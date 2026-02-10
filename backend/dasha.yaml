@@ -1,0 +1,26 @@
+debug: true
+clusters:
+  - name: home
+    username: postgres
+    password: postgres
+    databases:
+      - postgres
+    hosts:
+      - localhost
+      - my-postgresql.domain.local
+  - name: home2
+    username: postgres
+    password: postgres
+    databases:
+      - postgres
+    hosts:
+      - localhost
+      - my-postgresql.domain.local
+  - name: home-2
+    username: postgres
+    password: postgres
+    databases:
+      - postgres
+    hosts:
+      - localhost
+      - my-postgresql.domain.local

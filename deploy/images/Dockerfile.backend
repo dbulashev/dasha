@@ -1,0 +1,17 @@
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
+ARG TARGETOS TARGETARCH
+ARG BUILD_NUMBER=dev
+ARG BUILD_DATE=unknown
+WORKDIR /app
+COPY backend/go.mod backend/go.sum ./
+RUN go mod download
+COPY backend/ .
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
+    -ldflags="-s -w -X github.com/dbulashev/dasha/internal/version.buildNumber=$BUILD_NUMBER -X github.com/dbulashev/dasha/internal/version.buildDate=$BUILD_DATE" \
+    -o /dasha ./cmd/main.go
+
+FROM alpine:3.21
+RUN apk add --no-cache ca-certificates
+COPY --from=builder /dasha /usr/local/bin/dasha
+EXPOSE 8000
+CMD ["dasha"]

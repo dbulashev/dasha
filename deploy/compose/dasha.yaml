@@ -1,0 +1,39 @@
+clusters:
+  - name: my-cluster
+    username: postgres
+    password: postgres
+    databases:
+      - postgres
+    hosts:
+      - host.docker.internal
+
+# -- Authentication & authorization
+# auth:
+#   mode: none  # none | token | oidc
+#
+#   ## mode: token — static API keys
+#   # tokens:
+#   #   - name: monitoring
+#   #     token: "change-me-secret-token"
+#   #     role: viewer           # viewer (default) | admin
+#   #   - name: alerting
+#   #     token_from_env: DASHA_TOKEN_ALERTING
+#   #     role: admin
+#
+#   ## mode: oidc — OpenID Connect (Keycloak, Google, etc.)
+#   # oidc:
+#   #   issuer_url: "https://keycloak.example.com/realms/dasha"
+#   #   client_id: "dasha-app"
+#   #   client_secret_from_env: DASHA_OIDC_SECRET
+#   #   scopes: ["openid", "profile", "email"]
+#   #   redirect_url: "https://dasha.example.com/auth/callback"
+#   #   role_claim: "realm_access.roles"  # path to roles in JWT claims
+#   # cookie_secret_from_env: DASHA_COOKIE_SECRET  # 32+ char secret for session encryption
+#   # cookie_max_age: 86400  # session lifetime in seconds (default: 24h)
+#   # tokens:  # API keys also work in oidc mode
+#   #   - name: monitoring
+#   #     token_from_env: DASHA_TOKEN_MONITORING
+#   #     role: viewer
+#   # rate_limit:
+#   #   requests_per_second: 10  # per identity (user/IP)
+#   #   burst: 20

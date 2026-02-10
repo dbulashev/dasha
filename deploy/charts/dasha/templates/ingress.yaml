@@ -1,0 +1,77 @@
+{{- if .Values.ingress.enabled }}
+{{- if and .Values.ingress.tls.enabled .Values.ingress.tls.certManager.enabled (not .Values.ingress.tls.certManager.reflectToNamespace) }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ template "dasha.fullname" $ }}-tls
+  namespace: {{ .Values.ingress.tls.certNamespace }}
+spec:
+  dnsNames:
+    - {{ .Values.ingress.domain }}
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: {{ .Values.ingress.tls.certManager.issuer }}
+  secretName: {{ template "dasha.fullname" $ }}-tls
+{{- end }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ template "dasha.fullname" $ }}-ingress
+  namespace: {{ template "dasha.namespace" $ }}
+  labels:
+    {{- include "dasha.labels" $ | nindent 4 }}
+  {{- $annotations := dict }}
+  {{- if and .Values.ingress.tls.enabled .Values.ingress.tls.certManager.enabled }}
+  {{- $_ := set $annotations "cert-manager.io/cluster-issuer" .Values.ingress.tls.certManager.issuer }}
+  {{- if .Values.ingress.tls.certManager.reflectToNamespace }}
+  {{- $reflectorAnnotations := dict
+    "reflector.v1.k8s.emberstack.com/reflection-allowed" "true"
+    "reflector.v1.k8s.emberstack.com/reflection-auto-enabled" "true"
+    "reflector.v1.k8s.emberstack.com/reflection-auto-namespaces" .Values.ingress.tls.certManager.reflectToNamespace
+    "reflector.v1.k8s.emberstack.com/reflection-allowed-namespaces" .Values.ingress.tls.certManager.reflectToNamespace
+  }}
+  {{- $__ := set $annotations "cert-manager.io/secret-template" ($reflectorAnnotations | toJson) }}
+  {{- end }}
+  {{- end }}
+  {{- with .Values.ingress.annotations }}
+  {{- $annotations = merge $annotations . }}
+  {{- end }}
+  {{- if $annotations }}
+  annotations:
+    {{- toYaml $annotations | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.ingress.className }}
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
+  {{- if .Values.ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ .Values.ingress.domain }}
+      secretName: {{ .Values.ingress.tls.secretName | default (printf "%s-tls" (include "dasha.fullname" .)) }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.domain }}
+      http:
+        paths:
+          # /api/ must come before / for correct routing
+          - path: /api/
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ template "dasha.fullname" $ }}-backend
+                port:
+                  name: http
+          {{- if .Values.frontend.enabled }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ template "dasha.fullname" $ }}-frontend
+                port:
+                  name: http
+          {{- end }}
+{{- end }}

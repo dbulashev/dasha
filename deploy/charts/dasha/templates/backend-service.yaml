@@ -1,0 +1,19 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "dasha.fullname" $ }}-backend
+  namespace: {{ template "dasha.namespace" $ }}
+  labels:
+    {{- include "dasha.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.backend.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "dasha.selectorLabels" $ | nindent 4 }}
+    app.kubernetes.io/component: backend

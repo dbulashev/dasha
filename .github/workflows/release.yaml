@@ -1,0 +1,135 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  check-ci-passed:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify CI passed for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          COMMIT_SHA=$(gh api repos/${{ github.repository }}/git/ref/tags/${{ github.ref_name }} --jq '.object.sha')
+          # resolve annotated tags
+          OBJ_TYPE=$(gh api repos/${{ github.repository }}/git/tags/$COMMIT_SHA --jq '.object.type' 2>/dev/null || echo "commit")
+          if [ "$OBJ_TYPE" = "commit" ]; then
+            REAL_SHA=$(gh api repos/${{ github.repository }}/git/tags/$COMMIT_SHA --jq '.object.sha' 2>/dev/null || echo "$COMMIT_SHA")
+          else
+            REAL_SHA=$COMMIT_SHA
+          fi
+          echo "Checking CI status for commit $REAL_SHA"
+          STATUS=$(gh api repos/${{ github.repository }}/commits/$REAL_SHA/check-runs --jq '[.check_runs[] | select(.name == "build-check")] | .[0].conclusion')
+          if [ "$STATUS" != "success" ]; then
+            echo "::error::CI has not passed for this commit (build-check: $STATUS). Push to main first."
+            exit 1
+          fi
+
+  docker-push:
+    runs-on: ubuntu-latest
+    needs: check-ci-passed
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Docker meta (backend)
+        id: meta-backend
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/dasha-backend
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+
+      - name: Docker meta (frontend)
+        id: meta-frontend
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/dasha-frontend
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/images/Dockerfile.backend
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
+          provenance: true
+          sbom: true
+          build-args: |
+            BUILD_NUMBER=${{ github.ref_name }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/images/Dockerfile.frontend
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+          provenance: true
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Scan backend image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/dasha-backend:${{ steps.meta-backend.outputs.version }}
+          format: table
+          exit-code: 0
+          severity: CRITICAL,HIGH
+
+      - name: Scan frontend image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/dasha-frontend:${{ steps.meta-frontend.outputs.version }}
+          format: table
+          exit-code: 0
+          severity: CRITICAL,HIGH
+
+  helm-push:
+    runs-on: ubuntu-latest
+    needs: check-ci-passed
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set chart version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          sed -i "s/^version:.*/version: $VERSION/" deploy/charts/dasha/Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: \"$VERSION\"/" deploy/charts/dasha/Chart.yaml
+
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Package and push chart
+        run: |
+          helm package deploy/charts/dasha
+          helm push dasha-*.tgz oci://ghcr.io/${{ github.repository_owner }}/charts

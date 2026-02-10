@@ -1,0 +1,9 @@
+.DS_Store
+.git
+.gitignore
+.gitlab-ci.yml
+*.swp
+*.bak
+*.tmp
+*.orig
+*~

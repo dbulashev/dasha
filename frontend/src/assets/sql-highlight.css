@@ -1,0 +1,20 @@
+.sql-highlight .hljs-keyword { color: #cf222e; }
+.sql-highlight .hljs-string { color: #0a3069; }
+.sql-highlight .hljs-number { color: #0550ae; }
+.sql-highlight .hljs-built_in { color: #8250df; }
+.sql-highlight .hljs-type { color: #8250df; }
+.sql-highlight .hljs-comment { color: #6e7781; }
+.sql-highlight .hljs-operator { color: #cf222e; }
+
+.v-theme--dark .sql-highlight .hljs-keyword { color: #ff7b72; }
+.v-theme--dark .sql-highlight .hljs-string { color: #a5d6ff; }
+.v-theme--dark .sql-highlight .hljs-number { color: #79c0ff; }
+.v-theme--dark .sql-highlight .hljs-built_in { color: #d2a8ff; }
+.v-theme--dark .sql-highlight .hljs-type { color: #d2a8ff; }
+.v-theme--dark .sql-highlight .hljs-comment { color: #8b949e; }
+.v-theme--dark .sql-highlight .hljs-operator { color: #ff7b72; }
+
+.sql-code {
+  white-space: pre-wrap;
+  word-break: break-word;
+}

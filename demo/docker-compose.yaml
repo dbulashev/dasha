@@ -1,0 +1,266 @@
+services:
+  # ============================================================
+  # PG18 Cluster: master + replica (streaming replication)
+  # ============================================================
+  pg18-master:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo
+      POSTGRES_DB: demo
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
+      - -c
+      - wal_level=logical
+      - -c
+      - max_wal_senders=6
+      - -c
+      - max_replication_slots=6
+      - -c
+      - hot_standby=on
+      - -c
+      - track_io_timing=on
+      - -c
+      - hba_file=/etc/pg_hba.conf
+    volumes:
+      - ./pg_hba.conf:/etc/pg_hba.conf:ro
+      - ./sql/fixture.sql:/docker-entrypoint-initdb.d/01-fixture.sql:ro
+      - ./sql/pg18-master-init.sh:/docker-entrypoint-initdb.d/02-init.sh:ro
+    networks:
+      - dasha-demo
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U demo -d demo"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  pg18-replica:
+    image: postgres:18-alpine
+    environment:
+      PRIMARY_HOST: pg18-master
+      REPLICATION_SLOT: pg18_replica_slot
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo
+    entrypoint: ["/replica-entrypoint.sh"]
+    volumes:
+      - ./scripts/replica-entrypoint.sh:/replica-entrypoint.sh:ro
+    depends_on:
+      pg18-master:
+        condition: service_healthy
+    networks:
+      - dasha-demo
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U demo"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  # ============================================================
+  # PG17 Cluster: master + 2 replicas (streaming replication)
+  # "Bad" settings for Settings Analyze section
+  # ============================================================
+  pg17-master:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo
+      POSTGRES_DB: demo
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
+      - -c
+      - wal_level=replica
+      - -c
+      - max_wal_senders=6
+      - -c
+      - max_replication_slots=6
+      - -c
+      - hot_standby=on
+      - -c
+      - track_io_timing=on
+      - -c
+      - hba_file=/etc/pg_hba.conf
+      # "Bad" settings for Settings Analyze
+      - -c
+      - log_min_duration_statement=0
+      - -c
+      - autovacuum_vacuum_cost_delay=20
+      - -c
+      - huge_pages=off
+      - -c
+      - vacuum_cost_limit=200
+    volumes:
+      - ./pg_hba.conf:/etc/pg_hba.conf:ro
+      - ./sql/fixture.sql:/docker-entrypoint-initdb.d/01-fixture.sql:ro
+      - ./sql/pg17-master-init.sh:/docker-entrypoint-initdb.d/02-init.sh:ro
+    networks:
+      - dasha-demo
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U demo -d demo"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  pg17-replica-1:
+    image: postgres:17-alpine
+    environment:
+      PRIMARY_HOST: pg17-master
+      REPLICATION_SLOT: pg17_replica1_slot
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo
+    entrypoint: ["/replica-entrypoint.sh"]
+    volumes:
+      - ./scripts/replica-entrypoint.sh:/replica-entrypoint.sh:ro
+    depends_on:
+      pg17-master:
+        condition: service_healthy
+    networks:
+      - dasha-demo
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U demo"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  pg17-replica-2:
+    image: postgres:17-alpine
+    environment:
+      PRIMARY_HOST: pg17-master
+      REPLICATION_SLOT: pg17_replica2_slot
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo
+    entrypoint: ["/replica-entrypoint.sh"]
+    volumes:
+      - ./scripts/replica-entrypoint.sh:/replica-entrypoint.sh:ro
+    depends_on:
+      pg17-master:
+        condition: service_healthy
+    networks:
+      - dasha-demo
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U demo"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  # ============================================================
+  # PG18 Standalone: logical replication of orders from pg18-master
+  # ============================================================
+  pg18-standalone:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo
+      POSTGRES_DB: demo
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
+      - -c
+      - wal_level=logical
+      - -c
+      - track_io_timing=on
+      - -c
+      - hba_file=/etc/pg_hba.conf
+    volumes:
+      - ./pg_hba.conf:/etc/pg_hba.conf:ro
+      - ./sql/pg18-standalone-init.sh:/docker-entrypoint-initdb.d/01-init.sh:ro
+    depends_on:
+      pg18-master:
+        condition: service_healthy
+    networks:
+      - dasha-demo
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U demo -d demo"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  # ============================================================
+  # Keycloak (OIDC provider for auth demo)
+  # ============================================================
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.2
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_HTTP_ENABLED: "true"
+    command: start-dev --import-realm
+    volumes:
+      - ./keycloak/dasha-realm.json:/opt/keycloak/data/import/dasha-realm.json:ro
+      - ./keycloak/master-realm.json:/opt/keycloak/data/import/master-realm.json:ro
+    ports:
+      - "8080:8080"
+    networks:
+      - dasha-demo
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9000 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200 OK'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  # ============================================================
+  # Application
+  # ============================================================
+  backend:
+    build:
+      context: ..
+      dockerfile: demo/Dockerfile.backend
+    volumes:
+      - ./dasha-demo.yaml:/etc/dasha/dasha.yaml:ro
+    depends_on:
+      pg18-master:
+        condition: service_healthy
+      pg17-master:
+        condition: service_healthy
+      pg18-standalone:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    networks:
+      - dasha-demo
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: demo/Dockerfile.frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - dasha-demo
+
+  # ============================================================
+  # Workload Generator
+  # ============================================================
+  workload-generator:
+    image: postgres:18-alpine
+    entrypoint: ["/workload-generator.sh"]
+    volumes:
+      - ./scripts/workload-generator.sh:/workload-generator.sh:ro
+    depends_on:
+      pg18-master:
+        condition: service_healthy
+      pg17-master:
+        condition: service_healthy
+    networks:
+      - dasha-demo
+    restart: on-failure
+
+networks:
+  dasha-demo:
+    driver: bridge

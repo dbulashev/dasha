@@ -1,0 +1,166 @@
+replicaCount: 1
+
+images:
+  pullPolicy: IfNotPresent
+  backend:
+    repository: dbulashev/dasha-backend
+    tag: ""  # defaults to appVersion
+  frontend:
+    repository: dbulashev/dasha-frontend
+    tag: ""
+
+# -- dasha.yaml config rendered as ConfigMap
+# Passwords must use password_from_env, never inline
+config:
+  debug: false
+  # pg_stats_view: monitoring.pg_stats  # custom view when user lacks pg_catalog.pg_stats access
+
+  # -- Authentication & authorization
+  # auth:
+  #   mode: none  # none | token | oidc
+  #
+  #   ## mode: token — static API keys
+  #   # tokens:
+  #   #   - name: monitoring
+  #   #     token_from_env: DASHA_TOKEN_MONITORING
+  #   #     role: viewer           # viewer (default) | admin
+  #
+  #   ## mode: oidc — OpenID Connect (Keycloak, Google, etc.)
+  #   # oidc:
+  #   #   issuer_url: "https://keycloak.example.com/realms/dasha"
+  #   #   client_id: "dasha-app"
+  #   #   client_secret_from_env: DASHA_OIDC_SECRET
+  #   #   scopes: ["openid", "profile", "email"]
+  #   #   redirect_url: "https://dasha.example.com/auth/callback"
+  #   #   role_claim: "realm_access.roles"
+  #   # cookie_secret_from_env: DASHA_COOKIE_SECRET
+  #   # cookie_max_age: 86400
+  #   # tokens:  # API keys also work in oidc mode
+  #   #   - name: monitoring
+  #   #     token_from_env: DASHA_TOKEN_MONITORING
+  #   # rate_limit:
+  #   #   requests_per_second: 10
+  #   #   burst: 20
+
+  clusters: []
+  #  - name: my-cluster
+  #    username: postgres
+  #    password_from_env: CLUSTER_MY_CLUSTER_PASSWORD
+  #    port: "5432"
+  #    databases:
+  #      - postgres
+  #    hosts:
+  #      - pg-host.example.com
+  discovery: {}
+  #  yandex_mdb_prod:
+  #    type: yandex-mdb
+  #    config:
+  #      authorized_key: /secrets/prod/authorized_key.json
+  #      folder_id: "xxx"
+  #      user: postgres_monitoring
+  #      password_from_env: DISCOVERY_PROD_PASSWORD
+  #      refresh_interval: 5
+  #      clusters:
+  #        - name: ".*"
+
+# -- Secrets for environment variables (passwords, etc.)
+# Option A: provide existing Secret name containing all password env vars
+# Option B: create ExternalSecret via ESO
+secrets:
+  existingSecret: ""
+  externalSecret:
+    enabled: false
+    refreshInterval: "1m"
+    secretStoreRef:
+      name: ""
+      kind: ClusterSecretStore
+    data: []
+    #  - secretKey: CLUSTER_MY_CLUSTER_PASSWORD
+    #    remoteRef:
+    #      key: ycloud/my-cluster
+    #      property: password_monitoring_user
+    #  - secretKey: DISCOVERY_PROD_PASSWORD
+    #    remoteRef:
+    #      key: ycloud/monitoring
+    #      property: password_monitoring
+    #  # Auth secrets (for mode: token or oidc)
+    #  - secretKey: DASHA_TOKEN_MONITORING
+    #    remoteRef:
+    #      key: dasha/auth
+    #      property: token_monitoring
+    #  - secretKey: DASHA_OIDC_SECRET
+    #    remoteRef:
+    #      key: dasha/auth
+    #      property: oidc_client_secret
+    #  - secretKey: DASHA_COOKIE_SECRET
+    #    remoteRef:
+    #      key: dasha/auth
+    #      property: cookie_secret
+
+# -- Cloud SA keys for service discovery (one per folder/provider)
+# Each entry creates a volume mount with authorized_key.json
+cloudSAKeys: []
+#  - name: prod
+#    # Path where authorized_key.json will be mounted
+#    mountPath: /secrets/prod
+#    # Option A: existing Secret (must contain key "authorized_key.json")
+#    existingSecret: ""
+#    # Option B: create ExternalSecret via ESO
+#    externalSecret:
+#      enabled: false
+#      refreshInterval: 1m
+#      secretStoreRef:
+#        name: ""
+#        kind: ClusterSecretStore
+#      remoteRef:
+#        key: ycloud/monitoring
+#        property: sa_cloud_auth_key
+
+imagePullSecrets: []
+
+frontend:
+  enabled: true
+  replicaCount: 1
+  port: 3000
+  resources: {}
+  podSecurityContext: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+backend:
+  port: 8000
+  resources: {}
+  terminationGracePeriodSeconds: 30
+
+service:
+  type: ClusterIP
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  domain: dasha.example.com
+  tls:
+    enabled: false
+    secretName: ""
+    certNamespace: ""
+    # cert-manager integration
+    certManager:
+      enabled: false
+      issuer: cluster-issuer
+      # if set, adds reflector annotations to copy the TLS secret to this namespace
+      reflectToNamespace: ""
+
+nameOverride: ""
+fullnameOverride: ""
+namespaceOverride: ""
+
+podAnnotations: {}
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+securityContext: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

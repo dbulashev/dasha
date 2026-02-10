@@ -1,0 +1,92 @@
+# Changelog
+
+## v0.1.13
+
+#### New Features
+- **Authentication & Authorization**: three modes — `none` (default), `token` (static API keys), `oidc` (OpenID Connect BFF)
+- **RBAC**: role-based access via Casbin — `admin` (full) and `viewer` (read-only)
+- **Per-identity rate limiting**: token bucket with configurable RPS and burst
+
+#### Security
+- Constant-time token and OAuth2 state comparison
+- Secure random generation via `crypto/rand`
+- Refresh token revocation on logout (RFC 7009)
+- Reverse proxy support for `Secure` cookie flag
+
+#### Demo
+- Keycloak OIDC provider with preconfigured realm, users and roles
+- Fixed logical replication race condition in standalone init
+
+## v0.1.12
+
+- Visual improvements
+
+## v0.1.11
+
+#### New Features
+- **Replication view**: new page with 3 sections — config, status, slots
+  - `GET /api/replication/status` — pg_stat_replication with LEFT JOIN pg_replication_slots (slot per replica), state/sync_state chips with tooltips, client_addr/PID/LSN in expandable rows
+  - `GET /api/replication/slots` — slot_type, wal_status (with tooltip explanations), safe_wal_size, backlog_bytes
+  - `GET /api/replication/config` — synchronous_standby_names + synchronous_commit with tooltip descriptions for each mode (on, remote_apply, remote_write, local, off)
+- **Database health**: new `GET /api/database/health` — deadlocks, conflicts, checksum failures, rollback ratio from pg_stat_database
+- **Wait events**: new `GET /api/connection/wait-events` — aggregated wait events from pg_stat_activity (excluding idle Client.ClientRead)
+
+#### Frontend
+- **ReplicationView**: ReplicationConfigSection (settings with chip tooltips), ReplicationStatusSection (lag color coding, state/sync chips with tooltips, expandable rows), ReplicationSlotsSection (wal_status chip tooltips)
+- **DatabaseHealthSection**: chip-based health indicators on Home page with green/yellow/red thresholds
+- **WaitEventsSection**: wait events table on Home page with wait type color coding
+- Navigation: added "Replication" menu item with `mdi-database-sync-outline` icon
+- `fmtLag` and `fmtBytes` extracted to shared `utils/format.ts`
+
+#### Backend
+- New SQL templates: `replication/status` (with `LEFT JOIN pg_replication_slots`), `connections/wait_events`, `database/health`
+- Enriched `replication/slots` with slot_type, wal_status, safe_wal_size, backlog_bytes
+- New `replication/config` — `current_setting()` for synchronous_standby_names and synchronous_commit
+- `pg_is_in_recovery()` guard on `pg_current_wal_lsn()` calls (replica-safe)
+- New DTOs: ReplicationStatus, ReplicationConfig, ReplicationSlot, WaitEvent, DatabaseHealth
+
+#### Demo
+- Added deadlock generator to workload script for database health demonstration
+
+## v0.1.10
+
+### Table Describe (`\d+`) Enhancements
+
+#### New Features
+- **Table/schema selector**: autocomplete search for schemas and tables with URL sync
+- **Index metadata**: size column, primary/unique/invalid icons with tooltips
+- **Column statistics**: `null_frac`, `n_distinct`, `avg_width` from `pg_stats` in expandable rows
+- **Estimated row count**: `reltuples` from `pg_class` in human-readable format (K/M/B)
+- **Activity stats**: INS/UPD/DEL/SEQ_SCN/IDX_SCN from `pg_stat_all_tables`
+- **Partitions display**: paginated list of child partitions for partitioned tables with describe links
+- **Bloat estimation**: `pgstattuple_approx()` results via "Calculate bloat" button, disabled with status chip when extension is unavailable
+- **Describe links**: clickable table names across 12 index/table section components via shared `useDescribeLink` composable
+
+#### Backend
+- New SQL templates: `describe_bloat`, `describe_partitions`, `describe_schemas`, `describe_search`, `pgstattuple_available`
+- Extended `describe_columns` with `LEFT JOIN pg_stats` (null_frac, n_distinct, avg_width)
+- Extended `describe_indexes` with `indisvalid`, `pg_relation_size`, `pg_size_pretty`
+- Extended `describe_metadata` with `reltuples`, stat_info subquery
+- New API endpoints: `GET /api/tables/describe-bloat`, `GET /api/tables/describe-partitions`, `GET /api/tables/pgstattuple-available`, `GET /api/tables/schemas`, `GET /api/tables/search`
+- 1-minute query timeout for `pgstattuple_approx`
+
+#### Frontend
+- **Refactored** `TableDescribeView.vue` from ~580 lines into 8 focused components:
+  - `DescribeTableSelector` — schema/table autocomplete with URL sync
+  - `DescribeHeaderSection` — table metadata and size cards
+  - `DescribeColumnsSection` — columns with expanded stats rows
+  - `DescribeIndexesSection` — indexes with PK/unique/invalid icons
+  - `DescribeConstraintsSection` — reusable for check and FK constraints
+  - `DescribeReferencedBySection` — referenced-by with source table
+  - `DescribePartitionsSection` — paginated partitions via `usePaginatedApiLoader`
+  - `DescribeBloatSection` — pgstattuple availability check and bloat calculation
+- Added `fmtRowCount` to shared `utils/format.ts`
+- Added Russian plural rules for vue-i18n (`pluralRules` in main.ts)
+- Navigation: "Tables" menu split into "Overview" and "Describe" sub-items
+
+#### Demo
+- Added `pgstattuple` extension to demo init scripts
+
+## v0.1.9
+
+See git history for previous changes.

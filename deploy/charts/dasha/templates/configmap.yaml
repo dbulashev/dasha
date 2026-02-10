@@ -1,0 +1,11 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ template "dasha.fullname" $ }}-config
+  namespace: {{ template "dasha.namespace" $ }}
+  labels:
+    {{- include "dasha.labels" $ | nindent 4 }}
+data:
+  dasha.yaml: |
+    {{- .Values.config | toYaml | nindent 4 }}

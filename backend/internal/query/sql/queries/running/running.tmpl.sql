@@ -1,0 +1,17 @@
+SELECT pid::int,
+       state,
+       application_name                                                       AS source,
+       age(NOW(), COALESCE(query_start, xact_start))::text                    AS duration,
+       (wait_event IS NOT NULL)                                               AS waiting,
+       query,
+       COALESCE(query_start, xact_start)                                      AS started_at,
+       EXTRACT(EPOCH FROM NOW() - COALESCE(query_start, xact_start)) * 1000.0 AS duration_ms,
+       usename                                                                AS user,
+       backend_type
+FROM pg_stat_activity
+WHERE state <> 'idle'
+  AND pid <> pg_backend_pid()
+  AND datname = current_database()
+  AND NOW() - COALESCE(query_start, xact_start) > interval '{{ .MinDuration }} seconds'
+  AND query <> '<insufficient privilege>'
+ORDER BY COALESCE(query_start, xact_start) DESC

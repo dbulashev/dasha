@@ -1,0 +1,101 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "dasha.fullname" $ }}-backend
+  namespace: {{ template "dasha.namespace" $ }}
+  labels:
+    {{- include "dasha.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "dasha.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: backend
+  template:
+    metadata:
+      annotations:
+        checksum/config: "{{ print .Values.config | sha256sum }}"
+      {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "dasha.selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: backend
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      terminationGracePeriodSeconds: {{ .Values.backend.terminationGracePeriodSeconds }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ template "dasha.fullname" $ }}-config
+            defaultMode: 0644
+        {{- range $key := .Values.cloudSAKeys }}
+        - name: sa-{{ $key.name }}
+          secret:
+            {{- if $key.existingSecret }}
+            secretName: {{ $key.existingSecret }}
+            {{- else }}
+            secretName: {{ template "dasha.fullname" $ }}-sa-{{ $key.name }}
+            {{- end }}
+        {{- end }}
+      containers:
+        - name: backend
+          image: {{ include "dasha.backendImage" . }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.backend.port }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /api/clusters
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /api/clusters
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          {{- if or .Values.secrets.externalSecret.enabled (ne .Values.secrets.existingSecret "") }}
+          envFrom:
+            - secretRef:
+                name: {{ include "dasha.envSecretName" . }}
+          {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/dasha
+              readOnly: true
+            {{- range $key := .Values.cloudSAKeys }}
+            - name: sa-{{ $key.name }}
+              mountPath: {{ $key.mountPath }}
+              readOnly: true
+            {{- end }}
+          {{- with .Values.backend.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}

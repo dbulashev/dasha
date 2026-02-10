@@ -1,0 +1,44 @@
+debug: true
+
+auth:
+  mode: oidc
+  cookie_secret: "demo-secret-key-at-least-32-bytes-long-for-aes256-encryption"
+  cookie_max_age: 86400
+  oidc:
+    issuer_url: "http://keycloak:8080/realms/dasha"
+    client_id: "dasha-app"
+    client_secret: "demo-client-secret"
+    redirect_url: "http://localhost:3000/auth/callback"
+    role_claim: "realm_access.roles"
+  tokens:
+    - name: demo-api
+      token: "demo-api-token-for-testing"
+      role: viewer
+
+clusters:
+  - name: pg18-cluster
+    username: demo
+    password: demo
+    databases:
+      - demo
+    hosts:
+      - pg18-master
+      - pg18-replica
+
+  - name: pg17-cluster
+    username: demo
+    password: demo
+    databases:
+      - demo
+    hosts:
+      - pg17-master
+      - pg17-replica-1
+      - pg17-replica-2
+
+  - name: pg18-standalone
+    username: demo
+    password: demo
+    databases:
+      - demo
+    hosts:
+      - pg18-standalone
