@@ -1,0 +1,8 @@
+FROM golang:1.25-alpine
+WORKDIR /app
+COPY backend/go.mod backend/go.sum ./
+RUN go mod download
+COPY backend/ .
+RUN go build -o /usr/local/bin/dasha ./cmd/main.go
+EXPOSE 8000
+CMD ["dasha"]

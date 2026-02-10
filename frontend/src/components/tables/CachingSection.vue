@@ -1,0 +1,69 @@
+<script setup lang="ts">
+import { ref, watch, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { getTablesCaching } from '@/api/gen/default/default'
+import type { TableCaching } from '@/api/models/index'
+import { useClusterInfo } from '@/composables/useClusterInfo'
+import { assertOk } from '@/utils/api'
+
+const { clusterName, databaseName, hostName } = useClusterInfo()
+const { t } = useI18n()
+const emit = defineEmits<{ error: [msg: string] }>()
+
+const headers = computed(() => [
+  { title: t('header.schema'), key: 'Schema' },
+  { title: t('header.table'), key: 'Table' },
+  { title: t('tables.heapHitRate'), key: 'HitRate' },
+  { title: t('tables.idxHitRate'), key: 'IdxHitRate' },
+  { title: t('tables.toastHitRate'), key: 'ToastHitRate' },
+  { title: t('tables.toastIdxHitRate'), key: 'ToastIdxHitRate' },
+])
+const items = ref<TableCaching[]>([])
+const loading = ref(false)
+
+function fmtPct(v: number | null | undefined): string {
+  if (v == null) return '—'
+  return v.toFixed(2) + '%'
+}
+
+async function load() {
+  if (!clusterName.value || !hostName.value || !databaseName.value) return
+  loading.value = true
+  try {
+    const response = await getTablesCaching({
+      cluster_name: clusterName.value,
+      instance: hostName.value,
+      database: databaseName.value,
+    })
+    items.value = assertOk(response) ?? []
+  } catch (err) {
+    emit('error', String(err))
+    items.value = []
+  } finally {
+    loading.value = false
+  }
+}
+
+watch([clusterName, hostName, databaseName], () => load(), { immediate: true })
+</script>
+
+<template>
+  <v-card class="mb-4">
+    <v-card-title class="d-flex align-center ga-1">
+      {{ t('tables.caching') }}
+      <v-tooltip :text="t('hint.tableCaching')" location="bottom">
+        <template #activator="{ props }">
+          <v-icon v-bind="props" size="small" color="medium-emphasis">mdi-help-circle-outline</v-icon>
+        </template>
+      </v-tooltip>
+    </v-card-title>
+    <v-card-text>
+      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort disable-pagination hide-default-footer>
+        <template #item.HitRate="{ value }">{{ fmtPct(value) }}</template>
+        <template #item.IdxHitRate="{ value }">{{ fmtPct(value) }}</template>
+        <template #item.ToastHitRate="{ value }">{{ fmtPct(value) }}</template>
+        <template #item.ToastIdxHitRate="{ value }">{{ fmtPct(value) }}</template>
+      </v-data-table>
+    </v-card-text>
+  </v-card>
+</template>

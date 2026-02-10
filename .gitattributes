@@ -1,0 +1,5 @@
+* text=auto eol=lf
+/backend/gen/** -diff
+/frontend/api/*** -diff
+/frontend/src/api/gen/default/** -diff
+/frontend/src/api/models/** -diff

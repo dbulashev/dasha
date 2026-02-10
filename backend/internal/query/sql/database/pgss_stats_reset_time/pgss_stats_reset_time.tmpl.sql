@@ -1,0 +1,2 @@
+SELECT stats_reset
+FROM pg_stat_statements_info

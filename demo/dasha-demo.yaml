@@ -1,0 +1,28 @@
+debug: true
+clusters:
+  - name: pg18-cluster
+    username: demo
+    password: demo
+    databases:
+      - demo
+    hosts:
+      - pg18-master
+      - pg18-replica
+
+  - name: pg17-cluster
+    username: demo
+    password: demo
+    databases:
+      - demo
+    hosts:
+      - pg17-master
+      - pg17-replica-1
+      - pg17-replica-2
+
+  - name: pg18-standalone
+    username: demo
+    password: demo
+    databases:
+      - demo
+    hosts:
+      - pg18-standalone

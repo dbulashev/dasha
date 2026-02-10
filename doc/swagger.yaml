@@ -1,0 +1,2144 @@
+openapi: 3.0.3
+info:
+  title: User API
+  version: 1.0.0
+paths:
+  /api/clusters:
+    get:
+      operationId: getClusters
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Cluster'
+  /api/common/summary:
+    get:
+      operationId: getCommonSummary
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CommonSummary'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/connection/sources:
+    get:
+      operationId: getConnectionSources
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 30
+          required: false
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+          required: false
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConnectionSource'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/connection/states:
+    get:
+      operationId: getConnectionStates
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConnectionState'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/connection/stat-activity:
+    get:
+      operationId: getConnectionStatActivity
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+          required: false
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+          required: false
+        - in: query
+          name: username
+          schema:
+            type: string
+          required: false
+        - in: query
+          name: state
+          schema:
+            type: string
+          required: false
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ConnectionStatActivity'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/common/instance-info:
+    get:
+      operationId: getInstanceInfo
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstanceInfo'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/database/size:
+    get:
+      operationId: getDatabaseSize
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatabaseSize'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/database/pgss-stats-reset-time:
+    get:
+      operationId: getPgssStatsResetTime
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatsResetTime'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/database/stats-reset-time:
+    get:
+      operationId: getStatsResetTime
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StatsResetTime'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/constraints/invalid-constraints:
+    get:
+      operationId: getInvalidConstraints
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/InvalidConstraint'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/fks/possible-nulls:
+    get:
+      operationId: getFksPossibleNulls
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FksPossibleNulls'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/fks/possible-similar:
+    get:
+      operationId: getFksPossibleSimilar
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FksPossibleSimilar'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/fks/type-mismatch:
+    get:
+      operationId: getFkTypeMismatch
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FkTypeMismatch'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/indexes/bloat:
+    get:
+      operationId: getIndexesBloat
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 30
+          required: false
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+          required: false
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IndexBloat'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/indexes/btree-on-array:
+    get:
+      operationId: getIndexesBtreeOnArray
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IndexBtreeOnArray'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/indexes/caching:
+    get:
+      operationId: getIndexesCaching
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 30
+          required: false
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+          required: false
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IndexCaching'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/indexes/hit-rate:
+    get:
+      operationId: getIndexesHitRate
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IndexHitRate'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/indexes/invalid-or-not-ready:
+    get:
+      operationId: getIndexesInvalidOrNotReady
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IndexInvalidOrNotReady'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/indexes/missing:
+    get:
+      operationId: getIndexesMissing
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IndexMissing'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/indexes/similar1:
+    get:
+      operationId: getIndexesSimilar1
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IndexSimilar1'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/indexes/similar2:
+    get:
+      operationId: getIndexesSimilar2
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IndexSimilar2'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/indexes/similar3:
+    get:
+      operationId: getIndexesSimilar3
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IndexSimilar3'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/indexes/top-k-by-size:
+    get:
+      operationId: getIndexesTopKBySize
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IndexTopKBySize'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/indexes/unused:
+    get:
+      operationId: getIndexesUnused
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 30
+          required: false
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+          required: false
+        - in: query
+          name: all_hosts
+          schema:
+            type: boolean
+            default: false
+          required: false
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IndexUnused'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/indexes/usage:
+    get:
+      operationId: getIndexesUsage
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 30
+          required: false
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+          required: false
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/IndexUsage'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/tables/top-k-by-size:
+    get:
+      operationId: getTablesTopKBySize
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 10
+          required: false
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TableTopKBySize'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/tables/caching:
+    get:
+      operationId: getTablesCaching
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TableCaching'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/tables/hit-rate:
+    get:
+      operationId: getTablesHitRate
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TableHitRate'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/tables/partitions:
+    get:
+      operationId: getTablesPartitions
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TablePartition'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/maintenance/autovacuum-freeze-max-age:
+    get:
+      operationId: getMaintenanceAutovacuumFreezeMaxAge
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MaintenanceAutovacuumFreezeMaxAge'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/maintenance/info:
+    get:
+      operationId: getMaintenanceInfo
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MaintenanceInfo'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/maintenance/transaction-id-danger:
+    get:
+      operationId: getMaintenanceTransactionIdDanger
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MaintenanceTransactionIdDanger'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/maintenance/vacuum-progress:
+    get:
+      operationId: getMaintenanceVacuumProgress
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MaintenanceVacuumProgress'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/queries/blocked:
+    get:
+      operationId: getQueriesBlocked
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/QueryBlocked'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/queries/running:
+    get:
+      operationId: getQueriesRunning
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/QueryRunning'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/queries/top10-by-time:
+    get:
+      operationId: getQueriesTop10ByTime
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/QueryTop10ByTime'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/queries/top10-by-wal:
+    get:
+      operationId: getQueriesTop10ByWal
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/QueryTop10ByWal'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/queries/report:
+    get:
+      operationId: getQueriesReport
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/QueryReport'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/queries/query-stats-status:
+    get:
+      operationId: getQueryStatsStatus
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryStatsStatus'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/progress/analyze:
+    get:
+      operationId: getProgressAnalyze
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProgressAnalyze'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/progress/base-backup:
+    get:
+      operationId: getProgressBaseBackup
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProgressBaseBackup'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/progress/cluster:
+    get:
+      operationId: getProgressCluster
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProgressCluster'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/progress/index:
+    get:
+      operationId: getProgressIndex
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProgressIndex'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/progress/vacuum:
+    get:
+      operationId: getProgressVacuum
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProgressVacuum'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/settings/pg-settings:
+    get:
+      operationId: getPgSettings
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 30
+          required: false
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+          required: false
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PgSetting'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/settings/autovacuum-settings:
+    get:
+      operationId: getAutovacuumSettings
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PgSetting'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/settings/analyze:
+    get:
+      operationId: getSettingsAnalyze
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SettingsNotification'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  responses:
+    NotFound:
+      description: not found
+  parameters:
+    ClusterName:
+      in: query
+      name: cluster_name
+      schema:
+        type: string
+      required: true
+    Instance:
+      in: query
+      name: instance
+      schema:
+        type: string
+      required: true
+    Database:
+      in: query
+      name: database
+      schema:
+        type: string
+      required: true
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+    Cluster:
+      type: object
+      properties:
+        name:
+          type: string
+        instances:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClusterInstance'
+        databases:
+          type: array
+          items:
+            type: string
+    ClusterInstance:
+      type: object
+      properties:
+        host_name:
+          type: string
+    CommonSummary:
+      type: object
+      required:
+        - Namespace
+        - Kind
+        - ApproxSize
+        - Amount
+      properties:
+        Namespace:
+          type: string
+        Kind:
+          type: string
+        ApproxSize:
+          type: string
+        Amount:
+          type: integer
+          format: int64
+    ConnectionSource:
+      type: object
+      required:
+        - Database
+        - Username
+        - ApplicationName
+        - ClientAddr
+        - TotalConnections
+      properties:
+        Database:
+          type: string
+        Username:
+          type: string
+        ApplicationName:
+          type: string
+        ClientAddr:
+          type: string
+        TotalConnections:
+          type: integer
+          format: int64
+    ConnectionState:
+      type: object
+      required:
+        - State
+        - Count
+      properties:
+        State:
+          type: string
+        Count:
+          type: integer
+          format: int64
+    ConnectionStatActivity:
+      type: object
+      required:
+        - Pid
+        - Database
+        - UserName
+        - ApplicationName
+        - ClientAddr
+        - State
+        - Ssl
+        - BackendType
+      properties:
+        Pid:
+          type: integer
+        Database:
+          type: string
+        UserName:
+          type: string
+        ApplicationName:
+          type: string
+        ClientAddr:
+          type: string
+        State:
+          type: string
+        Ssl:
+          type: boolean
+        BackendType:
+          type: string
+    InstanceInfo:
+      type: object
+      required:
+        - InRecovery
+        - VersionNum
+      properties:
+        InRecovery:
+          type: boolean
+        VersionNum:
+          type: integer
+        Version:
+          type: string
+        VersionFull:
+          type: string
+    PgSetting:
+      type: object
+      required:
+        - Name
+        - Setting
+        - Unit
+        - Source
+      properties:
+        Name:
+          type: string
+        Setting:
+          type: string
+        Unit:
+          type: string
+        Source:
+          type: string
+    SettingsNotification:
+      type: object
+      required:
+        - Key
+        - Params
+      properties:
+        Key:
+          type: string
+        Params:
+          type: object
+          additionalProperties:
+            type: string
+    DatabaseSize:
+      type: object
+      required:
+        - SizeBytes
+        - SizePretty
+      properties:
+        SizeBytes:
+          type: integer
+          format: int64
+        SizePretty:
+          type: string
+    StatsResetTime:
+      type: object
+      required:
+        - Time
+      properties:
+        Time:
+          type: string
+          format: date-time
+    InvalidConstraint:
+      type: object
+      required:
+        - Schema
+        - Table
+        - Name
+        - ReferencedSchema
+        - ReferencedTable
+      properties:
+        Schema:
+          type: string
+        Table:
+          type: string
+        Name:
+          type: string
+        ReferencedSchema:
+          type: string
+        ReferencedTable:
+          type: string
+    FksPossibleNulls:
+      type: object
+      required:
+        - FkName
+        - RelName
+        - AttNames
+      properties:
+        FkName:
+          type: string
+        RelName:
+          type: string
+        AttNames:
+          type: array
+          items:
+            type: string
+    FksPossibleSimilar:
+      type: object
+      required:
+        - Table
+        - FkName
+        - Fk1Name
+      properties:
+        Table:
+          type: string
+        FkName:
+          type: string
+        Fk1Name:
+          type: string
+    FkTypeMismatch:
+      type: object
+      required:
+        - FkName
+        - FromRel
+        - RelAttNames
+        - ToRel
+        - ToRelAttNames
+      properties:
+        FkName:
+          type: string
+        FromRel:
+          type: string
+        RelAttNames:
+          type: array
+          items:
+            type: string
+        ToRel:
+          type: string
+        ToRelAttNames:
+          type: array
+          items:
+            type: string
+    IndexT:
+      type: object
+      required:
+        - Schema
+        - Table
+        - Name
+        - Columns
+        - Using
+        - Unique
+        - Primary
+        - Valid
+        - Indexprs
+        - Indpred
+        - Definition
+      properties:
+        Schema:
+          type: string
+        Table:
+          type: string
+        Name:
+          type: string
+        Columns:
+          type: string
+        Using:
+          type: string
+        Unique:
+          type: boolean
+        Primary:
+          type: boolean
+        Valid:
+          type: boolean
+        Indexprs:
+          type: string
+        Indpred:
+          type: string
+        Definition:
+          type: string
+
+    IndexBloat:
+      type: object
+      required:
+        - Schema
+        - Table
+        - Index
+        - BloatBytes
+        - IndexBytes
+        - Definition
+        - Primary
+      properties:
+        Schema:
+          type: string
+        Table:
+          type: string
+        Index:
+          type: string
+        BloatBytes:
+          type: integer
+          format: int64
+        IndexBytes:
+          type: integer
+          format: int64
+        Definition:
+          type: string
+        Primary:
+          type: boolean
+
+    IndexBtreeOnArray:
+      type: object
+      required:
+        - Table
+        - Index
+      properties:
+        Table:
+          type: string
+        Index:
+          type: string
+
+    IndexCaching:
+      type: object
+      required:
+        - Schema
+        - Table
+        - Index
+        - HitRate
+      properties:
+        Schema:
+          type: string
+        Table:
+          type: string
+        Index:
+          type: string
+        HitRate:
+          type: number
+          format: double
+
+    IndexHitRate:
+      type: object
+      required:
+        - Rate
+      properties:
+        Rate:
+          type: number
+          format: double
+
+    IndexInvalidOrNotReady:
+      type: object
+      required:
+        - Table
+        - IndexName
+        - IsValid
+        - IsReady
+        - Constraint
+      properties:
+        Table:
+          type: string
+        IndexName:
+          type: string
+        IsValid:
+          type: boolean
+        IsReady:
+          type: boolean
+        Constraint:
+          type: string
+
+    IndexMissing:
+      type: object
+      required:
+        - Schema
+        - Table
+        - EstimatedRows
+      properties:
+        Schema:
+          type: string
+        Table:
+          type: string
+        PercentOfTimesIndexUsed:
+          type: number
+          format: double
+          nullable: true
+        EstimatedRows:
+          type: integer
+          format: int64
+
+    IndexSimilar1:
+      type: object
+      required:
+        - Table
+        - I1UniqueIndexName
+        - I2IndexName
+        - I1UniqueIndexDefinition
+        - I2IndexDefinition
+        - I1UsedInConstraint
+        - I2UsedInConstraint
+      properties:
+        Table:
+          type: string
+        I1UniqueIndexName:
+          type: string
+        I2IndexName:
+          type: string
+        I1UniqueIndexDefinition:
+          type: string
+        I2IndexDefinition:
+          type: string
+        I1UsedInConstraint:
+          type: string
+        I2UsedInConstraint:
+          type: string
+
+    IndexSimilar2:
+      type: object
+      required:
+        - Table
+        - FkName
+        - FkName2
+      properties:
+        Table:
+          type: string
+        FkName:
+          type: string
+        FkName2:
+          type: string
+
+    IndexSimilar3:
+      type: object
+      required:
+        - Table
+        - I1IndexName
+        - I2IndexName
+        - SimplifiedIndexDefinition
+        - I1IndexDefinition
+        - I2IndexDefinition
+        - I1UsedInConstraint
+        - I2UsedInConstraint
+      properties:
+        Table:
+          type: string
+        I1IndexName:
+          type: string
+        I2IndexName:
+          type: string
+        SimplifiedIndexDefinition:
+          type: string
+        I1IndexDefinition:
+          type: string
+        I2IndexDefinition:
+          type: string
+        I1UsedInConstraint:
+          type: string
+        I2UsedInConstraint:
+          type: string
+
+    IndexTopKBySize:
+      type: object
+      required:
+        - Tablespace
+        - Table
+        - Index
+        - Size
+        - SizeBytes
+      properties:
+        Tablespace:
+          type: string
+        Table:
+          type: string
+        Index:
+          type: string
+        Size:
+          type: string
+        SizeBytes:
+          type: integer
+          format: int64
+
+    IndexUnused:
+      type: object
+      required:
+        - Schema
+        - Table
+        - Index
+        - SizeBytes
+        - IndexScans
+      properties:
+        Schema:
+          type: string
+        Table:
+          type: string
+        Index:
+          type: string
+        SizeBytes:
+          type: integer
+          format: int64
+        IndexScans:
+          type: integer
+          format: int64
+
+    IndexUsage:
+      type: object
+      required:
+        - Schema
+        - Table
+        - EstimatedRows
+      properties:
+        Schema:
+          type: string
+        Table:
+          type: string
+        PercentOfTimesIndexUsed:
+          type: number
+          format: double
+          nullable: true
+        EstimatedRows:
+          type: integer
+          format: int64
+    MaintenanceAutovacuumFreezeMaxAge:
+      type: object
+      required:
+        - AutovacuumFreezeMaxAge
+      properties:
+        AutovacuumFreezeMaxAge:
+          type: integer
+          format: int64
+
+    MaintenanceInfo:
+      type: object
+      required:
+        - Schema
+        - Table
+        - LastVacuum
+        - LastAutovacuum
+        - LastAnalyze
+        - LastAutoanalyze
+        - DeadRows
+        - LiveRows
+      properties:
+        Schema:
+          type: string
+        Table:
+          type: string
+        LastVacuum:
+          type: string
+          format: date-time
+          nullable: true
+        LastAutovacuum:
+          type: string
+          format: date-time
+          nullable: true
+        LastAnalyze:
+          type: string
+          format: date-time
+          nullable: true
+        LastAutoanalyze:
+          type: string
+          format: date-time
+          nullable: true
+        DeadRows:
+          type: integer
+          format: int64
+        LiveRows:
+          type: integer
+          format: int64
+
+    MaintenanceTransactionIdDanger:
+      type: object
+      required:
+        - Schema
+        - Table
+        - TransactionsLeft
+      properties:
+        Schema:
+          type: string
+        Table:
+          type: string
+        TransactionsLeft:
+          type: integer
+          format: int64
+
+    MaintenanceVacuumProgress:
+      type: object
+      required:
+        - Pid
+        - Phase
+      properties:
+        Pid:
+          type: integer
+          format: int32
+        Phase:
+          type: string
+
+    QueryBlocked:
+      type: object
+      required:
+        - LockedItem
+        - BlockedPid
+        - BlockedUser
+        - BlockedQuery
+        - BlockedDuration
+        - BlockedMode
+        - BlockingPid
+        - BlockingUser
+        - StateOfBlockingProcess
+        - CurrentOrRecentQueryInBlockingProcess
+        - BlockingDuration
+        - BlockingMode
+      properties:
+        LockedItem:
+          type: string
+        BlockedPid:
+          type: integer
+          format: int32
+        BlockedUser:
+          type: string
+        BlockedQuery:
+          type: string
+        BlockedDuration:
+          type: string
+        BlockedMode:
+          type: string
+        BlockingPid:
+          type: integer
+          format: int32
+        BlockingUser:
+          type: string
+        StateOfBlockingProcess:
+          type: string
+        CurrentOrRecentQueryInBlockingProcess:
+          type: string
+        BlockingDuration:
+          type: string
+        BlockingMode:
+          type: string
+
+    QueryRunning:
+      type: object
+      required:
+        - Pid
+        - State
+        - Source
+        - Duration
+        - Waiting
+        - Query
+        - StartedAt
+        - DurationMs
+        - User
+        - BackendType
+      properties:
+        Pid:
+          type: integer
+          format: int32
+        State:
+          type: string
+        Source:
+          type: string
+        Duration:
+          type: string
+        Waiting:
+          type: boolean
+        Query:
+          type: string
+        StartedAt:
+          type: string
+          format: date-time
+        DurationMs:
+          type: number
+          format: double
+        User:
+          type: string
+        BackendType:
+          type: string
+
+    QueryTop10ByTime:
+      type: object
+      required:
+        - QueryID
+        - ExecTime
+        - ExecTimeMs
+        - IoCpuPct
+        - IoPct
+        - CpuPct
+        - QueryTrunc
+      properties:
+        QueryID:
+          type: integer
+          format: int64
+        ExecTime:
+          type: string
+        ExecTimeMs:
+          type: number
+          format: double
+        IoCpuPct:
+          type: string
+        IoPct:
+          type: number
+          format: double
+        CpuPct:
+          type: number
+          format: double
+        QueryTrunc:
+          type: string
+
+    QueryTop10ByWal:
+      type: object
+      required:
+        - QueryID
+        - WalVolume
+        - WalBytes
+        - QueryTrunc
+      properties:
+        QueryID:
+          type: integer
+          format: int64
+        WalVolume:
+          type: string
+        WalBytes:
+          type: integer
+          format: int64
+        QueryTrunc:
+          type: string
+
+    QueryReport:
+      type: object
+      required:
+        - QueryID
+        - Query
+      properties:
+        QueryID:
+          type: integer
+          format: int64
+        Query:
+          type: string
+        Rows:
+          type: integer
+          format: int64
+          nullable: true
+        RowsPct:
+          type: number
+          format: double
+          nullable: true
+        Calls:
+          type: integer
+          format: int64
+          nullable: true
+        CallsPct:
+          type: number
+          format: double
+          nullable: true
+        TotalTimeMs:
+          type: number
+          format: double
+          nullable: true
+        TotalTimePct:
+          type: number
+          format: double
+          nullable: true
+        ExecTimeMs:
+          type: number
+          format: double
+          nullable: true
+        MinExecTimeMs:
+          type: number
+          format: double
+          nullable: true
+        MaxExecTimeMs:
+          type: number
+          format: double
+          nullable: true
+        MeanExecTimeMs:
+          type: number
+          format: double
+          nullable: true
+        PlanTimeMs:
+          type: number
+          format: double
+          nullable: true
+        MinPlanTimeMs:
+          type: number
+          format: double
+          nullable: true
+        MaxPlanTimeMs:
+          type: number
+          format: double
+          nullable: true
+        MeanPlanTimeMs:
+          type: number
+          format: double
+          nullable: true
+        IoTimeMs:
+          type: number
+          format: double
+          nullable: true
+        IoTimePct:
+          type: number
+          format: double
+          nullable: true
+        CpuTimeMs:
+          type: number
+          format: double
+          nullable: true
+        CpuTimePct:
+          type: number
+          format: double
+          nullable: true
+        CacheHitRatio:
+          type: number
+          format: double
+          nullable: true
+        SharedBlksDirtiedPct:
+          type: number
+          format: double
+          nullable: true
+        SharedBlksWrittenPct:
+          type: number
+          format: double
+          nullable: true
+        WalBytes:
+          type: integer
+          format: int64
+          nullable: true
+        WalBytesPct:
+          type: number
+          format: double
+          nullable: true
+        WalRecords:
+          type: integer
+          format: int64
+          nullable: true
+        WalFpi:
+          type: integer
+          format: int64
+          nullable: true
+        TempBlks:
+          type: integer
+          format: int64
+          nullable: true
+        TempBlksPct:
+          type: number
+          format: double
+          nullable: true
+
+    ProgressAnalyze:
+      type: object
+      required:
+        - Pid
+        - Datname
+        - TableName
+        - PhaseDescription
+        - SampleBlksTotal
+        - SampleBlksScanned
+        - ExtStatsTotal
+        - ExtStatsComputed
+        - CurrentChildTable
+      properties:
+        Pid:
+          type: integer
+          format: int32
+        Datname:
+          type: string
+        TableName:
+          type: string
+        PhaseDescription:
+          type: string
+        SampleBlksTotal:
+          type: integer
+          format: int64
+        SampleBlksScanned:
+          type: integer
+          format: int64
+        ExtStatsTotal:
+          type: integer
+          format: int64
+        ExtStatsComputed:
+          type: integer
+          format: int64
+        CurrentChildTable:
+          type: string
+
+    ProgressBaseBackup:
+      type: object
+      required:
+        - Pid
+        - PhaseDescription
+        - BackupTotal
+        - BackupStreamed
+        - TablespacesTotal
+        - TablespacesStreamed
+      properties:
+        Pid:
+          type: integer
+          format: int32
+        PhaseDescription:
+          type: string
+        BackupTotal:
+          type: integer
+          format: int64
+        BackupStreamed:
+          type: integer
+          format: int64
+        ProgressPercentage:
+          type: number
+          format: double
+          nullable: true
+        TablespacesTotal:
+          type: integer
+          format: int64
+        TablespacesStreamed:
+          type: integer
+          format: int64
+
+    ProgressCluster:
+      type: object
+      required:
+        - Pid
+        - Datname
+        - TableName
+        - Command
+        - PhaseDescription
+        - ClusterIndex
+        - HeapTuplesScanned
+        - HeapTuplesWritten
+        - HeapBlksTotal
+        - HeapBlksScanned
+        - IndexRebuildCount
+      properties:
+        Pid:
+          type: integer
+          format: int32
+        Datname:
+          type: string
+        TableName:
+          type: string
+        Command:
+          type: string
+        PhaseDescription:
+          type: string
+        ClusterIndex:
+          type: string
+        HeapTuplesScanned:
+          type: integer
+          format: int64
+        HeapTuplesWritten:
+          type: integer
+          format: int64
+        HeapBlksTotal:
+          type: integer
+          format: int64
+        HeapBlksScanned:
+          type: integer
+          format: int64
+        IndexRebuildCount:
+          type: integer
+          format: int64
+
+    ProgressIndex:
+      type: object
+      required:
+        - Pid
+        - Datname
+        - TableName
+        - IndexName
+        - PhaseDescription
+        - LockersTotal
+        - LockersDone
+        - CurrentLockerPid
+        - BlocksTotal
+        - BlocksDone
+        - TuplesTotal
+        - TuplesDone
+        - PartitionsTotal
+        - PartitionsDone
+      properties:
+        Pid:
+          type: integer
+          format: int32
+        Datname:
+          type: string
+        TableName:
+          type: string
+        IndexName:
+          type: string
+        PhaseDescription:
+          type: string
+        LockersTotal:
+          type: integer
+          format: int64
+        LockersDone:
+          type: integer
+          format: int64
+        CurrentLockerPid:
+          type: integer
+          format: int32
+        BlocksTotal:
+          type: integer
+          format: int64
+        BlocksDone:
+          type: integer
+          format: int64
+        TuplesTotal:
+          type: integer
+          format: int64
+        TuplesDone:
+          type: integer
+          format: int64
+        PartitionsTotal:
+          type: integer
+          format: int64
+        PartitionsDone:
+          type: integer
+          format: int64
+
+    ProgressVacuum:
+      type: object
+      required:
+        - Pid
+        - Datname
+        - TableName
+        - PhaseDescription
+        - HeapBlksTotal
+        - HeapBlksScanned
+        - HeapBlksVacuumed
+        - IndexVacuumCount
+        - MaxDeadTuples
+        - NumDeadTuples
+      properties:
+        Pid:
+          type: integer
+          format: int32
+        Datname:
+          type: string
+        TableName:
+          type: string
+        PhaseDescription:
+          type: string
+        HeapBlksTotal:
+          type: integer
+          format: int64
+        HeapBlksScanned:
+          type: integer
+          format: int64
+        HeapBlksVacuumed:
+          type: integer
+          format: int64
+        IndexVacuumCount:
+          type: integer
+          format: int64
+        MaxDeadTuples:
+          type: integer
+          format: int64
+        NumDeadTuples:
+          type: integer
+          format: int64
+
+    QueryStatsStatus:
+      type: object
+      required:
+        - Available
+        - Enabled
+        - Readable
+      properties:
+        Available:
+          type: boolean
+        Enabled:
+          type: boolean
+        Readable:
+          type: boolean
+
+    TableTopKBySize:
+      type: object
+      required:
+        - Table
+        - NIdx
+        - TotalBytes
+        - Total
+        - Toast
+        - Indexes
+        - Main
+        - Fsm
+        - Vm
+        - StatInfo
+        - Bloat
+        - Options
+      properties:
+        Table:
+          type: string
+        NIdx:
+          type: integer
+          format: int64
+        TotalBytes:
+          type: integer
+          format: int64
+        Total:
+          type: string
+        Toast:
+          type: string
+        Indexes:
+          type: string
+        Main:
+          type: string
+        Fsm:
+          type: string
+        Vm:
+          type: string
+        StatInfo:
+          type: string
+        Bloat:
+          type: string
+        Options:
+          type: string
+
+    TableCaching:
+      type: object
+      required:
+        - Schema
+        - Table
+      properties:
+        Schema:
+          type: string
+        Table:
+          type: string
+        HitRate:
+          type: number
+          format: double
+          nullable: true
+        IdxHitRate:
+          type: number
+          format: double
+          nullable: true
+        ToastHitRate:
+          type: number
+          format: double
+          nullable: true
+        ToastIdxHitRate:
+          type: number
+          format: double
+          nullable: true
+
+    TableHitRate:
+      type: object
+      required:
+        - Rate
+      properties:
+        Rate:
+          type: number
+          format: double
+
+    TablePartition:
+      type: object
+      required:
+        - ParentSchema
+        - Parent
+        - ChildsCount
+        - ChildsSizeBytes
+        - ChildsSize
+        - ChildsAvgSizeBytes
+        - ChildsAvgSize
+      properties:
+        ParentSchema:
+          type: string
+        Parent:
+          type: string
+        ChildsCount:
+          type: integer
+          format: int64
+        ChildsSizeBytes:
+          type: integer
+          format: int64
+        ChildsSize:
+          type: string
+        ChildsAvgSizeBytes:
+          type: integer
+          format: int64
+        ChildsAvgSize:
+          type: string
