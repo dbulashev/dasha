@@ -1,4 +1,6 @@
-# Dasha
+<p align="center">
+  <img src="assets/logo.png" width="650">
+</p>
 
 PostgreSQL performance dashboard for analyzing database cluster health, identifying problems, and providing optimization recommendations.
 

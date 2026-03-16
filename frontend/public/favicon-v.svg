@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+
+  <defs>
+    <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff2a7f"/>
+      <stop offset="50%" stop-color="#8a2be2"/>
+      <stop offset="100%" stop-color="#00c2ff"/>
+    </linearGradient>
+  </defs>
+
+  <!-- background -->
+  <rect x="0" y="0" width="256" height="256" rx="52" fill="#0b1020"/>
+
+  <!-- main D shape -->
+  <path
+    d="M70 40
+       L70 216
+       L120 216
+       C190 216 216 170 216 128
+       C216 86 190 40 120 40
+       Z"
+    fill="url(#grad)"
+  />
+
+  <!-- dashboard bars -->
+  <rect x="90" y="150" width="14" height="40" rx="3" fill="#00c2ff"/>
+  <rect x="110" y="130" width="14" height="60" rx="3" fill="#4aa8ff"/>
+  <rect x="130" y="110" width="14" height="80" rx="3" fill="#8a7bff"/>
+
+  <!-- gauge arc -->
+  <path
+    d="M95 115
+       A60 60 0 0 1 180 95"
+    stroke="#ffffff"
+    stroke-width="6"
+    fill="none"
+    stroke-linecap="round"
+    opacity="0.9"
+  />
+
+  <!-- gauge needle -->
+  <line x1="138" y1="110" x2="175" y2="95"
+        stroke="#ffffff"
+        stroke-width="5"
+        stroke-linecap="round"/>
+
+  <circle cx="138" cy="110" r="5" fill="#ffffff"/>
+
+</svg>
