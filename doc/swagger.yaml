@@ -1815,7 +1815,7 @@ components:
         - Pid
         - Datname
         - TableName
-        - PhaseDescription
+        - Phase
         - SampleBlksTotal
         - SampleBlksScanned
         - ExtStatsTotal
@@ -1829,7 +1829,7 @@ components:
           type: string
         TableName:
           type: string
-        PhaseDescription:
+        Phase:
           type: string
         SampleBlksTotal:
           type: integer
@@ -1850,7 +1850,7 @@ components:
       type: object
       required:
         - Pid
-        - PhaseDescription
+        - Phase
         - BackupTotal
         - BackupStreamed
         - TablespacesTotal
@@ -1859,7 +1859,7 @@ components:
         Pid:
           type: integer
           format: int32
-        PhaseDescription:
+        Phase:
           type: string
         BackupTotal:
           type: integer
@@ -1885,7 +1885,7 @@ components:
         - Datname
         - TableName
         - Command
-        - PhaseDescription
+        - Phase
         - ClusterIndex
         - HeapTuplesScanned
         - HeapTuplesWritten
@@ -1902,7 +1902,7 @@ components:
           type: string
         Command:
           type: string
-        PhaseDescription:
+        Phase:
           type: string
         ClusterIndex:
           type: string
@@ -1929,7 +1929,7 @@ components:
         - Datname
         - TableName
         - IndexName
-        - PhaseDescription
+        - Phase
         - LockersTotal
         - LockersDone
         - CurrentLockerPid
@@ -1949,7 +1949,7 @@ components:
           type: string
         IndexName:
           type: string
-        PhaseDescription:
+        Phase:
           type: string
         LockersTotal:
           type: integer
@@ -1985,7 +1985,7 @@ components:
         - Pid
         - Datname
         - TableName
-        - PhaseDescription
+        - Phase
         - HeapBlksTotal
         - HeapBlksScanned
         - HeapBlksVacuumed
@@ -2000,7 +2000,7 @@ components:
           type: string
         TableName:
           type: string
-        PhaseDescription:
+        Phase:
           type: string
         HeapBlksTotal:
           type: integer

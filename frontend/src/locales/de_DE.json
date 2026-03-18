@@ -177,7 +177,60 @@
     "backupStreamed": "Gestreamt",
     "progressPct": "Fortschritt %",
     "tablespacesTotal": "Tablespaces gesamt",
-    "tablespacesStreamed": "Tablespaces gestreamt"
+    "tablespacesStreamed": "Tablespaces gestreamt",
+    "phases": {
+      "vacuum": {
+        "initializing": "Initialisierung",
+        "scanning heap": "Heap scannen",
+        "vacuuming indexes": "Indexe bereinigen",
+        "vacuuming heap": "Heap bereinigen",
+        "cleaning up indexes": "Index-Aufräumen",
+        "truncating heap": "Heap kürzen",
+        "performing final cleanup": "Abschlussbereinigung"
+      },
+      "analyze": {
+        "initializing": "Initialisierung",
+        "acquiring sample rows": "Stichprobenzeilen sammeln",
+        "acquiring inherited sample rows": "Vererbte Stichprobenzeilen sammeln",
+        "computing statistics": "Statistiken berechnen",
+        "computing extended statistics": "Erweiterte Statistiken berechnen",
+        "finalizing analyze": "Analyse abschließen"
+      },
+      "cluster": {
+        "initializing": "Initialisierung",
+        "seq scanning heap": "Sequentielles Heap-Scannen",
+        "index scanning heap": "Index-basiertes Heap-Scannen",
+        "sorting tuples": "Tupel sortieren",
+        "writing new heap": "Neuen Heap schreiben",
+        "swapping relation files": "Relationsdateien tauschen",
+        "rebuilding index": "Index neu aufbauen",
+        "performing final cleanup": "Abschlussbereinigung"
+      },
+      "index": {
+        "initializing": "Initialisierung",
+        "waiting for writers before build": "Auf Schreiber vor dem Aufbau warten",
+        "building index": "Index aufbauen",
+        "building index: scanning table": "Index aufbauen: Tabelle scannen",
+        "building index: sorting live tuples": "Index aufbauen: Lebende Tupel sortieren",
+        "building index: sorting dead tuples": "Index aufbauen: Tote Tupel sortieren",
+        "building index: loading tuples in tree": "Index aufbauen: Tupel in Baum laden",
+        "waiting for writers before validation": "Auf Schreiber vor der Validierung warten",
+        "index validation: scanning index": "Validierung: Index scannen",
+        "index validation: sorting tuples": "Validierung: Tupel sortieren",
+        "index validation: scanning table": "Validierung: Tabelle scannen",
+        "waiting for old snapshots": "Auf alte Snapshots warten",
+        "waiting for readers before marking dead": "Auf Leser vor Deaktivierung warten",
+        "waiting for readers before dropping": "Auf Leser vor dem Löschen warten"
+      },
+      "baseBackup": {
+        "initializing": "Initialisierung",
+        "waiting for checkpoint to finish": "Auf Checkpoint warten",
+        "estimating backup size": "Backup-Größe schätzen",
+        "streaming database files": "Datenbankdateien übertragen",
+        "waiting for wal archiving to finish": "Auf WAL-Archivierung warten",
+        "transferring wal files": "WAL-Dateien übertragen"
+      }
+    }
   },
   "locks": {
     "tree": "Sperrbaum",

@@ -4,7 +4,7 @@ type ProgressAnalyze struct {
 	Pid               int32
 	Datname           string
 	TableName         string
-	PhaseDescription  string
+	Phase             string
 	SampleBlksTotal   int64
 	SampleBlksScanned int64
 	ExtStatsTotal     int64
@@ -14,7 +14,7 @@ type ProgressAnalyze struct {
 
 type ProgressBaseBackup struct {
 	Pid                 int32
-	PhaseDescription    string
+	Phase               string
 	BackupTotal         int64
 	BackupStreamed      int64
 	ProgressPercentage  *float64
@@ -27,7 +27,7 @@ type ProgressCluster struct {
 	Datname           string
 	TableName         string
 	Command           string
-	PhaseDescription  string
+	Phase             string
 	ClusterIndex      string
 	HeapTuplesScanned int64
 	HeapTuplesWritten int64
@@ -41,7 +41,7 @@ type ProgressIndex struct {
 	Datname          string
 	TableName        string
 	IndexName        string
-	PhaseDescription string
+	Phase            string
 	LockersTotal     int64
 	LockersDone      int64
 	CurrentLockerPid int32
@@ -57,7 +57,7 @@ type ProgressVacuum struct {
 	Pid              int32
 	Datname          string
 	TableName        string
-	PhaseDescription string
+	Phase            string
 	HeapBlksTotal    int64
 	HeapBlksScanned  int64
 	HeapBlksVacuumed int64

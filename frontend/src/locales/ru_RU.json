@@ -233,7 +233,60 @@
         "backupStreamed": "Передано",
         "progressPct": "Прогресс %",
         "tablespacesTotal": "Табличных пространств всего",
-        "tablespacesStreamed": "Табличных пространств передано"
+        "tablespacesStreamed": "Табличных пространств передано",
+        "phases": {
+            "vacuum": {
+                "initializing": "Инициализация",
+                "scanning heap": "Сканирование кучи",
+                "vacuuming indexes": "Очистка индексов",
+                "vacuuming heap": "Очистка кучи",
+                "cleaning up indexes": "Финализация индексов",
+                "truncating heap": "Усечение кучи",
+                "performing final cleanup": "Завершающая очистка"
+            },
+            "analyze": {
+                "initializing": "Инициализация",
+                "acquiring sample rows": "Сбор строк выборки",
+                "acquiring inherited sample rows": "Сбор строк из дочерних таблиц",
+                "computing statistics": "Вычисление статистики",
+                "computing extended statistics": "Вычисление расширенной статистики",
+                "finalizing analyze": "Завершение анализа"
+            },
+            "cluster": {
+                "initializing": "Инициализация",
+                "seq scanning heap": "Последовательное сканирование кучи",
+                "index scanning heap": "Сканирование кучи по индексу",
+                "sorting tuples": "Сортировка кортежей",
+                "writing new heap": "Запись новой кучи",
+                "swapping relation files": "Замена файлов таблицы",
+                "rebuilding index": "Перестроение индексов",
+                "performing final cleanup": "Завершающая очистка"
+            },
+            "index": {
+                "initializing": "Инициализация",
+                "waiting for writers before build": "Ожидание завершения записи перед построением",
+                "building index": "Построение индекса",
+                "building index: scanning table": "Построение индекса: сканирование таблицы",
+                "building index: sorting live tuples": "Построение индекса: сортировка живых кортежей",
+                "building index: sorting dead tuples": "Построение индекса: сортировка мёртвых кортежей",
+                "building index: loading tuples in tree": "Построение индекса: загрузка кортежей в дерево",
+                "waiting for writers before validation": "Ожидание завершения записи перед валидацией",
+                "index validation: scanning index": "Валидация: сканирование индекса",
+                "index validation: sorting tuples": "Валидация: сортировка кортежей",
+                "index validation: scanning table": "Валидация: сканирование таблицы",
+                "waiting for old snapshots": "Ожидание старых снимков",
+                "waiting for readers before marking dead": "Ожидание читателей перед отключением",
+                "waiting for readers before dropping": "Ожидание читателей перед удалением"
+            },
+            "baseBackup": {
+                "initializing": "Инициализация",
+                "waiting for checkpoint to finish": "Ожидание контрольной точки",
+                "estimating backup size": "Оценка размера бэкапа",
+                "streaming database files": "Передача файлов БД",
+                "waiting for wal archiving to finish": "Ожидание архивации WAL",
+                "transferring wal files": "Передача WAL файлов"
+            }
+        }
     },
     "locks": {
         "tree": "Дерево блокировок",

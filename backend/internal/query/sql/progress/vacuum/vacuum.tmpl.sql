@@ -2,16 +2,7 @@ SELECT
     pid,
     datname,
     relid::regclass AS table_name,
-    CASE phase
-        WHEN 'initializing' THEN 'Инициализация операции VACUUM'
-        WHEN 'scanning heap' THEN 'Сканирование кучи таблицы'
-        WHEN 'vacuuming indexes' THEN 'Очистка индексов таблицы'
-        WHEN 'vacuuming heap' THEN 'Очистка основной кучи таблицы'
-        WHEN 'cleaning up indexes' THEN 'Финализация очистки индексов'
-        WHEN 'truncating heap' THEN 'Усечение пустого пространства в конце таблицы'
-        WHEN 'performing final cleanup' THEN 'Завершающая очистка'
-        ELSE phase
-        END AS phase_description,
+    phase,
     heap_blks_total,
     heap_blks_scanned,
     heap_blks_vacuumed,

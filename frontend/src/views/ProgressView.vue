@@ -60,6 +60,39 @@ function fmtNum(v: number): string {
   return v.toLocaleString()
 }
 
+function phaseLabel(type: ProgressCard['type'], phase: string): string {
+  const key = `progress.phases.${type}.${phase}`
+  const translated = t(key)
+  // If no translation found, vue-i18n returns the key itself — fall back to raw phase
+  return translated === key ? phase : translated
+}
+
+// Phases where a numeric progress bar is meaningful
+const vacuumProgressPhases = new Set(['scanning heap', 'vacuuming heap'])
+const analyzeProgressPhases = new Set(['acquiring sample rows'])
+const clusterProgressPhases = new Set(['seq scanning heap', 'index scanning heap'])
+const indexProgressPrefixes = [
+  'building index',
+  'index validation: scanning index',
+  'index validation: scanning table',
+]
+
+function vacuumProgress(item: ProgressVacuum): number | null {
+  if (item.Phase === 'scanning heap') return calcPct(item.HeapBlksScanned, item.HeapBlksTotal)
+  if (item.Phase === 'vacuuming heap') return calcPct(item.HeapBlksVacuumed, item.HeapBlksTotal)
+  return null
+}
+
+function clusterProgress(item: ProgressCluster): number | null {
+  if (clusterProgressPhases.has(item.Phase)) return calcPct(item.HeapBlksScanned, item.HeapBlksTotal)
+  return null
+}
+
+function indexProgress(item: ProgressIndex): number | null {
+  if (!indexProgressPrefixes.some(p => item.Phase.startsWith(p))) return null
+  return calcPct(item.BlocksDone, item.BlocksTotal) ?? calcPct(item.TuplesDone, item.TuplesTotal)
+}
+
 const cards = computed<ProgressCard[]>(() => {
   const result: ProgressCard[] = []
 
@@ -69,8 +102,8 @@ const cards = computed<ProgressCard[]>(() => {
       ...typeConfig.analyze,
       pid: item.Pid,
       target: [item.Datname, item.TableName].filter(Boolean).join('.'),
-      phase: item.PhaseDescription,
-      progress: calcPct(item.SampleBlksScanned, item.SampleBlksTotal),
+      phase: phaseLabel('analyze', item.Phase),
+      progress: analyzeProgressPhases.has(item.Phase) ? calcPct(item.SampleBlksScanned, item.SampleBlksTotal) : null,
       metrics: [
         { label: t('progress.sampleBlksScanned'), value: `${fmtNum(item.SampleBlksScanned)} / ${fmtNum(item.SampleBlksTotal)}` },
         { label: t('progress.extStatsComputed'), value: `${fmtNum(item.ExtStatsComputed)} / ${fmtNum(item.ExtStatsTotal)}` },
@@ -80,15 +113,13 @@ const cards = computed<ProgressCard[]>(() => {
   }
 
   for (const item of vacuumItems.value) {
-    const isVacuuming = item.HeapBlksVacuumed > 0 && item.HeapBlksVacuumed < item.HeapBlksScanned
-    const progressDone = isVacuuming ? item.HeapBlksVacuumed : item.HeapBlksScanned
     result.push({
       type: 'vacuum',
       ...typeConfig.vacuum,
       pid: item.Pid,
       target: [item.Datname, item.TableName].filter(Boolean).join('.'),
-      phase: item.PhaseDescription,
-      progress: calcPct(progressDone, item.HeapBlksTotal),
+      phase: phaseLabel('vacuum', item.Phase),
+      progress: vacuumProgress(item),
       metrics: [
         { label: t('progress.heapBlksScanned'), value: `${fmtNum(item.HeapBlksScanned)} / ${fmtNum(item.HeapBlksTotal)}` },
         { label: t('progress.heapBlksVacuumed'), value: `${fmtNum(item.HeapBlksVacuumed)} / ${fmtNum(item.HeapBlksTotal)}` },
@@ -104,8 +135,8 @@ const cards = computed<ProgressCard[]>(() => {
       ...typeConfig.cluster,
       pid: item.Pid,
       target: [item.Datname, item.TableName].filter(Boolean).join('.'),
-      phase: item.PhaseDescription,
-      progress: calcPct(item.HeapBlksScanned, item.HeapBlksTotal),
+      phase: phaseLabel('cluster', item.Phase),
+      progress: clusterProgress(item),
       metrics: [
         { label: t('progress.command'), value: item.Command },
         { label: t('progress.heapBlksScanned'), value: `${fmtNum(item.HeapBlksScanned)} / ${fmtNum(item.HeapBlksTotal)}` },
@@ -118,14 +149,13 @@ const cards = computed<ProgressCard[]>(() => {
   }
 
   for (const item of indexItems.value) {
-    const progress = calcPct(item.BlocksDone, item.BlocksTotal) ?? calcPct(item.TuplesDone, item.TuplesTotal)
     result.push({
       type: 'index',
       ...typeConfig.index,
       pid: item.Pid,
       target: [item.Datname, item.TableName, item.IndexName].filter(Boolean).join('.'),
-      phase: item.PhaseDescription,
-      progress,
+      phase: phaseLabel('index', item.Phase),
+      progress: indexProgress(item),
       metrics: [
         { label: t('progress.blocksDone'), value: `${fmtNum(item.BlocksDone)} / ${fmtNum(item.BlocksTotal)}` },
         { label: t('progress.tuplesDone'), value: `${fmtNum(item.TuplesDone)} / ${fmtNum(item.TuplesTotal)}` },
@@ -141,7 +171,7 @@ const cards = computed<ProgressCard[]>(() => {
       ...typeConfig.baseBackup,
       pid: item.Pid,
       target: '',
-      phase: item.PhaseDescription,
+      phase: phaseLabel('baseBackup', item.Phase),
       progress: item.ProgressPercentage ?? null,
       metrics: [
         { label: t('progress.backupStreamed'), value: `${fmtNum(item.BackupStreamed)} / ${fmtNum(item.BackupTotal)}` },
