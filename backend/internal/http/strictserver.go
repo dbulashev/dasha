@@ -1,6 +1,7 @@
 package http
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -39,6 +40,30 @@ func New(si serverhttp.StrictServerInterface, middlewares []serverhttp.StrictMid
 	e.HideBanner = true
 	e.HidePort = true
 	e.Debug = true
+
+	e.HTTPErrorHandler = func(err error, c echo.Context) {
+		if !c.Response().Committed {
+			var he *echo.HTTPError
+			if errors.As(err, &he) {
+				if he.Code >= http.StatusInternalServerError {
+					logger.Error("internal server error",
+						zap.Int("status", he.Code),
+						zap.String("method", c.Request().Method),
+						zap.String("path", c.Request().URL.Path),
+						zap.Error(err),
+					)
+				}
+			} else {
+				logger.Error("internal server error",
+					zap.String("method", c.Request().Method),
+					zap.String("path", c.Request().URL.Path),
+					zap.Error(err),
+				)
+			}
+		}
+
+		e.DefaultHTTPErrorHandler(err, c)
+	}
 
 	serverhttp.RegisterHandlers(e, ssi)
 
