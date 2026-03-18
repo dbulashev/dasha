@@ -1,5 +1,3 @@
--- @todo balance ()
-
 WITH
     idx AS (
         SELECT
@@ -17,11 +15,11 @@ WITH
                                                     regexp_replace(
                                                             regexp_replace(
                                                                     pg_get_indexdef(ic.oid), ' INDEX .* ON ', ' INDEX ON '),
-                                                            ' NULLS FIRST\\)', ')'),
+                                                            ' NULLS FIRST\)', ')'),
                                                     ' NULLS FIRST,', ','),
-                                            ' NULLS LAST\\)', ')'),
+                                            ' NULLS LAST\)', ')'),
                                     ' NULLS LAST,', ','),
-                            ' DESC\\)', ')'),
+                            ' DESC\)', ')'),
                     ' DESC,', ',')
                 AS simplified_object_definition,
             (SELECT string_agg(format('%I', c.conname), ',') FROM pg_catalog.pg_constraint AS c WHERE c.conindid = ic.oid)

@@ -1,5 +1,3 @@
--- @todo balance ()
-
 WITH
     idx AS (
         SELECT
@@ -20,11 +18,11 @@ WITH
                                                                             regexp_replace(
                                                                                     regexp_replace(
                                                                                             pg_get_indexdef(ic.oid), ' INDEX .* ON ', ' INDEX ON '),
-                                                                                    ' NULLS FIRST\\)', ')'),
+                                                                                    ' NULLS FIRST\)', ')'),
                                                                             ' NULLS FIRST,', ','),
-                                                                    ' NULLS LAST\\)', ')'),
+                                                                    ' NULLS LAST\)', ')'),
                                                             ' NULLS LAST,', ','),
-                                                    ' DESC\\)', ')'),
+                                                    ' DESC\)', ')'),
                                             ' DESC,', ','),
                                     ' WHERE .*', ''),
                             ' INCLUDE .*', ''),
