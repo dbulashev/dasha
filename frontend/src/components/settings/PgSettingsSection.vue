@@ -11,7 +11,7 @@ const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
 const emit = defineEmits<{ error: [msg: string] }>()
 
-const PAGE_SIZE = 30
+const PAGE_SIZE = 15
 const headers = computed(() => [
   { title: t('settings.name'), key: 'Name' },
   { title: t('settings.value'), key: 'Setting' },
@@ -52,7 +52,7 @@ watch([clusterName, hostName], () => load(), { immediate: true })
   <v-card class="mb-4">
     <v-card-title>{{ t('settings.pgSettings') }}</v-card-title>
     <v-card-text>
-      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort disable-pagination hide-default-footer :no-data-text="t('noData')" />
+      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort :items-per-page="-1" hide-default-footer :no-data-text="t('noData')" />
       <PaginationControls :page="page" :has-more="hasMore" @update:page="load" />
     </v-card-text>
   </v-card>

@@ -46,7 +46,7 @@ watch([clusterName, hostName, databaseName], () => load(), { immediate: true })
     <v-card-title>{{ t('fk.typeMismatch') }}</v-card-title>
     <v-card-subtitle>{{ t('fk.typeMismatchHint') }}</v-card-subtitle>
     <v-card-text>
-      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort disable-pagination hide-default-footer :no-data-text="t('noData')">
+      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort :items-per-page="-1" hide-default-footer :no-data-text="t('noData')">
         <template #item.RelAttNames="{ value }">{{ (value as string[]).join(', ') }}</template>
         <template #item.ToRelAttNames="{ value }">{{ (value as string[]).join(', ') }}</template>
       </v-data-table>

@@ -58,7 +58,7 @@ watch([clusterName, hostName, databaseName], () => load(), { immediate: true })
       </v-tooltip>
     </v-card-title>
     <v-card-text>
-      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort disable-pagination hide-default-footer>
+      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort :items-per-page="-1" hide-default-footer>
         <template #item.HitRate="{ value }">{{ fmtPct(value) }}</template>
         <template #item.IdxHitRate="{ value }">{{ fmtPct(value) }}</template>
         <template #item.ToastHitRate="{ value }">{{ fmtPct(value) }}</template>

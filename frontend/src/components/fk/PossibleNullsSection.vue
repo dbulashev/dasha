@@ -44,7 +44,7 @@ watch([clusterName, hostName, databaseName], () => load(), { immediate: true })
     <v-card-title>{{ t('fk.possibleNulls') }}</v-card-title>
     <v-card-subtitle>{{ t('fk.possibleNullsHint') }}</v-card-subtitle>
     <v-card-text>
-      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort disable-pagination hide-default-footer :no-data-text="t('noData')">
+      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort :items-per-page="-1" hide-default-footer :no-data-text="t('noData')">
         <template #item.AttNames="{ value }">{{ (value as string[]).join(', ') }}</template>
       </v-data-table>
     </v-card-text>

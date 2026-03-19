@@ -6,17 +6,18 @@ import type { IndexCaching } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { assertOk } from '@/utils/api'
 import PaginationControls from '@/components/PaginationControls.vue'
+import { fa } from 'vuetify/locale'
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
 const emit = defineEmits<{ error: [msg: string] }>()
 
-const PAGE_SIZE = 30
+const PAGE_SIZE = 15
 const headers = computed(() => [
-  { title: t('header.schema'), key: 'Schema' },
-  { title: t('header.table'), key: 'Table' },
-  { title: t('header.index'), key: 'Index' },
-  { title: t('header.hitRate'), key: 'HitRate' },
+  { title: t('header.schema'), key: 'Schema', sortable: false },
+  { title: t('header.table'), key: 'Table', sortable: false },
+  { title: t('header.index'), key: 'Index', sortable: false },
+  { title: t('header.hitRate'), key: 'HitRate', sortable: false },
 ])
 const items = ref<IndexCaching[]>([])
 const loading = ref(false)
@@ -60,7 +61,11 @@ watch([clusterName, hostName, databaseName], () => load(), { immediate: true })
       </v-tooltip>
     </v-card-title>
     <v-card-text>
-      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort disable-pagination hide-default-footer />
+      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort :items-per-page="-1" hide-default-footer>
+        <template #item.HitRate="{ value }">
+          {{ value != null ? (value * 100).toFixed(2) + '%' : '—' }}
+        </template>
+      </v-data-table>
       <PaginationControls :page="page" :has-more="hasMore" @update:page="load" />
     </v-card-text>
   </v-card>

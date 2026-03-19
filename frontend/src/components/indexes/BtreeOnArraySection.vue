@@ -43,7 +43,7 @@ watch([clusterName, hostName, databaseName], () => load(), { immediate: true })
     <v-card-title>{{ t('indexes.btreeOnArray') }}</v-card-title>
     <v-card-subtitle class="text-wrap">{{ t('indexes.btreeOnArrayHint') }}</v-card-subtitle>
     <v-card-text>
-      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort disable-pagination hide-default-footer />
+      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort :items-per-page="-1" hide-default-footer />
     </v-card-text>
   </v-card>
 </template>

@@ -44,7 +44,7 @@ watch([clusterName, hostName, databaseName], () => load(), { immediate: true })
     <v-card-title>{{ t('fk.possibleSimilar') }}</v-card-title>
     <v-card-subtitle>{{ t('fk.possibleSimilarHint') }}</v-card-subtitle>
     <v-card-text>
-      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort disable-pagination hide-default-footer :no-data-text="t('noData')" />
+      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort :items-per-page="-1" hide-default-footer :no-data-text="t('noData')" />
     </v-card-text>
   </v-card>
 </template>

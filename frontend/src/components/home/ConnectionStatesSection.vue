@@ -56,7 +56,7 @@ watch([clusterName, hostName], () => load(), { immediate: true })
         :items="items"
         :loading="loading"
         density="compact"
-        disable-pagination
+        :items-per-page="-1"
         hide-default-footer
         :no-data-text="t('noData')"
       />

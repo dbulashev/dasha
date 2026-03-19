@@ -60,7 +60,7 @@ watch([clusterName, hostName], () => load(), { immediate: true })
         :loading="loading"
         density="compact"
         multi-sort
-        disable-pagination
+        :items-per-page="-1"
         hide-default-footer
         :no-data-text="t('noData')"
       />

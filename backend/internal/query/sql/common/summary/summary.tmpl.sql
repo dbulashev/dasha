@@ -21,4 +21,5 @@ FROM pg_class c
         WHERE relation = c.oid AND mode = 'AccessExclusiveLock' AND granted
     )
 GROUP BY 1, 2
+HAVING sum(COALESCE(relpages, 0)) > 10
 ORDER BY sum(COALESCE(relpages, 0)) desc;

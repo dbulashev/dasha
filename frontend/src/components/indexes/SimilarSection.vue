@@ -98,7 +98,7 @@ watch([clusterName, hostName, databaseName], () => load(), { immediate: true })
     <v-card-title>{{ t('indexes.similar1') }}</v-card-title>
     <v-card-subtitle class="text-wrap">{{ t('indexes.similar1Hint') }}</v-card-subtitle>
     <v-card-text>
-      <v-data-table :headers="similar1Headers" :items="similar1Items" :loading="similar1Loading" density="compact" multi-sort disable-pagination hide-default-footer />
+      <v-data-table :headers="similar1Headers" :items="similar1Items" :loading="similar1Loading" density="compact" multi-sort :items-per-page="-1" hide-default-footer />
     </v-card-text>
   </v-card>
 
@@ -107,7 +107,7 @@ watch([clusterName, hostName, databaseName], () => load(), { immediate: true })
     <v-card-title>{{ t('indexes.similar2') }}</v-card-title>
     <v-card-subtitle class="text-wrap">{{ t('indexes.similar2Hint') }}</v-card-subtitle>
     <v-card-text>
-      <v-data-table :headers="similar2Headers" :items="similar2Items" :loading="similar2Loading" density="compact" multi-sort disable-pagination hide-default-footer />
+      <v-data-table :headers="similar2Headers" :items="similar2Items" :loading="similar2Loading" density="compact" multi-sort :items-per-page="-1" hide-default-footer />
     </v-card-text>
   </v-card>
 
@@ -116,7 +116,7 @@ watch([clusterName, hostName, databaseName], () => load(), { immediate: true })
     <v-card-title>{{ t('indexes.similar3') }}</v-card-title>
     <v-card-subtitle class="text-wrap">{{ t('indexes.similar3Hint') }}</v-card-subtitle>
     <v-card-text>
-      <v-data-table :headers="similar3Headers" :items="similar3Items" :loading="similar3Loading" density="compact" multi-sort disable-pagination hide-default-footer />
+      <v-data-table :headers="similar3Headers" :items="similar3Items" :loading="similar3Loading" density="compact" multi-sort :items-per-page="-1" hide-default-footer />
     </v-card-text>
   </v-card>
 </template>

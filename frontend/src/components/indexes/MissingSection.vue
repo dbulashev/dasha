@@ -51,7 +51,7 @@ watch([clusterName, hostName, databaseName], () => load(), { immediate: true })
       </v-tooltip>
     </v-card-title>
     <v-card-text>
-      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort disable-pagination hide-default-footer>
+      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort :items-per-page="-1" hide-default-footer>
         <template #item.PercentOfTimesIndexUsed="{ value }">{{ value != null ? value + '%' : t('insufficientData') }}</template>
       </v-data-table>
     </v-card-text>

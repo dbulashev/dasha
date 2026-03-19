@@ -70,7 +70,7 @@ watch([clusterName, hostName], () => load(), { immediate: true })
       </v-tooltip>
     </v-card-title>
     <v-card-text>
-      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort disable-pagination hide-default-footer>
+      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort :items-per-page="-1" hide-default-footer>
         <template #item.WalBytes="{ item }">{{ item.WalVolume }}</template>
         <template #item.QueryID="{ value }">
           <v-btn icon="mdi-content-copy" variant="text" size="x-small" class="mr-1" @click="copyToClipboard(String(value))" />

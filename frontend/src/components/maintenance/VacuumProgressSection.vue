@@ -42,7 +42,7 @@ watch([clusterName, hostName, databaseName], () => load(), { immediate: true })
   <v-card class="mb-4">
     <v-card-title>{{ t('maintenance.vacuumProgress') }}</v-card-title>
     <v-card-text>
-      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" disable-pagination hide-default-footer :no-data-text="t('maintenance.noActiveVacuum')" />
+      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" :items-per-page="-1" hide-default-footer :no-data-text="t('maintenance.noActiveVacuum')" />
     </v-card-text>
   </v-card>
 </template>

@@ -231,7 +231,7 @@ watch([clusterName, hostName, databaseName], () => load(), { immediate: true })
         :loading="summaryLoading"
         density="compact"
         multi-sort
-        disable-pagination
+        :items-per-page="-1"
         hide-default-footer
       />
     </v-card-text>

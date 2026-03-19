@@ -82,7 +82,7 @@ watch([clusterName, hostName, databaseName], () => load(), { immediate: true })
         item-value="Table"
         density="compact"
         multi-sort
-        disable-pagination
+        :items-per-page="-1"
         hide-default-footer
       >
         <template #item.TotalBytes="{ item }">{{ item.Total }}</template>

@@ -845,7 +845,7 @@ func (p *PgxPool) getIndexesUnused(
 		return nil, fmt.Errorf("getIndexesUnused | %w", err)
 	}
 
-	rows, err := pool.Query(ctx, qStr, 100, limit, offset) //nolint:mnd
+	rows, err := pool.Query(ctx, qStr, 0, limit, offset) //nolint:mnd
 	if err != nil {
 		return nil, fmt.Errorf("getIndexesUnused | %w", err)
 	}

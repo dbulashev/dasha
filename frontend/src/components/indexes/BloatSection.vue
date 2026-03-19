@@ -11,7 +11,7 @@ const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
 const emit = defineEmits<{ error: [msg: string] }>()
 
-const PAGE_SIZE = 30
+const PAGE_SIZE = 15
 const headers = computed(() => [
   { title: t('header.schema'), key: 'Schema' },
   { title: t('header.table'), key: 'Table' },
@@ -62,7 +62,7 @@ watch([clusterName, hostName, databaseName], () => load(), { immediate: true })
       </v-tooltip>
     </v-card-title>
     <v-card-text>
-      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort disable-pagination hide-default-footer />
+      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort :items-per-page="-1" hide-default-footer />
       <PaginationControls :page="page" :has-more="hasMore" @update:page="load" />
     </v-card-text>
   </v-card>
