@@ -215,8 +215,8 @@ func TestGetIndexesUnused(t *testing.T) {
 	vNum, err := p.getServerVersionNum(ctx, pool)
 	require.NoError(t, err)
 
-	// Threshold is hardcoded as $1=100 in the repo method
-	result, err := p.getIndexesUnused(ctx, vNum, pool, 100, 0)
+	// Threshold=100: indexes with idx_scan <= 100
+	result, err := p.getIndexesUnused(ctx, vNum, pool, 100, 100, 0)
 	require.NoError(t, err)
 
 	// Verify field mapping and threshold filter
@@ -230,11 +230,11 @@ func TestGetIndexesUnused(t *testing.T) {
 
 	// Test pagination
 	if len(result) > 2 {
-		page1, err := p.getIndexesUnused(ctx, vNum, pool, 2, 0)
+		page1, err := p.getIndexesUnused(ctx, vNum, pool, 100, 2, 0)
 		require.NoError(t, err)
 		assert.Len(t, page1, 2)
 
-		page2, err := p.getIndexesUnused(ctx, vNum, pool, 2, 2)
+		page2, err := p.getIndexesUnused(ctx, vNum, pool, 100, 2, 2)
 		require.NoError(t, err)
 		if len(page2) > 0 {
 			assert.NotEqual(t, page1[0].Index, page2[0].Index)

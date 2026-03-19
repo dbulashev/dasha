@@ -494,6 +494,12 @@ paths:
             type: boolean
             default: false
           required: false
+        - in: query
+          name: threshold
+          schema:
+            type: integer
+            default: 0
+          required: false
       responses:
         '200':
           description: Success

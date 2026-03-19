@@ -256,6 +256,7 @@
     "similar3Hint": "Indizes mit ähnlichen Definitionen auf derselben Tabelle.",
     "unused": "Unbenutzte Indizes",
     "allHostsCheck": "Analyse über alle Cluster-Hosts (kann lange dauern)",
+    "thresholdLabel": "Schwellenwert idx_scan ≤",
     "usage": "Indexnutzung"
   },
   "Common summary": "Allgemeine Übersicht",

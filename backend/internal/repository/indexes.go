@@ -264,6 +264,7 @@ func (p *PgxPool) GetIndexesUnused(
 	clusterName,
 	instanceName,
 	databaseName string,
+	threshold,
 	limit,
 	offset int,
 ) ([]dto.IndexUnused, error) {
@@ -277,7 +278,7 @@ func (p *PgxPool) GetIndexesUnused(
 		return nil, fmt.Errorf("get server version | %w", err)
 	}
 
-	ret, err := p.getIndexesUnused(ctx, vNum, pool, limit, offset)
+	ret, err := p.getIndexesUnused(ctx, vNum, pool, threshold, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("getIndexesUnused | %w", err)
 	}
@@ -291,6 +292,7 @@ func (p *PgxPool) GetIndexesUnusedAllHosts(
 	ctx context.Context,
 	clusterName,
 	databaseName string,
+	threshold,
 	limit,
 	offset int,
 ) ([]dto.IndexUnused, error) {
@@ -364,12 +366,10 @@ func (p *PgxPool) GetIndexesUnusedAllHosts(
 	}
 
 	// Filter: keep only indexes where max scans across all hosts <= threshold
-	const unusedThreshold int64 = 100
-
 	var all []dto.IndexUnused
 
 	for k, a := range agg {
-		if a.MaxScans <= unusedThreshold {
+		if a.MaxScans <= int64(threshold) {
 			all = append(all, dto.IndexUnused{
 				Schema:     k.Schema,
 				Table:      k.Table,
@@ -837,6 +837,7 @@ func (p *PgxPool) getIndexesUnused(
 	ctx context.Context,
 	serverVersion int,
 	pool *pgxpool.Pool,
+	threshold,
 	limit,
 	offset int,
 ) ([]dto.IndexUnused, error) {
@@ -845,7 +846,7 @@ func (p *PgxPool) getIndexesUnused(
 		return nil, fmt.Errorf("getIndexesUnused | %w", err)
 	}
 
-	rows, err := pool.Query(ctx, qStr, 0, limit, offset) //nolint:mnd
+	rows, err := pool.Query(ctx, qStr, threshold, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("getIndexesUnused | %w", err)
 	}

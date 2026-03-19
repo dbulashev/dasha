@@ -692,15 +692,20 @@ func (s *Handlers) GetIndexesUnused(
 
 	allHosts := req.Params.AllHosts != nil && *req.Params.AllHosts
 
+	var threshold int
+	if req.Params.Threshold != nil {
+		threshold = *req.Params.Threshold
+	}
+
 	var (
 		indexes []dto.IndexUnused
 		err     error
 	)
 
 	if allHosts {
-		indexes, err = s.repo.GetIndexesUnusedAllHosts(ctx, req.Params.ClusterName, req.Params.Database, limit, offset)
+		indexes, err = s.repo.GetIndexesUnusedAllHosts(ctx, req.Params.ClusterName, req.Params.Database, threshold, limit, offset)
 	} else {
-		indexes, err = s.repo.GetIndexesUnused(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, limit, offset)
+		indexes, err = s.repo.GetIndexesUnused(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, threshold, limit, offset)
 	}
 
 	if errors.Is(err, repository.ErrNotFound) {

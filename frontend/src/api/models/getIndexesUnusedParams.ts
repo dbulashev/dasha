@@ -15,4 +15,5 @@ export type GetIndexesUnusedParams = {
   limit?: number
   offset?: number
   all_hosts?: boolean
+  threshold?: number
 }
