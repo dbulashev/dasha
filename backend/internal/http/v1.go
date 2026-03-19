@@ -1268,11 +1268,15 @@ func (s *Handlers) GetTablesTopKBySize(
 	return ret, nil
 }
 
+const defaultTablesCachingLimit = 30
+
 func (s *Handlers) GetTablesCaching(
 	ctx context.Context,
 	req serverhttp.GetTablesCachingRequestObject,
 ) (serverhttp.GetTablesCachingResponseObject, error) {
-	tables, err := s.repo.GetTablesCaching(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
+	limit, offset := paginationDefaults(req.Params.Limit, req.Params.Offset, defaultTablesCachingLimit)
+
+	tables, err := s.repo.GetTablesCaching(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, limit, offset)
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.GetTablesCaching404Response{}, fmt.Errorf("GetTablesCaching | %w", err)
 	}

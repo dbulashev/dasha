@@ -49,7 +49,7 @@ func TestGetTablesCaching(t *testing.T) {
 	vNum, err := p.getServerVersionNum(ctx, pool)
 	require.NoError(t, err)
 
-	result, err := p.getTablesCaching(ctx, vNum, pool)
+	result, err := p.getTablesCaching(ctx, vNum, pool, 100, 0)
 	require.NoError(t, err)
 	// May be empty on fresh databases with no buffer cache activity
 

@@ -569,6 +569,18 @@ paths:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
         - $ref: '#/components/parameters/Database'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 30
+          required: false
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+          required: false
       responses:
         '200':
           description: Success

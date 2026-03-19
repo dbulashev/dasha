@@ -41,7 +41,7 @@ func (p *PgxPool) GetTablesTopKBySize(
 	return ret, nil
 }
 
-func (p *PgxPool) GetTablesCaching(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.TableCaching, error) {
+func (p *PgxPool) GetTablesCaching(ctx context.Context, clusterName, instanceName, databaseName string, limit, offset int) ([]dto.TableCaching, error) {
 	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
 	if err != nil {
 		return nil, fmt.Errorf("GetTablesCaching | %w", err)
@@ -52,7 +52,7 @@ func (p *PgxPool) GetTablesCaching(ctx context.Context, clusterName, instanceNam
 		return nil, fmt.Errorf("get server version | %w", err)
 	}
 
-	ret, err := p.getTablesCaching(ctx, vNum, pool)
+	ret, err := p.getTablesCaching(ctx, vNum, pool, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("getTablesCaching | %w", err)
 	}
@@ -160,13 +160,13 @@ func (p *PgxPool) getTablesTopKBySize(
 	return ret, nil
 }
 
-func (p *PgxPool) getTablesCaching(ctx context.Context, serverVersion int, pool *pgxpool.Pool) ([]dto.TableCaching, error) {
+func (p *PgxPool) getTablesCaching(ctx context.Context, serverVersion int, pool *pgxpool.Pool, limit, offset int) ([]dto.TableCaching, error) {
 	qStr, err := query.Get(serverVersion, enums.QueryTablesCaching, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getTablesCaching | %w", err)
 	}
 
-	rows, err := pool.Query(ctx, qStr)
+	rows, err := pool.Query(ctx, qStr, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("getTablesCaching | %w", err)
 	}

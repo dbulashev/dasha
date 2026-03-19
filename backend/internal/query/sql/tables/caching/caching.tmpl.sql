@@ -13,4 +13,4 @@ WHERE coalesce(
     nullif(COALESCE(tidx_blks_hit, 0) + COALESCE(tidx_blks_read, 0), 0)
 ) IS NOT NULL
 ORDER BY pg_total_relation_size(relid) DESC
-LIMIT 50
+LIMIT $1 OFFSET $2

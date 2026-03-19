@@ -6,6 +6,7 @@ import type { IndexUnused } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { assertOk } from '@/utils/api'
 import PaginationControls from '@/components/PaginationControls.vue'
+import { fmtBytes } from '@/utils/format'
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
@@ -16,7 +17,7 @@ const headers = computed(() => [
   { title: t('header.schema'), key: 'Schema' },
   { title: t('header.table'), key: 'Table' },
   { title: t('header.index'), key: 'Index' },
-  { title: t('header.sizeBytes'), key: 'SizeBytes' },
+  { title: t('header.size'), key: 'SizeBytes' },
   { title: t('header.indexScans'), key: 'IndexScans' },
 ])
 const items = ref<IndexUnused[]>([])
@@ -64,7 +65,9 @@ watch(allHosts, () => load())
         hide-details
         class="mb-2"
       />
-      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort :items-per-page="-1" hide-default-footer />
+      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort :items-per-page="-1" hide-default-footer>
+        <template #item.SizeBytes="{ value }">{{ fmtBytes(value) }}</template>
+      </v-data-table>
       <PaginationControls :page="page" :has-more="hasMore" @update:page="load" />
     </v-card-text>
   </v-card>
