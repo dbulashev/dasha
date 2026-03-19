@@ -22,6 +22,8 @@ const headers = computed(() => [
 ])
 const items = ref<QueryRunning[]>([])
 const loading = ref(false)
+const minDuration = ref(3)
+const durationOptions = [3, 10, 100]
 
 async function load() {
   if (!clusterName.value || !hostName.value || !databaseName.value) return
@@ -31,6 +33,7 @@ async function load() {
       cluster_name: clusterName.value,
       instance: hostName.value,
       database: databaseName.value,
+      min_duration: minDuration.value,
     })
     items.value = assertOk(response) ?? []
   } catch (err) {
@@ -41,13 +44,23 @@ async function load() {
   }
 }
 
-watch([clusterName, hostName, databaseName], () => load(), { immediate: true })
+watch([clusterName, hostName, databaseName, minDuration], () => load(), { immediate: true })
 </script>
 
 <template>
   <v-card class="mb-4">
     <v-card-title>{{ t('Live Queries') }}</v-card-title>
     <v-card-text>
+      <div class="d-flex align-center ga-4 mb-2">
+        <v-select
+          v-model="minDuration"
+          :items="durationOptions"
+          :label="t('queries.minDurationLabel')"
+          density="compact"
+          hide-details
+          style="max-width: 200px"
+        />
+      </div>
       <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort :items-per-page="-1" hide-default-footer />
     </v-card-text>
   </v-card>

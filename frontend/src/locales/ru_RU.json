@@ -176,6 +176,9 @@
         "toastHitRate": "Hit Rate TOAST",
         "toastIdxHitRate": "Hit Rate индексов TOAST"
     },
+    "queries": {
+        "minDurationLabel": "Мин. длительность, сек ≥"
+    },
     "indexes": {
         "all": "Все индексы",
         "topKBySize": "TOP по размеру",

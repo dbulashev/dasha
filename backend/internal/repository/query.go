@@ -32,7 +32,7 @@ func (p *PgxPool) GetQueriesBlocked(ctx context.Context, clusterName, instanceNa
 	return ret, nil
 }
 
-func (p *PgxPool) GetQueriesRunning(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.QueryRunning, error) {
+func (p *PgxPool) GetQueriesRunning(ctx context.Context, clusterName, instanceName, databaseName string, minDuration int) ([]dto.QueryRunning, error) {
 	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
 	if err != nil {
 		return nil, fmt.Errorf("GetQueriesRunning | %w", err)
@@ -43,7 +43,7 @@ func (p *PgxPool) GetQueriesRunning(ctx context.Context, clusterName, instanceNa
 		return nil, fmt.Errorf("get server version | %w", err)
 	}
 
-	ret, err := p.getQueriesRunning(ctx, vNum, pool)
+	ret, err := p.getQueriesRunning(ctx, vNum, pool, minDuration)
 	if err != nil {
 		return nil, fmt.Errorf("getQueriesRunning | %w", err)
 	}
@@ -166,8 +166,8 @@ func (p *PgxPool) getQueriesBlocked(ctx context.Context, serverVersion int, pool
 	return ret, nil
 }
 
-func (p *PgxPool) getQueriesRunning(ctx context.Context, serverVersion int, pool *pgxpool.Pool) ([]dto.QueryRunning, error) {
-	qStr, err := query.Get(serverVersion, enums.QueryQueriesRunning, nil)
+func (p *PgxPool) getQueriesRunning(ctx context.Context, serverVersion int, pool *pgxpool.Pool, minDuration int) ([]dto.QueryRunning, error) {
+	qStr, err := query.Get(serverVersion, enums.QueryQueriesRunning, struct{ MinDuration int }{MinDuration: minDuration})
 	if err != nil {
 		return nil, fmt.Errorf("getQueriesRunning | %w", err)
 	}

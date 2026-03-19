@@ -12,4 +12,10 @@ export type GetMaintenanceInfoParams = {
   cluster_name: ClusterNameParameter
   instance: InstanceParameter
   database: DatabaseParameter
+  limit?: number
+  offset?: number
+  /**
+   * Filter by table name (case-insensitive substring match)
+   */
+  table_name?: string
 }

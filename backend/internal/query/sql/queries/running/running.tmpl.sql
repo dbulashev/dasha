@@ -12,6 +12,6 @@ FROM pg_stat_activity
 WHERE state <> 'idle'
   AND pid <> pg_backend_pid()
   AND datname = current_database()
-  AND NOW() - COALESCE(query_start, xact_start) > interval '3 seconds' -- @todo param
+  AND NOW() - COALESCE(query_start, xact_start) > interval '{{ .MinDuration }} seconds'
   AND query <> '<insufficient privilege>'
 ORDER BY COALESCE(query_start, xact_start) DESC

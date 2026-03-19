@@ -662,6 +662,24 @@ paths:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
         - $ref: '#/components/parameters/Database'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 30
+          required: false
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+          required: false
+        - in: query
+          name: table_name
+          schema:
+            type: string
+          required: false
+          description: Filter by table name (case-insensitive substring match)
       responses:
         '200':
           description: Success
@@ -737,6 +755,12 @@ paths:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
         - $ref: '#/components/parameters/Database'
+        - in: query
+          name: min_duration
+          schema:
+            type: integer
+            default: 3
+          description: Minimum query duration in seconds
       responses:
         '200':
           description: Success

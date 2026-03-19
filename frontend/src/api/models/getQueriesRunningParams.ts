@@ -12,4 +12,8 @@ export type GetQueriesRunningParams = {
   cluster_name: ClusterNameParameter
   instance: InstanceParameter
   database: DatabaseParameter
+  /**
+   * Minimum query duration in seconds
+   */
+  min_duration?: number
 }

@@ -69,7 +69,7 @@ type Repository interface {
 		clusterName,
 		instanceName string,
 	) ([]dto.MaintenanceAutovacuumFreezeMaxAge, error)
-	GetMaintenanceInfo(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.MaintenanceInfo, error)
+	GetMaintenanceInfo(ctx context.Context, clusterName, instanceName, databaseName string, tableName *string, limit, offset int) ([]dto.MaintenanceInfo, error)
 	GetMaintenanceTransactionIdDanger(
 		ctx context.Context,
 		clusterName,
@@ -78,7 +78,7 @@ type Repository interface {
 	) ([]dto.MaintenanceTransactionIdDanger, error)
 	GetMaintenanceVacuumProgress(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.MaintenanceVacuumProgress, error)
 	GetQueriesBlocked(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.QueryBlocked, error)
-	GetQueriesRunning(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.QueryRunning, error)
+	GetQueriesRunning(ctx context.Context, clusterName, instanceName, databaseName string, minDuration int) ([]dto.QueryRunning, error)
 	GetQueriesTop10ByTime(ctx context.Context, clusterName, instanceName string) ([]dto.QueryTop10ByTime, error)
 	GetQueriesTop10ByWal(ctx context.Context, clusterName, instanceName string) ([]dto.QueryTop10ByWal, error)
 	GetQueriesReport(ctx context.Context, clusterName, instanceName string) ([]dto.QueryReport, error)

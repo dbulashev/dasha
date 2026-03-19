@@ -238,6 +238,9 @@
     "noActiveLocks": "Keine aktiven Sperren",
     "blockedProcesses": "Blockierte Prozesse: {count}"
   },
+  "queries": {
+    "minDurationLabel": "Min. Dauer, Sek ≥"
+  },
   "indexes": {
     "all": "Alle Indizes",
     "topKBySize": "TOP nach Größe",
@@ -330,6 +333,7 @@
     "lastAutoanalyze": "Letztes Auto-ANALYZE",
     "deadRows": "Tote Zeilen",
     "liveRows": "Lebende Zeilen",
+    "tableNameFilter": "Nach Tabellenname filtern",
     "autovacuumFreezeMaxAge": "Autovacuum Freeze Max Age",
     "transactionIdDanger": "Transaction-ID-Erschöpfungsgefahr",
     "transactionsLeft": "Transaktionen übrig",

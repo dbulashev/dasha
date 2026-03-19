@@ -786,11 +786,15 @@ func (s *Handlers) GetMaintenanceAutovacuumFreezeMaxAge(
 	return ret, nil
 }
 
+const defaultMaintenanceInfoLimit = 30
+
 func (s *Handlers) GetMaintenanceInfo(
 	ctx context.Context,
 	req serverhttp.GetMaintenanceInfoRequestObject,
 ) (serverhttp.GetMaintenanceInfoResponseObject, error) {
-	data, err := s.repo.GetMaintenanceInfo(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
+	limit, offset := paginationDefaults(req.Params.Limit, req.Params.Offset, defaultMaintenanceInfoLimit)
+
+	data, err := s.repo.GetMaintenanceInfo(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, req.Params.TableName, limit, offset)
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.GetMaintenanceInfo404Response{}, fmt.Errorf("GetMaintenanceInfo | %w", err)
 	}
@@ -907,7 +911,12 @@ func (s *Handlers) GetQueriesRunning(
 	ctx context.Context,
 	req serverhttp.GetQueriesRunningRequestObject,
 ) (serverhttp.GetQueriesRunningResponseObject, error) {
-	queries, err := s.repo.GetQueriesRunning(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
+	minDuration := 3
+	if req.Params.MinDuration != nil {
+		minDuration = *req.Params.MinDuration
+	}
+
+	queries, err := s.repo.GetQueriesRunning(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, minDuration)
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.GetQueriesRunning404Response{}, fmt.Errorf("GetQueriesRunning | %w", err)
 	}
