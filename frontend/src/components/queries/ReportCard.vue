@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
-import hljs from 'highlight.js/lib/core'
-import pgsql from 'highlight.js/lib/languages/pgsql'
 import type { QueryReport } from '@/api/models/index'
-import { fmtBytes } from '@/utils/format'
-
-hljs.registerLanguage('pgsql', pgsql)
+import { fmtBytes, fmtMs as fmtMsUtil, fmtPct, fmtInt } from '@/utils/format'
+import { highlightSql, copyToClipboard } from '@/utils/sql'
+import '@/assets/sql-highlight.css'
 
 type ReportSortKey = 'total_time' | 'calls' | 'wal' | 'rows' | 'cpu_time' | 'io_time' | 'temp_blks'
 
@@ -40,56 +38,13 @@ function isHighContribution(sortKey: ReportSortKey): boolean {
   return pct != null && pct > 5
 }
 
-function highlightSql(sql: string): string {
-  return hljs.highlight(sql, { language: 'pgsql' }).value
+function fmtMs(ms: number | null | undefined): string {
+  return fmtMsUtil(ms, t)
 }
 
 function truncateSql(sql: string, maxLen = 120): string {
   if (sql.length <= maxLen) return sql
   return sql.substring(0, maxLen) + '…'
-}
-
-function copyToClipboard(text: string) {
-  if (navigator.clipboard) {
-    navigator.clipboard.writeText(text)
-  } else {
-    const ta = document.createElement('textarea')
-    ta.value = text
-    document.body.appendChild(ta)
-    ta.select()
-    document.execCommand('copy')
-    document.body.removeChild(ta)
-  }
-}
-
-function fmtMs(ms: number | null | undefined): string {
-  if (ms == null) return '—'
-  if (Math.abs(ms) >= 3600000) {
-    const h = Math.floor(Math.abs(ms) / 3600000)
-    const m = Math.floor((Math.abs(ms) % 3600000) / 60000)
-    const sign = ms < 0 ? '-' : ''
-    return m > 0 ? `${sign}${h} ${t('time.h')} ${m} ${t('time.min')}` : `${sign}${h} ${t('time.h')}`
-  }
-  if (Math.abs(ms) >= 60000) {
-    const m = Math.floor(Math.abs(ms) / 60000)
-    const s = Math.floor((Math.abs(ms) % 60000) / 1000)
-    const sign = ms < 0 ? '-' : ''
-    return s > 0 ? `${sign}${m} ${t('time.min')} ${s} ${t('time.sec')}` : `${sign}${m} ${t('time.min')}`
-  }
-  if (Math.abs(ms) >= 1000) return `${(ms / 1000).toFixed(1)} ${t('time.sec')}`
-  if (Math.abs(ms) >= 1) return `${ms.toFixed(1)} ${t('time.ms')}`
-  if (Math.abs(ms) >= 0.001) return `${(ms * 1000).toFixed(1)} ${t('time.us')}`
-  return `0 ${t('time.ms')}`
-}
-
-function fmtPct(v: number | null | undefined): string {
-  if (v == null) return '—'
-  return v.toFixed(1) + '%'
-}
-
-function fmtInt(v: number | null | undefined): string {
-  if (v == null) return '—'
-  return v.toLocaleString()
 }
 
 </script>
@@ -161,22 +116,6 @@ function fmtInt(v: number | null | undefined): string {
 </template>
 
 <style scoped>
-.sql-highlight :deep(.hljs-keyword) { color: #cf222e; }
-.sql-highlight :deep(.hljs-string) { color: #0a3069; }
-.sql-highlight :deep(.hljs-number) { color: #0550ae; }
-.sql-highlight :deep(.hljs-built_in) { color: #8250df; }
-.sql-highlight :deep(.hljs-type) { color: #8250df; }
-.sql-highlight :deep(.hljs-comment) { color: #6e7781; }
-.sql-highlight :deep(.hljs-operator) { color: #cf222e; }
-
-.v-theme--dark .sql-highlight :deep(.hljs-keyword) { color: #ff7b72; }
-.v-theme--dark .sql-highlight :deep(.hljs-string) { color: #a5d6ff; }
-.v-theme--dark .sql-highlight :deep(.hljs-number) { color: #79c0ff; }
-.v-theme--dark .sql-highlight :deep(.hljs-built_in) { color: #d2a8ff; }
-.v-theme--dark .sql-highlight :deep(.hljs-type) { color: #d2a8ff; }
-.v-theme--dark .sql-highlight :deep(.hljs-comment) { color: #8b949e; }
-.v-theme--dark .sql-highlight :deep(.hljs-operator) { color: #ff7b72; }
-
 .report-highlight {
   border-left: 3px solid rgb(var(--v-theme-primary));
   padding-left: 9px !important;

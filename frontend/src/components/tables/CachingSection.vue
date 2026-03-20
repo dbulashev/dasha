@@ -5,6 +5,7 @@ import { getTablesCaching } from '@/api/gen/default/default'
 import type { TableCaching } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { assertOk } from '@/utils/api'
+import { fmtPct } from '@/utils/format'
 import PaginationControls from '@/components/PaginationControls.vue'
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
@@ -24,11 +25,6 @@ const items = ref<TableCaching[]>([])
 const loading = ref(false)
 const hasMore = ref(true)
 const page = ref(1)
-
-function fmtPct(v: number | null | undefined): string {
-  if (v == null) return '—'
-  return v.toFixed(2) + '%'
-}
 
 async function load(p = 1) {
   if (!clusterName.value || !hostName.value || !databaseName.value) return
@@ -68,10 +64,10 @@ watch([clusterName, hostName, databaseName], () => load(), { immediate: true })
     </v-card-title>
     <v-card-text>
       <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort :items-per-page="-1" hide-default-footer>
-        <template #item.HitRate="{ value }">{{ fmtPct(value) }}</template>
-        <template #item.IdxHitRate="{ value }">{{ fmtPct(value) }}</template>
-        <template #item.ToastHitRate="{ value }">{{ fmtPct(value) }}</template>
-        <template #item.ToastIdxHitRate="{ value }">{{ fmtPct(value) }}</template>
+        <template #item.HitRate="{ value }">{{ fmtPct(value, 2) }}</template>
+        <template #item.IdxHitRate="{ value }">{{ fmtPct(value, 2) }}</template>
+        <template #item.ToastHitRate="{ value }">{{ fmtPct(value, 2) }}</template>
+        <template #item.ToastIdxHitRate="{ value }">{{ fmtPct(value, 2) }}</template>
       </v-data-table>
       <PaginationControls :page="page" :has-more="hasMore" @update:page="load" />
     </v-card-text>
