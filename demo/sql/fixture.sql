@@ -104,6 +104,24 @@ SELECT 1 + (i % 1000), 1 + ((i+500) % 1000)
 FROM generate_series(1, 100) i;
 
 -- =============================================
+-- Overlapping FK columns (detected by indexes/similar_2)
+-- Two FKs from the same table to the same target sharing a column
+-- =============================================
+CREATE UNIQUE INDEX orders_id_user_id_uniq ON orders(id, user_id);
+
+CREATE TABLE order_notes (
+    id serial PRIMARY KEY,
+    order_id integer NOT NULL,
+    user_id integer NOT NULL,
+    note text,
+    CONSTRAINT fk_order_notes_order FOREIGN KEY (order_id) REFERENCES orders(id),
+    CONSTRAINT fk_order_notes_order_user FOREIGN KEY (order_id, user_id) REFERENCES orders(id, user_id)
+);
+INSERT INTO order_notes (order_id, user_id, note)
+SELECT id, user_id, 'note_' || id
+FROM orders LIMIT 100;
+
+-- =============================================
 -- Dead rows for maintenance/info
 -- =============================================
 CREATE TABLE deadrows_test (
