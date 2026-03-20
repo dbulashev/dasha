@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getTablesCaching } from '@/api/gen/default/default'
 import type { TableCaching } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
-import { assertOk } from '@/utils/api'
+import { usePaginatedApiLoader } from '@/composables/useApiLoader'
 import { fmtPct } from '@/utils/format'
 import PaginationControls from '@/components/PaginationControls.vue'
 
@@ -12,7 +12,6 @@ const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
 const emit = defineEmits<{ error: [msg: string] }>()
 
-const PAGE_SIZE = 15
 const headers = computed(() => [
   { title: t('header.schema'), key: 'Schema' },
   { title: t('header.table'), key: 'Table' },
@@ -21,35 +20,22 @@ const headers = computed(() => [
   { title: t('tables.toastHitRate'), key: 'ToastHitRate' },
   { title: t('tables.toastIdxHitRate'), key: 'ToastIdxHitRate' },
 ])
-const items = ref<TableCaching[]>([])
-const loading = ref(false)
-const hasMore = ref(true)
-const page = ref(1)
 
-async function load(p = 1) {
-  if (!clusterName.value || !hostName.value || !databaseName.value) return
-  loading.value = true
-  page.value = p
-  try {
-    const response = await getTablesCaching({
-      cluster_name: clusterName.value,
-      instance: hostName.value,
-      database: databaseName.value,
-      limit: PAGE_SIZE,
-      offset: (p - 1) * PAGE_SIZE,
-    })
-    items.value = assertOk(response) ?? []
-    hasMore.value = items.value.length >= PAGE_SIZE
-  } catch (err) {
-    emit('error', String(err))
-    items.value = []
-    hasMore.value = false
-  } finally {
-    loading.value = false
-  }
-}
-
-watch([clusterName, hostName, databaseName], () => load(), { immediate: true })
+const { items, loading, page, hasMore, load } = usePaginatedApiLoader<TableCaching>(
+  (limit, offset) => getTablesCaching({
+    cluster_name: clusterName.value!,
+    instance: hostName.value!,
+    database: databaseName.value!,
+    limit,
+    offset,
+  }),
+  {
+    pageSize: 15,
+    deps: [clusterName, hostName, databaseName],
+    guard: () => !!clusterName.value && !!hostName.value && !!databaseName.value,
+    onError: (msg) => emit('error', msg),
+  },
+)
 </script>
 
 <template>

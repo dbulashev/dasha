@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getQueriesTop10ByTime } from '@/api/gen/default/default'
 import type { QueryTop10ByTime } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
-import { assertOk } from '@/utils/api'
+import { useApiLoader } from '@/composables/useApiLoader'
 import { highlightSql, copyToClipboard } from '@/utils/sql'
 import '@/assets/sql-highlight.css'
 
@@ -18,27 +18,18 @@ const headers = computed(() => [
   { title: t('header.ioCpuPct'), key: 'IoCpuPct', sortable: false },
   { title: t('header.queryTrunc'), key: 'QueryTrunc' },
 ])
-const items = ref<QueryTop10ByTime[]>([])
-const loading = ref(false)
 
-async function load() {
-  if (!clusterName.value || !hostName.value) return
-  loading.value = true
-  try {
-    const response = await getQueriesTop10ByTime({
-      cluster_name: clusterName.value,
-      instance: hostName.value,
-    })
-    items.value = assertOk(response) ?? []
-  } catch (err) {
-    emit('error', String(err))
-    items.value = []
-  } finally {
-    loading.value = false
-  }
-}
-
-watch([clusterName, hostName], () => load(), { immediate: true })
+const { items, loading } = useApiLoader<QueryTop10ByTime[]>(
+  () => getQueriesTop10ByTime({
+    cluster_name: clusterName.value!,
+    instance: hostName.value!,
+  }),
+  {
+    deps: [clusterName, hostName],
+    guard: () => !!clusterName.value && !!hostName.value,
+    onError: (msg) => emit('error', msg),
+  },
+)
 </script>
 
 <template>
@@ -65,4 +56,3 @@ watch([clusterName, hostName], () => load(), { immediate: true })
     </v-card-text>
   </v-card>
 </template>
-

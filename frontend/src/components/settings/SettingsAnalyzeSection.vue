@@ -1,36 +1,25 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getSettingsAnalyze } from '@/api/gen/default/default'
 import type { SettingsNotification } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
-import { assertOk } from '@/utils/api'
+import { useApiLoader } from '@/composables/useApiLoader'
 
 const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
 const emit = defineEmits<{ error: [msg: string] }>()
 
-const items = ref<SettingsNotification[]>([])
-const loading = ref(false)
-
-async function load() {
-  if (!clusterName.value || !hostName.value) return
-  loading.value = true
-  try {
-    const response = await getSettingsAnalyze({
-      cluster_name: clusterName.value,
-      instance: hostName.value,
-    })
-    items.value = assertOk(response) ?? []
-  } catch (err) {
-    emit('error', String(err))
-    items.value = []
-  } finally {
-    loading.value = false
-  }
-}
-
-watch([clusterName, hostName], () => load(), { immediate: true })
+const { items, loading } = useApiLoader<SettingsNotification[]>(
+  () => getSettingsAnalyze({
+    cluster_name: clusterName.value!,
+    instance: hostName.value!,
+  }),
+  {
+    deps: [clusterName, hostName],
+    guard: () => !!clusterName.value && !!hostName.value,
+    onError: (msg) => emit('error', msg),
+  },
+)
 </script>
 
 <template>

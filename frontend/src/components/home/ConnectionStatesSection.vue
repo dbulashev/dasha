@@ -1,45 +1,35 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getConnectionStates } from '@/api/gen/default/default'
 import type { ConnectionState } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
-import { assertOk } from '@/utils/api'
+import { useApiLoader } from '@/composables/useApiLoader'
 
 const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
-
 const emit = defineEmits<{ error: [msg: string] }>()
 
 const headers = computed(() => [
   { title: t('header.state'), key: 'State' },
   { title: t('header.amount'), key: 'Count' },
 ])
-const items = ref<ConnectionState[]>([])
-const loading = ref(false)
+
+const { items, loading } = useApiLoader<ConnectionState[]>(
+  () => getConnectionStates({
+    cluster_name: clusterName.value!,
+    instance: hostName.value!,
+  }),
+  {
+    deps: [clusterName, hostName],
+    guard: () => !!clusterName.value && !!hostName.value,
+    onError: (msg) => emit('error', msg),
+  },
+)
 
 const totalConnections = computed(() =>
   items.value.reduce((sum, s) => sum + s.Count, 0),
 )
-
-async function load() {
-  if (!clusterName.value || !hostName.value) return
-  loading.value = true
-  try {
-    const response = await getConnectionStates({
-      cluster_name: clusterName.value,
-      instance: hostName.value,
-    })
-    items.value = assertOk(response) ?? []
-  } catch (err) {
-    emit('error', String(err))
-    items.value = []
-  } finally {
-    loading.value = false
-  }
-}
-
-watch([clusterName, hostName], () => load(), { immediate: true })
 </script>
 
 <template>

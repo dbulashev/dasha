@@ -1,19 +1,16 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getQueriesReport } from '@/api/gen/default/default'
 import type { QueryReport } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
-import { assertOk } from '@/utils/api'
+import { useApiLoader } from '@/composables/useApiLoader'
 import ReportCard from '@/components/queries/ReportCard.vue'
 import SqlDialog from '@/components/queries/SqlDialog.vue'
 
 const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
 const emit = defineEmits<{ error: [msg: string] }>()
-
-const items = ref<QueryReport[]>([])
-const loading = ref(false)
 
 type ReportSortKey = 'total_time' | 'calls' | 'wal' | 'rows' | 'cpu_time' | 'io_time' | 'temp_blks'
 
@@ -39,6 +36,18 @@ const sortFieldMap: Record<ReportSortKey, keyof QueryReport> = {
   temp_blks: 'TempBlks',
 }
 
+const { items, loading } = useApiLoader<QueryReport[]>(
+  () => getQueriesReport({
+    cluster_name: clusterName.value!,
+    instance: hostName.value!,
+  }),
+  {
+    deps: [clusterName, hostName],
+    guard: () => !!clusterName.value && !!hostName.value,
+    onError: (msg) => emit('error', msg),
+  },
+)
+
 const sortedItems = computed(() => {
   const field = sortFieldMap[reportSortBy.value]
   return [...items.value].sort((a, b) => {
@@ -62,25 +71,6 @@ function showSqlDialog(item: QueryReport) {
   sqlDialogText.value = item.Query
   sqlDialogVisible.value = true
 }
-
-async function load() {
-  if (!clusterName.value || !hostName.value) return
-  loading.value = true
-  try {
-    const response = await getQueriesReport({
-      cluster_name: clusterName.value,
-      instance: hostName.value,
-    })
-    items.value = assertOk(response) ?? []
-  } catch (err) {
-    emit('error', String(err))
-    items.value = []
-  } finally {
-    loading.value = false
-  }
-}
-
-watch([clusterName, hostName], () => load(), { immediate: true })
 </script>
 
 <template>

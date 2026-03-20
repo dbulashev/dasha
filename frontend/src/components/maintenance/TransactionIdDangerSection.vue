@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getMaintenanceTransactionIdDanger } from '@/api/gen/default/default'
 import type { MaintenanceTransactionIdDanger } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
-import { assertOk } from '@/utils/api'
+import { useApiLoader } from '@/composables/useApiLoader'
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
@@ -15,28 +15,19 @@ const headers = computed(() => [
   { title: t('header.table'), key: 'Table' },
   { title: t('maintenance.transactionsLeft'), key: 'TransactionsLeft' },
 ])
-const items = ref<MaintenanceTransactionIdDanger[]>([])
-const loading = ref(false)
 
-async function load() {
-  if (!clusterName.value || !hostName.value || !databaseName.value) return
-  loading.value = true
-  try {
-    const response = await getMaintenanceTransactionIdDanger({
-      cluster_name: clusterName.value,
-      instance: hostName.value,
-      database: databaseName.value,
-    })
-    items.value = assertOk(response) ?? []
-  } catch (err) {
-    emit('error', String(err))
-    items.value = []
-  } finally {
-    loading.value = false
-  }
-}
-
-watch([clusterName, hostName, databaseName], () => load(), { immediate: true })
+const { items, loading } = useApiLoader<MaintenanceTransactionIdDanger[]>(
+  () => getMaintenanceTransactionIdDanger({
+    cluster_name: clusterName.value!,
+    instance: hostName.value!,
+    database: databaseName.value!,
+  }),
+  {
+    deps: [clusterName, hostName, databaseName],
+    guard: () => !!clusterName.value && !!hostName.value && !!databaseName.value,
+    onError: (msg) => emit('error', msg),
+  },
+)
 </script>
 
 <template>

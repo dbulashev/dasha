@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getTablesTopKBySize } from '@/api/gen/default/default'
 import type { TableTopKBySize } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
-import { assertOk } from '@/utils/api'
+import { useApiLoader } from '@/composables/useApiLoader'
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
@@ -21,32 +21,22 @@ const headers = computed(() => [
   { title: t('header.vm'), key: 'Vm' },
   { title: t('header.bloat'), key: 'Bloat' },
 ])
-const items = ref<TableTopKBySize[]>([])
-const loading = ref(false)
 const limitOptions = [10, 20, 30, 50]
 const limit = ref(10)
 
-async function load() {
-  if (!clusterName.value || !hostName.value || !databaseName.value) return
-  loading.value = true
-  try {
-    const response = await getTablesTopKBySize({
-      cluster_name: clusterName.value,
-      instance: hostName.value,
-      database: databaseName.value,
-      limit: limit.value,
-    })
-    items.value = assertOk(response) ?? []
-  } catch (err) {
-    emit('error', String(err))
-    items.value = []
-  } finally {
-    loading.value = false
-  }
-}
-
-watch(limit, () => load())
-watch([clusterName, hostName, databaseName], () => load(), { immediate: true })
+const { items, loading } = useApiLoader<TableTopKBySize[]>(
+  () => getTablesTopKBySize({
+    cluster_name: clusterName.value!,
+    instance: hostName.value!,
+    database: databaseName.value!,
+    limit: limit.value,
+  }),
+  {
+    deps: [clusterName, hostName, databaseName, limit],
+    guard: () => !!clusterName.value && !!hostName.value && !!databaseName.value,
+    onError: (msg) => emit('error', msg),
+  },
+)
 </script>
 
 <template>

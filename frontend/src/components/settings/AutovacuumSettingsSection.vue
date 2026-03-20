@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getAutovacuumSettings } from '@/api/gen/default/default'
 import type { PgSetting } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
-import { assertOk } from '@/utils/api'
+import { useApiLoader } from '@/composables/useApiLoader'
 
 const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
@@ -15,8 +15,18 @@ const headers = computed(() => [
   { title: t('settings.value'), key: 'SettingWithUnit' },
   { title: t('settings.source'), key: 'Source' },
 ])
-const items = ref<PgSetting[]>([])
-const loading = ref(false)
+
+const { items, loading } = useApiLoader<PgSetting[]>(
+  () => getAutovacuumSettings({
+    cluster_name: clusterName.value!,
+    instance: hostName.value!,
+  }),
+  {
+    deps: [clusterName, hostName],
+    guard: () => !!clusterName.value && !!hostName.value,
+    onError: (msg) => emit('error', msg),
+  },
+)
 
 const displayItems = computed(() =>
   items.value.map((s) => ({
@@ -24,25 +34,6 @@ const displayItems = computed(() =>
     SettingWithUnit: s.Unit ? `${s.Setting} ${s.Unit}` : s.Setting,
   })),
 )
-
-async function load() {
-  if (!clusterName.value || !hostName.value) return
-  loading.value = true
-  try {
-    const response = await getAutovacuumSettings({
-      cluster_name: clusterName.value,
-      instance: hostName.value,
-    })
-    items.value = assertOk(response) ?? []
-  } catch (err) {
-    emit('error', String(err))
-    items.value = []
-  } finally {
-    loading.value = false
-  }
-}
-
-watch([clusterName, hostName], () => load(), { immediate: true })
 </script>
 
 <template>
