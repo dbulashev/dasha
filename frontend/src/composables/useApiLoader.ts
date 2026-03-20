@@ -15,7 +15,8 @@ interface UseApiLoaderReturn<T> {
 }
 
 export function useApiLoader<T = unknown[]>(
-  fetcher: () => Promise<{ data: T; status: number }>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  fetcher: () => Promise<{ data: any; status: number }>,
   options: UseApiLoaderOptions<T>,
 ): UseApiLoaderReturn<T> {
   const items = ref(options.defaultValue ?? ([] as unknown as T)) as Ref<T>
@@ -57,7 +58,8 @@ interface UsePaginatedApiLoaderReturn<T> {
 }
 
 export function usePaginatedApiLoader<T>(
-  fetcher: (limit: number, offset: number) => Promise<{ data: T[]; status: number }>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  fetcher: (limit: number, offset: number) => Promise<{ data: any; status: number }>,
   options: UsePaginatedApiLoaderOptions<T>,
 ): UsePaginatedApiLoaderReturn<T> {
   const items = ref(options.defaultValue ?? []) as Ref<T[]>

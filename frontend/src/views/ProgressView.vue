@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed, onBeforeUnmount } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   getProgressAnalyze,
@@ -16,7 +16,10 @@ import type {
   ProgressBaseBackup,
 } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
+import { useAutoRefresh } from '@/composables/useAutoRefresh'
 import { assertOk } from '@/utils/api'
+import ProgressCard from '@/components/progress/ProgressCard.vue'
+import type { ProgressCardData } from '@/components/progress/ProgressCard.vue'
 
 const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
@@ -31,18 +34,7 @@ const clusterItems = ref<ProgressCluster[]>([])
 const indexItems = ref<ProgressIndex[]>([])
 const baseBackupItems = ref<ProgressBaseBackup[]>([])
 
-// --- Unified card model ---
-interface ProgressCard {
-  type: 'analyze' | 'vacuum' | 'cluster' | 'index' | 'baseBackup'
-  icon: string
-  label: string
-  pid: number
-  target: string
-  phase: string
-  progress: number | null // 0-100, null if not calculable
-  metrics: { label: string; value: string }[]
-}
-
+// --- Helpers ---
 const typeConfig = {
   analyze: { icon: 'mdi-magnify', label: 'progress.analyze' },
   vacuum: { icon: 'mdi-broom', label: 'progress.vacuum' },
@@ -60,21 +52,16 @@ function fmtNum(v: number): string {
   return v.toLocaleString()
 }
 
-function phaseLabel(type: ProgressCard['type'], phase: string): string {
+function phaseLabel(type: ProgressCardData['type'], phase: string): string {
   const key = `progress.phases.${type}.${phase}`
   const translated = t(key)
-  // If no translation found, vue-i18n returns the key itself — fall back to raw phase
   return translated === key ? phase : translated
 }
 
 // Phases where a numeric progress bar is meaningful
 const analyzeProgressPhases = new Set(['acquiring sample rows'])
 const clusterProgressPhases = new Set(['seq scanning heap', 'index scanning heap'])
-const indexProgressPrefixes = [
-  'building index',
-  'index validation: scanning index',
-  'index validation: scanning table',
-]
+const indexProgressPrefixes = ['building index', 'index validation: scanning index', 'index validation: scanning table']
 
 function vacuumProgress(item: ProgressVacuum): number | null {
   if (item.Phase === 'scanning heap') return calcPct(item.HeapBlksScanned, item.HeapBlksTotal)
@@ -92,14 +79,13 @@ function indexProgress(item: ProgressIndex): number | null {
   return calcPct(item.BlocksDone, item.BlocksTotal) ?? calcPct(item.TuplesDone, item.TuplesTotal)
 }
 
-const cards = computed<ProgressCard[]>(() => {
-  const result: ProgressCard[] = []
+// --- Unified card model ---
+const cards = computed<ProgressCardData[]>(() => {
+  const result: ProgressCardData[] = []
 
   for (const item of analyzeItems.value) {
     result.push({
-      type: 'analyze',
-      ...typeConfig.analyze,
-      pid: item.Pid,
+      type: 'analyze', ...typeConfig.analyze, pid: item.Pid,
       target: [item.Datname, item.TableName].filter(Boolean).join('.'),
       phase: phaseLabel('analyze', item.Phase),
       progress: analyzeProgressPhases.has(item.Phase) ? calcPct(item.SampleBlksScanned, item.SampleBlksTotal) : null,
@@ -113,9 +99,7 @@ const cards = computed<ProgressCard[]>(() => {
 
   for (const item of vacuumItems.value) {
     result.push({
-      type: 'vacuum',
-      ...typeConfig.vacuum,
-      pid: item.Pid,
+      type: 'vacuum', ...typeConfig.vacuum, pid: item.Pid,
       target: [item.Datname, item.TableName].filter(Boolean).join('.'),
       phase: phaseLabel('vacuum', item.Phase),
       progress: vacuumProgress(item),
@@ -130,9 +114,7 @@ const cards = computed<ProgressCard[]>(() => {
 
   for (const item of clusterItems.value) {
     result.push({
-      type: 'cluster',
-      ...typeConfig.cluster,
-      pid: item.Pid,
+      type: 'cluster', ...typeConfig.cluster, pid: item.Pid,
       target: [item.Datname, item.TableName].filter(Boolean).join('.'),
       phase: phaseLabel('cluster', item.Phase),
       progress: clusterProgress(item),
@@ -149,9 +131,7 @@ const cards = computed<ProgressCard[]>(() => {
 
   for (const item of indexItems.value) {
     result.push({
-      type: 'index',
-      ...typeConfig.index,
-      pid: item.Pid,
+      type: 'index', ...typeConfig.index, pid: item.Pid,
       target: [item.Datname, item.TableName, item.IndexName].filter(Boolean).join('.'),
       phase: phaseLabel('index', item.Phase),
       progress: indexProgress(item),
@@ -166,9 +146,7 @@ const cards = computed<ProgressCard[]>(() => {
 
   for (const item of baseBackupItems.value) {
     result.push({
-      type: 'baseBackup',
-      ...typeConfig.baseBackup,
-      pid: item.Pid,
+      type: 'baseBackup', ...typeConfig.baseBackup, pid: item.Pid,
       target: '',
       phase: phaseLabel('baseBackup', item.Phase),
       progress: item.ProgressPercentage ?? null,
@@ -214,65 +192,11 @@ async function loadEverything() {
 }
 
 // --- Auto-refresh ---
-const POLL_INTERVAL = 5000
-const MAX_POLL_DURATION = 5 * 60 * 1000
-const autoRefreshActive = ref(false)
-const autoRefreshRemaining = ref(0)
-let pollTimer: ReturnType<typeof setInterval> | null = null
-let countdownTimer: ReturnType<typeof setInterval> | null = null
-let pollStartTime = 0
-
-function startAutoRefresh() {
-  stopAutoRefresh()
-  autoRefreshActive.value = true
-  pollStartTime = Date.now()
-  autoRefreshRemaining.value = MAX_POLL_DURATION
-
-  pollTimer = setInterval(() => {
-    const elapsed = Date.now() - pollStartTime
-    if (elapsed >= MAX_POLL_DURATION) {
-      stopAutoRefresh()
-      return
-    }
-    loadEverything()
-  }, POLL_INTERVAL)
-
-  countdownTimer = setInterval(() => {
-    const elapsed = Date.now() - pollStartTime
-    autoRefreshRemaining.value = Math.max(0, MAX_POLL_DURATION - elapsed)
-    if (autoRefreshRemaining.value <= 0) {
-      stopAutoRefresh()
-    }
-  }, 1000)
-}
-
-function stopAutoRefresh() {
-  autoRefreshActive.value = false
-  autoRefreshRemaining.value = 0
-  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
-  if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null }
-}
-
-function toggleAutoRefresh() {
-  if (autoRefreshActive.value) {
-    stopAutoRefresh()
-  } else {
-    startAutoRefresh()
-  }
-}
-
-function formatRemaining(ms: number): string {
-  const totalSec = Math.ceil(ms / 1000)
-  const m = Math.floor(totalSec / 60)
-  const s = totalSec % 60
-  return `${m}:${s.toString().padStart(2, '0')}`
-}
-
-onBeforeUnmount(() => stopAutoRefresh())
+const autoRefresh = useAutoRefresh({ onTick: loadEverything })
 
 // --- Reload on cluster/host change ---
 watch([clusterName, hostName], () => {
-  stopAutoRefresh()
+  autoRefresh.stop()
   loadEverything()
 }, { immediate: true })
 </script>
@@ -285,15 +209,15 @@ watch([clusterName, hostName], () => {
   <!-- Header with auto-refresh control -->
   <div class="d-flex align-center ga-3 mb-4">
     <v-btn
-      :icon="autoRefreshActive ? 'mdi-stop' : 'mdi-play'"
-      :color="autoRefreshActive ? 'error' : 'success'"
+      :icon="autoRefresh.active.value ? 'mdi-stop' : 'mdi-play'"
+      :color="autoRefresh.active.value ? 'error' : 'success'"
       variant="tonal"
       size="small"
-      @click="toggleAutoRefresh"
+      @click="autoRefresh.toggle"
     />
-    <span v-if="autoRefreshActive" class="text-body-2 d-flex align-center ga-1">
+    <span v-if="autoRefresh.active.value" class="text-body-2 d-flex align-center ga-1">
       <v-icon size="small" color="success" class="auto-refresh-icon">mdi-refresh</v-icon>
-      {{ formatRemaining(autoRefreshRemaining) }}
+      {{ autoRefresh.formatRemaining(autoRefresh.remaining.value) }}
     </span>
     <v-btn
       icon="mdi-refresh"
@@ -316,50 +240,11 @@ watch([clusterName, hostName], () => {
   </v-card>
 
   <!-- Operation cards -->
-  <v-card
+  <ProgressCard
     v-for="card in cards"
     :key="`${card.type}-${card.pid}`"
-    variant="outlined"
-    class="mb-3"
-  >
-    <v-card-title class="text-subtitle-1 d-flex align-center ga-2 flex-wrap">
-      <v-icon :icon="card.icon" size="small" />
-      <span class="font-weight-bold">{{ t(card.label) }}</span>
-      <v-chip size="small" variant="tonal">PID {{ card.pid }}</v-chip>
-      <span v-if="card.target" class="text-body-2 text-medium-emphasis" style="font-family: monospace;">{{ card.target }}</span>
-    </v-card-title>
-
-    <v-card-text class="pt-0">
-      <!-- Phase -->
-      <div class="d-flex align-center ga-2 mb-2">
-        <v-chip size="small" color="info" variant="tonal">{{ card.phase }}</v-chip>
-        <span v-if="card.progress != null" class="text-body-2 font-weight-medium">{{ card.progress }}%</span>
-      </div>
-
-      <!-- Progress bar -->
-      <v-progress-linear
-        v-if="card.progress != null"
-        :model-value="card.progress"
-        color="primary"
-        height="8"
-        rounded
-        class="mb-3"
-      />
-
-      <!-- Metrics -->
-      <v-row dense>
-        <v-col
-          v-for="metric in card.metrics"
-          :key="metric.label"
-          cols="6"
-          md="3"
-        >
-          <div class="text-caption text-medium-emphasis">{{ metric.label }}</div>
-          <div class="text-body-2">{{ metric.value }}</div>
-        </v-col>
-      </v-row>
-    </v-card-text>
-  </v-card>
+    :card="card"
+  />
 </template>
 
 <style scoped>
