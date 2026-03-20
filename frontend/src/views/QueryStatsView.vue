@@ -4,16 +4,14 @@ import { useI18n } from 'vue-i18n'
 import { getQueryStatsStatus } from '@/api/gen/default/default'
 import type { QueryStatsStatus } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
+import { useViewError } from '@/composables/useViewError'
 import { assertOk } from '@/utils/api'
 import Top10ByTimeSection from '@/components/queries/Top10ByTimeSection.vue'
 import Top10ByWalSection from '@/components/queries/Top10ByWalSection.vue'
-import QueryReportSection from '@/components/queries/QueryReportSection.vue'
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
-
-const errorMessage = ref('')
-function onError(msg: string) { errorMessage.value = msg }
+const { errorMessage, onError, clearError } = useViewError()
 
 // --- Query stats status (shared warning) ---
 const queryStatsStatus = ref<QueryStatsStatus | null>(null)
@@ -47,7 +45,7 @@ async function loadQueryStatsStatus() {
 }
 
 watch([clusterName, hostName, databaseName], () => {
-  errorMessage.value = ''
+  clearError()
   loadQueryStatsStatus()
 }, { immediate: true })
 </script>
@@ -58,5 +56,4 @@ watch([clusterName, hostName, databaseName], () => {
 
   <Top10ByTimeSection @error="onError" />
   <Top10ByWalSection @error="onError" />
-  <QueryReportSection @error="onError" />
 </template>

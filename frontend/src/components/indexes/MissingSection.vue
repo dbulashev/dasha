@@ -42,7 +42,7 @@ const { items, loading } = useApiLoader<IndexMissing[]>(
       </v-tooltip>
     </v-card-title>
     <v-card-text>
-      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort :items-per-page="-1" hide-default-footer>
+      <v-data-table :headers="headers" :items="items" :loading="loading">
         <template #item.PercentOfTimesIndexUsed="{ value }">{{ value != null ? value + '%' : t('insufficientData') }}</template>
       </v-data-table>
     </v-card-text>

@@ -1,4 +1,7 @@
-WITH constants AS (SELECT current_setting('block_size')::numeric bs, 23 hdr, 8 ma),
+WITH locked_rels AS MATERIALIZED (
+    SELECT relation FROM pg_locks WHERE mode = 'AccessExclusiveLock' AND granted
+),
+constants AS (SELECT current_setting('block_size')::numeric bs, 23 hdr, 8 ma),
      monitor_pg_columns as (SELECT table_schema, table_name
                             FROM information_schema.columns),
      monitor_pg_stats as (SELECT schemaname, tablename, attname, null_frac, avg_width, n_distinct
@@ -13,6 +16,7 @@ WITH constants AS (SELECT current_setting('block_size')::numeric bs, 23 hdr, 8 m
                                                            column_name = attname
                   WHERE attname IS NULL
                     AND table_schema NOT IN ('pg_catalog', 'information_schema')
+                    AND psut.relid NOT IN (SELECT relation FROM locked_rels)
                   GROUP BY table_schema, table_name, relid, n_live_tup),
      null_headers AS (SELECT hdr + 1 + sum(CASE WHEN null_frac <> 0 THEN 1 ELSE 0 END) / 8 nullhdr,
                              sum((1 - null_frac) * avg_width)                              datawidth,
@@ -96,7 +100,14 @@ WITH constants AS (SELECT current_setting('block_size')::numeric bs, 23 hdr, 8 m
                                table_bloat_pct,
                                pg_size_pretty(bloat_bytes) as bloat_size,
                                pg_size_pretty(table_bytes) as table_size
-                        FROM bloat_data)
+                        FROM bloat_data),
+     safe_tables AS MATERIALIZED (
+         SELECT c.oid, c.relname, c.reltoastrelid, c.reloptions, ns.nspname
+         FROM pg_class c
+                  JOIN pg_catalog.pg_namespace ns ON ns.oid = c.relnamespace
+         WHERE c.relkind IN ('p', 'r', 'm')
+           AND c.oid NOT IN (SELECT relation FROM locked_rels)
+     )
 SELECT c.relname                                                  AS table,
        (SELECT count(*) FROM pg_index i WHERE i.indrelid = c.oid) AS n_idx,
        pg_total_relation_size(c.oid)                              AS total_bytes,
@@ -125,16 +136,9 @@ SELECT c.relname                                                  AS table,
         WHERE s.relid = c.oid)                                    AS stat_info,
        bloat_size || '(' || ptb.table_bloat_pct || '%)'           as bloat,
        replace(translate(c.reloptions::text, '{}', ''), ',', ', ') as reloptions
-FROM pg_class c
-         JOIN pg_catalog.pg_namespace ns ON ns.oid = c.relnamespace
+FROM safe_tables c
          LEFT JOIN pg_table_bloat ptb
-                   ON ptb."database" = current_database() AND ptb."schema" = ns.nspname AND ptb."table" = c.relname
-WHERE c.relkind IN ('p', 'r', 'm')
-  AND NOT EXISTS (SELECT 1
-                  FROM pg_locks
-                  WHERE relation = c.oid
-                    AND mode = 'AccessExclusiveLock'
-                    AND granted)
-  AND pg_total_relation_size(c.oid) > 500 * 2 ^ 10
+                   ON ptb."database" = current_database() AND ptb."schema" = c.nspname AND ptb."table" = c.relname
+WHERE pg_total_relation_size(c.oid) > 500 * 2 ^ 10
 ORDER BY pg_total_relation_size(c.oid) DESC
 limit $1;

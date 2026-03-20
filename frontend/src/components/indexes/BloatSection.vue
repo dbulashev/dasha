@@ -49,7 +49,7 @@ const { items, loading, page, hasMore, load } = usePaginatedApiLoader<IndexBloat
       </v-tooltip>
     </v-card-title>
     <v-card-text>
-      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort :items-per-page="-1" hide-default-footer />
+      <v-data-table :headers="headers" :items="items" :loading="loading" />
       <PaginationControls :page="page" :has-more="hasMore" @update:page="load" />
     </v-card-text>
   </v-card>

@@ -27,6 +27,10 @@ WITH
         FROM pg_catalog.pg_index AS i
                  INNER JOIN pg_catalog.pg_class AS ic ON i.indexrelid = ic.oid
                  INNER JOIN pg_catalog.pg_class AS c ON i.indrelid = c.oid
+        WHERE NOT EXISTS (
+            SELECT 1 FROM pg_locks
+            WHERE relation = c.oid AND mode = 'AccessExclusiveLock' AND granted
+        )
     )
 SELECT
     i1.table_name,

@@ -70,15 +70,11 @@ const { items, loading } = useApiLoader<TableTopKBySize[]>(
         :loading="loading"
         :expanded="items.map(i => i.Table)"
         item-value="Table"
-        density="compact"
-        multi-sort
-        :items-per-page="-1"
-        hide-default-footer
       >
         <template #item.TotalBytes="{ item }">{{ item.Total }}</template>
         <template #expanded-row="{ columns, item }">
           <tr v-if="item.StatInfo || item.Options" class="topk-expanded-row">
-            <td :colspan="columns.length" class="py-1" style="padding-left: 2.5rem !important">
+            <td :colspan="columns.length" class="py-1 expanded-cell">
               <v-icon size="x-small" class="mr-1 text-medium-emphasis">mdi-subdirectory-arrow-right</v-icon>
               <span v-if="item.StatInfo" class="text-caption mr-4">
                 <v-icon size="x-small" class="mr-1">mdi-chart-bar</v-icon>{{ item.StatInfo }}
@@ -93,3 +89,9 @@ const { items, loading } = useApiLoader<TableTopKBySize[]>(
     </v-card-text>
   </v-card>
 </template>
+
+<style scoped>
+.expanded-cell {
+  padding-left: 2.5rem !important;
+}
+</style>

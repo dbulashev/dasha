@@ -31,6 +31,7 @@ import type {
   GetConnectionStatActivityParams,
   GetConnectionStatesParams,
   GetDatabaseSizeParams,
+  GetDatabaseUsersParams,
   GetFkTypeMismatchParams,
   GetFksPossibleNullsParams,
   GetFksPossibleSimilarParams,
@@ -693,6 +694,108 @@ export function useGetInstanceInfo<
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetInstanceInfoQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+export type getDatabaseUsersResponse200 = {
+  data: string[]
+  status: 200
+}
+
+export type getDatabaseUsersResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getDatabaseUsersResponseSuccess = getDatabaseUsersResponse200 & {
+  headers: Headers
+}
+export type getDatabaseUsersResponseError = getDatabaseUsersResponse404 & {
+  headers: Headers
+}
+
+export type getDatabaseUsersResponse =
+  | getDatabaseUsersResponseSuccess
+  | getDatabaseUsersResponseError
+
+export const getGetDatabaseUsersUrl = (params: GetDatabaseUsersParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/common/database-users?${stringifiedParams}`
+    : `/api/common/database-users`
+}
+
+export const getDatabaseUsers = async (
+  params: GetDatabaseUsersParams,
+  options?: RequestInit,
+): Promise<getDatabaseUsersResponse> => {
+  const res = await fetch(getGetDatabaseUsersUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
+
+  const data: getDatabaseUsersResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getDatabaseUsersResponse
+}
+
+export const getGetDatabaseUsersQueryKey = (params?: MaybeRef<GetDatabaseUsersParams>) => {
+  return ['api', 'common', 'database-users', ...(params ? [params] : [])] as const
+}
+
+export const getGetDatabaseUsersQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDatabaseUsers>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetDatabaseUsersParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getDatabaseUsers>>, TError, TData>
+    fetch?: RequestInit
+  },
+) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+
+  const queryKey = getGetDatabaseUsersQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getDatabaseUsers>>> = ({ signal }) =>
+    getDatabaseUsers(unref(params), { signal, ...fetchOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDatabaseUsers>>,
+    TError,
+    TData
+  >
+}
+
+export type GetDatabaseUsersQueryResult = NonNullable<Awaited<ReturnType<typeof getDatabaseUsers>>>
+export type GetDatabaseUsersQueryError = NotFoundResponse
+
+export function useGetDatabaseUsers<
+  TData = Awaited<ReturnType<typeof getDatabaseUsers>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetDatabaseUsersParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getDatabaseUsers>>, TError, TData>
+    fetch?: RequestInit
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDatabaseUsersQueryOptions(params, options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
 

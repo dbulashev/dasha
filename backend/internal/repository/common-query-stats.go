@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
 
 	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/enums"
@@ -27,9 +28,20 @@ func (p *PgxPool) GetQueryStatsStatus(
 		return dto.QueryStatsStatus{}, fmt.Errorf("get server version | %w", err)
 	}
 
-	available, _ := p.getQueryStatsAvailable(ctx, vNum, pool)
-	enabled, _ := p.getQueryStatsEnabled(ctx, vNum, pool)
-	readable, _ := p.getQueryStatsReadable(ctx, vNum, pool)
+	available, err := p.getQueryStatsAvailable(ctx, vNum, pool)
+	if err != nil {
+		p.logger.Warn("failed to get query stats available", zap.Error(err))
+	}
+
+	enabled, err := p.getQueryStatsEnabled(ctx, vNum, pool)
+	if err != nil {
+		p.logger.Warn("failed to get query stats enabled", zap.Error(err))
+	}
+
+	readable, err := p.getQueryStatsReadable(ctx, vNum, pool)
+	if err != nil {
+		p.logger.Warn("failed to get query stats readable", zap.Error(err))
+	}
 
 	return dto.QueryStatsStatus{
 		Available: available,
@@ -43,6 +55,9 @@ func (p *PgxPool) getQueryStatsAvailable(
 	serverVersion int,
 	pool *pgxpool.Pool,
 ) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryCommonQueryStatsAvailable, nil)
 	if err != nil {
 		return false, fmt.Errorf("getQueryStatsAvailable | %w", err)
@@ -63,6 +78,9 @@ func (p *PgxPool) getQueryStatsEnabled(
 	serverVersion int,
 	pool *pgxpool.Pool,
 ) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryCommonQueryStatsEnabled, nil)
 	if err != nil {
 		return false, fmt.Errorf("getQueryStatsEnabled | %w", err)
@@ -83,6 +101,9 @@ func (p *PgxPool) getQueryStatsReadable(
 	serverVersion int,
 	pool *pgxpool.Pool,
 ) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryCommonQueryStatsReadable, nil)
 	if err != nil {
 		return false, fmt.Errorf("getQueryStatsReadable | %w", err)

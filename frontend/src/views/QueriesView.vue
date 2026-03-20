@@ -1,16 +1,13 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { watch } from 'vue'
 import { useClusterInfo } from '@/composables/useClusterInfo'
+import { useViewError } from '@/composables/useViewError'
 import RunningQueriesSection from '@/components/queries/RunningQueriesSection.vue'
 
 const { clusterName, hostName, databaseName } = useClusterInfo()
+const { errorMessage, onError, clearError } = useViewError()
 
-const errorMessage = ref('')
-function onError(msg: string) { errorMessage.value = msg }
-
-watch([clusterName, hostName, databaseName], () => {
-  errorMessage.value = ''
-}, { immediate: true })
+watch([clusterName, hostName, databaseName], clearError, { immediate: true })
 </script>
 
 <template>

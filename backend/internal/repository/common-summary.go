@@ -110,6 +110,9 @@ func (p *PgxPool) getCommonSummary(
 	serverVersion int,
 	pool *pgxpool.Pool,
 ) ([]dto.CommonSummary, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryCommonSummary, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getCommonSummary | %w", err)
@@ -134,6 +137,10 @@ func (p *PgxPool) getCommonSummary(
 		}
 
 		ret = append(ret, dto.CommonSummary{Namespace: namespace, Kind: kind, ApproxSize: approxSize, Amount: amount})
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getCommonSummary | %w", err)
 	}
 
 	return ret, nil

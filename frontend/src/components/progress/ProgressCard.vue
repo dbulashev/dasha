@@ -23,7 +23,7 @@ const { t } = useI18n()
       <v-icon :icon="card.icon" size="small" />
       <span class="font-weight-bold">{{ t(card.label) }}</span>
       <v-chip size="small" variant="tonal">PID {{ card.pid }}</v-chip>
-      <span v-if="card.target" class="text-body-2 text-medium-emphasis" style="font-family: monospace;">{{ card.target }}</span>
+      <span v-if="card.target" class="text-body-2 text-medium-emphasis text-mono">{{ card.target }}</span>
     </v-card-title>
 
     <v-card-text class="pt-0">

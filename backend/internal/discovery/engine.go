@@ -81,7 +81,12 @@ func (e *Engine) startYandexMDB(ctx context.Context, folderName string, cfg conf
 
 	filters := make([]filter.Filter, 0, len(cfg.Clusters))
 	for _, c := range cfg.Clusters {
-		filters = append(filters, *filter.New(c.Name, c.Db, c.ExcludeName, c.ExcludeDb))
+		f, err := filter.New(c.Name, c.Db, c.ExcludeName, c.ExcludeDb)
+		if err != nil {
+			return fmt.Errorf("compile filter for folder %q: %w", folderName, err)
+		}
+
+		filters = append(filters, *f)
 	}
 
 	interval := time.Duration(cfg.RefreshInterval) * time.Minute

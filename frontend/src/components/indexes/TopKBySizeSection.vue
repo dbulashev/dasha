@@ -35,7 +35,7 @@ const { items, loading } = useApiLoader<IndexTopKBySize[]>(
   <v-card class="mb-4">
     <v-card-title>{{ t('indexes.topKBySize') }}</v-card-title>
     <v-card-text>
-      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort :items-per-page="-1" hide-default-footer>
+      <v-data-table :headers="headers" :items="items" :loading="loading">
         <template #item.SizeBytes="{ item }">{{ item.Size }}</template>
       </v-data-table>
     </v-card-text>

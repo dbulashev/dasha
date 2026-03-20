@@ -1,7 +1,10 @@
 // Package filter implements regexp matching for cluster and database names.
 package filter
 
-import "regexp"
+import (
+	"fmt"
+	"regexp"
+)
 
 // Filter implements regexp filters for clusters and their databases.
 type Filter struct {
@@ -12,23 +15,38 @@ type Filter struct {
 }
 
 // New returns a Filter with compiled regexps.
-func New(name string, db, excludeName, excludeDb *string) *Filter {
+func New(name string, db, excludeName, excludeDb *string) (*Filter, error) {
 	f := &Filter{} //nolint:exhaustruct
 
-	f.nameRegexp = regexp.MustCompile(name)
+	var err error
+
+	f.nameRegexp, err = regexp.Compile(name)
+	if err != nil {
+		return nil, fmt.Errorf("compile name regexp %q: %w", name, err)
+	}
+
 	if db != nil {
-		f.dbRegexp = regexp.MustCompile(*db)
+		f.dbRegexp, err = regexp.Compile(*db)
+		if err != nil {
+			return nil, fmt.Errorf("compile db regexp %q: %w", *db, err)
+		}
 	}
 
 	if excludeName != nil {
-		f.excludeNameRegexp = regexp.MustCompile(*excludeName)
+		f.excludeNameRegexp, err = regexp.Compile(*excludeName)
+		if err != nil {
+			return nil, fmt.Errorf("compile exclude_name regexp %q: %w", *excludeName, err)
+		}
 	}
 
 	if excludeDb != nil {
-		f.excludeDbRegexp = regexp.MustCompile(*excludeDb)
+		f.excludeDbRegexp, err = regexp.Compile(*excludeDb)
+		if err != nil {
+			return nil, fmt.Errorf("compile exclude_db regexp %q: %w", *excludeDb, err)
+		}
 	}
 
-	return f
+	return f, nil
 }
 
 // MatchName returns true if name matches the name regexp and does not match exclude.

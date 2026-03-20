@@ -1,5 +1,5 @@
 <template>
-  <div class="d-flex align-center" style="gap: 10px">
+  <div class="d-flex align-center ga-3">
 
     <!-- Cluster -->
     <v-autocomplete
@@ -9,7 +9,7 @@
       :label="t('Database Cluster')"
       density="compact"
       hide-details
-      style="min-width: 170px"
+      class="selector-field"
     />
 
     <!-- Host -->
@@ -21,7 +21,7 @@
       :label="t('Database Host')"
       density="compact"
       hide-details
-      style="min-width: 170px"
+      class="selector-field"
     />
 
     <!-- Database -->
@@ -33,7 +33,7 @@
       :label="t('Database')"
       density="compact"
       hide-details
-      style="min-width: 170px"
+      class="selector-field"
     />
 
   </div>
@@ -54,3 +54,9 @@ const {
   dbOptions,
 } = useClusterSelector()
 </script>
+
+<style scoped>
+.selector-field {
+  min-width: 170px;
+}
+</style>

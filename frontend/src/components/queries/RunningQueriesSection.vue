@@ -52,7 +52,7 @@ const { items, loading } = useApiLoader<QueryRunning[]>(
           style="max-width: 200px"
         />
       </div>
-      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort :items-per-page="-1" hide-default-footer />
+      <v-data-table :headers="headers" :items="items" :loading="loading" />
     </v-card-text>
   </v-card>
 </template>

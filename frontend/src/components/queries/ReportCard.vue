@@ -52,7 +52,7 @@ function truncateSql(sql: string, maxLen = 120): string {
 <template>
   <v-card variant="outlined" class="mb-3">
     <v-card-title class="text-body-1 pb-1 d-flex align-center">
-      <span>queryid: <span style="font-family: monospace;">{{ item.QueryID }}</span></span>
+      <span>queryid: <span class="text-mono">{{ item.QueryID }}</span></span>
       <v-btn icon="mdi-content-copy" variant="text" size="x-small" class="ml-1" @click="copyToClipboard(String(item.QueryID))" />
     </v-card-title>
     <v-card-text class="pt-0">
@@ -105,7 +105,7 @@ function truncateSql(sql: string, maxLen = 120): string {
         </v-col>
       </v-row>
       <div class="mt-2 d-flex align-center">
-        <code class="sql-highlight text-body-2 text-medium-emphasis flex-grow-1" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: monospace;" v-html="highlightSql(truncateSql(item.Query))"></code>
+        <code class="sql-highlight text-mono text-body-2 text-medium-emphasis flex-grow-1 sql-truncate" v-html="highlightSql(truncateSql(item.Query))"></code>
         <v-btn icon="mdi-content-copy" variant="text" size="x-small" class="ml-1 flex-shrink-0" @click="copyToClipboard(item.Query)" />
         <v-btn v-if="item.Query.length > 120" size="small" variant="text" class="ml-1 flex-shrink-0" @click="emit('showSql', item)">
           {{ t('report.showSql') }}
@@ -118,7 +118,13 @@ function truncateSql(sql: string, maxLen = 120): string {
 <style scoped>
 .report-highlight {
   border-left: 3px solid rgb(var(--v-theme-primary));
-  padding-left: 9px !important;
+  padding-left: 9px;
+}
+
+.sql-truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .report-high-contrib {

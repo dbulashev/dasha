@@ -23,7 +23,7 @@ const emit = defineEmits<{
         <v-btn icon="mdi-close" variant="text" size="small" @click="emit('update:modelValue', false)" />
       </v-card-title>
       <v-card-text>
-        <pre class="sql-highlight text-body-2" style="white-space: pre-wrap; word-break: break-word; font-family: monospace;" v-html="highlightSql(props.sql)"></pre>
+        <pre class="sql-highlight sql-code text-mono text-body-2" v-html="highlightSql(props.sql)"></pre>
       </v-card-text>
     </v-card>
   </v-dialog>

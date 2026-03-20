@@ -115,6 +115,24 @@ func (s *Handlers) GetInstanceInfo(
 	return ret, nil
 }
 
+func (s *Handlers) GetDatabaseUsers(
+	ctx context.Context,
+	req serverhttp.GetDatabaseUsersRequestObject,
+) (serverhttp.GetDatabaseUsersResponseObject, error) {
+	users, err := s.repo.GetDatabaseUsers(ctx, req.Params.ClusterName, req.Params.Instance)
+	if errors.Is(err, repository.ErrNotFound) {
+		return serverhttp.GetDatabaseUsers404Response{}, fmt.Errorf("GetDatabaseUsers | %w", err)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("GetDatabaseUsers | %w", err)
+	}
+
+	var ret serverhttp.GetDatabaseUsers200JSONResponse = users
+
+	return ret, nil
+}
+
 func (s *Handlers) GetConnectionStates(
 	ctx context.Context,
 	req serverhttp.GetConnectionStatesRequestObject,
@@ -794,7 +812,14 @@ func (s *Handlers) GetMaintenanceInfo(
 ) (serverhttp.GetMaintenanceInfoResponseObject, error) {
 	limit, offset := paginationDefaults(req.Params.Limit, req.Params.Offset, defaultMaintenanceInfoLimit)
 
-	data, err := s.repo.GetMaintenanceInfo(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, req.Params.TableName, limit, offset)
+	data, err := s.repo.GetMaintenanceInfo(
+		ctx,
+		req.Params.ClusterName,
+		req.Params.Instance,
+		req.Params.Database,
+		req.Params.TableName,
+		limit,
+		offset)
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.GetMaintenanceInfo404Response{}, fmt.Errorf("GetMaintenanceInfo | %w", err)
 	}
@@ -1006,7 +1031,12 @@ func (s *Handlers) GetQueriesReport(
 	ctx context.Context,
 	req serverhttp.GetQueriesReportRequestObject,
 ) (serverhttp.GetQueriesReportResponseObject, error) {
-	queries, err := s.repo.GetQueriesReport(ctx, req.Params.ClusterName, req.Params.Instance)
+	var excludeUsers []string
+	if req.Params.ExcludeUsers != nil {
+		excludeUsers = *req.Params.ExcludeUsers
+	}
+
+	queries, err := s.repo.GetQueriesReport(ctx, req.Params.ClusterName, req.Params.Instance, excludeUsers)
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.GetQueriesReport404Response{}, fmt.Errorf("GetQueriesReport | %w", err)
 	}

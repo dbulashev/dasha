@@ -12,6 +12,9 @@ import (
 )
 
 func (p *PgxPool) getServerVersionNum(ctx context.Context, pool *pgxpool.Pool) (int, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(0, enums.QueryCommonServerVersionNum, nil)
 	if err != nil {
 		return 0, fmt.Errorf("getServerVersionNum | %w", err)
@@ -33,6 +36,9 @@ func (p *PgxPool) getServerVersionNum(ctx context.Context, pool *pgxpool.Pool) (
 }
 
 func (p *PgxPool) getServerVersion(ctx context.Context, pool *pgxpool.Pool) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(0, enums.QueryCommonServerVersion, nil)
 	if err != nil {
 		return "", fmt.Errorf("getServerVersion | %w", err)
@@ -49,6 +55,9 @@ func (p *PgxPool) getServerVersion(ctx context.Context, pool *pgxpool.Pool) (str
 }
 
 func (p *PgxPool) getServerVersionFull(ctx context.Context, pool *pgxpool.Pool) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(0, enums.QueryCommonServerVersionFull, nil)
 	if err != nil {
 		return "", fmt.Errorf("getServerVersionFull | %w", err)

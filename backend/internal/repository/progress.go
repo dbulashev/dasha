@@ -108,6 +108,9 @@ func (p *PgxPool) GetProgressVacuum(ctx context.Context, clusterName, instanceNa
 }
 
 func (p *PgxPool) getProgressAnalyze(ctx context.Context, serverVersion int, pool *pgxpool.Pool) ([]dto.ProgressAnalyze, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryProgressAnalyze, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getProgressAnalyze | %w", err)
@@ -123,7 +126,7 @@ func (p *PgxPool) getProgressAnalyze(ctx context.Context, serverVersion int, poo
 	for rows.Next() {
 		var (
 			pid                                                                 int32
-			datname, tableName, phase, currentChildTable             string
+			datname, tableName, phase, currentChildTable                        string
 			sampleBlksTotal, sampleBlksScanned, extStatsTotal, extStatsComputed int64
 		)
 
@@ -146,10 +149,17 @@ func (p *PgxPool) getProgressAnalyze(ctx context.Context, serverVersion int, poo
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getProgressAnalyze | %w", err)
+	}
+
 	return ret, nil
 }
 
 func (p *PgxPool) getProgressBaseBackup(ctx context.Context, serverVersion int, pool *pgxpool.Pool) ([]dto.ProgressBaseBackup, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryProgressBaseBackup, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getProgressBaseBackup | %w", err)
@@ -165,7 +175,7 @@ func (p *PgxPool) getProgressBaseBackup(ctx context.Context, serverVersion int, 
 	for rows.Next() {
 		var (
 			pid                                   int32
-			phase                      string
+			phase                                 string
 			backupTotal, backupStreamed           int64
 			progressPercentage                    pgtype.Float8
 			tablespacesTotal, tablespacesStreamed int64
@@ -193,10 +203,17 @@ func (p *PgxPool) getProgressBaseBackup(ctx context.Context, serverVersion int, 
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getProgressBaseBackup | %w", err)
+	}
+
 	return ret, nil
 }
 
 func (p *PgxPool) getProgressCluster(ctx context.Context, serverVersion int, pool *pgxpool.Pool) ([]dto.ProgressCluster, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryProgressCluster, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getProgressCluster | %w", err)
@@ -212,7 +229,7 @@ func (p *PgxPool) getProgressCluster(ctx context.Context, serverVersion int, poo
 	for rows.Next() {
 		var (
 			pid                                                                                     int32
-			datname, tableName, command, phase, clusterIndex                             string
+			datname, tableName, command, phase, clusterIndex                                        string
 			heapTuplesScanned, heapTuplesWritten, heapBlksTotal, heapBlksScanned, indexRebuildCount int64
 		)
 
@@ -238,10 +255,17 @@ func (p *PgxPool) getProgressCluster(ctx context.Context, serverVersion int, poo
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getProgressCluster | %w", err)
+	}
+
 	return ret, nil
 }
 
 func (p *PgxPool) getProgressIndex(ctx context.Context, serverVersion int, pool *pgxpool.Pool) ([]dto.ProgressIndex, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryProgressIndex, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getProgressIndex | %w", err)
@@ -257,7 +281,7 @@ func (p *PgxPool) getProgressIndex(ctx context.Context, serverVersion int, pool 
 	for rows.Next() {
 		var (
 			pid, currentLockerPid                                                                                        int32
-			datname, tableName, indexName, phase                                                              string
+			datname, tableName, indexName, phase                                                                         string
 			lockersTotal, lockersDone, blocksTotal, blocksDone, tuplesTotal, tuplesDone, partitionsTotal, partitionsDone int64
 		)
 
@@ -286,10 +310,17 @@ func (p *PgxPool) getProgressIndex(ctx context.Context, serverVersion int, pool 
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getProgressIndex | %w", err)
+	}
+
 	return ret, nil
 }
 
 func (p *PgxPool) getProgressVacuum(ctx context.Context, serverVersion int, pool *pgxpool.Pool) ([]dto.ProgressVacuum, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryProgressVacuum, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getProgressVacuum | %w", err)
@@ -305,7 +336,7 @@ func (p *PgxPool) getProgressVacuum(ctx context.Context, serverVersion int, pool
 	for rows.Next() {
 		var (
 			pid                                                                                              int32
-			datname, tableName, phase                                                             string
+			datname, tableName, phase                                                                        string
 			heapBlksTotal, heapBlksScanned, heapBlksVacuumed, indexVacuumCount, maxDeadTuples, numDeadTuples int64
 		)
 
@@ -328,6 +359,10 @@ func (p *PgxPool) getProgressVacuum(ctx context.Context, serverVersion int, pool
 			MaxDeadTuples:    maxDeadTuples,
 			NumDeadTuples:    numDeadTuples,
 		})
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getProgressVacuum | %w", err)
 	}
 
 	return ret, nil

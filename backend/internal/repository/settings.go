@@ -61,6 +61,9 @@ func (p *PgxPool) getPgSettings(
 	q enums.Query, limit,
 	offset int,
 ) ([]dto.PgSetting, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, q, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getPgSettings | %w", err)
@@ -93,10 +96,17 @@ func (p *PgxPool) getPgSettings(
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getPgSettings | %w", err)
+	}
+
 	return ret, nil
 }
 
 func (p *PgxPool) getAutovacuumSettings(ctx context.Context, serverVersion int, pool *pgxpool.Pool) ([]dto.PgSetting, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QuerySettingsAutovacuumSettings, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getAutovacuumSettings | %w", err)
@@ -129,10 +139,17 @@ func (p *PgxPool) getAutovacuumSettings(ctx context.Context, serverVersion int, 
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getAutovacuumSettings | %w", err)
+	}
+
 	return ret, nil
 }
 
 func (p *PgxPool) getSettingsAnalyze(ctx context.Context, serverVersion int, pool *pgxpool.Pool) ([]dto.SettingsNotification, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QuerySettingsAnalyzeSettings, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getSettingsAnalyze | %w", err)
@@ -160,6 +177,10 @@ func (p *PgxPool) getSettingsAnalyze(ctx context.Context, serverVersion int, poo
 			Key:    key,
 			Params: params,
 		})
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getSettingsAnalyze | %w", err)
 	}
 
 	return ret, nil

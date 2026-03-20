@@ -98,6 +98,9 @@ func (p *PgxPool) getConnectionSources(
 	limit,
 	offset int,
 ) ([]dto.ConnectionSources, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryConnectionsConnectionSources, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getConnectionSources | %w", err)
@@ -130,6 +133,10 @@ func (p *PgxPool) getConnectionSources(
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getConnectionSources | %w", err)
+	}
+
 	return ret, nil
 }
 
@@ -138,6 +145,9 @@ func (p *PgxPool) getConnectionStates(
 	serverVersion int,
 	pool *pgxpool.Pool,
 ) ([]dto.ConnectionStates, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryConnectionsConnectionStates, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getConnectionStates | %w", err)
@@ -167,6 +177,10 @@ func (p *PgxPool) getConnectionStates(
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getConnectionStates | %w", err)
+	}
+
 	return ret, nil
 }
 
@@ -178,6 +192,9 @@ func (p *PgxPool) getConnectionStatActivity(
 	username,
 	state string,
 ) ([]dto.ConnectionStatActivity, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryConnectionsStatActivity, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getConnectionStatActivity | %w", err)
@@ -212,6 +229,10 @@ func (p *PgxPool) getConnectionStatActivity(
 			Ssl:             ssl.Bool,
 			BackendType:     backendType.String,
 		})
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getConnectionStatActivity | %w", err)
 	}
 
 	return ret, nil

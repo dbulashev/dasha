@@ -230,10 +230,6 @@ watch([clusterName, hostName, databaseName], () => load(), { immediate: true })
         :headers="summaryHeaders"
         :items="displaySummaryItems"
         :loading="summaryLoading"
-        density="compact"
-        multi-sort
-        :items-per-page="-1"
-        hide-default-footer
       />
     </v-card-text>
   </v-card>

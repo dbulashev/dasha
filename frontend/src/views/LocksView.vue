@@ -4,13 +4,14 @@ import { useI18n } from 'vue-i18n'
 import { getQueriesBlocked } from '@/api/gen/default/default'
 import type { QueryBlocked } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
+import { useViewError } from '@/composables/useViewError'
 import { assertOk } from '@/utils/api'
 import { getErrorMessage } from '@/utils/error'
+import '@/assets/sql-highlight.css'
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
-
-const errorMessage = ref('')
+const { errorMessage, onError, clearError } = useViewError()
 
 // --- Blocked queries (locks) ---
 const blockedItems = ref<QueryBlocked[]>([])
@@ -58,7 +59,7 @@ const lockTree = computed<LockTreeNode[]>(() => {
 async function loadBlocked() {
   if (!clusterName.value || !hostName.value || !databaseName.value) return
   blockedLoading.value = true
-  errorMessage.value = ''
+  clearError()
   try {
     const response = await getQueriesBlocked({
       cluster_name: clusterName.value,
@@ -67,7 +68,7 @@ async function loadBlocked() {
     })
     blockedItems.value = assertOk(response) ?? []
   } catch (err) {
-    errorMessage.value = getErrorMessage(err)
+    onError(getErrorMessage(err))
     blockedItems.value = []
   } finally {
     blockedLoading.value = false
@@ -106,7 +107,7 @@ watch([clusterName, hostName, databaseName], () => {
             <v-chip size="small" variant="tonal">{{ node.mode }}</v-chip>
             <v-chip size="small" variant="tonal">{{ node.duration }}</v-chip>
           </v-card-title>
-          <v-card-subtitle class="text-wrap font-weight-regular" style="white-space: pre-wrap; font-family: monospace; font-size: 0.8rem;">
+          <v-card-subtitle class="text-wrap font-weight-regular sql-code text-mono text-caption">
             {{ node.query }}
           </v-card-subtitle>
           <v-card-text>
@@ -125,7 +126,7 @@ watch([clusterName, hostName, databaseName], () => {
                   <v-chip size="x-small" variant="tonal">{{ b.duration }}</v-chip>
                   <v-chip size="x-small" color="info" variant="tonal">{{ b.lockedItem }}</v-chip>
                 </v-list-item-title>
-                <v-list-item-subtitle style="white-space: pre-wrap; font-family: monospace; font-size: 0.75rem;">
+                <v-list-item-subtitle class="sql-code text-mono text-caption">
                   {{ b.query }}
                 </v-list-item-subtitle>
               </v-list-item>

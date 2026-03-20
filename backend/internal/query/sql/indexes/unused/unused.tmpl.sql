@@ -11,6 +11,9 @@ FROM
 WHERE
     NOT indisunique
   AND idx_scan <= $1
+  AND ui.relid NOT IN (
+      SELECT relation FROM pg_locks WHERE mode = 'AccessExclusiveLock' AND granted
+  )
 ORDER BY
     pg_relation_size(i.indexrelid) DESC,
     relname ASC

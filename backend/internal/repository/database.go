@@ -32,6 +32,9 @@ func (p *PgxPool) GetStatsResetTime(ctx context.Context, clusterName, instanceNa
 }
 
 func (p *PgxPool) getStatsResetTime(ctx context.Context, serverVersion int, pool *pgxpool.Pool) ([]dto.StatsResetTime, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryDatabaseStatsResetTime, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getStatsResetTime | %w", err)
@@ -55,6 +58,10 @@ func (p *PgxPool) getStatsResetTime(ctx context.Context, serverVersion int, pool
 		ret = append(ret, dto.StatsResetTime{
 			Time: resetTime.Time,
 		})
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getStatsResetTime | %w", err)
 	}
 
 	return ret, nil
@@ -94,6 +101,9 @@ func (p *PgxPool) GetDatabaseSize(ctx context.Context, clusterName, instanceName
 }
 
 func (p *PgxPool) getDatabaseSize(ctx context.Context, serverVersion int, pool *pgxpool.Pool) (*dto.DatabaseSize, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryDatabaseSize, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getDatabaseSize | %w", err)
@@ -113,6 +123,9 @@ func (p *PgxPool) getDatabaseSize(ctx context.Context, serverVersion int, pool *
 }
 
 func (p *PgxPool) getPgssStatsResetTime(ctx context.Context, serverVersion int, pool *pgxpool.Pool) (*dto.StatsResetTime, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryDatabasePgssStatsResetTime, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getPgssStatsResetTime | %w", err)

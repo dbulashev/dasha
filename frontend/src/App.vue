@@ -30,10 +30,14 @@ function withQuery(base: string) {
 }
 
 const mainLink = computed(() => withQuery("main"));
+const connectionsLink = computed(() => withQuery("connections"));
 const queriesLink = computed(() => withQuery("queries"));
 const queryStatsLink = computed(() => withQuery("query-stats"));
+const queryReportLink = computed(() => withQuery("query-report"));
 const tablesLink = computed(() => withQuery("tables"));
 const indexesLink = computed(() => withQuery("indexes"));
+const indexesUsageLink = computed(() => withQuery("indexes-usage"));
+const indexesProblemsLink = computed(() => withQuery("indexes-problems"));
 const locksLink = computed(() => withQuery("locks"));
 const progressLink = computed(() => withQuery("progress"));
 const fkAnalysisLink = computed(() => withQuery("fk-analysis"));
@@ -53,7 +57,7 @@ const drawer = ref(true)
             <v-app-bar-nav-icon variant="text" @click.stop="drawer = !drawer"></v-app-bar-nav-icon>
         </template>
         <v-toolbar-title>PostgreSQL Dashboard</v-toolbar-title>
-         <cluster-host-db-selector style="margin-left: 20px;"></cluster-host-db-selector>
+         <cluster-host-db-selector class="ml-5"></cluster-host-db-selector>
         <template v-slot:append>
           <v-btn
             :icon="themeStore.icon()"
@@ -69,10 +73,19 @@ const drawer = ref(true)
         >
         <v-list nav>
           <v-list-item :title="t('Home')"  prepend-icon="mdi-sigma" link :to="mainLink"></v-list-item>
+          <v-list-item :title="t('Connections')" prepend-icon="mdi-connection" link :to="connectionsLink"></v-list-item>
           <v-list-item :title="t('Active Queries')" prepend-icon="mdi-database-clock-outline" link :to="queriesLink"></v-list-item>
           <v-list-item :title="t('Query Stats')" prepend-icon="mdi-chart-bar" link :to="queryStatsLink"></v-list-item>
+          <v-list-item :title="t('Query Report')" prepend-icon="mdi-file-chart-outline" link :to="queryReportLink"></v-list-item>
           <v-list-item :title="t('Tables')" prepend-icon="mdi-table" link :to="tablesLink"></v-list-item>
-          <v-list-item :title="t('Indexes')" prepend-icon="mdi-family-tree" link :to="indexesLink"></v-list-item>
+          <v-list-group value="indexes">
+            <template #activator="{ props }">
+              <v-list-item v-bind="props" :title="t('Indexes')" prepend-icon="mdi-family-tree"></v-list-item>
+            </template>
+            <v-list-item :title="t('indexes.menuOverview')" link :to="indexesLink"></v-list-item>
+            <v-list-item :title="t('indexes.menuUsage')" link :to="indexesUsageLink"></v-list-item>
+            <v-list-item :title="t('indexes.menuProblems')" link :to="indexesProblemsLink"></v-list-item>
+          </v-list-group>
           <v-list-item :title="t('Locks')" prepend-icon="mdi-lock-outline" link :to="locksLink"></v-list-item>
           <v-list-item :title="t('Operation progress')" prepend-icon="mdi-progress-question" link :to="progressLink"></v-list-item>
           <v-list-item :title="t('FK Analysis')" prepend-icon="mdi-relation-many-to-many" link :to="fkAnalysisLink"></v-list-item>

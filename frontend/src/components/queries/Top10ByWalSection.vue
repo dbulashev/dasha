@@ -42,14 +42,14 @@ const { items, loading } = useApiLoader<QueryTop10ByWal[]>(
       </v-tooltip>
     </v-card-title>
     <v-card-text>
-      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort :items-per-page="-1" hide-default-footer>
+      <v-data-table :headers="headers" :items="items" :loading="loading">
         <template #item.WalBytes="{ item }">{{ item.WalVolume }}</template>
         <template #item.QueryID="{ value }">
           <v-btn icon="mdi-content-copy" variant="text" size="x-small" class="mr-1" @click="copyToClipboard(String(value))" />
-          <span style="font-family: monospace;">{{ value }}</span>
+          <span class="text-mono">{{ value }}</span>
         </template>
         <template #item.QueryTrunc="{ value }">
-          <code class="sql-highlight text-body-2" style="font-family: monospace;" v-html="highlightSql(value)"></code>
+          <code class="sql-highlight text-mono text-body-2" v-html="highlightSql(value)"></code>
         </template>
       </v-data-table>
     </v-card-text>

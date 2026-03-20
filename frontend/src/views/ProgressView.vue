@@ -16,6 +16,7 @@ import type {
   ProgressBaseBackup,
 } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
+import { useViewError } from '@/composables/useViewError'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 import { assertOk } from '@/utils/api'
 import { getErrorMessage } from '@/utils/error'
@@ -24,8 +25,7 @@ import type { ProgressCardData } from '@/components/progress/ProgressCard.vue'
 
 const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
-
-const errorMessage = ref('')
+const { errorMessage, onError, clearError } = useViewError()
 const loading = ref(false)
 
 // --- Data ---
@@ -166,7 +166,7 @@ const cards = computed<ProgressCardData[]>(() => {
 async function loadEverything() {
   if (!clusterName.value || !hostName.value) return
   loading.value = true
-  errorMessage.value = ''
+  clearError()
   try {
     const [aRes, vRes, cRes, iRes, bRes] = await Promise.allSettled([
       getProgressAnalyze({ cluster_name: clusterName.value, instance: hostName.value }),
@@ -183,10 +183,10 @@ async function loadEverything() {
 
     const rejected = [aRes, vRes, cRes, iRes, bRes].filter(r => r.status === 'rejected')
     if (rejected.length) {
-      errorMessage.value = getErrorMessage((rejected[0] as PromiseRejectedResult).reason)
+      onError(getErrorMessage((rejected[0] as PromiseRejectedResult).reason))
     }
   } catch (err) {
-    errorMessage.value = getErrorMessage(err)
+    onError(getErrorMessage(err))
   } finally {
     loading.value = false
   }

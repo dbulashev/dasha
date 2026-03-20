@@ -2,10 +2,12 @@
   "Switch to dark mode": "In den Dunkelmodus wechseln",
   "Switch to light mode": "In den Hellmodus wechseln",
   "Home": "Startseite",
+  "Connections": "Verbindungen",
   "Settings": "Einstellungen",
   "Queries": "Abfragen",
   "Active Queries": "Aktive Abfragen",
   "Query Stats": "Abfragestatistik",
+  "Query Report": "Abfragebericht",
   "Tables": "Tabellen",
   "Indexes": "Indizes",
   "Locks": "Sperren",
@@ -19,6 +21,7 @@
     "showSql": "SQL anzeigen",
     "avg": "Durchschnitt",
     "sortBy": "Sortierung",
+    "excludeUsers": "Benutzer ausschließen",
     "sort": {
       "total_time": "Gesamtzeit",
       "calls": "Aufrufe",
@@ -260,7 +263,10 @@
     "unused": "Unbenutzte Indizes",
     "allHostsCheck": "Analyse über alle Cluster-Hosts (kann lange dauern)",
     "thresholdLabel": "Schwellenwert idx_scan ≤",
-    "usage": "Indexnutzung"
+    "usage": "Indexnutzung",
+    "menuOverview": "Übersicht",
+    "menuUsage": "Nutzung",
+    "menuProblems": "Probleme"
   },
   "Common summary": "Allgemeine Übersicht",
   "home": {
@@ -285,7 +291,6 @@
   "fk": {
     "invalidConstraints": "Ungültige Constraints",
     "invalidConstraintsHint": "Constraints, die als NOT VALID markiert sind und Validierung benötigen.",
-    "noInvalidConstraints": "Keine ungültigen Constraints",
     "referencedSchema": "Referenz-Schema",
     "referencedTable": "Referenz-Tabelle",
     "typeMismatch": "FK-Typ-Nichtübereinstimmung",
@@ -337,8 +342,6 @@
     "autovacuumFreezeMaxAge": "Autovacuum Freeze Max Age",
     "transactionIdDanger": "Transaction-ID-Erschöpfungsgefahr",
     "transactionsLeft": "Transaktionen übrig",
-    "noTxDanger": "Keine Tabellen mit Transaction-ID-Erschöpfungsgefahr",
-    "vacuumProgress": "VACUUM-Fortschritt",
-    "noActiveVacuum": "Keine aktiven VACUUM-Operationen"
+    "vacuumProgress": "VACUUM-Fortschritt"
   }
 }

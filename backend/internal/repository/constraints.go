@@ -36,6 +36,9 @@ func (p *PgxPool) GetInvalidConstraints(
 }
 
 func (p *PgxPool) getInvalidConstraints(ctx context.Context, serverVersion int, pool *pgxpool.Pool) ([]dto.InvalidConstraint, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryConstraintsInvalidConstraints, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getInvalidConstraints | %w", err)
@@ -65,6 +68,10 @@ func (p *PgxPool) getInvalidConstraints(ctx context.Context, serverVersion int, 
 			ReferencedSchema: referencedSchema,
 			ReferencedTable:  referencedTable,
 		})
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getInvalidConstraints | %w", err)
 	}
 
 	return ret, nil

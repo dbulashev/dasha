@@ -15,6 +15,11 @@ const router = createRouter({
       component: HomeView,
     },
     {
+      path: '/connections/:clustername?',
+      name: 'connections',
+      component: () => import('../views/ConnectionsView.vue'),
+    },
+    {
       path: '/queries/:clustername?',
       name: 'queries',
       component: () => import('../views/QueriesView.vue'),
@@ -25,6 +30,11 @@ const router = createRouter({
       component: () => import('../views/QueryStatsView.vue'),
     },
     {
+      path: '/query-report/:clustername?',
+      name: 'query-report',
+      component: () => import('../views/QueryReportView.vue'),
+    },
+    {
       path: '/tables/:clustername?',
       name: 'tables',
       component: () => import('../views/TablesView.vue'),
@@ -32,7 +42,17 @@ const router = createRouter({
     {
       path: '/indexes/:clustername?',
       name: 'indexes',
-      component: () => import('../views/IndexesView.vue'),
+      component: () => import('../views/IndexesOverviewView.vue'),
+    },
+    {
+      path: '/indexes-usage/:clustername?',
+      name: 'indexes-usage',
+      component: () => import('../views/IndexesUsageView.vue'),
+    },
+    {
+      path: '/indexes-problems/:clustername?',
+      name: 'indexes-problems',
+      component: () => import('../views/IndexesProblemsView.vue'),
     },
     {
       path: '/locks/:clustername?',

@@ -13,6 +13,10 @@ WITH btree_index_atts AS (
         pg_am ON pg_class.relam = pg_am.oid
     WHERE
         pg_am.amname = 'btree'
+        AND NOT EXISTS (
+            SELECT 1 FROM pg_locks
+            WHERE relation = pg_index.indrelid AND mode = 'AccessExclusiveLock' AND granted
+        )
 ),
      index_item_sizes AS (
          SELECT

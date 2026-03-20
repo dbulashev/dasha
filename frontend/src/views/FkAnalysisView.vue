@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { ref } from 'vue'
 import InvalidConstraintsSection from '@/components/fk/InvalidConstraintsSection.vue'
 import TypeMismatchSection from '@/components/fk/TypeMismatchSection.vue'
 import PossibleNullsSection from '@/components/fk/PossibleNullsSection.vue'
 import PossibleSimilarSection from '@/components/fk/PossibleSimilarSection.vue'
+import { useViewError } from '@/composables/useViewError'
 
-const errorMessage = ref('')
-function onError(msg: string) { errorMessage.value = msg }
+const { errorMessage, onError } = useViewError()
 </script>
 
 <template>

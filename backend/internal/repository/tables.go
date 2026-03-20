@@ -41,7 +41,14 @@ func (p *PgxPool) GetTablesTopKBySize(
 	return ret, nil
 }
 
-func (p *PgxPool) GetTablesCaching(ctx context.Context, clusterName, instanceName, databaseName string, limit, offset int) ([]dto.TableCaching, error) {
+func (p *PgxPool) GetTablesCaching(
+	ctx context.Context,
+	clusterName,
+	instanceName,
+	databaseName string,
+	limit,
+	offset int,
+) ([]dto.TableCaching, error) {
 	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
 	if err != nil {
 		return nil, fmt.Errorf("GetTablesCaching | %w", err)
@@ -104,6 +111,9 @@ func (p *PgxPool) getTablesTopKBySize(
 	pool *pgxpool.Pool,
 	limit int,
 ) ([]dto.TableTopKBySize, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryTablesTopKBySize, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getTablesTopKBySize | %w", err)
@@ -157,10 +167,23 @@ func (p *PgxPool) getTablesTopKBySize(
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getTablesTopKBySize | %w", err)
+	}
+
 	return ret, nil
 }
 
-func (p *PgxPool) getTablesCaching(ctx context.Context, serverVersion int, pool *pgxpool.Pool, limit, offset int) ([]dto.TableCaching, error) {
+func (p *PgxPool) getTablesCaching(
+	ctx context.Context,
+	serverVersion int,
+	pool *pgxpool.Pool,
+	limit,
+	offset int,
+) ([]dto.TableCaching, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryTablesCaching, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getTablesCaching | %w", err)
@@ -207,10 +230,17 @@ func (p *PgxPool) getTablesCaching(ctx context.Context, serverVersion int, pool 
 		ret = append(ret, item)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getTablesCaching | %w", err)
+	}
+
 	return ret, nil
 }
 
 func (p *PgxPool) getTablesHitRate(ctx context.Context, serverVersion int, pool *pgxpool.Pool) ([]dto.TableHitRate, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryTablesHitRate, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getTablesHitRate | %w", err)
@@ -238,10 +268,17 @@ func (p *PgxPool) getTablesHitRate(ctx context.Context, serverVersion int, pool 
 		}
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getTablesHitRate | %w", err)
+	}
+
 	return ret, nil
 }
 
 func (p *PgxPool) getTablesPartitions(ctx context.Context, serverVersion int, pool *pgxpool.Pool) ([]dto.TablePartition, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryTablesPartitions, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getTablesPartitions | %w", err)
@@ -278,6 +315,10 @@ func (p *PgxPool) getTablesPartitions(ctx context.Context, serverVersion int, po
 			ChildsAvgSizeBytes: childsAvgSizeBytes,
 			ChildsAvgSize:      childsAvgSize.String,
 		})
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getTablesPartitions | %w", err)
 	}
 
 	return ret, nil

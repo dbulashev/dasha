@@ -2,10 +2,12 @@
     "Switch to dark mode": "Переключиться в тёмный режим",
     "Switch to light mode": "Переключиться в светлый режим",
     "Home": "Главная",
+    "Connections": "Подключения",
     "Settings": "Настройки",
     "Queries": "Запросы",
     "Active Queries": "Активные запросы",
     "Query Stats": "Статистика запросов",
+    "Query Report": "Отчёт по запросам",
     "Tables": "Таблицы",
     "Indexes": "Индексы",
     "Locks": "Блокировки",
@@ -27,11 +29,11 @@
     "Blocked Queries": "Заблокированные запросы",
     "Top 10 by Execution Time": "TOP-10 по времени выполнения",
     "Top 10 by WAL Volume": "TOP-10 по объёму WAL",
-    "Query Report": "Развёрнутый отчёт по запросам",
     "report": {
         "showSql": "Показать SQL",
         "avg": "среднее",
         "sortBy": "Сортировка",
+        "excludeUsers": "Исключить пользователей",
         "sort": {
             "total_time": "Общее время",
             "calls": "Вызовы",
@@ -198,7 +200,10 @@
         "unused": "Неиспользуемые индексы",
         "allHostsCheck": "Анализ по всем хостам кластера (может быть долго)",
         "thresholdLabel": "Порог idx_scan ≤",
-        "usage": "Использование индексов"
+        "usage": "Использование индексов",
+        "menuOverview": "Обзор",
+        "menuUsage": "Использование",
+        "menuProblems": "Проблемы"
     },
     "progress": {
         "analyze": "ANALYZE",
@@ -322,7 +327,6 @@
     "fk": {
         "invalidConstraints": "Невалидные constraints",
         "invalidConstraintsHint": "Constraints, которые помечены как NOT VALID и требуют валидации.",
-        "noInvalidConstraints": "Нет невалидных constraints",
         "referencedSchema": "Схема ссылки",
         "referencedTable": "Таблица ссылки",
         "typeMismatch": "Несовпадение типов FK",
@@ -373,8 +377,6 @@
         "autovacuumFreezeMaxAge": "Autovacuum Freeze Max Age",
         "transactionIdDanger": "Опасность исчерпания Transaction ID",
         "transactionsLeft": "Транзакций осталось",
-        "noTxDanger": "Нет таблиц с опасностью исчерпания Transaction ID",
-        "vacuumProgress": "Прогресс VACUUM",
-        "noActiveVacuum": "Нет активных операций VACUUM"
+        "vacuumProgress": "Прогресс VACUUM"
     }
 }

@@ -74,6 +74,9 @@ func (p *PgxPool) GetFkTypeMismatch(ctx context.Context, clusterName, instanceNa
 }
 
 func (p *PgxPool) getFksPossibleNulls(ctx context.Context, serverVersion int, pool *pgxpool.Pool) ([]dto.FksPossibleNulls, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryFksPossibleNulls, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getFksPossibleNulls | %w", err)
@@ -104,10 +107,17 @@ func (p *PgxPool) getFksPossibleNulls(ctx context.Context, serverVersion int, po
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getFksPossibleNulls | %w", err)
+	}
+
 	return ret, nil
 }
 
 func (p *PgxPool) getFksPossibleSimilar(ctx context.Context, serverVersion int, pool *pgxpool.Pool) ([]dto.FksPossibleSimilar, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr1, err := query.Get(serverVersion, enums.QueryFksPossibleSimilar1, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getFksPossibleSimilar | %w", err)
@@ -140,6 +150,10 @@ func (p *PgxPool) getFksPossibleSimilar(ctx context.Context, serverVersion int, 
 		})
 	}
 
+	if err := rows1.Err(); err != nil {
+		return nil, fmt.Errorf("getFksPossibleSimilar | %w", err)
+	}
+
 	rows1.Close()
 
 	rows2, err := pool.Query(ctx, qStr2)
@@ -162,12 +176,19 @@ func (p *PgxPool) getFksPossibleSimilar(ctx context.Context, serverVersion int, 
 		})
 	}
 
+	if err := rows2.Err(); err != nil {
+		return nil, fmt.Errorf("getFksPossibleSimilar | %w", err)
+	}
+
 	rows2.Close()
 
 	return ret, nil
 }
 
 func (p *PgxPool) getFkTypeMismatch(ctx context.Context, serverVersion int, pool *pgxpool.Pool) ([]dto.FkTypeMismatch, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryFksTypeMismatch, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getFkTypeMismatch | %w", err)
@@ -199,6 +220,10 @@ func (p *PgxPool) getFkTypeMismatch(ctx context.Context, serverVersion int, pool
 			ToRel:         toRel,
 			ToRelAttNames: toRelAttNames,
 		})
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getFkTypeMismatch | %w", err)
 	}
 
 	return ret, nil

@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue'
 import SettingsAnalyzeSection from '@/components/settings/SettingsAnalyzeSection.vue'
 import PgSettingsSection from '@/components/settings/PgSettingsSection.vue'
 import AutovacuumSettingsSection from '@/components/settings/AutovacuumSettingsSection.vue'
+import { useViewError } from '@/composables/useViewError'
 
-const errorMessage = ref('')
-function onError(msg: string) { errorMessage.value = msg }
+const { errorMessage, onError } = useViewError()
 </script>
 
 <template>

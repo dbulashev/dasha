@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue'
 import TopKBySizeSection from '@/components/tables/TopKBySizeSection.vue'
 import CachingSection from '@/components/tables/CachingSection.vue'
 import PartitionsSection from '@/components/tables/PartitionsSection.vue'
+import { useViewError } from '@/composables/useViewError'
 
-const errorMessage = ref('')
-function onError(msg: string) { errorMessage.value = msg }
+const { errorMessage, onError } = useViewError()
 </script>
 
 <template>

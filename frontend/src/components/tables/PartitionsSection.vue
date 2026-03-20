@@ -43,7 +43,7 @@ const { items, loading } = useApiLoader<TablePartition[]>(
       </v-tooltip>
     </v-card-title>
     <v-card-text>
-      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort :items-per-page="-1" hide-default-footer>
+      <v-data-table :headers="headers" :items="items" :loading="loading">
         <template #item.ChildsSizeBytes="{ item }">{{ item.ChildsSize }}</template>
         <template #item.ChildsAvgSizeBytes="{ item }">{{ item.ChildsAvgSize }}</template>
       </v-data-table>

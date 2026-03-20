@@ -10,7 +10,11 @@ WITH idx as (SELECT n.nspname              AS schemaname,
                       LEFT JOIN pg_namespace n ON n.oid = c.relnamespace
                       LEFT JOIN pg_tablespace t ON t.oid = i.reltablespace
              WHERE (c.relkind = ANY (ARRAY ['r'::"char", 'm'::"char", 'p'::"char"]))
-               AND (i.relkind = ANY (ARRAY ['i'::"char", 'I'::"char"])))
+               AND (i.relkind = ANY (ARRAY ['i'::"char", 'I'::"char"]))
+               AND NOT EXISTS (
+                   SELECT 1 FROM pg_locks
+                   WHERE relation = c.oid AND mode = 'AccessExclusiveLock' AND granted
+               ))
 SELECT coalesce(tablespace, 'pg_default')           AS tablespace,
        schemaname || '.' || tablename               AS table,
        indexname                                    AS index,

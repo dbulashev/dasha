@@ -5,7 +5,7 @@ import type { MaintenanceAutovacuumFreezeMaxAge } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useApiLoader } from '@/composables/useApiLoader'
 
-const { clusterName, databaseName, hostName } = useClusterInfo()
+const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
 const emit = defineEmits<{ error: [msg: string] }>()
 
@@ -13,11 +13,10 @@ const { items, loading } = useApiLoader<MaintenanceAutovacuumFreezeMaxAge[]>(
   () => getMaintenanceAutovacuumFreezeMaxAge({
     cluster_name: clusterName.value!,
     instance: hostName.value!,
-    database: databaseName.value!,
   }),
   {
-    deps: [clusterName, hostName, databaseName],
-    guard: () => !!clusterName.value && !!hostName.value && !!databaseName.value,
+    deps: [clusterName, hostName],
+    guard: () => !!clusterName.value && !!hostName.value,
     onError: (msg) => emit('error', msg),
   },
 )

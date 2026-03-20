@@ -10,4 +10,8 @@ import type { InstanceParameter } from './instanceParameter'
 export type GetQueriesReportParams = {
   cluster_name: ClusterNameParameter
   instance: InstanceParameter
+  /**
+   * Comma-separated list of usernames to exclude from the report
+   */
+  exclude_users?: string[]
 }

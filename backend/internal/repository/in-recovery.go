@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
 
 	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/enums"
@@ -27,8 +28,15 @@ func (p *PgxPool) GetInstanceInfo(ctx context.Context, clusterName, instanceName
 		return dto.InstanceInfo{}, fmt.Errorf("getInRecovery | %w", err)
 	}
 
-	v, _ := p.getServerVersion(ctx, pool)
-	vFull, _ := p.getServerVersionFull(ctx, pool)
+	v, err := p.getServerVersion(ctx, pool)
+	if err != nil {
+		p.logger.Warn("failed to get server version", zap.Error(err))
+	}
+
+	vFull, err := p.getServerVersionFull(ctx, pool)
+	if err != nil {
+		p.logger.Warn("failed to get server version full", zap.Error(err))
+	}
 
 	return dto.InstanceInfo{
 		InRecovery:  inRecovery,
@@ -39,6 +47,9 @@ func (p *PgxPool) GetInstanceInfo(ctx context.Context, clusterName, instanceName
 }
 
 func (p *PgxPool) getInRecovery(ctx context.Context, serverVersion int, pool *pgxpool.Pool) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryCommonInRecovery, nil)
 	if err != nil {
 		return false, fmt.Errorf("getInRecovery | %w", err)

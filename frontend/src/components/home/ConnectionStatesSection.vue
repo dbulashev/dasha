@@ -45,10 +45,6 @@ const totalConnections = computed(() =>
         :headers="headers"
         :items="items"
         :loading="loading"
-        density="compact"
-        :items-per-page="-1"
-        hide-default-footer
-        :no-data-text="t('noData')"
       />
     </v-card-text>
   </v-card>

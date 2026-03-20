@@ -425,6 +425,9 @@ func (p *PgxPool) getIndexesBloat(
 	limit,
 	offset int,
 ) ([]dto.IndexBloat, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryIndexesBloat, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getIndexesBloat | %w", err)
@@ -460,6 +463,10 @@ func (p *PgxPool) getIndexesBloat(
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getIndexesBloat | %w", err)
+	}
+
 	return ret, nil
 }
 
@@ -468,6 +475,9 @@ func (p *PgxPool) getIndexesBtreeOnArray(
 	serverVersion int,
 	pool *pgxpool.Pool,
 ) ([]dto.IndexBtreeOnArray, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryIndexesBtreeOnArray, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getIndexesBtreeOnArray | %w", err)
@@ -494,6 +504,10 @@ func (p *PgxPool) getIndexesBtreeOnArray(
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getIndexesBtreeOnArray | %w", err)
+	}
+
 	return ret, nil
 }
 
@@ -504,6 +518,9 @@ func (p *PgxPool) getIndexesCaching(
 	limit,
 	offset int,
 ) ([]dto.IndexCaching, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryIndexesCaching, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getIndexesCaching | %w", err)
@@ -535,6 +552,10 @@ func (p *PgxPool) getIndexesCaching(
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getIndexesCaching | %w", err)
+	}
+
 	return ret, nil
 }
 
@@ -543,6 +564,9 @@ func (p *PgxPool) getIndexesHitRate(
 	serverVersion int,
 	pool *pgxpool.Pool,
 ) ([]dto.IndexHitRate, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryIndexesHitRate, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getIndexesHitRate | %w", err)
@@ -570,6 +594,10 @@ func (p *PgxPool) getIndexesHitRate(
 		}
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getIndexesHitRate | %w", err)
+	}
+
 	return ret, nil
 }
 
@@ -578,6 +606,9 @@ func (p *PgxPool) getIndexesInvalidOrNotReady(
 	serverVersion int,
 	pool *pgxpool.Pool,
 ) ([]dto.IndexInvalidOrNotReady, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryIndexesInvalidOrNotReady, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getIndexesInvalidOrNotReady | %w", err)
@@ -610,10 +641,17 @@ func (p *PgxPool) getIndexesInvalidOrNotReady(
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getIndexesInvalidOrNotReady | %w", err)
+	}
+
 	return ret, nil
 }
 
 func (p *PgxPool) getIndexesMissing(ctx context.Context, serverVersion int, pool *pgxpool.Pool) ([]dto.IndexMissing, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryIndexesMissing, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getIndexesMissing | %w", err)
@@ -651,6 +689,10 @@ func (p *PgxPool) getIndexesMissing(ctx context.Context, serverVersion int, pool
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getIndexesMissing | %w", err)
+	}
+
 	return ret, nil
 }
 
@@ -659,6 +701,9 @@ func (p *PgxPool) getIndexesSimilar1(
 	serverVersion int,
 	pool *pgxpool.Pool,
 ) ([]dto.IndexSimilar1, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryIndexesSimilar1, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getIndexesSimilar1 | %w", err)
@@ -705,10 +750,17 @@ func (p *PgxPool) getIndexesSimilar1(
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getIndexesSimilar1 | %w", err)
+	}
+
 	return ret, nil
 }
 
 func (p *PgxPool) getIndexesSimilar2(ctx context.Context, serverVersion int, pool *pgxpool.Pool) ([]dto.IndexSimilar2, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryIndexesSimilar2, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getIndexesSimilar2 | %w", err)
@@ -736,6 +788,10 @@ func (p *PgxPool) getIndexesSimilar2(ctx context.Context, serverVersion int, poo
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getIndexesSimilar2 | %w", err)
+	}
+
 	return ret, nil
 }
 
@@ -744,6 +800,9 @@ func (p *PgxPool) getIndexesSimilar3(
 	serverVersion int,
 	pool *pgxpool.Pool,
 ) ([]dto.IndexSimilar3, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryIndexesSimilar3, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getIndexesSimilar3 | %w", err)
@@ -794,10 +853,17 @@ func (p *PgxPool) getIndexesSimilar3(
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getIndexesSimilar3 | %w", err)
+	}
+
 	return ret, nil
 }
 
 func (p *PgxPool) getIndexesTopKBySize(ctx context.Context, serverVersion int, pool *pgxpool.Pool) ([]dto.IndexTopKBySize, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryIndexesTopKBySize, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getIndexesTopKBySize | %w", err)
@@ -830,6 +896,10 @@ func (p *PgxPool) getIndexesTopKBySize(ctx context.Context, serverVersion int, p
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getIndexesTopKBySize | %w", err)
+	}
+
 	return ret, nil
 }
 
@@ -841,6 +911,9 @@ func (p *PgxPool) getIndexesUnused(
 	limit,
 	offset int,
 ) ([]dto.IndexUnused, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryIndexesUnused, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getIndexesUnused | %w", err)
@@ -873,10 +946,17 @@ func (p *PgxPool) getIndexesUnused(
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getIndexesUnused | %w", err)
+	}
+
 	return ret, nil
 }
 
 func (p *PgxPool) getIndexesUsage(ctx context.Context, serverVersion int, pool *pgxpool.Pool, limit, offset int) ([]dto.IndexUsage, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryIndexesUsage, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getIndexesUsage | %w", err)
@@ -914,11 +994,18 @@ func (p *PgxPool) getIndexesUsage(ctx context.Context, serverVersion int, pool *
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getIndexesUsage | %w", err)
+	}
+
 	return ret, nil
 }
 
 // getIndexesAllScans returns all non-unique indexes with their scan counts (no threshold filter).
 func (p *PgxPool) getIndexesAllScans(ctx context.Context, serverVersion int, pool *pgxpool.Pool) ([]dto.IndexUnused, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryIndexesAllScans, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getIndexesAllScans | %w", err)
@@ -949,6 +1036,10 @@ func (p *PgxPool) getIndexesAllScans(ctx context.Context, serverVersion int, poo
 			SizeBytes:  sizeBytes,
 			IndexScans: indexScans,
 		})
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getIndexesAllScans | %w", err)
 	}
 
 	return ret, nil

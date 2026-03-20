@@ -37,7 +37,7 @@ const { items, loading } = useApiLoader<InvalidConstraint[]>(
     <v-card-title>{{ t('fk.invalidConstraints') }}</v-card-title>
     <v-card-subtitle>{{ t('fk.invalidConstraintsHint') }}</v-card-subtitle>
     <v-card-text>
-      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort :items-per-page="-1" hide-default-footer :no-data-text="t('fk.noInvalidConstraints')" />
+      <v-data-table :headers="headers" :items="items" :loading="loading" />
     </v-card-text>
   </v-card>
 </template>

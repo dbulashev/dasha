@@ -1,16 +1,18 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getQueriesReport } from '@/api/gen/default/default'
+import { getDatabaseUsers, getQueriesReport } from '@/api/gen/default/default'
 import type { QueryReport } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useApiLoader } from '@/composables/useApiLoader'
+import { useExcludeUsersStore } from '@/stores/excludeUsers'
 import ReportCard from '@/components/queries/ReportCard.vue'
 import SqlDialog from '@/components/queries/SqlDialog.vue'
 
 const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
 const emit = defineEmits<{ error: [msg: string] }>()
+const excludeUsersStore = useExcludeUsersStore()
 
 type ReportSortKey = 'total_time' | 'calls' | 'wal' | 'rows' | 'cpu_time' | 'io_time' | 'temp_blks'
 
@@ -36,13 +38,45 @@ const sortFieldMap: Record<ReportSortKey, keyof QueryReport> = {
   temp_blks: 'TempBlks',
 }
 
-const { items, loading } = useApiLoader<QueryReport[]>(
-  () => getQueriesReport({
+// Exclude users filter — restore from store
+const excludeUsers = ref<string[]>(
+  clusterName.value
+    ? excludeUsersStore.getExcludeUsers(clusterName.value)
+    : [],
+)
+
+watch(clusterName, () => {
+  if (clusterName.value) {
+    excludeUsers.value = excludeUsersStore.getExcludeUsers(clusterName.value)
+  }
+})
+
+watch(excludeUsers, (val) => {
+  if (clusterName.value) {
+    excludeUsersStore.setExcludeUsers(clusterName.value, val)
+  }
+})
+
+const { items: availableUsers } = useApiLoader<string[]>(
+  () => getDatabaseUsers({
     cluster_name: clusterName.value!,
     instance: hostName.value!,
   }),
   {
     deps: [clusterName, hostName],
+    guard: () => !!clusterName.value && !!hostName.value,
+    onError: () => {},
+  },
+)
+
+const { items, loading } = useApiLoader<QueryReport[]>(
+  () => getQueriesReport({
+    cluster_name: clusterName.value!,
+    instance: hostName.value!,
+    exclude_users: excludeUsers.value.length ? excludeUsers.value : undefined,
+  }),
+  {
+    deps: [clusterName, hostName, excludeUsers],
     guard: () => !!clusterName.value && !!hostName.value,
     onError: (msg) => emit('error', msg),
   },
@@ -95,6 +129,19 @@ function showSqlDialog(item: QueryReport) {
         hide-details
         class="ml-4"
         style="max-width: 220px;"
+      />
+      <v-combobox
+        v-model="excludeUsers"
+        :items="availableUsers"
+        :label="t('report.excludeUsers')"
+        density="compact"
+        variant="outlined"
+        hide-details
+        multiple
+        chips
+        closable-chips
+        class="ml-4"
+        style="max-width: 350px;"
       />
     </v-card-title>
     <v-card-text>

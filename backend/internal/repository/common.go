@@ -40,6 +40,7 @@ type Repository interface {
 		username,
 		state string,
 	) ([]dto.ConnectionStatActivity, error)
+	GetDatabaseUsers(ctx context.Context, clusterName, instanceName string) ([]string, error)
 	GetInvalidConstraints(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.InvalidConstraint, error)
 	GetDatabaseSize(ctx context.Context, clusterName, instanceName, databaseName string) (*dto.DatabaseSize, error)
 	GetStatsResetTime(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.StatsResetTime, error)
@@ -57,7 +58,14 @@ type Repository interface {
 	GetIndexesSimilar2(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.IndexSimilar2, error)
 	GetIndexesSimilar3(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.IndexSimilar3, error)
 	GetIndexesTopKBySize(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.IndexTopKBySize, error)
-	GetIndexesUnused(ctx context.Context, clusterName, instanceName, databaseName string, threshold, limit, offset int) ([]dto.IndexUnused, error)
+	GetIndexesUnused(
+		ctx context.Context, clusterName,
+		instanceName,
+		databaseName string,
+		threshold,
+		limit,
+		offset int,
+	) ([]dto.IndexUnused, error)
 	GetIndexesUnusedAllHosts(ctx context.Context, clusterName, databaseName string, threshold, limit, offset int) ([]dto.IndexUnused, error)
 	GetIndexesUsage(ctx context.Context, clusterName, instanceName, databaseName string, limit, offset int) ([]dto.IndexUsage, error)
 	GetInstanceInfo(ctx context.Context, clusterName, instanceName string) (dto.InstanceInfo, error)
@@ -69,7 +77,15 @@ type Repository interface {
 		clusterName,
 		instanceName string,
 	) ([]dto.MaintenanceAutovacuumFreezeMaxAge, error)
-	GetMaintenanceInfo(ctx context.Context, clusterName, instanceName, databaseName string, tableName *string, limit, offset int) ([]dto.MaintenanceInfo, error)
+	GetMaintenanceInfo(
+		ctx context.Context,
+		clusterName,
+		instanceName,
+		databaseName string,
+		tableName *string,
+		limit,
+		offset int,
+	) ([]dto.MaintenanceInfo, error)
 	GetMaintenanceTransactionIdDanger(
 		ctx context.Context,
 		clusterName,
@@ -81,7 +97,7 @@ type Repository interface {
 	GetQueriesRunning(ctx context.Context, clusterName, instanceName, databaseName string, minDuration int) ([]dto.QueryRunning, error)
 	GetQueriesTop10ByTime(ctx context.Context, clusterName, instanceName string) ([]dto.QueryTop10ByTime, error)
 	GetQueriesTop10ByWal(ctx context.Context, clusterName, instanceName string) ([]dto.QueryTop10ByWal, error)
-	GetQueriesReport(ctx context.Context, clusterName, instanceName string) ([]dto.QueryReport, error)
+	GetQueriesReport(ctx context.Context, clusterName, instanceName string, excludeUsers []string) ([]dto.QueryReport, error)
 	GetQueryStatsStatus(ctx context.Context, clusterName, instanceName, databaseName string) (dto.QueryStatsStatus, error)
 	GetProgressAnalyze(ctx context.Context, clusterName, instanceName string) ([]dto.ProgressAnalyze, error)
 	GetProgressBaseBackup(ctx context.Context, clusterName, instanceName string) ([]dto.ProgressBaseBackup, error)
@@ -328,6 +344,11 @@ func (p *PgxPool) getPool(ctx context.Context, dsn string) (*pgxpool.Pool, error
 
 	databaseConfig.ConnConfig.ConnectTimeout = poolConnectTimeout
 	databaseConfig.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+
+	if databaseConfig.ConnConfig.RuntimeParams == nil {
+		databaseConfig.ConnConfig.RuntimeParams = make(map[string]string)
+	}
+
 	maps.Copy(databaseConfig.ConnConfig.RuntimeParams, runtimeParams)
 
 	connectCtx, cancel := context.WithTimeout(ctx, poolConnectTimeout)

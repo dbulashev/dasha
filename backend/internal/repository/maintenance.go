@@ -36,7 +36,15 @@ func (p *PgxPool) GetMaintenanceAutovacuumFreezeMaxAge(
 	return ret, nil
 }
 
-func (p *PgxPool) GetMaintenanceInfo(ctx context.Context, clusterName, instanceName, databaseName string, tableName *string, limit, offset int) ([]dto.MaintenanceInfo, error) {
+func (p *PgxPool) GetMaintenanceInfo(
+	ctx context.Context,
+	clusterName,
+	instanceName,
+	databaseName string,
+	tableName *string,
+	limit,
+	offset int,
+) ([]dto.MaintenanceInfo, error) {
 	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
 	if err != nil {
 		return nil, fmt.Errorf("GetMaintenanceInfo | %w", err)
@@ -108,6 +116,9 @@ func (p *PgxPool) getMaintenanceAutovacuumFreezeMaxAge(
 	serverVersion int,
 	pool *pgxpool.Pool,
 ) ([]dto.MaintenanceAutovacuumFreezeMaxAge, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryMaintenanceAutovacuumFreezeMaxAge, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getMaintenanceAutovacuumFreezeMaxAge | %w", err)
@@ -133,10 +144,24 @@ func (p *PgxPool) getMaintenanceAutovacuumFreezeMaxAge(
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getMaintenanceAutovacuumFreezeMaxAge | %w", err)
+	}
+
 	return ret, nil
 }
 
-func (p *PgxPool) getMaintenanceInfo(ctx context.Context, serverVersion int, pool *pgxpool.Pool, tableName *string, limit, offset int) ([]dto.MaintenanceInfo, error) {
+func (p *PgxPool) getMaintenanceInfo(
+	ctx context.Context,
+	serverVersion int,
+	pool *pgxpool.Pool,
+	tableName *string,
+	limit,
+	offset int,
+) ([]dto.MaintenanceInfo, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryMaintenanceInfo, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getMaintenanceInfo | %w", err)
@@ -174,6 +199,10 @@ func (p *PgxPool) getMaintenanceInfo(ctx context.Context, serverVersion int, poo
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getMaintenanceInfo | %w", err)
+	}
+
 	return ret, nil
 }
 
@@ -182,6 +211,9 @@ func (p *PgxPool) getMaintenanceTransactionIdDanger(
 	serverVersion int,
 	pool *pgxpool.Pool,
 ) ([]dto.MaintenanceTransactionIdDanger, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	maxAgeRows, err := p.getMaintenanceAutovacuumFreezeMaxAge(ctx, serverVersion, pool)
 	if err != nil {
 		return nil, fmt.Errorf("get autovacuum_freeze_max_age | %w", err)
@@ -225,6 +257,10 @@ func (p *PgxPool) getMaintenanceTransactionIdDanger(
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getMaintenanceTransactionIdDanger | %w", err)
+	}
+
 	return ret, nil
 }
 
@@ -233,6 +269,9 @@ func (p *PgxPool) getMaintenanceVacuumProgress(
 	serverVersion int,
 	pool *pgxpool.Pool,
 ) ([]dto.MaintenanceVacuumProgress, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryMaintenanceVacuumProgress, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getMaintenanceVacuumProgress | %w", err)
@@ -260,6 +299,10 @@ func (p *PgxPool) getMaintenanceVacuumProgress(
 			Pid:   pid,
 			Phase: phase,
 		})
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getMaintenanceVacuumProgress | %w", err)
 	}
 
 	return ret, nil

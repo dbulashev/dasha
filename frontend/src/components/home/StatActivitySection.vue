@@ -1,20 +1,18 @@
 <script setup lang="ts">
-import { ref, watch, computed, onBeforeUnmount } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getConnectionStatActivity } from '@/api/gen/default/default'
 import type { ConnectionStatActivity } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
-import { assertOk } from '@/utils/api'
-import { getErrorMessage } from '@/utils/error'
+import { usePaginatedApiLoader } from '@/composables/useApiLoader'
 import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
 import PaginationControls from '@/components/PaginationControls.vue'
+import { useDebouncedRef } from '@/composables/useDebouncedRef'
 
 const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
-
 const emit = defineEmits<{ error: [msg: string] }>()
 
-const PAGE_SIZE = DEFAULT_PAGE_SIZE
 const headers = computed(() => [
   { title: 'PID', key: 'Pid', sortable: false },
   { title: t('header.user') + '@' + t('header.database'), key: 'userDb', sortable: false },
@@ -23,52 +21,10 @@ const headers = computed(() => [
   { title: t('header.state'), key: 'State', sortable: false },
   { title: t('home.backendType'), key: 'BackendType', sortable: false },
 ])
-const items = ref<ConnectionStatActivity[]>([])
-const loading = ref(false)
-const hasMore = ref(true)
-const page = ref(1)
+
 const filterUser = ref('')
+const debouncedFilterUser = useDebouncedRef(filterUser, 500)
 const filterState = ref('')
-
-let filterTimer: ReturnType<typeof setTimeout> | null = null
-watch(filterUser, () => {
-  if (filterTimer) clearTimeout(filterTimer)
-  filterTimer = setTimeout(() => load(), 500)
-})
-onBeforeUnmount(() => {
-  if (filterTimer) clearTimeout(filterTimer)
-})
-
-function filterParams() {
-  const params: Record<string, string> = {}
-  if (filterUser.value) params.username = filterUser.value
-  if (filterState.value) params.state = filterState.value
-  return params
-}
-
-async function load(p = 1) {
-  if (!clusterName.value || !hostName.value) return
-  loading.value = true
-  page.value = p
-  try {
-    const response = await getConnectionStatActivity({
-      cluster_name: clusterName.value,
-      instance: hostName.value,
-      limit: PAGE_SIZE,
-      offset: (p - 1) * PAGE_SIZE,
-      ...filterParams(),
-    })
-    const data = assertOk<ConnectionStatActivity[]>(response) ?? []
-    items.value = data
-    hasMore.value = data.length >= PAGE_SIZE
-  } catch (err) {
-    emit('error', getErrorMessage(err))
-    items.value = []
-    hasMore.value = false
-  } finally {
-    loading.value = false
-  }
-}
 
 const stateOptions = [
   { title: t('home.allStates'), value: '' },
@@ -80,7 +36,22 @@ const stateOptions = [
   { title: 'disabled', value: 'disabled' },
 ]
 
-watch([clusterName, hostName], () => load(), { immediate: true })
+const { items, loading, page, hasMore, load } = usePaginatedApiLoader<ConnectionStatActivity>(
+  (limit, offset) => getConnectionStatActivity({
+    cluster_name: clusterName.value!,
+    instance: hostName.value!,
+    limit,
+    offset,
+    ...(debouncedFilterUser.value ? { username: debouncedFilterUser.value } : {}),
+    ...(filterState.value ? { state: filterState.value } : {}),
+  }),
+  {
+    pageSize: DEFAULT_PAGE_SIZE,
+    deps: [clusterName, hostName, debouncedFilterUser, filterState],
+    guard: () => !!clusterName.value && !!hostName.value,
+    onError: (msg) => emit('error', msg),
+  },
+)
 </script>
 
 <template>
@@ -103,17 +74,12 @@ watch([clusterName, hostName], () => load(), { immediate: true })
           density="compact"
           hide-details
           variant="outlined"
-          @update:model-value="load()"
         />
       </div>
       <v-data-table
         :headers="headers"
         :items="items"
         :loading="loading"
-        density="compact"
-        :items-per-page="-1"
-        hide-default-footer
-        :no-data-text="t('noData')"
       >
         <template #item.userDb="{ item }">
           {{ [item.UserName, item.Database].filter(Boolean).join('@') || '—' }}

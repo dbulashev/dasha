@@ -168,7 +168,7 @@ func TestGetQueriesReport(t *testing.T) {
 	vNum, err := p.getServerVersionNum(ctx, pool)
 	require.NoError(t, err)
 
-	result, err := p.getQueriesReport(ctx, vNum, pool)
+	result, err := p.getQueriesReport(ctx, vNum, pool, []string{})
 	require.NoError(t, err)
 	assert.NotEmpty(t, result, "should return query report (fixture generates pg_stat_statements data)")
 

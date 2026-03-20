@@ -40,7 +40,7 @@ const displayItems = computed(() =>
   <v-card class="mb-4">
     <v-card-title>{{ t('settings.autovacuumSettings') }}</v-card-title>
     <v-card-text>
-      <v-data-table :headers="headers" :items="displayItems" :loading="loading" density="compact" multi-sort :items-per-page="-1" hide-default-footer :no-data-text="t('noData')" />
+      <v-data-table :headers="headers" :items="displayItems" :loading="loading" />
     </v-card-text>
   </v-card>
 </template>

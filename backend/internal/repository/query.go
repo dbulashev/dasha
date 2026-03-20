@@ -32,7 +32,13 @@ func (p *PgxPool) GetQueriesBlocked(ctx context.Context, clusterName, instanceNa
 	return ret, nil
 }
 
-func (p *PgxPool) GetQueriesRunning(ctx context.Context, clusterName, instanceName, databaseName string, minDuration int) ([]dto.QueryRunning, error) {
+func (p *PgxPool) GetQueriesRunning(
+	ctx context.Context,
+	clusterName,
+	instanceName,
+	databaseName string,
+	minDuration int,
+) ([]dto.QueryRunning, error) {
 	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
 	if err != nil {
 		return nil, fmt.Errorf("GetQueriesRunning | %w", err)
@@ -97,7 +103,7 @@ func (p *PgxPool) GetQueriesTop10ByWal(ctx context.Context, clusterName, instanc
 	return ret, nil
 }
 
-func (p *PgxPool) GetQueriesReport(ctx context.Context, clusterName, instanceName string) ([]dto.QueryReport, error) {
+func (p *PgxPool) GetQueriesReport(ctx context.Context, clusterName, instanceName string, excludeUsers []string) ([]dto.QueryReport, error) {
 	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, "")
 	if err != nil {
 		return nil, fmt.Errorf("GetQueriesReport | %w", err)
@@ -112,7 +118,11 @@ func (p *PgxPool) GetQueriesReport(ctx context.Context, clusterName, instanceNam
 		return nil, nil
 	}
 
-	ret, err := p.getQueriesReport(ctx, vNum, pool)
+	if excludeUsers == nil {
+		excludeUsers = []string{}
+	}
+
+	ret, err := p.getQueriesReport(ctx, vNum, pool, excludeUsers)
 	if err != nil {
 		return nil, fmt.Errorf("getQueriesReport | %w", err)
 	}
@@ -121,6 +131,9 @@ func (p *PgxPool) GetQueriesReport(ctx context.Context, clusterName, instanceNam
 }
 
 func (p *PgxPool) getQueriesBlocked(ctx context.Context, serverVersion int, pool *pgxpool.Pool) ([]dto.QueryBlocked, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryQueriesBlocked, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getQueriesBlocked | %w", err)
@@ -163,10 +176,22 @@ func (p *PgxPool) getQueriesBlocked(ctx context.Context, serverVersion int, pool
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getQueriesBlocked | %w", err)
+	}
+
 	return ret, nil
 }
 
-func (p *PgxPool) getQueriesRunning(ctx context.Context, serverVersion int, pool *pgxpool.Pool, minDuration int) ([]dto.QueryRunning, error) {
+func (p *PgxPool) getQueriesRunning(
+	ctx context.Context,
+	serverVersion int,
+	pool *pgxpool.Pool,
+	minDuration int,
+) ([]dto.QueryRunning, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryQueriesRunning, struct{ MinDuration int }{MinDuration: minDuration})
 	if err != nil {
 		return nil, fmt.Errorf("getQueriesRunning | %w", err)
@@ -208,10 +233,17 @@ func (p *PgxPool) getQueriesRunning(ctx context.Context, serverVersion int, pool
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getQueriesRunning | %w", err)
+	}
+
 	return ret, nil
 }
 
 func (p *PgxPool) getQueriesTop10ByTime(ctx context.Context, serverVersion int, pool *pgxpool.Pool) ([]dto.QueryTop10ByTime, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryQueriesTop10ByTime, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getQueriesTop10ByTime | %w", err)
@@ -247,10 +279,17 @@ func (p *PgxPool) getQueriesTop10ByTime(ctx context.Context, serverVersion int, 
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getQueriesTop10ByTime | %w", err)
+	}
+
 	return ret, nil
 }
 
 func (p *PgxPool) getQueriesTop10ByWal(ctx context.Context, serverVersion int, pool *pgxpool.Pool) ([]dto.QueryTop10ByWal, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryQueriesTop10ByWal, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getQueriesTop10ByWal | %w", err)
@@ -283,6 +322,10 @@ func (p *PgxPool) getQueriesTop10ByWal(ctx context.Context, serverVersion int, p
 		})
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getQueriesTop10ByWal | %w", err)
+	}
+
 	return ret, nil
 }
 
@@ -290,13 +333,17 @@ func (p *PgxPool) getQueriesReport( //nolint:gocyclo
 	ctx context.Context,
 	serverVersion int,
 	pool *pgxpool.Pool,
+	excludeUsers []string,
 ) ([]dto.QueryReport, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	qStr, err := query.Get(serverVersion, enums.QueryQueriesReport, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getQueriesReport | %w", err)
 	}
 
-	rows, err := pool.Query(ctx, qStr)
+	rows, err := pool.Query(ctx, qStr, excludeUsers)
 	if err != nil {
 		return nil, fmt.Errorf("getQueriesReport | %w", err)
 	}
@@ -451,6 +498,10 @@ func (p *PgxPool) getQueriesReport( //nolint:gocyclo
 		}
 
 		ret = append(ret, r)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getQueriesReport | %w", err)
 	}
 
 	return ret, nil

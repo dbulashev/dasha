@@ -47,7 +47,7 @@ const { items, loading, page, hasMore, load } = usePaginatedApiLoader<IndexCachi
       </v-tooltip>
     </v-card-title>
     <v-card-text>
-      <v-data-table :headers="headers" :items="items" :loading="loading" density="compact" multi-sort :items-per-page="-1" hide-default-footer>
+      <v-data-table :headers="headers" :items="items" :loading="loading">
         <template #item.HitRate="{ value }">
           {{ value != null ? (value * 100).toFixed(2) + '%' : '—' }}
         </template>
