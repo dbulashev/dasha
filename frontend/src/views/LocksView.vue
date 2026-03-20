@@ -5,6 +5,7 @@ import { getQueriesBlocked } from '@/api/gen/default/default'
 import type { QueryBlocked } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { assertOk } from '@/utils/api'
+import { getErrorMessage } from '@/utils/error'
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
@@ -66,7 +67,7 @@ async function loadBlocked() {
     })
     blockedItems.value = assertOk(response) ?? []
   } catch (err) {
-    errorMessage.value = String(err)
+    errorMessage.value = getErrorMessage(err)
     blockedItems.value = []
   } finally {
     blockedLoading.value = false

@@ -18,6 +18,7 @@ import type {
 } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { assertOk } from '@/utils/api'
+import { getErrorMessage } from '@/utils/error'
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
@@ -51,7 +52,7 @@ async function loadSummary() {
     })
     summaryItems.value = assertOk(response) ?? []
   } catch (err) {
-    emit('error', String(err))
+    emit('error', getErrorMessage(err))
     summaryItems.value = []
   } finally {
     summaryLoading.value = false
@@ -80,7 +81,7 @@ async function loadInstanceInfo() {
     })
     instanceInfo.value = assertOk<InstanceInfo>(response)
   } catch (err) {
-    emit('error', String(err))
+    emit('error', getErrorMessage(err))
     instanceInfo.value = null
   }
 }
@@ -179,7 +180,7 @@ async function load() {
       loadStatsResetTime(),
     ])
   } catch (err) {
-    emit('error', String(err))
+    emit('error', getErrorMessage(err))
   }
 }
 

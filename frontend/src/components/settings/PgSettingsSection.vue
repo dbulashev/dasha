@@ -5,6 +5,7 @@ import { getPgSettings } from '@/api/gen/default/default'
 import type { PgSetting } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { usePaginatedApiLoader } from '@/composables/useApiLoader'
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
 import PaginationControls from '@/components/PaginationControls.vue'
 
 const { clusterName, hostName } = useClusterInfo()
@@ -26,7 +27,7 @@ const { items, loading, page, hasMore, load } = usePaginatedApiLoader<PgSetting>
     offset,
   }),
   {
-    pageSize: 15,
+    pageSize: DEFAULT_PAGE_SIZE,
     deps: [clusterName, hostName],
     guard: () => !!clusterName.value && !!hostName.value,
     onError: (msg) => emit('error', msg),

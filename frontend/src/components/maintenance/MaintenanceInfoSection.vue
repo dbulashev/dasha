@@ -1,17 +1,19 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getMaintenanceInfo } from '@/api/gen/default/default'
 import type { MaintenanceInfo } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { assertOk } from '@/utils/api'
+import { getErrorMessage } from '@/utils/error'
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
 import PaginationControls from '@/components/PaginationControls.vue'
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
 const emit = defineEmits<{ error: [msg: string] }>()
 
-const PAGE_SIZE = 15
+const PAGE_SIZE = DEFAULT_PAGE_SIZE
 const headers = computed(() => [
   { title: t('header.schema'), key: 'Schema' },
   { title: t('header.table'), key: 'Table' },
@@ -55,7 +57,7 @@ async function load(p = 1) {
     items.value = assertOk(response) ?? []
     hasMore.value = items.value.length >= PAGE_SIZE
   } catch (err) {
-    emit('error', String(err))
+    emit('error', getErrorMessage(err))
     items.value = []
     hasMore.value = false
   } finally {
@@ -67,6 +69,9 @@ let filterTimer: ReturnType<typeof setTimeout> | null = null
 watch(tableName, () => {
   if (filterTimer) clearTimeout(filterTimer)
   filterTimer = setTimeout(() => load(), 500)
+})
+onBeforeUnmount(() => {
+  if (filterTimer) clearTimeout(filterTimer)
 })
 
 watch([clusterName, hostName, databaseName], () => load(), { immediate: true })

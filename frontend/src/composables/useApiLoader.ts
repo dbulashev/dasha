@@ -1,5 +1,6 @@
 import { ref, watch, type Ref, type WatchSource } from 'vue'
 import { assertOk } from '@/utils/api'
+import { getErrorMessage } from '@/utils/error'
 
 interface UseApiLoaderOptions<T> {
   deps: WatchSource[]
@@ -15,8 +16,7 @@ interface UseApiLoaderReturn<T> {
 }
 
 export function useApiLoader<T = unknown[]>(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  fetcher: () => Promise<{ data: any; status: number }>,
+  fetcher: () => Promise<{ data: T; status: number }>,
   options: UseApiLoaderOptions<T>,
 ): UseApiLoaderReturn<T> {
   const items = ref(options.defaultValue ?? ([] as unknown as T)) as Ref<T>
@@ -29,7 +29,7 @@ export function useApiLoader<T = unknown[]>(
       const response = await fetcher()
       items.value = assertOk(response) ?? (options.defaultValue ?? ([] as unknown as T))
     } catch (err) {
-      options.onError(String(err))
+      options.onError(getErrorMessage(err))
       items.value = options.defaultValue ?? ([] as unknown as T)
     } finally {
       loading.value = false
@@ -58,8 +58,7 @@ interface UsePaginatedApiLoaderReturn<T> {
 }
 
 export function usePaginatedApiLoader<T>(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  fetcher: (limit: number, offset: number) => Promise<{ data: any; status: number }>,
+  fetcher: (limit: number, offset: number) => Promise<{ data: T[]; status: number }>,
   options: UsePaginatedApiLoaderOptions<T>,
 ): UsePaginatedApiLoaderReturn<T> {
   const items = ref(options.defaultValue ?? []) as Ref<T[]>
@@ -78,7 +77,7 @@ export function usePaginatedApiLoader<T>(
       page.value = p
       hasMore.value = data.length >= options.pageSize
     } catch (err) {
-      options.onError(String(err))
+      options.onError(getErrorMessage(err))
       items.value = []
     } finally {
       loading.value = false

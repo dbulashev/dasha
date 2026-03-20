@@ -18,6 +18,7 @@ import type {
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 import { assertOk } from '@/utils/api'
+import { getErrorMessage } from '@/utils/error'
 import ProgressCard from '@/components/progress/ProgressCard.vue'
 import type { ProgressCardData } from '@/components/progress/ProgressCard.vue'
 
@@ -182,10 +183,10 @@ async function loadEverything() {
 
     const rejected = [aRes, vRes, cRes, iRes, bRes].filter(r => r.status === 'rejected')
     if (rejected.length) {
-      errorMessage.value = (rejected[0] as PromiseRejectedResult).reason?.toString() ?? 'API error'
+      errorMessage.value = getErrorMessage((rejected[0] as PromiseRejectedResult).reason)
     }
   } catch (err) {
-    errorMessage.value = String(err)
+    errorMessage.value = getErrorMessage(err)
   } finally {
     loading.value = false
   }

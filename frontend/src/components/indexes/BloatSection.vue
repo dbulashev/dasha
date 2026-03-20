@@ -5,6 +5,7 @@ import { getIndexesBloat } from '@/api/gen/default/default'
 import type { IndexBloat } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { usePaginatedApiLoader } from '@/composables/useApiLoader'
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
 import PaginationControls from '@/components/PaginationControls.vue'
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
@@ -29,7 +30,7 @@ const { items, loading, page, hasMore, load } = usePaginatedApiLoader<IndexBloat
     offset,
   }),
   {
-    pageSize: 15,
+    pageSize: DEFAULT_PAGE_SIZE,
     deps: [clusterName, hostName, databaseName],
     guard: () => !!clusterName.value && !!hostName.value && !!databaseName.value,
     onError: (msg) => emit('error', msg),

@@ -5,6 +5,8 @@ import { getIndexesUnused } from '@/api/gen/default/default'
 import type { IndexUnused } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { assertOk } from '@/utils/api'
+import { getErrorMessage } from '@/utils/error'
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
 import PaginationControls from '@/components/PaginationControls.vue'
 import { fmtBytes } from '@/utils/format'
 
@@ -12,7 +14,7 @@ const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
 const emit = defineEmits<{ error: [msg: string] }>()
 
-const PAGE_SIZE = 15
+const PAGE_SIZE = DEFAULT_PAGE_SIZE
 const thresholdOptions = [0, 100, 1000, 10000]
 const headers = computed(() => [
   { title: t('header.schema'), key: 'Schema' },
@@ -45,7 +47,7 @@ async function load(p = 1) {
     items.value = assertOk(response) ?? []
     hasMore.value = items.value.length >= PAGE_SIZE
   } catch (err) {
-    emit('error', String(err))
+    emit('error', getErrorMessage(err))
     items.value = []
     hasMore.value = false
   } finally {

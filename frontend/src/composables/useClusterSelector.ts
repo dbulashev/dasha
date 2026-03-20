@@ -2,6 +2,7 @@ import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useClustersStore } from '@/stores/clusters'
 import { getClusters } from '@/api/gen/default/default'
+import { getErrorMessage } from '@/utils/error'
 
 export function useClusterSelector() {
   const clusterStore = useClustersStore()
@@ -21,12 +22,12 @@ export function useClusterSelector() {
 
   // --- Options ---
   const clusterNames = computed(() =>
-    (clusterStore.clusterList?.map(c => c.name!) ?? []).sort(),
+    (clusterStore.clusterList?.map(c => c.name).filter(Boolean) as string[] ?? []).sort(),
   )
 
   const hostOptions = computed(() => {
     const c = clusterStore.clusterList?.find(c => c.name === selectedCluster.value)
-    return (c?.instances?.map(i => i.host_name!).filter(Boolean) ?? []).sort()
+    return (c?.instances?.map(i => i.host_name).filter(Boolean) as string[] ?? []).sort()
   })
 
   const dbOptions = computed(() => {
@@ -37,12 +38,12 @@ export function useClusterSelector() {
   // --- Helpers ---
   function resolveHost(desired: string | null, hosts: string[]): string | null {
     if (desired && hosts.includes(desired)) return desired
-    return hosts.length > 0 ? hosts[0]! : null
+    return hosts[0] ?? null
   }
 
   function resolveDb(desired: string | null, dbs: string[]): string | null {
     if (desired && dbs.includes(desired)) return desired
-    return dbs.length > 0 ? dbs[0]! : null
+    return dbs[0] ?? null
   }
 
   function pushToUrl() {
@@ -76,13 +77,13 @@ export function useClusterSelector() {
     if (urlCluster && names.includes(urlCluster)) {
       selectedCluster.value = urlCluster
     } else if (names.length > 0) {
-      selectedCluster.value = names[0]!
+      selectedCluster.value = names[0] ?? null
     }
 
     if (selectedCluster.value) {
-      const cluster = clusterStore.clusterList!.find(c => c.name === selectedCluster.value)
+      const cluster = clusterStore.clusterList?.find(c => c.name === selectedCluster.value)
       if (cluster) {
-        const hosts = cluster.instances?.map(i => i.host_name!).filter(Boolean) ?? []
+        const hosts = cluster.instances?.map(i => i.host_name).filter(Boolean) as string[] ?? []
         const dbs = cluster.databases ?? []
         selectedHost.value = resolveHost(urlHost, hosts)
         selectedDb.value = resolveDb(urlDb, dbs)
@@ -113,7 +114,7 @@ export function useClusterSelector() {
       initialized.value = true
       pushToUrl()
     } catch (err: unknown) {
-      error.value = err instanceof Error ? err.message : String(err)
+      error.value = getErrorMessage(err)
       clusterStore.invalidateCache()
     } finally {
       loading.value = false
@@ -141,7 +142,7 @@ export function useClusterSelector() {
     const cluster = clusterStore.clusterList?.find(c => c.name === newCluster)
     if (!cluster) return
 
-    const hosts = cluster.instances?.map(i => i.host_name!).filter(Boolean) ?? []
+    const hosts = cluster.instances?.map(i => i.host_name).filter(Boolean) as string[] ?? []
     const dbs = cluster.databases ?? []
 
     isSyncing.value = true

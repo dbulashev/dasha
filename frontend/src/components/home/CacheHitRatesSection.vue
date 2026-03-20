@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { getTablesHitRate, getIndexesHitRate } from '@/api/gen/default/default'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { assertOk } from '@/utils/api'
+import { getErrorMessage } from '@/utils/error'
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
@@ -33,20 +34,20 @@ async function load() {
     ])
     if (tablesRes.status === 'fulfilled') {
       const arr = assertOk<{ Rate: number }[]>(tablesRes.value)
-      tablesHitRate.value = arr?.length ? arr[0].Rate : null
+      tablesHitRate.value = arr?.length ? arr[0]!.Rate : null
     } else {
       tablesHitRate.value = null
-      emit('error', String(tablesRes.reason))
+      emit('error', getErrorMessage(tablesRes.reason))
     }
     if (indexesRes.status === 'fulfilled') {
       const arr = assertOk<{ Rate: number }[]>(indexesRes.value)
-      indexesHitRate.value = arr?.length ? arr[0].Rate : null
+      indexesHitRate.value = arr?.length ? arr[0]!.Rate : null
     } else {
       indexesHitRate.value = null
-      emit('error', String(indexesRes.reason))
+      emit('error', getErrorMessage(indexesRes.reason))
     }
   } catch (err) {
-    emit('error', String(err))
+    emit('error', getErrorMessage(err))
     tablesHitRate.value = null
     indexesHitRate.value = null
   } finally {

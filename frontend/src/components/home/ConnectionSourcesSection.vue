@@ -5,6 +5,7 @@ import { getConnectionSources } from '@/api/gen/default/default'
 import type { ConnectionSource } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { usePaginatedApiLoader } from '@/composables/useApiLoader'
+import { LARGE_PAGE_SIZE } from '@/constants/pagination'
 import PaginationControls from '@/components/PaginationControls.vue'
 
 const { clusterName, hostName } = useClusterInfo()
@@ -27,7 +28,7 @@ const { items, loading, page, hasMore, load } = usePaginatedApiLoader<Connection
     offset,
   }),
   {
-    pageSize: 30,
+    pageSize: LARGE_PAGE_SIZE,
     deps: [clusterName, hostName],
     guard: () => !!clusterName.value && !!hostName.value,
     onError: (msg) => emit('error', msg),
