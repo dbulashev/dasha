@@ -68,7 +68,6 @@ function phaseLabel(type: ProgressCard['type'], phase: string): string {
 }
 
 // Phases where a numeric progress bar is meaningful
-const vacuumProgressPhases = new Set(['scanning heap', 'vacuuming heap'])
 const analyzeProgressPhases = new Set(['acquiring sample rows'])
 const clusterProgressPhases = new Set(['seq scanning heap', 'index scanning heap'])
 const indexProgressPrefixes = [
