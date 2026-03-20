@@ -65,7 +65,12 @@ async function load() {
   ])
 
   if (r1.status === 'fulfilled') {
-    similar1Items.value = assertOk(r1.value) ?? []
+    try {
+      similar1Items.value = assertOk(r1.value) ?? []
+    } catch (e) {
+      emit('error', String(e))
+      similar1Items.value = []
+    }
   } else {
     emit('error', String(r1.reason))
     similar1Items.value = []
@@ -73,7 +78,12 @@ async function load() {
   similar1Loading.value = false
 
   if (r2.status === 'fulfilled') {
-    similar2Items.value = assertOk(r2.value) ?? []
+    try {
+      similar2Items.value = assertOk(r2.value) ?? []
+    } catch (e) {
+      emit('error', String(e))
+      similar2Items.value = []
+    }
   } else {
     emit('error', String(r2.reason))
     similar2Items.value = []
@@ -81,7 +91,12 @@ async function load() {
   similar2Loading.value = false
 
   if (r3.status === 'fulfilled') {
-    similar3Items.value = assertOk(r3.value) ?? []
+    try {
+      similar3Items.value = assertOk(r3.value) ?? []
+    } catch (e) {
+      emit('error', String(e))
+      similar3Items.value = []
+    }
   } else {
     emit('error', String(r3.reason))
     similar3Items.value = []

@@ -120,7 +120,6 @@ func (p *PgxPool) getFksPossibleSimilar(ctx context.Context, serverVersion int, 
 
 	ret := make([]dto.FksPossibleSimilar, 0, 10) //nolint:mnd
 
-	// Выполняем первый запрос
 	rows1, err := pool.Query(ctx, qStr1)
 	if err != nil {
 		return nil, fmt.Errorf("getFksPossibleSimilar | %w", err)

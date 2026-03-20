@@ -677,9 +677,9 @@ func (p *PgxPool) getIndexesSimilar1(
 			i1UniqueIndexName,
 			i2IndexName,
 			i1UniqueIndexDefinition,
-			i2IndexDefinition,
+			i2IndexDefinition string
 			i1UsedInConstraint,
-			i2UsedInConstraint string
+			i2UsedInConstraint pgtype.Text
 		)
 
 		err = rows.Scan(&table,
@@ -700,8 +700,8 @@ func (p *PgxPool) getIndexesSimilar1(
 			I2IndexName:             i2IndexName,
 			I1UniqueIndexDefinition: i1UniqueIndexDefinition,
 			I2IndexDefinition:       i2IndexDefinition,
-			I1UsedInConstraint:      i1UsedInConstraint,
-			I2UsedInConstraint:      i2UsedInConstraint,
+			I1UsedInConstraint:      i1UsedInConstraint.String,
+			I2UsedInConstraint:      i2UsedInConstraint.String,
 		})
 	}
 
@@ -763,9 +763,9 @@ func (p *PgxPool) getIndexesSimilar3(
 			i2IndexName,
 			simplifiedIndexDefinition,
 			i1IndexDefinition,
-			i2IndexDefinition,
+			i2IndexDefinition string
 			i1UsedInConstraint,
-			i2UsedInConstraint string
+			i2UsedInConstraint pgtype.Text
 		)
 
 		err = rows.Scan(
@@ -789,8 +789,8 @@ func (p *PgxPool) getIndexesSimilar3(
 			SimplifiedIndexDefinition: simplifiedIndexDefinition,
 			I1IndexDefinition:         i1IndexDefinition,
 			I2IndexDefinition:         i2IndexDefinition,
-			I1UsedInConstraint:        i1UsedInConstraint,
-			I2UsedInConstraint:        i2UsedInConstraint,
+			I1UsedInConstraint:        i1UsedInConstraint.String,
+			I2UsedInConstraint:        i2UsedInConstraint.String,
 		})
 	}
 
