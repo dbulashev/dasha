@@ -18,6 +18,9 @@ func TestGetTablesTopKBySize(t *testing.T) {
 	p := NewTestPgxPool(pool, zap.NewNop())
 	ctx := t.Context()
 
+	// Ensure pg_class.relpages is up to date for size calculations
+	_, _ = pool.Exec(ctx, "VACUUM ANALYZE orders")
+
 	vNum, err := p.getServerVersionNum(ctx, pool)
 	require.NoError(t, err)
 
