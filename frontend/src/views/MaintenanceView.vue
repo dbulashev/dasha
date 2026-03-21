@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import FreezeMaxAgeSection from '@/components/maintenance/FreezeMaxAgeSection.vue'
 import TransactionIdDangerSection from '@/components/maintenance/TransactionIdDangerSection.vue'
 import VacuumProgressSection from '@/components/maintenance/VacuumProgressSection.vue'
 import MaintenanceInfoSection from '@/components/maintenance/MaintenanceInfoSection.vue'

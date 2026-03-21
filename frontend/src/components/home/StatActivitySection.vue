@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getConnectionStatActivity } from '@/api/gen/default/default'
 import type { ConnectionStatActivity } from '@/api/models/index'
