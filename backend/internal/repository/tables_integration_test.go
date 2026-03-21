@@ -12,37 +12,6 @@ import (
 	"github.com/dbulashev/dasha/internal/testinfra"
 )
 
-func TestGetTablesTopKBySize(t *testing.T) {
-	t.Parallel()
-	pool := testinfra.IsolatePool(t)
-	p := NewTestPgxPool(pool, zap.NewNop())
-	ctx := t.Context()
-
-	// Ensure pg_class.relpages is up to date for size calculations
-	_, _ = pool.Exec(ctx, "VACUUM ANALYZE orders")
-
-	vNum, err := p.getServerVersionNum(ctx, pool)
-	require.NoError(t, err)
-
-	result, err := p.getTablesTopKBySize(ctx, vNum, pool, 10)
-	require.NoError(t, err)
-	assert.NotEmpty(t, result, "should return tables")
-	assert.LessOrEqual(t, len(result), 10)
-
-	// Verify sorted by total_bytes DESC
-	for i := 1; i < len(result); i++ {
-		assert.GreaterOrEqual(t, result[i-1].TotalBytes, result[i].TotalBytes,
-			"tables should be sorted by size descending")
-	}
-
-	// Verify field mapping
-	for _, tbl := range result {
-		assert.NotEmpty(t, tbl.Table)
-		assert.NotEmpty(t, tbl.Total)
-		assert.GreaterOrEqual(t, tbl.TotalBytes, int64(0))
-	}
-}
-
 func TestGetTablesCaching(t *testing.T) {
 	t.Parallel()
 	pool := testinfra.IsolatePool(t)

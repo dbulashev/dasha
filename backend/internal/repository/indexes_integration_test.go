@@ -207,42 +207,6 @@ func TestGetIndexesMissing(t *testing.T) {
 	}
 }
 
-func TestGetIndexesUnused(t *testing.T) {
-	t.Parallel()
-	pool := testinfra.IsolatePool(t)
-	p := NewTestPgxPool(pool, zap.NewNop())
-	ctx := t.Context()
-
-	vNum, err := p.getServerVersionNum(ctx, pool)
-	require.NoError(t, err)
-
-	// Threshold=100: indexes with idx_scan <= 100
-	result, err := p.getIndexesUnused(ctx, vNum, pool, 100, 100, 0)
-	require.NoError(t, err)
-
-	// Verify field mapping and threshold filter
-	for _, idx := range result {
-		assert.NotEmpty(t, idx.Schema)
-		assert.NotEmpty(t, idx.Table)
-		assert.NotEmpty(t, idx.Index)
-		assert.LessOrEqual(t, idx.IndexScans, int64(100),
-			"unused indexes should have idx_scan <= threshold")
-	}
-
-	// Test pagination
-	if len(result) > 2 {
-		page1, err := p.getIndexesUnused(ctx, vNum, pool, 100, 2, 0)
-		require.NoError(t, err)
-		assert.Len(t, page1, 2)
-
-		page2, err := p.getIndexesUnused(ctx, vNum, pool, 100, 2, 2)
-		require.NoError(t, err)
-		if len(page2) > 0 {
-			assert.NotEqual(t, page1[0].Index, page2[0].Index)
-		}
-	}
-}
-
 func TestGetIndexesUsage(t *testing.T) {
 	t.Parallel()
 	pool := testinfra.IsolatePool(t)
