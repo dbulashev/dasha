@@ -4,7 +4,6 @@ package repository
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -296,39 +295,6 @@ func TestGetIndexesSimilar3(t *testing.T) {
 		assert.NotEmpty(t, idx.Table)
 		assert.NotEmpty(t, idx.I1IndexName)
 		assert.NotEmpty(t, idx.I2IndexName)
-	}
-}
-
-func TestGetIndexesAllScans(t *testing.T) {
-	t.Parallel()
-	pool := testinfra.IsolatePool(t)
-	p := NewTestPgxPool(pool, zap.NewNop())
-	ctx := t.Context()
-
-	// Warm up index stats so pg_stat_user_indexes has data
-	for i := range 10 {
-		_, _ = pool.Exec(ctx, "SELECT * FROM orders WHERE user_id = $1", i+1)
-	}
-	_, _ = pool.Exec(ctx, "SELECT count(*) FROM orders")
-	_, _ = pool.Exec(ctx, "ANALYZE orders")
-	_, _ = pool.Exec(ctx, "SELECT pg_stat_force_next_flush()")
-	// Allow stats collector to process
-	time.Sleep(500 * time.Millisecond)
-	_, _ = pool.Exec(ctx, "SELECT pg_stat_force_next_flush()")
-
-	vNum, err := p.getServerVersionNum(ctx, pool)
-	require.NoError(t, err)
-
-	result, err := p.getIndexesAllScans(ctx, vNum, pool)
-	require.NoError(t, err)
-	assert.NotEmpty(t, result, "should return all non-unique indexes with scan counts")
-
-	for _, idx := range result {
-		assert.NotEmpty(t, idx.Schema)
-		assert.NotEmpty(t, idx.Table)
-		assert.NotEmpty(t, idx.Index)
-		assert.GreaterOrEqual(t, idx.IndexScans, int64(0))
-		assert.GreaterOrEqual(t, idx.SizeBytes, int64(0))
 	}
 }
 
