@@ -7,14 +7,17 @@ on:
     branches: [main]
   workflow_call:
 
+permissions:
+  contents: read
+
 jobs:
   lint-backend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
-          go-version: "1.25"
+          go-version: "1.26"
           cache-dependency-path: backend/go.sum
       - name: Install linters
         run: |
@@ -42,9 +45,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
-          go-version: "1.25"
+          go-version: "1.26"
           cache-dependency-path: backend/go.sum
       - run: cd backend && go test ./internal/...
 
@@ -55,9 +58,9 @@ jobs:
         pg-version: [14, 15, 16, 17, 18]
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
-          go-version: "1.25"
+          go-version: "1.26"
           cache-dependency-path: backend/go.sum
       - name: Integration tests (PG ${{ matrix.pg-version }})
         run: |
@@ -81,9 +84,9 @@ jobs:
     needs: [lint-backend, lint-frontend, test-backend-unit, test-frontend]
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
-          go-version: "1.25"
+          go-version: "1.26"
           cache-dependency-path: backend/go.sum
       - run: cd backend && go build ./cmd/...
       - uses: actions/setup-node@v5

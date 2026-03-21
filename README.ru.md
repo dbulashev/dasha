@@ -4,8 +4,11 @@
 
 Дашборд производительности PostgreSQL для анализа состояния кластеров баз данных, выявления проблем и предоставления рекомендаций по оптимизации.
 
+[![CI](https://github.com/dbulashev/dasha/actions/workflows/ci.yaml/badge.svg)](https://github.com/dbulashev/dasha/actions/workflows/ci.yaml)
+[![Docker Backend](https://img.shields.io/docker/v/dbulashev/dasha-backend?label=backend&sort=semver)](https://hub.docker.com/r/dbulashev/dasha-backend)
+[![Docker Frontend](https://img.shields.io/docker/v/dbulashev/dasha-frontend?label=frontend&sort=semver)](https://hub.docker.com/r/dbulashev/dasha-frontend)
 ![License](https://img.shields.io/badge/license-GPLv3-blue)
-![Go](https://img.shields.io/badge/Go-1.25-00ADD8)
+![Go](https://img.shields.io/badge/Go-1.26-00ADD8)
 ![Vue](https://img.shields.io/badge/Vue-3.5-4FC08D)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14--18-336791)
 
@@ -77,7 +80,7 @@
 | Слой | Стек |
 |------|------|
 | Фронтенд | Vue 3, Vuetify 3, Pinia, TanStack Vue Query, vue-i18n, Vite |
-| Бэкенд | Go 1.25, Echo v4, pgx v5, Viper, Cobra, Zap, samber/do |
+| Бэкенд | Go 1.26, Echo v4, pgx v5, Viper, Cobra, Zap, samber/do |
 | Кодогенерация | oapi-codegen (Go-сервер), orval (TypeScript-клиент) |
 | Тестирование | Vitest, Playwright, testcontainers-go (матрица PG 14-18) |
 
@@ -85,7 +88,7 @@
 
 ### Требования
 
-- Go 1.25+
+- Go 1.26+
 - Node.js 22+ и npm
 - PostgreSQL 14+ (целевые базы данных)
 - Docker и Docker Compose (для демо-лаборатории)

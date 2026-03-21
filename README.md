@@ -6,8 +6,11 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 
 [Russian / Русская версия](README.ru.md)
 
+[![CI](https://github.com/dbulashev/dasha/actions/workflows/ci.yaml/badge.svg)](https://github.com/dbulashev/dasha/actions/workflows/ci.yaml)
+[![Docker Backend](https://img.shields.io/docker/v/dbulashev/dasha-backend?label=backend&sort=semver)](https://hub.docker.com/r/dbulashev/dasha-backend)
+[![Docker Frontend](https://img.shields.io/docker/v/dbulashev/dasha-frontend?label=frontend&sort=semver)](https://hub.docker.com/r/dbulashev/dasha-frontend)
 ![License](https://img.shields.io/badge/license-GPLv3-blue)
-![Go](https://img.shields.io/badge/Go-1.25-00ADD8)
+![Go](https://img.shields.io/badge/Go-1.26-00ADD8)
 ![Vue](https://img.shields.io/badge/Vue-3.5-4FC08D)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14--18-336791)
 
@@ -79,7 +82,7 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 | Layer | Stack |
 |-------|-------|
 | Frontend | Vue 3, Vuetify 3, Pinia, TanStack Vue Query, vue-i18n, Vite |
-| Backend | Go 1.25, Echo v4, pgx v5, Viper, Cobra, Zap, samber/do |
+| Backend | Go 1.26, Echo v4, pgx v5, Viper, Cobra, Zap, samber/do |
 | Code generation | oapi-codegen (Go server), orval (TypeScript client) |
 | Testing | Vitest, Playwright, testcontainers-go (PG 14-18 matrix) |
 
@@ -87,7 +90,7 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 
 ### Prerequisites
 
-- Go 1.25+
+- Go 1.26+
 - Node.js 22+ & npm
 - PostgreSQL 14+ (target databases)
 - Docker & Docker Compose (for demo lab)
