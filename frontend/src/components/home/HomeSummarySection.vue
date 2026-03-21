@@ -137,7 +137,7 @@ async function loadStatsResetTime() {
       database: databaseName.value,
     })
     const data = assertOk<StatsResetTime[]>(statsRes)
-    statsResetTime.value = data?.length ? data[0].Time : null
+    statsResetTime.value = data && data.length > 0 ? data[0]!.Time : null
   } catch {
     statsResetTime.value = null
   }

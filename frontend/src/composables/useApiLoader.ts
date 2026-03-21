@@ -28,7 +28,7 @@ export function useApiLoader<T = unknown[]>(
     loading.value = true
     try {
       const response = await fetcher()
-      items.value = assertOk(response) ?? (options.defaultValue ?? ([] as unknown as T))
+      items.value = (assertOk(response) as T) ?? (options.defaultValue ?? ([] as unknown as T))
     } catch (err) {
       options.onError(getErrorMessage(err))
       items.value = options.defaultValue ?? ([] as unknown as T)
@@ -74,7 +74,7 @@ export function usePaginatedApiLoader<T>(
     try {
       const offset = (p - 1) * options.pageSize
       const response = await fetcher(options.pageSize, offset)
-      const data = assertOk(response) ?? []
+      const data = (assertOk(response) as T[]) ?? []
       items.value = data
       page.value = p
       hasMore.value = data.length >= options.pageSize
