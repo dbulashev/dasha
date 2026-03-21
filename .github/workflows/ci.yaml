@@ -11,7 +11,7 @@ jobs:
   lint-backend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-go@v5
         with:
           go-version: "1.25"
@@ -29,8 +29,8 @@ jobs:
   lint-frontend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -41,7 +41,7 @@ jobs:
   test-backend-unit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-go@v5
         with:
           go-version: "1.25"
@@ -54,7 +54,7 @@ jobs:
       matrix:
         pg-version: [14, 15, 16, 17, 18]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-go@v5
         with:
           go-version: "1.25"
@@ -67,8 +67,8 @@ jobs:
   test-frontend:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -80,13 +80,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: [lint-backend, lint-frontend, test-backend-unit, test-frontend]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-go@v5
         with:
           go-version: "1.25"
           cache-dependency-path: backend/go.sum
       - run: cd backend && go build ./cmd/...
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
