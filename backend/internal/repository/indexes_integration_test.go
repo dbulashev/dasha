@@ -340,6 +340,11 @@ func TestGetIndexesAllScans(t *testing.T) {
 	p := NewTestPgxPool(pool, zap.NewNop())
 	ctx := t.Context()
 
+	// Warm up index stats so pg_stat_user_indexes has data
+	_, _ = pool.Exec(ctx, "SELECT * FROM orders WHERE user_id = 1")
+	_, _ = pool.Exec(ctx, "SELECT * FROM orders WHERE status = 'new'")
+	_, _ = pool.Exec(ctx, "SELECT pg_stat_force_next_flush()")
+
 	vNum, err := p.getServerVersionNum(ctx, pool)
 	require.NoError(t, err)
 
