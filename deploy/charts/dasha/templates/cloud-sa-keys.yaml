@@ -1,0 +1,23 @@
+{{- range $key := .Values.cloudSAKeys }}
+{{- if and (not $key.existingSecret) (hasKey $key "externalSecret") $key.externalSecret.enabled }}
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: {{ template "dasha.fullname" $ }}-sa-{{ $key.name }}
+  namespace: {{ template "dasha.namespace" $ }}
+  labels:
+    {{- include "dasha.labels" $ | nindent 4 }}
+spec:
+  secretStoreRef:
+    {{- toYaml $key.externalSecret.secretStoreRef | nindent 4 }}
+  refreshInterval: {{ $key.externalSecret.refreshInterval }}
+  target:
+    name: {{ template "dasha.fullname" $ }}-sa-{{ $key.name }}
+  data:
+    - secretKey: authorized_key.json
+      remoteRef:
+        key: {{ $key.externalSecret.remoteRef.key }}
+        property: {{ $key.externalSecret.remoteRef.property }}
+{{- end }}
+{{- end }}

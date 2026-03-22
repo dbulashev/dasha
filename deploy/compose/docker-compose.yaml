@@ -1,0 +1,20 @@
+services:
+  backend:
+    image: dbulashev/dasha-backend:latest
+    restart: unless-stopped
+    volumes:
+      - ./dasha.yaml:/etc/dasha/dasha.yaml:ro
+    ports:
+      - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  frontend:
+    image: dbulashev/dasha-frontend:latest
+    restart: unless-stopped
+    environment:
+      - BACKEND_URL=backend:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend

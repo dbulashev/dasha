@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  packages: write
 
 jobs:
   check-ci-passed:
@@ -112,3 +113,23 @@ jobs:
           format: table
           exit-code: 0
           severity: CRITICAL,HIGH
+
+  helm-push:
+    runs-on: ubuntu-latest
+    needs: check-ci-passed
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set chart version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          sed -i "s/^version:.*/version: $VERSION/" deploy/charts/dasha/Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: \"$VERSION\"/" deploy/charts/dasha/Chart.yaml
+
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Package and push chart
+        run: |
+          helm package deploy/charts/dasha
+          helm push dasha-*.tgz oci://ghcr.io/${{ github.repository_owner }}/charts

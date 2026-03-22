@@ -275,6 +275,146 @@ Dasha предоставляет 46+ REST-эндпоинтов по пути `/a
 
 Полная спецификация: [`doc/swagger.yaml`](doc/swagger.yaml)
 
+## Развёртывание
+
+### Docker Compose
+
+Самый простой способ запустить Dasha с готовыми образами:
+
+```bash
+cd deploy/compose
+# Отредактируйте dasha.yaml под ваши кластеры
+docker compose up -d
+# Откройте http://localhost:3000
+```
+
+### Docker-образы
+
+Мультиархитектурные образы (`linux/amd64`, `linux/arm64`) публикуются на Docker Hub при каждом релизе:
+
+| Образ | Описание |
+|-------|----------|
+| `dbulashev/dasha-backend` | Go API-сервер |
+| `dbulashev/dasha-frontend` | Nginx + Vue SPA, проксирует `/api/` на бэкенд |
+
+Фронтенд принимает переменную окружения `BACKEND_URL` (по умолчанию: `backend:8000`).
+
+### Helm Chart
+
+Чарт публикуется как OCI-артефакт в GitHub Container Registry:
+
+```bash
+helm install dasha oci://ghcr.io/dbulashev/charts/dasha --version 0.1.5
+```
+
+#### Минимальная конфигурация (статические кластеры)
+
+```yaml
+config:
+  clusters:
+    - name: production
+      username: monitoring_user
+      password_from_env: PG_PASSWORD
+      databases: [myapp]
+      hosts: [pg-master.example.com]
+
+secrets:
+  existingSecret: my-pg-credentials  # должен содержать ключ PG_PASSWORD
+```
+
+#### С ESO (External Secrets Operator)
+
+```yaml
+config:
+  clusters:
+    - name: production
+      username: monitoring_user
+      password_from_env: PG_PASSWORD
+      databases: [myapp]
+      hosts: [pg-master.example.com]
+
+secrets:
+  externalSecret:
+    enabled: true
+    refreshInterval: "1m"
+    secretStoreRef:
+      name: vault-backend
+      kind: ClusterSecretStore
+    data:
+      - secretKey: PG_PASSWORD
+        remoteRef:
+          key: dasha/production
+          property: password
+```
+
+#### С сервис-дискавери Yandex MDB
+
+```yaml
+config:
+  discovery:
+    yandex_mdb_prod:
+      type: yandex-mdb
+      config:
+        authorized_key: /secrets/prod/authorized_key.json
+        folder_id: "b1g..."
+        user: monitoring_user
+        password_from_env: DISCOVERY_PROD_PASSWORD
+        refresh_interval: 5
+        clusters:
+          - name: ".*"
+
+secrets:
+  externalSecret:
+    enabled: true
+    refreshInterval: "1m"
+    secretStoreRef:
+      name: vault-backend
+      kind: ClusterSecretStore
+    data:
+      - secretKey: DISCOVERY_PROD_PASSWORD
+        remoteRef:
+          key: dasha/discovery
+          property: password
+
+cloudSAKeys:
+  - name: prod
+    mountPath: /secrets/prod
+    externalSecret:
+      enabled: true
+      refreshInterval: "1m"
+      secretStoreRef:
+        name: vault-backend
+        kind: ClusterSecretStore
+      remoteRef:
+        key: dasha/discovery
+        property: sa_cloud_auth_key
+```
+
+#### Режим только API (без фронтенда)
+
+```yaml
+frontend:
+  enabled: false
+
+ingress:
+  enabled: true
+  domain: dasha-api.example.com
+```
+
+#### Ключевые возможности чарта
+
+- **Конфиг как ConfigMap** — `dasha.yaml` рендерится из values, пароли не хранятся в открытом виде
+- **Пароли через env** — `password_from_env` + ESO или существующий Kubernetes Secret
+- **Ключи сервисных аккаунтов** — отдельный `authorized_key.json` для каждого фолдера через ESO или существующий Secret
+- **Фронтенд опционален** — можно развернуть только бэкенд для доступа через API
+- **Ingress** — `/api/` маршрутизируется на бэкенд, `/` на фронтенд (когда включён), поддержка cert-manager
+- **Безопасность** — `podSecurityContext`, `securityContext`, отдельные настройки для фронтенда и бэкенда
+
+## CI/CD
+
+- **CI** запускается при каждом push/PR в `main`: линтинг Go (revive + gosec), линтинг фронтенда (ESLint), юнит-тесты, интеграционные тесты (матрица PG 14–18), проверка сборки
+- **Релиз** запускается по тегу `v*`: проверяет прохождение CI, собирает мультиархитектурные Docker-образы с attestation provenance/SBOM, сканирует Trivy, публикует Helm-чарт в GHCR
+- **Dependabot** автоматически обновляет GitHub Actions
 
 ## Лицензия
 

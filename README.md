@@ -277,6 +277,146 @@ All data endpoints accept `cluster_name`, `instance` (host:port), and `database`
 
 Full specification: [`doc/swagger.yaml`](doc/swagger.yaml)
 
+## Deployment
+
+### Docker Compose
+
+The simplest way to run Dasha with pre-built images:
+
+```bash
+cd deploy/compose
+# Edit dasha.yaml with your cluster settings
+docker compose up -d
+# Open http://localhost:3000
+```
+
+### Docker Images
+
+Multi-architecture images (`linux/amd64`, `linux/arm64`) are published to Docker Hub on every release:
+
+| Image | Description |
+|-------|-------------|
+| `dbulashev/dasha-backend` | Go API server |
+| `dbulashev/dasha-frontend` | Nginx + Vue SPA, proxies `/api/` to backend |
+
+The frontend accepts `BACKEND_URL` environment variable (default: `backend:8000`).
+
+### Helm Chart
+
+The chart is published as an OCI artifact to GitHub Container Registry:
+
+```bash
+helm install dasha oci://ghcr.io/dbulashev/charts/dasha --version 0.1.5
+```
+
+#### Minimal values (static clusters)
+
+```yaml
+config:
+  clusters:
+    - name: production
+      username: monitoring_user
+      password_from_env: PG_PASSWORD
+      databases: [myapp]
+      hosts: [pg-master.example.com]
+
+secrets:
+  existingSecret: my-pg-credentials  # must contain PG_PASSWORD key
+```
+
+#### With ESO (External Secrets Operator)
+
+```yaml
+config:
+  clusters:
+    - name: production
+      username: monitoring_user
+      password_from_env: PG_PASSWORD
+      databases: [myapp]
+      hosts: [pg-master.example.com]
+
+secrets:
+  externalSecret:
+    enabled: true
+    refreshInterval: "1m"
+    secretStoreRef:
+      name: vault-backend
+      kind: ClusterSecretStore
+    data:
+      - secretKey: PG_PASSWORD
+        remoteRef:
+          key: dasha/production
+          property: password
+```
+
+#### With Yandex MDB service discovery
+
+```yaml
+config:
+  discovery:
+    yandex_mdb_prod:
+      type: yandex-mdb
+      config:
+        authorized_key: /secrets/prod/authorized_key.json
+        folder_id: "b1g..."
+        user: monitoring_user
+        password_from_env: DISCOVERY_PROD_PASSWORD
+        refresh_interval: 5
+        clusters:
+          - name: ".*"
+
+secrets:
+  externalSecret:
+    enabled: true
+    refreshInterval: "1m"
+    secretStoreRef:
+      name: vault-backend
+      kind: ClusterSecretStore
+    data:
+      - secretKey: DISCOVERY_PROD_PASSWORD
+        remoteRef:
+          key: dasha/discovery
+          property: password
+
+cloudSAKeys:
+  - name: prod
+    mountPath: /secrets/prod
+    externalSecret:
+      enabled: true
+      refreshInterval: "1m"
+      secretStoreRef:
+        name: vault-backend
+        kind: ClusterSecretStore
+      remoteRef:
+        key: dasha/discovery
+        property: sa_cloud_auth_key
+```
+
+#### API-only mode (without frontend)
+
+```yaml
+frontend:
+  enabled: false
+
+ingress:
+  enabled: true
+  domain: dasha-api.example.com
+```
+
+#### Key chart features
+
+- **Config as ConfigMap** — `dasha.yaml` rendered from values, no passwords inline
+- **Passwords via env** — `password_from_env` + ESO or existing Kubernetes Secret
+- **Cloud SA keys** — per-folder `authorized_key.json` via ESO or existing Secret
+- **Frontend optional** — deploy backend only for API access
+- **Ingress** — `/api/` routed to backend, `/` to frontend (when enabled), cert-manager support
+- **Security** — `podSecurityContext`, `securityContext`, separate settings for frontend/backend
+
+## CI/CD
+
+- **CI** runs on every push/PR to `main`: Go lint (revive + gosec), frontend lint (ESLint), unit tests, integration tests (PG 14–18 matrix), build check
+- **Release** is triggered by a `v*` tag: verifies CI passed, builds multi-arch Docker images with provenance/SBOM attestation, scans with Trivy, pushes Helm chart to GHCR
+- **Dependabot** keeps GitHub Actions up to date
 
 ## License
 

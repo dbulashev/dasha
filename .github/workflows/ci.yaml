@@ -79,9 +79,18 @@ jobs:
       - run: cd frontend && npm ci
       # - run: cd frontend && npm run test:unit
 
+  lint-helm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Helm lint
+        run: helm lint deploy/charts/dasha
+      - name: Helm template
+        run: helm template test deploy/charts/dasha > /dev/null
+
   build-check:
     runs-on: ubuntu-latest
-    needs: [lint-backend, lint-frontend, test-backend-unit, test-frontend]
+    needs: [lint-backend, lint-frontend, lint-helm, test-backend-unit, test-frontend]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
