@@ -25,12 +25,13 @@ func (n ClusterName) String() string {
 
 // Cluster represents a PostgreSQL cluster connection configuration.
 type Cluster struct {
-	Name      ClusterName
-	UserName  string
-	Password  string
-	Port      string
-	Databases []Database
-	Hosts     []Host
+	Name            ClusterName
+	UserName        string
+	Password        string
+	PasswordFromEnv string `mapstructure:"password_from_env"`
+	Port            string
+	Databases       []Database
+	Hosts           []Host
 
 	// Extended attributes for service discovery.
 	Source     string            `mapstructure:"source"`

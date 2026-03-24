@@ -2,6 +2,7 @@ package deps
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/samber/do"
 	"github.com/spf13/viper"
@@ -110,6 +111,13 @@ func provideConfig() (*config.Config, error) {
 	err := viper.Unmarshal(&c)
 	if err != nil {
 		return nil, fmt.Errorf("provideConfig | %w", err)
+	}
+
+	// Resolve password_from_env for static clusters.
+	for i := range c.Clusters {
+		if c.Clusters[i].PasswordFromEnv != "" {
+			c.Clusters[i].Password = os.Getenv(c.Clusters[i].PasswordFromEnv)
+		}
 	}
 
 	return &c, nil
