@@ -392,6 +392,41 @@ cloudSAKeys:
         property: sa_cloud_auth_key
 ```
 
+#### Ingress with TLS (cert-manager)
+
+```yaml
+ingress:
+  enabled: true
+  className: nginx
+  domain: dasha.example.com
+  tls:
+    enabled: true
+    certManager:
+      enabled: true
+      issuer: cluster-issuer
+```
+
+cert-manager will create a `Certificate` resource in the application namespace.
+
+#### Ingress with TLS (cert-manager + reflector)
+
+When the ingress controller runs in a different namespace (e.g. Istio), use `reflectToNamespace` to copy the TLS secret via [reflector](https://github.com/emberstack/kubernetes-reflector):
+
+```yaml
+ingress:
+  enabled: true
+  className: istio
+  domain: dasha.example.com
+  tls:
+    enabled: true
+    certManager:
+      enabled: true
+      issuer: cluster-issuer
+      reflectToNamespace: istio-ingress
+```
+
+In this mode, no separate `Certificate` resource is created. Instead, cert-manager annotations are added to the Ingress, and the generated TLS secret gets reflector annotations to be copied to the specified namespace.
+
 #### API-only mode (without frontend)
 
 ```yaml
@@ -409,7 +444,7 @@ ingress:
 - **Passwords via env** — `password_from_env` + ESO or existing Kubernetes Secret
 - **Cloud SA keys** — per-folder `authorized_key.json` via ESO or existing Secret
 - **Frontend optional** — deploy backend only for API access
-- **Ingress** — `/api/` routed to backend, `/` to frontend (when enabled), cert-manager support
+- **Ingress** — `/api/` routed to backend, `/` to frontend (when enabled), cert-manager + reflector support
 - **Security** — `podSecurityContext`, `securityContext`, separate settings for frontend/backend
 
 ## CI/CD

@@ -1,5 +1,5 @@
 {{- if .Values.ingress.enabled }}
-{{- if and .Values.ingress.tls.enabled .Values.ingress.tls.certManager.enabled }}
+{{- if and .Values.ingress.tls.enabled .Values.ingress.tls.certManager.enabled (not .Values.ingress.tls.certManager.reflectToNamespace) }}
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
@@ -26,6 +26,15 @@ metadata:
   {{- $annotations := dict }}
   {{- if and .Values.ingress.tls.enabled .Values.ingress.tls.certManager.enabled }}
   {{- $_ := set $annotations "cert-manager.io/cluster-issuer" .Values.ingress.tls.certManager.issuer }}
+  {{- if .Values.ingress.tls.certManager.reflectToNamespace }}
+  {{- $reflectorAnnotations := dict
+    "reflector.v1.k8s.emberstack.com/reflection-allowed" "true"
+    "reflector.v1.k8s.emberstack.com/reflection-auto-enabled" "true"
+    "reflector.v1.k8s.emberstack.com/reflection-auto-namespaces" .Values.ingress.tls.certManager.reflectToNamespace
+    "reflector.v1.k8s.emberstack.com/reflection-allowed-namespaces" .Values.ingress.tls.certManager.reflectToNamespace
+  }}
+  {{- $__ := set $annotations "cert-manager.io/secret-template" ($reflectorAnnotations | toJson) }}
+  {{- end }}
   {{- end }}
   {{- with .Values.ingress.annotations }}
   {{- $annotations = merge $annotations . }}

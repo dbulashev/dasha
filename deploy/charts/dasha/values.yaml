@@ -106,6 +106,8 @@ ingress:
     certManager:
       enabled: false
       issuer: cluster-issuer
+      # if set, adds reflector annotations to copy the TLS secret to this namespace
+      reflectToNamespace: ""
 
 nameOverride: ""
 fullnameOverride: ""

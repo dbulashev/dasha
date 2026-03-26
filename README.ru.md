@@ -390,6 +390,41 @@ cloudSAKeys:
         property: sa_cloud_auth_key
 ```
 
+#### Ingress с TLS (cert-manager)
+
+```yaml
+ingress:
+  enabled: true
+  className: nginx
+  domain: dasha.example.com
+  tls:
+    enabled: true
+    certManager:
+      enabled: true
+      issuer: cluster-issuer
+```
+
+cert-manager создаст ресурс `Certificate` в namespace приложения.
+
+#### Ingress с TLS (cert-manager + reflector)
+
+Когда ingress controller работает в другом namespace (например, Istio), используйте `reflectToNamespace` для копирования TLS-секрета через [reflector](https://github.com/emberstack/kubernetes-reflector):
+
+```yaml
+ingress:
+  enabled: true
+  className: istio
+  domain: dasha.example.com
+  tls:
+    enabled: true
+    certManager:
+      enabled: true
+      issuer: cluster-issuer
+      reflectToNamespace: istio-ingress
+```
+
+В этом режиме отдельный ресурс `Certificate` не создаётся. Вместо этого на Ingress добавляются аннотации cert-manager, а сгенерированный TLS-секрет получает аннотации reflector для копирования в указанный namespace.
+
 #### Режим только API (без фронтенда)
 
 ```yaml
@@ -407,7 +442,7 @@ ingress:
 - **Пароли через env** — `password_from_env` + ESO или существующий Kubernetes Secret
 - **Ключи сервисных аккаунтов** — отдельный `authorized_key.json` для каждого фолдера через ESO или существующий Secret
 - **Фронтенд опционален** — можно развернуть только бэкенд для доступа через API
-- **Ingress** — `/api/` маршрутизируется на бэкенд, `/` на фронтенд (когда включён), поддержка cert-manager
+- **Ingress** — `/api/` маршрутизируется на бэкенд, `/` на фронтенд (когда включён), поддержка cert-manager + reflector
 - **Безопасность** — `podSecurityContext`, `securityContext`, отдельные настройки для фронтенда и бэкенда
 
 ## CI/CD
