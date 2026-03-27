@@ -102,6 +102,7 @@ ingress:
   tls:
     enabled: false
     secretName: ""
+    certNamespace: ""
     # cert-manager integration
     certManager:
       enabled: false
