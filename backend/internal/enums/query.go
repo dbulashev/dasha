@@ -59,6 +59,12 @@ package enums
 //	settings/autovacuum_settings
 //	settings/pg_settings
 //	tables/caching
+//	tables/describe_check_constraints
+//	tables/describe_columns
+//	tables/describe_fk_constraints
+//	tables/describe_indexes
+//	tables/describe_metadata
+//	tables/describe_referenced_by
 //	tables/hit_rate
 //	tables/partitions
 //	tables/top_k_by_size

@@ -119,6 +119,18 @@ const (
 	QuerySettingsPgSettings Query = "settings/pg_settings"
 	// QueryTablesCaching is a Query of type tables/caching.
 	QueryTablesCaching Query = "tables/caching"
+	// QueryTablesDescribeCheckConstraints is a Query of type tables/describe_check_constraints.
+	QueryTablesDescribeCheckConstraints Query = "tables/describe_check_constraints"
+	// QueryTablesDescribeColumns is a Query of type tables/describe_columns.
+	QueryTablesDescribeColumns Query = "tables/describe_columns"
+	// QueryTablesDescribeFkConstraints is a Query of type tables/describe_fk_constraints.
+	QueryTablesDescribeFkConstraints Query = "tables/describe_fk_constraints"
+	// QueryTablesDescribeIndexes is a Query of type tables/describe_indexes.
+	QueryTablesDescribeIndexes Query = "tables/describe_indexes"
+	// QueryTablesDescribeMetadata is a Query of type tables/describe_metadata.
+	QueryTablesDescribeMetadata Query = "tables/describe_metadata"
+	// QueryTablesDescribeReferencedBy is a Query of type tables/describe_referenced_by.
+	QueryTablesDescribeReferencedBy Query = "tables/describe_referenced_by"
 	// QueryTablesHitRate is a Query of type tables/hit_rate.
 	QueryTablesHitRate Query = "tables/hit_rate"
 	// QueryTablesPartitions is a Query of type tables/partitions.
@@ -184,6 +196,12 @@ var _QueryNames = []string{
 	string(QuerySettingsAutovacuumSettings),
 	string(QuerySettingsPgSettings),
 	string(QueryTablesCaching),
+	string(QueryTablesDescribeCheckConstraints),
+	string(QueryTablesDescribeColumns),
+	string(QueryTablesDescribeFkConstraints),
+	string(QueryTablesDescribeIndexes),
+	string(QueryTablesDescribeMetadata),
+	string(QueryTablesDescribeReferencedBy),
 	string(QueryTablesHitRate),
 	string(QueryTablesPartitions),
 	string(QueryTablesTopKBySize),
@@ -253,6 +271,12 @@ func QueryValues() []Query {
 		QuerySettingsAutovacuumSettings,
 		QuerySettingsPgSettings,
 		QueryTablesCaching,
+		QueryTablesDescribeCheckConstraints,
+		QueryTablesDescribeColumns,
+		QueryTablesDescribeFkConstraints,
+		QueryTablesDescribeIndexes,
+		QueryTablesDescribeMetadata,
+		QueryTablesDescribeReferencedBy,
 		QueryTablesHitRate,
 		QueryTablesPartitions,
 		QueryTablesTopKBySize,
@@ -326,6 +350,12 @@ var _QueryValue = map[string]Query{
 	"settings/autovacuum_settings":          QuerySettingsAutovacuumSettings,
 	"settings/pg_settings":                  QuerySettingsPgSettings,
 	"tables/caching":                        QueryTablesCaching,
+	"tables/describe_check_constraints":     QueryTablesDescribeCheckConstraints,
+	"tables/describe_columns":               QueryTablesDescribeColumns,
+	"tables/describe_fk_constraints":        QueryTablesDescribeFkConstraints,
+	"tables/describe_indexes":               QueryTablesDescribeIndexes,
+	"tables/describe_metadata":              QueryTablesDescribeMetadata,
+	"tables/describe_referenced_by":         QueryTablesDescribeReferencedBy,
 	"tables/hit_rate":                       QueryTablesHitRate,
 	"tables/partitions":                     QueryTablesPartitions,
 	"tables/top_k_by_size":                  QueryTablesTopKBySize,

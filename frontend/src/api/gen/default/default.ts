@@ -69,6 +69,7 @@ import type {
   GetSettingsAnalyzeParams,
   GetStatsResetTimeParams,
   GetTablesCachingParams,
+  GetTablesDescribeParams,
   GetTablesHitRateParams,
   GetTablesPartitionsParams,
   GetTablesTopKBySizeParams,
@@ -106,6 +107,7 @@ import type {
   SettingsNotification,
   StatsResetTime,
   TableCaching,
+  TableDescribe,
   TableHitRate,
   TablePartition,
   TableTopKBySize,
@@ -2769,6 +2771,110 @@ export function useGetIndexesUsage<
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetIndexesUsageQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+export type getTablesDescribeResponse200 = {
+  data: TableDescribe
+  status: 200
+}
+
+export type getTablesDescribeResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getTablesDescribeResponseSuccess = getTablesDescribeResponse200 & {
+  headers: Headers
+}
+export type getTablesDescribeResponseError = getTablesDescribeResponse404 & {
+  headers: Headers
+}
+
+export type getTablesDescribeResponse =
+  | getTablesDescribeResponseSuccess
+  | getTablesDescribeResponseError
+
+export const getGetTablesDescribeUrl = (params: GetTablesDescribeParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/tables/describe?${stringifiedParams}`
+    : `/api/tables/describe`
+}
+
+export const getTablesDescribe = async (
+  params: GetTablesDescribeParams,
+  options?: RequestInit,
+): Promise<getTablesDescribeResponse> => {
+  const res = await fetch(getGetTablesDescribeUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
+
+  const data: getTablesDescribeResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getTablesDescribeResponse
+}
+
+export const getGetTablesDescribeQueryKey = (params?: MaybeRef<GetTablesDescribeParams>) => {
+  return ['api', 'tables', 'describe', ...(params ? [params] : [])] as const
+}
+
+export const getGetTablesDescribeQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTablesDescribe>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetTablesDescribeParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesDescribe>>, TError, TData>
+    fetch?: RequestInit
+  },
+) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+
+  const queryKey = getGetTablesDescribeQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getTablesDescribe>>> = ({ signal }) =>
+    getTablesDescribe(unref(params), { signal, ...fetchOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTablesDescribe>>,
+    TError,
+    TData
+  >
+}
+
+export type GetTablesDescribeQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTablesDescribe>>
+>
+export type GetTablesDescribeQueryError = NotFoundResponse
+
+export function useGetTablesDescribe<
+  TData = Awaited<ReturnType<typeof getTablesDescribe>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetTablesDescribeParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesDescribe>>, TError, TData>
+    fetch?: RequestInit
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetTablesDescribeQueryOptions(params, options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
 

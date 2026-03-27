@@ -437,6 +437,58 @@ type TableCaching struct {
 	ToastIdxHitRate *float64 `json:"ToastIdxHitRate"`
 }
 
+// TableDescribe defines model for TableDescribe.
+type TableDescribe struct {
+	AccessMethod     string                      `json:"AccessMethod"`
+	CheckConstraints []TableDescribeConstraint   `json:"CheckConstraints"`
+	Columns          []TableDescribeColumn       `json:"Columns"`
+	FkConstraints    []TableDescribeConstraint   `json:"FkConstraints"`
+	Indexes          []TableDescribeIndex        `json:"Indexes"`
+	Options          string                      `json:"Options"`
+	PartitionOf      string                      `json:"PartitionOf"`
+	ReferencedBy     []TableDescribeReferencedBy `json:"ReferencedBy"`
+	Schema           string                      `json:"Schema"`
+	SizeIndexes      string                      `json:"SizeIndexes"`
+	SizeTable        string                      `json:"SizeTable"`
+	SizeToast        string                      `json:"SizeToast"`
+	SizeTotal        string                      `json:"SizeTotal"`
+	TableName        string                      `json:"TableName"`
+	TableType        string                      `json:"TableType"`
+	Tablespace       string                      `json:"Tablespace"`
+}
+
+// TableDescribeColumn defines model for TableDescribeColumn.
+type TableDescribeColumn struct {
+	Collation   string `json:"Collation"`
+	Default     string `json:"Default"`
+	Description string `json:"Description"`
+	Name        string `json:"Name"`
+	Nullable    bool   `json:"Nullable"`
+	Storage     string `json:"Storage"`
+	Type        string `json:"Type"`
+}
+
+// TableDescribeConstraint defines model for TableDescribeConstraint.
+type TableDescribeConstraint struct {
+	Definition string `json:"Definition"`
+	Name       string `json:"Name"`
+}
+
+// TableDescribeIndex defines model for TableDescribeIndex.
+type TableDescribeIndex struct {
+	Definition string `json:"Definition"`
+	IsPrimary  bool   `json:"IsPrimary"`
+	IsUnique   bool   `json:"IsUnique"`
+	Name       string `json:"Name"`
+}
+
+// TableDescribeReferencedBy defines model for TableDescribeReferencedBy.
+type TableDescribeReferencedBy struct {
+	Definition  string `json:"Definition"`
+	Name        string `json:"Name"`
+	SourceTable string `json:"SourceTable"`
+}
+
 // TableHitRate defines model for TableHitRate.
 type TableHitRate struct {
 	Rate float64 `json:"Rate"`
@@ -800,6 +852,15 @@ type GetTablesCachingParams struct {
 	Offset      *int        `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
+// GetTablesDescribeParams defines parameters for GetTablesDescribe.
+type GetTablesDescribeParams struct {
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance    `form:"instance" json:"instance"`
+	Database    Database    `form:"database" json:"database"`
+	Schema      string      `form:"schema" json:"schema"`
+	Table       string      `form:"table" json:"table"`
+}
+
 // GetTablesHitRateParams defines parameters for GetTablesHitRate.
 type GetTablesHitRateParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
@@ -959,6 +1020,9 @@ type ServerInterface interface {
 
 	// (GET /api/tables/caching)
 	GetTablesCaching(ctx echo.Context, params GetTablesCachingParams) error
+
+	// (GET /api/tables/describe)
+	GetTablesDescribe(ctx echo.Context, params GetTablesDescribeParams) error
 
 	// (GET /api/tables/hit-rate)
 	GetTablesHitRate(ctx echo.Context, params GetTablesHitRateParams) error
@@ -2448,6 +2512,52 @@ func (w *ServerInterfaceWrapper) GetTablesCaching(ctx echo.Context) error {
 	return err
 }
 
+// GetTablesDescribe converts echo context to params.
+func (w *ServerInterfaceWrapper) GetTablesDescribe(ctx echo.Context) error {
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetTablesDescribeParams
+	// ------------- Required query parameter "cluster_name" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "cluster_name", ctx.QueryParams(), &params.ClusterName)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter cluster_name: %s", err))
+	}
+
+	// ------------- Required query parameter "instance" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "instance", ctx.QueryParams(), &params.Instance)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter instance: %s", err))
+	}
+
+	// ------------- Required query parameter "database" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "database", ctx.QueryParams(), &params.Database)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter database: %s", err))
+	}
+
+	// ------------- Required query parameter "schema" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "schema", ctx.QueryParams(), &params.Schema)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter schema: %s", err))
+	}
+
+	// ------------- Required query parameter "table" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "table", ctx.QueryParams(), &params.Table)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter table: %s", err))
+	}
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.GetTablesDescribe(ctx, params)
+	return err
+}
+
 // GetTablesHitRate converts echo context to params.
 func (w *ServerInterfaceWrapper) GetTablesHitRate(ctx echo.Context) error {
 	var err error
@@ -2624,6 +2734,7 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 	router.GET(baseURL+"/api/settings/autovacuum-settings", wrapper.GetAutovacuumSettings)
 	router.GET(baseURL+"/api/settings/pg-settings", wrapper.GetPgSettings)
 	router.GET(baseURL+"/api/tables/caching", wrapper.GetTablesCaching)
+	router.GET(baseURL+"/api/tables/describe", wrapper.GetTablesDescribe)
 	router.GET(baseURL+"/api/tables/hit-rate", wrapper.GetTablesHitRate)
 	router.GET(baseURL+"/api/tables/partitions", wrapper.GetTablesPartitions)
 	router.GET(baseURL+"/api/tables/top-k-by-size", wrapper.GetTablesTopKBySize)
@@ -3705,6 +3816,30 @@ func (response GetTablesCaching404Response) VisitGetTablesCachingResponse(w http
 	return nil
 }
 
+type GetTablesDescribeRequestObject struct {
+	Params GetTablesDescribeParams
+}
+
+type GetTablesDescribeResponseObject interface {
+	VisitGetTablesDescribeResponse(w http.ResponseWriter) error
+}
+
+type GetTablesDescribe200JSONResponse TableDescribe
+
+func (response GetTablesDescribe200JSONResponse) VisitGetTablesDescribeResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetTablesDescribe404Response = NotFoundResponse
+
+func (response GetTablesDescribe404Response) VisitGetTablesDescribeResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
 type GetTablesHitRateRequestObject struct {
 	Params GetTablesHitRateParams
 }
@@ -3914,6 +4049,9 @@ type StrictServerInterface interface {
 
 	// (GET /api/tables/caching)
 	GetTablesCaching(ctx context.Context, request GetTablesCachingRequestObject) (GetTablesCachingResponseObject, error)
+
+	// (GET /api/tables/describe)
+	GetTablesDescribe(ctx context.Context, request GetTablesDescribeRequestObject) (GetTablesDescribeResponseObject, error)
 
 	// (GET /api/tables/hit-rate)
 	GetTablesHitRate(ctx context.Context, request GetTablesHitRateRequestObject) (GetTablesHitRateResponseObject, error)
@@ -5060,6 +5198,31 @@ func (sh *strictHandler) GetTablesCaching(ctx echo.Context, params GetTablesCach
 	return nil
 }
 
+// GetTablesDescribe operation middleware
+func (sh *strictHandler) GetTablesDescribe(ctx echo.Context, params GetTablesDescribeParams) error {
+	var request GetTablesDescribeRequestObject
+
+	request.Params = params
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetTablesDescribe(ctx.Request().Context(), request.(GetTablesDescribeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetTablesDescribe")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(GetTablesDescribeResponseObject); ok {
+		return validResponse.VisitGetTablesDescribeResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
 // GetTablesHitRate operation middleware
 func (sh *strictHandler) GetTablesHitRate(ctx echo.Context, params GetTablesHitRateParams) error {
 	var request GetTablesHitRateRequestObject
@@ -5138,70 +5301,75 @@ func (sh *strictHandler) GetTablesTopKBySize(ctx echo.Context, params GetTablesT
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
-	"8fG/AQAA//+/mqkKI5cAAA==",
+	"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",
+	"4S/t/ed92454Pvzh4f8BAAD///IBTZb+oAAA",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

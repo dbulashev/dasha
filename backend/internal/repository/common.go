@@ -104,6 +104,7 @@ type Repository interface {
 	GetProgressCluster(ctx context.Context, clusterName, instanceName string) ([]dto.ProgressCluster, error)
 	GetProgressIndex(ctx context.Context, clusterName, instanceName string) ([]dto.ProgressIndex, error)
 	GetProgressVacuum(ctx context.Context, clusterName, instanceName string) ([]dto.ProgressVacuum, error)
+	GetTablesDescribe(ctx context.Context, clusterName, instanceName, databaseName, schemaName, tableName string) (*dto.TableDescribe, error)
 	GetTablesTopKBySize(ctx context.Context, clusterName, instanceName, databaseName string, limit int) ([]dto.TableTopKBySize, error)
 	GetTablesCaching(ctx context.Context, clusterName, instanceName, databaseName string, limit, offset int) ([]dto.TableCaching, error)
 	GetTablesHitRate(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.TableHitRate, error)

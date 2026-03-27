@@ -28,6 +28,53 @@ type TableHitRate struct {
 	Rate float64
 }
 
+type TableDescribe struct {
+	Schema      string
+	TableName   string
+	TableType   string
+	AccessMethod string
+	Tablespace  string
+	Options     string
+	SizeTotal   string
+	SizeTable   string
+	SizeToast   string
+	SizeIndexes string
+	PartitionOf string
+	Columns     []TableDescribeColumn
+	Indexes     []TableDescribeIndex
+	CheckConstraints []TableDescribeConstraint
+	FkConstraints    []TableDescribeConstraint
+	ReferencedBy     []TableDescribeReferencedBy
+}
+
+type TableDescribeColumn struct {
+	Name        string
+	Type        string
+	Collation   string
+	Nullable    bool
+	Default     string
+	Storage     string
+	Description string
+}
+
+type TableDescribeIndex struct {
+	Name       string
+	Definition string
+	IsPrimary  bool
+	IsUnique   bool
+}
+
+type TableDescribeConstraint struct {
+	Name       string
+	Definition string
+}
+
+type TableDescribeReferencedBy struct {
+	Name        string
+	SourceTable string
+	Definition  string
+}
+
 type TablePartition struct {
 	ParentSchema       string
 	Parent             string

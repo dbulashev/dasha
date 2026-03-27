@@ -1272,6 +1272,81 @@ func (s *Handlers) GetProgressVacuum(
 	return ret, nil
 }
 
+func (s *Handlers) GetTablesDescribe(
+	ctx context.Context,
+	req serverhttp.GetTablesDescribeRequestObject,
+) (serverhttp.GetTablesDescribeResponseObject, error) {
+	table, err := s.repo.GetTablesDescribe(
+		ctx,
+		req.Params.ClusterName,
+		req.Params.Instance,
+		req.Params.Database,
+		req.Params.Schema,
+		req.Params.Table,
+	)
+	if errors.Is(err, repository.ErrNotFound) {
+		return serverhttp.GetTablesDescribe404Response{}, fmt.Errorf("GetTablesDescribe | %w", err)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("GetTablesDescribe | %w", err)
+	}
+
+	ret := serverhttp.GetTablesDescribe200JSONResponse{
+		Schema:       table.Schema,
+		TableName:    table.TableName,
+		TableType:    table.TableType,
+		AccessMethod: table.AccessMethod,
+		Tablespace:   table.Tablespace,
+		Options:      table.Options,
+		SizeTotal:    table.SizeTotal,
+		SizeTable:    table.SizeTable,
+		SizeToast:    table.SizeToast,
+		SizeIndexes:  table.SizeIndexes,
+		PartitionOf:  table.PartitionOf,
+		Columns: mapstruct.SliceMap(table.Columns, func(c dto.TableDescribeColumn) serverhttp.TableDescribeColumn {
+			return serverhttp.TableDescribeColumn{
+				Name:        c.Name,
+				Type:        c.Type,
+				Collation:   c.Collation,
+				Nullable:    c.Nullable,
+				Default:     c.Default,
+				Storage:     c.Storage,
+				Description: c.Description,
+			}
+		}),
+		Indexes: mapstruct.SliceMap(table.Indexes, func(i dto.TableDescribeIndex) serverhttp.TableDescribeIndex {
+			return serverhttp.TableDescribeIndex{
+				Name:       i.Name,
+				Definition: i.Definition,
+				IsPrimary:  i.IsPrimary,
+				IsUnique:   i.IsUnique,
+			}
+		}),
+		CheckConstraints: mapstruct.SliceMap(table.CheckConstraints, func(c dto.TableDescribeConstraint) serverhttp.TableDescribeConstraint {
+			return serverhttp.TableDescribeConstraint{
+				Name:       c.Name,
+				Definition: c.Definition,
+			}
+		}),
+		FkConstraints: mapstruct.SliceMap(table.FkConstraints, func(c dto.TableDescribeConstraint) serverhttp.TableDescribeConstraint {
+			return serverhttp.TableDescribeConstraint{
+				Name:       c.Name,
+				Definition: c.Definition,
+			}
+		}),
+		ReferencedBy: mapstruct.SliceMap(table.ReferencedBy, func(r dto.TableDescribeReferencedBy) serverhttp.TableDescribeReferencedBy {
+			return serverhttp.TableDescribeReferencedBy{
+				Name:        r.Name,
+				SourceTable: r.SourceTable,
+				Definition:  r.Definition,
+			}
+		}),
+	}
+
+	return ret, nil
+}
+
 func (s *Handlers) GetTablesTopKBySize(
 	ctx context.Context,
 	req serverhttp.GetTablesTopKBySizeRequestObject,

@@ -560,6 +560,33 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/tables/describe:
+    get:
+      operationId: getTablesDescribe
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+        - in: query
+          name: schema
+          schema:
+            type: string
+          required: true
+        - in: query
+          name: table
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TableDescribe'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /api/tables/top-k-by-size:
     get:
       operationId: getTablesTopKBySize
@@ -2209,4 +2236,135 @@ components:
           type: integer
           format: int64
         ChildsAvgSize:
+          type: string
+
+    TableDescribe:
+      type: object
+      required:
+        - Schema
+        - TableName
+        - TableType
+        - AccessMethod
+        - Tablespace
+        - Options
+        - SizeTotal
+        - SizeTable
+        - SizeToast
+        - SizeIndexes
+        - PartitionOf
+        - Columns
+        - Indexes
+        - CheckConstraints
+        - FkConstraints
+        - ReferencedBy
+      properties:
+        Schema:
+          type: string
+        TableName:
+          type: string
+        TableType:
+          type: string
+        AccessMethod:
+          type: string
+        Tablespace:
+          type: string
+        Options:
+          type: string
+        SizeTotal:
+          type: string
+        SizeTable:
+          type: string
+        SizeToast:
+          type: string
+        SizeIndexes:
+          type: string
+        PartitionOf:
+          type: string
+        Columns:
+          type: array
+          items:
+            $ref: '#/components/schemas/TableDescribeColumn'
+        Indexes:
+          type: array
+          items:
+            $ref: '#/components/schemas/TableDescribeIndex'
+        CheckConstraints:
+          type: array
+          items:
+            $ref: '#/components/schemas/TableDescribeConstraint'
+        FkConstraints:
+          type: array
+          items:
+            $ref: '#/components/schemas/TableDescribeConstraint'
+        ReferencedBy:
+          type: array
+          items:
+            $ref: '#/components/schemas/TableDescribeReferencedBy'
+
+    TableDescribeColumn:
+      type: object
+      required:
+        - Name
+        - Type
+        - Collation
+        - Nullable
+        - Default
+        - Storage
+        - Description
+      properties:
+        Name:
+          type: string
+        Type:
+          type: string
+        Collation:
+          type: string
+        Nullable:
+          type: boolean
+        Default:
+          type: string
+        Storage:
+          type: string
+        Description:
+          type: string
+
+    TableDescribeIndex:
+      type: object
+      required:
+        - Name
+        - Definition
+        - IsPrimary
+        - IsUnique
+      properties:
+        Name:
+          type: string
+        Definition:
+          type: string
+        IsPrimary:
+          type: boolean
+        IsUnique:
+          type: boolean
+
+    TableDescribeConstraint:
+      type: object
+      required:
+        - Name
+        - Definition
+      properties:
+        Name:
+          type: string
+        Definition:
+          type: string
+
+    TableDescribeReferencedBy:
+      type: object
+      required:
+        - Name
+        - SourceTable
+        - Definition
+      properties:
+        Name:
+          type: string
+        SourceTable:
+          type: string
+        Definition:
           type: string
