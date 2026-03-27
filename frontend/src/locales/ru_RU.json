@@ -165,6 +165,8 @@
     "prev": "Назад",
     "next": "Вперёд",
     "tables": {
+        "menuOverview": "Обзор",
+        "menuDescribe": "Описание таблицы",
         "topKBySize": "TOP таблиц по размеру",
         "hitRate": "Cache Hit Rate таблиц",
         "caching": "Кэширование таблиц",
@@ -364,6 +366,32 @@
             "tooManyCheckpoints": "Слишком много вынужденных checkpoint (req: {req}, timed: {timed}) — увеличьте max_wal_size",
             "highMaxwrittenClean": "Высокое значение maxwritten_clean ({value}) — увеличьте bgwriter_lru_maxpages"
         }
+    },
+    "describe": {
+        "selectTable": "Выберите таблицу — перейдите по ссылке из раздела «Обзор таблиц»",
+        "table": "Таблица",
+        "partitionedTable": "Секционированная таблица",
+        "partitionOf": "Партиция",
+        "size": "Размер",
+        "sizeTotal": "Общий размер",
+        "sizeTable": "Данные",
+        "sizeToast": "TOAST",
+        "sizeIndexes": "Индексы",
+        "columns": "Столбцы",
+        "columnName": "Имя",
+        "type": "Тип",
+        "collation": "Сортировка",
+        "nullable": "NULL",
+        "default": "По умолчанию",
+        "storage": "Хранилище",
+        "description": "Описание",
+        "indexes": "Индексы",
+        "indexName": "Имя индекса",
+        "checkConstraints": "CHECK-ограничения",
+        "fkConstraints": "FK-ограничения",
+        "referencedBy": "Ссылаются на эту таблицу",
+        "constraintName": "Имя ограничения",
+        "sourceTable": "Исходная таблица"
     },
     "Maintenance": "Обслуживание",
     "maintenance": {

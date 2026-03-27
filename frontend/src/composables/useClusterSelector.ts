@@ -52,12 +52,14 @@ export function useClusterSelector() {
     const targetDb = selectedDb.value
     if (!targetHost && hostOptions.value.length > 0) return
 
+    const { host: _h, db: _d, ...extraQuery } = route.query
     router.replace({
       name: route.name!,
       params: { clustername: selectedCluster.value },
       query: {
         ...(targetHost ? { host: targetHost } : {}),
         ...(targetDb ? { db: targetDb } : {}),
+        ...extraQuery,
       },
     })
   }

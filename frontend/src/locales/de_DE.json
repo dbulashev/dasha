@@ -138,6 +138,8 @@
   "prev": "Zurück",
   "next": "Weiter",
   "tables": {
+    "menuOverview": "Übersicht",
+    "menuDescribe": "Tabellenbeschreibung",
     "topKBySize": "TOP Tabellen nach Größe",
     "hitRate": "Cache-Trefferquote der Tabellen",
     "caching": "Tabellen-Caching",
@@ -328,6 +330,32 @@
       "tooManyCheckpoints": "Zu viele erzwungene Checkpoints (req: {req}, timed: {timed}) — erhöhen Sie max_wal_size",
       "highMaxwrittenClean": "Hoher maxwritten_clean-Wert ({value}) — erhöhen Sie bgwriter_lru_maxpages"
     }
+  },
+  "describe": {
+    "selectTable": "Wählen Sie eine Tabelle — folgen Sie einem Link aus der Tabellenübersicht",
+    "table": "Tabelle",
+    "partitionedTable": "Partitionierte Tabelle",
+    "partitionOf": "Partition von",
+    "size": "Größe",
+    "sizeTotal": "Gesamtgröße",
+    "sizeTable": "Daten",
+    "sizeToast": "TOAST",
+    "sizeIndexes": "Indizes",
+    "columns": "Spalten",
+    "columnName": "Name",
+    "type": "Typ",
+    "collation": "Sortierung",
+    "nullable": "NULL",
+    "default": "Standardwert",
+    "storage": "Speicherung",
+    "description": "Beschreibung",
+    "indexes": "Indizes",
+    "indexName": "Indexname",
+    "checkConstraints": "CHECK-Einschränkungen",
+    "fkConstraints": "FK-Einschränkungen",
+    "referencedBy": "Referenziert von",
+    "constraintName": "Einschränkungsname",
+    "sourceTable": "Quelltabelle"
   },
   "Maintenance": "Wartung",
   "maintenance": {

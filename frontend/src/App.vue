@@ -35,6 +35,7 @@ const queriesLink = computed(() => withQuery("queries"));
 const queryStatsLink = computed(() => withQuery("query-stats"));
 const queryReportLink = computed(() => withQuery("query-report"));
 const tablesLink = computed(() => withQuery("tables"));
+const tableDescribeLink = computed(() => withQuery("table-describe"));
 const indexesLink = computed(() => withQuery("indexes"));
 const indexesUsageLink = computed(() => withQuery("indexes-usage"));
 const indexesProblemsLink = computed(() => withQuery("indexes-problems"));
@@ -77,7 +78,13 @@ const drawer = ref(true)
           <v-list-item :title="t('Active Queries')" prepend-icon="mdi-database-clock-outline" link :to="queriesLink"></v-list-item>
           <v-list-item :title="t('Query Stats')" prepend-icon="mdi-chart-bar" link :to="queryStatsLink"></v-list-item>
           <v-list-item :title="t('Query Report')" prepend-icon="mdi-file-chart-outline" link :to="queryReportLink"></v-list-item>
-          <v-list-item :title="t('Tables')" prepend-icon="mdi-table" link :to="tablesLink"></v-list-item>
+          <v-list-group value="tables">
+            <template #activator="{ props }">
+              <v-list-item v-bind="props" :title="t('Tables')" prepend-icon="mdi-table"></v-list-item>
+            </template>
+            <v-list-item :title="t('tables.menuOverview')" link :to="tablesLink"></v-list-item>
+            <v-list-item :title="t('tables.menuDescribe')" link :to="tableDescribeLink"></v-list-item>
+          </v-list-group>
           <v-list-group value="indexes">
             <template #activator="{ props }">
               <v-list-item v-bind="props" :title="t('Indexes')" prepend-icon="mdi-family-tree"></v-list-item>

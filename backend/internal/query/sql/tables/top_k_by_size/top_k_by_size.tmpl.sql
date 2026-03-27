@@ -108,7 +108,7 @@ constants AS (SELECT current_setting('block_size')::numeric bs, 23 hdr, 8 ma),
          WHERE c.relkind IN ('p', 'r', 'm')
            AND c.oid NOT IN (SELECT relation FROM locked_rels)
      )
-SELECT c.relname                                                  AS table,
+SELECT c.nspname || '.' || c.relname                              AS table,
        (SELECT count(*) FROM pg_index i WHERE i.indrelid = c.oid) AS n_idx,
        pg_total_relation_size(c.oid)                              AS total_bytes,
        pg_size_pretty(pg_total_relation_size(c.oid))              AS total,

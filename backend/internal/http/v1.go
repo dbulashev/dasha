@@ -1285,7 +1285,7 @@ func (s *Handlers) GetTablesDescribe(
 		req.Params.Table,
 	)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetTablesDescribe404Response{}, fmt.Errorf("GetTablesDescribe | %w", err)
+		return serverhttp.GetTablesDescribe404Response{}, nil
 	}
 
 	if err != nil {

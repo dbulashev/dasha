@@ -40,6 +40,11 @@ const router = createRouter({
       component: () => import('../views/TablesView.vue'),
     },
     {
+      path: '/table-describe/:clustername?',
+      name: 'table-describe',
+      component: () => import('../views/TableDescribeView.vue'),
+    },
+    {
       path: '/indexes/:clustername?',
       name: 'indexes',
       component: () => import('../views/IndexesOverviewView.vue'),

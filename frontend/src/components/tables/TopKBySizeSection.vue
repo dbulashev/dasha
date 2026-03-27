@@ -1,12 +1,25 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import { getTablesTopKBySize } from '@/api/gen/default/default'
 import type { TableTopKBySize } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useApiLoader } from '@/composables/useApiLoader'
 
+const route = useRoute()
 const { clusterName, databaseName, hostName } = useClusterInfo()
+
+function describeLink(qualifiedName: string) {
+  const dot = qualifiedName.indexOf('.')
+  const schema = dot > 0 ? qualifiedName.substring(0, dot) : 'public'
+  const table = dot > 0 ? qualifiedName.substring(dot + 1) : qualifiedName
+  const cluster = route.params.clustername ?? ''
+  const query: Record<string, string> = { schema, table }
+  if (hostName.value) query.host = hostName.value
+  if (databaseName.value) query.db = databaseName.value
+  return { path: `/table-describe/${cluster}`, query }
+}
 const { t } = useI18n()
 const emit = defineEmits<{ error: [msg: string] }>()
 
@@ -71,6 +84,9 @@ const { items, loading } = useApiLoader<TableTopKBySize[]>(
         :expanded="items.map(i => i.Table)"
         item-value="Table"
       >
+        <template #item.Table="{ item }">
+          <router-link :to="describeLink(item.Table)" class="text-decoration-none">{{ item.Table }}</router-link>
+        </template>
         <template #item.TotalBytes="{ item }">{{ item.Total }}</template>
         <template #expanded-row="{ columns, item }">
           <tr v-if="item.StatInfo || item.Options" class="topk-expanded-row">
