@@ -129,6 +129,8 @@ func (sm *SessionManager) ClearSession(c echo.Context) {
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
+		Secure:   isSecureRequest(c),
+		SameSite: http.SameSiteLaxMode,
 	})
 }
 
@@ -208,8 +210,13 @@ func (sm *SessionManager) ValidateStateCookie(c echo.Context) error {
 	}
 
 	c.SetCookie(&http.Cookie{ //nolint:exhaustruct
-		Name:   stateCookieName,
-		MaxAge: -1,
+		Name:     stateCookieName,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   isSecureRequest(c),
+		SameSite: http.SameSiteLaxMode,
 	})
 
 	return nil
