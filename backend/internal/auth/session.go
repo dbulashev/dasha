@@ -93,7 +93,7 @@ func (sm *SessionManager) SetSession(c echo.Context, data *SessionData) error {
 		}
 	}
 
-	c.SetCookie(&http.Cookie{ //nolint:exhaustruct
+	c.SetCookie(&http.Cookie{ //nolint:exhaustruct,gosec // G124: Secure is set dynamically via isSecureRequest
 		Name:     cookieName,
 		Value:    encoded,
 		Path:     "/",
@@ -123,7 +123,7 @@ func (sm *SessionManager) GetSession(c echo.Context) (*SessionData, error) {
 }
 
 func (sm *SessionManager) ClearSession(c echo.Context) {
-	c.SetCookie(&http.Cookie{ //nolint:exhaustruct
+	c.SetCookie(&http.Cookie{ //nolint:exhaustruct,gosec // G124: Secure is set dynamically via isSecureRequest
 		Name:     cookieName,
 		Value:    "",
 		Path:     "/",
@@ -185,7 +185,7 @@ func (sm *SessionManager) SetStateCookie(c echo.Context) (string, error) {
 		return "", fmt.Errorf("generate state | %w", err)
 	}
 
-	c.SetCookie(&http.Cookie{ //nolint:exhaustruct
+	c.SetCookie(&http.Cookie{ //nolint:exhaustruct,gosec // G124: Secure is set dynamically via isSecureRequest
 		Name:     stateCookieName,
 		Value:    state,
 		Path:     "/",
@@ -209,7 +209,7 @@ func (sm *SessionManager) ValidateStateCookie(c echo.Context) error {
 		return fmt.Errorf("state mismatch") //nolint:goerr113
 	}
 
-	c.SetCookie(&http.Cookie{ //nolint:exhaustruct
+	c.SetCookie(&http.Cookie{ //nolint:exhaustruct,gosec // G124: Secure is set dynamically via isSecureRequest
 		Name:     stateCookieName,
 		Value:    "",
 		Path:     "/",
