@@ -79,8 +79,10 @@ const snackbar = ref(false)
 const copiedQueryId = ref('')
 
 function onChartClick(_event: unknown, elements: { datasetIndex: number }[]) {
-  if (!elements.length || !barData.value) return
-  const queryId = barData.value.datasets[elements[0].datasetIndex].label
+  if (!elements.length || !barData.value || elements[0] == undefined) return
+  const idx = elements[0].datasetIndex
+  if (barData.value.datasets[idx] == undefined) return
+  const queryId = barData.value.datasets[idx].label
   copyToClipboard(queryId)
   copiedQueryId.value = queryId
   snackbar.value = true

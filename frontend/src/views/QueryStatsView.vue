@@ -7,6 +7,7 @@ import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useViewError } from '@/composables/useViewError'
 import { assertOk } from '@/utils/api'
 import QueryStatsChartSection from '@/components/queries/QueryStatsChartSection.vue'
+import IoCpuScatterSection from '@/components/queries/IoCpuScatterSection.vue'
 import Top10ByTimeSection from '@/components/queries/Top10ByTimeSection.vue'
 import Top10ByWalSection from '@/components/queries/Top10ByWalSection.vue'
 
@@ -14,7 +15,6 @@ const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
 const { errorMessage, onError, clearError } = useViewError()
 
-// --- Query stats status (shared warning) ---
 const queryStatsStatus = ref<QueryStatsStatus | null>(null)
 
 const pgssUnavailable = computed(() => {
@@ -54,8 +54,8 @@ watch([clusterName, hostName, databaseName], () => {
 <template>
   <v-alert v-if="errorMessage" type="error" class="mb-4" closable>{{ errorMessage }}</v-alert>
   <v-alert v-if="pgssUnavailable" type="warning" class="mb-4" closable>{{ pgssWarningMessage }}</v-alert>
-
   <QueryStatsChartSection @error="onError" />
+  <IoCpuScatterSection @error="onError" />
   <Top10ByTimeSection @error="onError" />
   <Top10ByWalSection @error="onError" />
 </template>

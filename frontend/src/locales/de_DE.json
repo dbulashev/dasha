@@ -30,8 +30,11 @@
       "WalRecords": "WAL Records"
     },
     "clickToCopy": "Klick zum Kopieren der Query ID",
-    "copied": "Query ID {queryId} kopiert"
+    "copied": "Query ID {queryId} kopiert",
+    "ioTime": "I/O-Zeit (ms)",
+    "cpuTime": "CPU-Zeit (ms)"
   },
+  "IO vs CPU Time": "I/O- vs CPU-Zeit",
   "Query Report": "Detaillierter Abfragebericht",
   "report": {
     "showSql": "SQL anzeigen",

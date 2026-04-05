@@ -44,8 +44,11 @@
             "WalRecords": "WAL Records"
         },
         "clickToCopy": "Клик — скопировать Query ID",
-        "copied": "Query ID {queryId} скопирован"
+        "copied": "Query ID {queryId} скопирован",
+        "ioTime": "Время I/O (мс)",
+        "cpuTime": "Время CPU (мс)"
     },
+    "IO vs CPU Time": "I/O vs CPU время",
     "report": {
         "showSql": "Показать SQL",
         "avg": "среднее",
