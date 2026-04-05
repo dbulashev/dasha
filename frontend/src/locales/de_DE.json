@@ -14,8 +14,24 @@
   "Operation progress": "Fortschritt der Operationen",
   "Live Queries": "Aktive Abfragen",
   "Blocked Queries": "Blockierte Abfragen",
+  "Top 10 Queries Chart": "Lastverteilung (Top 10)",
   "Top 10 by Execution Time": "Top 10 nach Ausführungszeit",
   "Top 10 by WAL Volume": "Top 10 nach WAL-Volumen",
+  "chart": {
+    "metric": {
+      "Calls": "Aufrufe",
+      "TotalExecTime": "Ausführungszeit",
+      "Rows": "Zeilen",
+      "SharedBlksHit": "Shared Blks Hit",
+      "SharedBlksRead": "Shared Blks Read",
+      "SharedBlksDirtied": "Shared Blks Dirtied",
+      "TempBlksRead": "Temp Blks Read",
+      "TempBlksWritten": "Temp Blks Written",
+      "WalRecords": "WAL Records"
+    },
+    "clickToCopy": "Klick zum Kopieren der Query ID",
+    "copied": "Query ID {queryId} kopiert"
+  },
   "Query Report": "Detaillierter Abfragebericht",
   "report": {
     "showSql": "SQL anzeigen",

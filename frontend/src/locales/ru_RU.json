@@ -28,8 +28,24 @@
     "Extensions": "Расширения",
     "Live Queries": "Активные запросы",
     "Blocked Queries": "Заблокированные запросы",
+    "Top 10 Queries Chart": "Распределение нагрузки (TOP-10)",
     "Top 10 by Execution Time": "TOP-10 по времени выполнения",
     "Top 10 by WAL Volume": "TOP-10 по объёму WAL",
+    "chart": {
+        "metric": {
+            "Calls": "Вызовы",
+            "TotalExecTime": "Время выполнения",
+            "Rows": "Строки",
+            "SharedBlksHit": "Shared Blks Hit",
+            "SharedBlksRead": "Shared Blks Read",
+            "SharedBlksDirtied": "Shared Blks Dirtied",
+            "TempBlksRead": "Temp Blks Read",
+            "TempBlksWritten": "Temp Blks Written",
+            "WalRecords": "WAL Records"
+        },
+        "clickToCopy": "Клик — скопировать Query ID",
+        "copied": "Query ID {queryId} скопирован"
+    },
     "report": {
         "showSql": "Показать SQL",
         "avg": "среднее",

@@ -101,6 +101,7 @@ type Repository interface {
 	GetQueriesTop10ByTime(ctx context.Context, clusterName, instanceName string) ([]dto.QueryTop10ByTime, error)
 	GetQueriesTop10ByWal(ctx context.Context, clusterName, instanceName string) ([]dto.QueryTop10ByWal, error)
 	GetQueriesReport(ctx context.Context, clusterName, instanceName string, excludeUsers []string) ([]dto.QueryReport, error)
+	GetQueriesTop10Chart(ctx context.Context, clusterName, instanceName string) ([]dto.QueryTop10ChartItem, error)
 	GetQueryStatsStatus(ctx context.Context, clusterName, instanceName, databaseName string) (dto.QueryStatsStatus, error)
 	GetProgressAnalyze(ctx context.Context, clusterName, instanceName string) ([]dto.ProgressAnalyze, error)
 	GetProgressBaseBackup(ctx context.Context, clusterName, instanceName string) ([]dto.ProgressBaseBackup, error)

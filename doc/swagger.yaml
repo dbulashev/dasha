@@ -1003,6 +1003,22 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/queries/top10-chart:
+    get:
+      operationId: getQueriesTop10Chart
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QueryTop10Chart'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /api/queries/top10-by-time:
     get:
       operationId: getQueriesTop10ByTime
@@ -2042,6 +2058,69 @@ components:
           format: int64
         QueryTrunc:
           type: string
+
+    QueryTop10ChartItem:
+      type: object
+      required:
+        - QueryID
+        - Pct
+      properties:
+        QueryID:
+          type: integer
+          format: int64
+        Pct:
+          type: number
+          format: double
+
+    QueryTop10Chart:
+      type: object
+      required:
+        - Calls
+        - TotalExecTime
+        - Rows
+        - SharedBlksHit
+        - SharedBlksRead
+        - SharedBlksDirtied
+        - TempBlksRead
+        - TempBlksWritten
+        - WalRecords
+      properties:
+        Calls:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueryTop10ChartItem'
+        TotalExecTime:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueryTop10ChartItem'
+        Rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueryTop10ChartItem'
+        SharedBlksHit:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueryTop10ChartItem'
+        SharedBlksRead:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueryTop10ChartItem'
+        SharedBlksDirtied:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueryTop10ChartItem'
+        TempBlksRead:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueryTop10ChartItem'
+        TempBlksWritten:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueryTop10ChartItem'
+        WalRecords:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueryTop10ChartItem'
 
     QueryReport:
       type: object

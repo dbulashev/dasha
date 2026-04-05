@@ -111,6 +111,8 @@ const (
 	QueryQueriesTop10ByTime Query = "queries/top_10_by_time"
 	// QueryQueriesTop10ByWal is a Query of type queries/top_10_by_wal.
 	QueryQueriesTop10ByWal Query = "queries/top_10_by_wal"
+	// QueryQueriesTop10Chart is a Query of type queries/top_10_chart.
+	QueryQueriesTop10Chart Query = "queries/top_10_chart"
 	// QueryReplicationLag is a Query of type replication/lag.
 	QueryReplicationLag Query = "replication/lag"
 	// QueryReplicationSlots is a Query of type replication/slots.
@@ -208,6 +210,7 @@ var _QueryNames = []string{
 	string(QueryQueriesRunning),
 	string(QueryQueriesTop10ByTime),
 	string(QueryQueriesTop10ByWal),
+	string(QueryQueriesTop10Chart),
 	string(QueryReplicationLag),
 	string(QueryReplicationSlots),
 	string(QueryReplicationStatus),
@@ -291,6 +294,7 @@ func QueryValues() []Query {
 		QueryQueriesRunning,
 		QueryQueriesTop10ByTime,
 		QueryQueriesTop10ByWal,
+		QueryQueriesTop10Chart,
 		QueryReplicationLag,
 		QueryReplicationSlots,
 		QueryReplicationStatus,
@@ -378,6 +382,7 @@ var _QueryValue = map[string]Query{
 	"queries/running":                       QueryQueriesRunning,
 	"queries/top_10_by_time":                QueryQueriesTop10ByTime,
 	"queries/top_10_by_wal":                 QueryQueriesTop10ByWal,
+	"queries/top_10_chart":                  QueryQueriesTop10Chart,
 	"replication/lag":                       QueryReplicationLag,
 	"replication/slots":                     QueryReplicationSlots,
 	"replication/status":                    QueryReplicationStatus,

@@ -55,6 +55,7 @@ package enums
 //	queries/running
 //	queries/top_10_by_time
 //	queries/top_10_by_wal
+//	queries/top_10_chart
 //	replication/lag
 //	replication/slots
 //	replication/status

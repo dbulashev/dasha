@@ -1049,6 +1049,52 @@ func (s *Handlers) GetQueriesTop10ByWal(
 	return ret, nil
 }
 
+func (s *Handlers) GetQueriesTop10Chart(
+	ctx context.Context,
+	req serverhttp.GetQueriesTop10ChartRequestObject,
+) (serverhttp.GetQueriesTop10ChartResponseObject, error) {
+	items, err := s.repo.GetQueriesTop10Chart(ctx, req.Params.ClusterName, req.Params.Instance)
+	if errors.Is(err, repository.ErrNotFound) {
+		return serverhttp.GetQueriesTop10Chart404Response{}, fmt.Errorf("GetQueriesTop10Chart | %w", err)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("GetQueriesTop10Chart | %w", err)
+	}
+
+	ret := serverhttp.GetQueriesTop10Chart200JSONResponse{} //nolint:exhaustruct
+
+	for _, item := range items {
+		entry := serverhttp.QueryTop10ChartItem{
+			QueryID: item.QueryID,
+			Pct:     item.Pct,
+		}
+
+		switch item.Metric {
+		case "calls":
+			ret.Calls = append(ret.Calls, entry)
+		case "total_exec_time":
+			ret.TotalExecTime = append(ret.TotalExecTime, entry)
+		case "rows":
+			ret.Rows = append(ret.Rows, entry)
+		case "shared_blks_hit":
+			ret.SharedBlksHit = append(ret.SharedBlksHit, entry)
+		case "shared_blks_read":
+			ret.SharedBlksRead = append(ret.SharedBlksRead, entry)
+		case "shared_blks_dirtied":
+			ret.SharedBlksDirtied = append(ret.SharedBlksDirtied, entry)
+		case "temp_blks_read":
+			ret.TempBlksRead = append(ret.TempBlksRead, entry)
+		case "temp_blks_written":
+			ret.TempBlksWritten = append(ret.TempBlksWritten, entry)
+		case "wal_records":
+			ret.WalRecords = append(ret.WalRecords, entry)
+		}
+	}
+
+	return ret, nil
+}
+
 func (s *Handlers) GetQueriesReport(
 	ctx context.Context,
 	req serverhttp.GetQueriesReportRequestObject,

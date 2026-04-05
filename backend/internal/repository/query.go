@@ -103,6 +103,29 @@ func (p *PgxPool) GetQueriesTop10ByWal(ctx context.Context, clusterName, instanc
 	return ret, nil
 }
 
+func (p *PgxPool) GetQueriesTop10Chart(ctx context.Context, clusterName, instanceName string) ([]dto.QueryTop10ChartItem, error) {
+	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, "")
+	if err != nil {
+		return nil, fmt.Errorf("GetQueriesTop10Chart | %w", err)
+	}
+
+	vNum, err := p.getServerVersionNum(ctx, pool)
+	if err != nil {
+		return nil, fmt.Errorf("get server version | %w", err)
+	}
+
+	if readable, _ := p.getQueryStatsReadable(ctx, vNum, pool); !readable {
+		return nil, nil
+	}
+
+	ret, err := p.getQueriesTop10Chart(ctx, vNum, pool)
+	if err != nil {
+		return nil, fmt.Errorf("getQueriesTop10Chart | %w", err)
+	}
+
+	return ret, nil
+}
+
 func (p *PgxPool) GetQueriesReport(ctx context.Context, clusterName, instanceName string, excludeUsers []string) ([]dto.QueryReport, error) {
 	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, "")
 	if err != nil {
@@ -324,6 +347,48 @@ func (p *PgxPool) getQueriesTop10ByWal(ctx context.Context, serverVersion int, p
 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("getQueriesTop10ByWal | %w", err)
+	}
+
+	return ret, nil
+}
+
+func (p *PgxPool) getQueriesTop10Chart(ctx context.Context, serverVersion int, pool *pgxpool.Pool) ([]dto.QueryTop10ChartItem, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	qStr, err := query.Get(serverVersion, enums.QueryQueriesTop10Chart, nil)
+	if err != nil {
+		return nil, fmt.Errorf("getQueriesTop10Chart | %w", err)
+	}
+
+	rows, err := pool.Query(ctx, qStr)
+	if err != nil {
+		return nil, fmt.Errorf("getQueriesTop10Chart | %w", err)
+	}
+
+	ret := make([]dto.QueryTop10ChartItem, 0, 90) //nolint:mnd
+
+	for rows.Next() {
+		var (
+			metric  string
+			queryID int64
+			pct     float64
+		)
+
+		err = rows.Scan(&metric, &queryID, &pct)
+		if err != nil {
+			return nil, fmt.Errorf("getQueriesTop10Chart | %w", err)
+		}
+
+		ret = append(ret, dto.QueryTop10ChartItem{
+			Metric:  metric,
+			QueryID: queryID,
+			Pct:     pct,
+		})
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getQueriesTop10Chart | %w", err)
 	}
 
 	return ret, nil

@@ -6,6 +6,7 @@ import type { QueryStatsStatus } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useViewError } from '@/composables/useViewError'
 import { assertOk } from '@/utils/api'
+import QueryStatsChartSection from '@/components/queries/QueryStatsChartSection.vue'
 import Top10ByTimeSection from '@/components/queries/Top10ByTimeSection.vue'
 import Top10ByWalSection from '@/components/queries/Top10ByWalSection.vue'
 
@@ -54,6 +55,7 @@ watch([clusterName, hostName, databaseName], () => {
   <v-alert v-if="errorMessage" type="error" class="mb-4" closable>{{ errorMessage }}</v-alert>
   <v-alert v-if="pgssUnavailable" type="warning" class="mb-4" closable>{{ pgssWarningMessage }}</v-alert>
 
+  <QueryStatsChartSection @error="onError" />
   <Top10ByTimeSection @error="onError" />
   <Top10ByWalSection @error="onError" />
 </template>

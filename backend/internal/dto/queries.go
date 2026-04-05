@@ -47,6 +47,12 @@ type QueryTop10ByWal struct {
 	QueryTrunc string
 }
 
+type QueryTop10ChartItem struct {
+	Metric  string
+	QueryID int64
+	Pct     float64
+}
+
 type QueryStatsStatus struct {
 	Available bool
 	Enabled   bool
