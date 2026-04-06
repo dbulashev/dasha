@@ -8,6 +8,7 @@ import (
 	"github.com/dbulashev/dasha/gen/serverhttp"
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/dto"
+	"github.com/dbulashev/dasha/internal/health"
 	"github.com/dbulashev/dasha/internal/pkg/mapstruct"
 	"github.com/dbulashev/dasha/internal/pkg/shortcut"
 	"github.com/dbulashev/dasha/internal/repository"
@@ -135,6 +136,56 @@ func (s *Handlers) GetInstanceInfo(
 	}
 
 	return ret, nil
+}
+
+func (s *Handlers) GetHealthScore(
+	ctx context.Context,
+	req serverhttp.GetHealthScoreRequestObject,
+) (serverhttp.GetHealthScoreResponseObject, error) {
+	metrics, err := s.repo.GetHealthScoreMetrics(ctx, req.Params.ClusterName, req.Params.Instance)
+	if errors.Is(err, repository.ErrNotFound) {
+		return serverhttp.GetHealthScore404Response{}, fmt.Errorf("GetHealthScore | %w", err)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("GetHealthScore | %w", err)
+	}
+
+	result := health.Calculate(health.RawMetrics{
+		TotalConnections:          metrics.TotalConnections,
+		ActiveConnections:         metrics.ActiveConnections,
+		IdleInTransaction:         metrics.IdleInTransaction,
+		LongestTransactionSeconds: metrics.LongestTransactionSeconds,
+		MaxConnections:            metrics.MaxConnections,
+		CacheHitRatio:             metrics.CacheHitRatio,
+		MaxDeadRatio:              metrics.MaxDeadRatio,
+		AvgDeadRatio:              metrics.AvgDeadRatio,
+		TablesHighBloat:           metrics.TablesHighBloat,
+		ReplicaCount:              metrics.ReplicaCount,
+		MaxReplayLagSeconds:       metrics.MaxReplayLagSeconds,
+		MaxLagBytes:               metrics.MaxLagBytes,
+		DisconnectedReplicas:      metrics.DisconnectedReplicas,
+		MaxXidAge:                 metrics.MaxXidAge,
+		MaxVacuumAgeHours:         metrics.MaxVacuumAgeHours,
+		TablesNeverVacuumed:       metrics.TablesNeverVacuumed,
+	})
+
+	categories := make([]serverhttp.HealthScoreCategory, 0, len(result.Categories))
+	for _, c := range result.Categories {
+		categories = append(categories, serverhttp.HealthScoreCategory{
+			Name:    c.Name,
+			Score:   c.Score,
+			Weight:  c.Weight,
+			Penalty: c.Penalty,
+			Details: c.Details,
+		})
+	}
+
+	return serverhttp.GetHealthScore200JSONResponse{
+		Score:          result.Score,
+		Categories:     categories,
+		HasReplication: result.HasReplication,
+	}, nil
 }
 
 func (s *Handlers) GetDatabaseUsers(

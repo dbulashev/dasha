@@ -164,6 +164,21 @@ paths:
                 $ref: '#/components/schemas/InstanceInfo'
         '404':
           $ref: '#/components/responses/NotFound'
+  /api/common/health-score:
+    get:
+      operationId: getHealthScore
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthScore'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /api/common/database-users:
     get:
       operationId: getDatabaseUsers
@@ -2939,3 +2954,46 @@ components:
           type: integer
           format: int64
           nullable: true
+
+    HealthScoreCategory:
+      type: object
+      required:
+        - name
+        - score
+        - weight
+        - penalty
+        - details
+      properties:
+        name:
+          type: string
+        score:
+          type: number
+          format: double
+        weight:
+          type: number
+          format: double
+        penalty:
+          type: number
+          format: double
+        details:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+
+    HealthScore:
+      type: object
+      required:
+        - score
+        - categories
+        - has_replication
+      properties:
+        score:
+          type: number
+          format: double
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/HealthScoreCategory'
+        has_replication:
+          type: boolean

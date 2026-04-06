@@ -13,6 +13,8 @@ import (
 const (
 	// QueryCommonDatabaseUsers is a Query of type common/database_users.
 	QueryCommonDatabaseUsers Query = "common/database_users"
+	// QueryCommonHealthScore is a Query of type common/health_score.
+	QueryCommonHealthScore Query = "common/health_score"
 	// QueryCommonInRecovery is a Query of type common/in_recovery.
 	QueryCommonInRecovery Query = "common/in_recovery"
 	// QueryCommonQueryStatsAvailable is a Query of type common/query_stats_available.
@@ -161,6 +163,7 @@ var ErrInvalidQuery = fmt.Errorf("not a valid Query, try [%s]", strings.Join(_Qu
 
 var _QueryNames = []string{
 	string(QueryCommonDatabaseUsers),
+	string(QueryCommonHealthScore),
 	string(QueryCommonInRecovery),
 	string(QueryCommonQueryStatsAvailable),
 	string(QueryCommonQueryStatsEnabled),
@@ -245,6 +248,7 @@ func QueryNames() []string {
 func QueryValues() []Query {
 	return []Query{
 		QueryCommonDatabaseUsers,
+		QueryCommonHealthScore,
 		QueryCommonInRecovery,
 		QueryCommonQueryStatsAvailable,
 		QueryCommonQueryStatsEnabled,
@@ -333,6 +337,7 @@ func (x Query) IsValid() bool {
 
 var _QueryValue = map[string]Query{
 	"common/database_users":                 QueryCommonDatabaseUsers,
+	"common/health_score":                   QueryCommonHealthScore,
 	"common/in_recovery":                    QueryCommonInRecovery,
 	"common/query_stats_available":          QueryCommonQueryStatsAvailable,
 	"common/query_stats_enabled":            QueryCommonQueryStatsEnabled,

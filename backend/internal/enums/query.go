@@ -6,6 +6,7 @@ package enums
 // ENUM(
 //
 //	common/database_users
+//	common/health_score
 //	common/in_recovery
 //	common/query_stats_available
 //	common/query_stats_enabled

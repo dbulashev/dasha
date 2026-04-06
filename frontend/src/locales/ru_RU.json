@@ -511,5 +511,36 @@
         "transactionIdDanger": "Опасность исчерпания Transaction ID",
         "transactionsLeft": "Транзакций осталось",
         "vacuumProgress": "Прогресс VACUUM"
+    },
+    "healthScore": {
+        "title": "Health Score",
+        "tooltip": "Комплексная оценка здоровья PostgreSQL инстанса (0–100). Учитывает подключения, производительность, хранение, репликацию и обслуживание.",
+        "excellent": "Отлично",
+        "warning": "Внимание",
+        "problems": "Проблемы",
+        "critical": "Критично",
+        "categories": {
+            "connections": "Подключения",
+            "performance": "Производительность",
+            "storage": "Хранение",
+            "replication": "Репликация",
+            "maintenance": "Обслуживание"
+        },
+        "details": {
+            "connection_ratio": "Загрузка подключений",
+            "idle_in_transaction": "Idle in transaction (>30с)",
+            "longest_transaction_seconds": "Самая длинная транзакция (с)",
+            "cache_hit_ratio": "Cache hit ratio",
+            "max_dead_ratio": "Макс. dead tuples (%)",
+            "avg_dead_ratio": "Средн. dead tuples (%)",
+            "tables_high_bloat": "Таблиц с bloat > 20%",
+            "replica_count": "Количество реплик",
+            "max_replay_lag_seconds": "Макс. replay lag (с)",
+            "max_lag_bytes": "Макс. lag (байты)",
+            "disconnected_replicas": "Отключённые реплики",
+            "max_xid_age": "Макс. возраст XID",
+            "max_vacuum_age_hours": "Макс. возраст vacuum (ч)",
+            "tables_never_vacuumed": "Таблиц без vacuum"
+        }
     }
 }

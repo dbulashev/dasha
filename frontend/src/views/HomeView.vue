@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import HealthScoreSection from '@/components/home/HealthScoreSection.vue'
 import HomeSummarySection from '@/components/home/HomeSummarySection.vue'
 import DatabaseHealthSection from '@/components/home/DatabaseHealthSection.vue'
 import CacheHitRatesSection from '@/components/home/CacheHitRatesSection.vue'
@@ -10,6 +11,7 @@ const { errorMessage, onError } = useViewError()
 
 <template>
   <v-alert v-if="errorMessage" type="error" class="mb-4" closable>{{ errorMessage }}</v-alert>
+  <HealthScoreSection class="mb-4" @error="onError" />
   <HomeSummarySection @error="onError" />
   <v-row class="mb-0">
     <v-col cols="12" md="6">

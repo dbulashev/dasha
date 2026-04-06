@@ -39,6 +39,7 @@ import type {
   GetFkTypeMismatchParams,
   GetFksPossibleNullsParams,
   GetFksPossibleSimilarParams,
+  GetHealthScoreParams,
   GetIndexesBloatParams,
   GetIndexesBtreeOnArrayParams,
   GetIndexesCachingParams,
@@ -87,6 +88,7 @@ import type {
   GetTablesSchemasParams,
   GetTablesSearchParams,
   GetTablesTopKBySizeParams,
+  HealthScore,
   IndexBloat,
   IndexBtreeOnArray,
   IndexCaching,
@@ -894,6 +896,106 @@ export function useGetInstanceInfo<
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetInstanceInfoQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+export type getHealthScoreResponse200 = {
+  data: HealthScore
+  status: 200
+}
+
+export type getHealthScoreResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getHealthScoreResponseSuccess = getHealthScoreResponse200 & {
+  headers: Headers
+}
+export type getHealthScoreResponseError = getHealthScoreResponse404 & {
+  headers: Headers
+}
+
+export type getHealthScoreResponse = getHealthScoreResponseSuccess | getHealthScoreResponseError
+
+export const getGetHealthScoreUrl = (params: GetHealthScoreParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/common/health-score?${stringifiedParams}`
+    : `/api/common/health-score`
+}
+
+export const getHealthScore = async (
+  params: GetHealthScoreParams,
+  options?: RequestInit,
+): Promise<getHealthScoreResponse> => {
+  const res = await fetch(getGetHealthScoreUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
+
+  const data: getHealthScoreResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getHealthScoreResponse
+}
+
+export const getGetHealthScoreQueryKey = (params?: MaybeRef<GetHealthScoreParams>) => {
+  return ['api', 'common', 'health-score', ...(params ? [params] : [])] as const
+}
+
+export const getGetHealthScoreQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHealthScore>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getHealthScore>>, TError, TData>
+    fetch?: RequestInit
+  },
+) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+
+  const queryKey = getGetHealthScoreQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHealthScore>>> = ({ signal }) =>
+    getHealthScore(unref(params), { signal, ...fetchOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHealthScore>>,
+    TError,
+    TData
+  >
+}
+
+export type GetHealthScoreQueryResult = NonNullable<Awaited<ReturnType<typeof getHealthScore>>>
+export type GetHealthScoreQueryError = NotFoundResponse
+
+export function useGetHealthScore<
+  TData = Awaited<ReturnType<typeof getHealthScore>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getHealthScore>>, TError, TData>
+    fetch?: RequestInit
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHealthScoreQueryOptions(params, options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
 
