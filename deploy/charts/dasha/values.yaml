@@ -132,6 +132,16 @@ backend:
   port: 8000
   resources: {}
   terminationGracePeriodSeconds: 30
+  # -- Extra volumes to attach to the backend pod, i.e. for keycloak or pg certs
+  extraVolumes: []
+  #  - name: certs
+  #    secret:
+  #      secretName: pg-client-certs
+  # -- Extra volumeMounts for the backend container
+  extraVolumeMounts: []
+  #  - name: certs
+  #    mountPath: /etc/ssl/pg
+  #    readOnly: true
 
 service:
   type: ClusterIP

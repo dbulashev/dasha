@@ -57,6 +57,9 @@ spec:
             secretName: {{ template "dasha.fullname" $ }}-sa-{{ $key.name }}
             {{- end }}
         {{- end }}
+        {{- with .Values.backend.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
       containers:
         - name: backend
           image: {{ include "dasha.backendImage" . }}
@@ -94,6 +97,9 @@ spec:
             - name: sa-{{ $key.name }}
               mountPath: {{ $key.mountPath }}
               readOnly: true
+            {{- end }}
+            {{- with .Values.backend.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
             {{- end }}
           {{- with .Values.backend.resources }}
           resources:
