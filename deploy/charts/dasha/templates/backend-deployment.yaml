@@ -73,14 +73,12 @@ spec:
               containerPort: {{ .Values.backend.port }}
               protocol: TCP
           livenessProbe:
-            httpGet:
-              path: /api/clusters
+            tcpSocket:
               port: http
             initialDelaySeconds: 5
             periodSeconds: 30
           readinessProbe:
-            httpGet:
-              path: /api/clusters
+            tcpSocket:
               port: http
             initialDelaySeconds: 3
             periodSeconds: 10
