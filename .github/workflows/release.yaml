@@ -93,6 +93,8 @@ jobs:
           push: true
           tags: ${{ steps.meta-frontend.outputs.tags }}
           labels: ${{ steps.meta-frontend.outputs.labels }}
+          build-args: |
+            BUILD_NUMBER=${{ github.ref_name }}
           provenance: true
           sbom: true
           cache-from: type=gha

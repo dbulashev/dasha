@@ -1,8 +1,10 @@
 FROM --platform=$BUILDPLATFORM node:22-alpine AS builder
+ARG BUILD_NUMBER=dev
 WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ .
+ENV VITE_APP_VERSION=$BUILD_NUMBER
 RUN npm run build-only
 
 FROM nginx:alpine

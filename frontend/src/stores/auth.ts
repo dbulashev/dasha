@@ -9,24 +9,16 @@ interface UserInfo {
   role: string
 }
 
-const REDIRECT_KEY = 'dasha_auth_redirect_ts'
-const REDIRECT_COOLDOWN_MS = 5000
+const RETURN_URL_KEY = 'dasha_return_url'
 
 export const useAuthStore = defineStore('auth', () => {
   const mode = ref<string>(AuthInfoMode.none)
   const oidcLoginUrl = ref<string | null>(null)
   const user = ref<UserInfo | null>(null)
   const initialized = ref(false)
-  const redirecting = ref(false)
 
   const isAuthenticated = computed(() => mode.value === AuthInfoMode.none || user.value !== null)
-  const requiresLogin = computed(() => mode.value === AuthInfoMode.oidc && !user.value)
-  const ready = computed(() => initialized.value && !redirecting.value)
-
-  function canRedirect(): boolean {
-    const last = Number(sessionStorage.getItem(REDIRECT_KEY) || '0')
-    return Date.now() - last >= REDIRECT_COOLDOWN_MS
-  }
+  const requiresLogin = computed(() => mode.value !== AuthInfoMode.none && !user.value)
 
   async function init() {
     if (initialized.value) return
@@ -44,16 +36,10 @@ export const useAuthStore = defineStore('auth', () => {
         const meRes = await fetch('/auth/me')
         if (meRes.ok) {
           user.value = await meRes.json()
-          sessionStorage.removeItem(REDIRECT_KEY)
         }
       } catch {
         user.value = null
       }
-    }
-
-    if (requiresLogin.value && oidcLoginUrl.value && canRedirect()) {
-      redirecting.value = true
-      sessionStorage.setItem(REDIRECT_KEY, String(Date.now()))
     }
 
     initialized.value = true
@@ -61,8 +47,17 @@ export const useAuthStore = defineStore('auth', () => {
 
   function doLoginRedirect() {
     if (oidcLoginUrl.value) {
+      sessionStorage.setItem(RETURN_URL_KEY, window.location.pathname + window.location.search)
       window.location.href = oidcLoginUrl.value
     }
+  }
+
+  function consumeReturnUrl(): string | null {
+    const url = sessionStorage.getItem(RETURN_URL_KEY)
+    if (url) {
+      sessionStorage.removeItem(RETURN_URL_KEY)
+    }
+    return url
   }
 
   async function logout() {
@@ -86,5 +81,5 @@ export const useAuthStore = defineStore('auth', () => {
     window.location.href = '/'
   }
 
-  return { mode, oidcLoginUrl, user, initialized, redirecting, ready, isAuthenticated, requiresLogin, init, doLoginRedirect, logout }
+  return { mode, oidcLoginUrl, user, initialized, isAuthenticated, requiresLogin, init, doLoginRedirect, consumeReturnUrl, logout }
 })

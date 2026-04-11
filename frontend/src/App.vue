@@ -15,6 +15,7 @@ import { useRoute } from 'vue-router'
 const route = useRoute()
 
 import ClusterHostDbSelector from './components/ClusterHostDbSelector.vue'
+import LoginCard from './components/auth/LoginCard.vue'
 
 function withQuery(base: string) {
   const cluster = route.params.clustername ?? '';
@@ -84,13 +85,17 @@ watch(() => route.path, syncOpenedGroups)
   <v-responsive class="border rounded">
 
     <v-app :theme="themeStore.theme">
-      <template v-if="!authStore.ready">
+      <template v-if="!authStore.initialized">
         <v-container class="fill-height d-flex align-center justify-center">
           <div class="text-center">
             <v-progress-circular indeterminate size="48" color="primary" class="mb-4" />
             <div class="text-h6 text-medium-emphasis">Dasha</div>
           </div>
         </v-container>
+      </template>
+
+      <template v-else-if="authStore.requiresLogin">
+        <LoginCard />
       </template>
 
       <template v-else>
@@ -109,30 +114,35 @@ watch(() => route.path, syncOpenedGroups)
             slim
             @click="themeStore.toggleTheme()"
           ></v-btn>
-          <template v-if="authStore.mode === AuthInfoMode.oidc && authStore.user">
-            <v-menu location="bottom end" :close-on-content-click="false">
-              <template #activator="{ props }">
-                <v-btn v-bind="props" icon variant="text" class="ml-1">
-                  <v-icon>mdi-account-circle</v-icon>
-                </v-btn>
-              </template>
-              <v-card min-width="220">
-                <v-card-text class="text-center py-4">
-                  <v-avatar color="primary" size="48" class="mb-2">
-                    <span class="text-h6">{{ authStore.user.name?.charAt(0)?.toUpperCase() }}</span>
-                  </v-avatar>
-                  <div class="text-subtitle-1 font-weight-medium">{{ authStore.user.name }}</div>
-                  <div class="text-caption text-medium-emphasis">{{ authStore.user.email }}</div>
-                  <v-chip size="x-small" variant="tonal" class="mt-1">{{ authStore.user.role }}</v-chip>
-                </v-card-text>
-                <v-divider />
-                <v-card-actions>
-                  <v-btn block variant="text" prepend-icon="mdi-logout" @click="authStore.logout">
-                    {{ t('Logout') }}
+          <template v-if="authStore.mode === AuthInfoMode.oidc">
+            <template v-if="authStore.user">
+              <v-menu location="bottom end" :close-on-content-click="false">
+                <template #activator="{ props }">
+                  <v-btn v-bind="props" icon variant="text" class="ml-1">
+                    <v-icon>mdi-account-circle</v-icon>
                   </v-btn>
-                </v-card-actions>
-              </v-card>
-            </v-menu>
+                </template>
+                <v-card min-width="220">
+                  <v-card-text class="text-center py-4">
+                    <v-avatar color="primary" size="48" class="mb-2">
+                      <span class="text-h6">{{ authStore.user.name?.charAt(0)?.toUpperCase() }}</span>
+                    </v-avatar>
+                    <div class="text-subtitle-1 font-weight-medium">{{ authStore.user.name }}</div>
+                    <div class="text-caption text-medium-emphasis">{{ authStore.user.email }}</div>
+                    <v-chip size="x-small" variant="tonal" class="mt-1">{{ authStore.user.role }}</v-chip>
+                  </v-card-text>
+                  <v-divider />
+                  <v-card-actions>
+                    <v-btn block variant="text" prepend-icon="mdi-logout" @click="authStore.logout">
+                      {{ t('Logout') }}
+                    </v-btn>
+                  </v-card-actions>
+                </v-card>
+              </v-menu>
+            </template>
+            <v-btn v-else icon variant="text" class="ml-1" @click="authStore.doLoginRedirect">
+              <v-icon>mdi-login</v-icon>
+            </v-btn>
           </template>
         </template>
       </v-app-bar>
@@ -205,5 +215,6 @@ watch(() => route.path, syncOpenedGroups)
   font-weight: 300;
   opacity: 0.7;
 }
+
 </style>
 

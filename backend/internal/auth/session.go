@@ -71,6 +71,7 @@ func NewSessionManager(cfg config.AuthConfig) *SessionManager {
 
 	sc := securecookie.New(hashKey, blockKey)
 	sc.MaxAge(maxAge)
+	sc.MaxLength(0) // disable internal limit; we handle size check in SetSession
 	sc.SetSerializer(jsonSerializer{})
 
 	return &SessionManager{sc: sc, maxAge: maxAge}

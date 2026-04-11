@@ -29,8 +29,8 @@ func loginHandler(provider *OIDCProvider, sm *SessionManager, logger *zap.Logger
 func callbackHandler(provider *OIDCProvider, sm *SessionManager, logger *zap.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		if err := sm.ValidateStateCookie(c); err != nil {
-			logger.Warn("invalid OAuth state", zap.Error(err))
-			return errInvalidState
+			logger.Warn("invalid OAuth state, redirecting to login", zap.Error(err))
+			return c.Redirect(http.StatusFound, "/auth/login")
 		}
 
 		oauth2Token, err := sm.ExchangeCode(c, provider)
