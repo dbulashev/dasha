@@ -4,7 +4,6 @@ import { computed, provide, ref, watch } from 'vue'
 import { useThemeStore } from './stores/theme'
 import { useAuthStore } from './stores/auth'
 import { useClustersStore } from './stores/clusters'
-import { AuthInfoMode } from './api/models'
 import { useI18n } from 'vue-i18n'
 import { errorKey, type GlobalError } from './composables/useViewError'
 
@@ -22,6 +21,7 @@ const route = useRoute()
 
 import ClusterHostDbSelector from './components/ClusterHostDbSelector.vue'
 import LoginCard from './components/auth/LoginCard.vue'
+import UserMenu from './components/auth/UserMenu.vue'
 import ErrorAlert from './components/ErrorAlert.vue'
 
 function withQuery(base: string) {
@@ -127,36 +127,7 @@ watch(() => route.path, () => {
             slim
             @click="themeStore.toggleTheme()"
           ></v-btn>
-          <template v-if="authStore.mode === AuthInfoMode.oidc">
-            <template v-if="authStore.user">
-              <v-menu location="bottom end" :close-on-content-click="false">
-                <template #activator="{ props }">
-                  <v-btn v-bind="props" icon variant="text" class="ml-1">
-                    <v-icon>mdi-account-circle</v-icon>
-                  </v-btn>
-                </template>
-                <v-card min-width="220">
-                  <v-card-text class="text-center py-4">
-                    <v-avatar color="primary" size="48" class="mb-2">
-                      <span class="text-h6">{{ authStore.user.name?.charAt(0)?.toUpperCase() }}</span>
-                    </v-avatar>
-                    <div class="text-subtitle-1 font-weight-medium">{{ authStore.user.name }}</div>
-                    <div class="text-caption text-medium-emphasis">{{ authStore.user.email }}</div>
-                    <v-chip size="x-small" variant="tonal" class="mt-1">{{ authStore.user.role }}</v-chip>
-                  </v-card-text>
-                  <v-divider />
-                  <v-card-actions>
-                    <v-btn block variant="text" prepend-icon="mdi-logout" @click="authStore.logout">
-                      {{ t('Logout') }}
-                    </v-btn>
-                  </v-card-actions>
-                </v-card>
-              </v-menu>
-            </template>
-            <v-btn v-else icon variant="text" class="ml-1" @click="authStore.doLoginRedirect">
-              <v-icon>mdi-login</v-icon>
-            </v-btn>
-          </template>
+          <UserMenu />
         </template>
       </v-app-bar>
 
