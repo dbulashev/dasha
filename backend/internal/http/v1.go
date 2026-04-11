@@ -92,7 +92,7 @@ func (s *Handlers) GetCommonSummary(
 	summary, err := s.repo.GetCommonSummary(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
 
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetCommonSummary404Response{}, fmt.Errorf("GetCommonSummary | %w", err)
+		return serverhttp.GetCommonSummary404Response{}, nil
 	}
 
 	if err != nil {
@@ -120,7 +120,7 @@ func (s *Handlers) GetInstanceInfo(
 ) (serverhttp.GetInstanceInfoResponseObject, error) {
 	info, err := s.repo.GetInstanceInfo(ctx, req.Params.ClusterName, req.Params.Instance)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetInstanceInfo404Response{}, fmt.Errorf("GetInstanceInfo | %w", err)
+		return serverhttp.GetInstanceInfo404Response{}, nil
 	}
 
 	if err != nil {
@@ -143,7 +143,7 @@ func (s *Handlers) GetDatabaseUsers(
 ) (serverhttp.GetDatabaseUsersResponseObject, error) {
 	users, err := s.repo.GetDatabaseUsers(ctx, req.Params.ClusterName, req.Params.Instance)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetDatabaseUsers404Response{}, fmt.Errorf("GetDatabaseUsers | %w", err)
+		return serverhttp.GetDatabaseUsers404Response{}, nil
 	}
 
 	if err != nil {
@@ -161,7 +161,7 @@ func (s *Handlers) GetConnectionStates(
 ) (serverhttp.GetConnectionStatesResponseObject, error) {
 	states, err := s.repo.GetConnectionStates(ctx, req.Params.ClusterName, req.Params.Instance)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetConnectionStates404Response{}, fmt.Errorf("GetConnectionStates | %w", err)
+		return serverhttp.GetConnectionStates404Response{}, nil
 	}
 
 	if err != nil {
@@ -190,7 +190,7 @@ func (s *Handlers) GetConnectionSources(
 
 	sources, err := s.repo.GetConnectionSources(ctx, req.Params.ClusterName, req.Params.Instance, limit, offset)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetConnectionSources404Response{}, fmt.Errorf("GetConnectionSources | %w", err)
+		return serverhttp.GetConnectionSources404Response{}, nil
 	}
 
 	if err != nil {
@@ -241,7 +241,7 @@ func (s *Handlers) GetConnectionStatActivity(
 		ctx, req.Params.ClusterName, req.Params.Instance,
 		limit, offset, username, state)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetConnectionStatActivity404Response{}, fmt.Errorf("GetConnectionStatActivity | %w", err)
+		return serverhttp.GetConnectionStatActivity404Response{}, nil
 	}
 
 	if err != nil {
@@ -272,7 +272,7 @@ func (s *Handlers) GetFkTypeMismatch(
 ) (serverhttp.GetFkTypeMismatchResponseObject, error) {
 	fkTypeMismatches, err := s.repo.GetFkTypeMismatch(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetFkTypeMismatch404Response{}, fmt.Errorf("GetFkTypeMismatch | %w", err)
+		return serverhttp.GetFkTypeMismatch404Response{}, nil
 	}
 
 	if err != nil {
@@ -300,7 +300,7 @@ func (s *Handlers) GetFksPossibleNulls(
 ) (serverhttp.GetFksPossibleNullsResponseObject, error) {
 	fksPossibleNulls, err := s.repo.GetFksPossibleNulls(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetFksPossibleNulls404Response{}, fmt.Errorf("GetFksPossibleNulls | %w", err)
+		return serverhttp.GetFksPossibleNulls404Response{}, nil
 	}
 
 	if err != nil {
@@ -326,7 +326,7 @@ func (s *Handlers) GetFksPossibleSimilar(
 ) (serverhttp.GetFksPossibleSimilarResponseObject, error) {
 	fksPossibleSimilar, err := s.repo.GetFksPossibleSimilar(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetFksPossibleSimilar404Response{}, fmt.Errorf("GetFksPossibleSimilar | %w", err)
+		return serverhttp.GetFksPossibleSimilar404Response{}, nil
 	}
 
 	if err != nil {
@@ -352,7 +352,7 @@ func (s *Handlers) GetInvalidConstraints(
 ) (serverhttp.GetInvalidConstraintsResponseObject, error) {
 	invalidConstraints, err := s.repo.GetInvalidConstraints(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetInvalidConstraints404Response{}, fmt.Errorf("GetInvalidConstraints | %w", err)
+		return serverhttp.GetInvalidConstraints404Response{}, nil
 	}
 
 	if err != nil {
@@ -380,7 +380,7 @@ func (s *Handlers) GetDatabaseSize(
 ) (serverhttp.GetDatabaseSizeResponseObject, error) {
 	size, err := s.repo.GetDatabaseSize(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetDatabaseSize404Response{}, fmt.Errorf("GetDatabaseSize | %w", err)
+		return serverhttp.GetDatabaseSize404Response{}, nil
 	}
 
 	if err != nil {
@@ -401,7 +401,7 @@ func (s *Handlers) GetStatsResetTime(
 ) (serverhttp.GetStatsResetTimeResponseObject, error) {
 	statsResetTimes, err := s.repo.GetStatsResetTime(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetStatsResetTime404Response{}, fmt.Errorf("GetStatsResetTime | %w", err)
+		return serverhttp.GetStatsResetTime404Response{}, nil
 	}
 
 	if err != nil {
@@ -425,7 +425,7 @@ func (s *Handlers) GetPgssStatsResetTime(
 ) (serverhttp.GetPgssStatsResetTimeResponseObject, error) {
 	t, err := s.repo.GetPgssStatsResetTime(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetPgssStatsResetTime404Response{}, fmt.Errorf("GetPgssStatsResetTime | %w", err)
+		return serverhttp.GetPgssStatsResetTime404Response{}, nil
 	}
 
 	if err != nil {
@@ -449,7 +449,7 @@ func (s *Handlers) GetIndexesBloat(
 
 	indexes, err := s.repo.GetIndexesBloat(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, limit, offset)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetIndexesBloat404Response{}, fmt.Errorf("GetIndexesBloat | %w", err)
+		return serverhttp.GetIndexesBloat404Response{}, nil
 	}
 
 	if err != nil {
@@ -479,7 +479,7 @@ func (s *Handlers) GetIndexesBtreeOnArray(
 ) (serverhttp.GetIndexesBtreeOnArrayResponseObject, error) {
 	indexes, err := s.repo.GetIndexesBtreeOnArray(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetIndexesBtreeOnArray404Response{}, fmt.Errorf("GetIndexesBtreeOnArray | %w", err)
+		return serverhttp.GetIndexesBtreeOnArray404Response{}, nil
 	}
 
 	if err != nil {
@@ -508,7 +508,7 @@ func (s *Handlers) GetIndexesCaching(
 
 	indexes, err := s.repo.GetIndexesCaching(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, limit, offset)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetIndexesCaching404Response{}, fmt.Errorf("GetIndexesCaching | %w", err)
+		return serverhttp.GetIndexesCaching404Response{}, nil
 	}
 
 	if err != nil {
@@ -534,7 +534,7 @@ func (s *Handlers) GetIndexesHitRate(ctx context.Context,
 ) (serverhttp.GetIndexesHitRateResponseObject, error) {
 	indexes, err := s.repo.GetIndexesHitRate(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetIndexesHitRate404Response{}, fmt.Errorf("GetIndexesHitRate | %w", err)
+		return serverhttp.GetIndexesHitRate404Response{}, nil
 	}
 
 	if err != nil {
@@ -558,7 +558,7 @@ func (s *Handlers) GetIndexesInvalidOrNotReady(
 ) (serverhttp.GetIndexesInvalidOrNotReadyResponseObject, error) {
 	indexes, err := s.repo.GetIndexesInvalidOrNotReady(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetIndexesInvalidOrNotReady404Response{}, fmt.Errorf("GetIndexesInvalidOrNotReady | %w", err)
+		return serverhttp.GetIndexesInvalidOrNotReady404Response{}, nil
 	}
 
 	if err != nil {
@@ -586,7 +586,7 @@ func (s *Handlers) GetIndexesMissing(
 ) (serverhttp.GetIndexesMissingResponseObject, error) {
 	indexes, err := s.repo.GetIndexesMissing(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetIndexesMissing404Response{}, fmt.Errorf("GetIndexesMissing | %w", err)
+		return serverhttp.GetIndexesMissing404Response{}, nil
 	}
 
 	if err != nil {
@@ -613,7 +613,7 @@ func (s *Handlers) GetIndexesSimilar1(
 ) (serverhttp.GetIndexesSimilar1ResponseObject, error) {
 	indexes, err := s.repo.GetIndexesSimilar1(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetIndexesSimilar1404Response{}, fmt.Errorf("GetIndexesSimilar1 | %w", err)
+		return serverhttp.GetIndexesSimilar1404Response{}, nil
 	}
 
 	if err != nil {
@@ -643,7 +643,7 @@ func (s *Handlers) GetIndexesSimilar2(
 ) (serverhttp.GetIndexesSimilar2ResponseObject, error) {
 	indexes, err := s.repo.GetIndexesSimilar2(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetIndexesSimilar2404Response{}, fmt.Errorf("GetIndexesSimilar2 | %w", err)
+		return serverhttp.GetIndexesSimilar2404Response{}, nil
 	}
 
 	if err != nil {
@@ -669,7 +669,7 @@ func (s *Handlers) GetIndexesSimilar3(
 ) (serverhttp.GetIndexesSimilar3ResponseObject, error) {
 	indexes, err := s.repo.GetIndexesSimilar3(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetIndexesSimilar3404Response{}, fmt.Errorf("GetIndexesSimilar3 | %w", err)
+		return serverhttp.GetIndexesSimilar3404Response{}, nil
 	}
 
 	if err != nil {
@@ -700,7 +700,7 @@ func (s *Handlers) GetIndexesTopKBySize(
 ) (serverhttp.GetIndexesTopKBySizeResponseObject, error) {
 	indexes, err := s.repo.GetIndexesTopKBySize(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetIndexesTopKBySize404Response{}, fmt.Errorf("GetIndexesTopKBySize | %w", err)
+		return serverhttp.GetIndexesTopKBySize404Response{}, nil
 	}
 
 	if err != nil {
@@ -749,7 +749,7 @@ func (s *Handlers) GetIndexesUnused(
 	}
 
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetIndexesUnused404Response{}, fmt.Errorf("GetIndexesUnused | %w", err)
+		return serverhttp.GetIndexesUnused404Response{}, nil
 	}
 
 	if err != nil {
@@ -781,7 +781,7 @@ func (s *Handlers) GetIndexesUsage(
 
 	indexes, err := s.repo.GetIndexesUsage(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, limit, offset)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetIndexesUsage404Response{}, fmt.Errorf("GetIndexesUsage | %w", err)
+		return serverhttp.GetIndexesUsage404Response{}, nil
 	}
 
 	if err != nil {
@@ -808,7 +808,7 @@ func (s *Handlers) GetMaintenanceAutovacuumFreezeMaxAge(
 ) (serverhttp.GetMaintenanceAutovacuumFreezeMaxAgeResponseObject, error) {
 	data, err := s.repo.GetMaintenanceAutovacuumFreezeMaxAge(ctx, req.Params.ClusterName, req.Params.Instance)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetMaintenanceAutovacuumFreezeMaxAge404Response{}, fmt.Errorf("GetMaintenanceAutovacuumFreezeMaxAge | %w", err)
+		return serverhttp.GetMaintenanceAutovacuumFreezeMaxAge404Response{}, nil
 	}
 
 	if err != nil {
@@ -843,7 +843,7 @@ func (s *Handlers) GetMaintenanceInfo(
 		limit,
 		offset)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetMaintenanceInfo404Response{}, fmt.Errorf("GetMaintenanceInfo | %w", err)
+		return serverhttp.GetMaintenanceInfo404Response{}, nil
 	}
 
 	if err != nil {
@@ -874,7 +874,7 @@ func (s *Handlers) GetMaintenanceTransactionIdDanger(
 ) (serverhttp.GetMaintenanceTransactionIdDangerResponseObject, error) {
 	data, err := s.repo.GetMaintenanceTransactionIdDanger(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetMaintenanceTransactionIdDanger404Response{}, fmt.Errorf("GetMaintenanceTransactionIdDanger | %w", err)
+		return serverhttp.GetMaintenanceTransactionIdDanger404Response{}, nil
 	}
 
 	if err != nil {
@@ -900,7 +900,7 @@ func (s *Handlers) GetMaintenanceVacuumProgress(
 ) (serverhttp.GetMaintenanceVacuumProgressResponseObject, error) {
 	data, err := s.repo.GetMaintenanceVacuumProgress(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetMaintenanceVacuumProgress404Response{}, fmt.Errorf("GetMaintenanceVacuumProgress | %w", err)
+		return serverhttp.GetMaintenanceVacuumProgress404Response{}, nil
 	}
 
 	if err != nil {
@@ -925,7 +925,7 @@ func (s *Handlers) GetQueriesBlocked(
 ) (serverhttp.GetQueriesBlockedResponseObject, error) {
 	queries, err := s.repo.GetQueriesBlocked(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetQueriesBlocked404Response{}, fmt.Errorf("GetQueriesBlocked | %w", err)
+		return serverhttp.GetQueriesBlocked404Response{}, nil
 	}
 
 	if err != nil {
@@ -965,7 +965,7 @@ func (s *Handlers) GetQueriesRunning(
 
 	queries, err := s.repo.GetQueriesRunning(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, minDuration)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetQueriesRunning404Response{}, fmt.Errorf("GetQueriesRunning | %w", err)
+		return serverhttp.GetQueriesRunning404Response{}, nil
 	}
 
 	if err != nil {
@@ -998,7 +998,7 @@ func (s *Handlers) GetQueriesTop10ByTime(
 ) (serverhttp.GetQueriesTop10ByTimeResponseObject, error) {
 	queries, err := s.repo.GetQueriesTop10ByTime(ctx, req.Params.ClusterName, req.Params.Instance)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetQueriesTop10ByTime404Response{}, fmt.Errorf("GetQueriesTop10ByTime | %w", err)
+		return serverhttp.GetQueriesTop10ByTime404Response{}, nil
 	}
 
 	if err != nil {
@@ -1028,7 +1028,7 @@ func (s *Handlers) GetQueriesTop10ByWal(
 ) (serverhttp.GetQueriesTop10ByWalResponseObject, error) {
 	queries, err := s.repo.GetQueriesTop10ByWal(ctx, req.Params.ClusterName, req.Params.Instance)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetQueriesTop10ByWal404Response{}, fmt.Errorf("GetQueriesTop10ByWal | %w", err)
+		return serverhttp.GetQueriesTop10ByWal404Response{}, nil
 	}
 
 	if err != nil {
@@ -1055,7 +1055,7 @@ func (s *Handlers) GetQueriesTop10Chart(
 ) (serverhttp.GetQueriesTop10ChartResponseObject, error) {
 	items, err := s.repo.GetQueriesTop10Chart(ctx, req.Params.ClusterName, req.Params.Instance)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetQueriesTop10Chart404Response{}, fmt.Errorf("GetQueriesTop10Chart | %w", err)
+		return serverhttp.GetQueriesTop10Chart404Response{}, nil
 	}
 
 	if err != nil {
@@ -1106,7 +1106,7 @@ func (s *Handlers) GetQueriesReport(
 
 	queries, err := s.repo.GetQueriesReport(ctx, req.Params.ClusterName, req.Params.Instance, excludeUsers)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetQueriesReport404Response{}, fmt.Errorf("GetQueriesReport | %w", err)
+		return serverhttp.GetQueriesReport404Response{}, nil
 	}
 
 	if err != nil {
@@ -1158,7 +1158,7 @@ func (s *Handlers) GetQueryStatsStatus(
 ) (serverhttp.GetQueryStatsStatusResponseObject, error) {
 	status, err := s.repo.GetQueryStatsStatus(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetQueryStatsStatus404Response{}, fmt.Errorf("GetQueryStatsStatus | %w", err)
+		return serverhttp.GetQueryStatsStatus404Response{}, nil
 	}
 
 	if err != nil {
@@ -1180,7 +1180,7 @@ func (s *Handlers) GetProgressAnalyze(
 ) (serverhttp.GetProgressAnalyzeResponseObject, error) {
 	progress, err := s.repo.GetProgressAnalyze(ctx, req.Params.ClusterName, req.Params.Instance)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetProgressAnalyze404Response{}, fmt.Errorf("GetProgressAnalyze | %w", err)
+		return serverhttp.GetProgressAnalyze404Response{}, nil
 	}
 
 	if err != nil {
@@ -1212,7 +1212,7 @@ func (s *Handlers) GetProgressBaseBackup(
 ) (serverhttp.GetProgressBaseBackupResponseObject, error) {
 	progress, err := s.repo.GetProgressBaseBackup(ctx, req.Params.ClusterName, req.Params.Instance)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetProgressBaseBackup404Response{}, fmt.Errorf("GetProgressBaseBackup | %w", err)
+		return serverhttp.GetProgressBaseBackup404Response{}, nil
 	}
 
 	if err != nil {
@@ -1242,7 +1242,7 @@ func (s *Handlers) GetProgressCluster(
 ) (serverhttp.GetProgressClusterResponseObject, error) {
 	progress, err := s.repo.GetProgressCluster(ctx, req.Params.ClusterName, req.Params.Instance)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetProgressCluster404Response{}, fmt.Errorf("GetProgressCluster | %w", err)
+		return serverhttp.GetProgressCluster404Response{}, nil
 	}
 
 	if err != nil {
@@ -1276,7 +1276,7 @@ func (s *Handlers) GetProgressIndex(
 ) (serverhttp.GetProgressIndexResponseObject, error) {
 	progress, err := s.repo.GetProgressIndex(ctx, req.Params.ClusterName, req.Params.Instance)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetProgressIndex404Response{}, fmt.Errorf("GetProgressIndex | %w", err)
+		return serverhttp.GetProgressIndex404Response{}, nil
 	}
 
 	if err != nil {
@@ -1313,7 +1313,7 @@ func (s *Handlers) GetProgressVacuum(
 ) (serverhttp.GetProgressVacuumResponseObject, error) {
 	progress, err := s.repo.GetProgressVacuum(ctx, req.Params.ClusterName, req.Params.Instance)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetProgressVacuum404Response{}, fmt.Errorf("GetProgressVacuum | %w", err)
+		return serverhttp.GetProgressVacuum404Response{}, nil
 	}
 
 	if err != nil {
@@ -1580,7 +1580,7 @@ func (s *Handlers) GetTablesTopKBySize(
 
 	tables, err := s.repo.GetTablesTopKBySize(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, limit)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetTablesTopKBySize404Response{}, fmt.Errorf("GetTablesTopKBySize | %w", err)
+		return serverhttp.GetTablesTopKBySize404Response{}, nil
 	}
 
 	if err != nil {
@@ -1619,7 +1619,7 @@ func (s *Handlers) GetTablesCaching(
 
 	tables, err := s.repo.GetTablesCaching(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, limit, offset)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetTablesCaching404Response{}, fmt.Errorf("GetTablesCaching | %w", err)
+		return serverhttp.GetTablesCaching404Response{}, nil
 	}
 
 	if err != nil {
@@ -1648,7 +1648,7 @@ func (s *Handlers) GetTablesHitRate(
 ) (serverhttp.GetTablesHitRateResponseObject, error) {
 	tables, err := s.repo.GetTablesHitRate(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetTablesHitRate404Response{}, fmt.Errorf("GetTablesHitRate | %w", err)
+		return serverhttp.GetTablesHitRate404Response{}, nil
 	}
 
 	if err != nil {
@@ -1672,7 +1672,7 @@ func (s *Handlers) GetTablesPartitions(
 ) (serverhttp.GetTablesPartitionsResponseObject, error) {
 	tables, err := s.repo.GetTablesPartitions(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetTablesPartitions404Response{}, fmt.Errorf("GetTablesPartitions | %w", err)
+		return serverhttp.GetTablesPartitions404Response{}, nil
 	}
 
 	if err != nil {
@@ -1706,7 +1706,7 @@ func (s *Handlers) GetPgSettings(
 
 	settings, err := s.repo.GetPgSettings(ctx, req.Params.ClusterName, req.Params.Instance, limit, offset)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetPgSettings404Response{}, fmt.Errorf("GetPgSettings | %w", err)
+		return serverhttp.GetPgSettings404Response{}, nil
 	}
 
 	if err != nil {
@@ -1733,7 +1733,7 @@ func (s *Handlers) GetAutovacuumSettings(
 ) (serverhttp.GetAutovacuumSettingsResponseObject, error) {
 	settings, err := s.repo.GetAutovacuumSettings(ctx, req.Params.ClusterName, req.Params.Instance)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetAutovacuumSettings404Response{}, fmt.Errorf("GetAutovacuumSettings | %w", err)
+		return serverhttp.GetAutovacuumSettings404Response{}, nil
 	}
 
 	if err != nil {
@@ -1760,7 +1760,7 @@ func (s *Handlers) GetSettingsAnalyze(
 ) (serverhttp.GetSettingsAnalyzeResponseObject, error) {
 	notifications, err := s.repo.GetSettingsAnalyze(ctx, req.Params.ClusterName, req.Params.Instance)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetSettingsAnalyze404Response{}, fmt.Errorf("GetSettingsAnalyze | %w", err)
+		return serverhttp.GetSettingsAnalyze404Response{}, nil
 	}
 
 	if err != nil {
@@ -1785,7 +1785,7 @@ func (s *Handlers) GetReplicationStatus(
 ) (serverhttp.GetReplicationStatusResponseObject, error) {
 	items, err := s.repo.GetReplicationStatus(ctx, req.Params.ClusterName, req.Params.Instance)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetReplicationStatus404Response{}, fmt.Errorf("GetReplicationStatus | %w", err)
+		return serverhttp.GetReplicationStatus404Response{}, nil
 	}
 
 	if err != nil {
@@ -1823,7 +1823,7 @@ func (s *Handlers) GetReplicationSlots(
 ) (serverhttp.GetReplicationSlotsResponseObject, error) {
 	items, err := s.repo.GetReplicationSlots(ctx, req.Params.ClusterName, req.Params.Instance)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetReplicationSlots404Response{}, fmt.Errorf("GetReplicationSlots | %w", err)
+		return serverhttp.GetReplicationSlots404Response{}, nil
 	}
 
 	if err != nil {
@@ -1861,7 +1861,7 @@ func (s *Handlers) GetReplicationConfig(
 ) (serverhttp.GetReplicationConfigResponseObject, error) {
 	cfg, err := s.repo.GetReplicationConfig(ctx, req.Params.ClusterName, req.Params.Instance)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetReplicationConfig404Response{}, fmt.Errorf("GetReplicationConfig | %w", err)
+		return serverhttp.GetReplicationConfig404Response{}, nil
 	}
 
 	if err != nil {
@@ -1882,7 +1882,7 @@ func (s *Handlers) GetDatabaseHealth(
 ) (serverhttp.GetDatabaseHealthResponseObject, error) {
 	health, err := s.repo.GetDatabaseHealth(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetDatabaseHealth404Response{}, fmt.Errorf("GetDatabaseHealth | %w", err)
+		return serverhttp.GetDatabaseHealth404Response{}, nil
 	}
 
 	if err != nil {
@@ -1920,7 +1920,7 @@ func (s *Handlers) GetConnectionWaitEvents(
 ) (serverhttp.GetConnectionWaitEventsResponseObject, error) {
 	items, err := s.repo.GetConnectionWaitEvents(ctx, req.Params.ClusterName, req.Params.Instance)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetConnectionWaitEvents404Response{}, fmt.Errorf("GetConnectionWaitEvents | %w", err)
+		return serverhttp.GetConnectionWaitEvents404Response{}, nil
 	}
 
 	if err != nil {

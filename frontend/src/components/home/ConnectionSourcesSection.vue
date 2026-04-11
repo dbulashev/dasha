@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useViewError } from '@/composables/useViewError'
 import { getConnectionSources } from '@/api/gen/default/default'
 import type { ConnectionSource } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
@@ -10,7 +11,7 @@ import PaginationControls from '@/components/PaginationControls.vue'
 
 const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
-const emit = defineEmits<{ error: [msg: string] }>()
+const { onError } = useViewError()
 
 const headers = computed(() => [
   { title: t('header.database'), key: 'Database' },
@@ -31,7 +32,7 @@ const { items, loading, page, hasMore, load } = usePaginatedApiLoader<Connection
     pageSize: LARGE_PAGE_SIZE,
     deps: [clusterName, hostName],
     guard: () => !!clusterName.value && !!hostName.value,
-    onError: (msg) => emit('error', msg),
+    onError,
   },
 )
 </script>

@@ -4,10 +4,11 @@ import { getSettingsAnalyze } from '@/api/gen/default/default'
 import type { SettingsNotification } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useApiLoader } from '@/composables/useApiLoader'
+import { useViewError } from '@/composables/useViewError'
 
 const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
-const emit = defineEmits<{ error: [msg: string] }>()
+const { onError } = useViewError()
 
 const { items, loading } = useApiLoader<SettingsNotification[]>(
   () => getSettingsAnalyze({
@@ -17,7 +18,7 @@ const { items, loading } = useApiLoader<SettingsNotification[]>(
   {
     deps: [clusterName, hostName],
     guard: () => !!clusterName.value && !!hostName.value,
-    onError: (msg) => emit('error', msg),
+    onError,
   },
 )
 </script>

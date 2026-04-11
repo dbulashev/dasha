@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useViewError } from '@/composables/useViewError'
 import { getConnectionStatActivity } from '@/api/gen/default/default'
 import type { ConnectionStatActivity } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
@@ -11,7 +12,7 @@ import { useDebouncedRef } from '@/composables/useDebouncedRef'
 
 const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
-const emit = defineEmits<{ error: [msg: string] }>()
+const { onError } = useViewError()
 
 const headers = computed(() => [
   { title: 'PID', key: 'Pid', sortable: false },
@@ -49,7 +50,7 @@ const { items, loading, page, hasMore, load } = usePaginatedApiLoader<Connection
     pageSize: DEFAULT_PAGE_SIZE,
     deps: [clusterName, hostName, debouncedFilterUser, filterState],
     guard: () => !!clusterName.value && !!hostName.value,
-    onError: (msg) => emit('error', msg),
+    onError,
   },
 )
 </script>

@@ -21,12 +21,13 @@ import type {
   InstanceInfo,
 } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
+import { useViewError } from '@/composables/useViewError'
 import { assertOk } from '@/utils/api'
 import { getErrorMessage } from '@/utils/error'
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
-const emit = defineEmits<{ error: [msg: string] }>()
+const { onError } = useViewError()
 
 // --- Common Summary ---
 const summaryHeaders = computed(() => [
@@ -106,7 +107,7 @@ async function loadSummary() {
     })
     summaryItems.value = assertOk(response) ?? []
   } catch (err) {
-    emit('error', getErrorMessage(err))
+    onError(getErrorMessage(err), err)
     summaryItems.value = []
   } finally {
     summaryLoading.value = false
@@ -135,7 +136,7 @@ async function loadInstanceInfo() {
     })
     instanceInfo.value = assertOk<InstanceInfo>(response)
   } catch (err) {
-    emit('error', getErrorMessage(err))
+    onError(getErrorMessage(err), err)
     instanceInfo.value = null
   }
 }
@@ -234,7 +235,7 @@ async function load() {
       loadStatsResetTime(),
     ])
   } catch (err) {
-    emit('error', getErrorMessage(err))
+    onError(getErrorMessage(err), err)
   }
 }
 

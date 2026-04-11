@@ -12,6 +12,7 @@ import { getQueriesReport } from '@/api/gen/default/default'
 import type { QueryReport } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useApiLoader } from '@/composables/useApiLoader'
+import { useViewError } from '@/composables/useViewError'
 import { copyToClipboard } from '@/utils/sql'
 import { fmtMs } from '@/utils/format'
 
@@ -19,7 +20,7 @@ ChartJS.register(LinearScale, PointElement, Tooltip)
 
 const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
-const emit = defineEmits<{ error: [msg: string] }>()
+const { onError } = useViewError()
 
 const snackbar = ref(false)
 const copiedQueryId = ref('')
@@ -32,7 +33,7 @@ const { items, loading } = useApiLoader<QueryReport[]>(
   {
     deps: [clusterName, hostName],
     guard: () => !!clusterName.value && !!hostName.value,
-    onError: (msg) => emit('error', msg),
+    onError,
   },
 )
 

@@ -10,7 +10,7 @@ import QueryReportSection from '@/components/queries/QueryReportSection.vue'
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
-const { errorMessage, onError, clearError } = useViewError()
+const { clearError } = useViewError()
 
 const queryStatsStatus = ref<QueryStatsStatus | null>(null)
 
@@ -49,8 +49,7 @@ watch([clusterName, hostName, databaseName], () => {
 </script>
 
 <template>
-  <v-alert v-if="errorMessage" type="error" class="mb-4" closable>{{ errorMessage }}</v-alert>
   <v-alert v-if="pgssUnavailable" type="warning" class="mb-4" closable>{{ pgssWarningMessage }}</v-alert>
 
-  <QueryReportSection @error="onError" />
+  <QueryReportSection />
 </template>

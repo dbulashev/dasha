@@ -7,6 +7,7 @@ import { getConnectionStates } from '@/api/gen/default/default'
 import type { ConnectionState } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useApiLoader } from '@/composables/useApiLoader'
+import { useViewError } from '@/composables/useViewError'
 
 ChartJS.register(ArcElement, Tooltip, Legend)
 
@@ -22,7 +23,7 @@ const FALLBACK_COLOR = '#795548'
 
 const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
-const emit = defineEmits<{ error: [msg: string] }>()
+const { onError } = useViewError()
 
 const headers = computed(() => [
   { title: t('header.state'), key: 'State' },
@@ -37,7 +38,7 @@ const { items, loading } = useApiLoader<ConnectionState[]>(
   {
     deps: [clusterName, hostName],
     guard: () => !!clusterName.value && !!hostName.value,
-    onError: (msg) => emit('error', msg),
+    onError,
   },
 )
 

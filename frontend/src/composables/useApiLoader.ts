@@ -5,7 +5,7 @@ import { getErrorMessage } from '@/utils/error'
 interface UseApiLoaderOptions<T> {
   deps: WatchSource[]
   guard: () => boolean
-  onError: (msg: string) => void
+  onError: (msg: string, err?: unknown) => void
   defaultValue?: T
 }
 
@@ -30,7 +30,7 @@ export function useApiLoader<T = unknown[]>(
       const response = await fetcher()
       items.value = (assertOk(response) as T) ?? (options.defaultValue ?? ([] as unknown as T))
     } catch (err) {
-      options.onError(getErrorMessage(err))
+      options.onError(getErrorMessage(err), err)
       items.value = options.defaultValue ?? ([] as unknown as T)
     } finally {
       loading.value = false
@@ -46,7 +46,7 @@ interface UsePaginatedApiLoaderOptions<T> {
   pageSize: number
   deps: WatchSource[]
   guard: () => boolean
-  onError: (msg: string) => void
+  onError: (msg: string, err?: unknown) => void
   defaultValue?: T[]
 }
 
@@ -79,7 +79,7 @@ export function usePaginatedApiLoader<T>(
       page.value = p
       hasMore.value = data.length >= options.pageSize
     } catch (err) {
-      options.onError(getErrorMessage(err))
+      options.onError(getErrorMessage(err), err)
       items.value = []
     } finally {
       loading.value = false

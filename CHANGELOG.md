@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.1.16
+
+#### Bug Fixes
+- **Backend**: 404 responses now return correct HTTP status (was 500 due to oapi-codegen strict handler ignoring response object when error is non-nil)
+- **Frontend**: global error handling via provide/inject — error code from API propagated correctly (was always 500)
+- **Frontend**: "No clusters available" error no longer disappears on route change
+- **Frontend**: invalid cluster/host in URL now shows 404 with similar name suggestions instead of silent redirect
+
+#### Improvements
+- Section components use `useViewError()` directly instead of emit chain — removes indirection, preserves error codes
+- `useClusterInfo` returns null for unknown cluster/host — blocks API calls with invalid params
+- Login card with SSO button, version display, return URL preservation across OIDC redirect
+- `ApiError` class with HTTP status extracted from response body
+
 ## v0.1.13
 
 #### New Features

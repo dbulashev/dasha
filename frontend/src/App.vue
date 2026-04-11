@@ -1,14 +1,20 @@
 <script setup lang="ts">
 
-import { computed, ref, watch } from 'vue'
+import { computed, provide, ref, watch } from 'vue'
 import { useThemeStore } from './stores/theme'
 import { useAuthStore } from './stores/auth'
+import { useClustersStore } from './stores/clusters'
 import { AuthInfoMode } from './api/models'
 import { useI18n } from 'vue-i18n'
+import { errorKey, type GlobalError } from './composables/useViewError'
 
 const { t } = useI18n()
 const themeStore = useThemeStore()
 const authStore = useAuthStore()
+const clusterStore = useClustersStore()
+
+const globalError = ref<GlobalError | null>(null)
+provide(errorKey, globalError)
 
 import { useRoute } from 'vue-router'
 
@@ -16,6 +22,7 @@ const route = useRoute()
 
 import ClusterHostDbSelector from './components/ClusterHostDbSelector.vue'
 import LoginCard from './components/auth/LoginCard.vue'
+import ErrorAlert from './components/ErrorAlert.vue'
 
 function withQuery(base: string) {
   const cluster = route.params.clustername ?? '';
@@ -77,7 +84,13 @@ function syncOpenedGroups() {
 }
 
 syncOpenedGroups()
-watch(() => route.path, syncOpenedGroups)
+watch(() => route.path, () => {
+  syncOpenedGroups()
+  // Clear transient page errors on navigation, but preserve persistent errors (e.g. no clusters)
+  if (clusterStore.clusterList?.length) {
+    globalError.value = null
+  }
+})
 
 </script>
 
@@ -181,7 +194,8 @@ watch(() => route.path, syncOpenedGroups)
       </v-navigation-drawer>
 
       <v-main>
-        <v-container>
+        <ErrorAlert v-if="globalError" :code="globalError.code" :message="globalError.message" />
+        <v-container v-else>
           <router-view v-slot="{ Component }">
               <component :is="Component" />
           </router-view>

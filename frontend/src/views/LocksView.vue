@@ -11,7 +11,7 @@ import '@/assets/sql-highlight.css'
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
-const { errorMessage, onError, clearError } = useViewError()
+const { onError, clearError } = useViewError()
 
 // --- Blocked queries (locks) ---
 const blockedItems = ref<QueryBlocked[]>([])
@@ -68,7 +68,7 @@ async function loadBlocked() {
     })
     blockedItems.value = assertOk(response) ?? []
   } catch (err) {
-    onError(getErrorMessage(err))
+    onError(getErrorMessage(err), err)
     blockedItems.value = []
   } finally {
     blockedLoading.value = false
@@ -81,9 +81,6 @@ watch([clusterName, hostName, databaseName], () => {
 </script>
 
 <template>
-  <v-alert v-if="errorMessage" type="error" class="mb-4" closable>
-    {{ errorMessage }}
-  </v-alert>
 
   <!-- Lock Tree Visualization -->
   <v-card class="mb-4">

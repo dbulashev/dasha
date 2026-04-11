@@ -3,13 +3,13 @@ import { ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getTablesHitRate, getIndexesHitRate } from '@/api/gen/default/default'
 import { useClusterInfo } from '@/composables/useClusterInfo'
+import { useViewError } from '@/composables/useViewError'
 import { assertOk } from '@/utils/api'
 import { getErrorMessage } from '@/utils/error'
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
-
-const emit = defineEmits<{ error: [msg: string] }>()
+const { onError } = useViewError()
 
 const HIT_RATE_THRESHOLD = 0.9
 const tablesHitRate = ref<number | null>(null)
@@ -37,17 +37,17 @@ async function load() {
       tablesHitRate.value = arr?.length ? arr[0]!.Rate : null
     } else {
       tablesHitRate.value = null
-      emit('error', getErrorMessage(tablesRes.reason))
+      onError(getErrorMessage(tablesRes.reason), tablesRes.reason)
     }
     if (indexesRes.status === 'fulfilled') {
       const arr = assertOk<{ Rate: number }[]>(indexesRes.value)
       indexesHitRate.value = arr?.length ? arr[0]!.Rate : null
     } else {
       indexesHitRate.value = null
-      emit('error', getErrorMessage(indexesRes.reason))
+      onError(getErrorMessage(indexesRes.reason), indexesRes.reason)
     }
   } catch (err) {
-    emit('error', getErrorMessage(err))
+    onError(getErrorMessage(err), err)
     tablesHitRate.value = null
     indexesHitRate.value = null
   } finally {
