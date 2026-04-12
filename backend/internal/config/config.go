@@ -35,7 +35,8 @@ type OIDCConfig struct {
 	ClientSecretFromEnv string   `mapstructure:"client_secret_from_env"`
 	Scopes              []string `mapstructure:"scopes"`
 	RedirectURL         string   `mapstructure:"redirect_url"`
-	RoleClaim           string   `mapstructure:"role_claim"` // default: "realm_access.roles"
+	RoleClaim           string            `mapstructure:"role_claim"`   // default: "realm_access.roles"
+	RoleMapping         map[string]string `mapstructure:"role_mapping"` // e.g. {"dba_team": "admin", "dev_team": "viewer"}
 }
 
 type RateLimitConfig struct {
@@ -148,6 +149,10 @@ type Config struct {
 	// but a DBA has created an accessible view (e.g. "monitoring.pg_stats").
 	// If empty, pg_catalog.pg_stats is used by default.
 	PgStatsView string `mapstructure:"pg_stats_view"`
+
+	// EnableQueryStatsReset allows resetting pg_stat_statements statistics via the UI.
+	// Disabled by default for safety.
+	EnableQueryStatsReset bool `mapstructure:"enable_query_stats_reset"`
 }
 
 // Clusters is the interface for obtaining the current list of clusters.

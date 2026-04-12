@@ -55,7 +55,7 @@ func NewMiddlewares(ctx context.Context, cfg config.AuthConfig, logger *zap.Logg
 	if cfg.Mode == config.AuthModeOIDC {
 		var err error
 
-		oidcProvider, err = NewOIDCProvider(ctx, *cfg.OIDC)
+		oidcProvider, err = NewOIDCProvider(ctx, *cfg.OIDC, logger)
 		if err != nil {
 			logger.Warn("OIDC provider initialization failed (will retry on first request)", zap.Error(err))
 		}

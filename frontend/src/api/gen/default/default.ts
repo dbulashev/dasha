@@ -4,10 +4,13 @@
  * User API
  * OpenAPI spec version: 1.0.0
  */
-import { useQuery } from '@tanstack/vue-query'
+import { useMutation, useQuery } from '@tanstack/vue-query'
 import type {
+  MutationFunction,
   QueryFunction,
   QueryKey,
+  UseMutationOptions,
+  UseMutationReturnType,
   UseQueryOptions,
   UseQueryReturnType,
 } from '@tanstack/vue-query'
@@ -107,6 +110,7 @@ import type {
   MaintenanceVacuumProgress,
   NotFoundResponse,
   PgSetting,
+  PostQueriesResetStatsParams,
   ProgressAnalyze,
   ProgressBaseBackup,
   ProgressCluster,
@@ -5273,6 +5277,127 @@ export function useGetQueryStatsStatus<
   return query
 }
 
+export type postQueriesResetStatsResponse204 = {
+  data: void
+  status: 204
+}
+
+export type postQueriesResetStatsResponse403 = {
+  data: void
+  status: 403
+}
+
+export type postQueriesResetStatsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type postQueriesResetStatsResponseSuccess = postQueriesResetStatsResponse204 & {
+  headers: Headers
+}
+export type postQueriesResetStatsResponseError = (
+  | postQueriesResetStatsResponse403
+  | postQueriesResetStatsResponse404
+) & {
+  headers: Headers
+}
+
+export type postQueriesResetStatsResponse =
+  | postQueriesResetStatsResponseSuccess
+  | postQueriesResetStatsResponseError
+
+export const getPostQueriesResetStatsUrl = (params: PostQueriesResetStatsParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/queries/reset-stats?${stringifiedParams}`
+    : `/api/queries/reset-stats`
+}
+
+export const postQueriesResetStats = async (
+  params: PostQueriesResetStatsParams,
+  options?: RequestInit,
+): Promise<postQueriesResetStatsResponse> => {
+  const res = await fetch(getPostQueriesResetStatsUrl(params), {
+    ...options,
+    method: 'POST',
+  })
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
+
+  const data: postQueriesResetStatsResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as postQueriesResetStatsResponse
+}
+
+export const getPostQueriesResetStatsMutationOptions = <
+  TError = void | NotFoundResponse,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postQueriesResetStats>>,
+    TError,
+    { params: PostQueriesResetStatsParams },
+    TContext
+  >
+  fetch?: RequestInit
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postQueriesResetStats>>,
+  TError,
+  { params: PostQueriesResetStatsParams },
+  TContext
+> => {
+  const mutationKey = ['postQueriesResetStats']
+  const { mutation: mutationOptions, fetch: fetchOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, fetch: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postQueriesResetStats>>,
+    { params: PostQueriesResetStatsParams }
+  > = (props) => {
+    const { params } = props ?? {}
+
+    return postQueriesResetStats(params, fetchOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type PostQueriesResetStatsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof postQueriesResetStats>>
+>
+
+export type PostQueriesResetStatsMutationError = void | NotFoundResponse
+
+export const usePostQueriesResetStats = <
+  TError = void | NotFoundResponse,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postQueriesResetStats>>,
+    TError,
+    { params: PostQueriesResetStatsParams },
+    TContext
+  >
+  fetch?: RequestInit
+}): UseMutationReturnType<
+  Awaited<ReturnType<typeof postQueriesResetStats>>,
+  TError,
+  { params: PostQueriesResetStatsParams },
+  TContext
+> => {
+  return useMutation(getPostQueriesResetStatsMutationOptions(options))
+}
 export type getProgressAnalyzeResponse200 = {
   data: ProgressAnalyze[]
   status: 200

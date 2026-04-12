@@ -571,3 +571,20 @@ func (p *PgxPool) getQueriesReport( //nolint:gocyclo
 
 	return ret, nil
 }
+
+func (p *PgxPool) ResetQueryStats(ctx context.Context, clusterName, instanceName string) error {
+	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, "")
+	if err != nil {
+		return fmt.Errorf("ResetQueryStats | %w", err)
+	}
+
+	queryCtx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	_, err = pool.Exec(queryCtx, "SELECT pg_stat_statements_reset()")
+	if err != nil {
+		return fmt.Errorf("pg_stat_statements_reset | %w", err)
+	}
+
+	return nil
+}

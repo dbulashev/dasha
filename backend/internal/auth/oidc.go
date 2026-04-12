@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 
 	"github.com/dbulashev/dasha/internal/config"
@@ -18,12 +19,14 @@ type OIDCProvider struct {
 	verifier      *oidc.IDTokenVerifier
 	OAuth2Cfg     oauth2.Config
 	roleClaim     string
+	roleMapping   map[string]string // corporate group → dasha role
+	logger        *zap.Logger
 	endSessionURL string
 	revocationURL string
 	postLogoutURI string
 }
 
-func NewOIDCProvider(ctx context.Context, cfg config.OIDCConfig) (*OIDCProvider, error) {
+func NewOIDCProvider(ctx context.Context, cfg config.OIDCConfig, logger *zap.Logger) (*OIDCProvider, error) {
 	provider, err := oidc.NewProvider(ctx, cfg.IssuerURL)
 	if err != nil {
 		return nil, fmt.Errorf("OIDC discovery failed for %s: %w", cfg.IssuerURL, err)
@@ -68,6 +71,8 @@ func NewOIDCProvider(ctx context.Context, cfg config.OIDCConfig) (*OIDCProvider,
 		verifier:      verifier,
 		OAuth2Cfg:     oauth2Cfg,
 		roleClaim:     roleClaim,
+		roleMapping:   cfg.RoleMapping,
+		logger:        logger,
 		endSessionURL: providerClaims.EndSessionURL,
 		revocationURL: providerClaims.RevocationURL,
 		postLogoutURI: postLogoutURI,
@@ -79,7 +84,18 @@ func (p *OIDCProvider) VerifyIDToken(ctx context.Context, rawIDToken string) (*o
 }
 
 func (p *OIDCProvider) ExtractRole(claims map[string]any) string {
-	return extractRoleFromClaims(claims, p.roleClaim)
+	role := extractRoleFromClaims(claims, p.roleClaim, p.roleMapping)
+
+	val := nestedValue(claims, strings.Split(p.roleClaim, "."))
+
+	p.logger.Debug("OIDC role extraction",
+		zap.String("role_claim", p.roleClaim),
+		zap.Any("claim_values", val),
+		zap.Any("role_mapping", p.roleMapping),
+		zap.String("resolved_role", role),
+	)
+
+	return role
 }
 
 func (p *OIDCProvider) TokenSource(ctx context.Context, refreshToken string) oauth2.TokenSource {
@@ -143,7 +159,7 @@ func (p *OIDCProvider) RevokeRefreshToken(ctx context.Context, refreshToken stri
 	return nil
 }
 
-func extractRoleFromClaims(claims map[string]any, claimPath string) string {
+func extractRoleFromClaims(claims map[string]any, claimPath string, roleMapping map[string]string) string {
 	val := nestedValue(claims, strings.Split(claimPath, "."))
 
 	roles, ok := val.([]any)
@@ -151,6 +167,35 @@ func extractRoleFromClaims(claims map[string]any, claimPath string) string {
 		return defaultRole
 	}
 
+	if len(roleMapping) > 0 {
+		// Use explicit mapping: first match with highest privilege wins.
+		for _, r := range roles {
+			s, ok := r.(string)
+			if !ok {
+				continue
+			}
+
+			if mapped, exists := roleMapping[s]; exists && mapped == "admin" {
+				return "admin"
+			}
+		}
+
+		// Check for viewer mappings (admin takes priority, so check separately).
+		for _, r := range roles {
+			s, ok := r.(string)
+			if !ok {
+				continue
+			}
+
+			if mapped, exists := roleMapping[s]; exists && mapped == "viewer" {
+				return "viewer"
+			}
+		}
+
+		return defaultRole
+	}
+
+	// Default behavior: look for "admin" in claim values.
 	for _, r := range roles {
 		if s, ok := r.(string); ok && s == "admin" {
 			return "admin"

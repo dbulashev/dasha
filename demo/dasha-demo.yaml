@@ -1,4 +1,5 @@
 debug: true
+enable_query_stats_reset: true
 
 auth:
   mode: oidc

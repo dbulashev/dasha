@@ -1097,6 +1097,19 @@ paths:
                 $ref: '#/components/schemas/QueryStatsStatus'
         '404':
           $ref: '#/components/responses/NotFound'
+  /api/queries/reset-stats:
+    post:
+      operationId: postQueriesResetStats
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '204':
+          description: Statistics reset successfully
+        '403':
+          description: Feature disabled in configuration
+        '404':
+          $ref: '#/components/responses/NotFound'
   /api/progress/analyze:
     get:
       operationId: getProgressAnalyze
@@ -1345,6 +1358,8 @@ components:
           enum: [none, token, oidc]
         oidc_login_url:
           type: string
+        enable_query_stats_reset:
+          type: boolean
     User:
       type: object
       properties:

@@ -46,8 +46,10 @@ func (s *Handlers) GetAuthInfo(
 		mode = serverhttp.None
 	}
 
+	enableReset := s.cfg.EnableQueryStatsReset
 	resp := serverhttp.GetAuthInfo200JSONResponse{
-		Mode: mode,
+		Mode:                  mode,
+		EnableQueryStatsReset: &enableReset,
 	}
 
 	if s.cfg.Auth.Mode == config.AuthModeOIDC {
@@ -1173,6 +1175,26 @@ func (s *Handlers) GetQueryStatsStatus(
 	}
 
 	return ret, nil
+}
+
+func (s *Handlers) PostQueriesResetStats(
+	ctx context.Context,
+	req serverhttp.PostQueriesResetStatsRequestObject,
+) (serverhttp.PostQueriesResetStatsResponseObject, error) {
+	if !s.cfg.EnableQueryStatsReset {
+		return serverhttp.PostQueriesResetStats403Response{}, nil
+	}
+
+	err := s.repo.ResetQueryStats(ctx, req.Params.ClusterName, req.Params.Instance)
+	if errors.Is(err, repository.ErrNotFound) {
+		return serverhttp.PostQueriesResetStats404Response{}, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("PostQueriesResetStats | %w", err)
+	}
+
+	return serverhttp.PostQueriesResetStats204Response{}, nil
 }
 
 func (s *Handlers) GetProgressAnalyze(

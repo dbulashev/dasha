@@ -14,6 +14,7 @@ images:
 config:
   debug: false
   # pg_stats_view: monitoring.pg_stats  # custom view when user lacks pg_catalog.pg_stats access
+  # enable_query_stats_reset: false  # allow resetting pg_stat_statements via UI
 
   # -- Authentication & authorization
   # auth:
@@ -32,7 +33,11 @@ config:
   #   #   client_secret_from_env: DASHA_OIDC_SECRET
   #   #   scopes: ["openid", "profile", "email"]
   #   #   redirect_url: "https://dasha.example.com/auth/callback"
-  #   #   role_claim: "realm_access.roles"
+  #   #   role_claim: "realm_access.roles"   # or "groups" for corporate LDAP/AD groups
+  #   #   role_mapping:                      # map corporate groups to dasha roles (admin/viewer)
+  #   #     dba_team: admin
+  #   #     team_lead: admin
+  #   #     dev_team: viewer
   #   # cookie_secret_from_env: DASHA_COOKIE_SECRET
   #   # cookie_max_age: 86400
   #   # tokens:  # API keys also work in oidc mode

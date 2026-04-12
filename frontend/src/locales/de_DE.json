@@ -1,6 +1,7 @@
 {
   "Switch to dark mode": "In den Dunkelmodus wechseln",
   "Switch to light mode": "In den Hellmodus wechseln",
+  "Cancel": "Abbrechen",
   "Home": "Startseite",
   "Connections": "Verbindungen",
   "Settings": "Einstellungen",
@@ -61,6 +62,11 @@
   "pgssNotInstalled": "Die Erweiterung pg_stat_statements ist in dieser Datenbank nicht installiert. Abfragestatistiken (Top 10, Bericht) sind nicht verfügbar.",
   "pgssNotEnabled": "Die Erweiterung pg_stat_statements ist installiert, aber nicht aktiviert. Fügen Sie sie zu shared_preload_libraries hinzu und starten Sie PostgreSQL neu.",
   "pgssNotReadable": "Die Erweiterung pg_stat_statements ist installiert und aktiviert, aber der aktuelle Benutzer hat keinen Zugriff auf die Daten.",
+  "resetQueryStats": "Statistiken zurücksetzen",
+  "resetQueryStatsConfirm": "pg_stat_statements-Statistiken zurücksetzen? Diese Aktion kann nicht rückgängig gemacht werden.",
+  "resetQueryStatsSuccess": "pg_stat_statements-Statistiken wurden zurückgesetzt",
+  "resetQueryStatsForbidden": "Das Zurücksetzen der Statistiken ist in der Konfiguration deaktiviert",
+  "resetQueryStatsError": "Statistiken konnten nicht zurückgesetzt werden",
   "cpuTimeWarning": "Es wurden Abfragen mit negativer CPU-Zeit gefunden. Dies kann auf Ungenauigkeiten in der pg_stat_statements-Statistik hinweisen.",
   "header": {
     "lockedItem": "Gesperrtes Objekt",
