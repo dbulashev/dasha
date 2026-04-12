@@ -9,6 +9,7 @@ import (
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/pkg/mapstruct"
+	"github.com/dbulashev/dasha/internal/pkg/sanitize"
 	"github.com/dbulashev/dasha/internal/pkg/shortcut"
 	"github.com/dbulashev/dasha/internal/repository"
 )
@@ -939,13 +940,13 @@ func (s *Handlers) GetQueriesBlocked(
 				LockedItem:                            t.LockedItem,
 				BlockedPid:                            t.BlockedPid,
 				BlockedUser:                           t.BlockedUser,
-				BlockedQuery:                          t.BlockedQuery,
+				BlockedQuery:                          sanitize.SQL(t.BlockedQuery),
 				BlockedDuration:                       t.BlockedDuration,
 				BlockedMode:                           t.BlockedMode,
 				BlockingPid:                           t.BlockingPid,
 				BlockingUser:                          t.BlockingUser,
 				StateOfBlockingProcess:                t.StateOfBlockingProcess,
-				CurrentOrRecentQueryInBlockingProcess: t.CurrentOrRecentQueryInBlockingProcess,
+				CurrentOrRecentQueryInBlockingProcess: sanitize.SQL(t.CurrentOrRecentQueryInBlockingProcess),
 				BlockingDuration:                      t.BlockingDuration,
 				BlockingMode:                          t.BlockingMode,
 			}
@@ -981,7 +982,7 @@ func (s *Handlers) GetQueriesRunning(
 				Source:      t.Source,
 				Duration:    t.Duration,
 				Waiting:     t.Waiting,
-				Query:       t.Query,
+				Query:       sanitize.SQL(t.Query),
 				StartedAt:   t.StartedAt,
 				DurationMs:  t.DurationMs,
 				User:        t.User,
@@ -1015,7 +1016,7 @@ func (s *Handlers) GetQueriesTop10ByTime(
 				IoCpuPct:   t.IoCpuPct,
 				IoPct:      t.IoPct,
 				CpuPct:     t.CpuPct,
-				QueryTrunc: t.QueryTrunc,
+				QueryTrunc: sanitize.SQL(t.QueryTrunc),
 			}
 		})
 
@@ -1042,7 +1043,7 @@ func (s *Handlers) GetQueriesTop10ByWal(
 				QueryID:    t.QueryID,
 				WalVolume:  t.WalVolume,
 				WalBytes:   t.WalBytes,
-				QueryTrunc: t.QueryTrunc,
+				QueryTrunc: sanitize.SQL(t.QueryTrunc),
 			}
 		})
 
@@ -1118,7 +1119,7 @@ func (s *Handlers) GetQueriesReport(
 		func(t dto.QueryReport) serverhttp.QueryReport {
 			return serverhttp.QueryReport{
 				QueryID:              t.QueryID,
-				Query:                t.Query,
+				Query:                sanitize.SQL(t.Query),
 				Rows:                 t.Rows,
 				RowsPct:              t.RowsPct,
 				Calls:                t.Calls,
