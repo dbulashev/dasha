@@ -572,8 +572,8 @@ func (p *PgxPool) getQueriesReport( //nolint:gocyclo
 	return ret, nil
 }
 
-func (p *PgxPool) ResetQueryStats(ctx context.Context, clusterName, instanceName string) error {
-	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, "")
+func (p *PgxPool) ResetQueryStats(ctx context.Context, clusterName, instanceName, databaseName string) error {
+	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
 	if err != nil {
 		return fmt.Errorf("ResetQueryStats | %w", err)
 	}

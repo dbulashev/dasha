@@ -1185,7 +1185,7 @@ func (s *Handlers) PostQueriesResetStats(
 		return serverhttp.PostQueriesResetStats403Response{}, nil
 	}
 
-	err := s.repo.ResetQueryStats(ctx, req.Params.ClusterName, req.Params.Instance)
+	err := s.repo.ResetQueryStats(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.PostQueriesResetStats404Response{}, nil
 	}

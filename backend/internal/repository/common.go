@@ -103,7 +103,7 @@ type Repository interface {
 	GetQueriesReport(ctx context.Context, clusterName, instanceName string, excludeUsers []string) ([]dto.QueryReport, error)
 	GetQueriesTop10Chart(ctx context.Context, clusterName, instanceName string) ([]dto.QueryTop10ChartItem, error)
 	GetQueryStatsStatus(ctx context.Context, clusterName, instanceName, databaseName string) (dto.QueryStatsStatus, error)
-	ResetQueryStats(ctx context.Context, clusterName, instanceName string) error
+	ResetQueryStats(ctx context.Context, clusterName, instanceName, databaseName string) error
 	GetProgressAnalyze(ctx context.Context, clusterName, instanceName string) ([]dto.ProgressAnalyze, error)
 	GetProgressBaseBackup(ctx context.Context, clusterName, instanceName string) ([]dto.ProgressBaseBackup, error)
 	GetProgressCluster(ctx context.Context, clusterName, instanceName string) ([]dto.ProgressCluster, error)

@@ -32,8 +32,8 @@
     },
     "clickToCopy": "Klick zum Kopieren der Query ID",
     "copied": "Query ID {queryId} kopiert",
-    "ioTime": "I/O-Zeit (ms)",
-    "cpuTime": "CPU-Zeit (ms)"
+    "ioTime": "I/O-Zeit",
+    "cpuTime": "CPU-Zeit"
   },
   "IO vs CPU Time": "I/O- vs CPU-Zeit",
   "Query Report": "Detaillierter Abfragebericht",

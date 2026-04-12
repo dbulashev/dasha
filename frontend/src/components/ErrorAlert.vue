@@ -14,6 +14,6 @@ defineProps<{
     :headline="String(code)"
     :title="t('Something went wrong')"
     :text="message"
-    icon="mdi-alert-circle-outline"
+    image="/dasha-appology.png"
   />
 </template>

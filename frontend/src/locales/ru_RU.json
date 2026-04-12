@@ -54,8 +54,8 @@
         },
         "clickToCopy": "Клик — скопировать Query ID",
         "copied": "Query ID {queryId} скопирован",
-        "ioTime": "Время I/O (мс)",
-        "cpuTime": "Время CPU (мс)"
+        "ioTime": "Время I/O",
+        "cpuTime": "Время CPU"
     },
     "IO vs CPU Time": "I/O vs CPU время",
     "report": {

@@ -70,6 +70,6 @@ const isPartitioned = computed(() => data.value?.TableType === 'partitioned_tabl
     <DescribeConstraintsSection :title="t('describe.fkConstraints')" :items="data.FkConstraints" />
     <DescribeReferencedBySection :items="data.ReferencedBy" />
     <DescribePartitionsSection v-if="isPartitioned" :schema="schema" :table="table" />
-    <DescribeBloatSection :schema="schema" :table="table" />
+    <DescribeBloatSection v-if="data.TableType === 'table'" :schema="schema" :table="table" />
   </template>
 </template>

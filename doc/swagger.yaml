@@ -1103,6 +1103,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
       responses:
         '204':
           description: Statistics reset successfully

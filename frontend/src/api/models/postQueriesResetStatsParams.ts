@@ -5,9 +5,11 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { ClusterNameParameter } from './clusterNameParameter'
+import type { DatabaseParameter } from './databaseParameter'
 import type { InstanceParameter } from './instanceParameter'
 
 export type PostQueriesResetStatsParams = {
   cluster_name: ClusterNameParameter
   instance: InstanceParameter
+  database: DatabaseParameter
 }

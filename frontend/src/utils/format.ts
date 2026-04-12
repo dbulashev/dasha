@@ -35,6 +35,25 @@ export function fmtMs(ms: number | null | undefined, t: TFunc): string {
   return `0 ${t('time.ms')}`
 }
 
+export interface TimeScale {
+  divisor: number
+  unit: string
+}
+
+export function pickTimeScale(maxMs: number): TimeScale {
+  const abs = Math.abs(maxMs || 0)
+  if (abs >= 3600000) return { divisor: 3600000, unit: 'h' }
+  if (abs >= 60000) return { divisor: 60000, unit: 'min' }
+  if (abs >= 1000) return { divisor: 1000, unit: 'sec' }
+  return { divisor: 1, unit: 'ms' }
+}
+
+export function fmtScaled(ms: number, scale: TimeScale): string {
+  const v = ms / scale.divisor
+  if (Number.isInteger(v)) return String(v)
+  return v.toFixed(1)
+}
+
 export function fmtPct(v: number | null | undefined, decimals = 1): string {
   if (v == null) return '—'
   return v.toFixed(decimals) + '%'

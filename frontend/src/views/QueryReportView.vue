@@ -46,13 +46,14 @@ const resetSnackbarColor = ref('success')
 
 async function doReset() {
   resetConfirmDialog.value = false
-  if (!clusterName.value || !hostName.value) return
+  if (!clusterName.value || !hostName.value || !databaseName.value) return
 
   resetting.value = true
   try {
     const res = await postQueriesResetStats({
       cluster_name: clusterName.value,
       instance: hostName.value,
+      database: databaseName.value,
     })
     if (res.status === 204) {
       resetSnackbarMsg.value = t('resetQueryStatsSuccess')
