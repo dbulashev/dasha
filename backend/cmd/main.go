@@ -16,6 +16,7 @@ import (
 	"github.com/dbulashev/dasha/internal/auth"
 	"github.com/dbulashev/dasha/internal/deps"
 	"github.com/dbulashev/dasha/internal/http"
+	"github.com/dbulashev/dasha/internal/storage"
 	"github.com/dbulashev/dasha/internal/version"
 )
 
@@ -41,7 +42,30 @@ func Execute(ctx context.Context) error {
 		RunE: dashaExec,
 	}
 
+	dasha.AddCommand(migrateCmd())
+
 	return dasha.ExecuteContext(ctx) //nolint:wrapcheck
+}
+
+func migrateCmd() *cobra.Command {
+	return &cobra.Command{ //nolint: exhaustruct
+		Use:   "migrate",
+		Short: "Create snapshot storage tables and partitions",
+		RunE:  migrateExec,
+	}
+}
+
+func migrateExec(cmd *cobra.Command, _ []string) error {
+	container := deps.NewContainer()
+
+	cfg := container.Config()
+	logger := container.Logger()
+
+	if !cfg.Storage.Enabled() {
+		logger.Fatal("storage.dsn is not configured")
+	}
+
+	return storage.Migrate(cmd.Context(), cfg.Storage.DSN, logger)
 }
 
 func dashaExec(cmd *cobra.Command, _ []string) error {
@@ -80,7 +104,16 @@ func dashaExec(cmd *cobra.Command, _ []string) error {
 
 	defer authMW.Stop()
 
-	d := http.NewDashaHandlers(container.Config(), container.Repository())
+	st, err := storage.New(cmd.Context(), container.Config().Storage, serverLogger)
+	if err != nil {
+		serverLogger.Fatal("failed to initialize storage", zap.Error(err))
+	}
+
+	if st != nil {
+		defer st.Close()
+	}
+
+	d := http.NewDashaHandlers(container.Config(), container.Repository(), st)
 	svc := http.New(d, mw, authMW.RequireHTTPS, authMW.RateLimit, authMW.Auth, authMW.Casbin, logger)
 
 	if authMW.OIDCProvider != nil && authMW.SessionManager != nil {

@@ -67,6 +67,12 @@
   "resetQueryStatsSuccess": "pg_stat_statements-Statistiken wurden zurückgesetzt",
   "resetQueryStatsForbidden": "Das Zurücksetzen der Statistiken ist in der Konfiguration deaktiviert",
   "resetQueryStatsError": "Statistiken konnten nicht zurückgesetzt werden",
+  "createSnapshot": "Snapshot erstellen",
+  "snapshotCreated": "Snapshot gespeichert",
+  "snapshotError": "Snapshot konnte nicht erstellt werden",
+  "snapshotNotFound": "Snapshot nicht gefunden",
+  "snapshotLiveData": "Aktuelle Daten",
+  "snapshotSelect": "Datenquelle",
   "cpuTimeWarning": "Es wurden Abfragen mit negativer CPU-Zeit gefunden. Dies kann auf Ungenauigkeiten in der pg_stat_statements-Statistik hinweisen.",
   "header": {
     "lockedItem": "Gesperrtes Objekt",

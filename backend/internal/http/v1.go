@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 
+	openapi_types "github.com/oapi-codegen/runtime/types"
+
 	"github.com/dbulashev/dasha/gen/serverhttp"
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/dto"
@@ -12,15 +14,51 @@ import (
 	"github.com/dbulashev/dasha/internal/pkg/sanitize"
 	"github.com/dbulashev/dasha/internal/pkg/shortcut"
 	"github.com/dbulashev/dasha/internal/repository"
+	"github.com/dbulashev/dasha/internal/storage"
 )
 
 type Handlers struct {
-	cfg  *config.Config
-	repo repository.Repository
+	cfg     *config.Config
+	repo    repository.Repository
+	storage *storage.Storage
 }
 
-func NewDashaHandlers(cfg *config.Config, repo repository.Repository) *Handlers {
-	return &Handlers{cfg: cfg, repo: repo}
+func NewDashaHandlers(cfg *config.Config, repo repository.Repository, st *storage.Storage) *Handlers {
+	return &Handlers{cfg: cfg, repo: repo, storage: st}
+}
+
+func mapQueryReport(t dto.QueryReport) serverhttp.QueryReport {
+	return serverhttp.QueryReport{
+		QueryID:              t.QueryID,
+		Query:                t.Query,
+		Rows:                 t.Rows,
+		RowsPct:              t.RowsPct,
+		Calls:                t.Calls,
+		CallsPct:             t.CallsPct,
+		TotalTimeMs:          t.TotalTimeMs,
+		TotalTimePct:         t.TotalTimePct,
+		ExecTimeMs:           t.ExecTimeMs,
+		MinExecTimeMs:        t.MinExecTimeMs,
+		MaxExecTimeMs:        t.MaxExecTimeMs,
+		MeanExecTimeMs:       t.MeanExecTimeMs,
+		PlanTimeMs:           t.PlanTimeMs,
+		MinPlanTimeMs:        t.MinPlanTimeMs,
+		MaxPlanTimeMs:        t.MaxPlanTimeMs,
+		MeanPlanTimeMs:       t.MeanPlanTimeMs,
+		IoTimeMs:             t.IoTimeMs,
+		IoTimePct:            t.IoTimePct,
+		CpuTimeMs:            t.CpuTimeMs,
+		CpuTimePct:           t.CpuTimePct,
+		CacheHitRatio:        t.CacheHitRatio,
+		SharedBlksDirtiedPct: t.SharedBlksDirtiedPct,
+		SharedBlksWrittenPct: t.SharedBlksWrittenPct,
+		WalBytes:             t.WalBytes,
+		WalBytesPct:          t.WalBytesPct,
+		WalRecords:           t.WalRecords,
+		WalFpi:               t.WalFpi,
+		TempBlks:             t.TempBlks,
+		TempBlksPct:          t.TempBlksPct,
+	}
 }
 
 func paginationDefaults(limitPtr, offsetPtr *int, defaultLimit int) (int, int) {
@@ -1119,37 +1157,8 @@ func (s *Handlers) GetQueriesReport(
 	var ret serverhttp.GetQueriesReport200JSONResponse = mapstruct.SliceMap(
 		queries,
 		func(t dto.QueryReport) serverhttp.QueryReport {
-			return serverhttp.QueryReport{
-				QueryID:              t.QueryID,
-				Query:                sanitize.SQL(t.Query),
-				Rows:                 t.Rows,
-				RowsPct:              t.RowsPct,
-				Calls:                t.Calls,
-				CallsPct:             t.CallsPct,
-				TotalTimeMs:          t.TotalTimeMs,
-				TotalTimePct:         t.TotalTimePct,
-				ExecTimeMs:           t.ExecTimeMs,
-				MinExecTimeMs:        t.MinExecTimeMs,
-				MaxExecTimeMs:        t.MaxExecTimeMs,
-				MeanExecTimeMs:       t.MeanExecTimeMs,
-				PlanTimeMs:           t.PlanTimeMs,
-				MinPlanTimeMs:        t.MinPlanTimeMs,
-				MaxPlanTimeMs:        t.MaxPlanTimeMs,
-				MeanPlanTimeMs:       t.MeanPlanTimeMs,
-				IoTimeMs:             t.IoTimeMs,
-				IoTimePct:            t.IoTimePct,
-				CpuTimeMs:            t.CpuTimeMs,
-				CpuTimePct:           t.CpuTimePct,
-				CacheHitRatio:        t.CacheHitRatio,
-				SharedBlksDirtiedPct: t.SharedBlksDirtiedPct,
-				SharedBlksWrittenPct: t.SharedBlksWrittenPct,
-				WalBytes:             t.WalBytes,
-				WalBytesPct:          t.WalBytesPct,
-				WalRecords:           t.WalRecords,
-				WalFpi:               t.WalFpi,
-				TempBlks:             t.TempBlks,
-				TempBlksPct:          t.TempBlksPct,
-			}
+			t.Query = sanitize.SQL(t.Query)
+			return mapQueryReport(t)
 		})
 
 	return ret, nil
@@ -1195,6 +1204,93 @@ func (s *Handlers) PostQueriesResetStats(
 	}
 
 	return serverhttp.PostQueriesResetStats204Response{}, nil
+}
+
+func (s *Handlers) GetSnapshotsStatus(
+	_ context.Context,
+	_ serverhttp.GetSnapshotsStatusRequestObject,
+) (serverhttp.GetSnapshotsStatusResponseObject, error) {
+	return serverhttp.GetSnapshotsStatus200JSONResponse{
+		Available: s.storage != nil,
+	}, nil
+}
+
+func (s *Handlers) PostSnapshot(
+	ctx context.Context,
+	req serverhttp.PostSnapshotRequestObject,
+) (serverhttp.PostSnapshotResponseObject, error) {
+	if s.storage == nil {
+		return serverhttp.PostSnapshot501Response{}, nil
+	}
+
+	reports, err := s.repo.GetQueriesReport(ctx, req.Params.ClusterName, req.Params.Instance, nil)
+	if errors.Is(err, repository.ErrNotFound) {
+		return serverhttp.PostSnapshot404Response{}, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("PostSnapshot | get report: %w", err)
+	}
+
+	id, createdAt, err := s.storage.CreateSnapshot(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, reports)
+	if err != nil {
+		return nil, fmt.Errorf("PostSnapshot | create: %w", err)
+	}
+
+	return serverhttp.PostSnapshot201JSONResponse{
+		Id:        openapi_types.UUID(id),
+		CreatedAt: createdAt,
+	}, nil
+}
+
+func (s *Handlers) GetSnapshots(
+	ctx context.Context,
+	req serverhttp.GetSnapshotsRequestObject,
+) (serverhttp.GetSnapshotsResponseObject, error) {
+	if s.storage == nil {
+		return serverhttp.GetSnapshots501Response{}, nil
+	}
+
+	items, err := s.storage.ListSnapshots(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
+	if err != nil {
+		return nil, fmt.Errorf("GetSnapshots | %w", err)
+	}
+
+	var ret serverhttp.GetSnapshots200JSONResponse = mapstruct.SliceMap(
+		items,
+		func(item storage.SnapshotListItem) serverhttp.SnapshotListItem {
+			return serverhttp.SnapshotListItem{
+				Id:           openapi_types.UUID(item.ID),
+				CreatedAt:    item.CreatedAt,
+				DashaVersion: item.DashaVersion,
+				JsonVersion:  item.JsonVersion,
+			}
+		})
+
+	return ret, nil
+}
+
+func (s *Handlers) GetSnapshot(
+	ctx context.Context,
+	req serverhttp.GetSnapshotRequestObject,
+) (serverhttp.GetSnapshotResponseObject, error) {
+	if s.storage == nil {
+		return serverhttp.GetSnapshot501Response{}, nil
+	}
+
+	reports, err := s.storage.GetSnapshot(ctx, req.Id)
+	if err != nil {
+		return nil, fmt.Errorf("GetSnapshot | %w", err)
+	}
+
+	if reports == nil {
+		return serverhttp.GetSnapshot404Response{}, nil
+	}
+
+	var ret serverhttp.GetSnapshot200JSONResponse = mapstruct.SliceMap(
+		reports, mapQueryReport)
+
+	return ret, nil
 }
 
 func (s *Handlers) GetProgressAnalyze(

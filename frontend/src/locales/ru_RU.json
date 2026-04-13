@@ -88,6 +88,12 @@
     "resetQueryStatsSuccess": "Статистика pg_stat_statements сброшена",
     "resetQueryStatsForbidden": "Сброс статистики отключён в конфигурации",
     "resetQueryStatsError": "Не удалось сбросить статистику",
+    "createSnapshot": "Сделать снимок",
+    "snapshotCreated": "Снимок сохранён",
+    "snapshotError": "Не удалось создать снимок",
+    "snapshotNotFound": "Снимок не найден",
+    "snapshotLiveData": "Текущие данные",
+    "snapshotSelect": "Источник данных",
     "cpuTimeWarning": "Обнаружены запросы с отрицательным CPU time. Это может указывать на неточности в статистике pg_stat_statements (например, из-за параллельных запросов или расхождений в замерах).",
     "header": {
         "namespace": "Пространство имён",

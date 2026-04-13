@@ -6,4 +6,4 @@ COPY backend/ .
 RUN rm /app/dasha.yaml
 RUN go build -o /usr/local/bin/dasha ./cmd/main.go
 EXPOSE 8000
-CMD ["dasha"]
+CMD ["sh", "-c", "dasha migrate && dasha"]

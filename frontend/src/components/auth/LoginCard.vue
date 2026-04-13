@@ -21,7 +21,7 @@ const appVersion = import.meta.env.VITE_APP_VERSION || 'dev'
         {{ t('Sign in with SSO') }}
       </v-btn>
     </v-card>
-    <div class="text-caption text-medium-emphasis mt-1">{{ appVersion }}</div>
+    <div class="text-caption text-medium-emphasis mt-1"><v-icon size="small" class="mr-1">mdi-tag-text-outline</v-icon>{{ appVersion }}</div>
   </v-container>
 </template>
 

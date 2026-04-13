@@ -10,6 +10,10 @@ import { useExcludeUsersStore } from '@/stores/excludeUsers'
 import ReportCard from '@/components/queries/ReportCard.vue'
 import SqlDialog from '@/components/queries/SqlDialog.vue'
 
+const props = defineProps<{
+  snapshotData?: QueryReport[] | null
+}>()
+
 const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
 const { onError } = useViewError()
@@ -70,18 +74,22 @@ const { items: availableUsers } = useApiLoader<string[]>(
   },
 )
 
-const { items, loading } = useApiLoader<QueryReport[]>(
+const isSnapshot = computed(() => props.snapshotData != null)
+
+const { items: liveItems, loading } = useApiLoader<QueryReport[]>(
   () => getQueriesReport({
     cluster_name: clusterName.value!,
     instance: hostName.value!,
     exclude_users: excludeUsers.value.length ? excludeUsers.value : undefined,
   }),
   {
-    deps: [clusterName, hostName, excludeUsers],
-    guard: () => !!clusterName.value && !!hostName.value,
+    deps: [clusterName, hostName, excludeUsers, isSnapshot],
+    guard: () => !!clusterName.value && !!hostName.value && !isSnapshot.value,
     onError,
   },
 )
+
+const items = computed(() => isSnapshot.value ? (props.snapshotData ?? []) : liveItems.value)
 
 const sortedItems = computed(() => {
   const field = sortFieldMap[reportSortBy.value]
@@ -132,6 +140,7 @@ function showSqlDialog(item: QueryReport) {
         style="max-width: 220px;"
       />
       <v-combobox
+        v-if="!isSnapshot"
         v-model="excludeUsers"
         :items="availableUsers"
         :label="t('report.excludeUsers')"

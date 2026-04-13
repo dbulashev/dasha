@@ -137,12 +137,24 @@ type DiscoveryEntry struct {
 	Config YandexMDBConfig `mapstructure:"config"`
 }
 
+// StorageConfig holds optional snapshot storage database settings.
+type StorageConfig struct {
+	DSN        string `mapstructure:"dsn"`
+	DSNFromEnv string `mapstructure:"dsn_from_env"`
+}
+
+// Enabled returns true if the storage DSN is configured.
+func (s *StorageConfig) Enabled() bool {
+	return s.DSN != ""
+}
+
 // Config is the top-level application configuration.
 type Config struct {
 	Debug     bool                      `mapstructure:"debug"`
 	Clusters  []Cluster                 `mapstructure:"clusters"`
 	Discovery map[string]DiscoveryEntry `mapstructure:"discovery"`
 	Auth      AuthConfig                `mapstructure:"auth"`
+	Storage   StorageConfig             `mapstructure:"storage"`
 
 	// PgStatsView is an optional custom view name to use instead of pg_catalog.pg_stats.
 	// Useful when the connecting user lacks privileges to read pg_catalog.pg_stats

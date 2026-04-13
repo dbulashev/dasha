@@ -21,6 +21,7 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 - Comprehensive query report (rows, calls, planning/execution time, cache hit ratio, WAL, temp buffers, contribution %)
 - Running and blocked queries monitoring
 - `pg_stat_statements` status and reset time tracking
+- **pgss snapshots**: save point-in-time snapshots to a dedicated storage database, view and share via URL
 
 **Index Analysis**
 - Top-K by size, bloat estimation, duplicate detection
@@ -75,6 +76,7 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 - Multi-cluster support with per-cluster host/database selection
 - Yandex Managed Service for PostgreSQL service discovery
 - Primary / replica role display
+- Optional snapshot storage database (daily-partitioned tables, `dasha migrate` CLI)
 - Internationalization (Russian, German)
 
 ## Architecture
@@ -208,6 +210,18 @@ openssl rand -base64 32
 openssl rand -base64 32
 ```
 
+#### Snapshot Storage (optional)
+
+To enable pgss snapshots, configure a dedicated PostgreSQL database:
+
+```yaml
+storage:
+  dsn: "postgres://dasha:secret@localhost:5432/dasha_storage?sslmode=require"
+  # dsn_from_env: DASHA_STORAGE_DSN  # alternative: read from env variable
+```
+
+Run `dasha migrate` to create partitioned tables before first use.
+
 ### Run Locally
 
 ```bash
@@ -234,6 +248,7 @@ The demo includes:
 - **PG17 cluster**: master + 2 replicas (with intentionally "bad" settings for analysis)
 - **PG18 standalone**: logical replication subscriber
 - **Keycloak**: OIDC provider with preconfigured realm, users `admin`/`admin` and `viewer`/`viewer`
+- **Storage DB**: snapshot storage with auto-migration on startup
 - **Workload generator**: continuous background load for realistic data
 
 ## Development
@@ -255,6 +270,7 @@ The demo includes:
 │   │   ├── http/                 # Handlers (v1.go, strictserver.go)
 │   │   ├── query/sql/            # SQL templates with PG version overrides
 │   │   ├── repository/           # Data access (pgx pools)
+│   │   ├── storage/              # Snapshot storage (migrations, CRUD)
 │   │   └── testinfra/            # Test containers setup
 │   └── dasha.yaml                # Example config
 ├── frontend/

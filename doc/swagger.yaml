@@ -1111,6 +1111,74 @@ paths:
           description: Feature disabled in configuration
         '404':
           $ref: '#/components/responses/NotFound'
+  /api/queries/snapshots/status:
+    get:
+      operationId: getSnapshotsStatus
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SnapshotStatus'
+  /api/queries/snapshots:
+    get:
+      operationId: getSnapshots
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SnapshotListItem'
+        '501':
+          description: Storage not configured
+    post:
+      operationId: postSnapshot
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '201':
+          description: Snapshot created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SnapshotCreated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: Storage not configured
+  /api/queries/snapshot/{id}:
+    get:
+      operationId: getSnapshot
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/QueryReport'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: Storage not configured
   /api/progress/analyze:
     get:
       operationId: getProgressAnalyze
@@ -2955,3 +3023,43 @@ components:
           type: integer
           format: int64
           nullable: true
+
+    SnapshotStatus:
+      type: object
+      required:
+        - Available
+      properties:
+        Available:
+          type: boolean
+
+    SnapshotListItem:
+      type: object
+      required:
+        - Id
+        - CreatedAt
+        - DashaVersion
+        - JsonVersion
+      properties:
+        Id:
+          type: string
+          format: uuid
+        CreatedAt:
+          type: string
+          format: date-time
+        DashaVersion:
+          type: string
+        JsonVersion:
+          type: integer
+
+    SnapshotCreated:
+      type: object
+      required:
+        - Id
+        - CreatedAt
+      properties:
+        Id:
+          type: string
+          format: uuid
+        CreatedAt:
+          type: string
+          format: date-time

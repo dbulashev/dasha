@@ -1,6 +1,18 @@
 # Changelog
 
-## v0.1.16
+## v0.1.17
+
+#### New Features
+- **pg_stat_statements snapshots**: save and view pgss snapshots in a dedicated storage database
+  - Optional PostgreSQL storage database (`storage.dsn` in config)
+  - Daily-partitioned tables: `snapshots` (report JSON) and `query_texts` (deduplicated by SHA-256 hash)
+  - `dasha migrate` CLI command creates tables
+  - 4 new API endpoints: `GET /api/queries/snapshots/status`, `GET/POST /api/queries/snapshots`, `GET /api/queries/snapshot/{id}`
+  - Frontend: snapshot create button, snapshot selector (live data / saved snapshot), shareable URLs with `?snapshot=uuid`
+  - Snapshot-aware query report: hides "exclude users" filter, shows snackbar when snapshot from URL is not found
+- **SQL sanitization**: `sanitize.SQL()` masks `password=` and `PASSWORD 'x'` in query text fields
+- **OIDC role mapping**: `role_mapping` in OIDCConfig maps corporate groups to dasha roles (admin/viewer)
+- **pg_stat_statements reset**: `POST /api/queries/reset-stats` (admin-only), controlled by `enable_query_stats_reset` config
 
 #### Bug Fixes
 - **Backend**: 404 responses now return correct HTTP status (was 500 due to oapi-codegen strict handler ignoring response object when error is non-nil)
@@ -13,6 +25,10 @@
 - `useClusterInfo` returns null for unknown cluster/host — blocks API calls with invalid params
 - Login card with SSO button, version display, return URL preservation across OIDC redirect
 - `ApiError` class with HTTP status extracted from response body
+
+#### Demo
+- Added storage database service for snapshots
+- `dasha migrate` runs automatically before app start
 
 ## v0.1.13
 

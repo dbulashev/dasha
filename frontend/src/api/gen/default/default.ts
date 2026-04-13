@@ -15,7 +15,7 @@ import type {
   UseQueryReturnType,
 } from '@tanstack/vue-query'
 
-import { unref } from 'vue'
+import { computed, unref } from 'vue'
 import type { MaybeRef } from 'vue'
 
 import type {
@@ -80,6 +80,7 @@ import type {
   GetReplicationSlotsParams,
   GetReplicationStatusParams,
   GetSettingsAnalyzeParams,
+  GetSnapshotsParams,
   GetStatsResetTimeParams,
   GetTablesCachingParams,
   GetTablesDescribeBloatParams,
@@ -111,6 +112,7 @@ import type {
   NotFoundResponse,
   PgSetting,
   PostQueriesResetStatsParams,
+  PostSnapshotParams,
   ProgressAnalyze,
   ProgressBaseBackup,
   ProgressCluster,
@@ -127,6 +129,9 @@ import type {
   ReplicationSlot,
   ReplicationStatus,
   SettingsNotification,
+  SnapshotCreated,
+  SnapshotListItem,
+  SnapshotStatus,
   StatsResetTime,
   TableCaching,
   TableDescribe,
@@ -5398,6 +5403,382 @@ export const usePostQueriesResetStats = <
 > => {
   return useMutation(getPostQueriesResetStatsMutationOptions(options))
 }
+export type getSnapshotsStatusResponse200 = {
+  data: SnapshotStatus
+  status: 200
+}
+
+export type getSnapshotsStatusResponseSuccess = getSnapshotsStatusResponse200 & {
+  headers: Headers
+}
+export type getSnapshotsStatusResponse = getSnapshotsStatusResponseSuccess
+
+export const getGetSnapshotsStatusUrl = () => {
+  return `/api/queries/snapshots/status`
+}
+
+export const getSnapshotsStatus = async (
+  options?: RequestInit,
+): Promise<getSnapshotsStatusResponse> => {
+  const res = await fetch(getGetSnapshotsStatusUrl(), {
+    ...options,
+    method: 'GET',
+  })
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
+
+  const data: getSnapshotsStatusResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getSnapshotsStatusResponse
+}
+
+export const getGetSnapshotsStatusQueryKey = () => {
+  return ['api', 'queries', 'snapshots', 'status'] as const
+}
+
+export const getGetSnapshotsStatusQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSnapshotsStatus>>,
+  TError = unknown,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getSnapshotsStatus>>, TError, TData>
+  fetch?: RequestInit
+}) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+
+  const queryKey = getGetSnapshotsStatusQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSnapshotsStatus>>> = ({ signal }) =>
+    getSnapshotsStatus({ signal, ...fetchOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSnapshotsStatus>>,
+    TError,
+    TData
+  >
+}
+
+export type GetSnapshotsStatusQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSnapshotsStatus>>
+>
+export type GetSnapshotsStatusQueryError = unknown
+
+export function useGetSnapshotsStatus<
+  TData = Awaited<ReturnType<typeof getSnapshotsStatus>>,
+  TError = unknown,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getSnapshotsStatus>>, TError, TData>
+  fetch?: RequestInit
+}): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSnapshotsStatusQueryOptions(options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+export type getSnapshotsResponse200 = {
+  data: SnapshotListItem[]
+  status: 200
+}
+
+export type getSnapshotsResponse501 = {
+  data: void
+  status: 501
+}
+
+export type getSnapshotsResponseSuccess = getSnapshotsResponse200 & {
+  headers: Headers
+}
+export type getSnapshotsResponseError = getSnapshotsResponse501 & {
+  headers: Headers
+}
+
+export type getSnapshotsResponse = getSnapshotsResponseSuccess | getSnapshotsResponseError
+
+export const getGetSnapshotsUrl = (params: GetSnapshotsParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/queries/snapshots?${stringifiedParams}`
+    : `/api/queries/snapshots`
+}
+
+export const getSnapshots = async (
+  params: GetSnapshotsParams,
+  options?: RequestInit,
+): Promise<getSnapshotsResponse> => {
+  const res = await fetch(getGetSnapshotsUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
+
+  const data: getSnapshotsResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getSnapshotsResponse
+}
+
+export const getGetSnapshotsQueryKey = (params?: MaybeRef<GetSnapshotsParams>) => {
+  return ['api', 'queries', 'snapshots', ...(params ? [params] : [])] as const
+}
+
+export const getGetSnapshotsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSnapshots>>,
+  TError = void,
+>(
+  params: MaybeRef<GetSnapshotsParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getSnapshots>>, TError, TData>
+    fetch?: RequestInit
+  },
+) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+
+  const queryKey = getGetSnapshotsQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSnapshots>>> = ({ signal }) =>
+    getSnapshots(unref(params), { signal, ...fetchOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSnapshots>>,
+    TError,
+    TData
+  >
+}
+
+export type GetSnapshotsQueryResult = NonNullable<Awaited<ReturnType<typeof getSnapshots>>>
+export type GetSnapshotsQueryError = void
+
+export function useGetSnapshots<TData = Awaited<ReturnType<typeof getSnapshots>>, TError = void>(
+  params: MaybeRef<GetSnapshotsParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getSnapshots>>, TError, TData>
+    fetch?: RequestInit
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSnapshotsQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+export type postSnapshotResponse201 = {
+  data: SnapshotCreated
+  status: 201
+}
+
+export type postSnapshotResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type postSnapshotResponse501 = {
+  data: void
+  status: 501
+}
+
+export type postSnapshotResponseSuccess = postSnapshotResponse201 & {
+  headers: Headers
+}
+export type postSnapshotResponseError = (postSnapshotResponse404 | postSnapshotResponse501) & {
+  headers: Headers
+}
+
+export type postSnapshotResponse = postSnapshotResponseSuccess | postSnapshotResponseError
+
+export const getPostSnapshotUrl = (params: PostSnapshotParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/queries/snapshots?${stringifiedParams}`
+    : `/api/queries/snapshots`
+}
+
+export const postSnapshot = async (
+  params: PostSnapshotParams,
+  options?: RequestInit,
+): Promise<postSnapshotResponse> => {
+  const res = await fetch(getPostSnapshotUrl(params), {
+    ...options,
+    method: 'POST',
+  })
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
+
+  const data: postSnapshotResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as postSnapshotResponse
+}
+
+export const getPostSnapshotMutationOptions = <
+  TError = NotFoundResponse | void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postSnapshot>>,
+    TError,
+    { params: PostSnapshotParams },
+    TContext
+  >
+  fetch?: RequestInit
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof postSnapshot>>,
+  TError,
+  { params: PostSnapshotParams },
+  TContext
+> => {
+  const mutationKey = ['postSnapshot']
+  const { mutation: mutationOptions, fetch: fetchOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, fetch: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof postSnapshot>>,
+    { params: PostSnapshotParams }
+  > = (props) => {
+    const { params } = props ?? {}
+
+    return postSnapshot(params, fetchOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type PostSnapshotMutationResult = NonNullable<Awaited<ReturnType<typeof postSnapshot>>>
+
+export type PostSnapshotMutationError = NotFoundResponse | void
+
+export const usePostSnapshot = <TError = NotFoundResponse | void, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof postSnapshot>>,
+    TError,
+    { params: PostSnapshotParams },
+    TContext
+  >
+  fetch?: RequestInit
+}): UseMutationReturnType<
+  Awaited<ReturnType<typeof postSnapshot>>,
+  TError,
+  { params: PostSnapshotParams },
+  TContext
+> => {
+  return useMutation(getPostSnapshotMutationOptions(options))
+}
+export type getSnapshotResponse200 = {
+  data: QueryReport[]
+  status: 200
+}
+
+export type getSnapshotResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getSnapshotResponse501 = {
+  data: void
+  status: 501
+}
+
+export type getSnapshotResponseSuccess = getSnapshotResponse200 & {
+  headers: Headers
+}
+export type getSnapshotResponseError = (getSnapshotResponse404 | getSnapshotResponse501) & {
+  headers: Headers
+}
+
+export type getSnapshotResponse = getSnapshotResponseSuccess | getSnapshotResponseError
+
+export const getGetSnapshotUrl = (id: string) => {
+  return `/api/queries/snapshot/${id}`
+}
+
+export const getSnapshot = async (
+  id: string,
+  options?: RequestInit,
+): Promise<getSnapshotResponse> => {
+  const res = await fetch(getGetSnapshotUrl(id), {
+    ...options,
+    method: 'GET',
+  })
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
+
+  const data: getSnapshotResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getSnapshotResponse
+}
+
+export const getGetSnapshotQueryKey = (id: MaybeRef<string>) => {
+  return ['api', 'queries', 'snapshot', id] as const
+}
+
+export const getGetSnapshotQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSnapshot>>,
+  TError = NotFoundResponse | void,
+>(
+  id: MaybeRef<string>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getSnapshot>>, TError, TData>
+    fetch?: RequestInit
+  },
+) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+
+  const queryKey = getGetSnapshotQueryKey(id)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSnapshot>>> = ({ signal }) =>
+    getSnapshot(unref(id), { signal, ...fetchOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: computed(() => !!unref(id)),
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getSnapshot>>, TError, TData>
+}
+
+export type GetSnapshotQueryResult = NonNullable<Awaited<ReturnType<typeof getSnapshot>>>
+export type GetSnapshotQueryError = NotFoundResponse | void
+
+export function useGetSnapshot<
+  TData = Awaited<ReturnType<typeof getSnapshot>>,
+  TError = NotFoundResponse | void,
+>(
+  id: MaybeRef<string>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getSnapshot>>, TError, TData>
+    fetch?: RequestInit
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSnapshotQueryOptions(id, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
 export type getProgressAnalyzeResponse200 = {
   data: ProgressAnalyze[]
   status: 200

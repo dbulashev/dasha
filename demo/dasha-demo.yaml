@@ -1,6 +1,9 @@
 debug: true
 enable_query_stats_reset: true
 
+storage:
+  dsn: "postgres://dasha:dasha@storage-db:5432/dasha_storage?sslmode=disable"
+
 auth:
   mode: oidc
   cookie_secret: "demo-secret-key-at-least-32-bytes-long-for-aes256-encryption"
