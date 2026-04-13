@@ -513,6 +513,16 @@ ingress:
 
 See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
+## Authors
+* [Dmitry Bulashev](https://dbulashev.github.io/)
+
+## Contributors
+
+* [Mikhail Grigorev](https://github.com/cherts)
+* [Ilya Lukyanov](mailto:lukyanov1985@gmail.com)
+* [Roman Minebaev](https://github.com/minebaev)
+* [Rustem Sagdeev](https://github.com/SagdeevRR)
+
 ## License
 
 [GNU General Public License v3.0](LICENSE)

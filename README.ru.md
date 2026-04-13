@@ -511,6 +511,16 @@ ingress:
 
 См. [CHANGELOG.ru.md](CHANGELOG.ru.md).
 
+## Authors
+* [Dmitry Bulashev](https://dbulashev.github.io/)
+
+## Contributors
+
+* [Mikhail Grigorev](https://github.com/cherts)
+* [Ilya Lukyanov](mailto:lukyanov1985@gmail.com)
+* [Roman Minebaev](https://github.com/minebaev)
+* [Rustem Sagdeev](https://github.com/SagdeevRR)
+
 ## Лицензия
 
 [GNU General Public License v3.0](LICENSE)
