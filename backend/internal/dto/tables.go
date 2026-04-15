@@ -1,5 +1,7 @@
 package dto
 
+import "time"
+
 type TableTopKBySize struct {
 	Table      string
 	NIdx       int64
@@ -105,6 +107,35 @@ type TableDescribeBloat struct {
 	ApproxFreeSpace      int64
 	ApproxFreeSpacePretty string
 	ApproxFreePercent    float64
+}
+
+type VacuumStats struct {
+	LastVacuum        *time.Time
+	LastAutovacuum    *time.Time
+	LastAnalyze       *time.Time
+	LastAutoanalyze   *time.Time
+	DeadTuples        int64
+	LiveTuples        int64
+	ModSinceAnalyze   int64
+	InsSinceVacuum    int64
+	VacuumThreshold   int64
+	AnalyzeThreshold  int64
+	InsertVacThreshold int64
+}
+
+type ToastCandidate struct {
+	ColumnName string  `json:"column_name"`
+	AvgWidth   int     `json:"avg_width"`
+	Storage    string  `json:"storage"`
+}
+
+type RowEstimate struct {
+	BlockSize        int
+	Fillfactor       int
+	ColumnsTotal     int
+	ColumnsWithStats int
+	SumAvgWidth      int
+	ToastCandidates  []ToastCandidate
 }
 
 type TablePartition struct {

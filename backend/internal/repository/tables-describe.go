@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -503,6 +504,106 @@ func (p *PgxPool) getTablesDescribePartitions(
 	}
 
 	return ret, nil
+}
+
+func (p *PgxPool) GetTablesDescribeVacuumStats(
+	ctx context.Context,
+	clusterName, instanceName, databaseName, schemaName, tableName string,
+) (*dto.VacuumStats, error) {
+	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
+	if err != nil {
+		return nil, fmt.Errorf("GetTablesDescribeVacuumStats | %w", err)
+	}
+
+	vNum, err := p.getServerVersionNum(ctx, pool)
+	if err != nil {
+		return nil, fmt.Errorf("get server version | %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	qStr, err := query.Get(vNum, enums.QueryTablesDescribeVacuumStats, nil)
+	if err != nil {
+		return nil, fmt.Errorf("query.Get | %w", err)
+	}
+
+	var ret dto.VacuumStats
+
+	err = pool.QueryRow(ctx, qStr, schemaName, tableName).Scan(
+		&ret.LastVacuum,
+		&ret.LastAutovacuum,
+		&ret.LastAnalyze,
+		&ret.LastAutoanalyze,
+		&ret.DeadTuples,
+		&ret.LiveTuples,
+		&ret.ModSinceAnalyze,
+		&ret.InsSinceVacuum,
+		&ret.VacuumThreshold,
+		&ret.AnalyzeThreshold,
+		&ret.InsertVacThreshold,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil //nolint:nilnil
+		}
+
+		return nil, fmt.Errorf("scan | %w", err)
+	}
+
+	return &ret, nil
+}
+
+func (p *PgxPool) GetTablesDescribeRowEstimate(
+	ctx context.Context,
+	clusterName, instanceName, databaseName, schemaName, tableName string,
+) (*dto.RowEstimate, error) {
+	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
+	if err != nil {
+		return nil, fmt.Errorf("GetTablesDescribeRowEstimate | %w", err)
+	}
+
+	vNum, err := p.getServerVersionNum(ctx, pool)
+	if err != nil {
+		return nil, fmt.Errorf("get server version | %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	pgStatsView := p.resolvePgStatsView(ctx, pool)
+
+	qStr, err := query.Get(vNum, enums.QueryTablesDescribeRowEstimate,
+		struct{ PgStatsView string }{PgStatsView: pgStatsView})
+	if err != nil {
+		return nil, fmt.Errorf("query.Get | %w", err)
+	}
+
+	var ret dto.RowEstimate
+
+	var toastJSON []byte
+
+	err = pool.QueryRow(ctx, qStr, schemaName, tableName).Scan(
+		&ret.BlockSize,
+		&ret.Fillfactor,
+		&ret.ColumnsTotal,
+		&ret.ColumnsWithStats,
+		&ret.SumAvgWidth,
+		&toastJSON,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil //nolint:nilnil
+		}
+
+		return nil, fmt.Errorf("scan | %w", err)
+	}
+
+	if err := json.Unmarshal(toastJSON, &ret.ToastCandidates); err != nil {
+		return nil, fmt.Errorf("unmarshal toast_candidates | %w", err)
+	}
+
+	return &ret, nil
 }
 
 func (p *PgxPool) GetTablesSchemas(

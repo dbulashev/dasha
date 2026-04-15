@@ -143,10 +143,14 @@ const (
 	QueryTablesDescribePartitions Query = "tables/describe_partitions"
 	// QueryTablesDescribeReferencedBy is a Query of type tables/describe_referenced_by.
 	QueryTablesDescribeReferencedBy Query = "tables/describe_referenced_by"
+	// QueryTablesDescribeRowEstimate is a Query of type tables/describe_row_estimate.
+	QueryTablesDescribeRowEstimate Query = "tables/describe_row_estimate"
 	// QueryTablesDescribeSchemas is a Query of type tables/describe_schemas.
 	QueryTablesDescribeSchemas Query = "tables/describe_schemas"
 	// QueryTablesDescribeSearch is a Query of type tables/describe_search.
 	QueryTablesDescribeSearch Query = "tables/describe_search"
+	// QueryTablesDescribeVacuumStats is a Query of type tables/describe_vacuum_stats.
+	QueryTablesDescribeVacuumStats Query = "tables/describe_vacuum_stats"
 	// QueryTablesHitRate is a Query of type tables/hit_rate.
 	QueryTablesHitRate Query = "tables/hit_rate"
 	// QueryTablesPartitions is a Query of type tables/partitions.
@@ -226,8 +230,10 @@ var _QueryNames = []string{
 	string(QueryTablesDescribeMetadata),
 	string(QueryTablesDescribePartitions),
 	string(QueryTablesDescribeReferencedBy),
+	string(QueryTablesDescribeRowEstimate),
 	string(QueryTablesDescribeSchemas),
 	string(QueryTablesDescribeSearch),
+	string(QueryTablesDescribeVacuumStats),
 	string(QueryTablesHitRate),
 	string(QueryTablesPartitions),
 	string(QueryTablesPgstattupleAvailable),
@@ -310,8 +316,10 @@ func QueryValues() []Query {
 		QueryTablesDescribeMetadata,
 		QueryTablesDescribePartitions,
 		QueryTablesDescribeReferencedBy,
+		QueryTablesDescribeRowEstimate,
 		QueryTablesDescribeSchemas,
 		QueryTablesDescribeSearch,
+		QueryTablesDescribeVacuumStats,
 		QueryTablesHitRate,
 		QueryTablesPartitions,
 		QueryTablesPgstattupleAvailable,
@@ -398,8 +406,10 @@ var _QueryValue = map[string]Query{
 	"tables/describe_metadata":              QueryTablesDescribeMetadata,
 	"tables/describe_partitions":            QueryTablesDescribePartitions,
 	"tables/describe_referenced_by":         QueryTablesDescribeReferencedBy,
+	"tables/describe_row_estimate":          QueryTablesDescribeRowEstimate,
 	"tables/describe_schemas":               QueryTablesDescribeSchemas,
 	"tables/describe_search":                QueryTablesDescribeSearch,
+	"tables/describe_vacuum_stats":          QueryTablesDescribeVacuumStats,
 	"tables/hit_rate":                       QueryTablesHitRate,
 	"tables/partitions":                     QueryTablesPartitions,
 	"tables/pgstattuple_available":          QueryTablesPgstattupleAvailable,

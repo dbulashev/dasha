@@ -659,6 +659,60 @@ paths:
               schema:
                 $ref: '#/components/schemas/TableDescribeBloat'
 
+  /api/tables/describe-vacuum-stats:
+    get:
+      operationId: getTablesDescribeVacuumStats
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+        - in: query
+          name: schema
+          schema:
+            type: string
+          required: true
+        - in: query
+          name: table
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VacuumStats'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/tables/describe-row-estimate:
+    get:
+      operationId: getTablesDescribeRowEstimate
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+        - in: query
+          name: schema
+          schema:
+            type: string
+          required: true
+        - in: query
+          name: table
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RowEstimate'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /api/tables/pgstattuple-available:
     get:
       operationId: getPgstattupleAvailable
@@ -3063,3 +3117,121 @@ components:
         CreatedAt:
           type: string
           format: date-time
+
+    VacuumStats:
+      type: object
+      required:
+        - DeadTuples
+        - LiveTuples
+        - ModSinceAnalyze
+        - InsSinceVacuum
+        - VacuumThreshold
+        - AnalyzeThreshold
+        - InsertVacThreshold
+      properties:
+        LastVacuum:
+          type: string
+          format: date-time
+          nullable: true
+        LastAutovacuum:
+          type: string
+          format: date-time
+          nullable: true
+        LastAnalyze:
+          type: string
+          format: date-time
+          nullable: true
+        LastAutoanalyze:
+          type: string
+          format: date-time
+          nullable: true
+        DeadTuples:
+          type: integer
+          format: int64
+        LiveTuples:
+          type: integer
+          format: int64
+        ModSinceAnalyze:
+          type: integer
+          format: int64
+        InsSinceVacuum:
+          type: integer
+          format: int64
+        VacuumThreshold:
+          type: integer
+          format: int64
+        AnalyzeThreshold:
+          type: integer
+          format: int64
+        InsertVacThreshold:
+          type: integer
+          format: int64
+
+    ToastCandidate:
+      type: object
+      required:
+        - ColumnName
+        - AvgWidth
+        - Storage
+      properties:
+        ColumnName:
+          type: string
+        AvgWidth:
+          type: integer
+        Storage:
+          type: string
+
+    RowEstimate:
+      type: object
+      required:
+        - BlockSize
+        - Fillfactor
+        - ColumnsTotal
+        - ColumnsWithStats
+        - SumAvgWidth
+        - TupleHeaderSize
+        - NullBitmapSize
+        - EstimatedRowSize
+        - ToastThreshold
+        - WillToast
+        - PageUsable
+        - AvailableSpace
+        - RowsPerPage
+        - ReservedSpace
+        - RowsFitInReserved
+        - ToastCandidates
+      properties:
+        BlockSize:
+          type: integer
+        Fillfactor:
+          type: integer
+        ColumnsTotal:
+          type: integer
+        ColumnsWithStats:
+          type: integer
+        SumAvgWidth:
+          type: integer
+        TupleHeaderSize:
+          type: integer
+        NullBitmapSize:
+          type: integer
+        EstimatedRowSize:
+          type: integer
+        ToastThreshold:
+          type: integer
+        WillToast:
+          type: boolean
+        PageUsable:
+          type: integer
+        AvailableSpace:
+          type: integer
+        RowsPerPage:
+          type: integer
+        ReservedSpace:
+          type: integer
+        RowsFitInReserved:
+          type: integer
+        ToastCandidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToastCandidate'

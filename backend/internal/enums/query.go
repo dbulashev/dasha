@@ -71,8 +71,10 @@ package enums
 //	tables/describe_metadata
 //	tables/describe_partitions
 //	tables/describe_referenced_by
+//	tables/describe_row_estimate
 //	tables/describe_schemas
 //	tables/describe_search
+//	tables/describe_vacuum_stats
 //	tables/hit_rate
 //	tables/partitions
 //	tables/pgstattuple_available

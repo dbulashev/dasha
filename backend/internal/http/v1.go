@@ -1596,6 +1596,120 @@ func (s *Handlers) GetTablesDescribeBloat(
 	}, nil
 }
 
+const (
+	tupleHeaderSize = 23
+	itemPointerSize = 4
+	pageHeaderSize  = 24
+)
+
+func (s *Handlers) GetTablesDescribeVacuumStats(
+	ctx context.Context,
+	req serverhttp.GetTablesDescribeVacuumStatsRequestObject,
+) (serverhttp.GetTablesDescribeVacuumStatsResponseObject, error) {
+	stats, err := s.repo.GetTablesDescribeVacuumStats(
+		ctx,
+		req.Params.ClusterName,
+		req.Params.Instance,
+		req.Params.Database,
+		req.Params.Schema,
+		req.Params.Table,
+	)
+	if errors.Is(err, repository.ErrNotFound) {
+		return serverhttp.GetTablesDescribeVacuumStats404Response{}, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("GetTablesDescribeVacuumStats | %w", err)
+	}
+
+	if stats == nil {
+		return serverhttp.GetTablesDescribeVacuumStats404Response{}, nil
+	}
+
+	return serverhttp.GetTablesDescribeVacuumStats200JSONResponse{
+		LastVacuum:         stats.LastVacuum,
+		LastAutovacuum:     stats.LastAutovacuum,
+		LastAnalyze:        stats.LastAnalyze,
+		LastAutoanalyze:    stats.LastAutoanalyze,
+		DeadTuples:         stats.DeadTuples,
+		LiveTuples:         stats.LiveTuples,
+		ModSinceAnalyze:    stats.ModSinceAnalyze,
+		InsSinceVacuum:     stats.InsSinceVacuum,
+		VacuumThreshold:    stats.VacuumThreshold,
+		AnalyzeThreshold:   stats.AnalyzeThreshold,
+		InsertVacThreshold: stats.InsertVacThreshold,
+	}, nil
+}
+
+func (s *Handlers) GetTablesDescribeRowEstimate(
+	ctx context.Context,
+	req serverhttp.GetTablesDescribeRowEstimateRequestObject,
+) (serverhttp.GetTablesDescribeRowEstimateResponseObject, error) {
+	est, err := s.repo.GetTablesDescribeRowEstimate(
+		ctx,
+		req.Params.ClusterName,
+		req.Params.Instance,
+		req.Params.Database,
+		req.Params.Schema,
+		req.Params.Table,
+	)
+	if errors.Is(err, repository.ErrNotFound) {
+		return serverhttp.GetTablesDescribeRowEstimate404Response{}, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("GetTablesDescribeRowEstimate | %w", err)
+	}
+
+	if est == nil {
+		return serverhttp.GetTablesDescribeRowEstimate404Response{}, nil
+	}
+
+	nullBitmapSize := (est.ColumnsTotal + 7) / 8
+	estimatedRowSize := tupleHeaderSize + nullBitmapSize + est.SumAvgWidth
+	toastThreshold := est.BlockSize / 4
+	willToast := estimatedRowSize > toastThreshold
+	pageUsable := est.BlockSize - pageHeaderSize
+	availableSpace := pageUsable * est.Fillfactor / 100
+	rowsPerPage := 0
+	if estimatedRowSize+itemPointerSize > 0 {
+		rowsPerPage = availableSpace / (estimatedRowSize + itemPointerSize)
+	}
+	reservedSpace := pageUsable * (100 - est.Fillfactor) / 100
+	rowsFitInReserved := 0
+	if estimatedRowSize+itemPointerSize > 0 {
+		rowsFitInReserved = reservedSpace / (estimatedRowSize + itemPointerSize)
+	}
+
+	candidates := make([]serverhttp.ToastCandidate, 0, len(est.ToastCandidates))
+	for _, tc := range est.ToastCandidates {
+		candidates = append(candidates, serverhttp.ToastCandidate{
+			ColumnName: tc.ColumnName,
+			AvgWidth:   tc.AvgWidth,
+			Storage:    tc.Storage,
+		})
+	}
+
+	return serverhttp.GetTablesDescribeRowEstimate200JSONResponse{
+		BlockSize:        est.BlockSize,
+		Fillfactor:       est.Fillfactor,
+		ColumnsTotal:     est.ColumnsTotal,
+		ColumnsWithStats: est.ColumnsWithStats,
+		SumAvgWidth:      est.SumAvgWidth,
+		TupleHeaderSize:  tupleHeaderSize,
+		NullBitmapSize:   nullBitmapSize,
+		EstimatedRowSize: estimatedRowSize,
+		ToastThreshold:   toastThreshold,
+		WillToast:        willToast,
+		PageUsable:       pageUsable,
+		AvailableSpace:   availableSpace,
+		RowsPerPage:      rowsPerPage,
+		ReservedSpace:    reservedSpace,
+		RowsFitInReserved: rowsFitInReserved,
+		ToastCandidates:  candidates,
+	}, nil
+}
+
 const defaultDescribePartitionsLimit = 20
 
 func (s *Handlers) GetTablesDescribePartitions(

@@ -112,6 +112,8 @@ type Repository interface {
 	GetTablesDescribe(ctx context.Context, clusterName, instanceName, databaseName, schemaName, tableName string) (*dto.TableDescribe, error)
 	GetTablesDescribeBloat(ctx context.Context, clusterName, instanceName, databaseName, schemaName, tableName string) (*dto.TableDescribeBloat, error)
 	GetTablesDescribePartitions(ctx context.Context, clusterName, instanceName, databaseName, schemaName, tableName string, limit, offset int) ([]dto.TableDescribePartition, error)
+	GetTablesDescribeVacuumStats(ctx context.Context, clusterName, instanceName, databaseName, schemaName, tableName string) (*dto.VacuumStats, error)
+	GetTablesDescribeRowEstimate(ctx context.Context, clusterName, instanceName, databaseName, schemaName, tableName string) (*dto.RowEstimate, error)
 	GetPgstattupleAvailable(ctx context.Context, clusterName, instanceName, databaseName string) (bool, error)
 	GetReplicationStatus(ctx context.Context, clusterName, instanceName string) ([]dto.ReplicationStatus, error)
 	GetReplicationSlots(ctx context.Context, clusterName, instanceName string) ([]dto.ReplicationSlot, error)

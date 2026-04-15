@@ -132,6 +132,83 @@ CREATE TABLE deadrows_test (
 INSERT INTO deadrows_test (data) SELECT 'row_' || i FROM generate_series(1, 500) i;
 DELETE FROM deadrows_test WHERE id <= 200;
 
+-- =============================================
+-- Wide table for row estimate / TOAST demo
+-- =============================================
+CREATE TABLE customer_profiles (
+    id serial PRIMARY KEY,
+    first_name varchar(100) NOT NULL,
+    last_name varchar(100) NOT NULL,
+    email varchar(255) NOT NULL,
+    phone varchar(20),
+    bio text,                        -- TOAST candidate (extended)
+    preferences jsonb DEFAULT '{}',  -- TOAST candidate (extended)
+    avatar_data bytea,               -- TOAST candidate (extended)
+    notes text,                      -- TOAST candidate (extended)
+    address_line1 varchar(200),
+    address_line2 varchar(200),
+    city varchar(100),
+    country varchar(100),
+    postal_code varchar(20),
+    metadata jsonb DEFAULT '{}',
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now()
+) WITH (fillfactor = 70);
+
+INSERT INTO customer_profiles (
+    first_name, last_name, email, phone,
+    bio, preferences, avatar_data, notes,
+    address_line1, city, country, postal_code, metadata
+)
+SELECT
+    'First_' || i,
+    'Last_' || i,
+    'user' || i || '@example.com',
+    '+1-555-' || lpad((i % 10000)::text, 4, '0'),
+    repeat('Lorem ipsum dolor sit amet. ', 20 + (i % 80)),  -- 600-2800 bytes
+    jsonb_build_object(
+        'theme', (ARRAY['light','dark','auto'])[1 + i % 3],
+        'lang', (ARRAY['en','ru','de'])[1 + i % 3],
+        'notifications', jsonb_build_object('email', i % 2 = 0, 'push', i % 3 = 0),
+        'tags', jsonb_build_array('tag_' || (i % 10), 'tag_' || (i % 20))
+    ),
+    decode(repeat(lpad(to_hex(i % 256), 2, '0'), 500 + (i % 1500)), 'hex'),  -- 500-2000 bytes
+    CASE WHEN i % 3 = 0 THEN repeat('Note entry. ', 10 + (i % 50)) ELSE NULL END,
+    i || ' Main Street',
+    (ARRAY['Moscow','Berlin','London','Tokyo','New York'])[1 + i % 5],
+    (ARRAY['RU','DE','GB','JP','US'])[1 + i % 5],
+    lpad((10000 + i % 90000)::text, 5, '0'),
+    CASE WHEN i % 5 = 0 THEN '{"vip": true}'::jsonb ELSE '{}'::jsonb END
+FROM generate_series(1, 5000) i;
+
+-- Table with low fillfactor for HOT update demo
+CREATE TABLE hot_update_demo (
+    id serial PRIMARY KEY,
+    counter integer NOT NULL DEFAULT 0,
+    status varchar(20) NOT NULL DEFAULT 'active',
+    last_ping timestamptz DEFAULT now()
+) WITH (fillfactor = 50);
+
+INSERT INTO hot_update_demo (counter, status)
+SELECT i % 1000, (ARRAY['active','idle','busy'])[1 + i % 3]
+FROM generate_series(1, 10000) i;
+
+-- Materialized view for row estimate on matview
+CREATE MATERIALIZED VIEW mv_order_summary AS
+SELECT
+    u.id AS user_id,
+    u.name AS user_name,
+    count(o.id) AS order_count,
+    coalesce(sum(o.amount), 0) AS total_amount,
+    coalesce(avg(o.amount), 0) AS avg_amount,
+    min(o.created_at) AS first_order,
+    max(o.created_at) AS last_order
+FROM users u
+LEFT JOIN orders o ON o.user_id = u.id
+GROUP BY u.id, u.name;
+
+CREATE UNIQUE INDEX idx_mv_order_summary_user ON mv_order_summary (user_id);
+
 -- Invalid FK constraint (NOT VALID — detected by constraints/invalid_constraints)
 ALTER TABLE deadrows_test ADD COLUMN ref_user_id integer;
 ALTER TABLE deadrows_test ADD CONSTRAINT fk_deadrows_user
@@ -159,5 +236,9 @@ SELECT * FROM orders WHERE amount < 100 LIMIT 1;
 SELECT count(*) FROM users;
 SELECT count(*) FROM events;
 SELECT * FROM products p JOIN categories c ON c.id = p.category_id LIMIT 1;
+SELECT count(*) FROM customer_profiles WHERE bio IS NOT NULL;
+SELECT * FROM customer_profiles ORDER BY random() LIMIT 5;
+SELECT count(*) FROM hot_update_demo;
+SELECT * FROM mv_order_summary LIMIT 5;
 
 ANALYZE;

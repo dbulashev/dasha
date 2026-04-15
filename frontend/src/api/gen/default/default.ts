@@ -86,6 +86,8 @@ import type {
   GetTablesDescribeBloatParams,
   GetTablesDescribeParams,
   GetTablesDescribePartitionsParams,
+  GetTablesDescribeRowEstimateParams,
+  GetTablesDescribeVacuumStatsParams,
   GetTablesHitRateParams,
   GetTablesPartitionsParams,
   GetTablesSchemasParams,
@@ -128,6 +130,7 @@ import type {
   ReplicationConfig,
   ReplicationSlot,
   ReplicationStatus,
+  RowEstimate,
   SettingsNotification,
   SnapshotCreated,
   SnapshotListItem,
@@ -140,6 +143,7 @@ import type {
   TableHitRate,
   TablePartition,
   TableTopKBySize,
+  VacuumStats,
   WaitEvent,
 } from '../../models'
 
@@ -3281,6 +3285,222 @@ export function useGetTablesDescribeBloat<
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetTablesDescribeBloatQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+export type getTablesDescribeVacuumStatsResponse200 = {
+  data: VacuumStats
+  status: 200
+}
+
+export type getTablesDescribeVacuumStatsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getTablesDescribeVacuumStatsResponseSuccess =
+  getTablesDescribeVacuumStatsResponse200 & {
+    headers: Headers
+  }
+export type getTablesDescribeVacuumStatsResponseError = getTablesDescribeVacuumStatsResponse404 & {
+  headers: Headers
+}
+
+export type getTablesDescribeVacuumStatsResponse =
+  | getTablesDescribeVacuumStatsResponseSuccess
+  | getTablesDescribeVacuumStatsResponseError
+
+export const getGetTablesDescribeVacuumStatsUrl = (params: GetTablesDescribeVacuumStatsParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/tables/describe-vacuum-stats?${stringifiedParams}`
+    : `/api/tables/describe-vacuum-stats`
+}
+
+export const getTablesDescribeVacuumStats = async (
+  params: GetTablesDescribeVacuumStatsParams,
+  options?: RequestInit,
+): Promise<getTablesDescribeVacuumStatsResponse> => {
+  const res = await fetch(getGetTablesDescribeVacuumStatsUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
+
+  const data: getTablesDescribeVacuumStatsResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getTablesDescribeVacuumStatsResponse
+}
+
+export const getGetTablesDescribeVacuumStatsQueryKey = (
+  params?: MaybeRef<GetTablesDescribeVacuumStatsParams>,
+) => {
+  return ['api', 'tables', 'describe-vacuum-stats', ...(params ? [params] : [])] as const
+}
+
+export const getGetTablesDescribeVacuumStatsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTablesDescribeVacuumStats>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetTablesDescribeVacuumStatsParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesDescribeVacuumStats>>, TError, TData>
+    fetch?: RequestInit
+  },
+) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+
+  const queryKey = getGetTablesDescribeVacuumStatsQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getTablesDescribeVacuumStats>>> = ({
+    signal,
+  }) => getTablesDescribeVacuumStats(unref(params), { signal, ...fetchOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTablesDescribeVacuumStats>>,
+    TError,
+    TData
+  >
+}
+
+export type GetTablesDescribeVacuumStatsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTablesDescribeVacuumStats>>
+>
+export type GetTablesDescribeVacuumStatsQueryError = NotFoundResponse
+
+export function useGetTablesDescribeVacuumStats<
+  TData = Awaited<ReturnType<typeof getTablesDescribeVacuumStats>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetTablesDescribeVacuumStatsParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesDescribeVacuumStats>>, TError, TData>
+    fetch?: RequestInit
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetTablesDescribeVacuumStatsQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+export type getTablesDescribeRowEstimateResponse200 = {
+  data: RowEstimate
+  status: 200
+}
+
+export type getTablesDescribeRowEstimateResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getTablesDescribeRowEstimateResponseSuccess =
+  getTablesDescribeRowEstimateResponse200 & {
+    headers: Headers
+  }
+export type getTablesDescribeRowEstimateResponseError = getTablesDescribeRowEstimateResponse404 & {
+  headers: Headers
+}
+
+export type getTablesDescribeRowEstimateResponse =
+  | getTablesDescribeRowEstimateResponseSuccess
+  | getTablesDescribeRowEstimateResponseError
+
+export const getGetTablesDescribeRowEstimateUrl = (params: GetTablesDescribeRowEstimateParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/tables/describe-row-estimate?${stringifiedParams}`
+    : `/api/tables/describe-row-estimate`
+}
+
+export const getTablesDescribeRowEstimate = async (
+  params: GetTablesDescribeRowEstimateParams,
+  options?: RequestInit,
+): Promise<getTablesDescribeRowEstimateResponse> => {
+  const res = await fetch(getGetTablesDescribeRowEstimateUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
+
+  const data: getTablesDescribeRowEstimateResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getTablesDescribeRowEstimateResponse
+}
+
+export const getGetTablesDescribeRowEstimateQueryKey = (
+  params?: MaybeRef<GetTablesDescribeRowEstimateParams>,
+) => {
+  return ['api', 'tables', 'describe-row-estimate', ...(params ? [params] : [])] as const
+}
+
+export const getGetTablesDescribeRowEstimateQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTablesDescribeRowEstimate>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetTablesDescribeRowEstimateParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesDescribeRowEstimate>>, TError, TData>
+    fetch?: RequestInit
+  },
+) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+
+  const queryKey = getGetTablesDescribeRowEstimateQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getTablesDescribeRowEstimate>>> = ({
+    signal,
+  }) => getTablesDescribeRowEstimate(unref(params), { signal, ...fetchOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTablesDescribeRowEstimate>>,
+    TError,
+    TData
+  >
+}
+
+export type GetTablesDescribeRowEstimateQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTablesDescribeRowEstimate>>
+>
+export type GetTablesDescribeRowEstimateQueryError = NotFoundResponse
+
+export function useGetTablesDescribeRowEstimate<
+  TData = Awaited<ReturnType<typeof getTablesDescribeRowEstimate>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetTablesDescribeRowEstimateParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesDescribeRowEstimate>>, TError, TData>
+    fetch?: RequestInit
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetTablesDescribeRowEstimateQueryOptions(params, options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
 

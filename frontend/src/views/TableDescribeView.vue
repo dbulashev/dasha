@@ -16,6 +16,8 @@ import DescribeConstraintsSection from '@/components/tables/DescribeConstraintsS
 import DescribeReferencedBySection from '@/components/tables/DescribeReferencedBySection.vue'
 import DescribePartitionsSection from '@/components/tables/DescribePartitionsSection.vue'
 import DescribeBloatSection from '@/components/tables/DescribeBloatSection.vue'
+import DescribeVacuumStatsSection from '@/components/tables/DescribeVacuumStatsSection.vue'
+import DescribeRowEstimateSection from '@/components/tables/DescribeRowEstimateSection.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -71,5 +73,7 @@ const isPartitioned = computed(() => data.value?.TableType === 'partitioned_tabl
     <DescribeReferencedBySection :items="data.ReferencedBy" />
     <DescribePartitionsSection v-if="isPartitioned" :schema="schema" :table="table" />
     <DescribeBloatSection v-if="data.TableType === 'table'" :schema="schema" :table="table" />
+    <DescribeVacuumStatsSection v-if="data.TableType === 'table' || data.TableType === 'materialized_view'" :schema="schema" :table="table" />
+    <DescribeRowEstimateSection v-if="data.TableType === 'table' || data.TableType === 'materialized_view'" :schema="schema" :table="table" />
   </template>
 </template>

@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.1.17
+## v0.1.18
 
 #### New Features
 - **pg_stat_statements snapshots**: save and view pgss snapshots in a dedicated storage database
