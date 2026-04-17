@@ -20,10 +20,11 @@ const currentJSONVersion = 1
 
 // SnapshotListItem is a summary row returned by List.
 type SnapshotListItem struct {
-	ID           uuid.UUID
-	CreatedAt    time.Time
-	DashaVersion string
-	JsonVersion  int
+	ID              uuid.UUID
+	CreatedAt       time.Time
+	DashaVersion    string
+	JsonVersion     int
+	PgssStatsReset *time.Time
 }
 
 // CreateSnapshot stores a pgss snapshot and returns its id and timestamp.
@@ -31,6 +32,7 @@ func (s *Storage) CreateSnapshot(
 	ctx context.Context,
 	clusterName, instance, database string,
 	reports []dto.QueryReport,
+	pgssStatsReset *time.Time,
 ) (uuid.UUID, time.Time, error) {
 	now := time.Now().UTC()
 
@@ -88,10 +90,10 @@ func (s *Storage) CreateSnapshot(
 	var id uuid.UUID
 
 	err = tx.QueryRow(ctx, `
-		INSERT INTO snapshots (cluster_name, instance, database, dasha_version, json_version, report_data, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO snapshots (cluster_name, instance, database, dasha_version, json_version, report_data, created_at, pgss_stats_reset)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING id`,
-		clusterName, instance, database, version.GetBuildNumber(), currentJSONVersion, data, now,
+		clusterName, instance, database, version.GetBuildNumber(), currentJSONVersion, data, now, pgssStatsReset,
 	).Scan(&id)
 	if err != nil {
 		return uuid.Nil, time.Time{}, fmt.Errorf("storage: insert snapshot: %w", err)
@@ -110,7 +112,7 @@ func (s *Storage) ListSnapshots(
 	clusterName, instance, database string,
 ) ([]SnapshotListItem, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, created_at, dasha_version, json_version
+		SELECT id, created_at, dasha_version, json_version, pgss_stats_reset
 		FROM snapshots
 		WHERE cluster_name = $1 AND instance = $2 AND database = $3
 		ORDER BY created_at DESC
@@ -126,7 +128,7 @@ func (s *Storage) ListSnapshots(
 
 	for rows.Next() {
 		var item SnapshotListItem
-		if err := rows.Scan(&item.ID, &item.CreatedAt, &item.DashaVersion, &item.JsonVersion); err != nil {
+		if err := rows.Scan(&item.ID, &item.CreatedAt, &item.DashaVersion, &item.JsonVersion, &item.PgssStatsReset); err != nil {
 			return nil, fmt.Errorf("storage: scan snapshot: %w", err)
 		}
 

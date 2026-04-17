@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
+	"github.com/google/uuid"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	"github.com/dbulashev/dasha/gen/serverhttp"
@@ -31,6 +33,38 @@ func mapQueryReport(t dto.QueryReport) serverhttp.QueryReport {
 	return serverhttp.QueryReport{
 		QueryID:              t.QueryID,
 		Query:                t.Query,
+		Rows:                 t.Rows,
+		RowsPct:              t.RowsPct,
+		Calls:                t.Calls,
+		CallsPct:             t.CallsPct,
+		TotalTimeMs:          t.TotalTimeMs,
+		TotalTimePct:         t.TotalTimePct,
+		ExecTimeMs:           t.ExecTimeMs,
+		MinExecTimeMs:        t.MinExecTimeMs,
+		MaxExecTimeMs:        t.MaxExecTimeMs,
+		MeanExecTimeMs:       t.MeanExecTimeMs,
+		PlanTimeMs:           t.PlanTimeMs,
+		MinPlanTimeMs:        t.MinPlanTimeMs,
+		MaxPlanTimeMs:        t.MaxPlanTimeMs,
+		MeanPlanTimeMs:       t.MeanPlanTimeMs,
+		IoTimeMs:             t.IoTimeMs,
+		IoTimePct:            t.IoTimePct,
+		CpuTimeMs:            t.CpuTimeMs,
+		CpuTimePct:           t.CpuTimePct,
+		CacheHitRatio:        t.CacheHitRatio,
+		SharedBlksDirtiedPct: t.SharedBlksDirtiedPct,
+		SharedBlksWrittenPct: t.SharedBlksWrittenPct,
+		WalBytes:             t.WalBytes,
+		WalBytesPct:          t.WalBytesPct,
+		WalRecords:           t.WalRecords,
+		WalFpi:               t.WalFpi,
+		TempBlks:             t.TempBlks,
+		TempBlksPct:          t.TempBlksPct,
+	}
+}
+
+func mapQueryReportMetrics(t dto.QueryReport) serverhttp.QueryReportMetrics {
+	return serverhttp.QueryReportMetrics{
 		Rows:                 t.Rows,
 		RowsPct:              t.RowsPct,
 		Calls:                t.Calls,
@@ -1164,6 +1198,99 @@ func (s *Handlers) GetQueriesReport(
 	return ret, nil
 }
 
+func (s *Handlers) GetQueriesCompare(
+	ctx context.Context,
+	req serverhttp.GetQueriesCompareRequestObject,
+) (serverhttp.GetQueriesCompareResponseObject, error) {
+	if s.storage == nil {
+		return serverhttp.GetQueriesCompare501Response{}, nil
+	}
+
+	// Load source A (always a snapshot).
+	reportsA, err := s.storage.GetSnapshot(ctx, uuid.UUID(req.Params.SnapshotA))
+	if err != nil {
+		return nil, fmt.Errorf("GetQueriesCompare | snapshot A: %w", err)
+	}
+
+	if reportsA == nil {
+		return serverhttp.GetQueriesCompare404Response{}, nil
+	}
+
+	var reportsB []dto.QueryReport
+
+	if req.Params.SnapshotB != nil {
+		reportsB, err = s.storage.GetSnapshot(ctx, uuid.UUID(*req.Params.SnapshotB))
+		if err != nil {
+			return nil, fmt.Errorf("GetQueriesCompare | snapshot B: %w", err)
+		}
+
+		if reportsB == nil {
+			return serverhttp.GetQueriesCompare404Response{}, nil
+		}
+	} else {
+		var excludeUsers []string
+		if req.Params.ExcludeUsers != nil {
+			excludeUsers = *req.Params.ExcludeUsers
+		}
+
+		reportsB, err = s.repo.GetQueriesReport(ctx, req.Params.ClusterName, req.Params.Instance, excludeUsers)
+		if errors.Is(err, repository.ErrNotFound) {
+			return serverhttp.GetQueriesCompare404Response{}, nil
+		}
+
+		if err != nil {
+			return nil, fmt.Errorf("GetQueriesCompare | live report: %w", err)
+		}
+	}
+
+	joined := mapstruct.SliceFullJoin(
+		reportsA, reportsB,
+		func(r dto.QueryReport) int64 { return r.QueryID },
+		func(r dto.QueryReport) int64 { return r.QueryID },
+	)
+
+	items := make([]serverhttp.QueryCompareItem, 0, len(joined))
+
+	for _, pair := range joined {
+		var queryID int64
+
+		var query string
+
+		var left, right *serverhttp.QueryReportMetrics
+
+		if pair.Left != nil {
+			pair.Left.Query = sanitize.SQL(pair.Left.Query)
+			queryID = pair.Left.QueryID
+			query = pair.Left.Query
+			m := mapQueryReportMetrics(*pair.Left)
+			left = &m
+		}
+
+		if pair.Right != nil {
+			pair.Right.Query = sanitize.SQL(pair.Right.Query)
+			if queryID == 0 {
+				queryID = pair.Right.QueryID
+			}
+
+			if query == "" {
+				query = pair.Right.Query
+			}
+
+			m := mapQueryReportMetrics(*pair.Right)
+			right = &m
+		}
+
+		items = append(items, serverhttp.QueryCompareItem{
+			QueryID: queryID,
+			Query:   query,
+			Left:    left,
+			Right:   right,
+		})
+	}
+
+	return serverhttp.GetQueriesCompare200JSONResponse(items), nil
+}
+
 func (s *Handlers) GetQueryStatsStatus(
 	ctx context.Context,
 	req serverhttp.GetQueryStatsStatusRequestObject,
@@ -1232,7 +1359,14 @@ func (s *Handlers) PostSnapshot(
 		return nil, fmt.Errorf("PostSnapshot | get report: %w", err)
 	}
 
-	id, createdAt, err := s.storage.CreateSnapshot(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, reports)
+	var pgssStatsReset *time.Time
+
+	resetTime, err := s.repo.GetPgssStatsResetTime(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
+	if err == nil && resetTime != nil {
+		pgssStatsReset = &resetTime.Time
+	}
+
+	id, createdAt, err := s.storage.CreateSnapshot(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, reports, pgssStatsReset)
 	if err != nil {
 		return nil, fmt.Errorf("PostSnapshot | create: %w", err)
 	}
@@ -1260,10 +1394,11 @@ func (s *Handlers) GetSnapshots(
 		items,
 		func(item storage.SnapshotListItem) serverhttp.SnapshotListItem {
 			return serverhttp.SnapshotListItem{
-				Id:           openapi_types.UUID(item.ID),
-				CreatedAt:    item.CreatedAt,
-				DashaVersion: item.DashaVersion,
-				JsonVersion:  item.JsonVersion,
+				Id:             openapi_types.UUID(item.ID),
+				CreatedAt:      item.CreatedAt,
+				DashaVersion:   item.DashaVersion,
+				JsonVersion:    item.JsonVersion,
+				PgssStatsReset: item.PgssStatsReset,
 			}
 		})
 
@@ -1691,22 +1826,22 @@ func (s *Handlers) GetTablesDescribeRowEstimate(
 	}
 
 	return serverhttp.GetTablesDescribeRowEstimate200JSONResponse{
-		BlockSize:        est.BlockSize,
-		Fillfactor:       est.Fillfactor,
-		ColumnsTotal:     est.ColumnsTotal,
-		ColumnsWithStats: est.ColumnsWithStats,
-		SumAvgWidth:      est.SumAvgWidth,
-		TupleHeaderSize:  tupleHeaderSize,
-		NullBitmapSize:   nullBitmapSize,
-		EstimatedRowSize: estimatedRowSize,
-		ToastThreshold:   toastThreshold,
-		WillToast:        willToast,
-		PageUsable:       pageUsable,
-		AvailableSpace:   availableSpace,
-		RowsPerPage:      rowsPerPage,
-		ReservedSpace:    reservedSpace,
+		BlockSize:         est.BlockSize,
+		Fillfactor:        est.Fillfactor,
+		ColumnsTotal:      est.ColumnsTotal,
+		ColumnsWithStats:  est.ColumnsWithStats,
+		SumAvgWidth:       est.SumAvgWidth,
+		TupleHeaderSize:   tupleHeaderSize,
+		NullBitmapSize:    nullBitmapSize,
+		EstimatedRowSize:  estimatedRowSize,
+		ToastThreshold:    toastThreshold,
+		WillToast:         willToast,
+		PageUsable:        pageUsable,
+		AvailableSpace:    availableSpace,
+		RowsPerPage:       rowsPerPage,
+		ReservedSpace:     reservedSpace,
 		RowsFitInReserved: rowsFitInReserved,
-		ToastCandidates:  candidates,
+		ToastCandidates:   candidates,
 	}, nil
 }
 

@@ -36,6 +36,11 @@ const router = createRouter({
       component: () => import('../views/QueryReportView.vue'),
     },
     {
+      path: '/query-compare/:clustername?',
+      name: 'query-compare',
+      component: () => import('../views/QueryCompareView.vue'),
+    },
+    {
       path: '/tables/:clustername?',
       name: 'tables',
       component: () => import('../views/TablesView.vue'),

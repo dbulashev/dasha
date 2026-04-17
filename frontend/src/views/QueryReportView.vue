@@ -9,12 +9,15 @@ import {
   getSnapshots,
   postSnapshot,
   getSnapshot,
+  getPgssStatsResetTime,
 } from '@/api/gen/default/default'
+import type { StatsResetTime } from '@/api/models/index'
 import type { QueryStatsStatus, SnapshotListItem, QueryReport } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useViewError } from '@/composables/useViewError'
 import { useAuthStore } from '@/stores/auth'
 import { assertOk } from '@/utils/api'
+import { fmtAge } from '@/utils/format'
 import QueryReportSection from '@/components/queries/QueryReportSection.vue'
 
 const route = useRoute()
@@ -202,6 +205,44 @@ watch(selectedSnapshotId, (id) => {
   }
 })
 
+const livePgssStatsReset = ref<string | null>(null)
+
+async function loadLivePgssReset() {
+  if (!clusterName.value || !hostName.value || !databaseName.value) {
+    livePgssStatsReset.value = null
+    return
+  }
+  try {
+    const res = await getPgssStatsResetTime({
+      cluster_name: clusterName.value,
+      instance: hostName.value,
+      database: databaseName.value,
+    })
+    const body = assertOk<StatsResetTime>(res)
+    livePgssStatsReset.value = body?.Time ?? null
+  } catch {
+    livePgssStatsReset.value = null
+  }
+}
+
+const ageUnknown = computed(() => t('compare.ageUnknown'))
+
+const selectedSnapshot = computed(() =>
+  selectedSnapshotId.value
+    ? snapshotsList.value.find(s => s.Id === selectedSnapshotId.value) ?? null
+    : null,
+)
+
+const ageText = computed(() => {
+  if (isViewingSnapshot.value && selectedSnapshot.value) {
+    return fmtAge(selectedSnapshot.value.CreatedAt, selectedSnapshot.value.PgssStatsReset ?? undefined, ageUnknown.value)
+  }
+  if (!isViewingSnapshot.value && livePgssStatsReset.value) {
+    return fmtAge(new Date().toISOString(), livePgssStatsReset.value, ageUnknown.value)
+  }
+  return ''
+})
+
 async function loadQueryStatsStatus() {
   if (!clusterName.value || !hostName.value || !databaseName.value) return
   try {
@@ -219,7 +260,8 @@ async function loadQueryStatsStatus() {
 watch([clusterName, hostName, databaseName], async () => {
   clearError()
   snapshotData.value = null
-  loadQueryStatsStatus()
+  await loadQueryStatsStatus()
+  await loadLivePgssReset()
   await loadSnapshotsStatus()
   await loadSnapshotsList()
 
@@ -227,8 +269,7 @@ watch([clusterName, hostName, databaseName], async () => {
   const urlSnapshot = route.query.snapshot as string | undefined
   if (urlSnapshot && snapshotIdsSet.value.has(urlSnapshot)) {
     if (selectedSnapshotId.value === urlSnapshot) {
-      // Same ID — watcher won't fire, load data directly
-      loadSnapshotData(urlSnapshot)
+      await loadSnapshotData(urlSnapshot)
     } else {
       selectedSnapshotId.value = urlSnapshot
     }
@@ -259,6 +300,9 @@ watch([clusterName, hostName, databaseName], async () => {
       hide-details
       style="max-width: 300px;"
     />
+    <span v-if="ageText" class="text-caption text-medium-emphasis">
+      {{ t('compare.age') }}: {{ ageText }}
+    </span>
     <v-spacer />
     <v-btn
       v-if="showSnapshotButton"

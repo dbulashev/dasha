@@ -7,9 +7,15 @@
   - Опциональная БД хранилища (`storage.dsn` в конфиге)
   - Секционированные по дням таблицы: `snapshots` (JSON-отчёт) и `query_texts` (дедупликация по SHA-256 хешу)
   - CLI-команда `dasha migrate` создаёт таблицы и секции
-  - 4 новых API-эндпоинта: `GET /api/queries/snapshots/status`, `GET/POST /api/queries/snapshots`, `GET /api/queries/snapshot/{id}`
   - Фронтенд: кнопка создания снимка, селектор данных (текущие / сохранённый снимок), общие URL с `?snapshot=uuid`
   - Отчёт по снимку: скрывает фильтр «Исключить пользователей», уведомление если снимок из URL не найден
+- **Сравнение запросов**: side-by-side сравнение двух снимков или одного снимка с live-данными (`GET /api/queries/compare`)
+  - Сортировка по total_time / calls / WAL / rows / cpu_time / io_time / temp_blks
+  - Фильтры «скрыть запросы, отсутствующие в A/B»; блок Left/Right метрик с разницей по каждому запросу
+  - Фильтр «Исключить пользователей» для live-стороны
+  - Пункт меню скрывается автоматически, если хранилище снимков не настроено (проверка через `GET /api/queries/snapshots/status`, кеш в Pinia 10 мин)
+- **Описание таблицы — оценка размера строки**: новая секция со сведениями о tuple header, null bitmap, средней ширине данных, оценочном размере строки, fillfactor, доступном/полезном месте на странице, числе строк на страницу, резерве под HOT-обновления, предупреждение WILL_TOAST и список колонок-кандидатов на TOAST (`GET /api/tables/describe-row-estimate`)
+- **Описание таблицы — статистика вакуума**: время последних (auto)vacuum/(auto)analyze, dead/live tuples, `n_mod_since_analyze`, `n_ins_since_vacuum`, расчётные пороги vacuum/analyze/insert-vacuum с учётом глобальных настроек и per-table reloptions (`GET /api/tables/describe-vacuum-stats`)
 - **Санитизация SQL**: `sanitize.SQL()` маскирует `password=` и `PASSWORD 'x'` в текстах запросов
 - **OIDC маппинг ролей**: `role_mapping` в конфиге OIDC сопоставляет корпоративные группы с ролями dasha (admin/viewer)
 - **Сброс pg_stat_statements**: `POST /api/queries/reset-stats` (только admin), управляется параметром `enable_query_stats_reset`
@@ -25,6 +31,12 @@
 - `useClusterInfo` возвращает null для неизвестного кластера/хоста — блокирует API-запросы с невалидными параметрами
 - Карточка входа с кнопкой SSO, отображением версии, сохранением URL при OIDC-редиректе
 - Класс `ApiError` с HTTP-статусом, извлечённым из тела ответа
+- `IoCpuScatterSection`: оси автоматически масштабируются в ms / s / min / h по диапазону данных
+- `DescribeTableSelector`: при смене кластера схема сбрасывается на `public` (если есть) и очищается выбранная таблица; watcher схем предпочитает `public`, а не первую из списка
+- `DescribeBloatSection` теперь отображается только для обычных таблиц (раньше показывалась всегда)
+- Frontend Docker-образ зашивает `BUILD_NUMBER` через env `VITE_APP_VERSION` — версия видна в карточке логина и меню пользователя
+- Nginx: добавлены `X-Forwarded-Proto`, отдельный `location /auth/`, увеличены `proxy_buffer_size` / `proxy_buffers` для cookie-тяжёлых ответов OIDC
+- Компонент `ErrorAlert` для полноэкранного fallback при критической ошибке
 
 #### Демо
 - Добавлен сервис БД хранилища для снимков

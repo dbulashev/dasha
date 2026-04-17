@@ -9,6 +9,7 @@
   "Active Queries": "Aktive Abfragen",
   "Query Stats": "Abfragestatistik",
   "Query Report": "Abfragebericht",
+  "Query Compare": "Abfragevergleich",
   "Tables": "Tabellen",
   "Indexes": "Indizes",
   "Locks": "Sperren",
@@ -73,6 +74,19 @@
   "snapshotNotFound": "Snapshot nicht gefunden",
   "snapshotLiveData": "Aktuelle Daten",
   "snapshotSelect": "Datenquelle",
+  "compare": {
+    "snapshotA": "Snapshot A",
+    "snapshotB": "Snapshot B / Live",
+    "liveData": "Aktuelle Daten",
+    "age": "Alter",
+    "hideAbsentA": "Fehlende in A ausblenden",
+    "hideAbsentB": "Fehlende in B ausblenden",
+    "absent": "Nicht vorhanden",
+    "selectSnapshots": "Wählen Sie Snapshots zum Vergleichen aus",
+    "storageUnavailable": "Snapshot-Speicher ist nicht konfiguriert. Vergleich nicht verfügbar.",
+    "stats": "Gesamt: {total} | Gemeinsam: {both} | Nur in A: {onlyA} | Nur in B: {onlyB}",
+    "ageUnknown": "Alter unbekannt"
+  },
   "cpuTimeWarning": "Abfragen mit negativer CPU-Zeit gefunden (total_plan_time + total_exec_time − blk_read_time − blk_write_time < 0). Wenn pg_stat_statements.track_planning deaktiviert ist, ist plan_time = 0 und der negative Wert weist auf potenziell hohe Planungszeit hin. Aktivieren Sie track_planning für genaue Daten.",
   "header": {
     "lockedItem": "Gesperrtes Objekt",

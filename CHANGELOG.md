@@ -7,9 +7,15 @@
   - Optional PostgreSQL storage database (`storage.dsn` in config)
   - Daily-partitioned tables: `snapshots` (report JSON) and `query_texts` (deduplicated by SHA-256 hash)
   - `dasha migrate` CLI command creates tables
-  - 4 new API endpoints: `GET /api/queries/snapshots/status`, `GET/POST /api/queries/snapshots`, `GET /api/queries/snapshot/{id}`
   - Frontend: snapshot create button, snapshot selector (live data / saved snapshot), shareable URLs with `?snapshot=uuid`
   - Snapshot-aware query report: hides "exclude users" filter, shows snackbar when snapshot from URL is not found
+- **Query Compare**: side-by-side comparison of two snapshots or one snapshot vs live data (`GET /api/queries/compare`)
+  - Sort by total_time / calls / WAL / rows / cpu_time / io_time / temp_blks
+  - Filters "hide queries absent in A/B"; per-query Left/Right metrics block with deltas
+  - Exclude-users filter for the live side
+  - Menu item is hidden automatically when snapshot storage is not configured (probed via `GET /api/queries/snapshots/status`, cached in Pinia for 10 min)
+- **Table Describe — Row Estimate Analysis**: new section showing tuple header, null bitmap, row data width, estimated row size, fillfactor, page-usable / available space, rows-per-page, HOT-update reserve, WILL_TOAST warning and TOAST-candidate columns (`GET /api/tables/describe-row-estimate`)
+- **Table Describe — Vacuum Stats**: last (auto)vacuum / (auto)analyze timestamps, dead/live tuples, `n_mod_since_analyze`, `n_ins_since_vacuum`, computed vacuum / analyze / insert-vacuum thresholds from global + per-table reloptions (`GET /api/tables/describe-vacuum-stats`)
 - **SQL sanitization**: `sanitize.SQL()` masks `password=` and `PASSWORD 'x'` in query text fields
 - **OIDC role mapping**: `role_mapping` in OIDCConfig maps corporate groups to dasha roles (admin/viewer)
 - **pg_stat_statements reset**: `POST /api/queries/reset-stats` (admin-only), controlled by `enable_query_stats_reset` config
@@ -25,6 +31,12 @@
 - `useClusterInfo` returns null for unknown cluster/host — blocks API calls with invalid params
 - Login card with SSO button, version display, return URL preservation across OIDC redirect
 - `ApiError` class with HTTP status extracted from response body
+- `IoCpuScatterSection`: axes auto-scale to ms / s / min / h based on data range
+- `DescribeTableSelector`: on cluster change resets schema to `public` (when present) and clears selected table; schema watcher prefers `public` over first-in-list
+- `DescribeBloatSection` now renders only for regular tables (was unconditional)
+- Frontend Docker image embeds `BUILD_NUMBER` via `VITE_APP_VERSION` env — version shown in login card and user menu
+- Nginx: added `X-Forwarded-Proto`, dedicated `/auth/` location block, larger `proxy_buffer_size` / `proxy_buffers` for OIDC cookie-heavy responses
+- `ErrorAlert` component for full-page error fallback with illustration
 
 #### Demo
 - Added storage database service for snapshots

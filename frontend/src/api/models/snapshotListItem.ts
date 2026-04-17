@@ -10,4 +10,6 @@ export interface SnapshotListItem {
   CreatedAt: string
   DashaVersion: string
   JsonVersion: number
+  /** @nullable */
+  PgssStatsReset?: string | null
 }

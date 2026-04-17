@@ -1233,6 +1233,45 @@ paths:
           $ref: '#/components/responses/NotFound'
         '501':
           description: Storage not configured
+  /api/queries/compare:
+    get:
+      operationId: getQueriesCompare
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+        - name: snapshot_a
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: snapshot_b
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: exclude_users
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/QueryCompareItem'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: Storage not configured
   /api/progress/analyze:
     get:
       operationId: getProgressAnalyze
@@ -2380,6 +2419,138 @@ components:
           format: double
           nullable: true
 
+    QueryReportMetrics:
+      type: object
+      properties:
+        Rows:
+          type: integer
+          format: int64
+          nullable: true
+        RowsPct:
+          type: number
+          format: double
+          nullable: true
+        Calls:
+          type: integer
+          format: int64
+          nullable: true
+        CallsPct:
+          type: number
+          format: double
+          nullable: true
+        TotalTimeMs:
+          type: number
+          format: double
+          nullable: true
+        TotalTimePct:
+          type: number
+          format: double
+          nullable: true
+        ExecTimeMs:
+          type: number
+          format: double
+          nullable: true
+        MinExecTimeMs:
+          type: number
+          format: double
+          nullable: true
+        MaxExecTimeMs:
+          type: number
+          format: double
+          nullable: true
+        MeanExecTimeMs:
+          type: number
+          format: double
+          nullable: true
+        PlanTimeMs:
+          type: number
+          format: double
+          nullable: true
+        MinPlanTimeMs:
+          type: number
+          format: double
+          nullable: true
+        MaxPlanTimeMs:
+          type: number
+          format: double
+          nullable: true
+        MeanPlanTimeMs:
+          type: number
+          format: double
+          nullable: true
+        IoTimeMs:
+          type: number
+          format: double
+          nullable: true
+        IoTimePct:
+          type: number
+          format: double
+          nullable: true
+        CpuTimeMs:
+          type: number
+          format: double
+          nullable: true
+        CpuTimePct:
+          type: number
+          format: double
+          nullable: true
+        CacheHitRatio:
+          type: number
+          format: double
+          nullable: true
+        SharedBlksDirtiedPct:
+          type: number
+          format: double
+          nullable: true
+        SharedBlksWrittenPct:
+          type: number
+          format: double
+          nullable: true
+        WalBytes:
+          type: integer
+          format: int64
+          nullable: true
+        WalBytesPct:
+          type: number
+          format: double
+          nullable: true
+        WalRecords:
+          type: integer
+          format: int64
+          nullable: true
+        WalFpi:
+          type: integer
+          format: int64
+          nullable: true
+        TempBlks:
+          type: integer
+          format: int64
+          nullable: true
+        TempBlksPct:
+          type: number
+          format: double
+          nullable: true
+
+    QueryCompareItem:
+      type: object
+      required:
+        - QueryID
+        - Query
+      properties:
+        QueryID:
+          type: integer
+          format: int64
+        Query:
+          type: string
+        Left:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/QueryReportMetrics'
+        Right:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/QueryReportMetrics'
+
     ProgressAnalyze:
       type: object
       required:
@@ -3104,6 +3275,10 @@ components:
           type: string
         JsonVersion:
           type: integer
+        PgssStatsReset:
+          type: string
+          format: date-time
+          nullable: true
 
     SnapshotCreated:
       type: object

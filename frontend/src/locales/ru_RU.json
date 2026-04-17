@@ -18,6 +18,7 @@
     "Active Queries": "Активные запросы",
     "Query Stats": "Статистика запросов",
     "Query Report": "Отчёт по запросам",
+    "Query Compare": "Сравнение запросов",
     "Tables": "Таблицы",
     "Indexes": "Индексы",
     "Locks": "Блокировки",
@@ -94,6 +95,19 @@
     "snapshotNotFound": "Снимок не найден",
     "snapshotLiveData": "Текущие данные",
     "snapshotSelect": "Источник данных",
+    "compare": {
+        "snapshotA": "Снимок A",
+        "snapshotB": "Снимок B / Live",
+        "liveData": "Текущие данные",
+        "age": "возраст",
+        "hideAbsentA": "Скрыть отсутствующие в A",
+        "hideAbsentB": "Скрыть отсутствующие в B",
+        "absent": "Отсутствует",
+        "selectSnapshots": "Выберите снимки для сравнения",
+        "storageUnavailable": "Хранилище снимков не настроено. Сравнение недоступно.",
+        "stats": "Всего: {total} | Общие: {both} | Только в A: {onlyA} | Только в B: {onlyB}",
+        "ageUnknown": "возраст неопределён"
+    },
     "cpuTimeWarning": "Обнаружены запросы с отрицательным CPU time (total_plan_time + total_exec_time − blk_read_time − blk_write_time < 0). Если pg_stat_statements.track_planning отключён, plan_time = 0 и отрицательное значение указывает на потенциально высокое время планирования запроса. Включите track_planning для точных данных.",
     "header": {
         "namespace": "Пространство имён",

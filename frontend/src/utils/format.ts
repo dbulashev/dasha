@@ -64,6 +64,25 @@ export function fmtInt(v: number | null | undefined): string {
   return v.toLocaleString()
 }
 
+export function fmtAge(createdAt: string | null | undefined, statsReset: string | null | undefined, unknownLabel = '?'): string {
+  if (!createdAt || !statsReset) return unknownLabel
+  const diff = new Date(createdAt).getTime() - new Date(statsReset).getTime()
+  if (diff < 0) return '—'
+  let remaining = Math.floor(diff / 1000)
+  const days = Math.floor(remaining / 86400)
+  remaining %= 86400
+  const hrs = Math.floor(remaining / 3600)
+  remaining %= 3600
+  const min = Math.floor(remaining / 60)
+  const sec = remaining % 60
+  const parts: string[] = []
+  if (days > 0) parts.push(`${days}d`)
+  if (hrs > 0) parts.push(`${hrs}h`)
+  if (min > 0) parts.push(`${min}m`)
+  if (sec > 0 || parts.length === 0) parts.push(`${sec}s`)
+  return parts.join(' ')
+}
+
 export function fmtRowCount(n: number): string {
   if (n >= 1_000_000_000) return parseFloat((n / 1_000_000_000).toFixed(1)) + 'B'
   if (n >= 1_000_000) return parseFloat((n / 1_000_000).toFixed(1)) + 'M'

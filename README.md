@@ -22,6 +22,7 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 - Running and blocked queries monitoring
 - `pg_stat_statements` status and reset time tracking
 - **pgss snapshots**: save point-in-time snapshots to a dedicated storage database, view and share via URL
+- **Snapshot comparison**: side-by-side diff of two snapshots or one snapshot vs live data, sortable by any metric
 
 **Index Analysis**
 - Top-K by size, bloat estimation, duplicate detection
@@ -35,6 +36,7 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 - Sequential vs. index scan ratio
 - Cache hit rate, partitioned table info
 - Custom storage parameters (fillfactor, autovacuum overrides)
+- Detailed table describe: columns, indexes, constraints, bloat, partitions, vacuum stats with computed thresholds, row-size / TOAST estimate
 
 **Foreign Key Analysis**
 - Invalid constraints

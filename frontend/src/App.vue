@@ -4,6 +4,7 @@ import { computed, provide, ref, watch } from 'vue'
 import { useThemeStore } from './stores/theme'
 import { useAuthStore } from './stores/auth'
 import { useClustersStore } from './stores/clusters'
+import { useSnapshotsStatusStore } from './stores/snapshotsStatus'
 import { useI18n } from 'vue-i18n'
 import { errorKey, type GlobalError } from './composables/useViewError'
 
@@ -11,6 +12,15 @@ const { t } = useI18n()
 const themeStore = useThemeStore()
 const authStore = useAuthStore()
 const clusterStore = useClustersStore()
+const snapshotsStatusStore = useSnapshotsStatusStore()
+
+watch(
+  () => authStore.initialized && !authStore.requiresLogin,
+  (ready) => {
+    if (ready) snapshotsStatusStore.ensureLoaded()
+  },
+  { immediate: true },
+)
 
 const globalError = ref<GlobalError | null>(null)
 provide(errorKey, globalError)
@@ -45,6 +55,7 @@ const connectionsLink = computed(() => withQuery("connections"));
 const queriesLink = computed(() => withQuery("queries"));
 const queryStatsLink = computed(() => withQuery("query-stats"));
 const queryReportLink = computed(() => withQuery("query-report"));
+const queryCompareLink = computed(() => withQuery("query-compare"));
 const tablesLink = computed(() => withQuery("tables"));
 const tableDescribeLink = computed(() => {
   const base = withQuery("table-describe");
@@ -140,6 +151,7 @@ watch(() => route.path, () => {
           <v-list-item :title="t('Active Queries')" prepend-icon="mdi-database-clock-outline" link :to="queriesLink"></v-list-item>
           <v-list-item :title="t('Query Stats')" prepend-icon="mdi-chart-bar" link :to="queryStatsLink"></v-list-item>
           <v-list-item :title="t('Query Report')" prepend-icon="mdi-file-chart-outline" link :to="queryReportLink"></v-list-item>
+          <v-list-item v-if="snapshotsStatusStore.available" :title="t('Query Compare')" prepend-icon="mdi-compare" link :to="queryCompareLink"></v-list-item>
           <v-list-group value="tables">
             <template #activator="{ props }">
               <v-list-item v-bind="props" :title="t('Tables')" prepend-icon="mdi-table"></v-list-item>

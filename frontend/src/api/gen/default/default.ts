@@ -70,6 +70,7 @@ import type {
   GetProgressIndexParams,
   GetProgressVacuumParams,
   GetQueriesBlockedParams,
+  GetQueriesCompareParams,
   GetQueriesReportParams,
   GetQueriesRunningParams,
   GetQueriesTop10ByTimeParams,
@@ -121,6 +122,7 @@ import type {
   ProgressIndex,
   ProgressVacuum,
   QueryBlocked,
+  QueryCompareItem,
   QueryReport,
   QueryRunning,
   QueryStatsStatus,
@@ -5991,6 +5993,118 @@ export function useGetSnapshot<
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetSnapshotQueryOptions(id, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+export type getQueriesCompareResponse200 = {
+  data: QueryCompareItem[]
+  status: 200
+}
+
+export type getQueriesCompareResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getQueriesCompareResponse501 = {
+  data: void
+  status: 501
+}
+
+export type getQueriesCompareResponseSuccess = getQueriesCompareResponse200 & {
+  headers: Headers
+}
+export type getQueriesCompareResponseError = (
+  | getQueriesCompareResponse404
+  | getQueriesCompareResponse501
+) & {
+  headers: Headers
+}
+
+export type getQueriesCompareResponse =
+  | getQueriesCompareResponseSuccess
+  | getQueriesCompareResponseError
+
+export const getGetQueriesCompareUrl = (params: GetQueriesCompareParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/queries/compare?${stringifiedParams}`
+    : `/api/queries/compare`
+}
+
+export const getQueriesCompare = async (
+  params: GetQueriesCompareParams,
+  options?: RequestInit,
+): Promise<getQueriesCompareResponse> => {
+  const res = await fetch(getGetQueriesCompareUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
+
+  const data: getQueriesCompareResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getQueriesCompareResponse
+}
+
+export const getGetQueriesCompareQueryKey = (params?: MaybeRef<GetQueriesCompareParams>) => {
+  return ['api', 'queries', 'compare', ...(params ? [params] : [])] as const
+}
+
+export const getGetQueriesCompareQueryOptions = <
+  TData = Awaited<ReturnType<typeof getQueriesCompare>>,
+  TError = NotFoundResponse | void,
+>(
+  params: MaybeRef<GetQueriesCompareParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getQueriesCompare>>, TError, TData>
+    fetch?: RequestInit
+  },
+) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+
+  const queryKey = getGetQueriesCompareQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getQueriesCompare>>> = ({ signal }) =>
+    getQueriesCompare(unref(params), { signal, ...fetchOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getQueriesCompare>>,
+    TError,
+    TData
+  >
+}
+
+export type GetQueriesCompareQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getQueriesCompare>>
+>
+export type GetQueriesCompareQueryError = NotFoundResponse | void
+
+export function useGetQueriesCompare<
+  TData = Awaited<ReturnType<typeof getQueriesCompare>>,
+  TError = NotFoundResponse | void,
+>(
+  params: MaybeRef<GetQueriesCompareParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getQueriesCompare>>, TError, TData>
+    fetch?: RequestInit
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetQueriesCompareQueryOptions(params, options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
 

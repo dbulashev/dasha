@@ -35,6 +35,9 @@ CREATE TABLE IF NOT EXISTS query_texts (
 	createSnapshotsIdxSQL = `
 CREATE INDEX IF NOT EXISTS idx_snapshots_lookup
     ON snapshots (cluster_name, instance, database, created_at DESC)`
+
+	addPgssStatsResetSQL = `
+ALTER TABLE snapshots ADD COLUMN IF NOT EXISTS pgss_stats_reset timestamptz`
 )
 
 // Migrate creates parent tables and partitions for the next partitionDaysAhead days.
@@ -65,7 +68,7 @@ func newFromDSN(ctx context.Context, dsn string) (*Storage, error) {
 }
 
 func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
-	for _, ddl := range []string{createSnapshotsSQL, createQueryTextsSQL, createSnapshotsIdxSQL} {
+	for _, ddl := range []string{createSnapshotsSQL, createQueryTextsSQL, createSnapshotsIdxSQL, addPgssStatsResetSQL} {
 		if _, err := s.pool.Exec(ctx, ddl); err != nil {
 			return fmt.Errorf("storage: migrate: %w", err)
 		}
