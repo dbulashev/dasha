@@ -1033,7 +1033,7 @@ func (s *Handlers) GetQueriesRunning(
 	ctx context.Context,
 	req serverhttp.GetQueriesRunningRequestObject,
 ) (serverhttp.GetQueriesRunningResponseObject, error) {
-	minDuration := 1000
+	minDuration := 10
 	if req.Params.MinDuration != nil {
 		minDuration = *req.Params.MinDuration
 	}

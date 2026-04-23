@@ -21,7 +21,7 @@ const headers = computed(() => [
   { title: t('header.user'), key: 'User' },
   { title: t('header.backendType'), key: 'BackendType' },
 ])
-const minDuration = ref(1000)
+const minDuration = ref(10)
 const durationOptions = [0, 1, 5, 10, 50, 100, 500, 1000, 5000, 10000, 50000, 100000]
 
 const { items, loading } = useApiLoader<QueryRunning[]>(
