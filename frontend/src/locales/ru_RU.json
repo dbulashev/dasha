@@ -237,7 +237,7 @@
         "toastIdxHitRate": "Hit Rate индексов TOAST"
     },
     "queries": {
-        "minDurationLabel": "Мин. длительность, сек ≥"
+        "minDurationLabel": "Мин. длительность, мс ≥"
     },
     "indexes": {
         "all": "Все индексы",

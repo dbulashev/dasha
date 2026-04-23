@@ -291,7 +291,7 @@
     "blockedProcesses": "Blockierte Prozesse: {count}"
   },
   "queries": {
-    "minDurationLabel": "Min. Dauer, Sek ≥"
+    "minDurationLabel": "Min. Dauer, ms ≥"
   },
   "indexes": {
     "all": "Alle Indizes",
