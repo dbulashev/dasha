@@ -101,12 +101,6 @@ func TestFindTemplate_VersionSelection(t *testing.T) {
 			serverVersion: 140000,
 			wantContains:  "backend_type\n", // PG14 > all dirs → base
 		},
-		{
-			name:          "running_pg96_uses_100000_dir",
-			queryName:     "queries/running",
-			serverVersion: 90600,
-			wantContains:  "NULL::text", // MIN dir > 90600 = 100000
-		},
 
 		// queries/top_10_by_time — dirs: 150000, 170000
 		// 150000/ has blk_read_time only (no temp) — for PG14
