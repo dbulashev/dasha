@@ -4,7 +4,7 @@ import '@/assets/sql-highlight.css'
 
 const props = defineProps<{
   modelValue: boolean
-  queryId: number
+  queryId: string
   sql: string
 }>()
 

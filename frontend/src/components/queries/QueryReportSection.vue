@@ -119,7 +119,7 @@ const hasNegativeCpuTime = computed(() =>
 // SQL dialog
 const sqlDialogVisible = ref(false)
 const sqlDialogText = ref('')
-const sqlDialogQueryId = ref<number>(0)
+const sqlDialogQueryId = ref<string>('')
 
 function showSqlDialog(item: QueryReport) {
   sqlDialogQueryId.value = item.QueryID

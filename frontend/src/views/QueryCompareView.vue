@@ -165,7 +165,7 @@ const inBoth = computed(() => totalCount.value - onlyInA.value - onlyInB.value)
 
 const sqlDialogVisible = ref(false)
 const sqlDialogText = ref('')
-const sqlDialogQueryId = ref<number>(0)
+const sqlDialogQueryId = ref<string>('')
 
 function showSqlDialog(item: QueryCompareItem) {
   sqlDialogQueryId.value = item.QueryID

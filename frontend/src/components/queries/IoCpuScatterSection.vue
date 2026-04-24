@@ -92,7 +92,7 @@ const scatterOptions = computed(() => ({
     legend: { display: false },
     tooltip: {
       callbacks: {
-        label: (ctx: { raw: { x: number; y: number; calls: number; queryId: number } }) => {
+        label: (ctx: { raw: { x: number; y: number; calls: number; queryId: string } }) => {
           const p = ctx.raw
           return [
             `Query ${p.queryId}`,
