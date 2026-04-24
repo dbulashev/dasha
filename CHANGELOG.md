@@ -25,6 +25,9 @@
 - **Frontend**: global error handling via provide/inject — error code from API propagated correctly (was always 500)
 - **Frontend**: "No clusters available" error no longer disappears on route change
 - **Frontend**: invalid cluster/host in URL now shows 404 with similar name suggestions instead of silent redirect
+- **Query Report / Top10: queryid precision loss**
+- **Running queries: NULL scan error**: `GetQueriesRunning` crashed with `cannot scan NULL into *string` for background processes (autovacuum, walsender, logical replication worker) where `usename` is NULL. `usename` and `backend_type` are wrapped in `COALESCE(..., '')` across all three SQL templates (base, 100000/, 90600/).
+
 
 #### Improvements
 - Section components use `useViewError()` directly instead of emit chain — removes indirection, preserves error codes
@@ -37,6 +40,8 @@
 - Frontend Docker image embeds `BUILD_NUMBER` via `VITE_APP_VERSION` env — version shown in login card and user menu
 - Nginx: added `X-Forwarded-Proto`, dedicated `/auth/` location block, larger `proxy_buffer_size` / `proxy_buffers` for OIDC cookie-heavy responses
 - `ErrorAlert` component for full-page error fallback with illustration
+- **Query Report: substring search**: new text field in the report header filters cards by substring match against the full query text (including the part hidden behind the ellipsis in the card) or queryid. 200 ms debounce; clearable via the "×" button.
+
 
 #### Demo
 - Added storage database service for snapshots

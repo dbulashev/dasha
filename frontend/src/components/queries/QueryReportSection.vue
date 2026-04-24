@@ -6,6 +6,7 @@ import type { QueryReport } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useApiLoader } from '@/composables/useApiLoader'
 import { useViewError } from '@/composables/useViewError'
+import { useDebouncedRef } from '@/composables/useDebouncedRef'
 import { useExcludeUsersStore } from '@/stores/excludeUsers'
 import ReportCard from '@/components/queries/ReportCard.vue'
 import SqlDialog from '@/components/queries/SqlDialog.vue'
@@ -91,9 +92,20 @@ const { items: liveItems, loading } = useApiLoader<QueryReport[]>(
 
 const items = computed(() => isSnapshot.value ? (props.snapshotData ?? []) : liveItems.value)
 
+const search = ref<string | null>('')
+const debouncedSearch = useDebouncedRef(search, 200)
+
+const filteredItems = computed(() => {
+  const q = (debouncedSearch.value ?? '').trim().toLowerCase()
+  if (!q) return items.value
+  return items.value.filter((item) =>
+    item.Query.toLowerCase().includes(q) || String(item.QueryID).includes(q),
+  )
+})
+
 const sortedItems = computed(() => {
   const field = sortFieldMap[reportSortBy.value]
-  return [...items.value].sort((a, b) => {
+  return [...filteredItems.value].sort((a, b) => {
     const va = (a[field] as number | null | undefined) ?? 0
     const vb = (b[field] as number | null | undefined) ?? 0
     return vb - va
@@ -152,6 +164,17 @@ function showSqlDialog(item: QueryReport) {
         closable-chips
         class="ml-4"
         style="max-width: 350px;"
+      />
+      <v-text-field
+        v-model="search"
+        :label="t('report.search')"
+        prepend-inner-icon="mdi-magnify"
+        density="compact"
+        variant="outlined"
+        hide-details
+        clearable
+        class="ml-4"
+        style="max-width: 320px;"
       />
     </v-card-title>
     <v-card-text>

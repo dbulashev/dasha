@@ -6,7 +6,8 @@
  */
 
 export interface QueryTop10ByTime {
-  QueryID: number
+  /** pg_stat_statements queryid as string to preserve int64 precision in JavaScript */
+  QueryID: string
   ExecTime: string
   ExecTimeMs: number
   IoCpuPct: string

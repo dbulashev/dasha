@@ -43,6 +43,7 @@
     "avg": "Durchschnitt",
     "sortBy": "Sortierung",
     "excludeUsers": "Benutzer ausschließen",
+    "search": "Suche im Abfragetext",
     "sort": {
       "total_time": "Gesamtzeit",
       "calls": "Aufrufe",

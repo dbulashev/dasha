@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -31,7 +32,7 @@ func NewDashaHandlers(cfg *config.Config, repo repository.Repository, st *storag
 
 func mapQueryReport(t dto.QueryReport) serverhttp.QueryReport {
 	return serverhttp.QueryReport{
-		QueryID:              t.QueryID,
+		QueryID:              strconv.FormatInt(t.QueryID, 10),
 		Query:                t.Query,
 		Rows:                 t.Rows,
 		RowsPct:              t.RowsPct,
@@ -1084,7 +1085,7 @@ func (s *Handlers) GetQueriesTop10ByTime(
 		queries,
 		func(t dto.QueryTop10ByTime) serverhttp.QueryTop10ByTime {
 			return serverhttp.QueryTop10ByTime{
-				QueryID:    t.QueryID,
+				QueryID:    strconv.FormatInt(t.QueryID, 10),
 				ExecTime:   t.ExecTime,
 				ExecTimeMs: t.ExecTimeMs,
 				IoCpuPct:   t.IoCpuPct,
@@ -1114,7 +1115,7 @@ func (s *Handlers) GetQueriesTop10ByWal(
 		queries,
 		func(t dto.QueryTop10ByWal) serverhttp.QueryTop10ByWal {
 			return serverhttp.QueryTop10ByWal{
-				QueryID:    t.QueryID,
+				QueryID:    strconv.FormatInt(t.QueryID, 10),
 				WalVolume:  t.WalVolume,
 				WalBytes:   t.WalBytes,
 				QueryTrunc: sanitize.SQL(t.QueryTrunc),
@@ -1141,7 +1142,7 @@ func (s *Handlers) GetQueriesTop10Chart(
 
 	for _, item := range items {
 		entry := serverhttp.QueryTop10ChartItem{
-			QueryID: item.QueryID,
+			QueryID: strconv.FormatInt(item.QueryID, 10),
 			Pct:     item.Pct,
 		}
 
@@ -1281,7 +1282,7 @@ func (s *Handlers) GetQueriesCompare(
 		}
 
 		items = append(items, serverhttp.QueryCompareItem{
-			QueryID: queryID,
+			QueryID: strconv.FormatInt(queryID, 10),
 			Query:   query,
 			Left:    left,
 			Right:   right,

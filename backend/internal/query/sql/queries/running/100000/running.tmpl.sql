@@ -6,8 +6,8 @@ SELECT pid::int,
        query,
        COALESCE(query_start, xact_start)                                      AS started_at,
        EXTRACT(EPOCH FROM NOW() - COALESCE(query_start, xact_start)) * 1000.0 AS duration_ms,
-       usename                                                                AS user,
-       NULL::text                                                             AS backend_type
+       COALESCE(usename, '')                                                  AS user,
+       ''::text                                                               AS backend_type
 FROM pg_stat_activity
 WHERE state <> 'idle'
   AND pid <> pg_backend_pid()
