@@ -1079,7 +1079,7 @@ type GetQueriesRunningParams struct {
 	Instance    Instance    `form:"instance" json:"instance"`
 	Database    Database    `form:"database" json:"database"`
 
-	// MinDuration Minimum query duration in seconds
+	// MinDuration Minimum query duration in ms
 	MinDuration *int `form:"min_duration,omitempty" json:"min_duration,omitempty"`
 }
 
