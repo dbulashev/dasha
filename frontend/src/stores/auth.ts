@@ -26,6 +26,9 @@ export const useAuthStore = defineStore('auth', () => {
 
     try {
       const res = await getAuthInfo()
+      if (res.status < 200 || res.status >= 300) {
+        throw new Error(`HTTP ${res.status}`)
+      }
       mode.value = res.data.mode
       oidcLoginUrl.value = res.data.oidc_login_url ?? null
       enableQueryStatsReset.value = res.data.enable_query_stats_reset ?? false

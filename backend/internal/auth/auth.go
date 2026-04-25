@@ -57,7 +57,7 @@ func NewMiddlewares(ctx context.Context, cfg config.AuthConfig, logger *zap.Logg
 
 		oidcProvider, err = NewOIDCProvider(ctx, *cfg.OIDC, logger)
 		if err != nil {
-			logger.Warn("OIDC provider initialization failed (will retry on first request)", zap.Error(err))
+			logger.Warn("OIDC provider initialization failed; SSO login will show error page until config is fixed and service restarted", zap.Error(err))
 		}
 
 		sessionMgr = NewSessionManager(cfg)
