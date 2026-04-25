@@ -1,11 +1,15 @@
 package auth
 
 import (
+	_ "embed"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
 )
+
+//go:embed oidc_unavailable.html
+var oidcUnavailableHTML string
 
 func RegisterBFFRoutes(e *echo.Echo, provider *OIDCProvider, sm *SessionManager, logger *zap.Logger) {
 	e.GET("/auth/login", loginHandler(provider, sm, logger))
@@ -14,8 +18,17 @@ func RegisterBFFRoutes(e *echo.Echo, provider *OIDCProvider, sm *SessionManager,
 	e.GET("/auth/me", meHandler(sm, provider))
 }
 
+func renderOIDCUnavailable(c echo.Context) error {
+	return c.HTML(http.StatusServiceUnavailable, oidcUnavailableHTML) //nolint:wrapcheck
+}
+
 func loginHandler(provider *OIDCProvider, sm *SessionManager, logger *zap.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
+		if provider == nil {
+			logger.Warn("SSO login requested but OIDC provider is not initialized")
+			return renderOIDCUnavailable(c)
+		}
+
 		state, err := sm.SetStateCookie(c)
 		if err != nil {
 			logger.Error("failed to generate state", zap.Error(err))
@@ -28,6 +41,11 @@ func loginHandler(provider *OIDCProvider, sm *SessionManager, logger *zap.Logger
 
 func callbackHandler(provider *OIDCProvider, sm *SessionManager, logger *zap.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
+		if provider == nil {
+			logger.Warn("OIDC callback received but provider is not initialized")
+			return renderOIDCUnavailable(c)
+		}
+
 		if err := sm.ValidateStateCookie(c); err != nil {
 			logger.Warn("invalid OAuth state, redirecting to login", zap.Error(err))
 			return c.Redirect(http.StatusFound, "/auth/login")
@@ -88,13 +106,17 @@ func logoutHandler(sm *SessionManager, provider *OIDCProvider, logger *zap.Logge
 			return errNoActiveSession
 		}
 
-		if err := provider.RevokeRefreshToken(c.Request().Context(), session.RefreshToken); err != nil {
-			logger.Warn("failed to revoke refresh token", zap.Error(err))
-		}
-
 		sm.ClearSession(c)
 
-		logoutURL := provider.LogoutURL(session.IDToken)
+		var logoutURL string
+
+		if provider != nil {
+			if err := provider.RevokeRefreshToken(c.Request().Context(), session.RefreshToken); err != nil {
+				logger.Warn("failed to revoke refresh token", zap.Error(err))
+			}
+
+			logoutURL = provider.LogoutURL(session.IDToken)
+		}
 
 		return c.JSON(http.StatusOK, map[string]string{
 			"status":     "ok",
@@ -105,6 +127,10 @@ func logoutHandler(sm *SessionManager, provider *OIDCProvider, logger *zap.Logge
 
 func meHandler(sm *SessionManager, provider *OIDCProvider) echo.HandlerFunc {
 	return func(c echo.Context) error {
+		if provider == nil {
+			return errUnauthorized
+		}
+
 		user, err := sm.ValidateAndRefresh(c, provider)
 		if err != nil {
 			return errUnauthorized

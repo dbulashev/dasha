@@ -7,7 +7,13 @@ module.exports = {
             clean: true,
             prettier: true,
             schemas: './frontend/src/api/models',
-            mock: false
+            mock: false,
+            override: {
+                mutator: {
+                    path: './frontend/src/api/customFetch.ts',
+                    name: 'customFetch'
+                }
+            }
         },
         input: {
             target: './doc/swagger.yaml'
