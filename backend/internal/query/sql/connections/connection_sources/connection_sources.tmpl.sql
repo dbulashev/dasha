@@ -1,8 +1,8 @@
 SELECT
-    datname AS database,
-    usename AS user,
-    application_name AS source,
-    client_addr AS ip,
+    COALESCE(datname, backend_type)           AS database,
+    COALESCE(usename, backend_type)           AS user,
+    COALESCE(application_name, backend_type)  AS source,
+    COALESCE(client_addr::text, backend_type) AS ip,
     COUNT(*) AS total_connections
 FROM
     pg_stat_activity

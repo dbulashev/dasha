@@ -44,4 +44,6 @@ app.use(createVuetify)
 app.use(i18n)
 app.use(router)
 
-app.mount('#app')
+router.isReady().then(() => {
+    app.mount('#app')
+})

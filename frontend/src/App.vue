@@ -82,21 +82,16 @@ const settingsLink = computed(() => withQuery("settings"));
 
 const drawer = ref(true)
 
-const openedGroups = ref<string[]>([])
-
-function syncOpenedGroups() {
+const tablesGroupOpen = computed(() => {
   const path = route.path
-  if ((path.includes('/tables') || path.includes('/table-describe')) && !openedGroups.value.includes('tables')) {
-    openedGroups.value.push('tables')
-  }
-  if (path.includes('/indexes') && !openedGroups.value.includes('indexes')) {
-    openedGroups.value.push('indexes')
-  }
-}
+  return path.includes('/tables') || path.includes('/table-describe')
+})
 
-syncOpenedGroups()
+const indexesGroupOpen = computed(() => {
+  return route.path.includes('/indexes')
+})
+
 watch(() => route.path, () => {
-  syncOpenedGroups()
   // Clear transient page errors on navigation, but preserve persistent errors (e.g. no clusters)
   if (clusterStore.clusterList?.length) {
     globalError.value = null
@@ -145,21 +140,21 @@ watch(() => route.path, () => {
       <v-navigation-drawer v-model="drawer"
         :location="$vuetify.display.mobile ? 'bottom' : undefined"
         >
-        <v-list nav :opened="openedGroups">
+        <v-list nav>
           <v-list-item :title="t('Home')"  prepend-icon="mdi-sigma" link :to="mainLink"></v-list-item>
           <v-list-item :title="t('Connections')" prepend-icon="mdi-connection" link :to="connectionsLink"></v-list-item>
           <v-list-item :title="t('Active Queries')" prepend-icon="mdi-database-clock-outline" link :to="queriesLink"></v-list-item>
           <v-list-item :title="t('Query Stats')" prepend-icon="mdi-chart-bar" link :to="queryStatsLink"></v-list-item>
           <v-list-item :title="t('Query Report')" prepend-icon="mdi-file-chart-outline" link :to="queryReportLink"></v-list-item>
           <v-list-item v-if="snapshotsStatusStore.available" :title="t('Query Compare')" prepend-icon="mdi-compare" link :to="queryCompareLink"></v-list-item>
-          <v-list-group value="tables">
+          <v-list-group value="tables" :model-value="tablesGroupOpen">
             <template #activator="{ props }">
               <v-list-item v-bind="props" :title="t('Tables')" prepend-icon="mdi-table"></v-list-item>
             </template>
             <v-list-item :title="t('tables.menuOverview')" link :to="tablesLink"></v-list-item>
             <v-list-item :title="t('tables.menuDescribe')" link :to="tableDescribeLink"></v-list-item>
           </v-list-group>
-          <v-list-group value="indexes">
+          <v-list-group value="indexes" :model-value="indexesGroupOpen">
             <template #activator="{ props }">
               <v-list-item v-bind="props" :title="t('Indexes')" prepend-icon="mdi-family-tree"></v-list-item>
             </template>

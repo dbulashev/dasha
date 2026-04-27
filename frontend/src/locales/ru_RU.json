@@ -65,6 +65,7 @@
         "sortBy": "Сортировка",
         "excludeUsers": "Исключить пользователей",
         "search": "Поиск по тексту запроса",
+        "cpuTimeUnavailable": "Время CPU посчитать не удалось. Вероятно, запрос выполняется параллельно — pg_stat_statements суммирует время IO по всем воркерам, а exec time только по leader process.",
         "sort": {
             "total_time": "Общее время",
             "calls": "Вызовы",
@@ -167,8 +168,8 @@
         "tablespace": "Табличное пространство",
         "index": "Индекс",
         "size": "Размер",
-        "bloatBytes": "Bloat (байт)",
-        "indexBytes": "Размер индекса (байт)",
+        "bloatBytes": "Bloat",
+        "indexBytes": "Размер индекса",
         "hitRate": "Hit Rate",
         "isValid": "Валидный",
         "isReady": "Готов",

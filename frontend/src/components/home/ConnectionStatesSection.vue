@@ -19,7 +19,19 @@ const STATE_COLORS: Record<string, string> = {
   'fastpath function call': '#9C27B0',
   disabled: '#607D8B',
 }
-const FALLBACK_COLOR = '#795548'
+
+function colorForState(state: string): string {
+  const known = STATE_COLORS[state]
+  if (known) return known
+  // Deterministic HSL color from string hash — unique color per backend_type.
+  let hash = 0
+  for (let i = 0; i < state.length; i++) {
+    hash = ((hash << 5) - hash) + state.charCodeAt(i)
+    hash |= 0
+  }
+  const hue = Math.abs(hash) % 360
+  return `hsl(${hue}, 55%, 55%)`
+}
 
 const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
@@ -52,7 +64,7 @@ const chartData = computed(() => ({
   labels: chartItems.value.map(s => s.State),
   datasets: [{
     data: chartItems.value.map(s => s.Count),
-    backgroundColor: chartItems.value.map(s => STATE_COLORS[s.State] || FALLBACK_COLOR),
+    backgroundColor: chartItems.value.map(s => colorForState(s.State)),
     hoverOffset: 4,
   }],
 }))
