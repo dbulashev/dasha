@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.1.19
+
+#### Bug Fixes
+- **Index Usage**: tables with `seq_scan > 0, idx_scan = 0` now show `0%` instead of the "Insufficient data" placeholder; `—` is shown only when there is no scan activity at all
+- **Table Describe — cluster switch**: switching cluster no longer triggers 404; selected table is cleared and stale table data is dropped. `useClusterSelector.pushToUrl(true)` drops cluster-specific query params (`schema`, `table`, etc.) on cluster change; `isSyncing` is held through `nextTick` to suppress the host/db watcher from re-adding extras; `DescribeTableSelector` is remounted via `:key="clusterName"`
+- **Table Describe — Bloat card**: now resets on cluster / host / database / schema / table change (was retaining stale data when context changed)
+- **Sidebar submenu state**: Tables / Indexes submenu expands correctly after page reload when the current route is inside the submenu (root cause: router readiness was not awaited before app mount). Navigation-based expansion via per-group `:model-value` computeds — Vuetify did not always pick up changes to the parent v-list `:opened` array
+
+#### Improvements
+- **Connection States / Connection Sources**: empty cells for service processes (autovacuum launcher, walwriter, checkpointer, etc.) are now filled with `backend_type` from `pg_stat_activity` via `COALESCE`
+- **Connection States chart**: deterministic per-state color via HSL hash for unknown `backend_type` values (was using a single brown fallback for all service processes)
+- **Index Bloat**: byte-size columns rendered via `fmtBytes` (KB/MB/GB); redundant "(bytes)" suffix removed from column headers
+
 ## v0.1.18
 
 #### New Features
