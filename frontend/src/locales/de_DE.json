@@ -44,6 +44,7 @@
     "sortBy": "Sortierung",
     "excludeUsers": "Benutzer ausschließen",
     "search": "Suche im Abfragetext",
+    "cpuTimeUnavailable": "CPU-Zeit konnte nicht berechnet werden. Die Abfrage wird wahrscheinlich parallel ausgeführt — pg_stat_statements summiert die IO-Zeit über alle Worker, exec_time nur für den Leader-Prozess.",
     "sort": {
       "total_time": "Gesamtzeit",
       "calls": "Aufrufe",

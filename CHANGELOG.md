@@ -3,6 +3,7 @@
 ## v0.1.19
 
 #### Bug Fixes
+- **Query Report — CPU time**: previously could be negative or exceed 100% when a query ran with parallel workers (because `pg_stat_statements` aggregates IO time across all workers, while `total_exec_time` is wall-clock leader). Now: backend returns `null` for `cpu_time` when math gives a negative result; frontend renders `?` icon with explanatory tooltip. IO time now also includes `temp_blk_read_time + temp_blk_write_time` (PG15+) for completeness. New `150000/` SQL template added so PG14 (which lacks temp_blk timing) keeps its existing formula
 - **Index Usage**: tables with `seq_scan > 0, idx_scan = 0` now show `0%` instead of the "Insufficient data" placeholder; `—` is shown only when there is no scan activity at all
 - **Table Describe — cluster switch**: switching cluster no longer triggers 404; selected table is cleared and stale table data is dropped. `useClusterSelector.pushToUrl(true)` drops cluster-specific query params (`schema`, `table`, etc.) on cluster change; `isSyncing` is held through `nextTick` to suppress the host/db watcher from re-adding extras; `DescribeTableSelector` is remounted via `:key="clusterName"`
 - **Table Describe — Bloat card**: now resets on cluster / host / database / schema / table change (was retaining stale data when context changed)

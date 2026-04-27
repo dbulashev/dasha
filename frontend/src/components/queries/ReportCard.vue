@@ -89,7 +89,14 @@ function truncateSql(sql: string, maxLen = 120): string {
         </v-col>
         <v-col cols="6" md="3" :class="{ 'report-highlight': isHighlightedField('cpu_time'), 'report-high-contrib': isHighContribution('cpu_time') }">
           <div class="text-caption text-medium-emphasis">{{ t('header.cpuTime') }}</div>
-          <div class="text-body-2">{{ fmtMs(item.CpuTimeMs) }} ({{ fmtPct(item.CpuTimePct) }})</div>
+          <div v-if="item.CpuTimeMs == null" class="text-body-2">
+            <v-tooltip :text="t('report.cpuTimeUnavailable')" location="bottom" max-width="380">
+              <template #activator="{ props }">
+                <v-icon v-bind="props" size="small" color="medium-emphasis">mdi-help-circle-outline</v-icon>
+              </template>
+            </v-tooltip>
+          </div>
+          <div v-else class="text-body-2">{{ fmtMs(item.CpuTimeMs) }} ({{ fmtPct(item.CpuTimePct) }})</div>
         </v-col>
         <v-col v-if="item.SharedBlksDirtiedPct != null || item.SharedBlksWrittenPct != null" cols="6" md="4">
           <div class="text-caption text-medium-emphasis">{{ t('header.sharedBlks') }}</div>

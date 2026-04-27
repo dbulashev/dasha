@@ -19,8 +19,6 @@ WITH stst as (
         COALESCE(sum(temp_blks_read),0) + COALESCE(sum(temp_blks_written),0) AS temp_blks,
         sum(blk_read_time) AS blk_read_time,
         sum(blk_write_time) AS blk_write_time,
-        sum(temp_blk_read_time) AS temp_blk_read_time,
-        sum(temp_blk_write_time) AS temp_blk_write_time,
         sum(wal_records) AS wal_records,
         sum(wal_fpi) AS wal_fpi,
         sum(wal_bytes) AS wal_bytes
@@ -47,10 +45,10 @@ WITH stst as (
              max_exec_time,
              mean_exec_time,
              100.0 * (total_exec_time + total_plan_time) / nullif( sum(total_exec_time + total_plan_time) OVER () , 0) AS total_time_pct,
-             blk_read_time + blk_write_time + temp_blk_read_time + temp_blk_write_time AS io_time,
-             100.0 * (blk_read_time + blk_write_time + temp_blk_read_time + temp_blk_write_time) / nullif( sum(blk_read_time + blk_write_time + temp_blk_read_time + temp_blk_write_time) OVER () , 0) AS io_time_pct,
-             CASE WHEN total_plan_time + total_exec_time - blk_read_time - blk_write_time - temp_blk_read_time - temp_blk_write_time >= 0
-                  THEN total_plan_time + total_exec_time - blk_read_time - blk_write_time - temp_blk_read_time - temp_blk_write_time
+             blk_read_time + blk_write_time AS io_time,
+             100.0 * (blk_read_time + blk_write_time) / nullif( sum(blk_read_time + blk_write_time) OVER () , 0) AS io_time_pct,
+             CASE WHEN total_plan_time + total_exec_time - blk_read_time - blk_write_time >= 0
+                  THEN total_plan_time + total_exec_time - blk_read_time - blk_write_time
              END AS cpu_time,
              100.0 * (shared_blks_hit) / NULLIF(shared_blks_hit + shared_blks_read, 0) AS cache_hit_ratio,
              shared_blks_dirtied,
