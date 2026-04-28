@@ -14,17 +14,11 @@ import (
 var (
 	errUnauthorized     = echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
 	errForbidden        = echo.NewHTTPError(http.StatusForbidden, "forbidden")
-	errInternalError    = echo.NewHTTPError(http.StatusInternalServerError, "internal error")
 	errRateLimitExceed  = echo.NewHTTPError(http.StatusTooManyRequests, "rate limit exceeded")
 	errHTTPSRequired    = echo.NewHTTPError(http.StatusForbidden, "HTTPS required")
 	errOIDCUnavailable  = echo.NewHTTPError(http.StatusServiceUnavailable, "OIDC provider not available")
 	errInvalidState     = echo.NewHTTPError(http.StatusBadRequest, "invalid state")
 	errNoActiveSession  = echo.NewHTTPError(http.StatusUnauthorized, "no active session")
-	errTokenExchange    = echo.NewHTTPError(http.StatusUnauthorized, "token exchange failed")
-	errNoIDToken        = echo.NewHTTPError(http.StatusUnauthorized, "no id_token in response")
-	errInvalidIDToken   = echo.NewHTTPError(http.StatusUnauthorized, "invalid id_token")
-	errParseClaims      = echo.NewHTTPError(http.StatusInternalServerError, "failed to parse claims")
-	errSessionError     = echo.NewHTTPError(http.StatusInternalServerError, "session error")
 	errAuthorizationErr = echo.NewHTTPError(http.StatusInternalServerError, "authorization error")
 )
 

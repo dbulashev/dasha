@@ -42,7 +42,8 @@
   <div class="empty-state">
     <img src="/dasha-appology.png" alt="">
     <h1>Authentication is unavailable</h1>
-    <p>Single Sign-On is misconfigured. Please contact your administrator.</p>
+    <p>{{.Message}}</p>
+    {{if .ShowRetry}}<p style="margin-top: 16px;"><a href="/auth/login">Try logging in again</a></p>{{end}}
   </div>
 </body>
 </html>

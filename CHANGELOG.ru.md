@@ -1,5 +1,10 @@
 # История изменений
 
+## v0.1.20
+
+#### Исправления
+- **OIDC error-страницы**: все ошибки в callback (token exchange, missing id_token, invalid id_token, разбор claims, сессия) и сбой генерации state-cookie на login теперь рендерят стилизованную страницу с appology (`oidc_unavailable.html`) вместо сырого JSON. HTML теперь шаблон `html/template` с подстановкой `{{.Message}}` и `{{.ShowRetry}}`; для каждой ошибки — своё сообщение, при наличии смысла повторить попытку выводится ссылка «Try logging in again»
+
 ## v0.1.19
 
 #### Исправления
