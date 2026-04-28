@@ -2,6 +2,7 @@ package auth
 
 import (
 	_ "embed"
+	"html/template"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -9,7 +10,11 @@ import (
 )
 
 //go:embed oidc_unavailable.html
-var oidcUnavailableHTML string
+var oidcUnavailableHTMLRaw string
+
+var oidcUnavailableTmpl = template.Must(template.New("oidc_unavailable").Parse(oidcUnavailableHTMLRaw))
+
+const defaultOIDCUnavailableMessage = "Single Sign-On is misconfigured. Please contact your administrator."
 
 func RegisterBFFRoutes(e *echo.Echo, provider *OIDCProvider, sm *SessionManager, logger *zap.Logger) {
 	e.GET("/auth/login", loginHandler(provider, sm, logger))
@@ -18,21 +23,35 @@ func RegisterBFFRoutes(e *echo.Echo, provider *OIDCProvider, sm *SessionManager,
 	e.GET("/auth/me", meHandler(sm, provider))
 }
 
-func renderOIDCUnavailable(c echo.Context) error {
-	return c.HTML(http.StatusServiceUnavailable, oidcUnavailableHTML) //nolint:wrapcheck
+// renderOIDCUnavailable renders the apology page with a custom message and optional "Try again" link.
+// status: HTTP status code to return (typically 503 for misconfig, 502 for IDP errors).
+// message: user-facing description; empty falls back to the generic admin-contact text.
+// showRetry: when true, includes a link to /auth/login so the user can retry.
+func renderOIDCUnavailable(c echo.Context, status int, message string, showRetry bool) error {
+	if message == "" {
+		message = defaultOIDCUnavailableMessage
+	}
+
+	c.Response().Header().Set(echo.HeaderContentType, echo.MIMETextHTMLCharsetUTF8)
+	c.Response().WriteHeader(status)
+
+	return oidcUnavailableTmpl.Execute(c.Response().Writer, map[string]any{
+		"Message":   message,
+		"ShowRetry": showRetry,
+	})
 }
 
 func loginHandler(provider *OIDCProvider, sm *SessionManager, logger *zap.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		if provider == nil {
 			logger.Warn("SSO login requested but OIDC provider is not initialized")
-			return renderOIDCUnavailable(c)
+			return renderOIDCUnavailable(c, http.StatusServiceUnavailable, "", false)
 		}
 
 		state, err := sm.SetStateCookie(c)
 		if err != nil {
 			logger.Error("failed to generate state", zap.Error(err))
-			return errInternalError
+			return renderOIDCUnavailable(c, http.StatusInternalServerError, "Failed to start login: state cookie could not be generated.", true)
 		}
 
 		return c.Redirect(http.StatusFound, provider.OAuth2Cfg.AuthCodeURL(state))
@@ -43,7 +62,7 @@ func callbackHandler(provider *OIDCProvider, sm *SessionManager, logger *zap.Log
 	return func(c echo.Context) error {
 		if provider == nil {
 			logger.Warn("OIDC callback received but provider is not initialized")
-			return renderOIDCUnavailable(c)
+			return renderOIDCUnavailable(c, http.StatusServiceUnavailable, "", false)
 		}
 
 		if err := sm.ValidateStateCookie(c); err != nil {
@@ -54,24 +73,25 @@ func callbackHandler(provider *OIDCProvider, sm *SessionManager, logger *zap.Log
 		oauth2Token, err := sm.ExchangeCode(c, provider)
 		if err != nil {
 			logger.Error("token exchange failed", zap.Error(err))
-			return errTokenExchange
+			return renderOIDCUnavailable(c, http.StatusBadGateway, "Token exchange with the identity provider failed. Please try logging in again.", true)
 		}
 
 		rawIDToken, ok := oauth2Token.Extra("id_token").(string)
 		if !ok {
-			return errNoIDToken
+			logger.Error("OIDC token response did not include id_token")
+			return renderOIDCUnavailable(c, http.StatusBadGateway, "Identity provider response did not include an id_token.", true)
 		}
 
 		idToken, err := provider.VerifyIDToken(c.Request().Context(), rawIDToken)
 		if err != nil {
 			logger.Error("ID token verification failed", zap.Error(err))
-			return errInvalidIDToken
+			return renderOIDCUnavailable(c, http.StatusUnauthorized, "Identity provider returned an invalid id_token.", true)
 		}
 
 		var claims map[string]any
 		if err := idToken.Claims(&claims); err != nil {
 			logger.Error("failed to parse claims", zap.Error(err))
-			return errParseClaims
+			return renderOIDCUnavailable(c, http.StatusInternalServerError, "Failed to parse identity claims from the id_token.", true)
 		}
 
 		name, _ := claims["preferred_username"].(string)
@@ -87,7 +107,7 @@ func callbackHandler(provider *OIDCProvider, sm *SessionManager, logger *zap.Log
 			UserRole:     role,
 		}); err != nil {
 			logger.Error("failed to set session", zap.Error(err))
-			return errSessionError
+			return renderOIDCUnavailable(c, http.StatusInternalServerError, "Failed to create session after successful authentication.", true)
 		}
 
 		logger.Info("user authenticated via OIDC",

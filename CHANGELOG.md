@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.20
+
+#### Bug Fixes
+- **OIDC error pages**: all auth callback failures (token exchange, missing id_token, invalid id_token, claims parse, session error) and login state-cookie generation now render the styled apology page (`oidc_unavailable.html`) instead of raw JSON. The HTML is now a `html/template` with `{{.Message}}` and `{{.ShowRetry}}` substitution; specific error contexts get tailored messages, and a "Try logging in again" link is shown when retry makes sense
+
 ## v0.1.19
 
 #### Bug Fixes
