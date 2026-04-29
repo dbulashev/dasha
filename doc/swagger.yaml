@@ -1045,6 +1045,25 @@ paths:
             type: integer
             default: 3
           description: Minimum query duration in seconds
+        - in: query
+          name: query_filter
+          schema:
+            type: string
+            maxLength: 1000
+          description: Case-insensitive substring filter for query text. Use SQL wildcards (%, _) explicitly. Empty disables the filter.
+        - in: query
+          name: query_filter_mode
+          schema:
+            type: string
+            enum: [like, not_like]
+            default: like
+          description: Filter mode for query_filter — `like` keeps matches, `not_like` excludes them.
+        - in: query
+          name: username
+          schema:
+            type: string
+            maxLength: 64
+          description: Filter by exact PostgreSQL role name (`usename`).
       responses:
         '200':
           description: Success
@@ -2133,6 +2152,10 @@ components:
           type: string
         BlockedDuration:
           type: string
+        BlockedDurationMs:
+          type: number
+          format: double
+          nullable: true
         BlockedMode:
           type: string
         BlockingPid:
@@ -2146,6 +2169,10 @@ components:
           type: string
         BlockingDuration:
           type: string
+        BlockingDurationMs:
+          type: number
+          format: double
+          nullable: true
         BlockingMode:
           type: string
 
@@ -2310,6 +2337,22 @@ components:
           description: pg_stat_statements queryid as string to preserve int64 precision in JavaScript
         Query:
           type: string
+        Usernames:
+          type: array
+          items:
+            type: string
+          nullable: true
+          description: Distinct PostgreSQL roles that executed this queryid (aggregated across pg_stat_statements rows).
+        StddevExecTimeMs:
+          type: number
+          format: double
+          nullable: true
+          description: max(stddev_exec_time) across aggregated pg_stat_statements rows, in milliseconds.
+        StddevPlanTimeMs:
+          type: number
+          format: double
+          nullable: true
+          description: max(stddev_plan_time) across aggregated pg_stat_statements rows, in milliseconds.
         Rows:
           type: integer
           format: int64
@@ -2422,6 +2465,19 @@ components:
     QueryReportMetrics:
       type: object
       properties:
+        Usernames:
+          type: array
+          items:
+            type: string
+          nullable: true
+        StddevExecTimeMs:
+          type: number
+          format: double
+          nullable: true
+        StddevPlanTimeMs:
+          type: number
+          format: double
+          nullable: true
         Rows:
           type: integer
           format: int64

@@ -2,7 +2,7 @@
 import { useI18n } from 'vue-i18n'
 import type { QueryReport } from '@/api/models/index'
 import { fmtBytes, fmtMs as fmtMsUtil, fmtPct, fmtInt } from '@/utils/format'
-import { highlightSql, copyToClipboard } from '@/utils/sql'
+import { highlightSql, copyToClipboard, truncateSql, SQL_PREVIEW_MAX } from '@/utils/sql'
 import '@/assets/sql-highlight.css'
 
 type ReportSortKey = 'total_time' | 'calls' | 'wal' | 'rows' | 'cpu_time' | 'io_time' | 'temp_blks'
@@ -42,18 +42,17 @@ function fmtMs(ms: number | null | undefined): string {
   return fmtMsUtil(ms, t)
 }
 
-function truncateSql(sql: string, maxLen = 120): string {
-  if (sql.length <= maxLen) return sql
-  return sql.substring(0, maxLen) + '…'
-}
-
 </script>
 
 <template>
   <v-card variant="outlined" class="mb-3">
-    <v-card-title class="text-body-1 pb-1 d-flex align-center">
+    <v-card-title class="text-body-1 pb-1 d-flex align-center flex-wrap ga-1">
       <span>queryid: <span class="text-mono">{{ item.QueryID }}</span></span>
-      <v-btn icon="mdi-content-copy" variant="text" size="x-small" class="ml-1" @click="copyToClipboard(String(item.QueryID))" />
+      <v-btn icon="mdi-content-copy" variant="text" size="x-small" @click="copyToClipboard(String(item.QueryID))" />
+      <template v-if="item.Usernames && item.Usernames.length">
+        <span class="text-caption text-medium-emphasis ml-2">{{ t('report.users', item.Usernames.length) }}:</span>
+        <v-chip v-for="u in item.Usernames" :key="u" size="x-small" variant="tonal" label>{{ u }}</v-chip>
+      </template>
     </v-card-title>
     <v-card-text class="pt-0">
       <v-row dense>
@@ -76,12 +75,16 @@ function truncateSql(sql: string, maxLen = 120): string {
         <v-col cols="6" md="3">
           <div class="text-caption text-medium-emphasis">{{ t('header.execTime') }}</div>
           <div class="text-body-2">{{ fmtMs(item.ExecTimeMs) }}</div>
-          <div class="text-caption text-medium-emphasis">{{ fmtMs(item.MinExecTimeMs) }} .. {{ fmtMs(item.MaxExecTimeMs) }}, {{ t('report.avg') }} {{ fmtMs(item.MeanExecTimeMs) }}</div>
+          <div class="text-caption text-medium-emphasis">
+            {{ fmtMs(item.MinExecTimeMs) }} .. {{ fmtMs(item.MaxExecTimeMs) }}, {{ t('report.avg') }} {{ fmtMs(item.MeanExecTimeMs) }}<span v-if="item.StddevExecTimeMs != null">, {{ t('report.stddev') }}={{ fmtMs(item.StddevExecTimeMs) }}</span>
+          </div>
         </v-col>
         <v-col cols="6" md="3">
           <div class="text-caption text-medium-emphasis">{{ t('header.planTime') }}</div>
           <div class="text-body-2">{{ fmtMs(item.PlanTimeMs) }}</div>
-          <div class="text-caption text-medium-emphasis">{{ fmtMs(item.MinPlanTimeMs) }} .. {{ fmtMs(item.MaxPlanTimeMs) }}, {{ t('report.avg') }} {{ fmtMs(item.MeanPlanTimeMs) }}</div>
+          <div class="text-caption text-medium-emphasis">
+            {{ fmtMs(item.MinPlanTimeMs) }} .. {{ fmtMs(item.MaxPlanTimeMs) }}, {{ t('report.avg') }} {{ fmtMs(item.MeanPlanTimeMs) }}<span v-if="item.StddevPlanTimeMs != null">, {{ t('report.stddev') }}={{ fmtMs(item.StddevPlanTimeMs) }}</span>
+          </div>
         </v-col>
         <v-col cols="6" md="3" :class="{ 'report-highlight': isHighlightedField('io_time'), 'report-high-contrib': isHighContribution('io_time') }">
           <div class="text-caption text-medium-emphasis">{{ t('header.ioTime') }}</div>
@@ -114,7 +117,7 @@ function truncateSql(sql: string, maxLen = 120): string {
       <div class="mt-2 d-flex align-center">
         <code class="sql-highlight text-mono text-body-2 text-medium-emphasis flex-grow-1 sql-truncate" v-html="highlightSql(truncateSql(item.Query))"></code>
         <v-btn icon="mdi-content-copy" variant="text" size="x-small" class="ml-1 flex-shrink-0" @click="copyToClipboard(item.Query)" />
-        <v-btn v-if="item.Query.length > 120" size="small" variant="text" class="ml-1 flex-shrink-0" @click="emit('showSql', item)">
+        <v-btn v-if="item.Query.length > SQL_PREVIEW_MAX" size="small" variant="text" class="ml-1 flex-shrink-0" @click="emit('showSql', item)">
           {{ t('report.showSql') }}
         </v-btn>
       </div>

@@ -41,6 +41,8 @@
   "report": {
     "showSql": "SQL anzeigen",
     "avg": "Durchschnitt",
+    "stddev": "σ",
+    "users": "Benutzer | Benutzer",
     "sortBy": "Sortierung",
     "excludeUsers": "Benutzer ausschließen",
     "search": "Suche im Abfragetext",
@@ -293,7 +295,17 @@
     "blockedProcesses": "Blockierte Prozesse: {count}"
   },
   "queries": {
-    "minDurationLabel": "Min. Dauer, ms ≥"
+    "minDurationLabel": "Min. Dauer, ms ≥",
+    "queryFilterLabel": "Filter nach Abfragetext",
+    "queryFilterPlaceholder": "% und _ — Wildcards; leer = kein Filter",
+    "queryFilterModeLike": "LIKE",
+    "queryFilterModeNotLike": "NOT LIKE",
+    "usernameLabel": "Benutzer",
+    "intervalLabel": "Intervall",
+    "intervalSec": "{n} s",
+    "playTooltip": "Auto-Aktualisierung aktivieren",
+    "stopTooltip": "Auto-Aktualisierung stoppen",
+    "refreshTooltip": "Jetzt aktualisieren"
   },
   "indexes": {
     "all": "Alle Indizes",

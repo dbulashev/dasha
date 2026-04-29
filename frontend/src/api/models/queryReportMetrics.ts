@@ -7,6 +7,12 @@
 
 export interface QueryReportMetrics {
   /** @nullable */
+  Usernames?: string[] | null
+  /** @nullable */
+  StddevExecTimeMs?: number | null
+  /** @nullable */
+  StddevPlanTimeMs?: number | null
+  /** @nullable */
   Rows?: number | null
   /** @nullable */
   RowsPct?: number | null

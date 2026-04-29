@@ -9,6 +9,21 @@ export interface QueryReport {
   /** pg_stat_statements queryid as string to preserve int64 precision in JavaScript */
   QueryID: string
   Query: string
+  /**
+   * Distinct PostgreSQL roles that executed this queryid (aggregated across pg_stat_statements rows).
+   * @nullable
+   */
+  Usernames?: string[] | null
+  /**
+   * max(stddev_exec_time) across aggregated pg_stat_statements rows, in milliseconds.
+   * @nullable
+   */
+  StddevExecTimeMs?: number | null
+  /**
+   * max(stddev_plan_time) across aggregated pg_stat_statements rows, in milliseconds.
+   * @nullable
+   */
+  StddevPlanTimeMs?: number | null
   /** @nullable */
   Rows?: number | null
   /** @nullable */

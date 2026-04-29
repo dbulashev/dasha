@@ -48,12 +48,22 @@ function fmtMs(ms: number | null | undefined): string {
     <v-col cols="6">
       <div class="text-caption text-medium-emphasis">{{ t('header.execTime') }}</div>
       <div class="text-body-2">{{ fmtMs(metrics.ExecTimeMs) }}</div>
-      <div class="text-caption text-medium-emphasis">{{ fmtMs(metrics.MinExecTimeMs) }} .. {{ fmtMs(metrics.MaxExecTimeMs) }}, {{ t('report.avg') }} {{ fmtMs(metrics.MeanExecTimeMs) }}</div>
+      <div class="text-caption text-medium-emphasis">
+        {{ fmtMs(metrics.MinExecTimeMs) }} .. {{ fmtMs(metrics.MaxExecTimeMs) }}, {{ t('report.avg') }} {{ fmtMs(metrics.MeanExecTimeMs) }}<span v-if="metrics.StddevExecTimeMs != null">, {{ t('report.stddev') }}={{ fmtMs(metrics.StddevExecTimeMs) }}</span>
+      </div>
     </v-col>
     <v-col cols="6">
       <div class="text-caption text-medium-emphasis">{{ t('header.planTime') }}</div>
       <div class="text-body-2">{{ fmtMs(metrics.PlanTimeMs) }}</div>
-      <div class="text-caption text-medium-emphasis">{{ fmtMs(metrics.MinPlanTimeMs) }} .. {{ fmtMs(metrics.MaxPlanTimeMs) }}, {{ t('report.avg') }} {{ fmtMs(metrics.MeanPlanTimeMs) }}</div>
+      <div class="text-caption text-medium-emphasis">
+        {{ fmtMs(metrics.MinPlanTimeMs) }} .. {{ fmtMs(metrics.MaxPlanTimeMs) }}, {{ t('report.avg') }} {{ fmtMs(metrics.MeanPlanTimeMs) }}<span v-if="metrics.StddevPlanTimeMs != null">, {{ t('report.stddev') }}={{ fmtMs(metrics.StddevPlanTimeMs) }}</span>
+      </div>
+    </v-col>
+    <v-col v-if="metrics.Usernames && metrics.Usernames.length" cols="12">
+      <div class="d-flex flex-wrap align-center ga-1">
+        <span class="text-caption text-medium-emphasis mr-1">{{ t('report.users', metrics.Usernames.length) }}:</span>
+        <v-chip v-for="u in metrics.Usernames" :key="u" size="x-small" variant="tonal" label>{{ u }}</v-chip>
+      </div>
     </v-col>
     <v-col cols="6" :class="{ 'report-highlight': isHighlighted('io_time'), 'report-high-contrib': isHighContrib('io_time') }">
       <div class="text-caption text-medium-emphasis">{{ t('header.ioTime') }}</div>

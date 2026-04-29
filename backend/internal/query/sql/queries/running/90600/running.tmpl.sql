@@ -14,4 +14,10 @@ WHERE state <> 'idle'
   AND datname = current_database()
   AND NOW() - COALESCE(query_start, xact_start) > ({{ .MinDuration }} * interval '1 millisecond')
   AND query <> '<insufficient privilege>'
+  AND (
+    $1::text IS NULL
+    OR ($2::text = 'like'     AND query ILIKE $1)
+    OR ($2::text = 'not_like' AND query NOT ILIKE $1)
+  )
+  AND ($3::text IS NULL OR usename = $3)
 ORDER BY COALESCE(query_start, xact_start) DESC
