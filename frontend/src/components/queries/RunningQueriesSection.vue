@@ -32,6 +32,9 @@ function fmtMs(ms: number | null | undefined): string {
   return fmtMsUtil(ms, t)
 }
 
+// Vuetify v-data-table expects string keys; coerce Pid (number) so :expanded matches :item-value.
+const itemKey = (item: QueryRunning) => String(item.Pid)
+
 const sqlDialogVisible = ref(false)
 const sqlDialogSql = ref('')
 const sqlDialogPid = ref('')
@@ -84,11 +87,10 @@ const { items: usersList } = useApiLoader<string[]>(
   () => getDatabaseUsers({
     cluster_name: clusterName.value!,
     instance: hostName.value!,
-    database: databaseName.value!,
   }),
   {
-    deps: [clusterName, hostName, databaseName],
-    guard: () => !!clusterName.value && !!hostName.value && !!databaseName.value,
+    deps: [clusterName, hostName],
+    guard: () => !!clusterName.value && !!hostName.value,
     onError: () => {},
   },
 )
@@ -210,8 +212,8 @@ watch(intervalSec, () => autoRefresh.restart())
         :headers="headers"
         :items="items"
         :loading="loading"
-        :expanded="items.map(i => i.Pid)"
-        item-value="Pid"
+        :expanded="items.map(itemKey)"
+        :item-value="itemKey"
       >
         <template #item.DurationMs="{ item }">{{ fmtMs(item.DurationMs) }}</template>
         <template #expanded-row="{ columns, item }">
