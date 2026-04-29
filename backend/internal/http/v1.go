@@ -34,6 +34,9 @@ func mapQueryReport(t dto.QueryReport) serverhttp.QueryReport {
 	return serverhttp.QueryReport{
 		QueryID:              strconv.FormatInt(t.QueryID, 10),
 		Query:                t.Query,
+		Usernames:            usernamesPtr(t.Usernames),
+		StddevExecTimeMs:     t.StddevExecTimeMs,
+		StddevPlanTimeMs:     t.StddevPlanTimeMs,
 		Rows:                 t.Rows,
 		RowsPct:              t.RowsPct,
 		Calls:                t.Calls,
@@ -64,8 +67,21 @@ func mapQueryReport(t dto.QueryReport) serverhttp.QueryReport {
 	}
 }
 
+// usernamesPtr returns nil for an empty slice so the JSON field is rendered as null
+// (consistent with other nullable arrays in the API).
+func usernamesPtr(u []string) *[]string {
+	if len(u) == 0 {
+		return nil
+	}
+
+	return &u
+}
+
 func mapQueryReportMetrics(t dto.QueryReport) serverhttp.QueryReportMetrics {
 	return serverhttp.QueryReportMetrics{
+		Usernames:            usernamesPtr(t.Usernames),
+		StddevExecTimeMs:     t.StddevExecTimeMs,
+		StddevPlanTimeMs:     t.StddevPlanTimeMs,
 		Rows:                 t.Rows,
 		RowsPct:              t.RowsPct,
 		Calls:                t.Calls,
@@ -1017,12 +1033,14 @@ func (s *Handlers) GetQueriesBlocked(
 				BlockedUser:                           t.BlockedUser,
 				BlockedQuery:                          sanitize.SQL(t.BlockedQuery),
 				BlockedDuration:                       t.BlockedDuration,
+				BlockedDurationMs:                     t.BlockedDurationMs,
 				BlockedMode:                           t.BlockedMode,
 				BlockingPid:                           t.BlockingPid,
 				BlockingUser:                          t.BlockingUser,
 				StateOfBlockingProcess:                t.StateOfBlockingProcess,
 				CurrentOrRecentQueryInBlockingProcess: sanitize.SQL(t.CurrentOrRecentQueryInBlockingProcess),
 				BlockingDuration:                      t.BlockingDuration,
+				BlockingDurationMs:                    t.BlockingDurationMs,
 				BlockingMode:                          t.BlockingMode,
 			}
 		})
@@ -1039,7 +1057,23 @@ func (s *Handlers) GetQueriesRunning(
 		minDuration = *req.Params.MinDuration
 	}
 
-	queries, err := s.repo.GetQueriesRunning(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, minDuration)
+	// Filter by query text (ILIKE / NOT ILIKE) and by exact usename. Empty values disable the filter.
+	var queryFilter *string
+	if req.Params.QueryFilter != nil && *req.Params.QueryFilter != "" {
+		queryFilter = req.Params.QueryFilter
+	}
+
+	queryFilterMode := "like"
+	if req.Params.QueryFilterMode != nil && *req.Params.QueryFilterMode == serverhttp.NotLike {
+		queryFilterMode = "not_like"
+	}
+
+	var username *string
+	if req.Params.Username != nil && *req.Params.Username != "" {
+		username = req.Params.Username
+	}
+
+	queries, err := s.repo.GetQueriesRunning(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, minDuration, queryFilter, queryFilterMode, username)
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.GetQueriesRunning404Response{}, nil
 	}

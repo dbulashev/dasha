@@ -1,13 +1,18 @@
 import { ref, onBeforeUnmount } from 'vue'
 
 interface UseAutoRefreshOptions {
-  pollInterval?: number
+  // Static interval in ms, or a getter for reactive intervals (e.g. () => intervalSec.value * 1000).
+  pollInterval?: number | (() => number)
   maxDuration?: number
   onTick: () => void
 }
 
 export function useAutoRefresh(options: UseAutoRefreshOptions) {
-  const pollInterval = options.pollInterval ?? 5000
+  const pollIntervalGetter = (): number => {
+    const v = options.pollInterval
+    if (typeof v === 'function') return v()
+    return v ?? 5000
+  }
   const maxDuration = options.maxDuration ?? 5 * 60 * 1000
 
   const active = ref(false)
@@ -29,12 +34,17 @@ export function useAutoRefresh(options: UseAutoRefreshOptions) {
         return
       }
       options.onTick()
-    }, pollInterval)
+    }, pollIntervalGetter())
 
     countdownTimer = setInterval(() => {
       remaining.value = Math.max(0, maxDuration - (Date.now() - startTime))
       if (remaining.value <= 0) stop()
     }, 1000)
+  }
+
+  // Restart the poll timer with the current interval (callable from a watcher when interval changes).
+  function restart() {
+    if (active.value) start()
   }
 
   function stop() {
@@ -57,5 +67,5 @@ export function useAutoRefresh(options: UseAutoRefreshOptions) {
 
   onBeforeUnmount(stop)
 
-  return { active, remaining, start, stop, toggle, formatRemaining }
+  return { active, remaining, start, stop, restart, toggle, formatRemaining }
 }

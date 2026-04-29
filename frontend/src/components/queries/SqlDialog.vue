@@ -2,11 +2,14 @@
 import { highlightSql, copyToClipboard } from '@/utils/sql'
 import '@/assets/sql-highlight.css'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   modelValue: boolean
   queryId: string
   sql: string
-}>()
+  label?: string
+}>(), {
+  label: 'queryid',
+})
 
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
@@ -17,7 +20,7 @@ const emit = defineEmits<{
   <v-dialog :model-value="props.modelValue" max-width="900" @update:model-value="emit('update:modelValue', $event)">
     <v-card>
       <v-card-title class="d-flex align-center">
-        <span>queryid: {{ props.queryId }}</span>
+        <span>{{ props.label }}: {{ props.queryId }}</span>
         <v-spacer />
         <v-btn icon="mdi-content-copy" variant="text" size="small" @click="copyToClipboard(props.sql)" />
         <v-btn icon="mdi-close" variant="text" size="small" @click="emit('update:modelValue', false)" />

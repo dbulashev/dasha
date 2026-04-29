@@ -2,8 +2,22 @@
 
 ## v0.1.20
 
+#### New Features
+- **Active Queries — query text filter**: text field with `LIKE` / `NOT LIKE` toggle, case-insensitive (`ILIKE` on the backend). Wildcards (`%`, `_`) are explicit. New query params on `GET /api/queries/running`: `query_filter`, `query_filter_mode`
+- **Active Queries — username filter**: autocomplete sourced from `/api/common/database-users` (same source as Query Report exclude-users). New query param `username`
+- **Active Queries — Play/Stop + refresh interval**: Play/Stop button + interval selector (1 / 5 / 10 sec, default 5). Auto-refresh starts only on user click (same UX as Operation Progress) and is capped at 5 minutes; remaining time is shown next to the Play/Stop button. Interval changes restart the timer in flight. Cluster switch stops auto-refresh
+- **Active Queries — query text in expanded row**: SQL is moved out of the column into a per-row expanded cell (same pattern as Top Tables by Size). Syntax highlighting + copy-to-clipboard button, query truncated at 100 chars with a "Show SQL" dialog for the full text (same UX as Query Report card). The `state` column is removed from the table — for non-idle queries it is almost always `active`
+- **Query Report / Compare — stddev and usernames**: new fields `StddevExecTimeMs`, `StddevPlanTimeMs` (`max(stddev_*_time)` across aggregated `pg_stat_statements` rows) and `Usernames` (`array_agg(DISTINCT rolname)`). σ is shown next to avg on the `min..max, avg` line; usernames render as chips — in the report card next to queryid, in the comparison card as a single full-width row per A/B side (with i18n plural support: «Пользователь / Пользователя / Пользователей»). All three report SQL templates (base / 150000 / 170000) updated
+
 #### Bug Fixes
 - **OIDC error pages**: all auth callback failures (token exchange, missing id_token, invalid id_token, claims parse, session error) and login state-cookie generation now render the styled apology page (`oidc_unavailable.html`) instead of raw JSON. The HTML is now a `html/template` with `{{.Message}}` and `{{.ShowRetry}}` substitution; specific error contexts get tailored messages, and a "Try logging in again" link is shown when retry makes sense
+
+#### Improvements
+- **Active Queries — section state in Pinia**: `activeQueries` store (per-cluster, localStorage) now persists `minDuration`, `queryFilter`, `queryFilterMode`, `username`, `intervalSec`. Smooth cluster switching with restored UI state. Auto-refresh `running` state is intentionally **not** persisted — the timer must be re-armed by the user after a cluster switch or page reload
+- **`useAutoRefresh` composable**: `pollInterval` accepts a getter `() => number` for reactive intervals; new `restart()` method to reapply interval mid-flight
+- **Locks tree / Active Queries — human-readable durations**: durations now render as `2 h 30 min` / `45 sec` / `120 ms` via `fmtMs(ms, t)` instead of the raw PG interval string `00:01:23.456`. Backend: `QueryBlocked` now also returns `BlockedDurationMs` / `BlockingDurationMs` (`EXTRACT(EPOCH FROM age(...)) * 1000`); Active Queries table column is bound to `DurationMs` for correct numeric sorting
+- **Active Queries — pause auto-refresh on SQL copy / show**: clicking the copy or "Show SQL" button stops auto-refresh so the row doesn't disappear while the user is reading
+- **`truncateSql` / `SQL_PREVIEW_MAX` shared in `utils/sql.ts`**: deduplicated local truncation helpers in `RunningQueriesSection` and `ReportCard` (previously 100 vs 120 chars) — single shared 100-char preview threshold
 
 ## v0.1.19
 

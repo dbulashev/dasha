@@ -8,12 +8,14 @@ type QueryBlocked struct {
 	BlockedUser                           string
 	BlockedQuery                          string
 	BlockedDuration                       string
+	BlockedDurationMs                     *float64
 	BlockedMode                           string
 	BlockingPid                           int32
 	BlockingUser                          string
 	StateOfBlockingProcess                string
 	CurrentOrRecentQueryInBlockingProcess string
 	BlockingDuration                      string
+	BlockingDurationMs                    *float64
 	BlockingMode                          string
 }
 
@@ -62,6 +64,9 @@ type QueryStatsStatus struct {
 type QueryReport struct {
 	QueryID              int64
 	Query                string
+	Usernames            []string
+	StddevExecTimeMs     *float64
+	StddevPlanTimeMs     *float64
 	Rows                 *int64
 	RowsPct              *float64
 	Calls                *int64

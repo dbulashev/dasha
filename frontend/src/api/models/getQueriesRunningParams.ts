@@ -6,6 +6,7 @@
  */
 import type { ClusterNameParameter } from './clusterNameParameter'
 import type { DatabaseParameter } from './databaseParameter'
+import type { GetQueriesRunningQueryFilterMode } from './getQueriesRunningQueryFilterMode'
 import type { InstanceParameter } from './instanceParameter'
 
 export type GetQueriesRunningParams = {
@@ -16,4 +17,18 @@ export type GetQueriesRunningParams = {
    * Minimum query duration in seconds
    */
   min_duration?: number
+  /**
+   * Case-insensitive substring filter for query text. Use SQL wildcards (%, _) explicitly. Empty disables the filter.
+   * @maxLength 1000
+   */
+  query_filter?: string
+  /**
+   * Filter mode for query_filter — `like` keeps matches, `not_like` excludes them.
+   */
+  query_filter_mode?: GetQueriesRunningQueryFilterMode
+  /**
+   * Filter by exact PostgreSQL role name (`usename`).
+   * @maxLength 64
+   */
+  username?: string
 }

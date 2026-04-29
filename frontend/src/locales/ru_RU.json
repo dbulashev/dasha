@@ -62,6 +62,8 @@
     "report": {
         "showSql": "Показать SQL",
         "avg": "среднее",
+        "stddev": "σ",
+        "users": "Пользователь | Пользователя | Пользователей",
         "sortBy": "Сортировка",
         "excludeUsers": "Исключить пользователей",
         "search": "Поиск по тексту запроса",
@@ -239,7 +241,17 @@
         "toastIdxHitRate": "Hit Rate индексов TOAST"
     },
     "queries": {
-        "minDurationLabel": "Мин. длительность, мс ≥"
+        "minDurationLabel": "Мин. длительность, мс ≥",
+        "queryFilterLabel": "Фильтр по тексту запроса",
+        "queryFilterPlaceholder": "% и _ — wildcard'ы; пусто = без фильтра",
+        "queryFilterModeLike": "LIKE",
+        "queryFilterModeNotLike": "NOT LIKE",
+        "usernameLabel": "Пользователь",
+        "intervalLabel": "Интервал",
+        "intervalSec": "{n} с",
+        "playTooltip": "Включить авто-обновление",
+        "stopTooltip": "Остановить авто-обновление",
+        "refreshTooltip": "Обновить сейчас"
     },
     "indexes": {
         "all": "Все индексы",

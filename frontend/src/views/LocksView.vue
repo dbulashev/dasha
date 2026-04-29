@@ -7,11 +7,16 @@ import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useViewError } from '@/composables/useViewError'
 import { assertOk } from '@/utils/api'
 import { getErrorMessage } from '@/utils/error'
+import { fmtMs as fmtMsUtil } from '@/utils/format'
 import '@/assets/sql-highlight.css'
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
 const { onError, clearError } = useViewError()
+
+function fmtDuration(ms: number | null | undefined, fallback: string): string {
+  return ms == null ? fallback : fmtMsUtil(ms, t)
+}
 
 // --- Blocked queries (locks) ---
 const blockedItems = ref<QueryBlocked[]>([])
@@ -37,7 +42,7 @@ const lockTree = computed<LockTreeNode[]>(() => {
         pid: item.BlockingPid,
         user: item.BlockingUser,
         query: item.CurrentOrRecentQueryInBlockingProcess,
-        duration: item.BlockingDuration,
+        duration: fmtDuration(item.BlockingDurationMs, item.BlockingDuration),
         mode: item.BlockingMode,
         state: item.StateOfBlockingProcess,
         blocked: [],
@@ -48,7 +53,7 @@ const lockTree = computed<LockTreeNode[]>(() => {
       pid: item.BlockedPid,
       user: item.BlockedUser,
       query: item.BlockedQuery,
-      duration: item.BlockedDuration,
+      duration: fmtDuration(item.BlockedDurationMs, item.BlockedDuration),
       mode: item.BlockedMode,
       lockedItem: item.LockedItem,
     })
