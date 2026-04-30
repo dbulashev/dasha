@@ -25,7 +25,6 @@ WITH btree_index_atts AS (
              i.reltuples,
              i.relpages,
              i.relam,
-             (quote_ident(s.schemaname) || '.' || quote_ident(s.tablename))::regclass AS starelid,
              a.attrelid AS table_oid, index_oid,
              current_setting('block_size')::numeric AS bs,
              /* MAXALIGN: 4 on 32bits, 8 on 64bits (and mingw32 ?) */
@@ -44,13 +43,17 @@ WITH btree_index_atts AS (
          FROM
              pg_attribute AS a
                  JOIN
-             {{ .PgStatsView }} AS s ON (quote_ident(s.schemaname) || '.' || quote_ident(s.tablename))::regclass=a.attrelid AND s.attname = a.attname
+             pg_class AS tbl ON tbl.oid = a.attrelid
+                 JOIN
+             pg_namespace AS tns ON tns.oid = tbl.relnamespace
+                 JOIN
+             {{ .PgStatsView }} AS s ON s.schemaname = tns.nspname AND s.tablename = tbl.relname AND s.attname = a.attname
                  JOIN
              btree_index_atts AS i ON i.indrelid = a.attrelid AND a.attnum = i.attnum
          WHERE
              a.attnum > 0
          GROUP BY
-             1, 2, 3, 4, 5, 6, 7, 8, 9
+             1, 2, 3, 4, 5, 6, 7, 8
      ),
      index_aligned AS (
          SELECT
