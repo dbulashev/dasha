@@ -75,6 +75,7 @@ secrets:
   existingSecret: ""
   externalSecret:
     enabled: false
+    esoVersion: v1beta1
     refreshInterval: "1m"
     secretStoreRef:
       name: ""
