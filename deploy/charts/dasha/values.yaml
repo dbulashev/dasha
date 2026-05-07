@@ -72,6 +72,7 @@ config:
 # Option A: provide existing Secret name containing all password env vars
 # Option B: create ExternalSecret via ESO
 secrets:
+  esoVersion: v1beta1
   existingSecret: ""
   externalSecret:
     enabled: false
