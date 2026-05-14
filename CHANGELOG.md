@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.1.23
+
+#### Security
+- **Go toolchain CVEs (10 vulnerabilities)**: bumped CI Go version pin from `1.26` to `1.26.x` (floating patch) to pick up `go1.26.3`. Fixes:
+  - `html/template` XSS via meta-content URL escaping bypass (GO-2026-4982), escaper bypass (GO-2026-4980), JsBraceDepth context tracking (GO-2026-4865)
+  - `crypto/x509` unexpected work in chain building (GO-2026-4947), inefficient policy validation (GO-2026-4946), case-sensitive excludedSubtrees auth bypass (GO-2026-4866)
+  - `crypto/tls` unauthenticated TLS 1.3 KeyUpdate DoS (GO-2026-4870)
+  - `net` panic on NUL byte in Dial/LookupPort on Windows (GO-2026-4971)
+  - `net/http` HTTP/2 infinite loop on bad SETTINGS_MAX_FRAME_SIZE (GO-2026-4918)
+- **`golang.org/x/net` bump** `v0.50.0` → `v0.53.0` — fixes HTTP/2 server panic on crafted frames (GO-2026-4559) and the above HTTP/2 SETTINGS_MAX_FRAME_SIZE issue (GO-2026-4918)
+- `go.mod` `go` directive kept at `1.26.0` (minimum) — only the CI/Docker toolchain floats forward; `golang:1.26-alpine` image already auto-picks the latest patch
+- **CI: `govulncheck` job** added to `.github/workflows/ci.yaml` and wired into `build-check.needs` — every push and PR is now scanned for symbol-level Go vulnerabilities, blocking merge to `main` on any finding
+- **CI: `npm audit` job** added for the frontend (`vulncheck-frontend`), also wired into `build-check.needs`. Fails on `high` or `critical` advisories (`--audit-level=high`) against `frontend/package-lock.json`
+
+## v0.1.22
+- **Chart** ESO version
+
 ## v0.1.20
 
 #### New Features

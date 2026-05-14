@@ -1,5 +1,22 @@
 # История изменений
 
+## v0.1.23
+
+#### Безопасность
+- **CVE в Go toolchain (10 уязвимостей)**: версия Go в CI поднята с `1.26` до плавающего `1.26.x` — автоматически подтянется `go1.26.3`. Закрывает:
+  - `html/template`: XSS через обход экранирования meta-content URL (GO-2026-4982), обход escaper (GO-2026-4980), баги отслеживания контекста JsBraceDepth (GO-2026-4865)
+  - `crypto/x509`: неожиданная работа при построении цепочки (GO-2026-4947), неэффективная валидация политик (GO-2026-4946), обход auth через case-sensitive excludedSubtrees (GO-2026-4866)
+  - `crypto/tls`: DoS через неаутентифицированный TLS 1.3 KeyUpdate (GO-2026-4870)
+  - `net`: паника на NUL-байт в Dial/LookupPort на Windows (GO-2026-4971)
+  - `net/http`: бесконечный цикл HTTP/2 при некорректном SETTINGS_MAX_FRAME_SIZE (GO-2026-4918)
+- **Обновление `golang.org/x/net`** `v0.50.0` → `v0.53.0` — устраняет панику HTTP/2-сервера на специально подготовленных фреймах (GO-2026-4559) и упомянутый HTTP/2 SETTINGS_MAX_FRAME_SIZE (GO-2026-4918)
+- Директива `go` в `go.mod` оставлена на `1.26.0` (минимум) — плавает только toolchain в CI/Docker; образ `golang:1.26-alpine` сам подтягивает последний patch
+- **CI: job `govulncheck`** добавлен в `.github/workflows/ci.yaml` и включён в `build-check.needs` — каждый push и PR сканируется на символьные уязвимости Go, любое обнаружение блокирует merge в `main`
+- **CI: job `npm audit`** добавлен для фронтенда (`vulncheck-frontend`), также включён в `build-check.needs`. Падает на advisories уровня `high` или `critical` (`--audit-level=high`) по `frontend/package-lock.json`
+
+## v0.1.22
+- **Chart** ESO version
+
 ## v0.1.20
 
 #### Новые возможности
