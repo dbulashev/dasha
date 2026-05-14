@@ -44,6 +44,8 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       volumes:
+        - name: tmp
+          emptyDir: {}
         - name: config
           configMap:
             name: {{ template "dasha.fullname" $ }}-config
@@ -88,6 +90,8 @@ spec:
                 name: {{ include "dasha.envSecretName" . }}
           {{- end }}
           volumeMounts:
+            - name: tmp
+              mountPath: /tmp
             - name: config
               mountPath: /etc/dasha
               readOnly: true

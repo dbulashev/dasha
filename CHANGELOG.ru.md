@@ -7,6 +7,10 @@
 - **Release: Trivy на образах теперь блокирующий** — `exit-code: 0` → `1` для сканов `dasha-backend` и `dasha-frontend` в `release.yaml`. Релизы падают на `CRITICAL`/`HIGH` в опубликованных образах (раньше только печатался отчёт)
 - **Workflow CodeQL** (`.github/workflows/codeql.yaml`) — статический анализ от GitHub для Go и TypeScript с набором запросов `security-extended`. Запуск на push, PR и по расписанию (Пн 06:00 UTC). Находки появляются в вкладке Security
 - **Dependabot расширен** на экосистемы `gomod` (`/backend`) и `npm` (`/frontend`), плюс базовые Docker-образы в `/deploy/images`. Сгруппированные обновления для OpenTelemetry, gRPC/protobuf, Vuetify, Vue core, ESLint и Vite — меньше PR-шума
+- **Bump Go-зависимостей** по находкам `trivy fs`: `pgx/v5` `v5.7.6` → `v5.9.0` (CRITICAL memory-safety, CVE-2026-33816), `go-jose/v4` `v4.1.3` → `v4.1.4` (HIGH DoS через специально подготовленный JWE, CVE-2026-34986), `golang-jwt/v4` `v4.5.1` → `v4.5.2` (HIGH memory allocation в разборе header, CVE-2025-30204), `grpc` `v1.79.2` → `v1.79.3` (HIGH HTTP/2 path validation auth bypass, CVE-2026-33186). `CVE-2026-34040` в `docker/docker` (транзитивно через `testcontainers-go`, server-side баг, клиентом не задействован) — в `.trivyignore` с пояснением
+- **Non-root контейнеры**: `deploy/images/Dockerfile.backend` и `Dockerfile.frontend` теперь работают от non-root (`USER dasha` / `USER nginx`). В nginx main-конфиг внесена правка: убрана директива `user nginx;` и pid перенесён в `/tmp/nginx.pid`, чтобы процесс стартовал без root
+- **Hardening Helm**: дефолтный `securityContext` для обоих контейнеров теперь задаёт `allowPrivilegeEscalation: false`, `readOnlyRootFilesystem: true`, `capabilities.drop: [ALL]`, `seccompProfile.type: RuntimeDefault`. Pod-level `runAsNonRoot: true` + `runAsUser/Group/fsGroup` (1000 для backend, 101 для frontend nginx). `emptyDir` mount'ы добавлены для `/tmp` (backend) и `/var/cache/nginx`, `/etc/nginx/conf.d`, `/tmp` (frontend) — чтобы ROFS работал
+- **Trivy `skip-dirs: demo`** в CI config-scan — `demo/Dockerfile.*` это только demo-lab, не публикуется, не стоит усложнять
 
 ## v0.1.23
 

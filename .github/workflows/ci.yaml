@@ -98,6 +98,7 @@ jobs:
           format: table
           exit-code: 1
           severity: CRITICAL,HIGH
+          skip-dirs: demo
 
   test-backend-integration:
     runs-on: ubuntu-latest
