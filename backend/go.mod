@@ -9,8 +9,8 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/securecookie v1.1.2
 	github.com/jackc/pgx/v5 v5.9.0
-	github.com/labstack/echo/v4 v4.13.4
-	github.com/oapi-codegen/runtime v1.1.2
+	github.com/labstack/echo/v4 v4.15.1
+	github.com/oapi-codegen/runtime v1.4.0
 	github.com/samber/do v1.6.0
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/viper v1.21.0
