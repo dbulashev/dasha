@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM node:22-alpine AS builder
+FROM --platform=$BUILDPLATFORM node:26-alpine AS builder
 ARG BUILD_NUMBER=dev
 WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json ./
