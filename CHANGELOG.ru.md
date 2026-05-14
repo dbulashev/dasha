@@ -14,6 +14,9 @@
 - **CI: job `govulncheck`** добавлен в `.github/workflows/ci.yaml` и включён в `build-check.needs` — каждый push и PR сканируется на символьные уязвимости Go, любое обнаружение блокирует merge в `main`
 - **CI: job `npm audit`** добавлен для фронтенда (`vulncheck-frontend`), также включён в `build-check.needs`. Падает на advisories уровня `high` или `critical` (`--audit-level=high`) по `frontend/package-lock.json`
 
+## v0.1.22
+- **Chart** ESO version
+
 ## v0.1.20
 
 #### Новые возможности

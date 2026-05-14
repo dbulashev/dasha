@@ -14,6 +14,9 @@
 - **CI: `govulncheck` job** added to `.github/workflows/ci.yaml` and wired into `build-check.needs` — every push and PR is now scanned for symbol-level Go vulnerabilities, blocking merge to `main` on any finding
 - **CI: `npm audit` job** added for the frontend (`vulncheck-frontend`), also wired into `build-check.needs`. Fails on `high` or `critical` advisories (`--audit-level=high`) against `frontend/package-lock.json`
 
+## v0.1.22
+- **Chart** ESO version
+
 ## v0.1.20
 
 #### New Features
