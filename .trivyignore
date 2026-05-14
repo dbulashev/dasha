@@ -1,0 +1,5 @@
+# CVE-2026-34040 — Authorization bypass in Moby/Docker engine (server-side).
+# Package github.com/docker/docker is pulled transitively via testcontainers-go
+# and used ONLY as an HTTP client to the docker daemon from integration tests
+# (build tag `integration`). It does not run in the production binary.
+CVE-2026-34040

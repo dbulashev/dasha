@@ -129,7 +129,12 @@ frontend:
   replicaCount: 1
   port: 3000
   resources: {}
-  podSecurityContext: {}
+  # nginx official image runs as UID/GID 101
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+    runAsGroup: 101
+    fsGroup: 101
   nodeSelector: {}
   tolerations: []
   affinity: {}
@@ -173,10 +178,21 @@ fullnameOverride: ""
 namespaceOverride: ""
 
 podAnnotations: {}
+# Pod-level securityContext (applied to backend pod by default; frontend overrides via .frontend.podSecurityContext)
 podSecurityContext:
   runAsNonRoot: true
   runAsUser: 1000
-securityContext: {}
+  runAsGroup: 1000
+  fsGroup: 1000
+# Container-level securityContext (applied to both backend and frontend containers)
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
 nodeSelector: {}
 tolerations: []
 affinity: {}

@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.24
+
+#### Security
+- **CI: Trivy filesystem + config scan** (`trivy-scan` job) — scans dependencies (go.sum, package-lock.json) and IaC misconfig (Dockerfile, Helm chart) on every push/PR. Blocks merge on `CRITICAL`/`HIGH` (`ignore-unfixed: true` to avoid noise on advisories without a patch yet)
+- **Release: Trivy image scan now gating** — `exit-code: 0` → `1` for `dasha-backend` and `dasha-frontend` image scans in `release.yaml`. Releases now fail on `CRITICAL`/`HIGH` in published images (was: only printed a report)
+- **CodeQL workflow** (`.github/workflows/codeql.yaml`) — GitHub's static analysis for Go and TypeScript with the `security-extended` query suite. Runs on push, PR, and weekly schedule (Mon 06:00 UTC). Findings show up in the Security tab
+- **Dependabot expanded** to `gomod` (`/backend`) and `npm` (`/frontend`) ecosystems plus Docker base images in `/deploy/images`. Grouped updates for OpenTelemetry, gRPC/protobuf, Vuetify, Vue core, ESLint, and Vite to reduce PR noise
+- **Go dependency bumps** found by `trivy fs`: `pgx/v5` `v5.7.6` → `v5.9.0` (CRITICAL memory-safety, CVE-2026-33816), `go-jose/v4` `v4.1.3` → `v4.1.4` (HIGH DoS via crafted JWE, CVE-2026-34986), `golang-jwt/v4` `v4.5.1` → `v4.5.2` (HIGH memory allocation in header parsing, CVE-2025-30204), `grpc` `v1.79.2` → `v1.79.3` (HIGH HTTP/2 path validation auth bypass, CVE-2026-33186). `CVE-2026-34040` in `docker/docker` (transitive via `testcontainers-go`, server-side bug not exercised by client) ignored via `.trivyignore` with rationale
+- **Non-root containers**: `deploy/images/Dockerfile.backend` and `Dockerfile.frontend` now run as non-root (`USER dasha` / `USER nginx`). Nginx main config patched: `user nginx;` directive removed and pid moved to `/tmp/nginx.pid` so the process can start without root
+- **Helm hardening**: default `securityContext` for both containers now sets `allowPrivilegeEscalation: false`, `readOnlyRootFilesystem: true`, `capabilities.drop: [ALL]`, `seccompProfile.type: RuntimeDefault`. Pod-level `runAsNonRoot: true` + `runAsUser/Group/fsGroup` (1000 for backend, 101 for frontend nginx). `emptyDir` mounts added for `/tmp` (backend) and `/var/cache/nginx`, `/etc/nginx/conf.d`, `/tmp` (frontend) to keep ROFS working
+- **Trivy `skip-dirs: demo`** in CI config-scan — `demo/Dockerfile.*` are demo-lab only, not published, not worth hardening
+
 ## v0.1.23
 
 #### Security
