@@ -45,6 +45,12 @@ updates:
         patterns:
           - "vite"
           - "@vitejs/*"
+    ignore:
+      # Pin Vuetify to 3.x — major bump to 4.x is a breaking change (composition rewrite)
+      - dependency-name: "vuetify"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@vuetify/*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: docker
     directory: /deploy/images
