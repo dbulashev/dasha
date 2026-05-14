@@ -77,6 +77,28 @@ jobs:
       - name: Run npm audit
         run: cd frontend && npm audit --audit-level=high
 
+  trivy-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Trivy filesystem scan (vulnerabilities)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: table
+          exit-code: 1
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+      - name: Trivy config scan (Dockerfile/Helm misconfig)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: config
+          scan-ref: .
+          format: table
+          exit-code: 1
+          severity: CRITICAL,HIGH
+
   test-backend-integration:
     runs-on: ubuntu-latest
     strategy:
@@ -116,7 +138,7 @@ jobs:
 
   build-check:
     runs-on: ubuntu-latest
-    needs: [lint-backend, lint-frontend, lint-helm, test-backend-unit, test-frontend, vulncheck-backend, vulncheck-frontend]
+    needs: [lint-backend, lint-frontend, lint-helm, test-backend-unit, test-frontend, vulncheck-backend, vulncheck-frontend, trivy-scan]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6

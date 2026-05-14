@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.24
+
+#### Security
+- **CI: Trivy filesystem + config scan** (`trivy-scan` job) — scans dependencies (go.sum, package-lock.json) and IaC misconfig (Dockerfile, Helm chart) on every push/PR. Blocks merge on `CRITICAL`/`HIGH` (`ignore-unfixed: true` to avoid noise on advisories without a patch yet)
+- **Release: Trivy image scan now gating** — `exit-code: 0` → `1` for `dasha-backend` and `dasha-frontend` image scans in `release.yaml`. Releases now fail on `CRITICAL`/`HIGH` in published images (was: only printed a report)
+- **CodeQL workflow** (`.github/workflows/codeql.yaml`) — GitHub's static analysis for Go and TypeScript with the `security-extended` query suite. Runs on push, PR, and weekly schedule (Mon 06:00 UTC). Findings show up in the Security tab
+- **Dependabot expanded** to `gomod` (`/backend`) and `npm` (`/frontend`) ecosystems plus Docker base images in `/deploy/images`. Grouped updates for OpenTelemetry, gRPC/protobuf, Vuetify, Vue core, ESLint, and Vite to reduce PR noise
+
 ## v0.1.23
 
 #### Security

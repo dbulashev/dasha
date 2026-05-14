@@ -105,16 +105,18 @@ jobs:
         with:
           image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/dasha-backend:${{ steps.meta-backend.outputs.version }}
           format: table
-          exit-code: 0
+          exit-code: 1
           severity: CRITICAL,HIGH
+          ignore-unfixed: true
 
       - name: Scan frontend image
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/dasha-frontend:${{ steps.meta-frontend.outputs.version }}
           format: table
-          exit-code: 0
+          exit-code: 1
           severity: CRITICAL,HIGH
+          ignore-unfixed: true
 
   helm-push:
     runs-on: ubuntu-latest

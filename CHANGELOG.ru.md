@@ -1,5 +1,13 @@
 # История изменений
 
+## v0.1.24
+
+#### Безопасность
+- **CI: Trivy filesystem + config-скан** (job `trivy-scan`) — сканирует зависимости (go.sum, package-lock.json) и IaC-мисконфиги (Dockerfile, Helm chart) на каждый push/PR. Блокирует merge на `CRITICAL`/`HIGH` (`ignore-unfixed: true` — не шумим на advisories без патча)
+- **Release: Trivy на образах теперь блокирующий** — `exit-code: 0` → `1` для сканов `dasha-backend` и `dasha-frontend` в `release.yaml`. Релизы падают на `CRITICAL`/`HIGH` в опубликованных образах (раньше только печатался отчёт)
+- **Workflow CodeQL** (`.github/workflows/codeql.yaml`) — статический анализ от GitHub для Go и TypeScript с набором запросов `security-extended`. Запуск на push, PR и по расписанию (Пн 06:00 UTC). Находки появляются в вкладке Security
+- **Dependabot расширен** на экосистемы `gomod` (`/backend`) и `npm` (`/frontend`), плюс базовые Docker-образы в `/deploy/images`. Сгруппированные обновления для OpenTelemetry, gRPC/protobuf, Vuetify, Vue core, ESLint и Vite — меньше PR-шума
+
 ## v0.1.23
 
 #### Безопасность
