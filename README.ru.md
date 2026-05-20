@@ -474,7 +474,7 @@ gatewayAPI:
   gatewayClassName: istio
   hostname: dasha.example.com
   # Если Gateway живёт в namespace контроллера (например, istio-system),
-  # задайте gatewayNamespace и certManager.certNamespace соответственно.
+  # задайте gatewayNamespace — Certificate создаётся в том же namespace.
   # gatewayNamespace: istio-system
   tls:
     enabled: true
