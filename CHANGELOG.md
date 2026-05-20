@@ -38,7 +38,6 @@
 - **GitHub Actions:** `github/codeql-action` `v3` → `v4`.
 
 #### Misc
-- Russian translation of "users" term updated.
 - Dependabot config bugfix.
 
 ## v0.1.23
