@@ -2,12 +2,12 @@
 
 ## v1.0.0
 
-#### Breaking Changes
+### Breaking Changes
 - **Helm chart:** `ingress.tls.certManager.reflectToNamespace` removed. Reflector integration (emberstack `kubernetes-reflector`) is no longer rendered — add the annotations manually via `ingress.annotations` if you still need it.
 - **Helm chart:** `ingress.tls.certNamespace` removed; cert-manager `Certificate` is always created in the release namespace.
 - **Helm chart:** ingress/gateway routing simplified. With `frontend.enabled: true` (default), only a single `/` rule is rendered — frontend nginx handles `/api/` and `/auth/` proxying. The previous separate `/api/` Ingress rule is gone. Headless deploys (`frontend.enabled: false`) keep direct `/api/` and `/auth/` rules to backend.
 
-#### Security
+### Security
 - **Backend HTTPS enforcement:**
   - `auth.NewMiddlewares` emits a single zap WARNING at startup when `auth.mode != none && !require_https` — surfaces the case where credentials may be transmitted in plaintext. Unit tests added in `backend/internal/auth/auth_test.go` (4 cases).
   - Helm `configmap.yaml` auto-injects `auth.require_https: true` into the rendered `dasha.yaml` when `auth.mode != none && tls.enabled` (via new `dasha.tlsEnabled` helper which ORs `ingress.tls.enabled` and `gatewayAPI.tls.enabled`). Explicit `auth.require_https: false` from values is preserved as escape hatch.
@@ -17,7 +17,7 @@
   - Helm default container `securityContext`: `allowPrivilegeEscalation: false`, `readOnlyRootFilesystem: true`, `capabilities.drop: [ALL]`, `seccompProfile.type: RuntimeDefault`. Pod-level `runAsNonRoot: true` + `runAsUser/Group/fsGroup` (1000 backend, 101 frontend nginx). `emptyDir` mounts for `/tmp` (backend) and `/var/cache/nginx`, `/etc/nginx/conf.d`, `/tmp` (frontend) keep ROFS working.
 - **Go dependency CVE patches** (from `trivy fs` sweep): `pgx/v5` `v5.7.6` → `v5.9.0` (CRITICAL memory-safety, CVE-2026-33816), `go-jose/v4` `v4.1.3` → `v4.1.4` (HIGH DoS via crafted JWE, CVE-2026-34986), `golang-jwt/v4` `v4.5.1` → `v4.5.2` (HIGH memory allocation in header parsing, CVE-2025-30204), `grpc` `v1.79.2` → `v1.79.3` (HIGH HTTP/2 path validation auth bypass, CVE-2026-33186). `CVE-2026-34040` in `docker/docker` (transitive via `testcontainers-go`, server-side bug not exercised by client) ignored via `.trivyignore` with rationale.
 
-#### Helm
+### Helm
 - **Defense-in-depth HTTP→HTTPS redirect** at three layers when `tls.enabled`:
   - Ingress: `nginx.ingress.kubernetes.io/ssl-redirect` and `force-ssl-redirect` annotations auto-added.
   - Gateway API: separate `HTTPRoute` with `RequestRedirect` filter on the HTTP listener.
@@ -25,19 +25,19 @@
 - **Kubernetes Gateway API support** (`gateway.networking.k8s.io/v1`): new `gatewayAPI.*` values block, new templates `gateway.yaml`, `httproute.yaml`, `httproute-redirect.yaml`, `gateway-certificate.yaml`. Portable between Istio, NGINX Gateway Fabric, Envoy Gateway, Cilium. `ingress.enabled` and `gatewayAPI.enabled` are mutually exclusive — `helm template` fails via `dasha.validateTrafficMode` if both are true. `dasha.validateGatewayAPI` additionally requires `allowedRoutes.namespaces.from != "Same"` when `gatewayNamespace` differs from the release namespace, otherwise HTTPRoute cannot attach.
 - **New helpers in `_helpers.tpl`:** `dasha.tlsEnabled`, `dasha.validateTrafficMode`, `dasha.validateGatewayAPI`, `dasha.gatewayTLSSecretName`, `dasha.gatewayNamespace`.
 
-#### CI / Tooling
+### CI / Tooling
 - **Trivy filesystem + config scan** (`trivy-scan` job) — scans dependencies (`go.sum`, `package-lock.json`) and IaC misconfig (Dockerfile, Helm chart) on every push/PR. Blocks merge on `CRITICAL`/`HIGH` (`ignore-unfixed: true` to avoid noise on advisories without a patch). `skip-dirs: demo` excludes demo-lab artifacts.
 - **Release: Trivy image scan now gating** — `exit-code: 0` → `1` in `release.yaml`. Releases fail on `CRITICAL`/`HIGH` in published images (previously: report only).
 - **CodeQL workflow** (`.github/workflows/codeql.yaml`) — Go + TypeScript static analysis with `security-extended` query suite. Runs on push, PR, and weekly schedule (Mon 06:00 UTC). Findings appear in the Security tab.
 - **Dependabot expanded** to `gomod` (`/backend`), `npm` (`/frontend`), and Docker base images in `/deploy/images`. Grouped updates for OpenTelemetry, gRPC/protobuf, Vuetify, Vue core, ESLint, Vite to reduce PR noise.
 
-#### Dependencies (Dependabot bumps since v0.1.23)
+### Dependencies (Dependabot bumps since v0.1.23)
 - **Backend (Go):** `pgx/v5` `v5.9.0` → `v5.9.2`, `getkin/kin-openapi` `v0.133.0` → `v0.138.0`, `labstack/echo/v4` `v4.15.1` → `v4.15.2`, `spf13/cobra` `v1.10.1` → `v1.10.2`, `coreos/go-oidc/v3` `v3.17.0` → `v3.18.0`, `go.uber.org/zap` `v1.27.0` → `v1.28.0`, `oapi-codegen/runtime` `v1.1.2` → `v1.4.0`, `yandex-cloud/go-genproto` (bump).
 - **Frontend (npm):** `vuetify` group, `vue-core` group (6 packages), `vitest` `3.2.4` → `4.1.6`, `prettier` `3.6.2` → `3.8.3`, `eslint` group (3 packages), `@tsconfig/node22` `22.0.2` → `22.0.5`.
 - **Containers:** `alpine` `3.21` → `3.23`, `node` `22-alpine` → `26-alpine`.
 - **GitHub Actions:** `github/codeql-action` `v3` → `v4`.
 
-#### Misc
+### Misc
 - Dependabot config bugfix.
 
 ## v0.1.23

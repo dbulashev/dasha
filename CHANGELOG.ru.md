@@ -2,12 +2,12 @@
 
 ## v1.0.0
 
-#### Breaking changes
+### Breaking changes
 - **Helm chart:** `ingress.tls.certManager.reflectToNamespace` удалён. Интеграция с reflector (emberstack `kubernetes-reflector`) больше не рендерится — если нужна, добавляйте аннотации руками через `ingress.annotations`.
 - **Helm chart:** `ingress.tls.certNamespace` удалён; cert-manager `Certificate` всегда создаётся в release namespace.
 - **Helm chart:** маршрутизация ingress/gateway упрощена. При `frontend.enabled: true` (дефолт) рендерится одно правило `/` — frontend nginx сам проксирует `/api/` и `/auth/`. Прежнего отдельного правила `/api/` в Ingress больше нет. Headless-деплой (`frontend.enabled: false`) сохраняет прямые правила `/api/` и `/auth/` на backend.
 
-#### Безопасность
+### Безопасность
 - **Бэкенд: проверка HTTPS:**
   - `auth.NewMiddlewares` пишет один zap-WARNING при инициализации, если `auth.mode != none && !require_https` — подсвечивает случай, когда credentials передаются открытым текстом. Unit-тесты добавлены в `backend/internal/auth/auth_test.go` (4 кейса).
   - Helm-шаблон `configmap.yaml` авто-инжектит `auth.require_https: true` в рендеримый `dasha.yaml` при `auth.mode != none && tls.enabled` (через новый helper `dasha.tlsEnabled` — OR `ingress.tls.enabled` и `gatewayAPI.tls.enabled`). Явное `auth.require_https: false` в values сохраняется как escape hatch.
@@ -17,7 +17,7 @@
   - Дефолтный container-level `securityContext` в Helm: `allowPrivilegeEscalation: false`, `readOnlyRootFilesystem: true`, `capabilities.drop: [ALL]`, `seccompProfile.type: RuntimeDefault`. Pod-level `runAsNonRoot: true` + `runAsUser/Group/fsGroup` (1000 для backend, 101 для frontend nginx). `emptyDir` mount'ы для `/tmp` (backend) и `/var/cache/nginx`, `/etc/nginx/conf.d`, `/tmp` (frontend) — чтобы ROFS работал.
 - **Bump Go-зависимостей по находкам `trivy fs`:** `pgx/v5` `v5.7.6` → `v5.9.0` (CRITICAL memory-safety, CVE-2026-33816), `go-jose/v4` `v4.1.3` → `v4.1.4` (HIGH DoS через специально подготовленный JWE, CVE-2026-34986), `golang-jwt/v4` `v4.5.1` → `v4.5.2` (HIGH memory allocation в разборе header, CVE-2025-30204), `grpc` `v1.79.2` → `v1.79.3` (HIGH HTTP/2 path validation auth bypass, CVE-2026-33186). `CVE-2026-34040` в `docker/docker` (транзитивно через `testcontainers-go`, server-side баг, клиентом не задействован) — в `.trivyignore` с пояснением.
 
-#### Helm
+### Helm
 - **Defense-in-depth редирект HTTP→HTTPS** на трёх уровнях при `tls.enabled`:
   - Ingress: аннотации `nginx.ingress.kubernetes.io/ssl-redirect` и `force-ssl-redirect` авто-добавляются.
   - Gateway API: отдельный `HTTPRoute` с filter `RequestRedirect` на HTTP-listener.
@@ -25,19 +25,19 @@
 - **Поддержка Kubernetes Gateway API** (`gateway.networking.k8s.io/v1`): новый блок values `gatewayAPI.*`, новые шаблоны `gateway.yaml`, `httproute.yaml`, `httproute-redirect.yaml`, `gateway-certificate.yaml`. Портативно между Istio, NGINX Gateway Fabric, Envoy Gateway, Cilium. `ingress.enabled` и `gatewayAPI.enabled` взаимоисключаются — `helm template` падает через helper `dasha.validateTrafficMode`, если оба true. `dasha.validateGatewayAPI` дополнительно требует `allowedRoutes.namespaces.from != "Same"`, когда `gatewayNamespace` отличается от release namespace, иначе HTTPRoute не сможет attach.
 - **Новые helpers в `_helpers.tpl`:** `dasha.tlsEnabled`, `dasha.validateTrafficMode`, `dasha.validateGatewayAPI`, `dasha.gatewayTLSSecretName`, `dasha.gatewayNamespace`.
 
-#### CI / Tooling
+### CI / Tooling
 - **Trivy filesystem + config-скан** (job `trivy-scan`) — сканирует зависимости (`go.sum`, `package-lock.json`) и IaC-мисконфиги (Dockerfile, Helm chart) на каждый push/PR. Блокирует merge на `CRITICAL`/`HIGH` (`ignore-unfixed: true` — не шумим на advisories без патча). `skip-dirs: demo` исключает demo-lab.
 - **Release: Trivy на образах теперь блокирующий** — `exit-code: 0` → `1` в `release.yaml`. Релизы падают на `CRITICAL`/`HIGH` в опубликованных образах (раньше только печатался отчёт).
 - **Workflow CodeQL** (`.github/workflows/codeql.yaml`) — статический анализ Go + TypeScript с набором запросов `security-extended`. Запуск на push, PR и по расписанию (Пн 06:00 UTC). Находки появляются во вкладке Security.
 - **Dependabot расширен** на экосистемы `gomod` (`/backend`), `npm` (`/frontend`) и Docker-образы в `/deploy/images`. Сгруппированные обновления для OpenTelemetry, gRPC/protobuf, Vuetify, Vue core, ESLint, Vite — меньше PR-шума.
 
-#### Зависимости (Dependabot bumps с момента v0.1.23)
+### Зависимости (Dependabot bumps с момента v0.1.23)
 - **Бэкенд (Go):** `pgx/v5` `v5.9.0` → `v5.9.2`, `getkin/kin-openapi` `v0.133.0` → `v0.138.0`, `labstack/echo/v4` `v4.15.1` → `v4.15.2`, `spf13/cobra` `v1.10.1` → `v1.10.2`, `coreos/go-oidc/v3` `v3.17.0` → `v3.18.0`, `go.uber.org/zap` `v1.27.0` → `v1.28.0`, `oapi-codegen/runtime` `v1.1.2` → `v1.4.0`, `yandex-cloud/go-genproto` (bump).
 - **Фронтенд (npm):** группа `vuetify`, группа `vue-core` (6 пакетов), `vitest` `3.2.4` → `4.1.6`, `prettier` `3.6.2` → `3.8.3`, группа `eslint` (3 пакета), `@tsconfig/node22` `22.0.2` → `22.0.5`.
 - **Контейнеры:** `alpine` `3.21` → `3.23`, `node` `22-alpine` → `26-alpine`.
 - **GitHub Actions:** `github/codeql-action` `v3` → `v4`.
 
-#### Прочее
+### Прочее
 - Фикс в Dependabot config.
 
 ## v0.1.23
