@@ -486,7 +486,13 @@ gatewayAPI:
       # certNamespace: istio-system  # defaults to gatewayNamespace or release namespace
 ```
 
-The chart renders a `Gateway` resource with HTTP and HTTPS listeners, two `HTTPRoute` resources (main routing + HTTP→HTTPS redirect via `RequestRedirect` filter), and a cert-manager `Certificate`. `ingress.enabled` and `gatewayAPI.enabled` are mutually exclusive.
+Rendered resources (all conditional on `gatewayAPI.enabled: true`):
+- `Gateway` — HTTP listener always; HTTPS listener only when `gatewayAPI.tls.enabled: true`.
+- `HTTPRoute` (main) — attached to the HTTPS listener when `tls.enabled`, otherwise to the HTTP listener.
+- `HTTPRoute` (HTTP→HTTPS redirect, `RequestRedirect` filter) — only when `gatewayAPI.tls.enabled && gatewayAPI.tls.redirect`.
+- `Certificate` (cert-manager) — only when `gatewayAPI.tls.certManager.enabled`.
+
+`ingress.enabled` and `gatewayAPI.enabled` are mutually exclusive — `helm template` fails if both are true.
 
 #### API-only mode (without frontend)
 

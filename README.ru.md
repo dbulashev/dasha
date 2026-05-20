@@ -484,7 +484,13 @@ gatewayAPI:
       # certNamespace: istio-system  # по умолчанию gatewayNamespace или release namespace
 ```
 
-Чарт рендерит ресурс `Gateway` с HTTP- и HTTPS-listeners, два `HTTPRoute` (основная маршрутизация + редирект HTTP→HTTPS через filter `RequestRedirect`) и cert-manager `Certificate`. `ingress.enabled` и `gatewayAPI.enabled` взаимоисключаются.
+Рендеримые ресурсы (все условны от `gatewayAPI.enabled: true`):
+- `Gateway` — HTTP-listener всегда; HTTPS-listener только при `gatewayAPI.tls.enabled: true`.
+- `HTTPRoute` (основной) — привязан к HTTPS-listener при `tls.enabled`, иначе к HTTP-listener.
+- `HTTPRoute` (редирект HTTP→HTTPS, filter `RequestRedirect`) — только при `gatewayAPI.tls.enabled && gatewayAPI.tls.redirect`.
+- `Certificate` (cert-manager) — только при `gatewayAPI.tls.certManager.enabled`.
+
+`ingress.enabled` и `gatewayAPI.enabled` взаимоисключаются — `helm template` падает, если оба true.
 
 #### Режим только API (без фронтенда)
 

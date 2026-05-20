@@ -196,8 +196,6 @@ gatewayAPI:
     certManager:
       enabled: false
       issuer: cluster-issuer
-      # Namespace where Certificate is created. Empty = gatewayNamespace (or release namespace).
-      certNamespace: ""
     # Auto-create an HTTPRoute with RequestRedirect filter on the HTTP listener.
     redirect: true
 

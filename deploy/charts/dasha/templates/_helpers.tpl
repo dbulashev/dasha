@@ -94,6 +94,22 @@ Invoke from a guaranteed-rendered template (e.g. configmap.yaml).
 {{- end -}}
 
 {{/*
+Validate Gateway API configuration. When Gateway lives in a different namespace
+than the release (e.g. istio-system), allowedRoutes.namespaces.from must NOT be "Same"
+or HTTPRoute from the release namespace cannot attach to the Gateway.
+*/}}
+{{- define "dasha.validateGatewayAPI" -}}
+{{- if .Values.gatewayAPI.enabled -}}
+{{- $gwNs := .Values.gatewayAPI.gatewayNamespace -}}
+{{- $releaseNs := include "dasha.namespace" . -}}
+{{- $from := dig "namespaces" "from" "Same" .Values.gatewayAPI.allowedRoutes -}}
+{{- if and $gwNs (ne $gwNs $releaseNs) (eq $from "Same") -}}
+{{- fail (printf "gatewayAPI.gatewayNamespace=%q differs from release namespace %q, but gatewayAPI.allowedRoutes.namespaces.from=\"Same\" — HTTPRoute cannot attach. Set allowedRoutes.namespaces.from to \"All\" or \"Selector\"." $gwNs $releaseNs) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 TLS secret name for the Gateway. Defaults to {fullname}-tls when not set explicitly.
 */}}
 {{- define "dasha.gatewayTLSSecretName" -}}

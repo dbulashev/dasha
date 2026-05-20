@@ -4,7 +4,9 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: {{ include "dasha.fullname" . }}-gateway-tls
-  namespace: {{ .Values.gatewayAPI.tls.certManager.certNamespace | default (include "dasha.gatewayNamespace" .) }}
+  # Certificate is always created in the Gateway's namespace — Gateway listener references
+  # the secret by name only, and cross-namespace secret refs would require a ReferenceGrant.
+  namespace: {{ include "dasha.gatewayNamespace" . }}
   labels:
     {{- include "dasha.labels" . | nindent 4 }}
 spec:
