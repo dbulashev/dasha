@@ -483,8 +483,9 @@ gatewayAPI:
     certManager:
       enabled: true
       issuer: cluster-issuer
-      # certNamespace: istio-system  # defaults to gatewayNamespace or release namespace
 ```
+
+The cert-manager `Certificate` is created in the Gateway's namespace (`gatewayNamespace`, defaults to the release namespace). Cross-namespace secret refs would require a `ReferenceGrant`, which the chart does not render — keeping Certificate and Gateway colocated avoids that.
 
 Rendered resources (all conditional on `gatewayAPI.enabled: true`):
 - `Gateway` — HTTP listener always; HTTPS listener only when `gatewayAPI.tls.enabled: true`.

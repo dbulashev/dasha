@@ -481,8 +481,9 @@ gatewayAPI:
     certManager:
       enabled: true
       issuer: cluster-issuer
-      # certNamespace: istio-system  # по умолчанию gatewayNamespace или release namespace
 ```
+
+`Certificate` от cert-manager создаётся в namespace Gateway (`gatewayNamespace`, по умолчанию — release namespace). Cross-namespace ссылки на secret потребовали бы `ReferenceGrant`, который чарт не рендерит — поэтому Certificate и Gateway держим в одном namespace.
 
 Рендеримые ресурсы (все условны от `gatewayAPI.enabled: true`):
 - `Gateway` — HTTP-listener всегда; HTTPS-listener только при `gatewayAPI.tls.enabled: true`.
