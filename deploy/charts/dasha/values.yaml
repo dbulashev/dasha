@@ -165,13 +165,41 @@ ingress:
   tls:
     enabled: false
     secretName: ""
-    certNamespace: ""
+    # Auto-add nginx-ingress ssl-redirect annotations when tls is enabled.
+    # Set to false if you want to serve plain HTTP alongside HTTPS.
+    redirect: true
     # cert-manager integration
     certManager:
       enabled: false
       issuer: cluster-issuer
-      # if set, adds reflector annotations to copy the TLS secret to this namespace
-      reflectToNamespace: ""
+
+# -- Kubernetes Gateway API (gateway.networking.k8s.io/v1)
+# Portable alternative to Ingress. Mutually exclusive with ingress.enabled.
+gatewayAPI:
+  enabled: false
+  # gatewayClassName: istio | nginx | envoy | cilium | ...
+  gatewayClassName: istio
+  hostname: dasha.example.com
+  # Namespace for the Gateway resource. Empty = release namespace.
+  # Some implementations (e.g. Istio) expect the Gateway in the same namespace as the controller (istio-system).
+  gatewayNamespace: ""
+  # AllowedRoutes for cross-namespace HTTPRoute attachment.
+  allowedRoutes:
+    namespaces:
+      from: Same  # Same | Selector | All
+  tls:
+    enabled: false
+    certificateRef:
+      kind: Secret
+      # name: defaults to {fullname}-tls
+      name: ""
+    certManager:
+      enabled: false
+      issuer: cluster-issuer
+      # Namespace where Certificate is created. Empty = gatewayNamespace (or release namespace).
+      certNamespace: ""
+    # Auto-create an HTTPRoute with RequestRedirect filter on the HTTP listener.
+    redirect: true
 
 nameOverride: ""
 fullnameOverride: ""

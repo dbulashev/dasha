@@ -41,6 +41,13 @@ func (m *Middlewares) Stop() {
 }
 
 func NewMiddlewares(ctx context.Context, cfg config.AuthConfig, logger *zap.Logger) (*Middlewares, error) {
+	if cfg.Mode != config.AuthModeNone && cfg.Mode != "" && !cfg.RequireHTTPS {
+		logger.Warn(
+			"auth enabled without require_https — credentials may be transmitted in plaintext",
+			zap.String("auth_mode", string(cfg.Mode)),
+		)
+	}
+
 	var (
 		oidcProvider *OIDCProvider
 		sessionMgr   *SessionManager

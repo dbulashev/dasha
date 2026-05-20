@@ -1,3 +1,11 @@
+{{- include "dasha.validateTrafficMode" . -}}
+{{- $config := deepCopy .Values.config -}}
+{{- $authMode := dig "auth" "mode" "none" $config -}}
+{{- $authEnabled := and (ne $authMode "none") (ne $authMode "") -}}
+{{- $tlsEnabled := eq (include "dasha.tlsEnabled" .) "true" -}}
+{{- if and $authEnabled $tlsEnabled (not (hasKey $config "require_https")) -}}
+{{- $_ := set $config "require_https" true -}}
+{{- end }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -8,4 +16,4 @@ metadata:
     {{- include "dasha.labels" $ | nindent 4 }}
 data:
   dasha.yaml: |
-    {{- .Values.config | toYaml | nindent 4 }}
+    {{- $config | toYaml | nindent 4 }}

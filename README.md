@@ -466,24 +466,27 @@ ingress:
 
 cert-manager will create a `Certificate` resource in the application namespace.
 
-#### Ingress with TLS (cert-manager + reflector)
+#### Gateway API with TLS (cert-manager)
 
-When the ingress controller runs in a different namespace (e.g. Istio), use `reflectToNamespace` to copy the TLS secret via [reflector](https://github.com/emberstack/kubernetes-reflector):
+Portable alternative to Ingress — works with any Gateway API implementation (Istio, NGINX Gateway Fabric, Envoy Gateway, Cilium):
 
 ```yaml
-ingress:
+gatewayAPI:
   enabled: true
-  className: istio
-  domain: dasha.example.com
+  gatewayClassName: istio
+  hostname: dasha.example.com
+  # When the Gateway lives in a controller-specific namespace (e.g. istio-system),
+  # set gatewayNamespace and certManager.certNamespace accordingly.
+  # gatewayNamespace: istio-system
   tls:
     enabled: true
     certManager:
       enabled: true
       issuer: cluster-issuer
-      reflectToNamespace: istio-ingress
+      # certNamespace: istio-system  # defaults to gatewayNamespace or release namespace
 ```
 
-In this mode, no separate `Certificate` resource is created. Instead, cert-manager annotations are added to the Ingress, and the generated TLS secret gets reflector annotations to be copied to the specified namespace.
+The chart renders a `Gateway` resource with HTTP and HTTPS listeners, two `HTTPRoute` resources (main routing + HTTP→HTTPS redirect via `RequestRedirect` filter), and a cert-manager `Certificate`. `ingress.enabled` and `gatewayAPI.enabled` are mutually exclusive.
 
 #### API-only mode (without frontend)
 
@@ -502,7 +505,7 @@ ingress:
 - **Passwords via env** — `password_from_env` + ESO or existing Kubernetes Secret
 - **Cloud SA keys** — per-folder `authorized_key.json` via ESO or existing Secret
 - **Frontend optional** — deploy backend only for API access
-- **Ingress** — `/api/` routed to backend, `/` to frontend (when enabled), cert-manager + reflector support
+- **Ingress / Gateway API** — single `/` rule routes to frontend (which proxies `/api/` and `/auth/` to backend); auto HTTP→HTTPS redirect when TLS is enabled; cert-manager support; mutually exclusive `gatewayAPI.enabled` for K8s Gateway API (`gateway.networking.k8s.io/v1`)
 - **Security** — `podSecurityContext`, `securityContext`, separate settings for frontend/backend
 
 ## CI/CD

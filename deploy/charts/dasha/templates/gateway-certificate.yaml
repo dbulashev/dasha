@@ -1,0 +1,18 @@
+{{- if and .Values.gatewayAPI.enabled .Values.gatewayAPI.tls.enabled .Values.gatewayAPI.tls.certManager.enabled }}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "dasha.fullname" . }}-gateway-tls
+  namespace: {{ .Values.gatewayAPI.tls.certManager.certNamespace | default (include "dasha.gatewayNamespace" .) }}
+  labels:
+    {{- include "dasha.labels" . | nindent 4 }}
+spec:
+  dnsNames:
+    - {{ .Values.gatewayAPI.hostname }}
+  issuerRef:
+    group: cert-manager.io
+    kind: ClusterIssuer
+    name: {{ .Values.gatewayAPI.tls.certManager.issuer }}
+  secretName: {{ include "dasha.gatewayTLSSecretName" . }}
+{{- end }}
