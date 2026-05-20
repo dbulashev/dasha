@@ -1,35 +1,44 @@
 # История изменений
 
-## v0.1.25
+## v1.0.0
 
-#### Breaking changes
-- **Helm chart:** `ingress.tls.certManager.reflectToNamespace` удалён. Интеграция с reflector (emberstack `kubernetes-reflector`) больше не рендерится — если нужна, добавляйте аннотации руками через `ingress.annotations`. `ingress.tls.certNamespace` также удалён; cert-manager `Certificate` всегда создаётся в release namespace.
+### Breaking changes
+- **Helm chart:** `ingress.tls.certManager.reflectToNamespace` удалён. Интеграция с reflector (emberstack `kubernetes-reflector`) больше не рендерится — если нужна, добавляйте аннотации руками через `ingress.annotations`.
+- **Helm chart:** `ingress.tls.certNamespace` удалён; cert-manager `Certificate` всегда создаётся в release namespace.
+- **Helm chart:** маршрутизация ingress/gateway упрощена. При `frontend.enabled: true` (дефолт) рендерится одно правило `/` — frontend nginx сам проксирует `/api/` и `/auth/`. Прежнего отдельного правила `/api/` в Ingress больше нет. Headless-деплой (`frontend.enabled: false`) сохраняет прямые правила `/api/` и `/auth/` на backend.
 
-#### Безопасность
-- **WARNING бэкенда при auth без HTTPS:** `auth.NewMiddlewares` теперь пишет один zap-WARNING при инициализации, если `auth.mode != none && !require_https` — подсвечивает случай, когда credentials передаются открытым текстом. Добавлены unit-тесты в `backend/internal/auth/auth_test.go` (4 кейса по комбинациям).
-- **Авто-включение `require_https`:** Helm-шаблон `configmap.yaml` инжектит `require_https: true` в рендеримый `dasha.yaml` при `auth.mode != none && tls.enabled` (через новый helper `dasha.tlsEnabled` — OR `ingress.tls.enabled` и `gatewayAPI.tls.enabled`). Явное `config.require_https: false` в values сохраняется (escape hatch).
-- **Frontend nginx сохраняет оригинальный `X-Forwarded-Proto`:** entrypoint пишет `map`-блок в `/etc/nginx/conf.d/00-proto-map.conf` (`$http_x_forwarded_proto → $forwarded_proto`, fallback на `$scheme` при отсутствии заголовка). Оба `proxy_pass` (`/api/`, `/auth/`) теперь используют `$forwarded_proto` вместо `$scheme` — бэкенд видит протокол, терминированный на ingress/gateway, а не внутрикластерный http. Раньше заголовок перезаписывался на `http` и тихо ломал `require_https`.
+### Безопасность
+- **Бэкенд: проверка HTTPS:**
+  - `auth.NewMiddlewares` пишет один zap-WARNING при инициализации, если `auth.mode != none && !require_https` — подсвечивает случай, когда credentials передаются открытым текстом. Unit-тесты добавлены в `backend/internal/auth/auth_test.go` (4 кейса).
+  - Helm-шаблон `configmap.yaml` авто-инжектит `auth.require_https: true` в рендеримый `dasha.yaml` при `auth.mode != none && tls.enabled` (через новый helper `dasha.tlsEnabled` — OR `ingress.tls.enabled` и `gatewayAPI.tls.enabled`). Явное `auth.require_https: false` в values сохраняется как escape hatch.
+  - Frontend nginx сохраняет оригинальный `X-Forwarded-Proto` через `map`-блок (`/etc/nginx/conf.d/00-proto-map.conf`: `$http_x_forwarded_proto → $forwarded_proto`, fallback на `$scheme` при отсутствии заголовка). Оба `proxy_pass` (`/api/`, `/auth/`) теперь используют `$forwarded_proto`. Раньше `$scheme` переписывал заголовок на внутрикластерный `http` и тихо ломал `require_https`.
+- **Hardening контейнеров:**
+  - `Dockerfile.backend` и `Dockerfile.frontend` работают от non-root (`USER dasha` / `USER nginx`). В nginx main-конфиг внесена правка: убрана директива `user nginx;` и pid перенесён в `/tmp/nginx.pid`, чтобы процесс стартовал без root.
+  - Дефолтный container-level `securityContext` в Helm: `allowPrivilegeEscalation: false`, `readOnlyRootFilesystem: true`, `capabilities.drop: [ALL]`, `seccompProfile.type: RuntimeDefault`. Pod-level `runAsNonRoot: true` + `runAsUser/Group/fsGroup` (1000 для backend, 101 для frontend nginx). `emptyDir` mount'ы для `/tmp` (backend) и `/var/cache/nginx`, `/etc/nginx/conf.d`, `/tmp` (frontend) — чтобы ROFS работал.
+- **Bump Go-зависимостей по находкам `trivy fs`:** `pgx/v5` `v5.7.6` → `v5.9.0` (CRITICAL memory-safety, CVE-2026-33816), `go-jose/v4` `v4.1.3` → `v4.1.4` (HIGH DoS через специально подготовленный JWE, CVE-2026-34986), `golang-jwt/v4` `v4.5.1` → `v4.5.2` (HIGH memory allocation в разборе header, CVE-2025-30204), `grpc` `v1.79.2` → `v1.79.3` (HIGH HTTP/2 path validation auth bypass, CVE-2026-33186). `CVE-2026-34040` в `docker/docker` (транзитивно через `testcontainers-go`, server-side баг, клиентом не задействован) — в `.trivyignore` с пояснением.
 
-#### Helm
-- **Defense-in-depth редирект HTTP→HTTPS:**
-  - Ingress: аннотации `nginx.ingress.kubernetes.io/ssl-redirect` и `force-ssl-redirect` авто-добавляются при `ingress.tls.enabled && ingress.tls.redirect`.
-  - Gateway API: отдельный `HTTPRoute` с filter `RequestRedirect` на HTTP-listener (`tls.redirect: true`).
-  - Frontend nginx: env `FORCE_HTTPS_REDIRECT=true` (авто-выставляется чартом при `tls.enabled`) подставляет блок `if ($http_x_forwarded_proto = "http") { return 301 ... }` в server-config. Запросы без `X-Forwarded-Proto` (probes, port-forward) не редиректятся.
-- **Условный routing в ingress/gateway:** чарт теперь рендерит **одно** правило `/` → frontend service при `frontend.enabled: true` (frontend nginx делает path-routing внутри), и два правила `/api/`, `/auth/` → backend только при `frontend.enabled: false` (headless deploy). Устраняет прежнее дублирование маршрутизации между ingress и frontend nginx.
-- **Поддержка Kubernetes Gateway API** (`gateway.networking.k8s.io/v1`): новый блок values `gatewayAPI.*`, новые шаблоны `gateway.yaml`, `httproute.yaml`, `httproute-redirect.yaml`, `gateway-certificate.yaml`. Портативно между Istio, NGINX Gateway Fabric, Envoy Gateway, Cilium. `ingress.enabled` и `gatewayAPI.enabled` взаимоисключаются — `helm template` падает через helper `dasha.validateTrafficMode`, если оба true.
-- **Новые helpers в `_helpers.tpl`:** `dasha.tlsEnabled`, `dasha.validateTrafficMode`, `dasha.gatewayTLSSecretName`, `dasha.gatewayNamespace`.
+### Helm
+- **Defense-in-depth редирект HTTP→HTTPS** на трёх уровнях при `tls.enabled`:
+  - Ingress: аннотации `nginx.ingress.kubernetes.io/ssl-redirect` и `force-ssl-redirect` авто-добавляются.
+  - Gateway API: отдельный `HTTPRoute` с filter `RequestRedirect` на HTTP-listener.
+  - Frontend nginx: env `FORCE_HTTPS_REDIRECT=true` (авто-выставляется чартом) подставляет блок `if ($http_x_forwarded_proto = "http") { return 301 ... }`. Запросы без `X-Forwarded-Proto` (probes, port-forward) не редиректятся.
+- **Поддержка Kubernetes Gateway API** (`gateway.networking.k8s.io/v1`): новый блок values `gatewayAPI.*`, новые шаблоны `gateway.yaml`, `httproute.yaml`, `httproute-redirect.yaml`, `gateway-certificate.yaml`. Портативно между Istio, NGINX Gateway Fabric, Envoy Gateway, Cilium. `ingress.enabled` и `gatewayAPI.enabled` взаимоисключаются — `helm template` падает через helper `dasha.validateTrafficMode`, если оба true. `dasha.validateGatewayAPI` дополнительно требует `allowedRoutes.namespaces.from != "Same"`, когда `gatewayNamespace` отличается от release namespace, иначе HTTPRoute не сможет attach.
+- **Новые helpers в `_helpers.tpl`:** `dasha.tlsEnabled`, `dasha.validateTrafficMode`, `dasha.validateGatewayAPI`, `dasha.gatewayTLSSecretName`, `dasha.gatewayNamespace`.
 
-## v0.1.24
+### CI / Tooling
+- **Trivy filesystem + config-скан** (job `trivy-scan`) — сканирует зависимости (`go.sum`, `package-lock.json`) и IaC-мисконфиги (Dockerfile, Helm chart) на каждый push/PR. Блокирует merge на `CRITICAL`/`HIGH` (`ignore-unfixed: true` — не шумим на advisories без патча). `skip-dirs: demo` исключает demo-lab.
+- **Release: Trivy на образах теперь блокирующий** — `exit-code: 0` → `1` в `release.yaml`. Релизы падают на `CRITICAL`/`HIGH` в опубликованных образах (раньше только печатался отчёт).
+- **Workflow CodeQL** (`.github/workflows/codeql.yaml`) — статический анализ Go + TypeScript с набором запросов `security-extended`. Запуск на push, PR и по расписанию (Пн 06:00 UTC). Находки появляются во вкладке Security.
+- **Dependabot расширен** на экосистемы `gomod` (`/backend`), `npm` (`/frontend`) и Docker-образы в `/deploy/images`. Сгруппированные обновления для OpenTelemetry, gRPC/protobuf, Vuetify, Vue core, ESLint, Vite — меньше PR-шума.
 
-#### Безопасность
-- **CI: Trivy filesystem + config-скан** (job `trivy-scan`) — сканирует зависимости (go.sum, package-lock.json) и IaC-мисконфиги (Dockerfile, Helm chart) на каждый push/PR. Блокирует merge на `CRITICAL`/`HIGH` (`ignore-unfixed: true` — не шумим на advisories без патча)
-- **Release: Trivy на образах теперь блокирующий** — `exit-code: 0` → `1` для сканов `dasha-backend` и `dasha-frontend` в `release.yaml`. Релизы падают на `CRITICAL`/`HIGH` в опубликованных образах (раньше только печатался отчёт)
-- **Workflow CodeQL** (`.github/workflows/codeql.yaml`) — статический анализ от GitHub для Go и TypeScript с набором запросов `security-extended`. Запуск на push, PR и по расписанию (Пн 06:00 UTC). Находки появляются в вкладке Security
-- **Dependabot расширен** на экосистемы `gomod` (`/backend`) и `npm` (`/frontend`), плюс базовые Docker-образы в `/deploy/images`. Сгруппированные обновления для OpenTelemetry, gRPC/protobuf, Vuetify, Vue core, ESLint и Vite — меньше PR-шума
-- **Bump Go-зависимостей** по находкам `trivy fs`: `pgx/v5` `v5.7.6` → `v5.9.0` (CRITICAL memory-safety, CVE-2026-33816), `go-jose/v4` `v4.1.3` → `v4.1.4` (HIGH DoS через специально подготовленный JWE, CVE-2026-34986), `golang-jwt/v4` `v4.5.1` → `v4.5.2` (HIGH memory allocation в разборе header, CVE-2025-30204), `grpc` `v1.79.2` → `v1.79.3` (HIGH HTTP/2 path validation auth bypass, CVE-2026-33186). `CVE-2026-34040` в `docker/docker` (транзитивно через `testcontainers-go`, server-side баг, клиентом не задействован) — в `.trivyignore` с пояснением
-- **Non-root контейнеры**: `deploy/images/Dockerfile.backend` и `Dockerfile.frontend` теперь работают от non-root (`USER dasha` / `USER nginx`). В nginx main-конфиг внесена правка: убрана директива `user nginx;` и pid перенесён в `/tmp/nginx.pid`, чтобы процесс стартовал без root
-- **Hardening Helm**: дефолтный `securityContext` для обоих контейнеров теперь задаёт `allowPrivilegeEscalation: false`, `readOnlyRootFilesystem: true`, `capabilities.drop: [ALL]`, `seccompProfile.type: RuntimeDefault`. Pod-level `runAsNonRoot: true` + `runAsUser/Group/fsGroup` (1000 для backend, 101 для frontend nginx). `emptyDir` mount'ы добавлены для `/tmp` (backend) и `/var/cache/nginx`, `/etc/nginx/conf.d`, `/tmp` (frontend) — чтобы ROFS работал
-- **Trivy `skip-dirs: demo`** в CI config-scan — `demo/Dockerfile.*` это только demo-lab, не публикуется, не стоит усложнять
+### Зависимости (Dependabot bumps с момента v0.1.23)
+- **Бэкенд (Go):** `pgx/v5` `v5.9.0` → `v5.9.2`, `getkin/kin-openapi` `v0.133.0` → `v0.138.0`, `labstack/echo/v4` `v4.15.1` → `v4.15.2`, `spf13/cobra` `v1.10.1` → `v1.10.2`, `coreos/go-oidc/v3` `v3.17.0` → `v3.18.0`, `go.uber.org/zap` `v1.27.0` → `v1.28.0`, `oapi-codegen/runtime` `v1.1.2` → `v1.4.0`, `yandex-cloud/go-genproto` (bump).
+- **Фронтенд (npm):** группа `vuetify`, группа `vue-core` (6 пакетов), `vitest` `3.2.4` → `4.1.6`, `prettier` `3.6.2` → `3.8.3`, группа `eslint` (3 пакета), `@tsconfig/node22` `22.0.2` → `22.0.5`.
+- **Контейнеры:** `alpine` `3.21` → `3.23`, `node` `22-alpine` → `26-alpine`.
+- **GitHub Actions:** `github/codeql-action` `v3` → `v4`.
+
+### Прочее
+- Фикс в Dependabot config.
 
 ## v0.1.23
 
