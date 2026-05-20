@@ -74,6 +74,56 @@ Frontend image
 {{- end }}
 
 {{/*
+Whether TLS is enabled at the ingress / gateway layer.
+Returns "true" or "false" (string — use with eq).
+*/}}
+{{- define "dasha.tlsEnabled" -}}
+{{- $ingressTLS := and .Values.ingress.enabled .Values.ingress.tls.enabled -}}
+{{- $gwTLS := and .Values.gatewayAPI.enabled .Values.gatewayAPI.tls.enabled -}}
+{{- ternary "true" "false" (or $ingressTLS $gwTLS) -}}
+{{- end -}}
+
+{{/*
+Fail if both Ingress and Gateway API are enabled — they are mutually exclusive.
+Invoke from a guaranteed-rendered template (e.g. configmap.yaml).
+*/}}
+{{- define "dasha.validateTrafficMode" -}}
+{{- if and .Values.ingress.enabled .Values.gatewayAPI.enabled -}}
+{{- fail "ingress.enabled and gatewayAPI.enabled are mutually exclusive — set only one to true" -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Validate Gateway API configuration. When Gateway lives in a different namespace
+than the release (e.g. istio-system), allowedRoutes.namespaces.from must NOT be "Same"
+or HTTPRoute from the release namespace cannot attach to the Gateway.
+*/}}
+{{- define "dasha.validateGatewayAPI" -}}
+{{- if .Values.gatewayAPI.enabled -}}
+{{- $gwNs := .Values.gatewayAPI.gatewayNamespace -}}
+{{- $releaseNs := include "dasha.namespace" . -}}
+{{- $from := dig "namespaces" "from" "Same" .Values.gatewayAPI.allowedRoutes -}}
+{{- if and $gwNs (ne $gwNs $releaseNs) (eq $from "Same") -}}
+{{- fail (printf "gatewayAPI.gatewayNamespace=%q differs from release namespace %q, but gatewayAPI.allowedRoutes.namespaces.from=\"Same\" — HTTPRoute cannot attach. Set allowedRoutes.namespaces.from to \"All\" or \"Selector\"." $gwNs $releaseNs) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+TLS secret name for the Gateway. Defaults to {fullname}-tls when not set explicitly.
+*/}}
+{{- define "dasha.gatewayTLSSecretName" -}}
+{{- .Values.gatewayAPI.tls.certificateRef.name | default (printf "%s-tls" (include "dasha.fullname" .)) -}}
+{{- end -}}
+
+{{/*
+Gateway resource namespace. Defaults to release namespace when not set.
+*/}}
+{{- define "dasha.gatewayNamespace" -}}
+{{- .Values.gatewayAPI.gatewayNamespace | default (include "dasha.namespace" .) -}}
+{{- end -}}
+
+{{/*
 Name of the secret containing password env vars
 */}}
 {{- define "dasha.envSecretName" -}}

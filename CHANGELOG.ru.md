@@ -1,5 +1,24 @@
 # История изменений
 
+## v0.1.25
+
+#### Breaking changes
+- **Helm chart:** `ingress.tls.certManager.reflectToNamespace` удалён. Интеграция с reflector (emberstack `kubernetes-reflector`) больше не рендерится — если нужна, добавляйте аннотации руками через `ingress.annotations`. `ingress.tls.certNamespace` также удалён; cert-manager `Certificate` всегда создаётся в release namespace.
+
+#### Безопасность
+- **WARNING бэкенда при auth без HTTPS:** `auth.NewMiddlewares` теперь пишет один zap-WARNING при инициализации, если `auth.mode != none && !require_https` — подсвечивает случай, когда credentials передаются открытым текстом. Добавлены unit-тесты в `backend/internal/auth/auth_test.go` (4 кейса по комбинациям).
+- **Авто-включение `require_https`:** Helm-шаблон `configmap.yaml` инжектит `require_https: true` в рендеримый `dasha.yaml` при `auth.mode != none && tls.enabled` (через новый helper `dasha.tlsEnabled` — OR `ingress.tls.enabled` и `gatewayAPI.tls.enabled`). Явное `config.require_https: false` в values сохраняется (escape hatch).
+- **Frontend nginx сохраняет оригинальный `X-Forwarded-Proto`:** entrypoint пишет `map`-блок в `/etc/nginx/conf.d/00-proto-map.conf` (`$http_x_forwarded_proto → $forwarded_proto`, fallback на `$scheme` при отсутствии заголовка). Оба `proxy_pass` (`/api/`, `/auth/`) теперь используют `$forwarded_proto` вместо `$scheme` — бэкенд видит протокол, терминированный на ingress/gateway, а не внутрикластерный http. Раньше заголовок перезаписывался на `http` и тихо ломал `require_https`.
+
+#### Helm
+- **Defense-in-depth редирект HTTP→HTTPS:**
+  - Ingress: аннотации `nginx.ingress.kubernetes.io/ssl-redirect` и `force-ssl-redirect` авто-добавляются при `ingress.tls.enabled && ingress.tls.redirect`.
+  - Gateway API: отдельный `HTTPRoute` с filter `RequestRedirect` на HTTP-listener (`tls.redirect: true`).
+  - Frontend nginx: env `FORCE_HTTPS_REDIRECT=true` (авто-выставляется чартом при `tls.enabled`) подставляет блок `if ($http_x_forwarded_proto = "http") { return 301 ... }` в server-config. Запросы без `X-Forwarded-Proto` (probes, port-forward) не редиректятся.
+- **Условный routing в ingress/gateway:** чарт теперь рендерит **одно** правило `/` → frontend service при `frontend.enabled: true` (frontend nginx делает path-routing внутри), и два правила `/api/`, `/auth/` → backend только при `frontend.enabled: false` (headless deploy). Устраняет прежнее дублирование маршрутизации между ingress и frontend nginx.
+- **Поддержка Kubernetes Gateway API** (`gateway.networking.k8s.io/v1`): новый блок values `gatewayAPI.*`, новые шаблоны `gateway.yaml`, `httproute.yaml`, `httproute-redirect.yaml`, `gateway-certificate.yaml`. Портативно между Istio, NGINX Gateway Fabric, Envoy Gateway, Cilium. `ingress.enabled` и `gatewayAPI.enabled` взаимоисключаются — `helm template` падает через helper `dasha.validateTrafficMode`, если оба true.
+- **Новые helpers в `_helpers.tpl`:** `dasha.tlsEnabled`, `dasha.validateTrafficMode`, `dasha.gatewayTLSSecretName`, `dasha.gatewayNamespace`.
+
 ## v0.1.24
 
 #### Безопасность

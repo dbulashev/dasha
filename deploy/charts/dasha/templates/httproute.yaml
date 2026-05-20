@@ -1,0 +1,40 @@
+{{- if .Values.gatewayAPI.enabled }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "dasha.fullname" . }}
+  namespace: {{ include "dasha.namespace" . }}
+  labels:
+    {{- include "dasha.labels" . | nindent 4 }}
+spec:
+  parentRefs:
+    - name: {{ include "dasha.fullname" . }}
+      namespace: {{ include "dasha.gatewayNamespace" . }}
+      sectionName: {{ ternary "https" "http" .Values.gatewayAPI.tls.enabled }}
+  hostnames:
+    - {{ .Values.gatewayAPI.hostname }}
+  rules:
+    {{- if .Values.frontend.enabled }}
+    # Frontend nginx handles path-routing internally (/api/, /auth/ → backend, / → SPA).
+    - backendRefs:
+        - name: {{ include "dasha.fullname" . }}-frontend
+          port: {{ .Values.frontend.port }}
+    {{- else }}
+    # Headless deploy (no UI): route API and auth callbacks directly to backend.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api/
+      backendRefs:
+        - name: {{ include "dasha.fullname" . }}-backend
+          port: {{ .Values.backend.port }}
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /auth/
+      backendRefs:
+        - name: {{ include "dasha.fullname" . }}-backend
+          port: {{ .Values.backend.port }}
+    {{- end }}
+{{- end }}

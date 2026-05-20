@@ -1,11 +1,11 @@
 {{- if .Values.ingress.enabled }}
-{{- if and .Values.ingress.tls.enabled .Values.ingress.tls.certManager.enabled (not .Values.ingress.tls.certManager.reflectToNamespace) }}
+{{- if and .Values.ingress.tls.enabled .Values.ingress.tls.certManager.enabled }}
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: {{ template "dasha.fullname" $ }}-tls
-  namespace: {{ .Values.ingress.tls.certNamespace }}
+  namespace: {{ template "dasha.namespace" $ }}
 spec:
   dnsNames:
     - {{ .Values.ingress.domain }}
@@ -24,17 +24,12 @@ metadata:
   labels:
     {{- include "dasha.labels" $ | nindent 4 }}
   {{- $annotations := dict }}
+  {{- if and .Values.ingress.tls.enabled .Values.ingress.tls.redirect }}
+  {{- $_ := set $annotations "nginx.ingress.kubernetes.io/ssl-redirect" "true" }}
+  {{- $_ := set $annotations "nginx.ingress.kubernetes.io/force-ssl-redirect" "true" }}
+  {{- end }}
   {{- if and .Values.ingress.tls.enabled .Values.ingress.tls.certManager.enabled }}
   {{- $_ := set $annotations "cert-manager.io/cluster-issuer" .Values.ingress.tls.certManager.issuer }}
-  {{- if .Values.ingress.tls.certManager.reflectToNamespace }}
-  {{- $reflectorAnnotations := dict
-    "reflector.v1.k8s.emberstack.com/reflection-allowed" "true"
-    "reflector.v1.k8s.emberstack.com/reflection-auto-enabled" "true"
-    "reflector.v1.k8s.emberstack.com/reflection-auto-namespaces" .Values.ingress.tls.certManager.reflectToNamespace
-    "reflector.v1.k8s.emberstack.com/reflection-allowed-namespaces" .Values.ingress.tls.certManager.reflectToNamespace
-  }}
-  {{- $__ := set $annotations "cert-manager.io/secret-template" ($reflectorAnnotations | toJson) }}
-  {{- end }}
   {{- end }}
   {{- with .Values.ingress.annotations }}
   {{- $annotations = merge $annotations . }}
@@ -57,7 +52,17 @@ spec:
     - host: {{ .Values.ingress.domain }}
       http:
         paths:
-          # /api/ must come before / for correct routing
+          {{- if .Values.frontend.enabled }}
+          # Frontend nginx handles path-routing internally (/api/, /auth/ → backend, / → SPA).
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ template "dasha.fullname" $ }}-frontend
+                port:
+                  name: http
+          {{- else }}
+          # Headless deploy (no UI): route API and auth callbacks directly to backend.
           - path: /api/
             pathType: Prefix
             backend:
@@ -65,12 +70,11 @@ spec:
                 name: {{ template "dasha.fullname" $ }}-backend
                 port:
                   name: http
-          {{- if .Values.frontend.enabled }}
-          - path: /
+          - path: /auth/
             pathType: Prefix
             backend:
               service:
-                name: {{ template "dasha.fullname" $ }}-frontend
+                name: {{ template "dasha.fullname" $ }}-backend
                 port:
                   name: http
           {{- end }}

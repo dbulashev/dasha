@@ -64,6 +64,8 @@ spec:
           env:
             - name: BACKEND_URL
               value: {{ template "dasha.fullname" $ }}-backend:{{ .Values.backend.port }}
+            - name: FORCE_HTTPS_REDIRECT
+              value: {{ include "dasha.tlsEnabled" . | quote }}
           volumeMounts:
             - name: nginx-cache
               mountPath: /var/cache/nginx
