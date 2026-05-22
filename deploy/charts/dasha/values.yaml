@@ -165,6 +165,10 @@ ingress:
   tls:
     enabled: false
     secretName: ""
+    # Namespace where the cert-manager Certificate is created.
+    # Useful when the ingress controller lives in a separate namespace (e.g. Istio)
+    # and reads TLS secrets from its own namespace. Empty = release namespace.
+    certNamespace: ""
     # Auto-add nginx-ingress ssl-redirect annotations when tls is enabled.
     # Set to false if you want to serve plain HTTP alongside HTTPS.
     redirect: true

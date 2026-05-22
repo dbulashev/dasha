@@ -3,8 +3,7 @@
 ## v1.0.0
 
 ### Breaking changes
-- **Helm chart:** `ingress.tls.certManager.reflectToNamespace` удалён. Интеграция с reflector (emberstack `kubernetes-reflector`) больше не рендерится — если нужна, добавляйте аннотации руками через `ingress.annotations`.
-- **Helm chart:** `ingress.tls.certNamespace` удалён; cert-manager `Certificate` всегда создаётся в release namespace.
+- **Helm chart:** `ingress.tls.certManager.reflectToNamespace` удалён. Интеграция с reflector (emberstack `kubernetes-reflector`) больше не рендерится — если нужна, добавляйте аннотации руками через `ingress.annotations`. (`ingress.tls.certNamespace` **сохранён** — нужен пользователям, у которых ingress controller живёт в отдельном namespace, например Istio.)
 - **Helm chart:** маршрутизация ingress/gateway упрощена. При `frontend.enabled: true` (дефолт) рендерится одно правило `/` — frontend nginx сам проксирует `/api/` и `/auth/`. Прежнего отдельного правила `/api/` в Ingress больше нет. Headless-деплой (`frontend.enabled: false`) сохраняет прямые правила `/api/` и `/auth/` на backend.
 
 ### Безопасность

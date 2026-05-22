@@ -3,8 +3,7 @@
 ## v1.0.0
 
 ### Breaking Changes
-- **Helm chart:** `ingress.tls.certManager.reflectToNamespace` removed. Reflector integration (emberstack `kubernetes-reflector`) is no longer rendered — add the annotations manually via `ingress.annotations` if you still need it.
-- **Helm chart:** `ingress.tls.certNamespace` removed; cert-manager `Certificate` is always created in the release namespace.
+- **Helm chart:** `ingress.tls.certManager.reflectToNamespace` removed. Reflector integration (emberstack `kubernetes-reflector`) is no longer rendered — add the annotations manually via `ingress.annotations` if you still need it. (`ingress.tls.certNamespace` is **kept** for users whose ingress controller lives in a separate namespace, e.g. Istio.)
 - **Helm chart:** ingress/gateway routing simplified. With `frontend.enabled: true` (default), only a single `/` rule is rendered — frontend nginx handles `/api/` and `/auth/` proxying. The previous separate `/api/` Ingress rule is gone. Headless deploys (`frontend.enabled: false`) keep direct `/api/` and `/auth/` rules to backend.
 
 ### Security
