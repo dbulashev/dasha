@@ -223,6 +223,3 @@
 #### Demo
 - Added `pgstattuple` extension to demo init scripts
 
-## v0.1.9
-
-See git history for previous changes.
