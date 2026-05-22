@@ -10,7 +10,8 @@ RUN npm run build-only
 FROM nginx:alpine
 RUN apk add --no-cache gettext && \
     sed -i '/^user  *nginx;/d' /etc/nginx/nginx.conf && \
-    sed -i 's|/var/run/nginx.pid|/tmp/nginx.pid|' /etc/nginx/nginx.conf
+    sed -i -E 's|^pid[[:space:]]+/[^;]*nginx\.pid;|pid /tmp/nginx.pid;|' /etc/nginx/nginx.conf && \
+    grep -qE '^pid[[:space:]]+/tmp/nginx\.pid;' /etc/nginx/nginx.conf
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY deploy/images/nginx.conf.template /etc/nginx/templates/nginx.conf.template
 COPY deploy/images/docker-entrypoint.sh /docker-entrypoint.sh
