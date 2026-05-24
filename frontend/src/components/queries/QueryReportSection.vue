@@ -5,13 +5,19 @@ import { getDatabaseUsers, getQueriesReport } from '@/api/gen/default/default'
 import type { QueryReport } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useApiLoader } from '@/composables/useApiLoader'
+import { useViewError } from '@/composables/useViewError'
+import { useDebouncedRef } from '@/composables/useDebouncedRef'
 import { useExcludeUsersStore } from '@/stores/excludeUsers'
 import ReportCard from '@/components/queries/ReportCard.vue'
 import SqlDialog from '@/components/queries/SqlDialog.vue'
 
+const props = defineProps<{
+  snapshotData?: QueryReport[] | null
+}>()
+
 const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
-const emit = defineEmits<{ error: [msg: string] }>()
+const { onError } = useViewError()
 const excludeUsersStore = useExcludeUsersStore()
 
 type ReportSortKey = 'total_time' | 'calls' | 'wal' | 'rows' | 'cpu_time' | 'io_time' | 'temp_blks'
@@ -69,22 +75,37 @@ const { items: availableUsers } = useApiLoader<string[]>(
   },
 )
 
-const { items, loading } = useApiLoader<QueryReport[]>(
+const isSnapshot = computed(() => props.snapshotData != null)
+
+const { items: liveItems, loading } = useApiLoader<QueryReport[]>(
   () => getQueriesReport({
     cluster_name: clusterName.value!,
     instance: hostName.value!,
     exclude_users: excludeUsers.value.length ? excludeUsers.value : undefined,
   }),
   {
-    deps: [clusterName, hostName, excludeUsers],
-    guard: () => !!clusterName.value && !!hostName.value,
-    onError: (msg) => emit('error', msg),
+    deps: [clusterName, hostName, excludeUsers, isSnapshot],
+    guard: () => !!clusterName.value && !!hostName.value && !isSnapshot.value,
+    onError,
   },
 )
 
+const items = computed(() => isSnapshot.value ? (props.snapshotData ?? []) : liveItems.value)
+
+const search = ref<string | null>('')
+const debouncedSearch = useDebouncedRef(search, 200)
+
+const filteredItems = computed(() => {
+  const q = (debouncedSearch.value ?? '').trim().toLowerCase()
+  if (!q) return items.value
+  return items.value.filter((item) =>
+    item.Query.toLowerCase().includes(q) || String(item.QueryID).includes(q),
+  )
+})
+
 const sortedItems = computed(() => {
   const field = sortFieldMap[reportSortBy.value]
-  return [...items.value].sort((a, b) => {
+  return [...filteredItems.value].sort((a, b) => {
     const va = (a[field] as number | null | undefined) ?? 0
     const vb = (b[field] as number | null | undefined) ?? 0
     return vb - va
@@ -98,7 +119,7 @@ const hasNegativeCpuTime = computed(() =>
 // SQL dialog
 const sqlDialogVisible = ref(false)
 const sqlDialogText = ref('')
-const sqlDialogQueryId = ref<number>(0)
+const sqlDialogQueryId = ref<string>('')
 
 function showSqlDialog(item: QueryReport) {
   sqlDialogQueryId.value = item.QueryID
@@ -131,6 +152,7 @@ function showSqlDialog(item: QueryReport) {
         style="max-width: 220px;"
       />
       <v-combobox
+        v-if="!isSnapshot"
         v-model="excludeUsers"
         :items="availableUsers"
         :label="t('report.excludeUsers')"
@@ -142,6 +164,17 @@ function showSqlDialog(item: QueryReport) {
         closable-chips
         class="ml-4"
         style="max-width: 350px;"
+      />
+      <v-text-field
+        v-model="search"
+        :label="t('report.search')"
+        prepend-inner-icon="mdi-magnify"
+        density="compact"
+        variant="outlined"
+        hide-details
+        clearable
+        class="ml-4"
+        style="max-width: 320px;"
       />
     </v-card-title>
     <v-card-text>

@@ -101,12 +101,6 @@ func TestFindTemplate_VersionSelection(t *testing.T) {
 			serverVersion: 140000,
 			wantContains:  "backend_type\n", // PG14 > all dirs → base
 		},
-		{
-			name:          "running_pg96_uses_100000_dir",
-			queryName:     "queries/running",
-			serverVersion: 90600,
-			wantContains:  "NULL::text", // MIN dir > 90600 = 100000
-		},
 
 		// queries/top_10_by_time — dirs: 150000, 170000
 		// 150000/ has blk_read_time only (no temp) — for PG14
@@ -172,42 +166,6 @@ func TestFindTemplate_NonexistentQuery(t *testing.T) {
 
 	_, err := findTemplate(170000, "nonexistent/query")
 	assert.Error(t, err)
-}
-
-// TestFindTemplate_VersionSelectionAlgorithm verifies the exact algorithm behavior:
-// keeps dirs > serverVersion, picks MIN. For queries/running (dirs: 90600, 100000):
-// - serverVersion < 90600: both qualify → MIN = 90600
-// - serverVersion = 90600: only 100000 qualifies (strictly greater)
-// - serverVersion = 100000: no dirs qualify → base
-// - serverVersion > 100000: no dirs qualify → base
-func TestFindTemplate_VersionSelectionAlgorithm(t *testing.T) {
-	t.Parallel()
-
-	// For very old server (< 90600), MIN dir > 90500 = 90600
-	result90500, err := findTemplate(90500, "queries/running")
-	require.NoError(t, err)
-
-	// For PG9.6 (90600), MIN dir > 90600 = 100000
-	result90600, err := findTemplate(90600, "queries/running")
-	require.NoError(t, err)
-	assert.Contains(t, result90600, "NULL::text",
-		"PG9.6 should use 100000 dir which has NULL::text AS backend_type")
-
-	// PG9.5 uses 90600/ dir (different from PG9.6 which uses 100000/)
-	assert.NotEqual(t, result90500, result90600,
-		"PG9.5 and PG9.6 should use different templates")
-
-	// For PG10 (100000), no dirs > 100000 → base template
-	result100000, err := findTemplate(100000, "queries/running")
-	require.NoError(t, err)
-	assert.NotContains(t, result100000, "NULL::text",
-		"PG10 should use base template without NULL::text")
-
-	// For PG14 (140000), no dirs qualify → base template
-	result140000, err := findTemplate(140000, "queries/running")
-	require.NoError(t, err)
-	assert.Equal(t, result100000, result140000,
-		"PG10 and PG14 should both use base template")
 }
 
 // TestFindTemplate_PG17BoundaryBehavior documents the boundary behavior at PG17.

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useViewError } from '@/composables/useViewError'
 import { getIndexesUsage } from '@/api/gen/default/default'
 import type { IndexUsage } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
@@ -12,7 +13,7 @@ import { useDescribeLink } from '@/composables/useDescribeLink'
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { describeLink } = useDescribeLink()
 const { t } = useI18n()
-const emit = defineEmits<{ error: [msg: string] }>()
+const { onError } = useViewError()
 
 const headers = computed(() => [
   { title: t('header.schema'), key: 'Schema' },
@@ -33,7 +34,7 @@ const { items, loading, page, hasMore, load } = usePaginatedApiLoader<IndexUsage
     pageSize: DEFAULT_PAGE_SIZE,
     deps: [clusterName, hostName, databaseName],
     guard: () => !!clusterName.value && !!hostName.value && !!databaseName.value,
-    onError: (msg) => emit('error', msg),
+    onError,
   },
 )
 </script>
@@ -53,7 +54,7 @@ const { items, loading, page, hasMore, load } = usePaginatedApiLoader<IndexUsage
         <template #item.Table="{ item }">
           <router-link :to="describeLink(item.Schema, item.Table)" class="text-decoration-none">{{ item.Table }}</router-link>
         </template>
-        <template #item.PercentOfTimesIndexUsed="{ value }">{{ value != null ? value + '%' : t('insufficientData') }}</template>
+        <template #item.PercentOfTimesIndexUsed="{ value }">{{ value != null ? value + '%' : '—' }}</template>
       </v-data-table>
       <PaginationControls :page="page" :has-more="hasMore" @update:page="load" />
     </v-card-text>

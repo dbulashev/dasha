@@ -5,12 +5,13 @@ import { getIndexesMissing } from '@/api/gen/default/default'
 import type { IndexMissing } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useApiLoader } from '@/composables/useApiLoader'
+import { useViewError } from '@/composables/useViewError'
 import { useDescribeLink } from '@/composables/useDescribeLink'
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { describeLink } = useDescribeLink()
 const { t } = useI18n()
-const emit = defineEmits<{ error: [msg: string] }>()
+const { onError } = useViewError()
 
 const headers = computed(() => [
   { title: t('header.schema'), key: 'Schema' },
@@ -28,7 +29,7 @@ const { items, loading } = useApiLoader<IndexMissing[]>(
   {
     deps: [clusterName, hostName, databaseName],
     guard: () => !!clusterName.value && !!hostName.value && !!databaseName.value,
-    onError: (msg) => emit('error', msg),
+    onError,
   },
 )
 </script>

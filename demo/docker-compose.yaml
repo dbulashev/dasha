@@ -213,6 +213,23 @@ services:
       start_period: 30s
 
   # ============================================================
+  # Storage DB for snapshots
+  # ============================================================
+  storage-db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: dasha
+      POSTGRES_PASSWORD: dasha
+      POSTGRES_DB: dasha_storage
+    networks:
+      - dasha-demo
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dasha -d dasha_storage"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  # ============================================================
   # Application
   # ============================================================
   backend:
@@ -227,6 +244,8 @@ services:
       pg17-master:
         condition: service_healthy
       pg18-standalone:
+        condition: service_healthy
+      storage-db:
         condition: service_healthy
       keycloak:
         condition: service_healthy

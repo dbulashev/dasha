@@ -147,6 +147,10 @@ func provideConfig() (*config.Config, error) {
 		c.Auth.CookieSecret = os.Getenv(c.Auth.CookieSecretFromEnv)
 	}
 
+	if c.Storage.DSNFromEnv != "" {
+		c.Storage.DSN = os.Getenv(c.Storage.DSNFromEnv)
+	}
+
 	if err := c.Auth.Validate(); err != nil {
 		return nil, fmt.Errorf("provideConfig | auth config: %w", err)
 	}

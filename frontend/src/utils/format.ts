@@ -35,6 +35,25 @@ export function fmtMs(ms: number | null | undefined, t: TFunc): string {
   return `0 ${t('time.ms')}`
 }
 
+export interface TimeScale {
+  divisor: number
+  unit: string
+}
+
+export function pickTimeScale(maxMs: number): TimeScale {
+  const abs = Math.abs(maxMs || 0)
+  if (abs >= 3600000) return { divisor: 3600000, unit: 'h' }
+  if (abs >= 60000) return { divisor: 60000, unit: 'min' }
+  if (abs >= 1000) return { divisor: 1000, unit: 'sec' }
+  return { divisor: 1, unit: 'ms' }
+}
+
+export function fmtScaled(ms: number, scale: TimeScale): string {
+  const v = ms / scale.divisor
+  if (Number.isInteger(v)) return String(v)
+  return v.toFixed(1)
+}
+
 export function fmtPct(v: number | null | undefined, decimals = 1): string {
   if (v == null) return '—'
   return v.toFixed(decimals) + '%'
@@ -43,6 +62,25 @@ export function fmtPct(v: number | null | undefined, decimals = 1): string {
 export function fmtInt(v: number | null | undefined): string {
   if (v == null) return '—'
   return v.toLocaleString()
+}
+
+export function fmtAge(createdAt: string | null | undefined, statsReset: string | null | undefined, unknownLabel = '?'): string {
+  if (!createdAt || !statsReset) return unknownLabel
+  const diff = new Date(createdAt).getTime() - new Date(statsReset).getTime()
+  if (diff < 0) return '—'
+  let remaining = Math.floor(diff / 1000)
+  const days = Math.floor(remaining / 86400)
+  remaining %= 86400
+  const hrs = Math.floor(remaining / 3600)
+  remaining %= 3600
+  const min = Math.floor(remaining / 60)
+  const sec = remaining % 60
+  const parts: string[] = []
+  if (days > 0) parts.push(`${days}d`)
+  if (hrs > 0) parts.push(`${hrs}h`)
+  if (min > 0) parts.push(`${min}m`)
+  if (sec > 0 || parts.length === 0) parts.push(`${sec}s`)
+  return parts.join(' ')
 }
 
 export function fmtRowCount(n: number): string {

@@ -58,6 +58,13 @@ echo "=== Starting deadlock generator ==="
 ) &
 
 echo "=== Starting workload loop ==="
+
+# Disable autovacuum on customer_profiles to accumulate dead tuples for demo
+psql -h pg18-master -U demo -d demo -c \
+  "ALTER TABLE customer_profiles SET (autovacuum_enabled = false);"
+psql -h pg17-master -U demo -d demo -c \
+  "ALTER TABLE customer_profiles SET (autovacuum_enabled = false);" 2>/dev/null || true
+
 while true; do
   # 1. Dead rows generation (visible in Maintenance Info)
   psql -h pg17-master -U demo -d demo -c "
@@ -69,7 +76,27 @@ while true; do
   psql -h pg18-master -U demo -d demo -c \
     "UPDATE orders SET amount = amount + 0.01 WHERE id BETWEEN 1 AND 500;"
 
-  # 3. Diverse queries for pg_stat_statements variety (visible in Top10/Report)
+  # 3. Dead tuples in customer_profiles (visible in Vacuum Stats thresholds)
+  psql -h pg18-master -U demo -d demo -c "
+    UPDATE customer_profiles SET updated_at = now(), notes = 'updated_' || id
+    WHERE id IN (SELECT id FROM customer_profiles ORDER BY random() LIMIT 100);
+    DELETE FROM customer_profiles
+    WHERE id IN (SELECT id FROM customer_profiles ORDER BY random() LIMIT 20);
+    INSERT INTO customer_profiles (first_name, last_name, email, bio, preferences)
+    SELECT 'New_' || i, 'User_' || i,
+           'new' || i || '_' || extract(epoch from now())::int || '@example.com',
+           repeat('Fresh data. ', 30),
+           '{\"theme\": \"dark\"}'::jsonb
+    FROM generate_series(1, 20) i;
+  "
+
+  # 4. HOT updates on hot_update_demo (visible in Row Estimate / fillfactor demo)
+  psql -h pg18-master -U demo -d demo -c "
+    UPDATE hot_update_demo SET counter = counter + 1, last_ping = now()
+    WHERE id IN (SELECT id FROM hot_update_demo ORDER BY random() LIMIT 200);
+  "
+
+  # 5. Diverse queries for pg_stat_statements variety (visible in Top10/Report)
   psql -h pg17-master -U demo -d demo <<'SQL'
     SELECT count(*) FROM orders WHERE status = 'new';
     SELECT avg(amount), max(amount) FROM orders WHERE created_at > now() - interval '30 days';
@@ -82,6 +109,7 @@ SQL
     SELECT count(*) FROM orders WHERE user_id BETWEEN 1 AND 100;
     SELECT status, count(*), avg(amount) FROM orders GROUP BY status;
     SELECT * FROM orders WHERE amount > 9000 ORDER BY created_at DESC LIMIT 20;
+    SELECT * FROM customer_profiles WHERE bio IS NOT NULL ORDER BY random() LIMIT 5;
 SQL
 
   echo "[$(date)] Workload cycle completed"

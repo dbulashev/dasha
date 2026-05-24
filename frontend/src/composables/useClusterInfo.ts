@@ -6,17 +6,27 @@ export function useClusterInfo() {
   const route = useRoute()
   const clusterStore = useClustersStore()
 
-  const clusterName = computed(() => route.params.clustername ? String(route.params.clustername) : null)
+  const currentCluster = computed(() => {
+    const name = route.params.clustername ? String(route.params.clustername) : null
+    if (!name) return null
+    return clusterStore.clusterList?.find(c => c.name === name) ?? null
+  })
+
+  const currentHost = computed(() => {
+    const host = route.query.host ? String(route.query.host) : null
+    if (!host || !currentCluster.value) return null
+    return currentCluster.value.instances?.find(i => i.host_name === host) ?? null
+  })
+
+  // Return null if cluster/host not found in store — prevents API calls with invalid params
+  const clusterName = computed(() => currentCluster.value?.name ?? null)
+  const hostName = computed(() => {
+    const urlHost = route.query.host ? String(route.query.host) : null
+    if (!urlHost) return null
+    // Only return host if it exists in the cluster
+    return currentHost.value?.host_name ?? null
+  })
   const databaseName = computed(() => route.query.db ? String(route.query.db) : null)
-  const hostName = computed(() => route.query.host ? String(route.query.host) : null)
-
-  const currentCluster = computed(() => 
-    clusterStore.clusterList?.find(c => c.name === clusterName.value) ?? null
-  )
-
-  const currentHost = computed(() => 
-    currentCluster.value?.instances?.find(i => i.host_name === hostName.value) ?? null
-  )
 
   return {
     clusterName,

@@ -13,6 +13,7 @@ import { getQueriesTop10Chart } from '@/api/gen/default/default'
 import type { QueryTop10Chart, QueryTop10ChartItem } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useApiLoader } from '@/composables/useApiLoader'
+import { useViewError } from '@/composables/useViewError'
 import { copyToClipboard } from '@/utils/sql'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip)
@@ -30,7 +31,7 @@ const METRICS: (keyof QueryTop10Chart)[] = [
 
 const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
-const emit = defineEmits<{ error: [msg: string] }>()
+const { onError } = useViewError()
 
 const { items: chartData, loading } = useApiLoader<QueryTop10Chart | null>(
   () => getQueriesTop10Chart({
@@ -40,7 +41,7 @@ const { items: chartData, loading } = useApiLoader<QueryTop10Chart | null>(
   {
     deps: [clusterName, hostName],
     guard: () => !!clusterName.value && !!hostName.value,
-    onError: (msg) => emit('error', msg),
+    onError,
     defaultValue: null,
   },
 )
@@ -48,7 +49,7 @@ const { items: chartData, loading } = useApiLoader<QueryTop10Chart | null>(
 const barData = computed(() => {
   if (!chartData.value) return null
 
-  const allQueryIds = new Set<number>()
+  const allQueryIds = new Set<string>()
   for (const metric of METRICS) {
     const items = chartData.value[metric] as QueryTop10ChartItem[]
     if (items) {

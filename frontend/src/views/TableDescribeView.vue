@@ -7,6 +7,7 @@ import type { TableDescribe } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { assertOk } from '@/utils/api'
 import { getErrorMessage } from '@/utils/error'
+import { useViewError } from '@/composables/useViewError'
 import DescribeTableSelector from '@/components/tables/DescribeTableSelector.vue'
 import DescribeHeaderSection from '@/components/tables/DescribeHeaderSection.vue'
 import DescribeColumnsSection from '@/components/tables/DescribeColumnsSection.vue'
@@ -15,14 +16,16 @@ import DescribeConstraintsSection from '@/components/tables/DescribeConstraintsS
 import DescribeReferencedBySection from '@/components/tables/DescribeReferencedBySection.vue'
 import DescribePartitionsSection from '@/components/tables/DescribePartitionsSection.vue'
 import DescribeBloatSection from '@/components/tables/DescribeBloatSection.vue'
+import DescribeVacuumStatsSection from '@/components/tables/DescribeVacuumStatsSection.vue'
+import DescribeRowEstimateSection from '@/components/tables/DescribeRowEstimateSection.vue'
 
 const { t } = useI18n()
 const route = useRoute()
 const { clusterName, databaseName, hostName } = useClusterInfo()
 
+const { onError: setError } = useViewError()
 const data = ref<TableDescribe | null>(null)
 const loading = ref(false)
-const errorMessage = ref('')
 
 const schema = computed(() => route.query.schema ? String(route.query.schema) : '')
 const table = computed(() => route.query.table ? String(route.query.table) : '')
@@ -33,7 +36,6 @@ async function loadDescribe() {
     return
   }
   loading.value = true
-  errorMessage.value = ''
   try {
     const response = await getTablesDescribe({
       cluster_name: clusterName.value,
@@ -44,14 +46,22 @@ async function loadDescribe() {
     })
     data.value = assertOk(response) as TableDescribe
   } catch (err) {
-    errorMessage.value = getErrorMessage(err)
+    setError(getErrorMessage(err), err)
     data.value = null
   } finally {
     loading.value = false
   }
 }
 
-watch([clusterName, hostName, databaseName, schema, table], () => {
+watch([clusterName, hostName, databaseName, schema, table], (newVals, oldVals) => {
+  if (oldVals) {
+    const [newCluster] = newVals
+    const [oldCluster] = oldVals
+    if (oldCluster && newCluster && newCluster !== oldCluster) {
+      data.value = null
+      return
+    }
+  }
   loadDescribe()
 }, { immediate: true })
 
@@ -59,9 +69,8 @@ const isPartitioned = computed(() => data.value?.TableType === 'partitioned_tabl
 </script>
 
 <template>
-  <v-alert v-if="errorMessage" type="error" class="mb-4" closable>{{ errorMessage }}</v-alert>
 
-  <DescribeTableSelector :loading="loading" />
+  <DescribeTableSelector :key="clusterName ?? ''" :loading="loading" />
 
   <template v-if="data">
     <DescribeHeaderSection :data="data" />
@@ -71,6 +80,8 @@ const isPartitioned = computed(() => data.value?.TableType === 'partitioned_tabl
     <DescribeConstraintsSection :title="t('describe.fkConstraints')" :items="data.FkConstraints" />
     <DescribeReferencedBySection :items="data.ReferencedBy" />
     <DescribePartitionsSection v-if="isPartitioned" :schema="schema" :table="table" />
-    <DescribeBloatSection :schema="schema" :table="table" />
+    <DescribeBloatSection v-if="data.TableType === 'table'" :schema="schema" :table="table" />
+    <DescribeVacuumStatsSection v-if="data.TableType === 'table' || data.TableType === 'materialized_view'" :schema="schema" :table="table" />
+    <DescribeRowEstimateSection v-if="data.TableType === 'table' || data.TableType === 'materialized_view'" :schema="schema" :table="table" />
   </template>
 </template>

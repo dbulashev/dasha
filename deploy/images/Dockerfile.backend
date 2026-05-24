@@ -10,8 +10,10 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
     -ldflags="-s -w -X github.com/dbulashev/dasha/internal/version.buildNumber=$BUILD_NUMBER -X github.com/dbulashev/dasha/internal/version.buildDate=$BUILD_DATE" \
     -o /dasha ./cmd/main.go
 
-FROM alpine:3.21
-RUN apk add --no-cache ca-certificates
+FROM alpine:3.23
+RUN apk add --no-cache ca-certificates && \
+    addgroup -S dasha && adduser -S -G dasha -u 1000 dasha
 COPY --from=builder /dasha /usr/local/bin/dasha
+USER dasha
 EXPOSE 8000
 CMD ["dasha"]

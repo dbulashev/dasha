@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useViewError } from '@/composables/useViewError'
 import { getIndexesBloat } from '@/api/gen/default/default'
 import type { IndexBloat } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
@@ -8,11 +9,12 @@ import { usePaginatedApiLoader } from '@/composables/useApiLoader'
 import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
 import PaginationControls from '@/components/PaginationControls.vue'
 import { useDescribeLink } from '@/composables/useDescribeLink'
+import { fmtBytes } from '@/utils/format'
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { describeLink } = useDescribeLink()
 const { t } = useI18n()
-const emit = defineEmits<{ error: [msg: string] }>()
+const { onError } = useViewError()
 
 const headers = computed(() => [
   { title: t('header.schema'), key: 'Schema' },
@@ -35,7 +37,7 @@ const { items, loading, page, hasMore, load } = usePaginatedApiLoader<IndexBloat
     pageSize: DEFAULT_PAGE_SIZE,
     deps: [clusterName, hostName, databaseName],
     guard: () => !!clusterName.value && !!hostName.value && !!databaseName.value,
-    onError: (msg) => emit('error', msg),
+    onError,
   },
 )
 </script>
@@ -55,6 +57,8 @@ const { items, loading, page, hasMore, load } = usePaginatedApiLoader<IndexBloat
         <template #item.Table="{ item }">
           <router-link :to="describeLink(item.Schema, item.Table)" class="text-decoration-none">{{ item.Table }}</router-link>
         </template>
+        <template #item.BloatBytes="{ value }">{{ fmtBytes(value) }}</template>
+        <template #item.IndexBytes="{ value }">{{ fmtBytes(value) }}</template>
       </v-data-table>
       <PaginationControls :page="page" :has-more="hasMore" @update:page="load" />
     </v-card-text>

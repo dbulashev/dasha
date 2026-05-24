@@ -12,14 +12,15 @@ import { getQueriesReport } from '@/api/gen/default/default'
 import type { QueryReport } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useApiLoader } from '@/composables/useApiLoader'
+import { useViewError } from '@/composables/useViewError'
 import { copyToClipboard } from '@/utils/sql'
-import { fmtMs } from '@/utils/format'
+import { fmtMs, pickTimeScale, fmtScaled } from '@/utils/format'
 
 ChartJS.register(LinearScale, PointElement, Tooltip)
 
 const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
-const emit = defineEmits<{ error: [msg: string] }>()
+const { onError } = useViewError()
 
 const snackbar = ref(false)
 const copiedQueryId = ref('')
@@ -32,11 +33,10 @@ const { items, loading } = useApiLoader<QueryReport[]>(
   {
     deps: [clusterName, hostName],
     guard: () => !!clusterName.value && !!hostName.value,
-    onError: (msg) => emit('error', msg),
+    onError,
   },
 )
 
-// @todo: scale to actual units (eg minutes/hours)
 const points = computed(() =>
   items.value
     .filter(r => r.IoTimeMs != null && r.CpuTimeMs != null)
@@ -51,6 +51,9 @@ const points = computed(() =>
 const maxCalls = computed(() =>
   Math.max(...points.value.map(p => p.calls), 1),
 )
+
+const xScale = computed(() => pickTimeScale(Math.max(...points.value.map(p => p.x), 0)))
+const yScale = computed(() => pickTimeScale(Math.max(...points.value.map(p => p.y), 0)))
 
 const scatterData = computed(() => ({
   datasets: [{
@@ -89,7 +92,7 @@ const scatterOptions = computed(() => ({
     legend: { display: false },
     tooltip: {
       callbacks: {
-        label: (ctx: { raw: { x: number; y: number; calls: number; queryId: number } }) => {
+        label: (ctx: { raw: { x: number; y: number; calls: number; queryId: string } }) => {
           const p = ctx.raw
           return [
             `Query ${p.queryId}`,
@@ -104,12 +107,18 @@ const scatterOptions = computed(() => ({
   },
   scales: {
     x: {
-      title: { display: true, text: t('chart.ioTime') },
+      title: { display: true, text: `${t('chart.ioTime')} (${t('time.' + xScale.value.unit)})` },
       beginAtZero: true,
+      ticks: {
+        callback: (value: number) => fmtScaled(value, xScale.value),
+      },
     },
     y: {
-      title: { display: true, text: t('chart.cpuTime') },
+      title: { display: true, text: `${t('chart.cpuTime')} (${t('time.' + yScale.value.unit)})` },
       beginAtZero: true,
+      ticks: {
+        callback: (value: number) => fmtScaled(value, yScale.value),
+      },
     },
   },
 }))

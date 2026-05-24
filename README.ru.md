@@ -19,6 +19,8 @@
 - Развёрнутый отчёт по запросам (строки, вызовы, время планирования/выполнения, cache hit ratio, WAL, временные буферы, вклад в %)
 - Мониторинг активных и заблокированных запросов
 - Статус `pg_stat_statements` и отслеживание времени сброса статистики
+- **Снимки pgss**: сохранение снимков в отдельную БД хранилища, просмотр и расшаривание по URL
+- **Сравнение снимков**: side-by-side сравнение двух снимков или снимка с live-данными, сортировка по любой метрике
 
 **Анализ индексов**
 - Топ-K по размеру, оценка bloat, обнаружение дубликатов
@@ -32,6 +34,7 @@
 - Соотношение последовательного и индексного сканирования
 - Cache hit rate, информация о партиционированных таблицах
 - Кастомные параметры хранения (fillfactor, переопределения автовакуума)
+- Подробное описание таблицы: колонки, индексы, ограничения, bloat, партиции, статистика вакуума с расчётными порогами, оценка размера строки и кандидатов в TOAST
 
 **Анализ внешних ключей**
 - Невалидные ограничения
@@ -73,6 +76,7 @@
 - Поддержка множества кластеров с выбором хоста/базы для каждого
 - Сервис-дискавери Yandex Managed Service for PostgreSQL
 - Отображение роли хоста (primary / replica)
+- Опциональная БД хранилища снимков (секционированные таблицы, CLI `dasha migrate`)
 - Интернационализация (русский, немецкий)
 
 ## Архитектура
@@ -206,6 +210,18 @@ openssl rand -base64 32
 openssl rand -base64 32
 ```
 
+#### Хранилище снимков (опционально)
+
+Для включения снимков pgss настройте отдельную базу данных PostgreSQL:
+
+```yaml
+storage:
+  dsn: "postgres://dasha:secret@localhost:5432/dasha_storage?sslmode=require"
+  # dsn_from_env: DASHA_STORAGE_DSN  # альтернатива: читать из переменной окружения
+```
+
+Выполните `dasha migrate` для создания секционированных таблиц перед первым использованием.
+
 ### Локальный запуск
 
 ```bash
@@ -232,6 +248,7 @@ make demo-lab-down     # Остановить и очистить
 - **Кластер PG17**: мастер + 2 реплики (с намеренно «плохими» настройками для анализа)
 - **PG18 standalone**: подписчик логической репликации
 - **Keycloak**: OIDC-провайдер с настроенным realm, пользователи `admin`/`admin` и `viewer`/`viewer`
+- **БД хранилища**: хранилище снимков с автоматической миграцией при запуске
 - **Генератор нагрузки**: непрерывная фоновая нагрузка для реалистичных данных
 
 ## Разработка
@@ -253,6 +270,7 @@ make demo-lab-down     # Остановить и очистить
 │   │   ├── http/                 # Обработчики (v1.go, strictserver.go)
 │   │   ├── query/sql/            # SQL-шаблоны с версионными переопределениями
 │   │   ├── repository/           # Слой доступа к данным (pgx-пулы)
+│   │   ├── storage/              # Хранилище снимков (миграции, CRUD)
 │   │   └── testinfra/            # Инфраструктура тестов (testcontainers)
 │   └── dasha.yaml                # Пример конфигурации
 ├── frontend/
@@ -446,24 +464,34 @@ ingress:
 
 cert-manager создаст ресурс `Certificate` в namespace приложения.
 
-#### Ingress с TLS (cert-manager + reflector)
+#### Gateway API с TLS (cert-manager)
 
-Когда ingress controller работает в другом namespace (например, Istio), используйте `reflectToNamespace` для копирования TLS-секрета через [reflector](https://github.com/emberstack/kubernetes-reflector):
+Портативная альтернатива Ingress — работает с любой реализацией Gateway API (Istio, NGINX Gateway Fabric, Envoy Gateway, Cilium):
 
 ```yaml
-ingress:
+gatewayAPI:
   enabled: true
-  className: istio
-  domain: dasha.example.com
+  gatewayClassName: istio
+  hostname: dasha.example.com
+  # Если Gateway живёт в namespace контроллера (например, istio-system),
+  # задайте gatewayNamespace — Certificate создаётся в том же namespace.
+  # gatewayNamespace: istio-system
   tls:
     enabled: true
     certManager:
       enabled: true
       issuer: cluster-issuer
-      reflectToNamespace: istio-ingress
 ```
 
-В этом режиме отдельный ресурс `Certificate` не создаётся. Вместо этого на Ingress добавляются аннотации cert-manager, а сгенерированный TLS-секрет получает аннотации reflector для копирования в указанный namespace.
+`Certificate` от cert-manager создаётся в namespace Gateway (`gatewayNamespace`, по умолчанию — release namespace). Cross-namespace ссылки на secret потребовали бы `ReferenceGrant`, который чарт не рендерит — поэтому Certificate и Gateway держим в одном namespace.
+
+Рендеримые ресурсы (все условны от `gatewayAPI.enabled: true`):
+- `Gateway` — HTTP-listener всегда; HTTPS-listener только при `gatewayAPI.tls.enabled: true`.
+- `HTTPRoute` (основной) — привязан к HTTPS-listener при `tls.enabled`, иначе к HTTP-listener.
+- `HTTPRoute` (редирект HTTP→HTTPS, filter `RequestRedirect`) — только при `gatewayAPI.tls.enabled && gatewayAPI.tls.redirect`.
+- `Certificate` (cert-manager) — только при `gatewayAPI.tls.certManager.enabled`.
+
+`ingress.enabled` и `gatewayAPI.enabled` взаимоисключаются — `helm template` падает, если оба true.
 
 #### Режим только API (без фронтенда)
 
@@ -482,7 +510,7 @@ ingress:
 - **Пароли через env** — `password_from_env` + ESO или существующий Kubernetes Secret
 - **Ключи сервисных аккаунтов** — отдельный `authorized_key.json` для каждого фолдера через ESO или существующий Secret
 - **Фронтенд опционален** — можно развернуть только бэкенд для доступа через API
-- **Ingress** — `/api/` маршрутизируется на бэкенд, `/` на фронтенд (когда включён), поддержка cert-manager + reflector
+- **Ingress / Gateway API** — одно правило `/` на фронтенд (который проксирует `/api/` и `/auth/` на бэкенд); авто-редирект HTTP→HTTPS при включённом TLS; поддержка cert-manager; взаимоисключающий `gatewayAPI.enabled` для K8s Gateway API (`gateway.networking.k8s.io/v1`)
 - **Безопасность** — `podSecurityContext`, `securityContext`, отдельные настройки для фронтенда и бэкенда
 
 ## CI/CD
@@ -494,6 +522,16 @@ ingress:
 ## История изменений
 
 См. [CHANGELOG.ru.md](CHANGELOG.ru.md).
+
+## Authors
+* [Dmitry Bulashev](https://dbulashev.github.io/)
+
+## Contributors
+
+* [Mikhail Grigorev](https://github.com/cherts)
+* [Ilya Lukyanov](mailto:lukyanov1985@gmail.com)
+* [Roman Minebaev](https://github.com/minebaev)
+* [Rustem Sagdeev](https://github.com/SagdeevRR)
 
 ## Лицензия
 

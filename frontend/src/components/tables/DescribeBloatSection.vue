@@ -34,7 +34,7 @@ watch([clusterName, hostName, databaseName], async () => {
   }
 }, { immediate: true })
 
-watch(() => [props.schema, props.table], () => {
+watch([clusterName, hostName, databaseName, () => props.schema, () => props.table], () => {
   bloatData.value = null
   bloatError.value = ''
 })

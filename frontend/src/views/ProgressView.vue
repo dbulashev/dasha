@@ -25,7 +25,7 @@ import type { ProgressCardData } from '@/components/progress/ProgressCard.vue'
 
 const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
-const { errorMessage, onError, clearError } = useViewError()
+const { onError, clearError } = useViewError()
 const loading = ref(false)
 
 // --- Data ---
@@ -183,10 +183,11 @@ async function loadEverything() {
 
     const rejected = [aRes, vRes, cRes, iRes, bRes].filter(r => r.status === 'rejected')
     if (rejected.length) {
-      onError(getErrorMessage((rejected[0] as PromiseRejectedResult).reason))
+      const reason = (rejected[0] as PromiseRejectedResult).reason
+      onError(getErrorMessage(reason), reason)
     }
   } catch (err) {
-    onError(getErrorMessage(err))
+    onError(getErrorMessage(err), err)
   } finally {
     loading.value = false
   }
@@ -203,9 +204,6 @@ watch([clusterName, hostName], () => {
 </script>
 
 <template>
-  <v-alert v-if="errorMessage" type="error" class="mb-4" closable>
-    {{ errorMessage }}
-  </v-alert>
 
   <!-- Header with auto-refresh control -->
   <div class="d-flex align-center ga-3 mb-4">

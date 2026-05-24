@@ -5,10 +5,11 @@ import { getFkTypeMismatch } from '@/api/gen/default/default'
 import type { FkTypeMismatch } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useApiLoader } from '@/composables/useApiLoader'
+import { useViewError } from '@/composables/useViewError'
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
-const emit = defineEmits<{ error: [msg: string] }>()
+const { onError } = useViewError()
 
 const headers = computed(() => [
   { title: t('fk.fkName'), key: 'FkName' },
@@ -27,7 +28,7 @@ const { items, loading } = useApiLoader<FkTypeMismatch[]>(
   {
     deps: [clusterName, hostName, databaseName],
     guard: () => !!clusterName.value && !!hostName.value && !!databaseName.value,
-    onError: (msg) => emit('error', msg),
+    onError,
   },
 )
 </script>

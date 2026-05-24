@@ -226,10 +226,11 @@ func TestSkipAuthPrefix(t *testing.T) {
 
 func TestExtractRoleFromClaims(t *testing.T) {
 	tests := []struct {
-		name      string
-		claims    map[string]any
-		claimPath string
-		want      string
+		name        string
+		claims      map[string]any
+		claimPath   string
+		roleMapping map[string]string
+		want        string
 	}{
 		{
 			name:      "keycloak admin",
@@ -255,11 +256,39 @@ func TestExtractRoleFromClaims(t *testing.T) {
 			claimPath: "realm_access.roles",
 			want:      "viewer",
 		},
+		{
+			name:        "mapping: corporate group to admin",
+			claims:      map[string]any{"groups": []any{"dba_team", "dev_team"}},
+			claimPath:   "groups",
+			roleMapping: map[string]string{"dba_team": "admin", "dev_team": "viewer"},
+			want:        "admin",
+		},
+		{
+			name:        "mapping: corporate group to viewer",
+			claims:      map[string]any{"groups": []any{"dev_team"}},
+			claimPath:   "groups",
+			roleMapping: map[string]string{"dba_team": "admin", "dev_team": "viewer"},
+			want:        "viewer",
+		},
+		{
+			name:        "mapping: no matching group",
+			claims:      map[string]any{"groups": []any{"sales"}},
+			claimPath:   "groups",
+			roleMapping: map[string]string{"dba_team": "admin", "dev_team": "viewer"},
+			want:        "viewer",
+		},
+		{
+			name:        "mapping: admin wins over viewer",
+			claims:      map[string]any{"groups": []any{"dev_team", "dba_team"}},
+			claimPath:   "groups",
+			roleMapping: map[string]string{"dba_team": "admin", "dev_team": "viewer"},
+			want:        "admin",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := extractRoleFromClaims(tt.claims, tt.claimPath)
+			got := extractRoleFromClaims(tt.claims, tt.claimPath, tt.roleMapping)
 			if got != tt.want {
 				t.Errorf("extractRoleFromClaims() = %q, want %q", got, tt.want)
 			}

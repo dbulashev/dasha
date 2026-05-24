@@ -20,6 +20,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/oapi-codegen/runtime"
 	strictecho "github.com/oapi-codegen/runtime/strictmiddleware/echo"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 const (
@@ -34,10 +35,17 @@ const (
 	Token AuthInfoMode = "token"
 )
 
+// Defines values for GetQueriesRunningParamsQueryFilterMode.
+const (
+	Like    GetQueriesRunningParamsQueryFilterMode = "like"
+	NotLike GetQueriesRunningParamsQueryFilterMode = "not_like"
+)
+
 // AuthInfo defines model for AuthInfo.
 type AuthInfo struct {
-	Mode         AuthInfoMode `json:"mode"`
-	OidcLoginUrl *string      `json:"oidc_login_url,omitempty"`
+	EnableQueryStatsReset *bool        `json:"enable_query_stats_reset,omitempty"`
+	Mode                  AuthInfoMode `json:"mode"`
+	OidcLoginUrl          *string      `json:"oidc_login_url,omitempty"`
 }
 
 // AuthInfoMode defines model for AuthInfo.Mode.
@@ -379,51 +387,108 @@ type ProgressVacuum struct {
 
 // QueryBlocked defines model for QueryBlocked.
 type QueryBlocked struct {
-	BlockedDuration                       string `json:"BlockedDuration"`
-	BlockedMode                           string `json:"BlockedMode"`
-	BlockedPid                            int32  `json:"BlockedPid"`
-	BlockedQuery                          string `json:"BlockedQuery"`
-	BlockedUser                           string `json:"BlockedUser"`
-	BlockingDuration                      string `json:"BlockingDuration"`
-	BlockingMode                          string `json:"BlockingMode"`
-	BlockingPid                           int32  `json:"BlockingPid"`
-	BlockingUser                          string `json:"BlockingUser"`
-	CurrentOrRecentQueryInBlockingProcess string `json:"CurrentOrRecentQueryInBlockingProcess"`
-	LockedItem                            string `json:"LockedItem"`
-	StateOfBlockingProcess                string `json:"StateOfBlockingProcess"`
+	BlockedDuration                       string   `json:"BlockedDuration"`
+	BlockedDurationMs                     *float64 `json:"BlockedDurationMs"`
+	BlockedMode                           string   `json:"BlockedMode"`
+	BlockedPid                            int32    `json:"BlockedPid"`
+	BlockedQuery                          string   `json:"BlockedQuery"`
+	BlockedUser                           string   `json:"BlockedUser"`
+	BlockingDuration                      string   `json:"BlockingDuration"`
+	BlockingDurationMs                    *float64 `json:"BlockingDurationMs"`
+	BlockingMode                          string   `json:"BlockingMode"`
+	BlockingPid                           int32    `json:"BlockingPid"`
+	BlockingUser                          string   `json:"BlockingUser"`
+	CurrentOrRecentQueryInBlockingProcess string   `json:"CurrentOrRecentQueryInBlockingProcess"`
+	LockedItem                            string   `json:"LockedItem"`
+	StateOfBlockingProcess                string   `json:"StateOfBlockingProcess"`
+}
+
+// QueryCompareItem defines model for QueryCompareItem.
+type QueryCompareItem struct {
+	Left  *QueryReportMetrics `json:"Left"`
+	Query string              `json:"Query"`
+
+	// QueryID pg_stat_statements queryid as string to preserve int64 precision in JavaScript
+	QueryID string              `json:"QueryID"`
+	Right   *QueryReportMetrics `json:"Right"`
 }
 
 // QueryReport defines model for QueryReport.
 type QueryReport struct {
-	CacheHitRatio        *float64 `json:"CacheHitRatio"`
-	Calls                *int64   `json:"Calls"`
-	CallsPct             *float64 `json:"CallsPct"`
-	CpuTimeMs            *float64 `json:"CpuTimeMs"`
-	CpuTimePct           *float64 `json:"CpuTimePct"`
-	ExecTimeMs           *float64 `json:"ExecTimeMs"`
-	IoTimeMs             *float64 `json:"IoTimeMs"`
-	IoTimePct            *float64 `json:"IoTimePct"`
-	MaxExecTimeMs        *float64 `json:"MaxExecTimeMs"`
-	MaxPlanTimeMs        *float64 `json:"MaxPlanTimeMs"`
-	MeanExecTimeMs       *float64 `json:"MeanExecTimeMs"`
-	MeanPlanTimeMs       *float64 `json:"MeanPlanTimeMs"`
-	MinExecTimeMs        *float64 `json:"MinExecTimeMs"`
-	MinPlanTimeMs        *float64 `json:"MinPlanTimeMs"`
-	PlanTimeMs           *float64 `json:"PlanTimeMs"`
-	Query                string   `json:"Query"`
-	QueryID              int64    `json:"QueryID"`
+	CacheHitRatio  *float64 `json:"CacheHitRatio"`
+	Calls          *int64   `json:"Calls"`
+	CallsPct       *float64 `json:"CallsPct"`
+	CpuTimeMs      *float64 `json:"CpuTimeMs"`
+	CpuTimePct     *float64 `json:"CpuTimePct"`
+	ExecTimeMs     *float64 `json:"ExecTimeMs"`
+	IoTimeMs       *float64 `json:"IoTimeMs"`
+	IoTimePct      *float64 `json:"IoTimePct"`
+	MaxExecTimeMs  *float64 `json:"MaxExecTimeMs"`
+	MaxPlanTimeMs  *float64 `json:"MaxPlanTimeMs"`
+	MeanExecTimeMs *float64 `json:"MeanExecTimeMs"`
+	MeanPlanTimeMs *float64 `json:"MeanPlanTimeMs"`
+	MinExecTimeMs  *float64 `json:"MinExecTimeMs"`
+	MinPlanTimeMs  *float64 `json:"MinPlanTimeMs"`
+	PlanTimeMs     *float64 `json:"PlanTimeMs"`
+	Query          string   `json:"Query"`
+
+	// QueryID pg_stat_statements queryid as string to preserve int64 precision in JavaScript
+	QueryID              string   `json:"QueryID"`
 	Rows                 *int64   `json:"Rows"`
 	RowsPct              *float64 `json:"RowsPct"`
 	SharedBlksDirtiedPct *float64 `json:"SharedBlksDirtiedPct"`
 	SharedBlksWrittenPct *float64 `json:"SharedBlksWrittenPct"`
-	TempBlks             *int64   `json:"TempBlks"`
-	TempBlksPct          *float64 `json:"TempBlksPct"`
-	TotalTimeMs          *float64 `json:"TotalTimeMs"`
-	TotalTimePct         *float64 `json:"TotalTimePct"`
-	WalBytes             *int64   `json:"WalBytes"`
-	WalBytesPct          *float64 `json:"WalBytesPct"`
-	WalFpi               *int64   `json:"WalFpi"`
-	WalRecords           *int64   `json:"WalRecords"`
+
+	// StddevExecTimeMs max(stddev_exec_time) across aggregated pg_stat_statements rows, in milliseconds.
+	StddevExecTimeMs *float64 `json:"StddevExecTimeMs"`
+
+	// StddevPlanTimeMs max(stddev_plan_time) across aggregated pg_stat_statements rows, in milliseconds.
+	StddevPlanTimeMs *float64 `json:"StddevPlanTimeMs"`
+	TempBlks         *int64   `json:"TempBlks"`
+	TempBlksPct      *float64 `json:"TempBlksPct"`
+	TotalTimeMs      *float64 `json:"TotalTimeMs"`
+	TotalTimePct     *float64 `json:"TotalTimePct"`
+
+	// Usernames Distinct PostgreSQL roles that executed this queryid (aggregated across pg_stat_statements rows).
+	Usernames   *[]string `json:"Usernames"`
+	WalBytes    *int64    `json:"WalBytes"`
+	WalBytesPct *float64  `json:"WalBytesPct"`
+	WalFpi      *int64    `json:"WalFpi"`
+	WalRecords  *int64    `json:"WalRecords"`
+}
+
+// QueryReportMetrics defines model for QueryReportMetrics.
+type QueryReportMetrics struct {
+	CacheHitRatio        *float64  `json:"CacheHitRatio"`
+	Calls                *int64    `json:"Calls"`
+	CallsPct             *float64  `json:"CallsPct"`
+	CpuTimeMs            *float64  `json:"CpuTimeMs"`
+	CpuTimePct           *float64  `json:"CpuTimePct"`
+	ExecTimeMs           *float64  `json:"ExecTimeMs"`
+	IoTimeMs             *float64  `json:"IoTimeMs"`
+	IoTimePct            *float64  `json:"IoTimePct"`
+	MaxExecTimeMs        *float64  `json:"MaxExecTimeMs"`
+	MaxPlanTimeMs        *float64  `json:"MaxPlanTimeMs"`
+	MeanExecTimeMs       *float64  `json:"MeanExecTimeMs"`
+	MeanPlanTimeMs       *float64  `json:"MeanPlanTimeMs"`
+	MinExecTimeMs        *float64  `json:"MinExecTimeMs"`
+	MinPlanTimeMs        *float64  `json:"MinPlanTimeMs"`
+	PlanTimeMs           *float64  `json:"PlanTimeMs"`
+	Rows                 *int64    `json:"Rows"`
+	RowsPct              *float64  `json:"RowsPct"`
+	SharedBlksDirtiedPct *float64  `json:"SharedBlksDirtiedPct"`
+	SharedBlksWrittenPct *float64  `json:"SharedBlksWrittenPct"`
+	StddevExecTimeMs     *float64  `json:"StddevExecTimeMs"`
+	StddevPlanTimeMs     *float64  `json:"StddevPlanTimeMs"`
+	TempBlks             *int64    `json:"TempBlks"`
+	TempBlksPct          *float64  `json:"TempBlksPct"`
+	TotalTimeMs          *float64  `json:"TotalTimeMs"`
+	TotalTimePct         *float64  `json:"TotalTimePct"`
+	Usernames            *[]string `json:"Usernames"`
+	WalBytes             *int64    `json:"WalBytes"`
+	WalBytesPct          *float64  `json:"WalBytesPct"`
+	WalFpi               *int64    `json:"WalFpi"`
+	WalRecords           *int64    `json:"WalRecords"`
 }
 
 // QueryRunning defines model for QueryRunning.
@@ -454,13 +519,16 @@ type QueryTop10ByTime struct {
 	ExecTimeMs float64 `json:"ExecTimeMs"`
 	IoCpuPct   string  `json:"IoCpuPct"`
 	IoPct      float64 `json:"IoPct"`
-	QueryID    int64   `json:"QueryID"`
-	QueryTrunc string  `json:"QueryTrunc"`
+
+	// QueryID pg_stat_statements queryid as string to preserve int64 precision in JavaScript
+	QueryID    string `json:"QueryID"`
+	QueryTrunc string `json:"QueryTrunc"`
 }
 
 // QueryTop10ByWal defines model for QueryTop10ByWal.
 type QueryTop10ByWal struct {
-	QueryID    int64  `json:"QueryID"`
+	// QueryID pg_stat_statements queryid as string to preserve int64 precision in JavaScript
+	QueryID    string `json:"QueryID"`
 	QueryTrunc string `json:"QueryTrunc"`
 	WalBytes   int64  `json:"WalBytes"`
 	WalVolume  string `json:"WalVolume"`
@@ -481,8 +549,10 @@ type QueryTop10Chart struct {
 
 // QueryTop10ChartItem defines model for QueryTop10ChartItem.
 type QueryTop10ChartItem struct {
-	Pct     float64 `json:"Pct"`
-	QueryID int64   `json:"QueryID"`
+	Pct float64 `json:"Pct"`
+
+	// QueryID pg_stat_statements queryid as string to preserve int64 precision in JavaScript
+	QueryID string `json:"QueryID"`
 }
 
 // ReplicationConfig defines model for ReplicationConfig.
@@ -521,10 +591,50 @@ type ReplicationStatus struct {
 	WriteLsn         *string  `json:"WriteLsn,omitempty"`
 }
 
+// RowEstimate defines model for RowEstimate.
+type RowEstimate struct {
+	AvailableSpace    int              `json:"AvailableSpace"`
+	BlockSize         int              `json:"BlockSize"`
+	ColumnsTotal      int              `json:"ColumnsTotal"`
+	ColumnsWithStats  int              `json:"ColumnsWithStats"`
+	EstimatedRowSize  int              `json:"EstimatedRowSize"`
+	Fillfactor        int              `json:"Fillfactor"`
+	NullBitmapSize    int              `json:"NullBitmapSize"`
+	PageUsable        int              `json:"PageUsable"`
+	ReservedSpace     int              `json:"ReservedSpace"`
+	RowsFitInReserved int              `json:"RowsFitInReserved"`
+	RowsPerPage       int              `json:"RowsPerPage"`
+	SumAvgWidth       int              `json:"SumAvgWidth"`
+	ToastCandidates   []ToastCandidate `json:"ToastCandidates"`
+	ToastThreshold    int              `json:"ToastThreshold"`
+	TupleHeaderSize   int              `json:"TupleHeaderSize"`
+	WillToast         bool             `json:"WillToast"`
+}
+
 // SettingsNotification defines model for SettingsNotification.
 type SettingsNotification struct {
 	Key    string            `json:"Key"`
 	Params map[string]string `json:"Params"`
+}
+
+// SnapshotCreated defines model for SnapshotCreated.
+type SnapshotCreated struct {
+	CreatedAt time.Time          `json:"CreatedAt"`
+	Id        openapi_types.UUID `json:"Id"`
+}
+
+// SnapshotListItem defines model for SnapshotListItem.
+type SnapshotListItem struct {
+	CreatedAt      time.Time          `json:"CreatedAt"`
+	DashaVersion   string             `json:"DashaVersion"`
+	Id             openapi_types.UUID `json:"Id"`
+	JsonVersion    int                `json:"JsonVersion"`
+	PgssStatsReset *time.Time         `json:"PgssStatsReset"`
+}
+
+// SnapshotStatus defines model for SnapshotStatus.
+type SnapshotStatus struct {
+	Available bool `json:"Available"`
 }
 
 // StatsResetTime defines model for StatsResetTime.
@@ -658,6 +768,28 @@ type TableTopKBySize struct {
 	Total      string `json:"Total"`
 	TotalBytes int64  `json:"TotalBytes"`
 	Vm         string `json:"Vm"`
+}
+
+// ToastCandidate defines model for ToastCandidate.
+type ToastCandidate struct {
+	AvgWidth   int    `json:"AvgWidth"`
+	ColumnName string `json:"ColumnName"`
+	Storage    string `json:"Storage"`
+}
+
+// VacuumStats defines model for VacuumStats.
+type VacuumStats struct {
+	AnalyzeThreshold   int64      `json:"AnalyzeThreshold"`
+	DeadTuples         int64      `json:"DeadTuples"`
+	InsSinceVacuum     int64      `json:"InsSinceVacuum"`
+	InsertVacThreshold int64      `json:"InsertVacThreshold"`
+	LastAnalyze        *time.Time `json:"LastAnalyze"`
+	LastAutoanalyze    *time.Time `json:"LastAutoanalyze"`
+	LastAutovacuum     *time.Time `json:"LastAutovacuum"`
+	LastVacuum         *time.Time `json:"LastVacuum"`
+	LiveTuples         int64      `json:"LiveTuples"`
+	ModSinceAnalyze    int64      `json:"ModSinceAnalyze"`
+	VacuumThreshold    int64      `json:"VacuumThreshold"`
 }
 
 // WaitEvent defines model for WaitEvent.
@@ -950,6 +1082,16 @@ type GetQueriesBlockedParams struct {
 	Database    Database    `form:"database" json:"database"`
 }
 
+// GetQueriesCompareParams defines parameters for GetQueriesCompare.
+type GetQueriesCompareParams struct {
+	ClusterName  ClusterName         `form:"cluster_name" json:"cluster_name"`
+	Instance     Instance            `form:"instance" json:"instance"`
+	Database     Database            `form:"database" json:"database"`
+	SnapshotA    openapi_types.UUID  `form:"snapshot_a" json:"snapshot_a"`
+	SnapshotB    *openapi_types.UUID `form:"snapshot_b,omitempty" json:"snapshot_b,omitempty"`
+	ExcludeUsers *[]string           `form:"exclude_users,omitempty" json:"exclude_users,omitempty"`
+}
+
 // GetQueryStatsStatusParams defines parameters for GetQueryStatsStatus.
 type GetQueryStatsStatusParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
@@ -966,6 +1108,13 @@ type GetQueriesReportParams struct {
 	ExcludeUsers *[]string `form:"exclude_users,omitempty" json:"exclude_users,omitempty"`
 }
 
+// PostQueriesResetStatsParams defines parameters for PostQueriesResetStats.
+type PostQueriesResetStatsParams struct {
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance    `form:"instance" json:"instance"`
+	Database    Database    `form:"database" json:"database"`
+}
+
 // GetQueriesRunningParams defines parameters for GetQueriesRunning.
 type GetQueriesRunningParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
@@ -974,6 +1123,32 @@ type GetQueriesRunningParams struct {
 
 	// MinDuration Minimum query duration in seconds
 	MinDuration *int `form:"min_duration,omitempty" json:"min_duration,omitempty"`
+
+	// QueryFilter Case-insensitive substring filter for query text. Use SQL wildcards (%, _) explicitly. Empty disables the filter.
+	QueryFilter *string `form:"query_filter,omitempty" json:"query_filter,omitempty"`
+
+	// QueryFilterMode Filter mode for query_filter — `like` keeps matches, `not_like` excludes them.
+	QueryFilterMode *GetQueriesRunningParamsQueryFilterMode `form:"query_filter_mode,omitempty" json:"query_filter_mode,omitempty"`
+
+	// Username Filter by exact PostgreSQL role name (`usename`).
+	Username *string `form:"username,omitempty" json:"username,omitempty"`
+}
+
+// GetQueriesRunningParamsQueryFilterMode defines parameters for GetQueriesRunning.
+type GetQueriesRunningParamsQueryFilterMode string
+
+// GetSnapshotsParams defines parameters for GetSnapshots.
+type GetSnapshotsParams struct {
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance    `form:"instance" json:"instance"`
+	Database    Database    `form:"database" json:"database"`
+}
+
+// PostSnapshotParams defines parameters for PostSnapshot.
+type PostSnapshotParams struct {
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance    `form:"instance" json:"instance"`
+	Database    Database    `form:"database" json:"database"`
 }
 
 // GetQueriesTop10ByTimeParams defines parameters for GetQueriesTop10ByTime.
@@ -1068,6 +1243,24 @@ type GetTablesDescribePartitionsParams struct {
 	Table       string      `form:"table" json:"table"`
 	Limit       *int        `form:"limit,omitempty" json:"limit,omitempty"`
 	Offset      *int        `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// GetTablesDescribeRowEstimateParams defines parameters for GetTablesDescribeRowEstimate.
+type GetTablesDescribeRowEstimateParams struct {
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance    `form:"instance" json:"instance"`
+	Database    Database    `form:"database" json:"database"`
+	Schema      string      `form:"schema" json:"schema"`
+	Table       string      `form:"table" json:"table"`
+}
+
+// GetTablesDescribeVacuumStatsParams defines parameters for GetTablesDescribeVacuumStats.
+type GetTablesDescribeVacuumStatsParams struct {
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance    `form:"instance" json:"instance"`
+	Database    Database    `form:"database" json:"database"`
+	Schema      string      `form:"schema" json:"schema"`
+	Table       string      `form:"table" json:"table"`
 }
 
 // GetTablesHitRateParams defines parameters for GetTablesHitRate.
@@ -1241,14 +1434,32 @@ type ServerInterface interface {
 	// (GET /api/queries/blocked)
 	GetQueriesBlocked(ctx echo.Context, params GetQueriesBlockedParams) error
 
+	// (GET /api/queries/compare)
+	GetQueriesCompare(ctx echo.Context, params GetQueriesCompareParams) error
+
 	// (GET /api/queries/query-stats-status)
 	GetQueryStatsStatus(ctx echo.Context, params GetQueryStatsStatusParams) error
 
 	// (GET /api/queries/report)
 	GetQueriesReport(ctx echo.Context, params GetQueriesReportParams) error
 
+	// (POST /api/queries/reset-stats)
+	PostQueriesResetStats(ctx echo.Context, params PostQueriesResetStatsParams) error
+
 	// (GET /api/queries/running)
 	GetQueriesRunning(ctx echo.Context, params GetQueriesRunningParams) error
+
+	// (GET /api/queries/snapshot/{id})
+	GetSnapshot(ctx echo.Context, id openapi_types.UUID) error
+
+	// (GET /api/queries/snapshots)
+	GetSnapshots(ctx echo.Context, params GetSnapshotsParams) error
+
+	// (POST /api/queries/snapshots)
+	PostSnapshot(ctx echo.Context, params PostSnapshotParams) error
+
+	// (GET /api/queries/snapshots/status)
+	GetSnapshotsStatus(ctx echo.Context) error
 
 	// (GET /api/queries/top10-by-time)
 	GetQueriesTop10ByTime(ctx echo.Context, params GetQueriesTop10ByTimeParams) error
@@ -1288,6 +1499,12 @@ type ServerInterface interface {
 
 	// (GET /api/tables/describe-partitions)
 	GetTablesDescribePartitions(ctx echo.Context, params GetTablesDescribePartitionsParams) error
+
+	// (GET /api/tables/describe-row-estimate)
+	GetTablesDescribeRowEstimate(ctx echo.Context, params GetTablesDescribeRowEstimateParams) error
+
+	// (GET /api/tables/describe-vacuum-stats)
+	GetTablesDescribeVacuumStats(ctx echo.Context, params GetTablesDescribeVacuumStatsParams) error
 
 	// (GET /api/tables/hit-rate)
 	GetTablesHitRate(ctx echo.Context, params GetTablesHitRateParams) error
@@ -2745,6 +2962,63 @@ func (w *ServerInterfaceWrapper) GetQueriesBlocked(ctx echo.Context) error {
 	return err
 }
 
+// GetQueriesCompare converts echo context to params.
+func (w *ServerInterfaceWrapper) GetQueriesCompare(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	ctx.Set(ApiKeyAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetQueriesCompareParams
+	// ------------- Required query parameter "cluster_name" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "cluster_name", ctx.QueryParams(), &params.ClusterName)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter cluster_name: %s", err))
+	}
+
+	// ------------- Required query parameter "instance" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "instance", ctx.QueryParams(), &params.Instance)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter instance: %s", err))
+	}
+
+	// ------------- Required query parameter "database" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "database", ctx.QueryParams(), &params.Database)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter database: %s", err))
+	}
+
+	// ------------- Required query parameter "snapshot_a" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "snapshot_a", ctx.QueryParams(), &params.SnapshotA)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter snapshot_a: %s", err))
+	}
+
+	// ------------- Optional query parameter "snapshot_b" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "snapshot_b", ctx.QueryParams(), &params.SnapshotB)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter snapshot_b: %s", err))
+	}
+
+	// ------------- Optional query parameter "exclude_users" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "exclude_users", ctx.QueryParams(), &params.ExcludeUsers)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter exclude_users: %s", err))
+	}
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.GetQueriesCompare(ctx, params)
+	return err
+}
+
 // GetQueryStatsStatus converts echo context to params.
 func (w *ServerInterfaceWrapper) GetQueryStatsStatus(ctx echo.Context) error {
 	var err error
@@ -2817,6 +3091,42 @@ func (w *ServerInterfaceWrapper) GetQueriesReport(ctx echo.Context) error {
 	return err
 }
 
+// PostQueriesResetStats converts echo context to params.
+func (w *ServerInterfaceWrapper) PostQueriesResetStats(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	ctx.Set(ApiKeyAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostQueriesResetStatsParams
+	// ------------- Required query parameter "cluster_name" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "cluster_name", ctx.QueryParams(), &params.ClusterName)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter cluster_name: %s", err))
+	}
+
+	// ------------- Required query parameter "instance" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "instance", ctx.QueryParams(), &params.Instance)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter instance: %s", err))
+	}
+
+	// ------------- Required query parameter "database" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "database", ctx.QueryParams(), &params.Database)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter database: %s", err))
+	}
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.PostQueriesResetStats(ctx, params)
+	return err
+}
+
 // GetQueriesRunning converts echo context to params.
 func (w *ServerInterfaceWrapper) GetQueriesRunning(ctx echo.Context) error {
 	var err error
@@ -2855,8 +3165,134 @@ func (w *ServerInterfaceWrapper) GetQueriesRunning(ctx echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter min_duration: %s", err))
 	}
 
+	// ------------- Optional query parameter "query_filter" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "query_filter", ctx.QueryParams(), &params.QueryFilter)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter query_filter: %s", err))
+	}
+
+	// ------------- Optional query parameter "query_filter_mode" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "query_filter_mode", ctx.QueryParams(), &params.QueryFilterMode)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter query_filter_mode: %s", err))
+	}
+
+	// ------------- Optional query parameter "username" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "username", ctx.QueryParams(), &params.Username)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter username: %s", err))
+	}
+
 	// Invoke the callback with all the unmarshaled arguments
 	err = w.Handler.GetQueriesRunning(ctx, params)
+	return err
+}
+
+// GetSnapshot converts echo context to params.
+func (w *ServerInterfaceWrapper) GetSnapshot(ctx echo.Context) error {
+	var err error
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", ctx.Param("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter id: %s", err))
+	}
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	ctx.Set(ApiKeyAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.GetSnapshot(ctx, id)
+	return err
+}
+
+// GetSnapshots converts echo context to params.
+func (w *ServerInterfaceWrapper) GetSnapshots(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	ctx.Set(ApiKeyAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetSnapshotsParams
+	// ------------- Required query parameter "cluster_name" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "cluster_name", ctx.QueryParams(), &params.ClusterName)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter cluster_name: %s", err))
+	}
+
+	// ------------- Required query parameter "instance" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "instance", ctx.QueryParams(), &params.Instance)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter instance: %s", err))
+	}
+
+	// ------------- Required query parameter "database" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "database", ctx.QueryParams(), &params.Database)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter database: %s", err))
+	}
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.GetSnapshots(ctx, params)
+	return err
+}
+
+// PostSnapshot converts echo context to params.
+func (w *ServerInterfaceWrapper) PostSnapshot(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	ctx.Set(ApiKeyAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params PostSnapshotParams
+	// ------------- Required query parameter "cluster_name" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "cluster_name", ctx.QueryParams(), &params.ClusterName)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter cluster_name: %s", err))
+	}
+
+	// ------------- Required query parameter "instance" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "instance", ctx.QueryParams(), &params.Instance)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter instance: %s", err))
+	}
+
+	// ------------- Required query parameter "database" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "database", ctx.QueryParams(), &params.Database)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter database: %s", err))
+	}
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.PostSnapshot(ctx, params)
+	return err
+}
+
+// GetSnapshotsStatus converts echo context to params.
+func (w *ServerInterfaceWrapper) GetSnapshotsStatus(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	ctx.Set(ApiKeyAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.GetSnapshotsStatus(ctx)
 	return err
 }
 
@@ -3349,6 +3785,106 @@ func (w *ServerInterfaceWrapper) GetTablesDescribePartitions(ctx echo.Context) e
 	return err
 }
 
+// GetTablesDescribeRowEstimate converts echo context to params.
+func (w *ServerInterfaceWrapper) GetTablesDescribeRowEstimate(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	ctx.Set(ApiKeyAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetTablesDescribeRowEstimateParams
+	// ------------- Required query parameter "cluster_name" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "cluster_name", ctx.QueryParams(), &params.ClusterName)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter cluster_name: %s", err))
+	}
+
+	// ------------- Required query parameter "instance" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "instance", ctx.QueryParams(), &params.Instance)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter instance: %s", err))
+	}
+
+	// ------------- Required query parameter "database" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "database", ctx.QueryParams(), &params.Database)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter database: %s", err))
+	}
+
+	// ------------- Required query parameter "schema" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "schema", ctx.QueryParams(), &params.Schema)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter schema: %s", err))
+	}
+
+	// ------------- Required query parameter "table" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "table", ctx.QueryParams(), &params.Table)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter table: %s", err))
+	}
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.GetTablesDescribeRowEstimate(ctx, params)
+	return err
+}
+
+// GetTablesDescribeVacuumStats converts echo context to params.
+func (w *ServerInterfaceWrapper) GetTablesDescribeVacuumStats(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	ctx.Set(ApiKeyAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetTablesDescribeVacuumStatsParams
+	// ------------- Required query parameter "cluster_name" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "cluster_name", ctx.QueryParams(), &params.ClusterName)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter cluster_name: %s", err))
+	}
+
+	// ------------- Required query parameter "instance" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "instance", ctx.QueryParams(), &params.Instance)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter instance: %s", err))
+	}
+
+	// ------------- Required query parameter "database" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "database", ctx.QueryParams(), &params.Database)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter database: %s", err))
+	}
+
+	// ------------- Required query parameter "schema" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "schema", ctx.QueryParams(), &params.Schema)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter schema: %s", err))
+	}
+
+	// ------------- Required query parameter "table" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "table", ctx.QueryParams(), &params.Table)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter table: %s", err))
+	}
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.GetTablesDescribeVacuumStats(ctx, params)
+	return err
+}
+
 // GetTablesHitRate converts echo context to params.
 func (w *ServerInterfaceWrapper) GetTablesHitRate(ctx echo.Context) error {
 	var err error
@@ -3661,9 +4197,15 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 	router.GET(baseURL+"/api/progress/index", wrapper.GetProgressIndex)
 	router.GET(baseURL+"/api/progress/vacuum", wrapper.GetProgressVacuum)
 	router.GET(baseURL+"/api/queries/blocked", wrapper.GetQueriesBlocked)
+	router.GET(baseURL+"/api/queries/compare", wrapper.GetQueriesCompare)
 	router.GET(baseURL+"/api/queries/query-stats-status", wrapper.GetQueryStatsStatus)
 	router.GET(baseURL+"/api/queries/report", wrapper.GetQueriesReport)
+	router.POST(baseURL+"/api/queries/reset-stats", wrapper.PostQueriesResetStats)
 	router.GET(baseURL+"/api/queries/running", wrapper.GetQueriesRunning)
+	router.GET(baseURL+"/api/queries/snapshot/:id", wrapper.GetSnapshot)
+	router.GET(baseURL+"/api/queries/snapshots", wrapper.GetSnapshots)
+	router.POST(baseURL+"/api/queries/snapshots", wrapper.PostSnapshot)
+	router.GET(baseURL+"/api/queries/snapshots/status", wrapper.GetSnapshotsStatus)
 	router.GET(baseURL+"/api/queries/top10-by-time", wrapper.GetQueriesTop10ByTime)
 	router.GET(baseURL+"/api/queries/top10-by-wal", wrapper.GetQueriesTop10ByWal)
 	router.GET(baseURL+"/api/queries/top10-chart", wrapper.GetQueriesTop10Chart)
@@ -3677,6 +4219,8 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 	router.GET(baseURL+"/api/tables/describe", wrapper.GetTablesDescribe)
 	router.GET(baseURL+"/api/tables/describe-bloat", wrapper.GetTablesDescribeBloat)
 	router.GET(baseURL+"/api/tables/describe-partitions", wrapper.GetTablesDescribePartitions)
+	router.GET(baseURL+"/api/tables/describe-row-estimate", wrapper.GetTablesDescribeRowEstimate)
+	router.GET(baseURL+"/api/tables/describe-vacuum-stats", wrapper.GetTablesDescribeVacuumStats)
 	router.GET(baseURL+"/api/tables/hit-rate", wrapper.GetTablesHitRate)
 	router.GET(baseURL+"/api/tables/partitions", wrapper.GetTablesPartitions)
 	router.GET(baseURL+"/api/tables/pgstattuple-available", wrapper.GetPgstattupleAvailable)
@@ -4633,6 +5177,38 @@ func (response GetQueriesBlocked404Response) VisitGetQueriesBlockedResponse(w ht
 	return nil
 }
 
+type GetQueriesCompareRequestObject struct {
+	Params GetQueriesCompareParams
+}
+
+type GetQueriesCompareResponseObject interface {
+	VisitGetQueriesCompareResponse(w http.ResponseWriter) error
+}
+
+type GetQueriesCompare200JSONResponse []QueryCompareItem
+
+func (response GetQueriesCompare200JSONResponse) VisitGetQueriesCompareResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetQueriesCompare404Response = NotFoundResponse
+
+func (response GetQueriesCompare404Response) VisitGetQueriesCompareResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type GetQueriesCompare501Response struct {
+}
+
+func (response GetQueriesCompare501Response) VisitGetQueriesCompareResponse(w http.ResponseWriter) error {
+	w.WriteHeader(501)
+	return nil
+}
+
 type GetQueryStatsStatusRequestObject struct {
 	Params GetQueryStatsStatusParams
 }
@@ -4681,6 +5257,37 @@ func (response GetQueriesReport404Response) VisitGetQueriesReportResponse(w http
 	return nil
 }
 
+type PostQueriesResetStatsRequestObject struct {
+	Params PostQueriesResetStatsParams
+}
+
+type PostQueriesResetStatsResponseObject interface {
+	VisitPostQueriesResetStatsResponse(w http.ResponseWriter) error
+}
+
+type PostQueriesResetStats204Response struct {
+}
+
+func (response PostQueriesResetStats204Response) VisitPostQueriesResetStatsResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type PostQueriesResetStats403Response struct {
+}
+
+func (response PostQueriesResetStats403Response) VisitPostQueriesResetStatsResponse(w http.ResponseWriter) error {
+	w.WriteHeader(403)
+	return nil
+}
+
+type PostQueriesResetStats404Response = NotFoundResponse
+
+func (response PostQueriesResetStats404Response) VisitPostQueriesResetStatsResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
 type GetQueriesRunningRequestObject struct {
 	Params GetQueriesRunningParams
 }
@@ -4703,6 +5310,111 @@ type GetQueriesRunning404Response = NotFoundResponse
 func (response GetQueriesRunning404Response) VisitGetQueriesRunningResponse(w http.ResponseWriter) error {
 	w.WriteHeader(404)
 	return nil
+}
+
+type GetSnapshotRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetSnapshotResponseObject interface {
+	VisitGetSnapshotResponse(w http.ResponseWriter) error
+}
+
+type GetSnapshot200JSONResponse []QueryReport
+
+func (response GetSnapshot200JSONResponse) VisitGetSnapshotResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetSnapshot404Response = NotFoundResponse
+
+func (response GetSnapshot404Response) VisitGetSnapshotResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type GetSnapshot501Response struct {
+}
+
+func (response GetSnapshot501Response) VisitGetSnapshotResponse(w http.ResponseWriter) error {
+	w.WriteHeader(501)
+	return nil
+}
+
+type GetSnapshotsRequestObject struct {
+	Params GetSnapshotsParams
+}
+
+type GetSnapshotsResponseObject interface {
+	VisitGetSnapshotsResponse(w http.ResponseWriter) error
+}
+
+type GetSnapshots200JSONResponse []SnapshotListItem
+
+func (response GetSnapshots200JSONResponse) VisitGetSnapshotsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetSnapshots501Response struct {
+}
+
+func (response GetSnapshots501Response) VisitGetSnapshotsResponse(w http.ResponseWriter) error {
+	w.WriteHeader(501)
+	return nil
+}
+
+type PostSnapshotRequestObject struct {
+	Params PostSnapshotParams
+}
+
+type PostSnapshotResponseObject interface {
+	VisitPostSnapshotResponse(w http.ResponseWriter) error
+}
+
+type PostSnapshot201JSONResponse SnapshotCreated
+
+func (response PostSnapshot201JSONResponse) VisitPostSnapshotResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type PostSnapshot404Response = NotFoundResponse
+
+func (response PostSnapshot404Response) VisitPostSnapshotResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type PostSnapshot501Response struct {
+}
+
+func (response PostSnapshot501Response) VisitPostSnapshotResponse(w http.ResponseWriter) error {
+	w.WriteHeader(501)
+	return nil
+}
+
+type GetSnapshotsStatusRequestObject struct {
+}
+
+type GetSnapshotsStatusResponseObject interface {
+	VisitGetSnapshotsStatusResponse(w http.ResponseWriter) error
+}
+
+type GetSnapshotsStatus200JSONResponse SnapshotStatus
+
+func (response GetSnapshotsStatus200JSONResponse) VisitGetSnapshotsStatusResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
 }
 
 type GetQueriesTop10ByTimeRequestObject struct {
@@ -5003,6 +5715,54 @@ func (response GetTablesDescribePartitions200JSONResponse) VisitGetTablesDescrib
 	return json.NewEncoder(w).Encode(response)
 }
 
+type GetTablesDescribeRowEstimateRequestObject struct {
+	Params GetTablesDescribeRowEstimateParams
+}
+
+type GetTablesDescribeRowEstimateResponseObject interface {
+	VisitGetTablesDescribeRowEstimateResponse(w http.ResponseWriter) error
+}
+
+type GetTablesDescribeRowEstimate200JSONResponse RowEstimate
+
+func (response GetTablesDescribeRowEstimate200JSONResponse) VisitGetTablesDescribeRowEstimateResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetTablesDescribeRowEstimate404Response = NotFoundResponse
+
+func (response GetTablesDescribeRowEstimate404Response) VisitGetTablesDescribeRowEstimateResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type GetTablesDescribeVacuumStatsRequestObject struct {
+	Params GetTablesDescribeVacuumStatsParams
+}
+
+type GetTablesDescribeVacuumStatsResponseObject interface {
+	VisitGetTablesDescribeVacuumStatsResponse(w http.ResponseWriter) error
+}
+
+type GetTablesDescribeVacuumStats200JSONResponse VacuumStats
+
+func (response GetTablesDescribeVacuumStats200JSONResponse) VisitGetTablesDescribeVacuumStatsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetTablesDescribeVacuumStats404Response = NotFoundResponse
+
+func (response GetTablesDescribeVacuumStats404Response) VisitGetTablesDescribeVacuumStatsResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
 type GetTablesHitRateRequestObject struct {
 	Params GetTablesHitRateParams
 }
@@ -5265,14 +6025,32 @@ type StrictServerInterface interface {
 	// (GET /api/queries/blocked)
 	GetQueriesBlocked(ctx context.Context, request GetQueriesBlockedRequestObject) (GetQueriesBlockedResponseObject, error)
 
+	// (GET /api/queries/compare)
+	GetQueriesCompare(ctx context.Context, request GetQueriesCompareRequestObject) (GetQueriesCompareResponseObject, error)
+
 	// (GET /api/queries/query-stats-status)
 	GetQueryStatsStatus(ctx context.Context, request GetQueryStatsStatusRequestObject) (GetQueryStatsStatusResponseObject, error)
 
 	// (GET /api/queries/report)
 	GetQueriesReport(ctx context.Context, request GetQueriesReportRequestObject) (GetQueriesReportResponseObject, error)
 
+	// (POST /api/queries/reset-stats)
+	PostQueriesResetStats(ctx context.Context, request PostQueriesResetStatsRequestObject) (PostQueriesResetStatsResponseObject, error)
+
 	// (GET /api/queries/running)
 	GetQueriesRunning(ctx context.Context, request GetQueriesRunningRequestObject) (GetQueriesRunningResponseObject, error)
+
+	// (GET /api/queries/snapshot/{id})
+	GetSnapshot(ctx context.Context, request GetSnapshotRequestObject) (GetSnapshotResponseObject, error)
+
+	// (GET /api/queries/snapshots)
+	GetSnapshots(ctx context.Context, request GetSnapshotsRequestObject) (GetSnapshotsResponseObject, error)
+
+	// (POST /api/queries/snapshots)
+	PostSnapshot(ctx context.Context, request PostSnapshotRequestObject) (PostSnapshotResponseObject, error)
+
+	// (GET /api/queries/snapshots/status)
+	GetSnapshotsStatus(ctx context.Context, request GetSnapshotsStatusRequestObject) (GetSnapshotsStatusResponseObject, error)
 
 	// (GET /api/queries/top10-by-time)
 	GetQueriesTop10ByTime(ctx context.Context, request GetQueriesTop10ByTimeRequestObject) (GetQueriesTop10ByTimeResponseObject, error)
@@ -5312,6 +6090,12 @@ type StrictServerInterface interface {
 
 	// (GET /api/tables/describe-partitions)
 	GetTablesDescribePartitions(ctx context.Context, request GetTablesDescribePartitionsRequestObject) (GetTablesDescribePartitionsResponseObject, error)
+
+	// (GET /api/tables/describe-row-estimate)
+	GetTablesDescribeRowEstimate(ctx context.Context, request GetTablesDescribeRowEstimateRequestObject) (GetTablesDescribeRowEstimateResponseObject, error)
+
+	// (GET /api/tables/describe-vacuum-stats)
+	GetTablesDescribeVacuumStats(ctx context.Context, request GetTablesDescribeVacuumStatsRequestObject) (GetTablesDescribeVacuumStatsResponseObject, error)
 
 	// (GET /api/tables/hit-rate)
 	GetTablesHitRate(ctx context.Context, request GetTablesHitRateRequestObject) (GetTablesHitRateResponseObject, error)
@@ -6340,6 +7124,31 @@ func (sh *strictHandler) GetQueriesBlocked(ctx echo.Context, params GetQueriesBl
 	return nil
 }
 
+// GetQueriesCompare operation middleware
+func (sh *strictHandler) GetQueriesCompare(ctx echo.Context, params GetQueriesCompareParams) error {
+	var request GetQueriesCompareRequestObject
+
+	request.Params = params
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetQueriesCompare(ctx.Request().Context(), request.(GetQueriesCompareRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetQueriesCompare")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(GetQueriesCompareResponseObject); ok {
+		return validResponse.VisitGetQueriesCompareResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
 // GetQueryStatsStatus operation middleware
 func (sh *strictHandler) GetQueryStatsStatus(ctx echo.Context, params GetQueryStatsStatusParams) error {
 	var request GetQueryStatsStatusRequestObject
@@ -6390,6 +7199,31 @@ func (sh *strictHandler) GetQueriesReport(ctx echo.Context, params GetQueriesRep
 	return nil
 }
 
+// PostQueriesResetStats operation middleware
+func (sh *strictHandler) PostQueriesResetStats(ctx echo.Context, params PostQueriesResetStatsParams) error {
+	var request PostQueriesResetStatsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.PostQueriesResetStats(ctx.Request().Context(), request.(PostQueriesResetStatsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostQueriesResetStats")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(PostQueriesResetStatsResponseObject); ok {
+		return validResponse.VisitPostQueriesResetStatsResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
 // GetQueriesRunning operation middleware
 func (sh *strictHandler) GetQueriesRunning(ctx echo.Context, params GetQueriesRunningParams) error {
 	var request GetQueriesRunningRequestObject
@@ -6409,6 +7243,104 @@ func (sh *strictHandler) GetQueriesRunning(ctx echo.Context, params GetQueriesRu
 		return err
 	} else if validResponse, ok := response.(GetQueriesRunningResponseObject); ok {
 		return validResponse.VisitGetQueriesRunningResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// GetSnapshot operation middleware
+func (sh *strictHandler) GetSnapshot(ctx echo.Context, id openapi_types.UUID) error {
+	var request GetSnapshotRequestObject
+
+	request.Id = id
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetSnapshot(ctx.Request().Context(), request.(GetSnapshotRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetSnapshot")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(GetSnapshotResponseObject); ok {
+		return validResponse.VisitGetSnapshotResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// GetSnapshots operation middleware
+func (sh *strictHandler) GetSnapshots(ctx echo.Context, params GetSnapshotsParams) error {
+	var request GetSnapshotsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetSnapshots(ctx.Request().Context(), request.(GetSnapshotsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetSnapshots")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(GetSnapshotsResponseObject); ok {
+		return validResponse.VisitGetSnapshotsResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// PostSnapshot operation middleware
+func (sh *strictHandler) PostSnapshot(ctx echo.Context, params PostSnapshotParams) error {
+	var request PostSnapshotRequestObject
+
+	request.Params = params
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.PostSnapshot(ctx.Request().Context(), request.(PostSnapshotRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PostSnapshot")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(PostSnapshotResponseObject); ok {
+		return validResponse.VisitPostSnapshotResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// GetSnapshotsStatus operation middleware
+func (sh *strictHandler) GetSnapshotsStatus(ctx echo.Context) error {
+	var request GetSnapshotsStatusRequestObject
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetSnapshotsStatus(ctx.Request().Context(), request.(GetSnapshotsStatusRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetSnapshotsStatus")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(GetSnapshotsStatusResponseObject); ok {
+		return validResponse.VisitGetSnapshotsStatusResponse(ctx.Response())
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
 	}
@@ -6740,6 +7672,56 @@ func (sh *strictHandler) GetTablesDescribePartitions(ctx echo.Context, params Ge
 	return nil
 }
 
+// GetTablesDescribeRowEstimate operation middleware
+func (sh *strictHandler) GetTablesDescribeRowEstimate(ctx echo.Context, params GetTablesDescribeRowEstimateParams) error {
+	var request GetTablesDescribeRowEstimateRequestObject
+
+	request.Params = params
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetTablesDescribeRowEstimate(ctx.Request().Context(), request.(GetTablesDescribeRowEstimateRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetTablesDescribeRowEstimate")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(GetTablesDescribeRowEstimateResponseObject); ok {
+		return validResponse.VisitGetTablesDescribeRowEstimateResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// GetTablesDescribeVacuumStats operation middleware
+func (sh *strictHandler) GetTablesDescribeVacuumStats(ctx echo.Context, params GetTablesDescribeVacuumStatsParams) error {
+	var request GetTablesDescribeVacuumStatsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetTablesDescribeVacuumStats(ctx.Request().Context(), request.(GetTablesDescribeVacuumStatsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetTablesDescribeVacuumStats")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(GetTablesDescribeVacuumStatsResponseObject); ok {
+		return validResponse.VisitGetTablesDescribeVacuumStatsResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
 // GetTablesHitRate operation middleware
 func (sh *strictHandler) GetTablesHitRate(ctx echo.Context, params GetTablesHitRateParams) error {
 	var request GetTablesHitRateRequestObject
@@ -6893,95 +7875,115 @@ func (sh *strictHandler) GetTablesTopKBySize(ctx echo.Context, params GetTablesT
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
-	"0Jmp3r5++/nt5/8FAAD//ybJzHe7zQAA",
+	"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",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useViewError } from '@/composables/useViewError'
 import { getTablesCaching } from '@/api/gen/default/default'
 import type { TableCaching } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
@@ -11,7 +12,7 @@ import PaginationControls from '@/components/PaginationControls.vue'
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
-const emit = defineEmits<{ error: [msg: string] }>()
+const { onError } = useViewError()
 
 const headers = computed(() => [
   { title: t('header.schema'), key: 'Schema' },
@@ -34,7 +35,7 @@ const { items, loading, page, hasMore, load } = usePaginatedApiLoader<TableCachi
     pageSize: DEFAULT_PAGE_SIZE,
     deps: [clusterName, hostName, databaseName],
     guard: () => !!clusterName.value && !!hostName.value && !!databaseName.value,
-    onError: (msg) => emit('error', msg),
+    onError,
   },
 )
 </script>

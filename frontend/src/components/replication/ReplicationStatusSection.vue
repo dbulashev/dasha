@@ -5,11 +5,12 @@ import { getReplicationStatus } from '@/api/gen/default/default'
 import type { ReplicationStatus } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useApiLoader } from '@/composables/useApiLoader'
+import { useViewError } from '@/composables/useViewError'
 import { fmtLag, fmtBytes } from '@/utils/format'
 
 const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
-const emit = defineEmits<{ error: [msg: string] }>()
+const { onError } = useViewError()
 
 const headers = computed(() => [
   { title: t('replication.applicationName'), key: 'ApplicationName' },
@@ -28,7 +29,7 @@ const { items, loading } = useApiLoader<ReplicationStatus[]>(
   {
     deps: [clusterName, hostName],
     guard: () => !!clusterName.value && !!hostName.value,
-    onError: (msg) => emit('error', msg),
+    onError,
   },
 )
 

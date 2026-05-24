@@ -9,4 +9,5 @@ import type { AuthInfoMode } from './authInfoMode'
 export interface AuthInfo {
   mode: AuthInfoMode
   oidc_login_url?: string
+  enable_query_stats_reset?: boolean
 }

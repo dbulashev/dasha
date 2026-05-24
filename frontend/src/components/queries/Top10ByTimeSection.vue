@@ -5,12 +5,13 @@ import { getQueriesTop10ByTime } from '@/api/gen/default/default'
 import type { QueryTop10ByTime } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useApiLoader } from '@/composables/useApiLoader'
+import { useViewError } from '@/composables/useViewError'
 import { highlightSql, copyToClipboard } from '@/utils/sql'
 import '@/assets/sql-highlight.css'
 
 const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
-const emit = defineEmits<{ error: [msg: string] }>()
+const { onError } = useViewError()
 
 const headers = computed(() => [
   { title: t('header.queryId'), key: 'QueryID' },
@@ -27,7 +28,7 @@ const { items, loading } = useApiLoader<QueryTop10ByTime[]>(
   {
     deps: [clusterName, hostName],
     guard: () => !!clusterName.value && !!hostName.value,
-    onError: (msg) => emit('error', msg),
+    onError,
   },
 )
 </script>

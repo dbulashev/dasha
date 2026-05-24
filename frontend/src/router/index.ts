@@ -36,6 +36,11 @@ const router = createRouter({
       component: () => import('../views/QueryReportView.vue'),
     },
     {
+      path: '/query-compare/:clustername?',
+      name: 'query-compare',
+      component: () => import('../views/QueryCompareView.vue'),
+    },
+    {
       path: '/tables/:clustername?',
       name: 'tables',
       component: () => import('../views/TablesView.vue'),
@@ -93,16 +98,18 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach(async () => {
+router.beforeEach(async (to) => {
   const auth = useAuthStore()
 
   if (!auth.initialized) {
     await auth.init()
   }
 
-  if (auth.redirecting) {
-    auth.doLoginRedirect()
-    return false
+  if (auth.isAuthenticated) {
+    const returnUrl = auth.consumeReturnUrl()
+    if (returnUrl && returnUrl !== to.fullPath) {
+      return returnUrl
+    }
   }
 })
 

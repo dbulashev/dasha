@@ -44,6 +44,8 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       volumes:
+        - name: tmp
+          emptyDir: {}
         - name: config
           configMap:
             name: {{ template "dasha.fullname" $ }}-config
@@ -56,6 +58,9 @@ spec:
             {{- else }}
             secretName: {{ template "dasha.fullname" $ }}-sa-{{ $key.name }}
             {{- end }}
+        {{- end }}
+        {{- with .Values.backend.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
         {{- end }}
       containers:
         - name: backend
@@ -70,14 +75,12 @@ spec:
               containerPort: {{ .Values.backend.port }}
               protocol: TCP
           livenessProbe:
-            httpGet:
-              path: /api/clusters
+            tcpSocket:
               port: http
             initialDelaySeconds: 5
             periodSeconds: 30
           readinessProbe:
-            httpGet:
-              path: /api/clusters
+            tcpSocket:
               port: http
             initialDelaySeconds: 3
             periodSeconds: 10
@@ -87,6 +90,8 @@ spec:
                 name: {{ include "dasha.envSecretName" . }}
           {{- end }}
           volumeMounts:
+            - name: tmp
+              mountPath: /tmp
             - name: config
               mountPath: /etc/dasha
               readOnly: true
@@ -94,6 +99,9 @@ spec:
             - name: sa-{{ $key.name }}
               mountPath: {{ $key.mountPath }}
               readOnly: true
+            {{- end }}
+            {{- with .Values.backend.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
             {{- end }}
           {{- with .Values.backend.resources }}
           resources:

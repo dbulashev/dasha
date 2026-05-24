@@ -1,20 +1,38 @@
 <script setup lang="ts">
 
-import { computed, ref, watch } from 'vue'
+import { computed, provide, ref, watch } from 'vue'
 import { useThemeStore } from './stores/theme'
 import { useAuthStore } from './stores/auth'
-import { AuthInfoMode } from './api/models'
+import { useClustersStore } from './stores/clusters'
+import { useSnapshotsStatusStore } from './stores/snapshotsStatus'
 import { useI18n } from 'vue-i18n'
+import { errorKey, type GlobalError } from './composables/useViewError'
 
 const { t } = useI18n()
 const themeStore = useThemeStore()
 const authStore = useAuthStore()
+const clusterStore = useClustersStore()
+const snapshotsStatusStore = useSnapshotsStatusStore()
+
+watch(
+  () => authStore.initialized && !authStore.requiresLogin,
+  (ready) => {
+    if (ready) snapshotsStatusStore.ensureLoaded()
+  },
+  { immediate: true },
+)
+
+const globalError = ref<GlobalError | null>(null)
+provide(errorKey, globalError)
 
 import { useRoute } from 'vue-router'
 
 const route = useRoute()
 
 import ClusterHostDbSelector from './components/ClusterHostDbSelector.vue'
+import LoginCard from './components/auth/LoginCard.vue'
+import UserMenu from './components/auth/UserMenu.vue'
+import ErrorAlert from './components/ErrorAlert.vue'
 
 function withQuery(base: string) {
   const cluster = route.params.clustername ?? '';
@@ -37,6 +55,7 @@ const connectionsLink = computed(() => withQuery("connections"));
 const queriesLink = computed(() => withQuery("queries"));
 const queryStatsLink = computed(() => withQuery("query-stats"));
 const queryReportLink = computed(() => withQuery("query-report"));
+const queryCompareLink = computed(() => withQuery("query-compare"));
 const tablesLink = computed(() => withQuery("tables"));
 const tableDescribeLink = computed(() => {
   const base = withQuery("table-describe");
@@ -63,20 +82,21 @@ const settingsLink = computed(() => withQuery("settings"));
 
 const drawer = ref(true)
 
-const openedGroups = ref<string[]>([])
-
-function syncOpenedGroups() {
+const tablesGroupOpen = computed(() => {
   const path = route.path
-  if ((path.includes('/tables') || path.includes('/table-describe')) && !openedGroups.value.includes('tables')) {
-    openedGroups.value.push('tables')
-  }
-  if (path.includes('/indexes') && !openedGroups.value.includes('indexes')) {
-    openedGroups.value.push('indexes')
-  }
-}
+  return path.includes('/tables') || path.includes('/table-describe')
+})
 
-syncOpenedGroups()
-watch(() => route.path, syncOpenedGroups)
+const indexesGroupOpen = computed(() => {
+  return route.path.includes('/indexes')
+})
+
+watch(() => route.path, () => {
+  // Clear transient page errors on navigation, but preserve persistent errors (e.g. no clusters)
+  if (clusterStore.clusterList?.length) {
+    globalError.value = null
+  }
+})
 
 </script>
 
@@ -84,13 +104,17 @@ watch(() => route.path, syncOpenedGroups)
   <v-responsive class="border rounded">
 
     <v-app :theme="themeStore.theme">
-      <template v-if="!authStore.ready">
+      <template v-if="!authStore.initialized">
         <v-container class="fill-height d-flex align-center justify-center">
           <div class="text-center">
             <v-progress-circular indeterminate size="48" color="primary" class="mb-4" />
             <div class="text-h6 text-medium-emphasis">Dasha</div>
           </div>
         </v-container>
+      </template>
+
+      <template v-else-if="authStore.requiresLogin">
+        <LoginCard />
       </template>
 
       <template v-else>
@@ -109,51 +133,28 @@ watch(() => route.path, syncOpenedGroups)
             slim
             @click="themeStore.toggleTheme()"
           ></v-btn>
-          <template v-if="authStore.mode === AuthInfoMode.oidc && authStore.user">
-            <v-menu location="bottom end" :close-on-content-click="false">
-              <template #activator="{ props }">
-                <v-btn v-bind="props" icon variant="text" class="ml-1">
-                  <v-icon>mdi-account-circle</v-icon>
-                </v-btn>
-              </template>
-              <v-card min-width="220">
-                <v-card-text class="text-center py-4">
-                  <v-avatar color="primary" size="48" class="mb-2">
-                    <span class="text-h6">{{ authStore.user.name?.charAt(0)?.toUpperCase() }}</span>
-                  </v-avatar>
-                  <div class="text-subtitle-1 font-weight-medium">{{ authStore.user.name }}</div>
-                  <div class="text-caption text-medium-emphasis">{{ authStore.user.email }}</div>
-                  <v-chip size="x-small" variant="tonal" class="mt-1">{{ authStore.user.role }}</v-chip>
-                </v-card-text>
-                <v-divider />
-                <v-card-actions>
-                  <v-btn block variant="text" prepend-icon="mdi-logout" @click="authStore.logout">
-                    {{ t('Logout') }}
-                  </v-btn>
-                </v-card-actions>
-              </v-card>
-            </v-menu>
-          </template>
+          <UserMenu />
         </template>
       </v-app-bar>
 
       <v-navigation-drawer v-model="drawer"
         :location="$vuetify.display.mobile ? 'bottom' : undefined"
         >
-        <v-list nav :opened="openedGroups">
+        <v-list nav>
           <v-list-item :title="t('Home')"  prepend-icon="mdi-sigma" link :to="mainLink"></v-list-item>
           <v-list-item :title="t('Connections')" prepend-icon="mdi-connection" link :to="connectionsLink"></v-list-item>
           <v-list-item :title="t('Active Queries')" prepend-icon="mdi-database-clock-outline" link :to="queriesLink"></v-list-item>
           <v-list-item :title="t('Query Stats')" prepend-icon="mdi-chart-bar" link :to="queryStatsLink"></v-list-item>
           <v-list-item :title="t('Query Report')" prepend-icon="mdi-file-chart-outline" link :to="queryReportLink"></v-list-item>
-          <v-list-group value="tables">
+          <v-list-item v-if="snapshotsStatusStore.available" :title="t('Query Compare')" prepend-icon="mdi-compare" link :to="queryCompareLink"></v-list-item>
+          <v-list-group value="tables" :model-value="tablesGroupOpen">
             <template #activator="{ props }">
               <v-list-item v-bind="props" :title="t('Tables')" prepend-icon="mdi-table"></v-list-item>
             </template>
             <v-list-item :title="t('tables.menuOverview')" link :to="tablesLink"></v-list-item>
             <v-list-item :title="t('tables.menuDescribe')" link :to="tableDescribeLink"></v-list-item>
           </v-list-group>
-          <v-list-group value="indexes">
+          <v-list-group value="indexes" :model-value="indexesGroupOpen">
             <template #activator="{ props }">
               <v-list-item v-bind="props" :title="t('Indexes')" prepend-icon="mdi-family-tree"></v-list-item>
             </template>
@@ -171,7 +172,8 @@ watch(() => route.path, syncOpenedGroups)
       </v-navigation-drawer>
 
       <v-main>
-        <v-container>
+        <ErrorAlert v-if="globalError" :code="globalError.code" :message="globalError.message" />
+        <v-container v-else>
           <router-view v-slot="{ Component }">
               <component :is="Component" />
           </router-view>
@@ -205,5 +207,6 @@ watch(() => route.path, syncOpenedGroups)
   font-weight: 300;
   opacity: 0.7;
 }
+
 </style>
 

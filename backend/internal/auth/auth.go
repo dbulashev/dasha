@@ -14,17 +14,11 @@ import (
 var (
 	errUnauthorized     = echo.NewHTTPError(http.StatusUnauthorized, "unauthorized")
 	errForbidden        = echo.NewHTTPError(http.StatusForbidden, "forbidden")
-	errInternalError    = echo.NewHTTPError(http.StatusInternalServerError, "internal error")
 	errRateLimitExceed  = echo.NewHTTPError(http.StatusTooManyRequests, "rate limit exceeded")
 	errHTTPSRequired    = echo.NewHTTPError(http.StatusForbidden, "HTTPS required")
 	errOIDCUnavailable  = echo.NewHTTPError(http.StatusServiceUnavailable, "OIDC provider not available")
 	errInvalidState     = echo.NewHTTPError(http.StatusBadRequest, "invalid state")
 	errNoActiveSession  = echo.NewHTTPError(http.StatusUnauthorized, "no active session")
-	errTokenExchange    = echo.NewHTTPError(http.StatusUnauthorized, "token exchange failed")
-	errNoIDToken        = echo.NewHTTPError(http.StatusUnauthorized, "no id_token in response")
-	errInvalidIDToken   = echo.NewHTTPError(http.StatusUnauthorized, "invalid id_token")
-	errParseClaims      = echo.NewHTTPError(http.StatusInternalServerError, "failed to parse claims")
-	errSessionError     = echo.NewHTTPError(http.StatusInternalServerError, "session error")
 	errAuthorizationErr = echo.NewHTTPError(http.StatusInternalServerError, "authorization error")
 )
 
@@ -47,6 +41,13 @@ func (m *Middlewares) Stop() {
 }
 
 func NewMiddlewares(ctx context.Context, cfg config.AuthConfig, logger *zap.Logger) (*Middlewares, error) {
+	if cfg.Mode != config.AuthModeNone && cfg.Mode != "" && !cfg.RequireHTTPS {
+		logger.Warn(
+			"auth enabled without require_https — credentials may be transmitted in plaintext",
+			zap.String("auth_mode", string(cfg.Mode)),
+		)
+	}
+
 	var (
 		oidcProvider *OIDCProvider
 		sessionMgr   *SessionManager
@@ -55,9 +56,9 @@ func NewMiddlewares(ctx context.Context, cfg config.AuthConfig, logger *zap.Logg
 	if cfg.Mode == config.AuthModeOIDC {
 		var err error
 
-		oidcProvider, err = NewOIDCProvider(ctx, *cfg.OIDC)
+		oidcProvider, err = NewOIDCProvider(ctx, *cfg.OIDC, logger)
 		if err != nil {
-			logger.Warn("OIDC provider initialization failed (will retry on first request)", zap.Error(err))
+			logger.Warn("OIDC provider initialization failed; SSO login will show error page until config is fixed and service restarted", zap.Error(err))
 		}
 
 		sessionMgr = NewSessionManager(cfg)

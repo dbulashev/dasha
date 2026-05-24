@@ -21,6 +21,8 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 - Comprehensive query report (rows, calls, planning/execution time, cache hit ratio, WAL, temp buffers, contribution %)
 - Running and blocked queries monitoring
 - `pg_stat_statements` status and reset time tracking
+- **pgss snapshots**: save point-in-time snapshots to a dedicated storage database, view and share via URL
+- **Snapshot comparison**: side-by-side diff of two snapshots or one snapshot vs live data, sortable by any metric
 
 **Index Analysis**
 - Top-K by size, bloat estimation, duplicate detection
@@ -34,6 +36,7 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 - Sequential vs. index scan ratio
 - Cache hit rate, partitioned table info
 - Custom storage parameters (fillfactor, autovacuum overrides)
+- Detailed table describe: columns, indexes, constraints, bloat, partitions, vacuum stats with computed thresholds, row-size / TOAST estimate
 
 **Foreign Key Analysis**
 - Invalid constraints
@@ -75,6 +78,7 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 - Multi-cluster support with per-cluster host/database selection
 - Yandex Managed Service for PostgreSQL service discovery
 - Primary / replica role display
+- Optional snapshot storage database (daily-partitioned tables, `dasha migrate` CLI)
 - Internationalization (Russian, German)
 
 ## Architecture
@@ -208,6 +212,18 @@ openssl rand -base64 32
 openssl rand -base64 32
 ```
 
+#### Snapshot Storage (optional)
+
+To enable pgss snapshots, configure a dedicated PostgreSQL database:
+
+```yaml
+storage:
+  dsn: "postgres://dasha:secret@localhost:5432/dasha_storage?sslmode=require"
+  # dsn_from_env: DASHA_STORAGE_DSN  # alternative: read from env variable
+```
+
+Run `dasha migrate` to create partitioned tables before first use.
+
 ### Run Locally
 
 ```bash
@@ -234,6 +250,7 @@ The demo includes:
 - **PG17 cluster**: master + 2 replicas (with intentionally "bad" settings for analysis)
 - **PG18 standalone**: logical replication subscriber
 - **Keycloak**: OIDC provider with preconfigured realm, users `admin`/`admin` and `viewer`/`viewer`
+- **Storage DB**: snapshot storage with auto-migration on startup
 - **Workload generator**: continuous background load for realistic data
 
 ## Development
@@ -255,6 +272,7 @@ The demo includes:
 │   │   ├── http/                 # Handlers (v1.go, strictserver.go)
 │   │   ├── query/sql/            # SQL templates with PG version overrides
 │   │   ├── repository/           # Data access (pgx pools)
+│   │   ├── storage/              # Snapshot storage (migrations, CRUD)
 │   │   └── testinfra/            # Test containers setup
 │   └── dasha.yaml                # Example config
 ├── frontend/
@@ -448,24 +466,34 @@ ingress:
 
 cert-manager will create a `Certificate` resource in the application namespace.
 
-#### Ingress with TLS (cert-manager + reflector)
+#### Gateway API with TLS (cert-manager)
 
-When the ingress controller runs in a different namespace (e.g. Istio), use `reflectToNamespace` to copy the TLS secret via [reflector](https://github.com/emberstack/kubernetes-reflector):
+Portable alternative to Ingress — works with any Gateway API implementation (Istio, NGINX Gateway Fabric, Envoy Gateway, Cilium):
 
 ```yaml
-ingress:
+gatewayAPI:
   enabled: true
-  className: istio
-  domain: dasha.example.com
+  gatewayClassName: istio
+  hostname: dasha.example.com
+  # When the Gateway lives in a controller-specific namespace (e.g. istio-system),
+  # set gatewayNamespace accordingly — Certificate is created in the same namespace.
+  # gatewayNamespace: istio-system
   tls:
     enabled: true
     certManager:
       enabled: true
       issuer: cluster-issuer
-      reflectToNamespace: istio-ingress
 ```
 
-In this mode, no separate `Certificate` resource is created. Instead, cert-manager annotations are added to the Ingress, and the generated TLS secret gets reflector annotations to be copied to the specified namespace.
+The cert-manager `Certificate` is created in the Gateway's namespace (`gatewayNamespace`, defaults to the release namespace). Cross-namespace secret refs would require a `ReferenceGrant`, which the chart does not render — keeping Certificate and Gateway colocated avoids that.
+
+Rendered resources (all conditional on `gatewayAPI.enabled: true`):
+- `Gateway` — HTTP listener always; HTTPS listener only when `gatewayAPI.tls.enabled: true`.
+- `HTTPRoute` (main) — attached to the HTTPS listener when `tls.enabled`, otherwise to the HTTP listener.
+- `HTTPRoute` (HTTP→HTTPS redirect, `RequestRedirect` filter) — only when `gatewayAPI.tls.enabled && gatewayAPI.tls.redirect`.
+- `Certificate` (cert-manager) — only when `gatewayAPI.tls.certManager.enabled`.
+
+`ingress.enabled` and `gatewayAPI.enabled` are mutually exclusive — `helm template` fails if both are true.
 
 #### API-only mode (without frontend)
 
@@ -484,7 +512,7 @@ ingress:
 - **Passwords via env** — `password_from_env` + ESO or existing Kubernetes Secret
 - **Cloud SA keys** — per-folder `authorized_key.json` via ESO or existing Secret
 - **Frontend optional** — deploy backend only for API access
-- **Ingress** — `/api/` routed to backend, `/` to frontend (when enabled), cert-manager + reflector support
+- **Ingress / Gateway API** — single `/` rule routes to frontend (which proxies `/api/` and `/auth/` to backend); auto HTTP→HTTPS redirect when TLS is enabled; cert-manager support; mutually exclusive `gatewayAPI.enabled` for K8s Gateway API (`gateway.networking.k8s.io/v1`)
 - **Security** — `podSecurityContext`, `securityContext`, separate settings for frontend/backend
 
 ## CI/CD
@@ -496,6 +524,16 @@ ingress:
 ## Changelog
 
 See [CHANGELOG.md](CHANGELOG.md) for release notes.
+
+## Authors
+* [Dmitry Bulashev](https://dbulashev.github.io/)
+
+## Contributors
+
+* [Mikhail Grigorev](https://github.com/cherts)
+* [Ilya Lukyanov](mailto:lukyanov1985@gmail.com)
+* [Roman Minebaev](https://github.com/minebaev)
+* [Rustem Sagdeev](https://github.com/SagdeevRR)
 
 ## License
 

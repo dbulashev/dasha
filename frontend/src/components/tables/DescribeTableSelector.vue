@@ -32,7 +32,7 @@ const { items: schemas, loading: schemasLoading } = useApiLoader<string[]>(
 
 watch(schemas, (val) => {
   if (val.length && !val.includes(selectedSchema.value)) {
-    selectedSchema.value = val[0] ?? 'public'
+    selectedSchema.value = val.includes('public') ? 'public' : (val[0] ?? 'public')
   }
 })
 
@@ -84,6 +84,15 @@ watch(() => [route.query.schema, route.query.table], () => {
 // Reset table when schema changes
 watch(selectedSchema, (newSchema, oldSchema) => {
   if (oldSchema && newSchema !== oldSchema) {
+    selectedTable.value = ''
+    tableSearchInput.value = ''
+  }
+})
+
+// Reset to public schema and clear table when cluster changes
+watch(clusterName, (newCluster, oldCluster) => {
+  if (oldCluster && newCluster !== oldCluster) {
+    selectedSchema.value = 'public'
     selectedTable.value = ''
     tableSearchInput.value = ''
   }

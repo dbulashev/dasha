@@ -14,6 +14,7 @@ images:
 config:
   debug: false
   # pg_stats_view: monitoring.pg_stats  # custom view when user lacks pg_catalog.pg_stats access
+  # enable_query_stats_reset: false  # allow resetting pg_stat_statements via UI
 
   # -- Authentication & authorization
   # auth:
@@ -32,7 +33,11 @@ config:
   #   #   client_secret_from_env: DASHA_OIDC_SECRET
   #   #   scopes: ["openid", "profile", "email"]
   #   #   redirect_url: "https://dasha.example.com/auth/callback"
-  #   #   role_claim: "realm_access.roles"
+  #   #   role_claim: "realm_access.roles"   # or "groups" for corporate LDAP/AD groups
+  #   #   role_mapping:                      # map corporate groups to dasha roles (admin/viewer)
+  #   #     dba_team: admin
+  #   #     team_lead: admin
+  #   #     dev_team: viewer
   #   # cookie_secret_from_env: DASHA_COOKIE_SECRET
   #   # cookie_max_age: 86400
   #   # tokens:  # API keys also work in oidc mode
@@ -66,6 +71,7 @@ config:
 # -- Secrets for environment variables (passwords, etc.)
 # Option A: provide existing Secret name containing all password env vars
 # Option B: create ExternalSecret via ESO
+esoVersion: v1beta1
 secrets:
   existingSecret: ""
   externalSecret:
@@ -123,7 +129,12 @@ frontend:
   replicaCount: 1
   port: 3000
   resources: {}
-  podSecurityContext: {}
+  # nginx official image runs as UID/GID 101
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+    runAsGroup: 101
+    fsGroup: 101
   nodeSelector: {}
   tolerations: []
   affinity: {}
@@ -132,6 +143,16 @@ backend:
   port: 8000
   resources: {}
   terminationGracePeriodSeconds: 30
+  # -- Extra volumes to attach to the backend pod, i.e. for keycloak or pg certs
+  extraVolumes: []
+  #  - name: certs
+  #    secret:
+  #      secretName: pg-client-certs
+  # -- Extra volumeMounts for the backend container
+  extraVolumeMounts: []
+  #  - name: certs
+  #    mountPath: /etc/ssl/pg
+  #    readOnly: true
 
 service:
   type: ClusterIP
@@ -144,23 +165,64 @@ ingress:
   tls:
     enabled: false
     secretName: ""
+    # Namespace where the cert-manager Certificate is created.
+    # Useful when the ingress controller lives in a separate namespace (e.g. Istio)
+    # and reads TLS secrets from its own namespace. Empty = release namespace.
     certNamespace: ""
+    # Auto-add nginx-ingress ssl-redirect annotations when tls is enabled.
+    # Set to false if you want to serve plain HTTP alongside HTTPS.
+    redirect: true
     # cert-manager integration
     certManager:
       enabled: false
       issuer: cluster-issuer
-      # if set, adds reflector annotations to copy the TLS secret to this namespace
-      reflectToNamespace: ""
+
+# -- Kubernetes Gateway API (gateway.networking.k8s.io/v1)
+# Portable alternative to Ingress. Mutually exclusive with ingress.enabled.
+gatewayAPI:
+  enabled: false
+  # gatewayClassName: istio | nginx | envoy | cilium | ...
+  gatewayClassName: istio
+  hostname: dasha.example.com
+  # Namespace for the Gateway resource. Empty = release namespace.
+  # Some implementations (e.g. Istio) expect the Gateway in the same namespace as the controller (istio-system).
+  gatewayNamespace: ""
+  # AllowedRoutes for cross-namespace HTTPRoute attachment.
+  allowedRoutes:
+    namespaces:
+      from: Same  # Same | Selector | All
+  tls:
+    enabled: false
+    certificateRef:
+      kind: Secret
+      # name: defaults to {fullname}-tls
+      name: ""
+    certManager:
+      enabled: false
+      issuer: cluster-issuer
+    # Auto-create an HTTPRoute with RequestRedirect filter on the HTTP listener.
+    redirect: true
 
 nameOverride: ""
 fullnameOverride: ""
 namespaceOverride: ""
 
 podAnnotations: {}
+# Pod-level securityContext (applied to backend pod by default; frontend overrides via .frontend.podSecurityContext)
 podSecurityContext:
   runAsNonRoot: true
   runAsUser: 1000
-securityContext: {}
+  runAsGroup: 1000
+  fsGroup: 1000
+# Container-level securityContext (applied to both backend and frontend containers)
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
 nodeSelector: {}
 tolerations: []
 affinity: {}

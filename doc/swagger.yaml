@@ -674,6 +674,60 @@ paths:
               schema:
                 $ref: '#/components/schemas/TableDescribeBloat'
 
+  /api/tables/describe-vacuum-stats:
+    get:
+      operationId: getTablesDescribeVacuumStats
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+        - in: query
+          name: schema
+          schema:
+            type: string
+          required: true
+        - in: query
+          name: table
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VacuumStats'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/tables/describe-row-estimate:
+    get:
+      operationId: getTablesDescribeRowEstimate
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+        - in: query
+          name: schema
+          schema:
+            type: string
+          required: true
+        - in: query
+          name: table
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RowEstimate'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /api/tables/pgstattuple-available:
     get:
       operationId: getPgstattupleAvailable
@@ -1006,6 +1060,25 @@ paths:
             type: integer
             default: 3
           description: Minimum query duration in seconds
+        - in: query
+          name: query_filter
+          schema:
+            type: string
+            maxLength: 1000
+          description: Case-insensitive substring filter for query text. Use SQL wildcards (%, _) explicitly. Empty disables the filter.
+        - in: query
+          name: query_filter_mode
+          schema:
+            type: string
+            enum: [like, not_like]
+            default: like
+          description: Filter mode for query_filter — `like` keeps matches, `not_like` excludes them.
+        - in: query
+          name: username
+          schema:
+            type: string
+            maxLength: 64
+          description: Filter by exact PostgreSQL role name (`usename`).
       responses:
         '200':
           description: Success
@@ -1112,6 +1185,127 @@ paths:
                 $ref: '#/components/schemas/QueryStatsStatus'
         '404':
           $ref: '#/components/responses/NotFound'
+  /api/queries/reset-stats:
+    post:
+      operationId: postQueriesResetStats
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '204':
+          description: Statistics reset successfully
+        '403':
+          description: Feature disabled in configuration
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/queries/snapshots/status:
+    get:
+      operationId: getSnapshotsStatus
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SnapshotStatus'
+  /api/queries/snapshots:
+    get:
+      operationId: getSnapshots
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SnapshotListItem'
+        '501':
+          description: Storage not configured
+    post:
+      operationId: postSnapshot
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '201':
+          description: Snapshot created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SnapshotCreated'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: Storage not configured
+  /api/queries/snapshot/{id}:
+    get:
+      operationId: getSnapshot
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/QueryReport'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: Storage not configured
+  /api/queries/compare:
+    get:
+      operationId: getQueriesCompare
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+        - name: snapshot_a
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: snapshot_b
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: exclude_users
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/QueryCompareItem'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: Storage not configured
   /api/progress/analyze:
     get:
       operationId: getProgressAnalyze
@@ -1360,6 +1554,8 @@ components:
           enum: [none, token, oidc]
         oidc_login_url:
           type: string
+        enable_query_stats_reset:
+          type: boolean
     User:
       type: object
       properties:
@@ -1971,6 +2167,10 @@ components:
           type: string
         BlockedDuration:
           type: string
+        BlockedDurationMs:
+          type: number
+          format: double
+          nullable: true
         BlockedMode:
           type: string
         BlockingPid:
@@ -1984,6 +2184,10 @@ components:
           type: string
         BlockingDuration:
           type: string
+        BlockingDurationMs:
+          type: number
+          format: double
+          nullable: true
         BlockingMode:
           type: string
 
@@ -2037,8 +2241,8 @@ components:
         - QueryTrunc
       properties:
         QueryID:
-          type: integer
-          format: int64
+          type: string
+          description: pg_stat_statements queryid as string to preserve int64 precision in JavaScript
         ExecTime:
           type: string
         ExecTimeMs:
@@ -2064,8 +2268,8 @@ components:
         - QueryTrunc
       properties:
         QueryID:
-          type: integer
-          format: int64
+          type: string
+          description: pg_stat_statements queryid as string to preserve int64 precision in JavaScript
         WalVolume:
           type: string
         WalBytes:
@@ -2081,8 +2285,8 @@ components:
         - Pct
       properties:
         QueryID:
-          type: integer
-          format: int64
+          type: string
+          description: pg_stat_statements queryid as string to preserve int64 precision in JavaScript
         Pct:
           type: number
           format: double
@@ -2144,10 +2348,26 @@ components:
         - Query
       properties:
         QueryID:
-          type: integer
-          format: int64
+          type: string
+          description: pg_stat_statements queryid as string to preserve int64 precision in JavaScript
         Query:
           type: string
+        Usernames:
+          type: array
+          items:
+            type: string
+          nullable: true
+          description: Distinct PostgreSQL roles that executed this queryid (aggregated across pg_stat_statements rows).
+        StddevExecTimeMs:
+          type: number
+          format: double
+          nullable: true
+          description: max(stddev_exec_time) across aggregated pg_stat_statements rows, in milliseconds.
+        StddevPlanTimeMs:
+          type: number
+          format: double
+          nullable: true
+          description: max(stddev_plan_time) across aggregated pg_stat_statements rows, in milliseconds.
         Rows:
           type: integer
           format: int64
@@ -2256,6 +2476,151 @@ components:
           type: number
           format: double
           nullable: true
+
+    QueryReportMetrics:
+      type: object
+      properties:
+        Usernames:
+          type: array
+          items:
+            type: string
+          nullable: true
+        StddevExecTimeMs:
+          type: number
+          format: double
+          nullable: true
+        StddevPlanTimeMs:
+          type: number
+          format: double
+          nullable: true
+        Rows:
+          type: integer
+          format: int64
+          nullable: true
+        RowsPct:
+          type: number
+          format: double
+          nullable: true
+        Calls:
+          type: integer
+          format: int64
+          nullable: true
+        CallsPct:
+          type: number
+          format: double
+          nullable: true
+        TotalTimeMs:
+          type: number
+          format: double
+          nullable: true
+        TotalTimePct:
+          type: number
+          format: double
+          nullable: true
+        ExecTimeMs:
+          type: number
+          format: double
+          nullable: true
+        MinExecTimeMs:
+          type: number
+          format: double
+          nullable: true
+        MaxExecTimeMs:
+          type: number
+          format: double
+          nullable: true
+        MeanExecTimeMs:
+          type: number
+          format: double
+          nullable: true
+        PlanTimeMs:
+          type: number
+          format: double
+          nullable: true
+        MinPlanTimeMs:
+          type: number
+          format: double
+          nullable: true
+        MaxPlanTimeMs:
+          type: number
+          format: double
+          nullable: true
+        MeanPlanTimeMs:
+          type: number
+          format: double
+          nullable: true
+        IoTimeMs:
+          type: number
+          format: double
+          nullable: true
+        IoTimePct:
+          type: number
+          format: double
+          nullable: true
+        CpuTimeMs:
+          type: number
+          format: double
+          nullable: true
+        CpuTimePct:
+          type: number
+          format: double
+          nullable: true
+        CacheHitRatio:
+          type: number
+          format: double
+          nullable: true
+        SharedBlksDirtiedPct:
+          type: number
+          format: double
+          nullable: true
+        SharedBlksWrittenPct:
+          type: number
+          format: double
+          nullable: true
+        WalBytes:
+          type: integer
+          format: int64
+          nullable: true
+        WalBytesPct:
+          type: number
+          format: double
+          nullable: true
+        WalRecords:
+          type: integer
+          format: int64
+          nullable: true
+        WalFpi:
+          type: integer
+          format: int64
+          nullable: true
+        TempBlks:
+          type: integer
+          format: int64
+          nullable: true
+        TempBlksPct:
+          type: number
+          format: double
+          nullable: true
+
+    QueryCompareItem:
+      type: object
+      required:
+        - QueryID
+        - Query
+      properties:
+        QueryID:
+          type: string
+          description: pg_stat_statements queryid as string to preserve int64 precision in JavaScript
+        Query:
+          type: string
+        Left:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/QueryReportMetrics'
+        Right:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/QueryReportMetrics'
 
     ProgressAnalyze:
       type: object
@@ -2997,3 +3362,165 @@ components:
             $ref: '#/components/schemas/HealthScoreCategory'
         has_replication:
           type: boolean
+
+    SnapshotStatus:
+      type: object
+      required:
+        - Available
+      properties:
+        Available:
+          type: boolean
+
+    SnapshotListItem:
+      type: object
+      required:
+        - Id
+        - CreatedAt
+        - DashaVersion
+        - JsonVersion
+      properties:
+        Id:
+          type: string
+          format: uuid
+        CreatedAt:
+          type: string
+          format: date-time
+        DashaVersion:
+          type: string
+        JsonVersion:
+          type: integer
+        PgssStatsReset:
+          type: string
+          format: date-time
+          nullable: true
+
+    SnapshotCreated:
+      type: object
+      required:
+        - Id
+        - CreatedAt
+      properties:
+        Id:
+          type: string
+          format: uuid
+        CreatedAt:
+          type: string
+          format: date-time
+
+    VacuumStats:
+      type: object
+      required:
+        - DeadTuples
+        - LiveTuples
+        - ModSinceAnalyze
+        - InsSinceVacuum
+        - VacuumThreshold
+        - AnalyzeThreshold
+        - InsertVacThreshold
+      properties:
+        LastVacuum:
+          type: string
+          format: date-time
+          nullable: true
+        LastAutovacuum:
+          type: string
+          format: date-time
+          nullable: true
+        LastAnalyze:
+          type: string
+          format: date-time
+          nullable: true
+        LastAutoanalyze:
+          type: string
+          format: date-time
+          nullable: true
+        DeadTuples:
+          type: integer
+          format: int64
+        LiveTuples:
+          type: integer
+          format: int64
+        ModSinceAnalyze:
+          type: integer
+          format: int64
+        InsSinceVacuum:
+          type: integer
+          format: int64
+        VacuumThreshold:
+          type: integer
+          format: int64
+        AnalyzeThreshold:
+          type: integer
+          format: int64
+        InsertVacThreshold:
+          type: integer
+          format: int64
+
+    ToastCandidate:
+      type: object
+      required:
+        - ColumnName
+        - AvgWidth
+        - Storage
+      properties:
+        ColumnName:
+          type: string
+        AvgWidth:
+          type: integer
+        Storage:
+          type: string
+
+    RowEstimate:
+      type: object
+      required:
+        - BlockSize
+        - Fillfactor
+        - ColumnsTotal
+        - ColumnsWithStats
+        - SumAvgWidth
+        - TupleHeaderSize
+        - NullBitmapSize
+        - EstimatedRowSize
+        - ToastThreshold
+        - WillToast
+        - PageUsable
+        - AvailableSpace
+        - RowsPerPage
+        - ReservedSpace
+        - RowsFitInReserved
+        - ToastCandidates
+      properties:
+        BlockSize:
+          type: integer
+        Fillfactor:
+          type: integer
+        ColumnsTotal:
+          type: integer
+        ColumnsWithStats:
+          type: integer
+        SumAvgWidth:
+          type: integer
+        TupleHeaderSize:
+          type: integer
+        NullBitmapSize:
+          type: integer
+        EstimatedRowSize:
+          type: integer
+        ToastThreshold:
+          type: integer
+        WillToast:
+          type: boolean
+        PageUsable:
+          type: integer
+        AvailableSpace:
+          type: integer
+        RowsPerPage:
+          type: integer
+        ReservedSpace:
+          type: integer
+        RowsFitInReserved:
+          type: integer
+        ToastCandidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/ToastCandidate'

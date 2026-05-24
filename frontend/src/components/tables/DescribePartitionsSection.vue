@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, toRef } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useViewError } from '@/composables/useViewError'
 import { getTablesDescribePartitions } from '@/api/gen/default/default'
 import type { TableDescribePartition } from '@/api/models/index'
 import { useDescribeLink } from '@/composables/useDescribeLink'
@@ -23,7 +24,7 @@ const headers = computed(() => [
   { title: t('header.size'), key: 'Size' },
 ])
 
-const emit = defineEmits<{ error: [msg: string] }>()
+const { onError } = useViewError()
 
 const { items, loading, page, hasMore, load } = usePaginatedApiLoader<TableDescribePartition>(
   (limit, offset) => getTablesDescribePartitions({
@@ -39,7 +40,7 @@ const { items, loading, page, hasMore, load } = usePaginatedApiLoader<TableDescr
     pageSize: 20,
     deps: [clusterName, hostName, databaseName, schemaRef, tableRef],
     guard: () => !!clusterName.value && !!hostName.value && !!databaseName.value && !!props.schema && !!props.table,
-    onError: (msg) => emit('error', msg),
+    onError,
   },
 )
 </script>

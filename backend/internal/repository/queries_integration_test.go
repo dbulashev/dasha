@@ -86,7 +86,7 @@ func TestGetQueriesRunning(t *testing.T) {
 	vNum, err := p.getServerVersionNum(ctx, pool)
 	require.NoError(t, err)
 
-	result, err := p.getQueriesRunning(ctx, vNum, pool, 3)
+	result, err := p.getQueriesRunning(ctx, vNum, pool, 3, nil, "like", nil)
 	require.NoError(t, err)
 	// At least our own query should be visible as running
 	// (though it may have already completed by the time we check)

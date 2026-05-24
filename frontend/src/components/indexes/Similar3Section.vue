@@ -5,12 +5,13 @@ import { getIndexesSimilar3 } from '@/api/gen/default/default'
 import type { IndexSimilar3 } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useApiLoader } from '@/composables/useApiLoader'
+import { useViewError } from '@/composables/useViewError'
 import { useDescribeLink } from '@/composables/useDescribeLink'
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { describeLinkFromQualified } = useDescribeLink()
 const { t } = useI18n()
-const emit = defineEmits<{ error: [msg: string] }>()
+const { onError } = useViewError()
 
 const headers = computed(() => [
   { title: t('header.table'), key: 'Table' },
@@ -32,7 +33,7 @@ const { items, loading } = useApiLoader<IndexSimilar3[]>(
   {
     deps: [clusterName, hostName, databaseName],
     guard: () => !!clusterName.value && !!hostName.value && !!databaseName.value,
-    onError: (msg) => emit('error', msg),
+    onError,
   },
 )
 </script>
