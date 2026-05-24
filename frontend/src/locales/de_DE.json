@@ -579,5 +579,138 @@
     "transactionIdDanger": "Transaction-ID-Erschöpfungsgefahr",
     "transactionsLeft": "Transaktionen übrig",
     "vacuumProgress": "VACUUM-Fortschritt"
+  },
+  "healthScore": {
+    "title": "Health Score",
+    "tooltip": "Gesamtbewertung der PostgreSQL-Instanz (0–100). Berücksichtigt Verbindungen, Performance, Speicherung, Replikation und Wartung.",
+    "openDetailsPage": "Details",
+    "excellent": "Ausgezeichnet",
+    "warning": "Achtung",
+    "problems": "Probleme",
+    "critical": "Kritisch",
+    "categories": {
+      "connections": "Verbindungen",
+      "performance": "Performance",
+      "storage": "Speicherung",
+      "replication": "Replikation",
+      "maintenance": "Wartung"
+    },
+    "details": {
+      "connection_ratio": "Verbindungsauslastung",
+      "idle_in_transaction": "Idle in transaction (>30 s)",
+      "longest_transaction_seconds": "Längste Transaktion (s)",
+      "cache_hit_ratio": "Cache-Hit-Ratio",
+      "max_dead_ratio": "Max. tote Tupel (%)",
+      "avg_dead_ratio": "Ø tote Tupel (%)",
+      "tables_high_bloat": "Tabellen mit Bloat > 20 %",
+      "replica_count": "Anzahl der Replikate",
+      "max_replay_lag_seconds": "Max. Replay-Lag (s)",
+      "max_lag_bytes": "Max. Lag (Bytes)",
+      "disconnected_replicas": "Getrennte Replikate",
+      "max_xid_age": "Max. XID-Alter",
+      "max_vacuum_age_hours": "Max. VACUUM-Alter (h)",
+      "tables_never_vacuumed": "Tabellen ohne VACUUM"
+    },
+    "page": {
+      "title": "Health Score",
+      "menuItem": "Health Score",
+      "noRecommendations": "Alles in Ordnung — keine kritischen Befunde."
+    },
+    "databases": {
+      "title": "Datenbanken",
+      "headers": {
+        "database": "Datenbank",
+        "size": "Größe",
+        "score": "Score"
+      },
+      "worstHint": "Schlechteste DB: {db} (Score {score}). Klicken Sie auf die Zeile für Details."
+    },
+    "weights": {
+      "sectionTitle": "Gewichte konfigurieren",
+      "tooltip": "Kategoriegewichte werden auf 100 % normalisiert. Nützlich z. B. für Replikate, wo Replikation wichtiger ist als Performance.",
+      "source": {
+        "default": "Standard",
+        "override": "Cluster-Override"
+      },
+      "readonlyHint": "Gewichte ändern darf nur ein Administrator.",
+      "saveBtn": "Speichern",
+      "resetBtn": "Auf Standardwerte zurücksetzen",
+      "updatedAt": "Aktualisiert: {ts}"
+    },
+    "recommendations": {
+      "title": "Empfehlungen",
+      "openRelated": "Öffnen",
+      "showHowTo": "Was tun",
+      "hideHowTo": "Einklappen",
+      "copy": "Kopieren",
+      "copied": "Kopiert",
+      "high_connection_ratio": {
+        "title": "Hohe Auslastung des Connection-Pools",
+        "short": "Belegt: {total} von {max_connections} Verbindungen.",
+        "detail": "Prüfen Sie, ob die Anwendung Verbindungen ordnungsgemäß schließt. Bei dauerhaftem Wachstum max_connections erhöhen oder pgbouncer einsetzen."
+      },
+      "idle_in_transaction": {
+        "title": "Hängende idle-in-transaction-Verbindungen",
+        "short": "Verbindungen im Zustand idle in transaction (>30 s): {metric_value}.",
+        "detail": "Von der Anwendung vergessene Transaktionen halten Locks und blockieren Autovacuum."
+      },
+      "long_running_transaction": {
+        "title": "Langlaufende Transaktion",
+        "short": "Älteste Transaktion läuft seit {metric_value} s.",
+        "detail": "Über pg_stat_activity identifizieren und ggf. mit pg_terminate_backend beenden."
+      },
+      "low_cache_hit_ratio": {
+        "title": "Niedrige Cache-Hit-Ratio",
+        "short": "Cache-Hit-Ratio = {metric_value} %.",
+        "detail": "shared_buffers erhöhen (üblicherweise 25 % des RAM)."
+      },
+      "high_max_dead_ratio": {
+        "title": "Hohe Dead-Tuples-Ratio in einer Tabelle",
+        "short": "Maximale Dead-Ratio: {metric_value} %.",
+        "detail": "VACUUM ANALYZE für die betroffene Tabelle ausführen.",
+        "sql": "-- Tabellen mit hoher Dead-Ratio finden\nSELECT schemaname, relname, n_dead_tup, n_live_tup\nFROM pg_stat_user_tables\nORDER BY n_dead_tup DESC\nLIMIT 10;"
+      },
+      "high_avg_dead_ratio": {
+        "title": "Hohe durchschnittliche Dead-Ratio",
+        "short": "Durchschnittliche Dead-Ratio: {metric_value} %.",
+        "detail": "Autovacuum kommt nicht hinterher. autovacuum_vacuum_scale_factor anpassen."
+      },
+      "many_bloated_tables": {
+        "title": "Viele Tabellen mit Bloat",
+        "short": "Tabellen mit Dead-Ratio > 20 %: {metric_value}.",
+        "detail": "Im Tables-Bereich VACUUM für die Liste ausführen."
+      },
+      "replication_lag_time": {
+        "title": "Hoher Replication-Lag (Zeit)",
+        "short": "Max. Replay-Lag: {metric_value} s.",
+        "detail": "Last auf dem Replikat und Netzwerk prüfen."
+      },
+      "replication_lag_bytes": {
+        "title": "Hoher Replication-Lag (Bytes)",
+        "short": "Maximaler Lag in Bytes.",
+        "detail": "Bei wachsendem Lag max_wal_size erhöhen."
+      },
+      "disconnected_replicas": {
+        "title": "Getrennte Replikate",
+        "short": "Replikate nicht im Streaming-Zustand: {metric_value}.",
+        "detail": "Netzwerk und walreceiver-Status prüfen."
+      },
+      "xid_wraparound_risk": {
+        "title": "XID-Wraparound-Risiko",
+        "short": "XID-Alter: {metric_value}.",
+        "detail": "Bei Annäherung an 2 Mrd. geht die DB in read-only. VACUUM FREEZE ausführen.",
+        "sql": "-- XID-Alter pro Datenbank prüfen\nSELECT datname, age(datfrozenxid) AS xid_age\nFROM pg_database\nORDER BY xid_age DESC;"
+      },
+      "stale_vacuum": {
+        "title": "VACUUM lief lange nicht",
+        "short": "Max. VACUUM-Alter: {metric_value} h.",
+        "detail": "Wenn Autovacuum nicht hinterherkommt, autovacuum_vacuum_scale_factor verschärfen."
+      },
+      "tables_never_vacuumed": {
+        "title": "Tabellen ohne VACUUM",
+        "short": "Nie vakuumierte Tabellen: {metric_value}.",
+        "detail": "VACUUM ANALYZE manuell ausführen oder Autovacuum aktivieren."
+      }
+    }
   }
 }

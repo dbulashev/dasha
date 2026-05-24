@@ -27,6 +27,7 @@ import type {
   ConnectionState,
   DatabaseHealth,
   DatabaseSize,
+  DeleteHealthScoreWeightsParams,
   FkTypeMismatch,
   FksPossibleNulls,
   FksPossibleSimilar,
@@ -42,7 +43,10 @@ import type {
   GetFkTypeMismatchParams,
   GetFksPossibleNullsParams,
   GetFksPossibleSimilarParams,
+  GetHealthScoreDatabasesParams,
   GetHealthScoreParams,
+  GetHealthScoreRecommendationsParams,
+  GetHealthScoreWeightsParams,
   GetIndexesBloatParams,
   GetIndexesBtreeOnArrayParams,
   GetIndexesCachingParams,
@@ -96,6 +100,10 @@ import type {
   GetTablesSearchParams,
   GetTablesTopKBySizeParams,
   HealthScore,
+  HealthScoreDatabases,
+  HealthScoreRecommendations,
+  HealthScoreWeights,
+  HealthScoreWeightsUpdate,
   IndexBloat,
   IndexBtreeOnArray,
   IndexCaching,
@@ -123,6 +131,7 @@ import type {
   ProgressCluster,
   ProgressIndex,
   ProgressVacuum,
+  PutHealthScoreWeightsParams,
   QueryBlocked,
   QueryCompareItem,
   QueryReport,
@@ -978,6 +987,517 @@ export function useGetHealthScore<
   return query
 }
 
+export type getHealthScoreRecommendationsResponse200 = {
+  data: HealthScoreRecommendations
+  status: 200
+}
+
+export type getHealthScoreRecommendationsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getHealthScoreRecommendationsResponseSuccess =
+  getHealthScoreRecommendationsResponse200 & {
+    headers: Headers
+  }
+export type getHealthScoreRecommendationsResponseError =
+  getHealthScoreRecommendationsResponse404 & {
+    headers: Headers
+  }
+
+export type getHealthScoreRecommendationsResponse =
+  | getHealthScoreRecommendationsResponseSuccess
+  | getHealthScoreRecommendationsResponseError
+
+export const getGetHealthScoreRecommendationsUrl = (
+  params: GetHealthScoreRecommendationsParams,
+) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/common/health-score/recommendations?${stringifiedParams}`
+    : `/api/common/health-score/recommendations`
+}
+
+export const getHealthScoreRecommendations = async (
+  params: GetHealthScoreRecommendationsParams,
+  options?: RequestInit,
+): Promise<getHealthScoreRecommendationsResponse> => {
+  return customFetch<getHealthScoreRecommendationsResponse>(
+    getGetHealthScoreRecommendationsUrl(params),
+    {
+      ...options,
+      method: 'GET',
+    },
+  )
+}
+
+export const getGetHealthScoreRecommendationsQueryKey = (
+  params?: MaybeRef<GetHealthScoreRecommendationsParams>,
+) => {
+  return ['api', 'common', 'health-score', 'recommendations', ...(params ? [params] : [])] as const
+}
+
+export const getGetHealthScoreRecommendationsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHealthScoreRecommendations>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreRecommendationsParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreRecommendations>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetHealthScoreRecommendationsQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHealthScoreRecommendations>>> = ({
+    signal,
+  }) => getHealthScoreRecommendations(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHealthScoreRecommendations>>,
+    TError,
+    TData
+  >
+}
+
+export type GetHealthScoreRecommendationsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHealthScoreRecommendations>>
+>
+export type GetHealthScoreRecommendationsQueryError = NotFoundResponse
+
+export function useGetHealthScoreRecommendations<
+  TData = Awaited<ReturnType<typeof getHealthScoreRecommendations>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreRecommendationsParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreRecommendations>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHealthScoreRecommendationsQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+export type getHealthScoreDatabasesResponse200 = {
+  data: HealthScoreDatabases
+  status: 200
+}
+
+export type getHealthScoreDatabasesResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getHealthScoreDatabasesResponseSuccess = getHealthScoreDatabasesResponse200 & {
+  headers: Headers
+}
+export type getHealthScoreDatabasesResponseError = getHealthScoreDatabasesResponse404 & {
+  headers: Headers
+}
+
+export type getHealthScoreDatabasesResponse =
+  | getHealthScoreDatabasesResponseSuccess
+  | getHealthScoreDatabasesResponseError
+
+export const getGetHealthScoreDatabasesUrl = (params: GetHealthScoreDatabasesParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/common/health-score/databases?${stringifiedParams}`
+    : `/api/common/health-score/databases`
+}
+
+export const getHealthScoreDatabases = async (
+  params: GetHealthScoreDatabasesParams,
+  options?: RequestInit,
+): Promise<getHealthScoreDatabasesResponse> => {
+  return customFetch<getHealthScoreDatabasesResponse>(getGetHealthScoreDatabasesUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetHealthScoreDatabasesQueryKey = (
+  params?: MaybeRef<GetHealthScoreDatabasesParams>,
+) => {
+  return ['api', 'common', 'health-score', 'databases', ...(params ? [params] : [])] as const
+}
+
+export const getGetHealthScoreDatabasesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHealthScoreDatabases>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreDatabasesParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getHealthScoreDatabases>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetHealthScoreDatabasesQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHealthScoreDatabases>>> = ({
+    signal,
+  }) => getHealthScoreDatabases(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHealthScoreDatabases>>,
+    TError,
+    TData
+  >
+}
+
+export type GetHealthScoreDatabasesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHealthScoreDatabases>>
+>
+export type GetHealthScoreDatabasesQueryError = NotFoundResponse
+
+export function useGetHealthScoreDatabases<
+  TData = Awaited<ReturnType<typeof getHealthScoreDatabases>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreDatabasesParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getHealthScoreDatabases>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHealthScoreDatabasesQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+export type getHealthScoreWeightsResponse200 = {
+  data: HealthScoreWeights
+  status: 200
+}
+
+export type getHealthScoreWeightsResponseSuccess = getHealthScoreWeightsResponse200 & {
+  headers: Headers
+}
+export type getHealthScoreWeightsResponse = getHealthScoreWeightsResponseSuccess
+
+export const getGetHealthScoreWeightsUrl = (params: GetHealthScoreWeightsParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/common/health-score/weights?${stringifiedParams}`
+    : `/api/common/health-score/weights`
+}
+
+export const getHealthScoreWeights = async (
+  params: GetHealthScoreWeightsParams,
+  options?: RequestInit,
+): Promise<getHealthScoreWeightsResponse> => {
+  return customFetch<getHealthScoreWeightsResponse>(getGetHealthScoreWeightsUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetHealthScoreWeightsQueryKey = (
+  params?: MaybeRef<GetHealthScoreWeightsParams>,
+) => {
+  return ['api', 'common', 'health-score', 'weights', ...(params ? [params] : [])] as const
+}
+
+export const getGetHealthScoreWeightsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHealthScoreWeights>>,
+  TError = unknown,
+>(
+  params: MaybeRef<GetHealthScoreWeightsParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getHealthScoreWeights>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetHealthScoreWeightsQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHealthScoreWeights>>> = ({ signal }) =>
+    getHealthScoreWeights(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHealthScoreWeights>>,
+    TError,
+    TData
+  >
+}
+
+export type GetHealthScoreWeightsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHealthScoreWeights>>
+>
+export type GetHealthScoreWeightsQueryError = unknown
+
+export function useGetHealthScoreWeights<
+  TData = Awaited<ReturnType<typeof getHealthScoreWeights>>,
+  TError = unknown,
+>(
+  params: MaybeRef<GetHealthScoreWeightsParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getHealthScoreWeights>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHealthScoreWeightsQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+export type putHealthScoreWeightsResponse200 = {
+  data: HealthScoreWeights
+  status: 200
+}
+
+export type putHealthScoreWeightsResponse400 = {
+  data: void
+  status: 400
+}
+
+export type putHealthScoreWeightsResponseSuccess = putHealthScoreWeightsResponse200 & {
+  headers: Headers
+}
+export type putHealthScoreWeightsResponseError = putHealthScoreWeightsResponse400 & {
+  headers: Headers
+}
+
+export type putHealthScoreWeightsResponse =
+  | putHealthScoreWeightsResponseSuccess
+  | putHealthScoreWeightsResponseError
+
+export const getPutHealthScoreWeightsUrl = (params: PutHealthScoreWeightsParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/common/health-score/weights?${stringifiedParams}`
+    : `/api/common/health-score/weights`
+}
+
+export const putHealthScoreWeights = async (
+  healthScoreWeightsUpdate: HealthScoreWeightsUpdate,
+  params: PutHealthScoreWeightsParams,
+  options?: RequestInit,
+): Promise<putHealthScoreWeightsResponse> => {
+  return customFetch<putHealthScoreWeightsResponse>(getPutHealthScoreWeightsUrl(params), {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(healthScoreWeightsUpdate),
+  })
+}
+
+export const getPutHealthScoreWeightsMutationOptions = <
+  TError = void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putHealthScoreWeights>>,
+    TError,
+    { data: HealthScoreWeightsUpdate; params: PutHealthScoreWeightsParams },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putHealthScoreWeights>>,
+  TError,
+  { data: HealthScoreWeightsUpdate; params: PutHealthScoreWeightsParams },
+  TContext
+> => {
+  const mutationKey = ['putHealthScoreWeights']
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putHealthScoreWeights>>,
+    { data: HealthScoreWeightsUpdate; params: PutHealthScoreWeightsParams }
+  > = (props) => {
+    const { data, params } = props ?? {}
+
+    return putHealthScoreWeights(data, params, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type PutHealthScoreWeightsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof putHealthScoreWeights>>
+>
+export type PutHealthScoreWeightsMutationBody = HealthScoreWeightsUpdate
+export type PutHealthScoreWeightsMutationError = void
+
+export const usePutHealthScoreWeights = <TError = void, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putHealthScoreWeights>>,
+    TError,
+    { data: HealthScoreWeightsUpdate; params: PutHealthScoreWeightsParams },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationReturnType<
+  Awaited<ReturnType<typeof putHealthScoreWeights>>,
+  TError,
+  { data: HealthScoreWeightsUpdate; params: PutHealthScoreWeightsParams },
+  TContext
+> => {
+  return useMutation(getPutHealthScoreWeightsMutationOptions(options))
+}
+export type deleteHealthScoreWeightsResponse200 = {
+  data: HealthScoreWeights
+  status: 200
+}
+
+export type deleteHealthScoreWeightsResponseSuccess = deleteHealthScoreWeightsResponse200 & {
+  headers: Headers
+}
+export type deleteHealthScoreWeightsResponse = deleteHealthScoreWeightsResponseSuccess
+
+export const getDeleteHealthScoreWeightsUrl = (params: DeleteHealthScoreWeightsParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/common/health-score/weights?${stringifiedParams}`
+    : `/api/common/health-score/weights`
+}
+
+export const deleteHealthScoreWeights = async (
+  params: DeleteHealthScoreWeightsParams,
+  options?: RequestInit,
+): Promise<deleteHealthScoreWeightsResponse> => {
+  return customFetch<deleteHealthScoreWeightsResponse>(getDeleteHealthScoreWeightsUrl(params), {
+    ...options,
+    method: 'DELETE',
+  })
+}
+
+export const getDeleteHealthScoreWeightsMutationOptions = <
+  TError = unknown,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteHealthScoreWeights>>,
+    TError,
+    { params: DeleteHealthScoreWeightsParams },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteHealthScoreWeights>>,
+  TError,
+  { params: DeleteHealthScoreWeightsParams },
+  TContext
+> => {
+  const mutationKey = ['deleteHealthScoreWeights']
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteHealthScoreWeights>>,
+    { params: DeleteHealthScoreWeightsParams }
+  > = (props) => {
+    const { params } = props ?? {}
+
+    return deleteHealthScoreWeights(params, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type DeleteHealthScoreWeightsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteHealthScoreWeights>>
+>
+
+export type DeleteHealthScoreWeightsMutationError = unknown
+
+export const useDeleteHealthScoreWeights = <TError = unknown, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteHealthScoreWeights>>,
+    TError,
+    { params: DeleteHealthScoreWeightsParams },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationReturnType<
+  Awaited<ReturnType<typeof deleteHealthScoreWeights>>,
+  TError,
+  { params: DeleteHealthScoreWeightsParams },
+  TContext
+> => {
+  return useMutation(getDeleteHealthScoreWeightsMutationOptions(options))
+}
 export type getDatabaseUsersResponse200 = {
   data: string[]
   status: 200

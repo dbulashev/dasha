@@ -7,8 +7,8 @@ import WaitEventsSection from '@/components/home/WaitEventsSection.vue'
 </script>
 
 <template>
-  <HealthScoreSection class="mb-4" />
   <HomeSummarySection />
+  <HealthScoreSection class="mb-4" />
   <v-row class="mb-0">
     <v-col cols="12" md="6">
       <DatabaseHealthSection />

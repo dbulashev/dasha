@@ -243,7 +243,9 @@ func (s *Handlers) GetHealthScore(
 		return nil, fmt.Errorf("GetHealthScore | %w", err)
 	}
 
-	result := health.Calculate(health.RawMetrics{
+	weights := s.loadHealthWeights(ctx, req.Params.ClusterName)
+
+	result := health.CalculateWithWeights(health.RawMetrics{
 		TotalConnections:          metrics.TotalConnections,
 		ActiveConnections:         metrics.ActiveConnections,
 		IdleInTransaction:         metrics.IdleInTransaction,
@@ -260,7 +262,7 @@ func (s *Handlers) GetHealthScore(
 		MaxXidAge:                 metrics.MaxXidAge,
 		MaxVacuumAgeHours:         metrics.MaxVacuumAgeHours,
 		TablesNeverVacuumed:       metrics.TablesNeverVacuumed,
-	})
+	}, weights)
 
 	categories := make([]serverhttp.HealthScoreCategory, 0, len(result.Categories))
 	for _, c := range result.Categories {
@@ -277,6 +279,263 @@ func (s *Handlers) GetHealthScore(
 		Score:          result.Score,
 		Categories:     categories,
 		HasReplication: result.HasReplication,
+	}, nil
+}
+
+// loadHealthWeights returns per-cluster weights override from storage,
+// falling back to defaults when no override is configured or storage is unavailable.
+func (s *Handlers) loadHealthWeights(ctx context.Context, clusterName string) health.Weights {
+	if s.storage == nil {
+		return health.DefaultWeights()
+	}
+
+	rec, err := s.storage.GetHealthWeights(ctx, clusterName)
+	if err != nil || rec == nil {
+		return health.DefaultWeights()
+	}
+
+	return rec.Weights
+}
+
+func (s *Handlers) GetHealthScoreRecommendations(
+	ctx context.Context,
+	req serverhttp.GetHealthScoreRecommendationsRequestObject,
+) (serverhttp.GetHealthScoreRecommendationsResponseObject, error) {
+	metrics, err := s.repo.GetHealthScoreMetrics(ctx, req.Params.ClusterName, req.Params.Instance)
+	if errors.Is(err, repository.ErrNotFound) {
+		return serverhttp.GetHealthScoreRecommendations404Response{}, fmt.Errorf("GetHealthScoreRecommendations | %w", err)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("GetHealthScoreRecommendations | %w", err)
+	}
+
+	raw := health.RawMetrics{
+		TotalConnections:          metrics.TotalConnections,
+		ActiveConnections:         metrics.ActiveConnections,
+		IdleInTransaction:         metrics.IdleInTransaction,
+		LongestTransactionSeconds: metrics.LongestTransactionSeconds,
+		MaxConnections:            metrics.MaxConnections,
+		CacheHitRatio:             metrics.CacheHitRatio,
+		MaxDeadRatio:              metrics.MaxDeadRatio,
+		AvgDeadRatio:              metrics.AvgDeadRatio,
+		TablesHighBloat:           metrics.TablesHighBloat,
+		ReplicaCount:              metrics.ReplicaCount,
+		MaxReplayLagSeconds:       metrics.MaxReplayLagSeconds,
+		MaxLagBytes:               metrics.MaxLagBytes,
+		DisconnectedReplicas:      metrics.DisconnectedReplicas,
+		MaxXidAge:                 metrics.MaxXidAge,
+		MaxVacuumAgeHours:         metrics.MaxVacuumAgeHours,
+		TablesNeverVacuumed:       metrics.TablesNeverVacuumed,
+	}
+
+	databaseScoped := req.Params.Database != nil && *req.Params.Database != ""
+	recs := health.Evaluate(raw, databaseScoped)
+
+	out := make([]serverhttp.HealthScoreRecommendation, 0, len(recs))
+	for _, r := range recs {
+		var ctxPtr *map[string]any
+		if len(r.Context) > 0 {
+			c := r.Context
+			ctxPtr = &c
+		}
+
+		var routePtr *string
+		if r.RelatedRoute != "" {
+			route := r.RelatedRoute
+			routePtr = &route
+		}
+
+		out = append(out, serverhttp.HealthScoreRecommendation{
+			RuleId:       r.RuleID,
+			Category:     r.Category,
+			Severity:     serverhttp.HealthScoreRecommendationSeverity(r.Severity),
+			MetricValue:  r.MetricValue,
+			Context:      ctxPtr,
+			RelatedRoute: routePtr,
+		})
+	}
+
+	return serverhttp.GetHealthScoreRecommendations200JSONResponse{
+		Recommendations: out,
+	}, nil
+}
+
+func (s *Handlers) GetHealthScoreDatabases(
+	ctx context.Context,
+	req serverhttp.GetHealthScoreDatabasesRequestObject,
+) (serverhttp.GetHealthScoreDatabasesResponseObject, error) {
+	metrics, err := s.repo.GetHealthScorePerDatabase(ctx, req.Params.ClusterName, req.Params.Instance)
+	if errors.Is(err, repository.ErrNotFound) {
+		return serverhttp.GetHealthScoreDatabases404Response{}, fmt.Errorf("GetHealthScoreDatabases | %w", err)
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("GetHealthScoreDatabases | %w", err)
+	}
+
+	weights := s.loadHealthWeights(ctx, req.Params.ClusterName)
+
+	per := make([]health.PerDBMetrics, 0, len(metrics))
+	for _, m := range metrics {
+		per = append(per, health.PerDBMetrics{
+			Database:            m.Database,
+			SizeBytes:           m.SizeBytes,
+			CacheHitRatio:       m.CacheHitRatio,
+			MaxDeadRatio:        m.MaxDeadRatio,
+			AvgDeadRatio:        m.AvgDeadRatio,
+			TablesHighBloat:     m.TablesHighBloat,
+			MaxXidAge:           m.MaxXidAge,
+			MaxVacuumAgeHours:   m.MaxVacuumAgeHours,
+			TablesNeverVacuumed: m.TablesNeverVacuumed,
+		})
+	}
+
+	scores := health.ComputePerDB(per, weights)
+
+	databases := make([]serverhttp.HealthScoreDatabase, 0, len(scores))
+	for _, ds := range scores {
+		cats := make([]serverhttp.HealthScoreCategory, 0, len(ds.Categories))
+		for _, c := range ds.Categories {
+			cats = append(cats, serverhttp.HealthScoreCategory{
+				Name:    c.Name,
+				Score:   c.Score,
+				Weight:  c.Weight,
+				Penalty: c.Penalty,
+				Details: c.Details,
+			})
+		}
+
+		databases = append(databases, serverhttp.HealthScoreDatabase{
+			Database:   ds.Database,
+			SizeBytes:  ds.SizeBytes,
+			Score:      ds.Score,
+			Categories: cats,
+		})
+	}
+
+	var worst *string
+	if w := health.WorstDatabase(scores); w != nil {
+		name := w.Database
+		worst = &name
+	}
+
+	return serverhttp.GetHealthScoreDatabases200JSONResponse{
+		Databases:            databases,
+		ApplicableCategories: health.PerDBApplicableCategories,
+		WorstDatabase:        worst,
+	}, nil
+}
+
+func (s *Handlers) GetHealthScoreWeights(
+	ctx context.Context,
+	req serverhttp.GetHealthScoreWeightsRequestObject,
+) (serverhttp.GetHealthScoreWeightsResponseObject, error) {
+	resp, err := s.getHealthScoreWeightsResponse(ctx, req.Params.ClusterName)
+	if err != nil {
+		return nil, fmt.Errorf("GetHealthScoreWeights | %w", err)
+	}
+
+	return serverhttp.GetHealthScoreWeights200JSONResponse(resp), nil
+}
+
+func (s *Handlers) PutHealthScoreWeights(
+	ctx context.Context,
+	req serverhttp.PutHealthScoreWeightsRequestObject,
+) (serverhttp.PutHealthScoreWeightsResponseObject, error) {
+	if req.Body == nil {
+		return serverhttp.PutHealthScoreWeights400Response{}, nil
+	}
+
+	w := health.Weights{
+		Connections: req.Body.Connections,
+		Performance: req.Body.Performance,
+		Storage:     req.Body.Storage,
+		Replication: req.Body.Replication,
+		Maintenance: req.Body.Maintenance,
+	}
+
+	if err := w.Validate(); err != nil {
+		return serverhttp.PutHealthScoreWeights400Response{}, nil
+	}
+
+	if s.storage == nil {
+		return nil, fmt.Errorf("PutHealthScoreWeights | storage is not configured")
+	}
+
+	if err := s.storage.UpsertHealthWeights(ctx, req.Params.ClusterName, w.Normalize(), ""); err != nil {
+		return nil, fmt.Errorf("PutHealthScoreWeights | %w", err)
+	}
+
+	resp, err := s.getHealthScoreWeightsResponse(ctx, req.Params.ClusterName)
+	if err != nil {
+		return nil, fmt.Errorf("PutHealthScoreWeights | %w", err)
+	}
+
+	return serverhttp.PutHealthScoreWeights200JSONResponse(resp), nil
+}
+
+func (s *Handlers) DeleteHealthScoreWeights(
+	ctx context.Context,
+	req serverhttp.DeleteHealthScoreWeightsRequestObject,
+) (serverhttp.DeleteHealthScoreWeightsResponseObject, error) {
+	if s.storage != nil {
+		if err := s.storage.DeleteHealthWeights(ctx, req.Params.ClusterName); err != nil {
+			return nil, fmt.Errorf("DeleteHealthScoreWeights | %w", err)
+		}
+	}
+
+	resp, err := s.getHealthScoreWeightsResponse(ctx, req.Params.ClusterName)
+	if err != nil {
+		return nil, fmt.Errorf("DeleteHealthScoreWeights | %w", err)
+	}
+
+	return serverhttp.DeleteHealthScoreWeights200JSONResponse(resp), nil
+}
+
+func (s *Handlers) getHealthScoreWeightsResponse(
+	ctx context.Context,
+	clusterName string,
+) (serverhttp.HealthScoreWeights, error) {
+	var (
+		w         health.Weights
+		source    = serverhttp.Default
+		updatedAt *time.Time
+		updatedBy *string
+	)
+
+	if s.storage != nil {
+		rec, err := s.storage.GetHealthWeights(ctx, clusterName)
+		if err != nil {
+			return serverhttp.HealthScoreWeights{}, err
+		}
+
+		if rec != nil {
+			w = rec.Weights
+			source = serverhttp.Override
+			ts := rec.UpdatedAt
+			updatedAt = &ts
+
+			if rec.UpdatedBy != "" {
+				by := rec.UpdatedBy
+				updatedBy = &by
+			}
+		}
+	}
+
+	if source == serverhttp.Default {
+		w = health.DefaultWeights()
+	}
+
+	return serverhttp.HealthScoreWeights{
+		Connections: w.Connections,
+		Performance: w.Performance,
+		Storage:     w.Storage,
+		Replication: w.Replication,
+		Maintenance: w.Maintenance,
+		Source:      source,
+		UpdatedAt:   updatedAt,
+		UpdatedBy:   updatedBy,
 	}, nil
 }
 

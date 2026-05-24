@@ -627,6 +627,7 @@
     "healthScore": {
         "title": "Health Score",
         "tooltip": "Комплексная оценка здоровья PostgreSQL инстанса (0–100). Учитывает подключения, производительность, хранение, репликацию и обслуживание.",
+        "openDetailsPage": "Подробнее",
         "excellent": "Отлично",
         "warning": "Внимание",
         "problems": "Проблемы",
@@ -653,6 +654,107 @@
             "max_xid_age": "Макс. возраст XID",
             "max_vacuum_age_hours": "Макс. возраст vacuum (ч)",
             "tables_never_vacuumed": "Таблиц без vacuum"
+        },
+        "page": {
+            "title": "Health Score",
+            "menuItem": "Health Score",
+            "noRecommendations": "Всё хорошо — критичных замечаний нет."
+        },
+        "databases": {
+            "title": "Базы данных",
+            "headers": {
+                "database": "База",
+                "size": "Размер",
+                "score": "Score"
+            },
+            "worstHint": "Самая проблемная БД: {db} (score {score}). Кликните по строке для детализации."
+        },
+        "weights": {
+            "sectionTitle": "Настройка весов",
+            "tooltip": "Веса категорий нормализуются к 100%. Полезно, например, для реплики, где репликация важнее производительности.",
+            "source": {
+                "default": "По умолчанию",
+                "override": "Кластерный override"
+            },
+            "readonlyHint": "Изменение весов доступно только администратору.",
+            "saveBtn": "Сохранить",
+            "resetBtn": "Сбросить к дефолтам",
+            "updatedAt": "Обновлено: {ts}"
+        },
+        "recommendations": {
+            "title": "Рекомендации",
+            "openRelated": "Перейти",
+            "showHowTo": "Что делать",
+            "hideHowTo": "Свернуть",
+            "copy": "Копировать",
+            "copied": "Скопировано",
+            "high_connection_ratio": {
+                "title": "Высокая загрузка connection pool",
+                "short": "Используется {total} из {max_connections} соединений.",
+                "detail": "Проверьте, не утекают ли соединения в приложении (пул не закрывает их вовремя). При устойчивом росте увеличьте max_connections или внедрите pgbouncer."
+            },
+            "idle_in_transaction": {
+                "title": "Висящие idle in transaction",
+                "short": "Соединений в состоянии idle in transaction (>30с): {metric_value}.",
+                "detail": "Транзакции, забытые приложением, удерживают блокировки и мешают autovacuum. Проверьте логи приложения и идемпотентность транзакций."
+            },
+            "long_running_transaction": {
+                "title": "Долгая открытая транзакция",
+                "short": "Самая старая транзакция работает уже {metric_value} с.",
+                "detail": "Найдите её через pg_stat_activity и решите, нужно ли её прервать (pg_terminate_backend)."
+            },
+            "low_cache_hit_ratio": {
+                "title": "Низкий cache hit ratio",
+                "short": "Cache hit ratio = {metric_value}%.",
+                "detail": "Увеличьте shared_buffers (обычно 25% от RAM). Также проверьте таблицы с большим числом disk reads."
+            },
+            "high_max_dead_ratio": {
+                "title": "Большой dead tuples ratio в таблице",
+                "short": "Максимальный dead ratio: {metric_value}%.",
+                "detail": "Запустите VACUUM ANALYZE для проблемной таблицы. Найдите её через pg_stat_user_tables.",
+                "sql": "-- найти таблицы с большим dead ratio\nSELECT schemaname, relname, n_dead_tup, n_live_tup\nFROM pg_stat_user_tables\nORDER BY n_dead_tup DESC\nLIMIT 10;"
+            },
+            "high_avg_dead_ratio": {
+                "title": "Высокий средний dead ratio по базе",
+                "short": "Средний dead ratio: {metric_value}%.",
+                "detail": "Autovacuum не справляется. Пересмотрите autovacuum_vacuum_scale_factor и autovacuum_vacuum_cost_limit."
+            },
+            "many_bloated_tables": {
+                "title": "Много таблиц с bloat",
+                "short": "Таблиц с dead ratio > 20%: {metric_value}.",
+                "detail": "Перейдите в раздел Tables → Bloat и запустите VACUUM по списку."
+            },
+            "replication_lag_time": {
+                "title": "Большой replication lag (время)",
+                "short": "Максимальный replay lag: {metric_value} с.",
+                "detail": "Проверьте нагрузку на реплику (тяжёлые SELECT), сеть и wal_receiver_timeout."
+            },
+            "replication_lag_bytes": {
+                "title": "Большой replication lag (байты)",
+                "short": "Максимальный replication lag по байтам.",
+                "detail": "Если lag растёт, увеличьте max_wal_size или ускорьте применение WAL на реплике."
+            },
+            "disconnected_replicas": {
+                "title": "Отключённые реплики",
+                "short": "Реплик в состоянии не streaming: {metric_value}.",
+                "detail": "Проверьте сетевой доступ от реплики к primary и статус walreceiver."
+            },
+            "xid_wraparound_risk": {
+                "title": "Риск XID wraparound",
+                "short": "Возраст XID: {metric_value}.",
+                "detail": "При приближении к 2 млрд база уйдёт в read-only. Запустите VACUUM FREEZE для проблемных БД.",
+                "sql": "-- проверить возраст XID по базам\nSELECT datname, age(datfrozenxid) AS xid_age\nFROM pg_database\nORDER BY xid_age DESC;"
+            },
+            "stale_vacuum": {
+                "title": "Vacuum давно не работал",
+                "short": "Максимальный возраст vacuum: {metric_value} ч.",
+                "detail": "Если autovacuum не успевает, ужесточите autovacuum_vacuum_scale_factor для крупных таблиц."
+            },
+            "tables_never_vacuumed": {
+                "title": "Таблицы без vacuum",
+                "short": "Таблиц, не вакуумированных ни разу: {metric_value}.",
+                "detail": "Запустите VACUUM ANALYZE вручную или включите autovacuum, если он выключен на уровне таблицы."
+            }
         }
     }
 }

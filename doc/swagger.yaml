@@ -179,6 +179,86 @@ paths:
                 $ref: '#/components/schemas/HealthScore'
         '404':
           $ref: '#/components/responses/NotFound'
+  /api/common/health-score/recommendations:
+    get:
+      operationId: getHealthScoreRecommendations
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - name: database
+          in: query
+          required: false
+          schema:
+            type: string
+          description: |
+            When set, only rules applicable at the per-database level are
+            returned (Connections / Replication rules are filtered out).
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthScoreRecommendations'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/common/health-score/databases:
+    get:
+      operationId: getHealthScoreDatabases
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthScoreDatabases'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/common/health-score/weights:
+    get:
+      operationId: getHealthScoreWeights
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthScoreWeights'
+    put:
+      operationId: putHealthScoreWeights
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HealthScoreWeightsUpdate'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthScoreWeights'
+        '400':
+          description: Invalid weights
+    delete:
+      operationId: deleteHealthScoreWeights
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthScoreWeights'
   /api/common/database-users:
     get:
       operationId: getDatabaseUsers
@@ -3362,6 +3442,147 @@ components:
             $ref: '#/components/schemas/HealthScoreCategory'
         has_replication:
           type: boolean
+
+    HealthScoreRecommendation:
+      type: object
+      required:
+        - rule_id
+        - category
+        - severity
+        - metric_value
+      properties:
+        rule_id:
+          type: string
+        category:
+          type: string
+        severity:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+        metric_value:
+          type: number
+          format: double
+        context:
+          type: object
+          additionalProperties: true
+          nullable: true
+        related_route:
+          type: string
+          nullable: true
+
+    HealthScoreRecommendations:
+      type: object
+      required:
+        - recommendations
+      properties:
+        recommendations:
+          type: array
+          items:
+            $ref: '#/components/schemas/HealthScoreRecommendation'
+
+    HealthScoreDatabase:
+      type: object
+      required:
+        - database
+        - size_bytes
+        - score
+        - categories
+      properties:
+        database:
+          type: string
+        size_bytes:
+          type: integer
+          format: int64
+        score:
+          type: number
+          format: double
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/HealthScoreCategory'
+
+    HealthScoreDatabases:
+      type: object
+      required:
+        - databases
+        - applicable_categories
+      properties:
+        databases:
+          type: array
+          items:
+            $ref: '#/components/schemas/HealthScoreDatabase'
+        applicable_categories:
+          type: array
+          items:
+            type: string
+        worst_database:
+          type: string
+          nullable: true
+
+    HealthScoreWeights:
+      type: object
+      required:
+        - connections
+        - performance
+        - storage
+        - replication
+        - maintenance
+        - source
+      properties:
+        connections:
+          type: number
+          format: double
+        performance:
+          type: number
+          format: double
+        storage:
+          type: number
+          format: double
+        replication:
+          type: number
+          format: double
+        maintenance:
+          type: number
+          format: double
+        source:
+          type: string
+          enum: [default, override]
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+        updated_by:
+          type: string
+          nullable: true
+
+    HealthScoreWeightsUpdate:
+      type: object
+      required:
+        - connections
+        - performance
+        - storage
+        - replication
+        - maintenance
+      properties:
+        connections:
+          type: number
+          format: double
+          minimum: 0
+        performance:
+          type: number
+          format: double
+          minimum: 0
+        storage:
+          type: number
+          format: double
+          minimum: 0
+        replication:
+          type: number
+          format: double
+          minimum: 0
+        maintenance:
+          type: number
+          format: double
+          minimum: 0
 
     SnapshotStatus:
       type: object

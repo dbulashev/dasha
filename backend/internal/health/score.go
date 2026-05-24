@@ -55,9 +55,17 @@ const (
 	weightMaintenance  = 0.20
 )
 
-// Calculate computes the health score from raw metrics.
+// Calculate computes the health score from raw metrics using default weights.
 func Calculate(m RawMetrics) Result {
+	return CalculateWithWeights(m, DefaultWeights())
+}
+
+// CalculateWithWeights computes the health score using the provided per-category
+// weights. Weights are normalized before applying; if no replication is present,
+// the replication weight is redistributed proportionally across remaining categories.
+func CalculateWithWeights(m RawMetrics, w Weights) Result {
 	hasReplication := m.ReplicaCount > 0
+	w = w.Normalize()
 
 	categories := []CategoryResult{
 		penaltyConnections(m),
@@ -65,6 +73,10 @@ func Calculate(m RawMetrics) Result {
 		penaltyStorage(m),
 		penaltyReplication(m),
 		penaltyMaintenance(m),
+	}
+
+	for i := range categories {
+		categories[i].Weight = w.byCategory(categories[i].Name)
 	}
 
 	if !hasReplication {

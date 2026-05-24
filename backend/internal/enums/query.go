@@ -7,6 +7,7 @@ package enums
 //
 //	common/database_users
 //	common/health_score
+//	common/health_score_per_database
 //	common/in_recovery
 //	common/query_stats_available
 //	common/query_stats_enabled

@@ -44,6 +44,7 @@ type Repository interface {
 	GetConnectionWaitEvents(ctx context.Context, clusterName, instanceName string) ([]dto.WaitEvent, error)
 	GetDatabaseUsers(ctx context.Context, clusterName, instanceName string) ([]string, error)
 	GetHealthScoreMetrics(ctx context.Context, clusterName, instanceName string) (*dto.HealthScoreMetrics, error)
+	GetHealthScorePerDatabase(ctx context.Context, clusterName, instanceName string) ([]dto.HealthScoreDatabaseMetrics, error)
 	GetInvalidConstraints(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.InvalidConstraint, error)
 	GetDatabaseHealth(ctx context.Context, clusterName, instanceName, databaseName string) (*dto.DatabaseHealth, error)
 	GetDatabaseSize(ctx context.Context, clusterName, instanceName, databaseName string) (*dto.DatabaseSize, error)
