@@ -3526,6 +3526,9 @@ components:
         - storage
         - replication
         - maintenance
+        - horizon
+        - wal_checkpoint
+        - locks
         - source
       properties:
         connections:
@@ -3541,6 +3544,15 @@ components:
           type: number
           format: double
         maintenance:
+          type: number
+          format: double
+        horizon:
+          type: number
+          format: double
+        wal_checkpoint:
+          type: number
+          format: double
+        locks:
           type: number
           format: double
         source:
@@ -3562,6 +3574,9 @@ components:
         - storage
         - replication
         - maintenance
+        - horizon
+        - wal_checkpoint
+        - locks
       properties:
         connections:
           type: number
@@ -3580,6 +3595,18 @@ components:
           format: double
           minimum: 0
         maintenance:
+          type: number
+          format: double
+          minimum: 0
+        horizon:
+          type: number
+          format: double
+          minimum: 0
+        wal_checkpoint:
+          type: number
+          format: double
+          minimum: 0
+        locks:
           type: number
           format: double
           minimum: 0

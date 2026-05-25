@@ -145,20 +145,59 @@ func TestWorstDatabase(t *testing.T) {
 
 func TestPerDBWeights_DropsInapplicable(t *testing.T) {
 	in := Weights{
-		Connections: 0.30, // dropped
-		Performance: 0.20,
-		Storage:     0.20,
-		Replication: 0.10, // dropped
-		Maintenance: 0.20,
+		Connections:   0.30, // dropped
+		Performance:   0.20,
+		Storage:       0.20,
+		Replication:   0.10, // dropped
+		Maintenance:   0.20,
+		Horizon:       0.05, // dropped
+		WalCheckpoint: 0.05, // dropped
+		Locks:         0.05, // dropped
 	}
 
 	w := perDBWeights(in)
 
-	if w.Connections != 0 || w.Replication != 0 {
-		t.Errorf("connections/replication must be zero in per-DB weights, got %+v", w)
+	for _, ic := range []string{"connections", "replication", "horizon", "wal_checkpoint", "locks"} {
+		if w.byCategory(ic) != 0 {
+			t.Errorf("instance-only category %q must be zero, got %v", ic, w.byCategory(ic))
+		}
 	}
 
 	if math.Abs(w.Sum()-1.0) > 1e-9 {
 		t.Errorf("per-DB weights must be normalized to 1.0, got sum=%v", w.Sum())
+	}
+}
+
+func TestPerDBWeights_FallbackKeepsApplicableOnly(t *testing.T) {
+	// User zeroed all per-DB-applicable categories — we must fall back to
+	// defaults projected on the same applicable set, NOT to the full default
+	// vector (which would silently leak instance-only categories into the
+	// per-DB score).
+	in := Weights{
+		Connections:   0.50,
+		Performance:   0,
+		Storage:       0,
+		Replication:   0.30,
+		Maintenance:   0,
+		Horizon:       0.10,
+		WalCheckpoint: 0.05,
+		Locks:         0.05,
+	}
+
+	w := perDBWeights(in)
+
+	for _, ic := range []string{"connections", "replication", "horizon", "wal_checkpoint", "locks"} {
+		if w.byCategory(ic) != 0 {
+			t.Errorf("instance-only category %q must stay zero in fallback, got %v", ic, w.byCategory(ic))
+		}
+	}
+
+	if math.Abs(w.Sum()-1.0) > 1e-9 {
+		t.Errorf("fallback weights must be normalized to 1.0, got sum=%v", w.Sum())
+	}
+
+	// All three applicable categories should be > 0 (defaults are non-zero).
+	if w.Performance <= 0 || w.Storage <= 0 || w.Maintenance <= 0 {
+		t.Errorf("fallback must populate all applicable categories, got %+v", w)
 	}
 }

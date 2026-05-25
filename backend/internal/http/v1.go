@@ -234,16 +234,19 @@ func (s *Handlers) GetHealthScore(
 	ctx context.Context,
 	req serverhttp.GetHealthScoreRequestObject,
 ) (serverhttp.GetHealthScoreResponseObject, error) {
-	metrics, err := s.repo.GetHealthScoreMetrics(ctx, req.Params.ClusterName, req.Params.Instance)
+	metrics, err := s.repo.GetHealthScoreMetrics(ctx, req.Params.ClusterName, req.Params.Instance, "")
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetHealthScore404Response{}, fmt.Errorf("GetHealthScore | %w", err)
+		return serverhttp.GetHealthScore404Response{}, nil
 	}
 
 	if err != nil {
 		return nil, fmt.Errorf("GetHealthScore | %w", err)
 	}
 
-	weights := s.loadHealthWeights(ctx, req.Params.ClusterName)
+	weights, err := s.loadHealthWeights(ctx, req.Params.ClusterName)
+	if err != nil {
+		return nil, fmt.Errorf("GetHealthScore | loadHealthWeights | %w", err)
+	}
 
 	result := health.CalculateWithWeights(health.RawMetrics{
 		TotalConnections:          metrics.TotalConnections,
@@ -252,6 +255,7 @@ func (s *Handlers) GetHealthScore(
 		LongestTransactionSeconds: metrics.LongestTransactionSeconds,
 		MaxConnections:            metrics.MaxConnections,
 		CacheHitRatio:             metrics.CacheHitRatio,
+		TrackIoTimingEnabled:      metrics.TrackIoTimingEnabled,
 		MaxDeadRatio:              metrics.MaxDeadRatio,
 		AvgDeadRatio:              metrics.AvgDeadRatio,
 		TablesHighBloat:           metrics.TablesHighBloat,
@@ -262,6 +266,13 @@ func (s *Handlers) GetHealthScore(
 		MaxXidAge:                 metrics.MaxXidAge,
 		MaxVacuumAgeHours:         metrics.MaxVacuumAgeHours,
 		TablesNeverVacuumed:       metrics.TablesNeverVacuumed,
+		AutovacuumEnabled:         metrics.AutovacuumEnabled,
+		TrackCountsEnabled:        metrics.TrackCountsEnabled,
+		TablesWithAutovacuumOff:   metrics.TablesWithAutovacuumOff,
+		MaxRelfrozenxidAge:        metrics.MaxRelfrozenxidAge,
+		HorizonLagXids:            metrics.HorizonLagXids,
+		TimedCheckpoints:          metrics.TimedCheckpoints,
+		RequestedCheckpoints:      metrics.RequestedCheckpoints,
 	}, weights)
 
 	categories := make([]serverhttp.HealthScoreCategory, 0, len(result.Categories))
@@ -283,27 +294,40 @@ func (s *Handlers) GetHealthScore(
 }
 
 // loadHealthWeights returns per-cluster weights override from storage,
-// falling back to defaults when no override is configured or storage is unavailable.
-func (s *Handlers) loadHealthWeights(ctx context.Context, clusterName string) health.Weights {
+// or DefaultWeights when no storage is configured / no override exists.
+// A non-nil error is returned only when the storage read itself failed —
+// callers should propagate it (5xx) instead of silently scoring with defaults
+// while the storage backend is misbehaving. The returned Weights is always
+// DefaultWeights when err != nil, so the caller can choose graceful degradation.
+func (s *Handlers) loadHealthWeights(ctx context.Context, clusterName string) (health.Weights, error) {
 	if s.storage == nil {
-		return health.DefaultWeights()
+		return health.DefaultWeights(), nil
 	}
 
 	rec, err := s.storage.GetHealthWeights(ctx, clusterName)
-	if err != nil || rec == nil {
-		return health.DefaultWeights()
+	if err != nil {
+		return health.DefaultWeights(), err
 	}
 
-	return rec.Weights
+	if rec == nil {
+		return health.DefaultWeights(), nil
+	}
+
+	return rec.Weights, nil
 }
 
 func (s *Handlers) GetHealthScoreRecommendations(
 	ctx context.Context,
 	req serverhttp.GetHealthScoreRecommendationsRequestObject,
 ) (serverhttp.GetHealthScoreRecommendationsResponseObject, error) {
-	metrics, err := s.repo.GetHealthScoreMetrics(ctx, req.Params.ClusterName, req.Params.Instance)
+	database := ""
+	if req.Params.Database != nil {
+		database = *req.Params.Database
+	}
+
+	metrics, err := s.repo.GetHealthScoreMetrics(ctx, req.Params.ClusterName, req.Params.Instance, database)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetHealthScoreRecommendations404Response{}, fmt.Errorf("GetHealthScoreRecommendations | %w", err)
+		return serverhttp.GetHealthScoreRecommendations404Response{}, nil
 	}
 
 	if err != nil {
@@ -317,6 +341,7 @@ func (s *Handlers) GetHealthScoreRecommendations(
 		LongestTransactionSeconds: metrics.LongestTransactionSeconds,
 		MaxConnections:            metrics.MaxConnections,
 		CacheHitRatio:             metrics.CacheHitRatio,
+		TrackIoTimingEnabled:      metrics.TrackIoTimingEnabled,
 		MaxDeadRatio:              metrics.MaxDeadRatio,
 		AvgDeadRatio:              metrics.AvgDeadRatio,
 		TablesHighBloat:           metrics.TablesHighBloat,
@@ -327,10 +352,16 @@ func (s *Handlers) GetHealthScoreRecommendations(
 		MaxXidAge:                 metrics.MaxXidAge,
 		MaxVacuumAgeHours:         metrics.MaxVacuumAgeHours,
 		TablesNeverVacuumed:       metrics.TablesNeverVacuumed,
+		AutovacuumEnabled:         metrics.AutovacuumEnabled,
+		TrackCountsEnabled:        metrics.TrackCountsEnabled,
+		TablesWithAutovacuumOff:   metrics.TablesWithAutovacuumOff,
+		MaxRelfrozenxidAge:        metrics.MaxRelfrozenxidAge,
+		HorizonLagXids:            metrics.HorizonLagXids,
+		TimedCheckpoints:          metrics.TimedCheckpoints,
+		RequestedCheckpoints:      metrics.RequestedCheckpoints,
 	}
 
-	databaseScoped := req.Params.Database != nil && *req.Params.Database != ""
-	recs := health.Evaluate(raw, databaseScoped)
+	recs := health.Evaluate(raw, database != "")
 
 	out := make([]serverhttp.HealthScoreRecommendation, 0, len(recs))
 	for _, r := range recs {
@@ -367,14 +398,17 @@ func (s *Handlers) GetHealthScoreDatabases(
 ) (serverhttp.GetHealthScoreDatabasesResponseObject, error) {
 	metrics, err := s.repo.GetHealthScorePerDatabase(ctx, req.Params.ClusterName, req.Params.Instance)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetHealthScoreDatabases404Response{}, fmt.Errorf("GetHealthScoreDatabases | %w", err)
+		return serverhttp.GetHealthScoreDatabases404Response{}, nil
 	}
 
 	if err != nil {
 		return nil, fmt.Errorf("GetHealthScoreDatabases | %w", err)
 	}
 
-	weights := s.loadHealthWeights(ctx, req.Params.ClusterName)
+	weights, err := s.loadHealthWeights(ctx, req.Params.ClusterName)
+	if err != nil {
+		return nil, fmt.Errorf("GetHealthScoreDatabases | loadHealthWeights | %w", err)
+	}
 
 	per := make([]health.PerDBMetrics, 0, len(metrics))
 	for _, m := range metrics {

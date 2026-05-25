@@ -637,7 +637,10 @@
             "performance": "Производительность",
             "storage": "Хранение",
             "replication": "Репликация",
-            "maintenance": "Обслуживание"
+            "maintenance": "Обслуживание",
+            "horizon": "Горизонт",
+            "wal_checkpoint": "WAL и checkpoint",
+            "locks": "Блокировки"
         },
         "details": {
             "connection_ratio": "Загрузка подключений",
@@ -653,7 +656,11 @@
             "disconnected_replicas": "Отключённые реплики",
             "max_xid_age": "Макс. возраст XID",
             "max_vacuum_age_hours": "Макс. возраст vacuum (ч)",
-            "tables_never_vacuumed": "Таблиц без vacuum"
+            "tables_never_vacuumed": "Таблиц без vacuum",
+            "horizon_lag_xids": "Отставание горизонта (XID)",
+            "requested_checkpoint_ratio": "Доля внеплановых checkpoint",
+            "timed_checkpoints": "Checkpoint по расписанию",
+            "requested_checkpoints": "Checkpoint по требованию"
         },
         "page": {
             "title": "Health Score",
@@ -742,8 +749,49 @@
             "xid_wraparound_risk": {
                 "title": "Риск XID wraparound",
                 "short": "Возраст XID: {metric_value}.",
-                "detail": "При приближении к 2 млрд база уйдёт в read-only. Запустите VACUUM FREEZE для проблемных БД.",
+                "detail": "Пороги соответствуют механикам PG: 150M — начинается агрессивная заморозка (vacuum_freeze_table_age), 200M — срабатывает аварийная автоочистка (autovacuum_freeze_max_age), 1.6B — включается failsafe-режим без очистки индексов (vacuum_failsafe_age). При 2B база уйдёт в read-only. Запустите VACUUM FREEZE для проблемных БД.",
                 "sql": "-- проверить возраст XID по базам\nSELECT datname, age(datfrozenxid) AS xid_age\nFROM pg_database\nORDER BY xid_age DESC;"
+            },
+            "autovacuum_disabled": {
+                "title": "Автоочистка выключена",
+                "short": "Параметр autovacuum=off. Без неё мёртвые версии будут копиться без ручного вмешательства.",
+                "detail": "Включите autovacuum в postgresql.conf или через ALTER SYSTEM. Без этого база обречена на ручной режим VACUUM, индексы и таблицы будут раздуваться.",
+                "sql": "ALTER SYSTEM SET autovacuum = on;\nSELECT pg_reload_conf();"
+            },
+            "track_counts_disabled": {
+                "title": "track_counts выключен",
+                "short": "Без статистики использования автоочистка не сможет решить, какие таблицы чистить.",
+                "detail": "Параметр track_counts критичен для работы autovacuum: он определяет «активные» базы и таблицы. Включите его.",
+                "sql": "ALTER SYSTEM SET track_counts = on;\nSELECT pg_reload_conf();"
+            },
+            "tables_with_autovacuum_off": {
+                "title": "Таблицы с выключенной автоочисткой",
+                "short": "Найдено {metric_value} таблиц с autovacuum_enabled=false на уровне storage параметров.",
+                "detail": "Обычно так не делают намеренно — это часто остаточные настройки от старых миграций или экспериментов. Проверьте, что отключение оправдано.",
+                "sql": "SELECT relname, reloptions\nFROM pg_class\nWHERE 'autovacuum_enabled=false' = ANY(reloptions);"
+            },
+            "relfrozenxid_age_outlier": {
+                "title": "Старая таблица без заморозки",
+                "short": "Максимальный возраст relfrozenxid: {metric_value}.",
+                "detail": "В кластере есть таблицы, которые давно не обрабатывались autovacuum freeze. Найдите их и запустите VACUUM FREEZE.",
+                "sql": "SELECT relname, age(relfrozenxid) AS age\nFROM pg_class\nWHERE relkind IN ('r','m','t')\nORDER BY age DESC\nLIMIT 10;"
+            },
+            "horizon_lag_xids": {
+                "title": "Горизонт удерживается долгой транзакцией",
+                "short": "Горизонт отстал на {metric_value} транзакций — очистка не может удалить мёртвые версии.",
+                "detail": "Долгие транзакции (Repeatable Read или idle in transaction) удерживают горизонт БД. Очистка пропускает мёртвые версии «но они ещё не подлежат удалению». Найдите процесс с минимальным backend_xmin и завершите.",
+                "sql": "SELECT pid, usename, state, query, now() - xact_start AS duration\nFROM pg_stat_activity\nWHERE backend_xmin IS NOT NULL\nORDER BY backend_xmin\nLIMIT 5;"
+            },
+            "requested_checkpoint_ratio": {
+                "title": "Слишком частые внеплановые checkpoints",
+                "short": "Доля requested checkpoints: {metric_value} (timed={timed}, requested={requested}).",
+                "detail": "Внеплановые checkpoint'ы происходят при заполнении max_wal_size. Увеличьте max_wal_size или checkpoint_timeout. Здоровый показатель — практически все checkpoint'ы по расписанию (timed)."
+            },
+            "track_io_timing_disabled": {
+                "title": "track_io_timing выключен",
+                "short": "Без него недоступны детальные тайминги I/O в EXPLAIN ANALYZE и pg_stat_statements.",
+                "detail": "На современных ОС оверхед минимален. Включите для детального анализа I/O узких мест.",
+                "sql": "ALTER SYSTEM SET track_io_timing = on;\nSELECT pg_reload_conf();"
             },
             "stale_vacuum": {
                 "title": "Vacuum давно не работал",

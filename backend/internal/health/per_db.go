@@ -144,8 +144,14 @@ func WorstDatabase(scores []DatabaseScore) *DatabaseScore {
 
 // perDBWeights extracts and renormalizes only the per-DB-applicable categories
 // (Performance, Storage, Maintenance) so they sum to 1.0 within the per-DB
-// score computation. Connections and Replication weights from the input
-// Weights are dropped — they have no per-DB meaning.
+// score computation. Instance-only weights (Connections, Replication, Horizon,
+// WalCheckpoint, Locks) from the input Weights are dropped — they have no
+// per-DB meaning.
+//
+// When the caller zeroed all applicable categories, we fall back to the
+// defaults projected onto the same applicable set, not to the full default
+// vector — otherwise the per-DB score would silently start counting
+// instance-only categories.
 func perDBWeights(w Weights) Weights {
 	out := Weights{
 		Performance: w.Performance,
@@ -153,9 +159,13 @@ func perDBWeights(w Weights) Weights {
 		Maintenance: w.Maintenance,
 	}
 
-	sum := out.Sum()
-	if sum <= 0 {
-		return DefaultWeights().Normalize()
+	if out.Sum() <= 0 {
+		def := DefaultWeights()
+		out = Weights{
+			Performance: def.Performance,
+			Storage:     def.Storage,
+			Maintenance: def.Maintenance,
+		}
 	}
 
 	return out.Normalize()

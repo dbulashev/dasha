@@ -74,7 +74,6 @@ maintenance_metrics AS (
     FROM pg_stat_user_tables, pg_database
     WHERE pg_database.datname = current_database()
 ),
--- Horizon: oldest backend_xmin gives the longest-held DB horizon in xid age.
 horizon_metrics AS (
     SELECT
         COALESCE(MAX(age(backend_xmin))::bigint, 0) AS horizon_lag_xids
@@ -82,7 +81,6 @@ horizon_metrics AS (
     WHERE backend_xmin IS NOT NULL
       AND datname = current_database()
 ),
--- Per-table maintenance: scans pg_class once for relfrozenxid + storage params.
 per_table_metrics AS (
     SELECT
         COUNT(*) FILTER (
@@ -92,9 +90,8 @@ per_table_metrics AS (
     FROM pg_class
     WHERE relkind IN ('r','m','t')
 ),
--- GUC checks for autovacuum hygiene and IO timing tracking.
--- Pulled from pg_settings (one scan) instead of current_setting() to avoid
--- any session-level overrides; setting is text 'on'/'off' for boolean GUCs.
+-- pg_settings.setting is reliably 'on'/'off' text for boolean GUCs; avoids any
+-- session-level overrides that current_setting() might pick up.
 guc_metrics AS (
     SELECT
         COALESCE(BOOL_OR(name = 'autovacuum'      AND setting = 'on'), false) AS autovacuum_enabled,
@@ -103,36 +100,30 @@ guc_metrics AS (
     FROM pg_settings
     WHERE name IN ('autovacuum', 'track_counts', 'track_io_timing')
 ),
--- Checkpoint stats: base template targets the newest supported PG (17+) which
--- exposes counters in pg_stat_checkpointer. The 170000/ override covers
--- earlier PG versions still reading them from pg_stat_bgwriter.
+-- PG 14-16 fork: checkpoint counters live in pg_stat_bgwriter.
+-- They moved to pg_stat_checkpointer in PG 17 (see base template).
 checkpoint_metrics AS (
     SELECT
-        COALESCE(num_timed, 0)::bigint AS timed_checkpoints,
-        COALESCE(num_requested, 0)::bigint AS requested_checkpoints
-    FROM pg_stat_checkpointer
+        COALESCE(checkpoints_timed, 0)::bigint AS timed_checkpoints,
+        COALESCE(checkpoints_req, 0)::bigint AS requested_checkpoints
+    FROM pg_stat_bgwriter
     LIMIT 1
 )
 SELECT
-    -- connections
     c.total_connections,
     c.active_connections,
     c.idle_in_transaction,
     c.longest_transaction_seconds,
     c.max_connections,
-    -- performance
     p.cache_hit_ratio,
     g.track_io_timing_enabled,
-    -- storage
     s.max_dead_ratio,
     s.avg_dead_ratio,
     s.tables_high_bloat,
-    -- replication
     r.replica_count,
     r.max_replay_lag_seconds,
     r.max_lag_bytes,
     r.disconnected_replicas,
-    -- maintenance
     m.max_xid_age,
     m.max_vacuum_age_hours,
     m.tables_never_vacuumed,
@@ -140,9 +131,7 @@ SELECT
     g.track_counts_enabled,
     pt.tables_with_autovacuum_off,
     pt.max_relfrozenxid_age,
-    -- horizon
     h.horizon_lag_xids,
-    -- wal & checkpoint
     cp.timed_checkpoints,
     cp.requested_checkpoints
 FROM connection_metrics c,

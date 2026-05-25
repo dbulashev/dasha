@@ -593,7 +593,10 @@
       "performance": "Performance",
       "storage": "Speicherung",
       "replication": "Replikation",
-      "maintenance": "Wartung"
+      "maintenance": "Wartung",
+      "horizon": "Horizon",
+      "wal_checkpoint": "WAL & Checkpoint",
+      "locks": "Sperren"
     },
     "details": {
       "connection_ratio": "Verbindungsauslastung",
@@ -609,7 +612,11 @@
       "disconnected_replicas": "Getrennte Replikate",
       "max_xid_age": "Max. XID-Alter",
       "max_vacuum_age_hours": "Max. VACUUM-Alter (h)",
-      "tables_never_vacuumed": "Tabellen ohne VACUUM"
+      "tables_never_vacuumed": "Tabellen ohne VACUUM",
+      "horizon_lag_xids": "Horizont-Rückstand (XID)",
+      "requested_checkpoint_ratio": "Anteil außerplanmäßiger Checkpoints",
+      "timed_checkpoints": "Geplante Checkpoints",
+      "requested_checkpoints": "Angeforderte Checkpoints"
     },
     "page": {
       "title": "Health Score",
@@ -698,8 +705,49 @@
       "xid_wraparound_risk": {
         "title": "XID-Wraparound-Risiko",
         "short": "XID-Alter: {metric_value}.",
-        "detail": "Bei Annäherung an 2 Mrd. geht die DB in read-only. VACUUM FREEZE ausführen.",
+        "detail": "Schwellen entsprechen PG-Mechanismen: 150M — aggressives Freeze (vacuum_freeze_table_age), 200M — Notfall-Autovacuum (autovacuum_freeze_max_age), 1.6B — Failsafe-Modus ohne Index-Cleanup (vacuum_failsafe_age). Bei 2B geht die DB in read-only. VACUUM FREEZE für problematische DBs ausführen.",
         "sql": "-- XID-Alter pro Datenbank prüfen\nSELECT datname, age(datfrozenxid) AS xid_age\nFROM pg_database\nORDER BY xid_age DESC;"
+      },
+      "autovacuum_disabled": {
+        "title": "Autovacuum ist aus",
+        "short": "Parameter autovacuum=off. Ohne ihn häufen sich tote Tupel ohne manuellen Eingriff.",
+        "detail": "Aktivieren Sie autovacuum in postgresql.conf oder via ALTER SYSTEM. Ohne ihn ist die DB auf manuellen VACUUM angewiesen, Indizes und Tabellen schwellen an.",
+        "sql": "ALTER SYSTEM SET autovacuum = on;\nSELECT pg_reload_conf();"
+      },
+      "track_counts_disabled": {
+        "title": "track_counts ist aus",
+        "short": "Ohne Nutzungsstatistik kann Autovacuum nicht entscheiden, welche Tabellen zu bereinigen sind.",
+        "detail": "Der Parameter track_counts ist kritisch für Autovacuum: er identifiziert «aktive» Datenbanken und Tabellen.",
+        "sql": "ALTER SYSTEM SET track_counts = on;\nSELECT pg_reload_conf();"
+      },
+      "tables_with_autovacuum_off": {
+        "title": "Tabellen mit deaktiviertem Autovacuum",
+        "short": "Es wurden {metric_value} Tabellen mit autovacuum_enabled=false gefunden.",
+        "detail": "Selten ist das beabsichtigt — meist sind es Reste alter Migrationen oder Experimente.",
+        "sql": "SELECT relname, reloptions\nFROM pg_class\nWHERE 'autovacuum_enabled=false' = ANY(reloptions);"
+      },
+      "relfrozenxid_age_outlier": {
+        "title": "Alte Tabelle ohne Freeze",
+        "short": "Max. relfrozenxid-Alter: {metric_value}.",
+        "detail": "Im Cluster gibt es Tabellen, die lange nicht von autovacuum freeze bearbeitet wurden.",
+        "sql": "SELECT relname, age(relfrozenxid) AS age\nFROM pg_class\nWHERE relkind IN ('r','m','t')\nORDER BY age DESC\nLIMIT 10;"
+      },
+      "horizon_lag_xids": {
+        "title": "Horizont von langer Transaktion gehalten",
+        "short": "Horizont liegt {metric_value} Transaktionen zurück — VACUUM kann tote Versionen nicht löschen.",
+        "detail": "Lange Transaktionen (Repeatable Read oder idle in transaction) halten den DB-Horizont. VACUUM überspringt tote Versionen «aber noch nicht entfernbar». Finden Sie den Prozess mit dem kleinsten backend_xmin und beenden Sie ihn.",
+        "sql": "SELECT pid, usename, state, query, now() - xact_start AS duration\nFROM pg_stat_activity\nWHERE backend_xmin IS NOT NULL\nORDER BY backend_xmin\nLIMIT 5;"
+      },
+      "requested_checkpoint_ratio": {
+        "title": "Zu viele außerplanmäßige Checkpoints",
+        "short": "Anteil requested checkpoints: {metric_value} (timed={timed}, requested={requested}).",
+        "detail": "Außerplanmäßige Checkpoints entstehen bei Erreichen von max_wal_size. Erhöhen Sie max_wal_size oder checkpoint_timeout."
+      },
+      "track_io_timing_disabled": {
+        "title": "track_io_timing ist aus",
+        "short": "Ohne ihn sind detaillierte I/O-Timings in EXPLAIN ANALYZE und pg_stat_statements nicht verfügbar.",
+        "detail": "Auf modernen Betriebssystemen ist der Overhead minimal. Aktivieren für detaillierte I/O-Engpassanalyse.",
+        "sql": "ALTER SYSTEM SET track_io_timing = on;\nSELECT pg_reload_conf();"
       },
       "stale_vacuum": {
         "title": "VACUUM lief lange nicht",

@@ -50,6 +50,12 @@ CREATE TABLE IF NOT EXISTS health_score_weights (
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_by   TEXT
 )`
+
+	addHealthScoreWeightsCategoriesSQL = `
+ALTER TABLE health_score_weights
+    ADD COLUMN IF NOT EXISTS horizon        DOUBLE PRECISION NOT NULL DEFAULT 0.10 CHECK (horizon        >= 0),
+    ADD COLUMN IF NOT EXISTS wal_checkpoint DOUBLE PRECISION NOT NULL DEFAULT 0.10 CHECK (wal_checkpoint >= 0),
+    ADD COLUMN IF NOT EXISTS locks          DOUBLE PRECISION NOT NULL DEFAULT 0.10 CHECK (locks          >= 0)`
 )
 
 // Migrate creates parent tables and partitions for the next partitionDaysAhead days.
@@ -86,6 +92,7 @@ func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
 		createSnapshotsIdxSQL,
 		addPgssStatsResetSQL,
 		createHealthScoreWeightsSQL,
+		addHealthScoreWeightsCategoriesSQL,
 	} {
 		if _, err := s.pool.Exec(ctx, ddl); err != nil {
 			return fmt.Errorf("storage: migrate: %w", err)

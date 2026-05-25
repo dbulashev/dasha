@@ -16,4 +16,10 @@ export interface HealthScoreWeightsUpdate {
   replication: number
   /** @minimum 0 */
   maintenance: number
+  /** @minimum 0 */
+  horizon: number
+  /** @minimum 0 */
+  wal_checkpoint: number
+  /** @minimum 0 */
+  locks: number
 }

@@ -30,7 +30,8 @@ type HealthScoreMetrics struct {
 	MaxConnections            int
 
 	// Performance
-	CacheHitRatio float64
+	CacheHitRatio        float64
+	TrackIoTimingEnabled bool
 
 	// Storage
 	MaxDeadRatio    float64
@@ -44,7 +45,18 @@ type HealthScoreMetrics struct {
 	DisconnectedReplicas int
 
 	// Maintenance
-	MaxXidAge           int64
-	MaxVacuumAgeHours   float64
-	TablesNeverVacuumed int
+	MaxXidAge               int64
+	MaxVacuumAgeHours       float64
+	TablesNeverVacuumed     int
+	AutovacuumEnabled       bool
+	TrackCountsEnabled      bool
+	TablesWithAutovacuumOff int
+	MaxRelfrozenxidAge      int64
+
+	// Horizon
+	HorizonLagXids int64
+
+	// WAL & Checkpoint
+	TimedCheckpoints     int64
+	RequestedCheckpoints int64
 }

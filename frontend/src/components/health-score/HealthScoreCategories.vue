@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { HealthScoreCategory } from '@/api/models/index'
+import { fmtBytes } from '@/utils/format'
 
 const props = defineProps<{
   categories: HealthScoreCategory[]
@@ -31,6 +32,9 @@ function categoryIcon(name: string): string {
     storage: 'mdi-database',
     replication: 'mdi-content-copy',
     maintenance: 'mdi-wrench',
+    horizon: 'mdi-axis-arrow',
+    wal_checkpoint: 'mdi-file-document-edit',
+    locks: 'mdi-lock-outline',
   }
   return icons[name] ?? 'mdi-circle'
 }
@@ -38,15 +42,9 @@ function categoryIcon(name: string): string {
 function formatDetail(key: string, value: number): string {
   if (key === 'cache_hit_ratio') return value.toFixed(2) + '%'
   if (key.endsWith('_ratio')) return value.toFixed(3)
-  if (key === 'max_lag_bytes') return formatBytes(value)
+  if (key === 'max_lag_bytes') return fmtBytes(value)
   if (key.endsWith('_seconds') || key.endsWith('_hours')) return value.toFixed(1)
   return String(value)
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return bytes + ' B'
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
-  return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
 
 function detailLabel(key: string): string {

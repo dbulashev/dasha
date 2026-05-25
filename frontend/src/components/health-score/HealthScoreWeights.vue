@@ -16,9 +16,26 @@ import { useAuthStore } from '@/stores/auth'
 import { assertOk } from '@/utils/api'
 import { getErrorMessage } from '@/utils/error'
 
-type WeightKey = 'connections' | 'performance' | 'storage' | 'replication' | 'maintenance'
+type WeightKey =
+  | 'connections'
+  | 'performance'
+  | 'storage'
+  | 'replication'
+  | 'maintenance'
+  | 'horizon'
+  | 'wal_checkpoint'
+  | 'locks'
 
-const CATEGORIES: WeightKey[] = ['connections', 'performance', 'storage', 'replication', 'maintenance']
+const CATEGORIES: WeightKey[] = [
+  'connections',
+  'performance',
+  'storage',
+  'replication',
+  'maintenance',
+  'horizon',
+  'wal_checkpoint',
+  'locks',
+]
 const TOTAL = 100
 
 const { clusterName, hostName } = useClusterInfo()
@@ -48,6 +65,9 @@ const draft = ref<Record<WeightKey, number>>({
   storage: 0,
   replication: 0,
   maintenance: 0,
+  horizon: 0,
+  wal_checkpoint: 0,
+  locks: 0,
 })
 
 const saving = ref(false)
@@ -97,7 +117,7 @@ function adjustSlider(changedKey: WeightKey, rawValue: number) {
     draft.value[others[others.length - 1]] = Math.max(0, leftToDistribute)
   } else if (others.length > 0) {
     const perOther = Math.floor(remaining / others.length)
-    let leftover = remaining - perOther * others.length
+    const leftover = remaining - perOther * others.length
     for (const k of others) {
       draft.value[k] = perOther
     }
@@ -118,6 +138,9 @@ async function save() {
         storage: draft.value.storage,
         replication: draft.value.replication,
         maintenance: draft.value.maintenance,
+        horizon: draft.value.horizon,
+        wal_checkpoint: draft.value.wal_checkpoint,
+        locks: draft.value.locks,
       },
       { cluster_name: clusterName.value },
     )

@@ -12,8 +12,14 @@ import (
 	"github.com/dbulashev/dasha/internal/query"
 )
 
-func (p *PgxPool) GetHealthScoreMetrics(ctx context.Context, clusterName, instanceName string) (*dto.HealthScoreMetrics, error) {
-	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, "")
+// GetHealthScoreMetrics returns instance-level health metrics. When databaseName
+// is non-empty, the query runs against that database's pool so that per-DB
+// fields (cache_hit_ratio, dead_tuples, vacuum age) reflect the selected
+// database; instance-wide fields (pg_stat_activity, replication, GUCs,
+// pg_database) are unaffected. Pass "" to fall back to the first pool found
+// for the (cluster, instance) pair — the previous behaviour.
+func (p *PgxPool) GetHealthScoreMetrics(ctx context.Context, clusterName, instanceName, databaseName string) (*dto.HealthScoreMetrics, error) {
+	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
 	if err != nil {
 		return nil, fmt.Errorf("GetHealthScoreMetrics | %w", err)
 	}
@@ -40,6 +46,7 @@ func (p *PgxPool) GetHealthScoreMetrics(ctx context.Context, clusterName, instan
 		&m.LongestTransactionSeconds,
 		&m.MaxConnections,
 		&m.CacheHitRatio,
+		&m.TrackIoTimingEnabled,
 		&m.MaxDeadRatio,
 		&m.AvgDeadRatio,
 		&m.TablesHighBloat,
@@ -50,6 +57,13 @@ func (p *PgxPool) GetHealthScoreMetrics(ctx context.Context, clusterName, instan
 		&m.MaxXidAge,
 		&m.MaxVacuumAgeHours,
 		&m.TablesNeverVacuumed,
+		&m.AutovacuumEnabled,
+		&m.TrackCountsEnabled,
+		&m.TablesWithAutovacuumOff,
+		&m.MaxRelfrozenxidAge,
+		&m.HorizonLagXids,
+		&m.TimedCheckpoints,
+		&m.RequestedCheckpoints,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("GetHealthScoreMetrics | %w", err)
@@ -122,6 +136,13 @@ func (p *PgxPool) GetHealthScorePerDatabase(
 		}
 
 		results = append(results, m)
+	}
+
+	// All per-DB collections failed — surface as error so the handler returns
+	// 5xx instead of an empty list that looks like a valid "no databases" state.
+	if len(results) == 0 {
+		return nil, fmt.Errorf("GetHealthScorePerDatabase | %s/%s: all %d database collections failed",
+			clusterName, instanceName, len(pools))
 	}
 
 	return results, nil

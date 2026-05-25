@@ -12,6 +12,9 @@ export interface HealthScoreWeights {
   storage: number
   replication: number
   maintenance: number
+  horizon: number
+  wal_checkpoint: number
+  locks: number
   source: HealthScoreWeightsSource
   /** @nullable */
   updated_at?: string | null

@@ -28,6 +28,7 @@ func (s *Storage) GetHealthWeights(ctx context.Context, clusterName string) (*He
 
 	err := s.pool.QueryRow(ctx, `
 		SELECT connections, performance, storage, replication, maintenance,
+		       horizon, wal_checkpoint, locks,
 		       updated_at, updated_by
 		FROM health_score_weights
 		WHERE cluster_name = $1`, clusterName,
@@ -37,6 +38,9 @@ func (s *Storage) GetHealthWeights(ctx context.Context, clusterName string) (*He
 		&rec.Weights.Storage,
 		&rec.Weights.Replication,
 		&rec.Weights.Maintenance,
+		&rec.Weights.Horizon,
+		&rec.Weights.WalCheckpoint,
+		&rec.Weights.Locks,
 		&rec.UpdatedAt,
 		&updatedBy,
 	)
@@ -70,18 +74,25 @@ func (s *Storage) UpsertHealthWeights(
 
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO health_score_weights
-			(cluster_name, connections, performance, storage, replication, maintenance, updated_at, updated_by)
-		VALUES ($1, $2, $3, $4, $5, $6, now(), $7)
+			(cluster_name,
+			 connections, performance, storage, replication, maintenance,
+			 horizon, wal_checkpoint, locks,
+			 updated_at, updated_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now(), $10)
 		ON CONFLICT (cluster_name) DO UPDATE SET
-			connections = EXCLUDED.connections,
-			performance = EXCLUDED.performance,
-			storage     = EXCLUDED.storage,
-			replication = EXCLUDED.replication,
-			maintenance = EXCLUDED.maintenance,
-			updated_at  = now(),
-			updated_by  = EXCLUDED.updated_by`,
+			connections    = EXCLUDED.connections,
+			performance    = EXCLUDED.performance,
+			storage        = EXCLUDED.storage,
+			replication    = EXCLUDED.replication,
+			maintenance    = EXCLUDED.maintenance,
+			horizon        = EXCLUDED.horizon,
+			wal_checkpoint = EXCLUDED.wal_checkpoint,
+			locks          = EXCLUDED.locks,
+			updated_at     = now(),
+			updated_by     = EXCLUDED.updated_by`,
 		clusterName,
 		w.Connections, w.Performance, w.Storage, w.Replication, w.Maintenance,
+		w.Horizon, w.WalCheckpoint, w.Locks,
 		by,
 	)
 	if err != nil {

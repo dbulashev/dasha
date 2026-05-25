@@ -1,8 +1,41 @@
 package health
 
 import (
+	"math"
 	"testing"
 )
+
+func TestCalculateWithWeights_InvalidFallsBackToDefaults(t *testing.T) {
+	m := RawMetrics{
+		TotalConnections: 5, MaxConnections: 100, CacheHitRatio: 99.5,
+		ReplicaCount: 1, MaxReplayLagSeconds: 0.1,
+		MaxXidAge: 50_000_000, MaxVacuumAgeHours: 12,
+		AutovacuumEnabled: true, TrackCountsEnabled: true, TrackIoTimingEnabled: true,
+		TimedCheckpoints: 5,
+	}
+
+	// Compare against known-good baseline (defaults).
+	want := CalculateWithWeights(m, DefaultWeights()).Score
+
+	cases := []struct {
+		name string
+		w    Weights
+	}{
+		{"all zero", Weights{}},
+		{"NaN in one field", Weights{Connections: math.NaN(), Performance: 0.5}},
+		{"+Inf", Weights{Storage: math.Inf(1)}},
+		{"negative", Weights{Connections: -0.5, Performance: 0.5}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := CalculateWithWeights(m, tc.w).Score
+			if math.Abs(got-want) > 0.1 {
+				t.Errorf("invalid weights should fall back to defaults: got score=%v, want=%v", got, want)
+			}
+		})
+	}
+}
 
 func TestCalculate_HealthyDatabase(t *testing.T) {
 	m := RawMetrics{
@@ -217,12 +250,16 @@ func TestPenaltyConnections_ZeroMaxConnections(t *testing.T) {
 }
 
 func TestRedistributeWeights(t *testing.T) {
+	// Use the 8-category default arrangement (sum = 1.00).
 	categories := []CategoryResult{
-		{Name: "connections", Weight: 0.20},
-		{Name: "performance", Weight: 0.25},
-		{Name: "storage", Weight: 0.20},
+		{Name: "connections", Weight: 0.15},
+		{Name: "performance", Weight: 0.15},
+		{Name: "storage", Weight: 0.10},
 		{Name: "replication", Weight: 0.15},
-		{Name: "maintenance", Weight: 0.20},
+		{Name: "maintenance", Weight: 0.15},
+		{Name: "horizon", Weight: 0.10},
+		{Name: "wal_checkpoint", Weight: 0.10},
+		{Name: "locks", Weight: 0.10},
 	}
 
 	redistributeWeights(categories)
@@ -239,16 +276,19 @@ func TestRedistributeWeights(t *testing.T) {
 		t.Errorf("total weights should sum to ~1.0 after redistribution, got %v", total)
 	}
 
-	// Check proportional redistribution
+	// Replication's 0.15 is split across the 7 remaining categories in proportion
+	// to their pre-redistribution weights (sum 0.85).
+	// Categories at 0.15 → 0.15 + 0.15*(0.15/0.85) ≈ 0.1765
+	// Categories at 0.10 → 0.10 + 0.15*(0.10/0.85) ≈ 0.1176
 	for _, c := range categories {
 		switch c.Name {
-		case "connections":
-			if c.Weight < 0.235 || c.Weight > 0.236 {
-				t.Errorf("connections weight should be ~0.2353, got %v", c.Weight)
+		case "connections", "performance", "maintenance":
+			if c.Weight < 0.175 || c.Weight > 0.178 {
+				t.Errorf("%s weight should be ~0.1765, got %v", c.Name, c.Weight)
 			}
-		case "performance":
-			if c.Weight < 0.294 || c.Weight > 0.295 {
-				t.Errorf("performance weight should be ~0.2941, got %v", c.Weight)
+		case "storage", "horizon", "wal_checkpoint", "locks":
+			if c.Weight < 0.117 || c.Weight > 0.119 {
+				t.Errorf("%s weight should be ~0.1176, got %v", c.Name, c.Weight)
 			}
 		}
 	}

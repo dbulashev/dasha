@@ -34,6 +34,15 @@ func TestEvaluate_HealthyDatabaseTriggersNoRules(t *testing.T) {
 		MaxReplayLagSeconds: 0.1,
 		MaxXidAge:           50_000_000,
 		MaxVacuumAgeHours:   12,
+		// Healthy state for new P1 rules:
+		AutovacuumEnabled:    true,
+		TrackCountsEnabled:   true,
+		TrackIoTimingEnabled: true,
+		HorizonLagXids:       0,
+		MaxRelfrozenxidAge:   50_000_000,
+		// Below requested_checkpoint_ratio's sample threshold (< 10 total).
+		TimedCheckpoints:     5,
+		RequestedCheckpoints: 0,
 	}
 
 	got := Evaluate(m, false)
@@ -173,15 +182,17 @@ func TestRule_DisconnectedReplicasSeverity(t *testing.T) {
 }
 
 func TestRule_XidWraparoundRisk(t *testing.T) {
+	// Recalibrated thresholds: 150M (vacuum_freeze_table_age),
+	// 200M (autovacuum_freeze_max_age), 1.6B (vacuum_failsafe_age).
 	r := findRule(t, "xid_wraparound_risk")
 	cases := []struct {
 		age  int64
 		want Severity
 	}{
 		{100_000_000, ""},
-		{600_000_000, SeverityLow},
-		{1_100_000_000, SeverityMedium},
-		{1_800_000_000, SeverityHigh},
+		{160_000_000, SeverityLow},     // > 150M, < 200M
+		{250_000_000, SeverityMedium},  // > 200M, < 1.6B
+		{1_700_000_000, SeverityHigh},  // > 1.6B (failsafe)
 	}
 
 	for _, tc := range cases {
@@ -197,6 +208,137 @@ func TestRule_XidWraparoundRisk(t *testing.T) {
 
 		if hit == nil || hit.Severity != tc.want {
 			t.Errorf("xid_age %d → want %s, got %v", tc.age, tc.want, hit)
+		}
+	}
+}
+
+func TestRule_AutovacuumDisabled(t *testing.T) {
+	r := findRule(t, "autovacuum_disabled")
+
+	if hit := r.Evaluate(RawMetrics{AutovacuumEnabled: true}); hit != nil {
+		t.Errorf("enabled → nil, got %+v", hit)
+	}
+
+	if hit := r.Evaluate(RawMetrics{AutovacuumEnabled: false}); hit == nil || hit.Severity != SeverityHigh {
+		t.Errorf("disabled → HIGH, got %+v", hit)
+	}
+}
+
+func TestRule_TrackCountsDisabled(t *testing.T) {
+	r := findRule(t, "track_counts_disabled")
+
+	if hit := r.Evaluate(RawMetrics{TrackCountsEnabled: true}); hit != nil {
+		t.Errorf("enabled → nil, got %+v", hit)
+	}
+
+	if hit := r.Evaluate(RawMetrics{TrackCountsEnabled: false}); hit == nil || hit.Severity != SeverityHigh {
+		t.Errorf("disabled → HIGH, got %+v", hit)
+	}
+}
+
+func TestRule_TablesWithAutovacuumOff(t *testing.T) {
+	r := findRule(t, "tables_with_autovacuum_off")
+
+	if hit := r.Evaluate(RawMetrics{TablesWithAutovacuumOff: 0}); hit != nil {
+		t.Errorf("0 → nil, got %+v", hit)
+	}
+
+	if hit := r.Evaluate(RawMetrics{TablesWithAutovacuumOff: 1}); hit == nil || hit.Severity != SeverityLow {
+		t.Errorf("1 → LOW, got %+v", hit)
+	}
+}
+
+func TestRule_RelfrozenxidAgeOutlier(t *testing.T) {
+	// Shares thresholds with xid_wraparound_risk.
+	r := findRule(t, "relfrozenxid_age_outlier")
+
+	if hit := r.Evaluate(RawMetrics{MaxRelfrozenxidAge: 100_000_000}); hit != nil {
+		t.Errorf("100M → nil, got %+v", hit)
+	}
+
+	if hit := r.Evaluate(RawMetrics{MaxRelfrozenxidAge: 1_700_000_000}); hit == nil || hit.Severity != SeverityHigh {
+		t.Errorf("1.7B → HIGH, got %+v", hit)
+	}
+}
+
+func TestRule_HorizonLagXids(t *testing.T) {
+	r := findRule(t, "horizon_lag_xids")
+	cases := []struct {
+		lag  int64
+		want Severity
+	}{
+		{500_000, ""},
+		{5_000_000, SeverityLow},
+		{50_000_000, SeverityMedium},
+		{200_000_000, SeverityHigh},
+	}
+
+	for _, tc := range cases {
+		hit := r.Evaluate(RawMetrics{HorizonLagXids: tc.lag})
+
+		if tc.want == "" {
+			if hit != nil {
+				t.Errorf("lag %d → want nil, got %v", tc.lag, hit.Severity)
+			}
+
+			continue
+		}
+
+		if hit == nil || hit.Severity != tc.want {
+			t.Errorf("lag %d → want %s, got %v", tc.lag, tc.want, hit)
+		}
+	}
+}
+
+func TestRule_RequestedCheckpointRatio(t *testing.T) {
+	r := findRule(t, "requested_checkpoint_ratio")
+
+	// Below sample-count threshold → no signal regardless of ratio.
+	if hit := r.Evaluate(RawMetrics{TimedCheckpoints: 5, RequestedCheckpoints: 4}); hit != nil {
+		t.Errorf("low sample count → nil, got %+v", hit)
+	}
+
+	// Healthy: only timed checkpoints.
+	if hit := r.Evaluate(RawMetrics{TimedCheckpoints: 100, RequestedCheckpoints: 0}); hit != nil {
+		t.Errorf("0%% requested → nil, got %+v", hit)
+	}
+
+	// 10% requested → MEDIUM.
+	if hit := r.Evaluate(RawMetrics{TimedCheckpoints: 90, RequestedCheckpoints: 10}); hit == nil || hit.Severity != SeverityMedium {
+		t.Errorf("10%% requested → MEDIUM, got %+v", hit)
+	}
+
+	// 50% requested → HIGH.
+	if hit := r.Evaluate(RawMetrics{TimedCheckpoints: 50, RequestedCheckpoints: 50}); hit == nil || hit.Severity != SeverityHigh {
+		t.Errorf("50%% requested → HIGH, got %+v", hit)
+	}
+}
+
+func TestRule_TrackIoTimingDisabled(t *testing.T) {
+	r := findRule(t, "track_io_timing_disabled")
+
+	if hit := r.Evaluate(RawMetrics{TrackIoTimingEnabled: true}); hit != nil {
+		t.Errorf("enabled → nil, got %+v", hit)
+	}
+
+	if hit := r.Evaluate(RawMetrics{TrackIoTimingEnabled: false}); hit == nil || hit.Severity != SeverityLow {
+		t.Errorf("disabled → LOW, got %+v", hit)
+	}
+}
+
+func TestEvaluate_DatabaseScopeFiltersNewInstanceCategories(t *testing.T) {
+	// Trigger rules across the three new instance-only categories.
+	m := RawMetrics{
+		HorizonLagXids:    50_000_000,             // horizon
+		AutovacuumEnabled: true, TrackCountsEnabled: true,
+		TimedCheckpoints:    50,
+		RequestedCheckpoints: 50, // wal_checkpoint
+	}
+
+	dbScoped := Evaluate(m, true)
+	for _, r := range dbScoped {
+		if instanceOnlyCategories[r.Category] {
+			t.Errorf("db scope must hide %q, but got %+v", r.Category, r)
 		}
 	}
 }

@@ -56,11 +56,14 @@ type Recommendation struct {
 	RelatedRoute string         `json:"related_route,omitempty"`
 }
 
-// instanceCategoryFlags caches which categories make sense for the per-database
-// drilldown. Used to filter rules when database != "".
+// instanceOnlyCategories lists categories that have no meaning at the
+// per-database drilldown level. Used to filter rules when database != "".
 var instanceOnlyCategories = map[string]bool{
-	"connections": true,
-	"replication": true,
+	"connections":    true,
+	"replication":    true,
+	"horizon":        true,
+	"wal_checkpoint": true,
+	"locks":          true,
 }
 
 // Evaluate runs all rules against the given metrics and returns triggered
@@ -256,11 +259,15 @@ var Registry = []Rule{
 		},
 	},
 	{
+		// Thresholds aligned with PG mechanics (see "PostgreSQL Internals" §7.3):
+		// 150M = vacuum_freeze_table_age (aggressive freeze starts here),
+		// 200M = autovacuum_freeze_max_age (emergency autovacuum kicks in),
+		// 1.6B = vacuum_failsafe_age (failsafe mode skips index cleanup).
 		ID: "xid_wraparound_risk", Category: "maintenance", RelatedRoute: "/maintenance",
 		Evaluate: func(m RawMetrics) *Hit {
 			age := float64(m.MaxXidAge)
 
-			sev := severityForRatio(age, 1_500_000_000, 1_000_000_000, 500_000_000)
+			sev := severityForRatio(age, 1_600_000_000, 200_000_000, 150_000_000)
 			if sev == "" {
 				return nil
 			}
@@ -290,6 +297,108 @@ var Registry = []Rule{
 			}
 
 			return &Hit{Severity: sev, MetricValue: float64(m.TablesNeverVacuumed)}
+		},
+	},
+	{
+		// Without autovacuum, dead tuples accumulate indefinitely. Critical.
+		ID: "autovacuum_disabled", Category: "maintenance", RelatedRoute: "/maintenance",
+		Evaluate: func(m RawMetrics) *Hit {
+			if m.AutovacuumEnabled {
+				return nil
+			}
+
+			return &Hit{Severity: SeverityHigh, MetricValue: 0}
+		},
+	},
+	{
+		// Without track_counts autovacuum can't decide which tables to clean — even if enabled.
+		ID: "track_counts_disabled", Category: "maintenance", RelatedRoute: "/maintenance",
+		Evaluate: func(m RawMetrics) *Hit {
+			if m.TrackCountsEnabled {
+				return nil
+			}
+
+			return &Hit{Severity: SeverityHigh, MetricValue: 0}
+		},
+	},
+	{
+		// Disabled autovacuum on individual tables is suspicious; usually unintentional.
+		ID: "tables_with_autovacuum_off", Category: "maintenance", RelatedRoute: "/maintenance",
+		Evaluate: func(m RawMetrics) *Hit {
+			if m.TablesWithAutovacuumOff <= 0 {
+				return nil
+			}
+
+			return &Hit{Severity: SeverityLow, MetricValue: float64(m.TablesWithAutovacuumOff)}
+		},
+	},
+	{
+		// Per-table relfrozenxid age; uses the same thresholds as xid_wraparound_risk
+		// because the underlying PG mechanics are identical.
+		ID: "relfrozenxid_age_outlier", Category: "maintenance", RelatedRoute: "/maintenance",
+		Evaluate: func(m RawMetrics) *Hit {
+			age := float64(m.MaxRelfrozenxidAge)
+
+			sev := severityForRatio(age, 1_600_000_000, 200_000_000, 150_000_000)
+			if sev == "" {
+				return nil
+			}
+
+			return &Hit{Severity: sev, MetricValue: age}
+		},
+	},
+	{
+		// Horizon held by a long-running transaction prevents vacuum from cleaning
+		// dead versions even on healthy tables (see "PostgreSQL Internals" §4.5, §6.2).
+		ID: "horizon_lag_xids", Category: "horizon", RelatedRoute: "/queries",
+		Evaluate: func(m RawMetrics) *Hit {
+			lag := float64(m.HorizonLagXids)
+
+			sev := severityForRatio(lag, 100_000_000, 10_000_000, 1_000_000)
+			if sev == "" {
+				return nil
+			}
+
+			return &Hit{Severity: sev, MetricValue: lag}
+		},
+	},
+	{
+		// Frequent requested checkpoints indicate max_wal_size is too small or a load spike.
+		// Needs minimum sample to avoid noise on freshly-started instances.
+		ID: "requested_checkpoint_ratio", Category: "wal_checkpoint", RelatedRoute: "/maintenance",
+		Evaluate: func(m RawMetrics) *Hit {
+			total := m.TimedCheckpoints + m.RequestedCheckpoints
+			if total < 10 {
+				return nil
+			}
+
+			ratio := float64(m.RequestedCheckpoints) / float64(total)
+
+			sev := severityForRatio(ratio, 0.30, 0.10, 0.05)
+			if sev == "" {
+				return nil
+			}
+
+			return &Hit{
+				Severity:    sev,
+				MetricValue: ratio,
+				Context: map[string]any{
+					"timed":     m.TimedCheckpoints,
+					"requested": m.RequestedCheckpoints,
+				},
+			}
+		},
+	},
+	{
+		// track_io_timing exposes per-block IO timings in EXPLAIN ANALYZE
+		// and pg_stat_statements. Recommended on; minimal overhead on modern OS.
+		ID: "track_io_timing_disabled", Category: "performance", RelatedRoute: "/settings",
+		Evaluate: func(m RawMetrics) *Hit {
+			if m.TrackIoTimingEnabled {
+				return nil
+			}
+
+			return &Hit{Severity: SeverityLow, MetricValue: 0}
 		},
 	},
 }
