@@ -64,8 +64,8 @@ func TestCalculate_HealthyDatabase(t *testing.T) {
 	if !r.HasReplication {
 		t.Error("expected HasReplication = true")
 	}
-	if len(r.Categories) != 5 {
-		t.Errorf("expected 5 categories, got %d", len(r.Categories))
+	if len(r.Categories) != 8 {
+		t.Errorf("expected 8 categories, got %d", len(r.Categories))
 	}
 }
 
