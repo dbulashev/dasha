@@ -28,8 +28,23 @@ server {
         proxy_buffers 4 16k;
     }
 
+    # Hashed build artefacts from Vite (assets/<name>-<hash>.{js,css,...}) —
+    # filename changes on every build, so they can be cached "forever".
+    location /assets/ {
+        root /usr/share/nginx/html;
+        expires 1y;
+        add_header Cache-Control "public, immutable" always;
+        access_log off;
+    }
+
+    # index.html and SPA routes must never be cached: they are the entry point
+    # that tells the browser which hashed assets to load. Without no-cache,
+    # users keep the previous bundle after an upgrade until they manually
+    # clear browser cache.
     location / {
         root /usr/share/nginx/html;
         try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache, must-revalidate" always;
+        expires 0;
     }
 }
