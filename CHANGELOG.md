@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.0.1
+
+### Bug Fixes
+- **Autovacuum / autoanalyze thresholds in `describe_vacuum_stats`**: the `vacuum_threshold`, `analyze_threshold` and `insert_vacuum_threshold` columns of the table description endpoint were computed against `pg_stat_user_tables.n_live_tup` instead of `pg_class.reltuples`. PostgreSQL itself uses `reltuples` when deciding whether to trigger autovacuum/autoanalyze, so the displayed thresholds did not match real autovacuum behaviour — especially right after large bulk inserts/deletes where the two counters diverge until the next ANALYZE. The SQL now reads `GREATEST(c.reltuples, 0)::bigint` (clamping the PG ≥14 "no statistics" sentinel value `-1` to `0`) and joins it into all three threshold formulas. Tooltips in `frontend/src/locales/{ru_RU,de_DE}.json` (`vacuumThreshold`, `analyzeThreshold`, `insertVacThreshold`) updated to reference `pg_class.reltuples` accordingly.
+
+### Dependencies (Dependabot bumps since v1.0.0)
+- **Backend (Go):** `oapi-codegen/runtime` `v1.4.0` → `v1.4.1`, `yandex-cloud/go-genproto` `v0.80.0` → `v0.82.0`.
+- **Frontend (npm):** `vue-i18n` `^11.1.12` → `^11.4.4` (Node engine requirement bumped to `>= 22` by upstream — already satisfied by the `node:26-alpine` build image), `eslint-plugin-playwright` `^2.10.2` → `^2.10.4` (dev), `vite-plugin-vue-devtools` `^8.0.3` → `^8.1.2` (dev, adds Vite 8 peer support).
+
 ## v1.0.0
 
 ### Breaking Changes
