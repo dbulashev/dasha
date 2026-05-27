@@ -1,5 +1,10 @@
 # История изменений
 
+## v1.0.2
+
+### Багфиксы
+- **Устаревший SPA-bundle после апгрейда**: frontend nginx теперь отдаёт `index.html`/SPA-маршруты с `Cache-Control: no-cache`, а хэшированные `/assets/` — с `immutable` + `expires 1y`. Правки в `deploy/images/nginx.conf.template` и `demo/nginx.conf`. Сам переход v1.0.1 → v1.0.2 ещё требует разовой очистки кэша, последующие апгрейды будут чистыми.
+
 ## v1.0.1
 
 ### Багфиксы

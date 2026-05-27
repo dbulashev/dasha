@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.0.2
+
+### Bug Fixes
+- **Stale SPA bundle after upgrade**: frontend nginx now sets `Cache-Control: no-cache` for `index.html`/SPA routes and `immutable` + `expires 1y` for hashed `/assets/`. Affects `deploy/images/nginx.conf.template` and `demo/nginx.conf`. One manual cache clear is still needed for the v1.0.1 → v1.0.2 transition; future upgrades are clean.
+
 ## v1.0.1
 
 ### Bug Fixes
