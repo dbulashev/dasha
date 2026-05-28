@@ -22,6 +22,11 @@ type HealthScoreDatabaseMetrics struct {
 }
 
 type HealthScoreMetrics struct {
+	// InRecovery is true when pg_is_in_recovery() returns true.
+	// Standbys cannot run autovacuum/ANALYZE, so the maintenance category
+	// is dropped (weight redistributed) when this is set.
+	InRecovery bool
+
 	// Connections
 	TotalConnections          int
 	ActiveConnections         int
@@ -59,4 +64,20 @@ type HealthScoreMetrics struct {
 	// WAL & Checkpoint
 	TimedCheckpoints     int64
 	RequestedCheckpoints int64
+
+	// Locks
+	ActiveLockWaiters      int
+	LongestLockWaitSeconds float64
+	UngrantedLocks         int
+	DeadlocksTotal         int64
+	HeavyweightLocksTotal  int
+	MaxLocksPerTransaction int
+
+	// HOT updates / planner stats / WAL level (P3 minor rules)
+	HotUpdateRatio          float64
+	NewpageUpdateRatio      float64
+	StalePlannerStatsTables int
+	AnalyzeDisabledTables   int
+	WalLevel                string
+	LogicalSlotsActive      int
 }

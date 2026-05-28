@@ -40,6 +40,7 @@ func (p *PgxPool) GetHealthScoreMetrics(ctx context.Context, clusterName, instan
 	var m dto.HealthScoreMetrics
 
 	err = pool.QueryRow(ctx, qStr).Scan(
+		&m.InRecovery,
 		&m.TotalConnections,
 		&m.ActiveConnections,
 		&m.IdleInTransaction,
@@ -64,6 +65,18 @@ func (p *PgxPool) GetHealthScoreMetrics(ctx context.Context, clusterName, instan
 		&m.HorizonLagXids,
 		&m.TimedCheckpoints,
 		&m.RequestedCheckpoints,
+		&m.ActiveLockWaiters,
+		&m.LongestLockWaitSeconds,
+		&m.UngrantedLocks,
+		&m.DeadlocksTotal,
+		&m.HeavyweightLocksTotal,
+		&m.MaxLocksPerTransaction,
+		&m.HotUpdateRatio,
+		&m.NewpageUpdateRatio,
+		&m.StalePlannerStatsTables,
+		&m.AnalyzeDisabledTables,
+		&m.WalLevel,
+		&m.LogicalSlotsActive,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("GetHealthScoreMetrics | %w", err)

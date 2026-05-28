@@ -4,6 +4,7 @@ import { computed, provide, ref, watch } from 'vue'
 import { useThemeStore } from './stores/theme'
 import { useAuthStore } from './stores/auth'
 import { useClustersStore } from './stores/clusters'
+import { useInstanceInfoStore } from './stores/instanceInfo'
 import { useSnapshotsStatusStore } from './stores/snapshotsStatus'
 import { useI18n } from 'vue-i18n'
 import { errorKey, type GlobalError } from './composables/useViewError'
@@ -12,6 +13,7 @@ const { t } = useI18n()
 const themeStore = useThemeStore()
 const authStore = useAuthStore()
 const clusterStore = useClustersStore()
+const instanceInfoStore = useInstanceInfoStore()
 const snapshotsStatusStore = useSnapshotsStatusStore()
 
 watch(
@@ -25,9 +27,10 @@ watch(
 const globalError = ref<GlobalError | null>(null)
 provide(errorKey, globalError)
 
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 const route = useRoute()
+const router = useRouter()
 
 import ClusterHostDbSelector from './components/ClusterHostDbSelector.vue'
 import LoginCard from './components/auth/LoginCard.vue'
@@ -80,6 +83,35 @@ const fkAnalysisLink = computed(() => withQuery("fk-analysis"));
 const maintenanceLink = computed(() => withQuery("maintenance"));
 const replicationLink = computed(() => withQuery("replication"));
 const settingsLink = computed(() => withQuery("settings"));
+
+// Track whether the currently selected host is a standby. When true the
+// Maintenance menu item is hidden and any visit to /maintenance redirects to
+// /main — autovacuum/ANALYZE run only on the primary, so showing maintenance
+// data from a replica is misleading.
+const currentCluster = computed(() => String(route.params.clustername ?? ''))
+const currentHost = computed(() => String(route.query.host ?? ''))
+
+watch(
+  [currentCluster, currentHost, () => authStore.initialized && !authStore.requiresLogin],
+  ([cluster, host, ready]) => {
+    if (ready && cluster && host) instanceInfoStore.ensure(cluster, host)
+  },
+  { immediate: true },
+)
+
+const isReplica = computed(() =>
+  instanceInfoStore.isReplica(currentCluster.value, currentHost.value),
+)
+
+watch(
+  [isReplica, () => route.path],
+  ([replica, path]) => {
+    if (replica && path.startsWith('/maintenance/')) {
+      router.replace({ path: `/main/${currentCluster.value}`, query: route.query })
+    }
+  },
+  { immediate: true },
+)
 
 const drawer = ref(true)
 
@@ -168,7 +200,7 @@ watch(() => route.path, () => {
           <v-list-item :title="t('Operation progress')" prepend-icon="mdi-progress-question" link :to="progressLink"></v-list-item>
           <v-list-item :title="t('FK Analysis')" prepend-icon="mdi-relation-many-to-many" link :to="fkAnalysisLink"></v-list-item>
           <v-list-item :title="t('Replication')" prepend-icon="mdi-database-sync-outline" link :to="replicationLink"></v-list-item>
-          <v-list-item :title="t('Maintenance')" prepend-icon="mdi-wrench-outline" link :to="maintenanceLink"></v-list-item>
+          <v-list-item v-if="!isReplica" :title="t('Maintenance')" prepend-icon="mdi-wrench-outline" link :to="maintenanceLink"></v-list-item>
           <v-list-item :title="t('Settings')" prepend-icon="mdi-database-settings-outline" link :to="settingsLink"></v-list-item>
         </v-list>
       </v-navigation-drawer>

@@ -3432,6 +3432,7 @@ components:
         - score
         - categories
         - has_replication
+        - in_recovery
       properties:
         score:
           type: number
@@ -3442,6 +3443,13 @@ components:
             $ref: '#/components/schemas/HealthScoreCategory'
         has_replication:
           type: boolean
+        in_recovery:
+          type: boolean
+          description: >-
+            True when the instance is a standby (pg_is_in_recovery() = true).
+            When true, the maintenance category is dropped from the score and
+            its weight is redistributed across the remaining categories — same
+            handling as the replication category on instances without replicas.
 
     HealthScoreRecommendation:
       type: object

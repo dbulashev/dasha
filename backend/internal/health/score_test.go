@@ -249,6 +249,107 @@ func TestPenaltyConnections_ZeroMaxConnections(t *testing.T) {
 	}
 }
 
+func TestCalculate_InRecovery_DropsMaintenance(t *testing.T) {
+	// On a standby maintenance has no signal — autovacuum/ANALYZE can't run —
+	// so its weight must be redistributed and its penalty zeroed regardless of
+	// any maintenance metric values fed in.
+	m := RawMetrics{
+		InRecovery:       true,
+		TotalConnections: 5,
+		MaxConnections:   100,
+		CacheHitRatio:    99.5,
+		ReplicaCount:     1, // replication is active (cascading standby chain ignored)
+		// Catastrophic maintenance metrics that MUST be ignored on a standby:
+		MaxXidAge:          1_900_000_000,
+		MaxVacuumAgeHours:  10_000,
+		AutovacuumEnabled:  false,
+		TrackCountsEnabled: false,
+	}
+
+	r := Calculate(m)
+
+	if !r.InRecovery {
+		t.Error("expected InRecovery = true in result")
+	}
+
+	var maintWeight, maintPenalty float64
+	for _, c := range r.Categories {
+		if c.Name == "maintenance" {
+			maintWeight = c.Weight
+			maintPenalty = c.Penalty
+		}
+	}
+
+	if maintWeight != 0 {
+		t.Errorf("maintenance weight must be 0 on a standby, got %v", maintWeight)
+	}
+
+	if maintPenalty != 0 {
+		t.Errorf("maintenance penalty must be zeroed on a standby, got %v", maintPenalty)
+	}
+
+	// Surviving weights still sum to 1.0.
+	var total float64
+	for _, c := range r.Categories {
+		total += c.Weight
+	}
+
+	if total < 0.99 || total > 1.01 {
+		t.Errorf("remaining weights should sum to ~1.0, got %v", total)
+	}
+
+	// A standby with otherwise healthy metrics scores essentially 100.
+	if r.Score < 95 {
+		t.Errorf("healthy standby should keep a high score, got %v", r.Score)
+	}
+}
+
+func TestCalculate_InRecovery_NoReplicas_DropsBoth(t *testing.T) {
+	// Standby with no downstream cascaded standbys: both replication and
+	// maintenance are dropped, weight redistributed across the remaining six.
+	m := RawMetrics{
+		InRecovery:       true,
+		TotalConnections: 5,
+		MaxConnections:   100,
+		CacheHitRatio:    99.5,
+		ReplicaCount:     0,
+	}
+
+	r := Calculate(m)
+
+	for _, c := range r.Categories {
+		if (c.Name == "replication" || c.Name == "maintenance") && c.Weight != 0 {
+			t.Errorf("%s weight must be 0, got %v", c.Name, c.Weight)
+		}
+	}
+
+	var total float64
+	for _, c := range r.Categories {
+		total += c.Weight
+	}
+
+	if total < 0.99 || total > 1.01 {
+		t.Errorf("remaining weights should sum to ~1.0, got %v", total)
+	}
+}
+
+func TestEvaluate_InRecovery_HidesMaintenanceRules(t *testing.T) {
+	// Catastrophic maintenance metrics must not surface on a standby.
+	m := RawMetrics{
+		InRecovery:         true,
+		MaxXidAge:          1_900_000_000,
+		MaxVacuumAgeHours:  10_000,
+		AutovacuumEnabled:  false,
+		TrackCountsEnabled: false,
+	}
+
+	for _, r := range Evaluate(m, false) {
+		if r.Category == "maintenance" {
+			t.Errorf("maintenance rule %q should be hidden on a standby, got %+v", r.RuleID, r)
+		}
+	}
+}
+
 func TestRedistributeWeights(t *testing.T) {
 	// Use the 8-category default arrangement (sum = 1.00).
 	categories := []CategoryResult{
@@ -262,7 +363,7 @@ func TestRedistributeWeights(t *testing.T) {
 		{Name: "locks", Weight: 0.10},
 	}
 
-	redistributeWeights(categories)
+	redistributeWeights(categories, []string{"replication"})
 
 	var total float64
 	for _, c := range categories {

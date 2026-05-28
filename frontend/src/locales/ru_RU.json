@@ -554,6 +554,7 @@
         "bloatTableLen": "Физический размер",
         "bloatRows": "кортеж | кортежа | кортежей",
         "vacuumStats": "Vacuum / Analyze",
+        "replicaVacuumHint": "Этот хост — реплика. Autovacuum и ANALYZE работают только на мастере, статистика pg_stat_user_tables на реплике отражает локальные операции и не соответствует реальному состоянию таблицы. Переключитесь на мастер кластера.",
         "lastVacuum": "Последний VACUUM",
         "lastAutovacuum": "Последний autovacuum",
         "lastAnalyze": "Последний ANALYZE",
@@ -660,7 +661,19 @@
             "horizon_lag_xids": "Отставание горизонта (XID)",
             "requested_checkpoint_ratio": "Доля внеплановых checkpoint",
             "timed_checkpoints": "Checkpoint по расписанию",
-            "requested_checkpoints": "Checkpoint по требованию"
+            "requested_checkpoints": "Checkpoint по требованию",
+            "active_lock_waiters": "Процессы в ожидании блокировок",
+            "longest_lock_wait_seconds": "Максимальное ожидание блокировки (с)",
+            "ungranted_locks": "Несогласованные блокировки (granted=false)",
+            "deadlocks_total": "Deadlock-ов всего (с pg_stat_reset)",
+            "heavyweight_locks": "Тяжёлых блокировок всего",
+            "lock_pool_saturation": "Заполненность lock-пула",
+            "hot_update_ratio": "Доля HOT-обновлений",
+            "newpage_update_ratio": "Доля разрывов HOT-цепочки",
+            "stale_planner_stats_tables": "Таблиц с устаревшей статистикой",
+            "analyze_disabled_tables": "Таблиц с выключенным auto-analyze",
+            "wal_level": "wal_level",
+            "logical_slots_active": "Активных логических слотов"
         },
         "page": {
             "title": "Health Score",
@@ -784,7 +797,7 @@
             },
             "requested_checkpoint_ratio": {
                 "title": "Слишком частые внеплановые checkpoints",
-                "short": "Доля requested checkpoints: {metric_value} (timed={timed}, requested={requested}).",
+                "short": "Доля requested checkpoints: {metric_pct}% (timed={timed}, requested={requested}).",
                 "detail": "Внеплановые checkpoint'ы происходят при заполнении max_wal_size. Увеличьте max_wal_size или checkpoint_timeout. Здоровый показатель — практически все checkpoint'ы по расписанию (timed)."
             },
             "track_io_timing_disabled": {
@@ -802,6 +815,66 @@
                 "title": "Таблицы без vacuum",
                 "short": "Таблиц, не вакуумированных ни разу: {metric_value}.",
                 "detail": "Запустите VACUUM ANALYZE вручную или включите autovacuum, если он выключен на уровне таблицы."
+            },
+            "active_lock_waiters": {
+                "title": "Активные ожидания блокировок",
+                "short": "Процессов в ожидании блокировки: {metric_value}.",
+                "detail": "Снимок pg_stat_activity. Высокие значения говорят о контеншене. Найдите блокирующие процессы и решите, оборвать ли долгие транзакции.",
+                "sql": "SELECT pid, usename, state, wait_event_type, wait_event,\n       now() - state_change AS wait_for,\n       pg_blocking_pids(pid) AS blocked_by,\n       query\nFROM pg_stat_activity\nWHERE wait_event_type = 'Lock' AND state = 'active'\nORDER BY state_change\nLIMIT 20;"
+            },
+            "longest_lock_wait_seconds": {
+                "title": "Долгое ожидание блокировки",
+                "short": "Максимальное ожидание: {metric_value} с.",
+                "detail": "Один или несколько процессов ждут блокировки слишком долго. Возможные причины: длинная транзакция, серьёзная контеншн на горячей строке, забытая блокировка таблицы (например, после CREATE INDEX без CONCURRENTLY)."
+            },
+            "ungranted_locks": {
+                "title": "Несогласованные блокировки в очереди",
+                "short": "Строк в pg_locks с granted=false: {metric_value}.",
+                "detail": "Длина очереди ожидания. Отличается от «активных ожидающих» — один процесс может ждать несколько блокировок."
+            },
+            "deadlocks_rate": {
+                "title": "Deadlock-и",
+                "short": "Зарегистрировано deadlock-ов: {metric_value} (с момента pg_stat_reset).",
+                "detail": "Любой deadlock — признак проблемы в приложении (разный порядок захвата блокировок). Детали — в логе сервера. Это абсолютный счётчик с последнего pg_stat_database_reset; время сброса можно посмотреть в Home → Status / Stats reset.",
+                "sql": "SELECT datname, deadlocks, stats_reset\nFROM pg_stat_database\nWHERE deadlocks > 0\nORDER BY deadlocks DESC;"
+            },
+            "lock_pool_saturation": {
+                "title": "Lock-пул близок к лимиту",
+                "short": "Занято {total} из {capacity} ({metric_pct}%).",
+                "detail": "Размер пула тяжёлых блокировок ограничен max_locks_per_transaction × max_connections. При переполнении PostgreSQL выдаёт «out of shared memory; consider increasing max_locks_per_transaction». Увеличьте max_locks_per_transaction (требует рестарта) или уменьшите конкурентность."
+            },
+            "low_hot_update_ratio": {
+                "title": "Низкая доля HOT-обновлений",
+                "short": "HOT-ratio = {metric_pct}%.",
+                "detail": "HOT-обновление позволяет новой версии строки остаться на той же странице, не порождая записи во всех индексах. Низкая доля = индексы раздуваются, autovacuum тратит больше времени. Уменьшите fillfactor для часто обновляемых таблиц без обновления индексных столбцов (типично 70–90%) — это резервирует место для HOT-обновлений.",
+                "sql": "-- найти таблицы с большим количеством не-HOT обновлений\nSELECT schemaname, relname,\n       n_tup_upd, n_tup_hot_upd,\n       round(100.0 * n_tup_hot_upd::numeric / nullif(n_tup_upd, 0), 2) AS hot_pct\nFROM pg_stat_user_tables\nWHERE n_tup_upd > 1000\nORDER BY hot_pct NULLS FIRST\nLIMIT 20;"
+            },
+            "high_newpage_update_ratio": {
+                "title": "Частые разрывы HOT-цепочки",
+                "short": "Доля обновлений с переносом на новую страницу: {metric_pct}%.",
+                "detail": "PG 16+: счётчик n_tup_newpage_upd показывает, сколько UPDATE не уместилось на исходной странице — HOT-цепочка прервалась, в индексе появилась лишняя запись. Уменьшите fillfactor проблемной таблицы, чтобы зарезервировать место на странице."
+            },
+            "stale_planner_stats": {
+                "title": "Устаревшая статистика планировщика",
+                "short": "Таблиц с устаревшей статистикой: {metric_value}.",
+                "detail": "Эти таблицы заметно изменились с последнего ANALYZE (>50% от формулы автоанализа) и не анализировались более суток. Планировщик может выбирать неоптимальные планы. Запустите ANALYZE вручную или уменьшите autovacuum_analyze_scale_factor.",
+                "sql": "-- найти таблицы с устаревшей статистикой\nSELECT schemaname, relname,\n       n_mod_since_analyze,\n       last_analyze, last_autoanalyze\nFROM pg_stat_user_tables\nWHERE n_mod_since_analyze > 0\nORDER BY GREATEST(\n    COALESCE(last_analyze, '-infinity'::timestamptz),\n    COALESCE(last_autoanalyze, '-infinity'::timestamptz)\n) ASC\nLIMIT 20;"
+            },
+            "analyze_disabled_tables": {
+                "title": "Авто-ANALYZE выключен для части таблиц",
+                "short": "Найдено {metric_value} таблиц с autovacuum_analyze_enabled=false.",
+                "detail": "Обычно это остаточная настройка от миграций или экспериментов. Без авто-ANALYZE статистика становится устаревшей.",
+                "sql": "SELECT relname, reloptions\nFROM pg_class\nWHERE 'autovacuum_analyze_enabled=false' = ANY(reloptions);"
+            },
+            "wal_level_minimal_with_replicas": {
+                "title": "wal_level=minimal при наличии реплик",
+                "short": "wal_level=minimal, но подключено реплик: {replicas}.",
+                "detail": "Несовместимая конфигурация: wal_level=minimal не поддерживает streaming replication. Для работы реплик нужен replica или logical. Поменяйте параметр (требует рестарта)."
+            },
+            "wal_level_logical_without_publications": {
+                "title": "wal_level=logical без активных публикаций",
+                "short": "wal_level=logical, но активных логических слотов нет.",
+                "detail": "logical-уровень WAL даёт overhead (больше данных в журнале, медленнее VACUUM). Если логическая репликация не используется — переключите на replica."
             }
         }
     }

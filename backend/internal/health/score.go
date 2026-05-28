@@ -4,6 +4,12 @@ import "math"
 
 // RawMetrics contains raw metrics collected from PostgreSQL for health score calculation.
 type RawMetrics struct {
+	// InRecovery is true when the instance is a standby (pg_is_in_recovery()).
+	// Standbys cannot run autovacuum/ANALYZE, so the maintenance category is
+	// dropped from the score and its rules are hidden from recommendations —
+	// same treatment as the replication category on instances without replicas.
+	InRecovery bool
+
 	// Connections
 	TotalConnections          int
 	ActiveConnections         int
@@ -41,6 +47,22 @@ type RawMetrics struct {
 	// WAL & Checkpoint
 	TimedCheckpoints     int64
 	RequestedCheckpoints int64
+
+	// Locks
+	ActiveLockWaiters      int
+	LongestLockWaitSeconds float64
+	UngrantedLocks         int
+	DeadlocksTotal         int64
+	HeavyweightLocksTotal  int
+	MaxLocksPerTransaction int
+
+	// HOT updates / planner stats / WAL level (P3 minor rules)
+	HotUpdateRatio          float64
+	NewpageUpdateRatio      float64
+	StalePlannerStatsTables int
+	AnalyzeDisabledTables   int
+	WalLevel                string
+	LogicalSlotsActive      int
 }
 
 // CategoryResult holds the penalty calculation result for one category.
@@ -57,6 +79,7 @@ type Result struct {
 	Score          float64          `json:"score"`
 	Categories     []CategoryResult `json:"categories"`
 	HasReplication bool             `json:"has_replication"`
+	InRecovery     bool             `json:"in_recovery"`
 }
 
 // Default category weights, sum to 1.00. Rationale: see plans/health-score-v3-design.md §1.2.
@@ -79,8 +102,13 @@ func Calculate(m RawMetrics) Result {
 // CalculateWithWeights computes the health score using the provided per-category
 // weights. Weights are validated, then normalized; invalid input (NaN, Inf,
 // negative, or zero sum) falls back to DefaultWeights so a downstream caller
-// passing garbage cannot corrupt the score. If no replication is present, the
-// replication weight is redistributed proportionally across remaining categories.
+// passing garbage cannot corrupt the score.
+//
+// Categories with no signal on this instance are dropped and their weight is
+// redistributed proportionally across the remaining ones:
+//   - replication: dropped when there are no replicas
+//   - maintenance: dropped when pg_is_in_recovery() (standby) — autovacuum/ANALYZE
+//     cannot run on a standby, so the metrics would always look stale.
 func CalculateWithWeights(m RawMetrics, w Weights) Result {
 	hasReplication := m.ReplicaCount > 0
 
@@ -105,8 +133,17 @@ func CalculateWithWeights(m RawMetrics, w Weights) Result {
 		categories[i].Weight = w.byCategory(categories[i].Name)
 	}
 
+	var dropped []string
 	if !hasReplication {
-		redistributeWeights(categories)
+		dropped = append(dropped, "replication")
+	}
+
+	if m.InRecovery {
+		dropped = append(dropped, "maintenance")
+	}
+
+	if len(dropped) > 0 {
+		redistributeWeights(categories, dropped)
 	}
 
 	totalPenalty := 0.0
@@ -121,31 +158,40 @@ func CalculateWithWeights(m RawMetrics, w Weights) Result {
 		Score:          math.Round(score*10) / 10,
 		Categories:     categories,
 		HasReplication: hasReplication,
+		InRecovery:     m.InRecovery,
 	}
 }
 
-func redistributeWeights(categories []CategoryResult) {
-	var replWeight float64
-	var otherWeightSum float64
+// redistributeWeights zeroes the weight (and penalty) of categories whose names
+// appear in `drop`, and adds their combined weight to the remaining categories
+// proportionally to their current weight. No-op when the dropped set is empty
+// or when there is nothing left to receive the redistributed weight.
+func redistributeWeights(categories []CategoryResult, drop []string) {
+	dropped := make(map[string]bool, len(drop))
+	for _, n := range drop {
+		dropped[n] = true
+	}
+
+	var droppedSum, otherSum float64
 
 	for _, c := range categories {
-		if c.Name == "replication" {
-			replWeight = c.Weight
+		if dropped[c.Name] {
+			droppedSum += c.Weight
 		} else {
-			otherWeightSum += c.Weight
+			otherSum += c.Weight
 		}
 	}
 
-	if replWeight == 0 || otherWeightSum == 0 {
+	if droppedSum == 0 || otherSum == 0 {
 		return
 	}
 
 	for i := range categories {
-		if categories[i].Name == "replication" {
+		if dropped[categories[i].Name] {
 			categories[i].Weight = 0
 			categories[i].Penalty = 0
 		} else {
-			categories[i].Weight += replWeight * (categories[i].Weight / otherWeightSum)
+			categories[i].Weight += droppedSum * (categories[i].Weight / otherSum)
 		}
 	}
 }
@@ -194,15 +240,18 @@ func penaltyConnections(m RawMetrics) CategoryResult {
 func penaltyPerformance(m RawMetrics) CategoryResult {
 	penalty := 0.0
 
+	// Relaxed gradient (was 99/95/90): aligned with low_cache_hit_ratio rule
+	// thresholds — OLAP workloads with cold cache shouldn't be penalised
+	// indiscriminately.
 	switch {
-	case m.CacheHitRatio >= 99:
-		penalty = 0
 	case m.CacheHitRatio >= 95:
-		penalty = (99 - m.CacheHitRatio) / 4 * 20
+		penalty = 0
 	case m.CacheHitRatio >= 90:
-		penalty = 20 + (95-m.CacheHitRatio)/5*30
+		penalty = (95 - m.CacheHitRatio) / 5 * 20
+	case m.CacheHitRatio >= 85:
+		penalty = 20 + (90-m.CacheHitRatio)/5*30
 	default:
-		penalty = 50 + (90-m.CacheHitRatio)/10*50
+		penalty = 50 + (85-m.CacheHitRatio)/10*50
 	}
 
 	penalty = math.Min(penalty, 100)
@@ -220,17 +269,19 @@ func penaltyPerformance(m RawMetrics) CategoryResult {
 func penaltyStorage(m RawMetrics) CategoryResult {
 	penalty := 0.0
 
+	// Aligned with high_max_dead_ratio thresholds (30/20/10) and
+	// high_avg_dead_ratio (25/15/5).
 	switch {
-	case m.MaxDeadRatio > 50:
+	case m.MaxDeadRatio > 30:
 		penalty = 40
 	case m.MaxDeadRatio > 20:
-		penalty = 10 + (m.MaxDeadRatio-20)/30*30
+		penalty = 20 + (m.MaxDeadRatio-20)/10*20
 	default:
-		penalty = m.MaxDeadRatio / 20 * 10
+		penalty = m.MaxDeadRatio / 20 * 20
 	}
 
-	if m.AvgDeadRatio > 10 {
-		penalty += math.Min(m.AvgDeadRatio*2, 30)
+	if m.AvgDeadRatio > 15 {
+		penalty += math.Min((m.AvgDeadRatio-15)*2, 30)
 	}
 
 	if m.TablesHighBloat > 5 {
@@ -310,10 +361,13 @@ func penaltyMaintenance(m RawMetrics) CategoryResult {
 		penalty = 5 + float64(m.MaxXidAge-500_000_000)/500_000_000*15
 	}
 
-	if m.MaxVacuumAgeHours > 168 { // 7 days
-		penalty += math.Min((m.MaxVacuumAgeHours-168)/24*5, 30)
-	} else if m.MaxVacuumAgeHours > 48 {
-		penalty += (m.MaxVacuumAgeHours - 48) / 120 * 10
+	// Aligned with stale_vacuum thresholds (7/21/60 days = 168/504/1440 h).
+	if m.MaxVacuumAgeHours > 1440 { // 60 days
+		penalty += 30
+	} else if m.MaxVacuumAgeHours > 504 { // 21 days
+		penalty += 15 + (m.MaxVacuumAgeHours-504)/24*0.5
+	} else if m.MaxVacuumAgeHours > 168 { // 7 days
+		penalty += (m.MaxVacuumAgeHours - 168) / 24 * 1
 	}
 
 	if m.TablesNeverVacuumed > 0 {
@@ -395,14 +449,85 @@ func penaltyWalCheckpoint(m RawMetrics) CategoryResult {
 	}
 }
 
-// penaltyLocks is a stub for Package 1: returns 0 penalty.
-// Package 2 fills it in based on active_lock_waiters / longest_lock_wait_seconds /
-// ungranted_locks / deadlocks_total / heavyweight_locks_total.
-func penaltyLocks(_ RawMetrics) CategoryResult {
+// penaltyLocks scores heavy-lock contention from a snapshot of pg_stat_activity
+// (`wait_event_type = 'Lock'`) and pg_locks (ungranted, total vs capacity), plus
+// cumulative deadlocks from pg_stat_database. Thresholds mirror the locks rules.
+func penaltyLocks(m RawMetrics) CategoryResult {
+	penalty := 0.0
+
+	// Active lock waiters: 2 / 5 / 10 → roughly 10 / 30 / 60 penalty points.
+	switch {
+	case m.ActiveLockWaiters >= 10:
+		penalty += 60
+	case m.ActiveLockWaiters >= 5:
+		penalty += 30
+	case m.ActiveLockWaiters >= 2:
+		penalty += 10
+	}
+
+	// Longest lock wait seconds: 10 / 30 / 60 → up to 40 penalty points.
+	switch {
+	case m.LongestLockWaitSeconds > 60:
+		penalty += 40
+	case m.LongestLockWaitSeconds > 30:
+		penalty += 20
+	case m.LongestLockWaitSeconds > 10:
+		penalty += 5
+	}
+
+	// Ungranted locks queue length: 3 / 10 / 20 → up to 30 points.
+	switch {
+	case m.UngrantedLocks >= 20:
+		penalty += 30
+	case m.UngrantedLocks >= 10:
+		penalty += 15
+	case m.UngrantedLocks >= 3:
+		penalty += 5
+	}
+
+	// Pool saturation: ratio of pg_locks rows to capacity.
+	saturation := 0.0
+
+	if m.MaxLocksPerTransaction > 0 && m.MaxConnections > 0 {
+		capacity := float64(m.MaxLocksPerTransaction) * float64(m.MaxConnections)
+		if capacity > 0 {
+			saturation = float64(m.HeavyweightLocksTotal) / capacity
+		}
+
+		switch {
+		case saturation > 0.8:
+			penalty += 30
+		case saturation > 0.6:
+			penalty += 15
+		case saturation > 0.5:
+			penalty += 5
+		}
+	}
+
+	// Deadlocks: absolute count since stats_reset. Caps at 20 points so a base
+	// cluster with 1-2 historical deadlocks doesn't dominate the locks score.
+	switch {
+	case m.DeadlocksTotal >= 100:
+		penalty += 20
+	case m.DeadlocksTotal >= 10:
+		penalty += 10
+	case m.DeadlocksTotal >= 1:
+		penalty += 3
+	}
+
+	penalty = math.Min(penalty, 100)
+
 	return CategoryResult{
 		Name:    "locks",
 		Weight:  weightLocks,
-		Penalty: 0,
-		Details: map[string]float64{},
+		Penalty: math.Round(penalty*10) / 10,
+		Details: map[string]float64{
+			"active_lock_waiters":       float64(m.ActiveLockWaiters),
+			"longest_lock_wait_seconds": m.LongestLockWaitSeconds,
+			"ungranted_locks":           float64(m.UngrantedLocks),
+			"deadlocks_total":           float64(m.DeadlocksTotal),
+			"heavyweight_locks":         float64(m.HeavyweightLocksTotal),
+			"lock_pool_saturation":      math.Round(saturation*10000) / 10000,
+		},
 	}
 }

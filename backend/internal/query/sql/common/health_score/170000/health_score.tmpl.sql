@@ -86,6 +86,9 @@ per_table_metrics AS (
         COUNT(*) FILTER (
             WHERE 'autovacuum_enabled=false' = ANY(COALESCE(reloptions, ARRAY[]::text[]))
         )::int AS tables_with_autovacuum_off,
+        COUNT(*) FILTER (
+            WHERE 'autovacuum_analyze_enabled=false' = ANY(COALESCE(reloptions, ARRAY[]::text[]))
+        )::int AS analyze_disabled_tables,
         COALESCE(MAX(age(relfrozenxid))::bigint, 0) AS max_relfrozenxid_age
     FROM pg_class
     WHERE relkind IN ('r','m','t')
@@ -108,8 +111,79 @@ checkpoint_metrics AS (
         COALESCE(checkpoints_req, 0)::bigint AS requested_checkpoints
     FROM pg_stat_bgwriter
     LIMIT 1
+),
+lock_activity AS (
+    SELECT
+        COUNT(*) FILTER (
+            WHERE wait_event_type = 'Lock' AND state = 'active'
+        )::int AS active_lock_waiters,
+        -- FILTER attaches directly to the aggregate (MAX), not to the EXTRACT wrapper.
+        COALESCE(
+            EXTRACT(EPOCH FROM MAX(now() - state_change) FILTER (
+                WHERE wait_event_type = 'Lock'
+            )), 0
+        )::float8 AS longest_lock_wait_seconds
+    FROM pg_stat_activity
+),
+lock_pool AS (
+    SELECT
+        COUNT(*) FILTER (WHERE NOT granted)::int AS ungranted_locks,
+        COUNT(*)::int AS heavyweight_total
+    FROM pg_locks
+),
+deadlock_metrics AS (
+    SELECT COALESCE(SUM(deadlocks), 0)::bigint AS deadlocks_total
+    FROM pg_stat_database
+),
+locks_guc AS (
+    SELECT setting::int AS max_locks_per_transaction
+    FROM pg_settings
+    WHERE name = 'max_locks_per_transaction'
+),
+-- HOT updates: PG 14/15 do not expose n_tup_newpage_upd (added in PG 16) so
+-- this template surfaces 0 for newpage ratio — the high_newpage_update_ratio
+-- rule simply won't trigger on those versions.
+hot_update_metrics AS (
+    SELECT
+        COALESCE(
+            SUM(n_tup_hot_upd)::float8 / NULLIF(SUM(n_tup_upd), 0),
+            1.0
+        )::float8 AS hot_update_ratio,
+        0::float8 AS newpage_update_ratio
+    FROM pg_stat_user_tables
+    WHERE n_tup_upd > 1000
+),
+stale_stats_metric AS (
+    SELECT COUNT(*)::int AS stale_planner_stats_tables
+    FROM pg_stat_user_tables st
+    JOIN pg_class c ON c.oid = st.relid
+    CROSS JOIN (
+        SELECT
+            (SELECT setting::int   FROM pg_settings WHERE name = 'autovacuum_analyze_threshold')    AS thr,
+            (SELECT setting::float FROM pg_settings WHERE name = 'autovacuum_analyze_scale_factor') AS sf
+    ) p
+    WHERE GREATEST(c.reltuples, 0) > 0
+      AND st.n_mod_since_analyze >
+          0.5 * (p.thr + p.sf * GREATEST(c.reltuples, 0))
+      AND GREATEST(
+              COALESCE(st.last_analyze,     '-infinity'::timestamptz),
+              COALESCE(st.last_autoanalyze, '-infinity'::timestamptz)
+          ) < now() - interval '24 hours'
+),
+wal_level_metric AS (
+    SELECT setting AS wal_level
+    FROM pg_settings
+    WHERE name = 'wal_level'
+),
+logical_slots AS (
+    SELECT
+        COALESCE(COUNT(*) FILTER (WHERE slot_type = 'logical' AND active), 0)::int AS active_count
+    FROM pg_replication_slots
 )
 SELECT
+    -- recovery state: standbys cannot run autovacuum/ANALYZE, so the maintenance
+    -- category is dropped (its weight is redistributed) when this is true.
+    pg_is_in_recovery() AS in_recovery,
     c.total_connections,
     c.active_connections,
     c.idle_in_transaction,
@@ -133,7 +207,19 @@ SELECT
     pt.max_relfrozenxid_age,
     h.horizon_lag_xids,
     cp.timed_checkpoints,
-    cp.requested_checkpoints
+    cp.requested_checkpoints,
+    la.active_lock_waiters,
+    la.longest_lock_wait_seconds,
+    lp.ungranted_locks,
+    dl.deadlocks_total,
+    lp.heavyweight_total,
+    lg.max_locks_per_transaction,
+    hot.hot_update_ratio,
+    hot.newpage_update_ratio,
+    ss.stale_planner_stats_tables,
+    pt.analyze_disabled_tables,
+    wl.wal_level,
+    ls.active_count AS logical_slots_active
 FROM connection_metrics c,
      performance_metrics p,
      storage_metrics s,
@@ -142,4 +228,12 @@ FROM connection_metrics c,
      horizon_metrics h,
      per_table_metrics pt,
      guc_metrics g,
-     checkpoint_metrics cp
+     checkpoint_metrics cp,
+     lock_activity la,
+     lock_pool lp,
+     deadlock_metrics dl,
+     locks_guc lg,
+     hot_update_metrics hot,
+     stale_stats_metric ss,
+     wal_level_metric wl,
+     logical_slots ls

@@ -70,13 +70,23 @@ var instanceOnlyCategories = map[string]bool{
 // recommendations, sorted by severity (HIGH first) and then by rule ID for
 // stable output.
 //
-// If databaseScoped is true, instance-only categories (connections, replication)
-// are skipped — they have no meaning at the per-database level.
+// If databaseScoped is true, instance-only categories (connections, replication,
+// horizon, wal_checkpoint, locks) are skipped — they have no meaning at the
+// per-database level.
+//
+// When m.InRecovery is true, all maintenance rules are skipped — standbys
+// cannot run autovacuum/ANALYZE, so the metrics reflect the primary state and
+// any action belongs there. Mirrors the maintenance-weight drop in
+// CalculateWithWeights.
 func Evaluate(m RawMetrics, databaseScoped bool) []Recommendation {
 	out := make([]Recommendation, 0, len(Registry))
 
 	for _, r := range Registry {
 		if databaseScoped && instanceOnlyCategories[r.Category] {
+			continue
+		}
+
+		if m.InRecovery && r.Category == "maintenance" {
 			continue
 		}
 
@@ -136,7 +146,9 @@ var Registry = []Rule{
 	{
 		ID: "idle_in_transaction", Category: "connections", RelatedRoute: "/queries",
 		Evaluate: func(m RawMetrics) *Hit {
-			sev := severityForCount(m.IdleInTransaction, 5, 2, 1)
+			// Loose thresholds: on busy OLTP 1 idle in tx >30s is a regular blip,
+			// not a sustained issue. HIGH 10 catches real connection-leak storms.
+			sev := severityForCount(m.IdleInTransaction, 10, 5, 2)
 			if sev == "" {
 				return nil
 			}
@@ -162,14 +174,17 @@ var Registry = []Rule{
 		Evaluate: func(m RawMetrics) *Hit {
 			r := m.CacheHitRatio
 
+			// Relaxed thresholds: classic 99/95/90 over-triggers on OLAP
+			// workloads with large sequential scans (cold cache is normal).
+			// OLTP users who want strict scoring can raise the Performance weight.
 			var sev Severity
 
 			switch {
-			case r < 90:
+			case r < 85:
 				sev = SeverityHigh
-			case r < 95:
+			case r < 90:
 				sev = SeverityMedium
-			case r < 99:
+			case r < 95:
 				sev = SeverityLow
 			default:
 				return nil
@@ -181,7 +196,9 @@ var Registry = []Rule{
 	{
 		ID: "high_max_dead_ratio", Category: "storage", RelatedRoute: "/tables",
 		Evaluate: func(m RawMetrics) *Hit {
-			sev := severityForRatio(m.MaxDeadRatio, 50, 20, 10)
+			// HIGH lowered from 50% to 30%: on OLTP with a working autovacuum
+			// bloat rarely passes 5%, so 30% is already a serious deviation.
+			sev := severityForRatio(m.MaxDeadRatio, 30, 20, 10)
 			if sev == "" {
 				return nil
 			}
@@ -192,7 +209,9 @@ var Registry = []Rule{
 	{
 		ID: "high_avg_dead_ratio", Category: "storage", RelatedRoute: "/tables",
 		Evaluate: func(m RawMetrics) *Hit {
-			sev := severityForRatio(m.AvgDeadRatio, 25, 10, 5)
+			// MED raised from 10% to 15%: 5-15% average dead ratio is normal
+			// background for active OLTP.
+			sev := severityForRatio(m.AvgDeadRatio, 25, 15, 5)
 			if sev == "" {
 				return nil
 			}
@@ -280,7 +299,10 @@ var Registry = []Rule{
 		Evaluate: func(m RawMetrics) *Hit {
 			days := m.MaxVacuumAgeHours / 24
 
-			sev := severityForRatio(days, 14, 7, 2)
+			// Raised thresholds (was 2/7/14): read-mostly tables legitimately
+			// go months without vacuum. 7/21/60 days catches real autovacuum
+			// stalls without false-positives on low-churn workloads.
+			sev := severityForRatio(days, 60, 21, 7)
 			if sev == "" {
 				return nil
 			}
@@ -374,7 +396,9 @@ var Registry = []Rule{
 
 			ratio := float64(m.RequestedCheckpoints) / float64(total)
 
-			sev := severityForRatio(ratio, 0.30, 0.10, 0.05)
+			// HIGH lowered from 30% to 20%: 20% of checkpoints being unplanned
+			// already indicates max_wal_size is undersized for current write rate.
+			sev := severityForRatio(ratio, 0.20, 0.10, 0.05)
 			if sev == "" {
 				return nil
 			}
@@ -395,6 +419,202 @@ var Registry = []Rule{
 		ID: "track_io_timing_disabled", Category: "performance", RelatedRoute: "/settings",
 		Evaluate: func(m RawMetrics) *Hit {
 			if m.TrackIoTimingEnabled {
+				return nil
+			}
+
+			return &Hit{Severity: SeverityLow, MetricValue: 0}
+		},
+	},
+
+	// === Locks (P2) ===
+	{
+		// Number of backends actively blocked on a heavyweight lock right now.
+		// Snapshot-level — high values indicate active contention.
+		ID: "active_lock_waiters", Category: "locks", RelatedRoute: "/locks",
+		Evaluate: func(m RawMetrics) *Hit {
+			// LOW lowered to 1: on a healthy DB lock-waiters are 0 almost
+			// always. A single waiter is already worth a heads-up.
+			sev := severityForCount(m.ActiveLockWaiters, 10, 3, 1)
+			if sev == "" {
+				return nil
+			}
+
+			return &Hit{Severity: sev, MetricValue: float64(m.ActiveLockWaiters)}
+		},
+	},
+	{
+		// Longest time a process has been waiting on a lock. Sustained high
+		// values suggest blocking transactions to investigate via pg_blocking_pids.
+		ID: "longest_lock_wait_seconds", Category: "locks", RelatedRoute: "/locks",
+		Evaluate: func(m RawMetrics) *Hit {
+			sec := m.LongestLockWaitSeconds
+
+			sev := severityForRatio(sec, 60, 30, 10)
+			if sev == "" {
+				return nil
+			}
+
+			return &Hit{Severity: sev, MetricValue: sec}
+		},
+	},
+	{
+		// pg_locks rows in `granted = false` state — backends waiting in the queue.
+		// Different from active_lock_waiters: counts each ungranted lock, not just
+		// blocked processes (one process may wait for multiple locks).
+		ID: "ungranted_locks", Category: "locks", RelatedRoute: "/locks",
+		Evaluate: func(m RawMetrics) *Hit {
+			// Tightened (was 3/10/20): healthy OLTP keeps ungranted = 0 almost
+			// always; even 2 waiting locks is worth surfacing.
+			sev := severityForCount(m.UngrantedLocks, 15, 5, 2)
+			if sev == "" {
+				return nil
+			}
+
+			return &Hit{Severity: sev, MetricValue: float64(m.UngrantedLocks)}
+		},
+	},
+	{
+		// Cumulative deadlocks counter from pg_stat_database since last reset.
+		// Any deadlock is a sign of application-level locking order issues.
+		// Without history we can't compute a rate — context.stats_reset helps
+		// the user interpret the value.
+		ID: "deadlocks_rate", Category: "locks", RelatedRoute: "/locks",
+		Evaluate: func(m RawMetrics) *Hit {
+			// Absolute counter since pg_stat_database_reset: without per-day
+			// normalisation any threshold above 0 is uptime-dependent
+			// (fresh clusters look clean, long-running ones look catastrophic).
+			// Surface as LOW only — «есть deadlocks, посмотри логи»; absolute
+			// MED/HIGH gradations would be misleading without history.
+			if m.DeadlocksTotal <= 0 {
+				return nil
+			}
+
+			return &Hit{Severity: SeverityLow, MetricValue: float64(m.DeadlocksTotal)}
+		},
+	},
+	{
+		// Heavy lock pool saturation: total pg_locks rows vs the configured
+		// capacity (max_locks_per_transaction × max_connections). Approaching
+		// the limit risks "out of shared memory" errors on lock acquisition.
+		ID: "lock_pool_saturation", Category: "locks", RelatedRoute: "/locks",
+		Evaluate: func(m RawMetrics) *Hit {
+			if m.MaxLocksPerTransaction <= 0 || m.MaxConnections <= 0 {
+				return nil
+			}
+
+			capacity := float64(m.MaxLocksPerTransaction) * float64(m.MaxConnections)
+			if capacity <= 0 {
+				return nil
+			}
+
+			ratio := float64(m.HeavyweightLocksTotal) / capacity
+
+			sev := severityForRatio(ratio, 0.8, 0.6, 0.5)
+			if sev == "" {
+				return nil
+			}
+
+			return &Hit{
+				Severity:    sev,
+				MetricValue: ratio,
+				Context: map[string]any{
+					"total":    m.HeavyweightLocksTotal,
+					"capacity": int64(capacity),
+				},
+			}
+		},
+	},
+
+	// === Minor (P3) ===
+	{
+		// Low HOT-update ratio means most UPDATEs allocate new tuples that
+		// require updating all indexes — leading to index bloat and extra
+		// dead versions. Healthy OLTP usually keeps HOT ratio above 0.8.
+		// Inverted severity: lower ratio = worse.
+		ID: "low_hot_update_ratio", Category: "storage", RelatedRoute: "/tables",
+		Evaluate: func(m RawMetrics) *Hit {
+			r := m.HotUpdateRatio
+
+			// HIGH raised from <30% to <50%: below half-HOT means most UPDATEs
+			// allocate fresh tuples and update every index — significant bloat.
+			var sev Severity
+
+			switch {
+			case r < 0.50:
+				sev = SeverityHigh
+			case r < 0.65:
+				sev = SeverityMedium
+			case r < 0.80:
+				sev = SeverityLow
+			default:
+				return nil
+			}
+
+			return &Hit{Severity: sev, MetricValue: r}
+		},
+	},
+	{
+		// HOT-chain ruptures: an UPDATE could not stay on the same page so a
+		// new tuple was put elsewhere. Only meaningful on PG 16+; the
+		// 170000/ template returns 0 on older versions and the rule stays silent.
+		ID: "high_newpage_update_ratio", Category: "storage", RelatedRoute: "/tables",
+		Evaluate: func(m RawMetrics) *Hit {
+			r := m.NewpageUpdateRatio
+
+			sev := severityForRatio(r, 0.20, 0.10, 0.05)
+			if sev == "" {
+				return nil
+			}
+
+			return &Hit{Severity: sev, MetricValue: r}
+		},
+	},
+	{
+		// Tables that significantly diverged from their last ANALYZE — the
+		// planner is making decisions on stale statistics.
+		ID: "stale_planner_stats", Category: "maintenance", RelatedRoute: "/maintenance",
+		Evaluate: func(m RawMetrics) *Hit {
+			sev := severityForCount(m.StalePlannerStatsTables, 10, 5, 3)
+			if sev == "" {
+				return nil
+			}
+
+			return &Hit{Severity: sev, MetricValue: float64(m.StalePlannerStatsTables)}
+		},
+	},
+	{
+		// Per-table autovacuum_analyze_enabled=false. Rarely intentional —
+		// usually a leftover from an experiment or migration.
+		ID: "analyze_disabled_tables", Category: "maintenance", RelatedRoute: "/maintenance",
+		Evaluate: func(m RawMetrics) *Hit {
+			if m.AnalyzeDisabledTables <= 0 {
+				return nil
+			}
+
+			return &Hit{Severity: SeverityLow, MetricValue: float64(m.AnalyzeDisabledTables)}
+		},
+	},
+	{
+		// wal_level=minimal forbids streaming replication. If replicas are
+		// actually connected, the configuration is internally inconsistent.
+		ID: "wal_level_minimal_with_replicas", Category: "wal_checkpoint", RelatedRoute: "/replication",
+		Evaluate: func(m RawMetrics) *Hit {
+			if m.WalLevel != "minimal" || m.ReplicaCount == 0 {
+				return nil
+			}
+
+			return &Hit{
+				Severity:    SeverityHigh,
+				MetricValue: float64(m.ReplicaCount),
+				Context:     map[string]any{"replicas": m.ReplicaCount},
+			}
+		},
+	},
+	{
+		// wal_level=logical without any active logical slot is wasted overhead.
+		ID: "wal_level_logical_without_publications", Category: "wal_checkpoint", RelatedRoute: "/replication",
+		Evaluate: func(m RawMetrics) *Hit {
+			if m.WalLevel != "logical" || m.LogicalSlotsActive > 0 {
 				return nil
 			}
 

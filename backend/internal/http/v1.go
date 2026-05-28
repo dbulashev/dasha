@@ -249,6 +249,7 @@ func (s *Handlers) GetHealthScore(
 	}
 
 	result := health.CalculateWithWeights(health.RawMetrics{
+		InRecovery:                metrics.InRecovery,
 		TotalConnections:          metrics.TotalConnections,
 		ActiveConnections:         metrics.ActiveConnections,
 		IdleInTransaction:         metrics.IdleInTransaction,
@@ -273,6 +274,18 @@ func (s *Handlers) GetHealthScore(
 		HorizonLagXids:            metrics.HorizonLagXids,
 		TimedCheckpoints:          metrics.TimedCheckpoints,
 		RequestedCheckpoints:      metrics.RequestedCheckpoints,
+		ActiveLockWaiters:         metrics.ActiveLockWaiters,
+		LongestLockWaitSeconds:    metrics.LongestLockWaitSeconds,
+		UngrantedLocks:            metrics.UngrantedLocks,
+		DeadlocksTotal:            metrics.DeadlocksTotal,
+		HeavyweightLocksTotal:     metrics.HeavyweightLocksTotal,
+		MaxLocksPerTransaction:    metrics.MaxLocksPerTransaction,
+		HotUpdateRatio:            metrics.HotUpdateRatio,
+		NewpageUpdateRatio:        metrics.NewpageUpdateRatio,
+		StalePlannerStatsTables:   metrics.StalePlannerStatsTables,
+		AnalyzeDisabledTables:     metrics.AnalyzeDisabledTables,
+		WalLevel:                  metrics.WalLevel,
+		LogicalSlotsActive:        metrics.LogicalSlotsActive,
 	}, weights)
 
 	categories := make([]serverhttp.HealthScoreCategory, 0, len(result.Categories))
@@ -290,6 +303,7 @@ func (s *Handlers) GetHealthScore(
 		Score:          result.Score,
 		Categories:     categories,
 		HasReplication: result.HasReplication,
+		InRecovery:     result.InRecovery,
 	}, nil
 }
 
@@ -335,6 +349,7 @@ func (s *Handlers) GetHealthScoreRecommendations(
 	}
 
 	raw := health.RawMetrics{
+		InRecovery:                metrics.InRecovery,
 		TotalConnections:          metrics.TotalConnections,
 		ActiveConnections:         metrics.ActiveConnections,
 		IdleInTransaction:         metrics.IdleInTransaction,
@@ -359,6 +374,18 @@ func (s *Handlers) GetHealthScoreRecommendations(
 		HorizonLagXids:            metrics.HorizonLagXids,
 		TimedCheckpoints:          metrics.TimedCheckpoints,
 		RequestedCheckpoints:      metrics.RequestedCheckpoints,
+		ActiveLockWaiters:         metrics.ActiveLockWaiters,
+		LongestLockWaitSeconds:    metrics.LongestLockWaitSeconds,
+		UngrantedLocks:            metrics.UngrantedLocks,
+		DeadlocksTotal:            metrics.DeadlocksTotal,
+		HeavyweightLocksTotal:     metrics.HeavyweightLocksTotal,
+		MaxLocksPerTransaction:    metrics.MaxLocksPerTransaction,
+		HotUpdateRatio:            metrics.HotUpdateRatio,
+		NewpageUpdateRatio:        metrics.NewpageUpdateRatio,
+		StalePlannerStatsTables:   metrics.StalePlannerStatsTables,
+		AnalyzeDisabledTables:     metrics.AnalyzeDisabledTables,
+		WalLevel:                  metrics.WalLevel,
+		LogicalSlotsActive:        metrics.LogicalSlotsActive,
 	}
 
 	recs := health.Evaluate(raw, database != "")

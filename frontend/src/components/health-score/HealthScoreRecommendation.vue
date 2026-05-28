@@ -40,8 +40,13 @@ const relatedLink = computed(() => {
 const i18nBase = computed(() => `healthScore.recommendations.${props.rec.rule_id}`)
 
 const i18nContext = computed<Record<string, unknown>>(() => {
+  const raw = props.rec.metric_value
+  // metric_pct: same value rendered as a percentage with one decimal,
+  // for rules whose metric_value is a 0..1 ratio (HOT, newpage, requested_checkpoints,
+  // lock_pool_saturation). Locale strings choose which form to use.
   return {
-    metric_value: props.rec.metric_value,
+    metric_value: raw,
+    metric_pct: Number.isFinite(raw) ? (raw * 100).toFixed(1) : raw,
     ...(props.rec.context ?? {}),
   }
 })
