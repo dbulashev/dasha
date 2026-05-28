@@ -34,7 +34,7 @@ In parallel, a **rules engine** evaluates the same metrics and emits a list of L
 
 ## Penalty thresholds (overview)
 
-Penalty functions produce a smooth gradient; the table lists the breakpoints where the slope changes.
+Penalties grow smoothly with the metric. A **breakpoint** is the metric value at which the slope of the penalty function changes: before the first one the penalty is zero, between the points it grows linearly, after the last one it reaches the category's maximum. The `→` arrows in the right column read exactly that way: first breakpoint → second → third.
 
 | Category       | Metric                              | Breakpoints (no penalty → full penalty)   |
 |----------------|--------------------------------------|-------------------------------------------|
@@ -61,7 +61,7 @@ XID-age and horizon thresholds are calibrated against `autovacuum_freeze_max_age
 
 Rules emit when the metric crosses a discrete LOW / MEDIUM / HIGH threshold. They are filtered by scope:
 
-- instance-only categories (`connections`, `replication`, `horizon`, `wal_checkpoint`, `locks`) are hidden when drilling down into a specific database;
+- instance-only categories (`connections`, `replication`, `horizon`, `wal_checkpoint`, `locks`) are hidden on the per-database drill down (detail view);
 - the whole `maintenance` category is hidden on standbys (`pg_is_in_recovery() = true`) — mirrors the maintenance-weight drop in the score.
 
 Each bullet: what's measured / how it's computed, then LOW / MEDIUM / HIGH thresholds.
@@ -113,4 +113,6 @@ Each bullet: what's measured / how it's computed, then LOW / MEDIUM / HIGH thres
 - `deadlocks_rate` — `deadlocks` from `pg_stat_database` (cumulative since `pg_stat_database_reset`). Without per-day normalisation only "non-zero" is actionable. LOW when total > 0.
 - `lock_pool_saturation` — `count(*) from pg_locks` divided by `max_connections × max_locks_per_transaction` (size of the heavyweight-lock shared pool). Thresholds ≥0.4 / ≥0.6 / ≥0.8.
 
+## Drill down (per-database detail view)
 
+The "Databases" table collects the same metrics on a per-DB basis as it does for the instance: cache hit ratio, dead tuples, vacuum age. Each row is aggregated into a `DatabaseScore`. The rules engine is re-run in database scope, hiding instance-only categories. The UI table is sortable by size or score and lets the user pin a database as the recommendation context.

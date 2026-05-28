@@ -11,6 +11,7 @@ import HealthScoreGauge from '@/components/health-score/HealthScoreGauge.vue'
 import HealthScoreCategories from '@/components/health-score/HealthScoreCategories.vue'
 import HealthScoreDatabases from '@/components/health-score/HealthScoreDatabases.vue'
 import HealthScoreRecommendations from '@/components/health-score/HealthScoreRecommendations.vue'
+import HealthScoreAbout from '@/components/health-score/HealthScoreAbout.vue'
 
 const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
@@ -70,5 +71,7 @@ const { items: data, loading } = useApiLoader<HealthScore | null>(
       :database="selectedDatabase"
       @clear-database="clearDatabase"
     />
+
+    <HealthScoreAbout />
   </div>
 </template>
