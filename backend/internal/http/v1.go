@@ -435,6 +435,13 @@ func (s *Handlers) GetHealthScoreDatabases(
 		return nil, fmt.Errorf("GetHealthScoreDatabases | loadHealthWeights | %w", err)
 	}
 
+	// Mirror the instance-level behaviour: drop maintenance per-DB on
+	// standbys, where autovacuum / ANALYZE do not run.
+	info, err := s.repo.GetInstanceInfo(ctx, req.Params.ClusterName, req.Params.Instance)
+	if err != nil {
+		return nil, fmt.Errorf("GetHealthScoreDatabases | GetInstanceInfo | %w", err)
+	}
+
 	per := make([]health.PerDBMetrics, 0, len(metrics))
 	for _, m := range metrics {
 		per = append(per, health.PerDBMetrics{
@@ -450,7 +457,7 @@ func (s *Handlers) GetHealthScoreDatabases(
 		})
 	}
 
-	scores := health.ComputePerDB(per, weights)
+	scores := health.ComputePerDB(per, weights, info.InRecovery)
 
 	databases := make([]serverhttp.HealthScoreDatabase, 0, len(scores))
 	for _, ds := range scores {

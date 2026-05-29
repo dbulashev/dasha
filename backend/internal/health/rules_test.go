@@ -80,7 +80,7 @@ func TestEvaluate_SortedHighFirst(t *testing.T) {
 	m := RawMetrics{
 		TotalConnections:  98, // HIGH connection_ratio
 		MaxConnections:    100,
-		IdleInTransaction: 2, // LOW idle_in_tx (threshold lowered to ≥2)
+		IdleInTransaction: 2,  // LOW idle_in_tx (threshold lowered to ≥2)
 		MaxDeadRatio:      25, // MEDIUM dead_ratio
 	}
 
@@ -195,9 +195,9 @@ func TestRule_XidWraparoundRisk(t *testing.T) {
 		want Severity
 	}{
 		{100_000_000, ""},
-		{160_000_000, SeverityLow},     // > 150M, < 200M
-		{250_000_000, SeverityMedium},  // > 200M, < 1.6B
-		{1_700_000_000, SeverityHigh},  // > 1.6B (failsafe)
+		{160_000_000, SeverityLow},    // > 150M, < 200M
+		{250_000_000, SeverityMedium}, // > 200M, < 1.6B
+		{1_700_000_000, SeverityHigh}, // > 1.6B (failsafe)
 	}
 
 	for _, tc := range cases {
@@ -334,9 +334,9 @@ func TestRule_TrackIoTimingDisabled(t *testing.T) {
 func TestEvaluate_DatabaseScopeFiltersNewInstanceCategories(t *testing.T) {
 	// Trigger rules across the three new instance-only categories.
 	m := RawMetrics{
-		HorizonLagXids:    50_000_000,             // horizon
+		HorizonLagXids:    50_000_000, // horizon
 		AutovacuumEnabled: true, TrackCountsEnabled: true,
-		TimedCheckpoints:    50,
+		TimedCheckpoints:     50,
 		RequestedCheckpoints: 50, // wal_checkpoint
 	}
 

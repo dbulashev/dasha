@@ -7,6 +7,7 @@ A composite metric (0–100) summarising overall PostgreSQL instance health acro
 ```text
 score = 100 − Σ (penalty_i × weight_i)
 clamp(0..100)
+if a critical condition is present: score = min(score, 30)
 ```
 
 For every category `i` Dasha computes a continuous **penalty** (0..100) from raw metrics and combines them with per-category **weights** that sum to 1.0. Weights are validated and normalised; invalid input falls back to defaults.
@@ -16,7 +17,17 @@ Categories with no signal on this instance are **dropped** and their weight is r
 - `replication` — dropped when the instance has no replicas.
 - `maintenance` — dropped when `pg_is_in_recovery()` is true (the instance is a standby). Autovacuum and ANALYZE cannot run on a standby, so vacuum age, XID age and the maintenance GUCs reflect primary state observed from the replica — any action belongs on the primary. The corresponding rules are also hidden from recommendations.
 
-In parallel, a **rules engine** evaluates the same metrics and emits a list of LOW / MEDIUM / HIGH recommendations with deep-links to the relevant Dasha page. Rules and penalties are independent: penalties feed the numeric score, rules feed the action list.
+### Critical conditions (score floor)
+
+A plain weighted average dilutes catastrophes: imminent transaction-ID wraparound moves the `maintenance` category by at most its weight (~15 points), so a database minutes from a forced shutdown would otherwise still show ~85/100 next to a HIGH wraparound recommendation. To keep the headline number honest, any of the following clamps the score into the red band (`min(score, 30)`):
+
+- **transaction-ID wraparound at failsafe** — `max(age(datfrozenxid), age(relfrozenxid)) ≥ 1.6 B` (`vacuum_failsafe_age`), where PostgreSQL itself enters emergency VACUUM and skips index cleanup to race the ~2.1 B shutdown wall;
+- **autovacuum globally off** (`autovacuum=off`) — dead tuples and XID age grow unbounded;
+- **track_counts off** (`track_counts=off`) — autovacuum is blind and effectively never triggers.
+
+The floor is gated on primaries (`pg_is_in_recovery() = false`): a standby cannot run autovacuum and inherits its frozen-xid horizon from the primary, so the action — and the red score — belong there. These same conditions also surface as HIGH recommendations, so the number and the action list stay in lockstep.
+
+In parallel, a **rules engine** evaluates the same metrics and emits a list of LOW / MEDIUM / HIGH recommendations with deep-links to the relevant Dasha page. Rules and penalties are independent: penalties feed the numeric score, rules feed the action list. Every rule has a matching score contribution (a penalty term or the floor), so a condition can never appear in the recommendation list while leaving the number untouched.
 
 ## Categories and default weights
 
@@ -36,26 +47,33 @@ In parallel, a **rules engine** evaluates the same metrics and emits a list of L
 
 Penalties grow smoothly with the metric. A **breakpoint** is the metric value at which the slope of the penalty function changes: before the first one the penalty is zero, between the points it grows linearly, after the last one it reaches the category's maximum. The `→` arrows in the right column read exactly that way: first breakpoint → second → third.
 
-| Category       | Metric                              | Breakpoints (no penalty → full penalty)   |
-|----------------|--------------------------------------|-------------------------------------------|
-| connections    | `total / max_connections`           | 0.60 → 0.80 → 0.95+                        |
-| connections    | `idle_in_transaction` (count)       | linear 5 pts each, capped at 30           |
-| connections    | `longest_transaction_seconds`       | >300 s, capped at 20 pts                   |
-| performance    | `cache_hit_ratio` (%)               | ≥95 → ≥90 → ≥85 → below                    |
-| storage        | `max_dead_ratio` (%)                | ≤20 → 20–30 → >30                          |
-| storage        | `avg_dead_ratio` (%)                | >15 adds up to 30 pts                      |
-| storage        | `tables_high_bloat` (count)         | >5 adds up to 30 pts                       |
-| replication    | `max_replay_lag_seconds`            | >10 s ramps up to full                     |
-| replication    | `max_lag_bytes`                     | >16 MiB ramps up to full                   |
-| replication    | `disconnected_replicas`             | each disconnect adds 25 pts                |
-| maintenance    | `max_xid_age` (txns)                | 500 M → 1 B → 1.5 B                        |
-| maintenance    | `max_vacuum_age_hours`              | >168 h → >504 h → >1440 h (7/21/60 days)   |
-| maintenance    | `tables_never_vacuumed`             | each table adds 5 pts, capped at 20        |
-| horizon        | `horizon_lag_xids`                  | 1 M → 10 M → 100 M                          |
-| wal_checkpoint | `requested / total_checkpoints`     | ≥5 % → ≥10 % → ≥20 %                       |
-| locks          | weighted sum of all lock factors    | see `penaltyLocks` (accumulative)         |
+| Category       | Metric                              | Breakpoints (no penalty → full penalty)        |
+|----------------|--------------------------------------|------------------------------------------------|
+| connections    | `total / max_connections`           | 0.60 → 0.80 → 0.95+                             |
+| connections    | `idle_in_transaction` (count)       | linear 5 pts each, capped at 30                |
+| connections    | `longest_transaction_seconds`       | >300 s, capped at 20 pts                        |
+| performance    | `cache_hit_ratio` (%)               | ≥95 → ≥90 → ≥85 → below                         |
+| performance    | `track_io_timing` off               | flat 5 pts (LOW)                               |
+| storage        | `max_dead_ratio` (%)                | ≤20 → 20–30 → >30                               |
+| storage        | `avg_dead_ratio` (%)                | >15 adds up to 30 pts                           |
+| storage        | `tables_high_bloat` (count)         | >5 adds up to 30 pts                            |
+| storage        | `hot_update_ratio`                  | <0.80 → <0.65 → <0.50 (5 / 15 / 30 pts)        |
+| storage        | `newpage_update_ratio` (PG 16+)     | >0.05 → >0.10 → >0.20 (5 / 10 / 20 pts)        |
+| replication    | `max_replay_lag_seconds`            | >10 s ramps up to full                          |
+| replication    | `max_lag_bytes`                     | >16 MiB ramps up to full                        |
+| replication    | `disconnected_replicas`             | each disconnect adds 25 pts                     |
+| maintenance    | `max(xid_age, relfrozenxid_age)`    | 200 M → 1.6 B → 2.1 B (escalates to 100)       |
+| maintenance    | `max_vacuum_age_hours`              | >168 h → >504 h → >1440 h (7/21/60 days)        |
+| maintenance    | `tables_never_vacuumed`             | each table adds 5 pts, capped at 20             |
+| maintenance    | `tables_with_autovacuum_off`        | 3 pts each, capped at 15                        |
+| maintenance    | `stale_planner_stats_tables`        | 2 pts each, capped at 15                        |
+| maintenance    | `autovacuum` / `track_counts` off   | saturates the category (also floors the score) |
+| horizon        | `horizon_lag_xids`                  | 1 M → 10 M → 100 M                               |
+| wal_checkpoint | `requested / total_checkpoints`     | ≥5 % → ≥10 % → ≥20 %                            |
+| wal_checkpoint | `wal_level` mismatch                | minimal+replicas 80 pts; logical+no slot 5 pts |
+| locks          | weighted sum of all lock factors    | see `penaltyLocks` (accumulative)              |
 
-XID-age and horizon thresholds are calibrated against `autovacuum_freeze_max_age` (200 M) and `vacuum_freeze_table_age` (150 M) from PostgreSQL internals.
+The transaction-ID penalty is calibrated against PostgreSQL's freeze machinery: it starts at `autovacuum_freeze_max_age` (200 M, emergency autovacuum), reaches 80 at `vacuum_failsafe_age` (1.6 B) and 100 at the ~2.1 B shutdown wall — so it keeps climbing through the danger zone instead of flat-lining. The `relfrozenxid_age_outlier` rule shares the same curve via `max(datfrozenxid, relfrozenxid)`. Every rule listed below maps to one of these penalty terms or to the critical floor, so the score and the recommendations cover the same conditions.
 
 ## Rules and severity (recommendations)
 
@@ -80,7 +98,7 @@ Each bullet: what's measured / how it's computed, then LOW / MEDIUM / HIGH thres
 - `high_avg_dead_ratio` — same ratio averaged across tables with > 1000 live tuples. Background bloat level. Thresholds ≥5 / ≥15 / ≥25.
 - `many_bloated_tables` — number of tables whose dead ratio exceeds the autovacuum trigger (`autovacuum_vacuum_scale_factor`). Thresholds ≥5 / ≥10 / ≥20.
 - `low_hot_update_ratio` — `n_tup_hot_upd / NULLIF(n_tup_upd, 0)` over all user tables. Lower means UPDATEs allocate new tuples and rewrite every index, bloating indexes. Thresholds <0.80 / <0.65 / <0.50.
-- `high_newpage_update_ratio` — `n_tup_newpage_upd / NULLIF(n_tup_upd, 0)` (PG 16+). Share of UPDATEs that broke a HOT chain by placing the new tuple on a fresh page. Thresholds ≥0.05 / ≥0.15 / ≥0.25.
+- `high_newpage_update_ratio` — `n_tup_newpage_upd / NULLIF(n_tup_upd, 0)` (PG 16+). Share of UPDATEs that broke a HOT chain by placing the new tuple on a fresh page. Thresholds ≥0.05 / ≥0.10 / ≥0.20.
 
 ### Replication
 - `replication_lag_time` — `EXTRACT(EPOCH FROM replay_lag)` of the worst row in `pg_stat_replication`. How far behind in WAL replay any standby is. Thresholds ≥10 / ≥60 / ≥300 seconds.

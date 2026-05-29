@@ -21,17 +21,24 @@ const PENALTY_ROWS = [
   { cat: 'connections', metric: 'idle_in_transaction', pointsKey: 'idle_in_tx' },
   { cat: 'connections', metric: 'longest_transaction_seconds', pointsKey: 'longest_transaction' },
   { cat: 'performance', metric: 'cache_hit_ratio (%)', pointsKey: 'cache_hit_ratio' },
+  { cat: 'performance', metric: 'track_io_timing', pointsKey: 'track_io_timing' },
   { cat: 'storage', metric: 'max_dead_ratio (%)', pointsKey: 'max_dead_ratio' },
   { cat: 'storage', metric: 'avg_dead_ratio (%)', pointsKey: 'avg_dead_ratio' },
   { cat: 'storage', metric: 'tables_high_bloat', pointsKey: 'tables_high_bloat' },
+  { cat: 'storage', metric: 'hot_update_ratio', pointsKey: 'hot_update_ratio' },
+  { cat: 'storage', metric: 'newpage_update_ratio', pointsKey: 'newpage_update_ratio' },
   { cat: 'replication', metric: 'max_replay_lag_seconds', pointsKey: 'max_replay_lag' },
   { cat: 'replication', metric: 'max_lag_bytes', pointsKey: 'max_lag_bytes' },
   { cat: 'replication', metric: 'disconnected_replicas', pointsKey: 'disconnected_replicas' },
-  { cat: 'maintenance', metric: 'max_xid_age (xid)', pointsKey: 'max_xid_age' },
+  { cat: 'maintenance', metric: 'max(xid_age, relfrozenxid_age)', pointsKey: 'max_xid_age' },
   { cat: 'maintenance', metric: 'max_vacuum_age_hours', pointsKey: 'max_vacuum_age_hours' },
   { cat: 'maintenance', metric: 'tables_never_vacuumed', pointsKey: 'tables_never_vacuumed' },
+  { cat: 'maintenance', metric: 'tables_with_autovacuum_off', pointsKey: 'tables_with_autovacuum_off' },
+  { cat: 'maintenance', metric: 'stale_planner_stats_tables', pointsKey: 'stale_planner_stats' },
+  { cat: 'maintenance', metric: 'autovacuum / track_counts', pointsKey: 'autovacuum_track_counts' },
   { cat: 'horizon', metric: 'horizon_lag_xids', pointsKey: 'horizon_lag_xids' },
   { cat: 'wal_checkpoint', metric: 'requested / total_checkpoints', pointsKey: 'requested_checkpoint_ratio' },
+  { cat: 'wal_checkpoint', metric: 'wal_level', pointsKey: 'wal_level_mismatch' },
   { cat: 'locks', metric: 'penaltyLocks', pointsKey: 'penalty_locks' },
 ] as const
 
@@ -149,6 +156,23 @@ clamp(0 … 100)</pre>
             <ul class="text-body-2 ms-4">
               <li>{{ t('healthScore.about.dropReplication') }}</li>
               <li>{{ t('healthScore.about.dropMaintenance') }}</li>
+            </ul>
+          </v-alert>
+
+          <v-alert
+            type="error"
+            variant="tonal"
+            density="compact"
+            border="start"
+            icon="mdi-fire"
+            class="mt-3"
+          >
+            <div class="font-weight-medium mb-1">{{ t('healthScore.about.criticalTitle') }}</div>
+            <div class="text-body-2 mb-2">{{ t('healthScore.about.criticalIntro') }}</div>
+            <ul class="text-body-2 ms-4">
+              <li>{{ t('healthScore.about.criticalXid') }}</li>
+              <li>{{ t('healthScore.about.criticalAutovacuum') }}</li>
+              <li>{{ t('healthScore.about.criticalTrackCounts') }}</li>
             </ul>
           </v-alert>
 

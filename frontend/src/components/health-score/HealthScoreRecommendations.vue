@@ -74,6 +74,7 @@ const recs = computed(() => data.value?.recommendations ?? [])
           v-for="r in recs"
           :key="r.rule_id"
           :rec="r"
+          :database="database ?? null"
         />
       </template>
     </v-card-text>

@@ -93,6 +93,34 @@ const (
 	weightLocks         = 0.10
 )
 
+// Transaction-ID age thresholds, tied to PostgreSQL's freeze machinery. Shared
+// by the maintenance penalty curve, the xid wraparound rules, and the critical
+// score ceiling so all three stay calibrated to the same mechanics:
+//   - xidFreezeTableAge  vacuum_freeze_table_age default: regular VACUUM begins
+//     aggressively freezing whole tables.
+//   - xidFreezeMaxAge    autovacuum_freeze_max_age default: anti-wraparound
+//     (emergency) autovacuum is forced, even on tables it would otherwise skip.
+//   - xidFailsafeAge     vacuum_failsafe_age default: VACUUM enters failsafe and
+//     skips index cleanup to race the wraparound — PostgreSQL's own "emergency".
+//   - xidShutdownAge     ~ the point where the server refuses new XIDs (2^31 less
+//     a safety margin) and must be brought down for an offline VACUUM.
+const (
+	xidFreezeTableAge int64 = 150_000_000
+	xidFreezeMaxAge   int64 = 200_000_000
+	xidFailsafeAge    int64 = 1_600_000_000
+	xidShutdownAge    int64 = 2_100_000_000
+)
+
+// criticalScoreCeiling caps the overall score when a catastrophic, availability-
+// or data-integrity-threatening condition is present. 30 sits in the frontend's
+// red band (< 40), so a single silent-killer issue forces the instance into the
+// red regardless of how healthy the other categories look. A plain weighted
+// average would otherwise dilute it away — e.g. imminent wraparound moves the
+// maintenance category by at most its weight (~15 points), leaving the headline
+// number green next to a HIGH wraparound recommendation. The ceiling keeps the
+// number consistent with the rules engine, which surfaces the same conditions.
+const criticalScoreCeiling = 30.0
+
 // Calculate computes the health score from raw metrics using default weights.
 func Calculate(m RawMetrics) Result {
 	return CalculateWithWeights(m, DefaultWeights())
@@ -128,6 +156,11 @@ func CalculateWithWeights(m RawMetrics, w Weights) Result {
 		penaltyLocks(m),
 	}
 
+	// Fold in instance-only signals (enabled GUCs, HOT ratio, wal_level) so the
+	// score moves on every condition the rules engine reports — applied before
+	// the weight drop so a standby's maintenance bumps still get zeroed out.
+	applyInstanceAdjustments(categories, m)
+
 	for i := range categories {
 		categories[i].Weight = w.byCategory(categories[i].Name)
 	}
@@ -153,11 +186,163 @@ func CalculateWithWeights(m RawMetrics, w Weights) Result {
 
 	score := math.Max(0, math.Min(100, 100-totalPenalty))
 
+	// Catastrophic conditions clamp the aggregate into the red regardless of how
+	// the weighted average came out — see criticalScoreCeiling.
+	if ceiling := criticalCeiling(m); ceiling < score {
+		score = ceiling
+	}
+
 	return Result{
 		Score:          math.Round(score*10) / 10,
 		Categories:     categories,
 		HasReplication: hasReplication,
 		InRecovery:     m.InRecovery,
+	}
+}
+
+// criticalCeiling returns the maximum score allowed in the presence of a
+// catastrophic condition, or 100 when none applies.
+//
+// Maintenance-class conditions are gated on !InRecovery: a standby cannot run
+// autovacuum/ANALYZE and inherits its frozen-xid horizon from the primary, so
+// any action belongs there — mirroring the maintenance-category drop in
+// CalculateWithWeights.
+func criticalCeiling(m RawMetrics) float64 {
+	if m.InRecovery {
+		return 100
+	}
+
+	// Imminent transaction-ID wraparound. Use the larger of the database
+	// datfrozenxid age and the per-table relfrozenxid age; the latter also
+	// covers a database whose datfrozenxid metric came back empty.
+	xidAge := m.MaxXidAge
+	if m.MaxRelfrozenxidAge > xidAge {
+		xidAge = m.MaxRelfrozenxidAge
+	}
+
+	if c := criticalXidCeiling(xidAge); c < 100 {
+		return c
+	}
+
+	// Autovacuum globally off — dead tuples and frozen-xid age grow unbounded.
+	// track_counts off — autovacuum is blind and never triggers, even if enabled.
+	if !m.AutovacuumEnabled || !m.TrackCountsEnabled {
+		return criticalScoreCeiling
+	}
+
+	return 100
+}
+
+// criticalXidCeiling clamps the score to the red band once the transaction-ID
+// age reaches the wraparound failsafe zone, where PostgreSQL itself enters
+// emergency VACUUM. Returns 100 (no clamp) below that. Shared with the per-DB
+// path, where the instance-level GUC conditions do not apply.
+func criticalXidCeiling(xidAge int64) float64 {
+	if xidAge >= xidFailsafeAge {
+		return criticalScoreCeiling
+	}
+
+	return 100
+}
+
+// applyInstanceAdjustments folds instance-only signals into the per-category
+// penalties so the aggregate moves on every condition the rules engine reports
+// (low_cache_hit_ratio's siblings: track_io_timing, HOT ratio, wal_level, and
+// the autovacuum/track_counts GUCs). These live here, not in the shared penalty
+// functions, because those are reused for per-DB scoring with a zero-value
+// RawMetrics where a false bool or a 0.0 HOT ratio would read as "broken".
+// Magnitudes mirror the corresponding rule's severity (LOW ≈ 5, HIGH ≈ 80+).
+func applyInstanceAdjustments(categories []CategoryResult, m RawMetrics) {
+	// Maintenance: autovacuum / track_counts off are silent killers — the same
+	// HIGH rules that drive criticalCeiling. Saturate the category so the
+	// breakdown turns red to match the floored aggregate.
+	if !m.AutovacuumEnabled {
+		addPenalty(categories, "maintenance", 100)
+	}
+
+	if !m.TrackCountsEnabled {
+		addPenalty(categories, "maintenance", 100)
+	}
+
+	// Surface the GUC state in the maintenance tooltip, so a saturated (red) bar
+	// reads as "autovacuum off" rather than the benign vacuum/xid numbers next to it.
+	setDetail(categories, "maintenance", "autovacuum_enabled", b2f(m.AutovacuumEnabled))
+	setDetail(categories, "maintenance", "track_counts_enabled", b2f(m.TrackCountsEnabled))
+
+	// Performance: track_io_timing off (LOW) — recommended on, negligible cost.
+	if !m.TrackIoTimingEnabled {
+		addPenalty(categories, "performance", 5)
+	}
+
+	setDetail(categories, "performance", "track_io_timing_enabled", b2f(m.TrackIoTimingEnabled))
+
+	// Storage: low HOT-update ratio (inverted — lower is worse). The SQL returns
+	// 1.0 when there are too few updates to judge, so quiet databases score 0.
+	switch {
+	case m.HotUpdateRatio < 0.50:
+		addPenalty(categories, "storage", 30)
+	case m.HotUpdateRatio < 0.65:
+		addPenalty(categories, "storage", 15)
+	case m.HotUpdateRatio < 0.80:
+		addPenalty(categories, "storage", 5)
+	}
+
+	setDetail(categories, "storage", "hot_update_ratio", m.HotUpdateRatio)
+
+	// WAL & checkpoint: wal_level misconfiguration. wal_level is a string and the
+	// Details map is float64-only, so we flag the offending condition by presence
+	// (value 1) and let the frontend render it to text — this keeps a penalised
+	// wal_checkpoint bar self-explanatory in the tooltip without a schema change.
+	if m.WalLevel == "minimal" && m.ReplicaCount > 0 {
+		addPenalty(categories, "wal_checkpoint", 80) // HIGH: replicas can't stream
+		setDetail(categories, "wal_checkpoint", "wal_level_minimal_with_replicas", 1)
+	}
+
+	if m.WalLevel == "logical" && m.LogicalSlotsActive == 0 {
+		addPenalty(categories, "wal_checkpoint", 5) // LOW: wasted WAL overhead
+		setDetail(categories, "wal_checkpoint", "wal_level_logical_without_slots", 1)
+	}
+
+	// Round once, after every addition, to keep penalties at one decimal place
+	// without per-call rounding drift.
+	for i := range categories {
+		categories[i].Penalty = math.Round(categories[i].Penalty*10) / 10
+	}
+}
+
+// addPenalty adds delta to the named category's penalty, capping at 100.
+// Rounding is deferred to a single pass at the end of applyInstanceAdjustments
+// so repeated additions cannot accumulate per-call rounding error.
+func addPenalty(categories []CategoryResult, name string, delta float64) {
+	for i := range categories {
+		if categories[i].Name == name {
+			categories[i].Penalty = math.Min(categories[i].Penalty+delta, 100)
+			return
+		}
+	}
+}
+
+// b2f maps a bool to 1.0 / 0.0 for the float64 Details map.
+func b2f(b bool) float64 {
+	if b {
+		return 1
+	}
+
+	return 0
+}
+
+// setDetail records an extra metric in the named category's Details tooltip.
+func setDetail(categories []CategoryResult, name, key string, value float64) {
+	for i := range categories {
+		if categories[i].Name == name {
+			if categories[i].Details == nil {
+				categories[i].Details = map[string]float64{}
+			}
+
+			categories[i].Details[key] = value
+
+			return
+		}
 	}
 }
 
@@ -229,9 +414,9 @@ func penaltyConnections(m RawMetrics) CategoryResult {
 		Weight:  weightConnections,
 		Penalty: math.Round(penalty*10) / 10,
 		Details: map[string]float64{
-			"connection_ratio":              math.Round(ratio*1000) / 1000,
-			"idle_in_transaction":           float64(m.IdleInTransaction),
-			"longest_transaction_seconds":   m.LongestTransactionSeconds,
+			"connection_ratio":            math.Round(ratio*1000) / 1000,
+			"idle_in_transaction":         float64(m.IdleInTransaction),
+			"longest_transaction_seconds": m.LongestTransactionSeconds,
 		},
 	}
 }
@@ -287,6 +472,18 @@ func penaltyStorage(m RawMetrics) CategoryResult {
 		penalty += math.Min(float64(m.TablesHighBloat)*3, 30)
 	}
 
+	// HOT-chain ruptures (high_newpage_update_ratio rule): a new-page UPDATE
+	// could not stay on the same page and had to touch every index. 0 on PG < 16
+	// (column absent → stays silent) and under per-DB scoring (not collected).
+	switch {
+	case m.NewpageUpdateRatio > 0.20:
+		penalty += 20
+	case m.NewpageUpdateRatio > 0.10:
+		penalty += 10
+	case m.NewpageUpdateRatio > 0.05:
+		penalty += 5
+	}
+
 	penalty = math.Min(penalty, 100)
 
 	return CategoryResult{
@@ -294,9 +491,10 @@ func penaltyStorage(m RawMetrics) CategoryResult {
 		Weight:  weightStorage,
 		Penalty: math.Round(penalty*10) / 10,
 		Details: map[string]float64{
-			"max_dead_ratio":    m.MaxDeadRatio,
-			"avg_dead_ratio":    m.AvgDeadRatio,
-			"tables_high_bloat": float64(m.TablesHighBloat),
+			"max_dead_ratio":       m.MaxDeadRatio,
+			"avg_dead_ratio":       m.AvgDeadRatio,
+			"tables_high_bloat":    float64(m.TablesHighBloat),
+			"newpage_update_ratio": m.NewpageUpdateRatio,
 		},
 	}
 }
@@ -351,13 +549,24 @@ func penaltyReplication(m RawMetrics) CategoryResult {
 func penaltyMaintenance(m RawMetrics) CategoryResult {
 	penalty := 0.0
 
+	// Transaction-ID age — covers both the database datfrozenxid age and the
+	// per-table relfrozenxid age (relfrozenxid_age_outlier rule); the worse of
+	// the two drives the curve. Calibrated to PostgreSQL freeze mechanics and
+	// escalating steeply through the danger zone toward the ~2.1B shutdown wall.
+	// The previous curve flat-lined at 60 above 1.5B, so a DB minutes from a
+	// forced shutdown scored the same as one merely at failsafe. Continuous and
+	// monotonic:
+	//   200M (emergency autovacuum) → 0, 1.6B (failsafe) → 80, 2.1B (shutdown) → 100.
+	xidAge := m.MaxXidAge
+	if m.MaxRelfrozenxidAge > xidAge {
+		xidAge = m.MaxRelfrozenxidAge
+	}
+
 	switch {
-	case m.MaxXidAge > 1_500_000_000:
-		penalty = 60
-	case m.MaxXidAge > 1_000_000_000:
-		penalty = 20 + float64(m.MaxXidAge-1_000_000_000)/500_000_000*40
-	case m.MaxXidAge > 500_000_000:
-		penalty = 5 + float64(m.MaxXidAge-500_000_000)/500_000_000*15
+	case xidAge > xidFailsafeAge:
+		penalty = 80 + math.Min(float64(xidAge-xidFailsafeAge)/float64(xidShutdownAge-xidFailsafeAge)*20, 20)
+	case xidAge > xidFreezeMaxAge:
+		penalty = float64(xidAge-xidFreezeMaxAge) / float64(xidFailsafeAge-xidFreezeMaxAge) * 80
 	}
 
 	// Aligned with stale_vacuum thresholds (7/21/60 days = 168/504/1440 h).
@@ -376,6 +585,18 @@ func penaltyMaintenance(m RawMetrics) CategoryResult {
 		penalty += math.Min(float64(m.TablesNeverVacuumed)*5, 20)
 	}
 
+	// Per-table hygiene rules: autovacuum_enabled=false on individual tables
+	// (tables_with_autovacuum_off) and planner stats drifted past their
+	// auto-analyze point (stale_planner_stats). Both 0 = healthy, so they stay
+	// neutral under per-DB scoring, which does not collect them.
+	if m.TablesWithAutovacuumOff > 0 {
+		penalty += math.Min(float64(m.TablesWithAutovacuumOff)*3, 15)
+	}
+
+	if m.StalePlannerStatsTables > 0 {
+		penalty += math.Min(float64(m.StalePlannerStatsTables)*2, 15)
+	}
+
 	penalty = math.Min(penalty, 100)
 
 	return CategoryResult{
@@ -383,9 +604,12 @@ func penaltyMaintenance(m RawMetrics) CategoryResult {
 		Weight:  weightMaintenance,
 		Penalty: math.Round(penalty*10) / 10,
 		Details: map[string]float64{
-			"max_xid_age":           float64(m.MaxXidAge),
-			"max_vacuum_age_hours":  m.MaxVacuumAgeHours,
-			"tables_never_vacuumed": float64(m.TablesNeverVacuumed),
+			"max_xid_age":                float64(m.MaxXidAge),
+			"max_relfrozenxid_age":       float64(m.MaxRelfrozenxidAge),
+			"max_vacuum_age_hours":       m.MaxVacuumAgeHours,
+			"tables_never_vacuumed":      float64(m.TablesNeverVacuumed),
+			"tables_with_autovacuum_off": float64(m.TablesWithAutovacuumOff),
+			"stale_planner_stats_tables": float64(m.StalePlannerStatsTables),
 		},
 	}
 }

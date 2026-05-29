@@ -7,6 +7,7 @@
 ```text
 score = 100 − Σ (penalty_i × weight_i)
 обрезается до [0..100]
+если есть критическое условие: score = min(score, 30)
 ```
 
 Для каждой категории `i` Dasha вычисляет непрерывный **штраф** (0..100) по «сырым» метрикам и складывает их с **весами** категорий, в сумме дающими 1.0. Веса валидируются и нормализуются; некорректные значения откатываются к дефолтным.
@@ -16,7 +17,17 @@ score = 100 − Σ (penalty_i × weight_i)
 - `replication` — отбрасывается, если у инстанса нет реплик.
 - `maintenance` — отбрасывается, если `pg_is_in_recovery()` = true (инстанс является standby). На реплике не работает autovacuum/ANALYZE, поэтому давность вакуума, возраст XID и maintenance-GUC отражают состояние мастера, наблюдаемое с реплики — действовать надо на мастере. Соответствующие правила также скрываются из рекомендаций.
 
-Параллельно **движок правил** оценивает те же метрики и формирует список рекомендаций с уровнями LOW / MEDIUM / HIGH и ссылками на нужную страницу Dasha. Правила и штрафы независимы: штрафы дают числовой score, правила — список действий.
+### Критические условия (нижний порог score)
+
+Обычное взвешенное среднее размывает катастрофы: близкий wraparound XID двигает категорию `maintenance` максимум на её вес (~15 баллов), поэтому база в шаге от аварийной остановки иначе показывала бы ~85/100 рядом с HIGH-рекомендацией о wraparound. Чтобы число не лгало, любое из условий ниже зажимает score в красную зону (`min(score, 30)`):
+
+- **wraparound XID на failsafe** — `max(age(datfrozenxid), age(relfrozenxid)) ≥ 1.6 Б` (`vacuum_failsafe_age`), где PostgreSQL сам уходит в аварийный VACUUM и пропускает чистку индексов, чтобы успеть до стены ~2.1 Б;
+- **autovacuum выключен глобально** (`autovacuum=off`) — dead-кортежи и возраст XID растут бесконтрольно;
+- **track_counts выключен** (`track_counts=off`) — autovacuum «слеп» и фактически не запускается.
+
+Порог применяется только на мастере (`pg_is_in_recovery() = false`): standby не запускает autovacuum и наследует горизонт заморозки от мастера, поэтому действие — и красный score — относятся к мастеру. Эти же условия выдаются как HIGH-рекомендации, так что число и список действий синхронны.
+
+Параллельно **движок правил** оценивает те же метрики и формирует список рекомендаций с уровнями LOW / MEDIUM / HIGH и ссылками на нужную страницу Dasha. Правила и штрафы независимы: штрафы дают числовой score, правила — список действий. У каждого правила есть соответствующий вклад в score (штрафное слагаемое или нижний порог), поэтому условие не может попасть в рекомендации, не сдвинув число.
 
 ## Категории и веса
 
@@ -36,26 +47,33 @@ score = 100 − Σ (penalty_i × weight_i)
 
 Штраф растёт по метрике непрерывно. **Точки перелома** — это значения метрики, в которых меняется крутизна штрафной функции: до первой точки штраф нулевой, между точками растёт плавно, после последней — достигает максимума категории. Стрелки `→` в правой колонке читаются именно так: первая точка → вторая → третья.
 
-| Категория      | Метрика                                | Точки перелома (без штрафа → максимум)   |
-|----------------|-----------------------------------------|-------------------------------------------|
-| connections    | `total / max_connections`              | 0.60 → 0.80 → 0.95+                        |
-| connections    | `idle_in_transaction` (шт.)            | по 5 баллов за каждый, потолок 30          |
-| connections    | `longest_transaction_seconds`          | >300 с, потолок 20 баллов                  |
-| performance    | `cache_hit_ratio` (%)                  | ≥95 → ≥90 → ≥85 → ниже                     |
-| storage        | `max_dead_ratio` (%)                   | ≤20 → 20–30 → >30                          |
-| storage        | `avg_dead_ratio` (%)                   | >15 — до 30 баллов                         |
-| storage        | `tables_high_bloat` (шт.)              | >5 — до 30 баллов                          |
-| replication    | `max_replay_lag_seconds`               | >10 с — растёт до максимума                 |
-| replication    | `max_lag_bytes`                        | >16 МиБ — растёт до максимума              |
-| replication    | `disconnected_replicas`                | каждое отключение даёт 25 баллов           |
-| maintenance    | `max_xid_age` (xid)                    | 500 М → 1 Б → 1.5 Б                        |
-| maintenance    | `max_vacuum_age_hours`                 | >168 ч → >504 ч → >1440 ч (7/21/60 дней)   |
-| maintenance    | `tables_never_vacuumed`                | по 5 баллов за таблицу, потолок 20         |
-| horizon        | `horizon_lag_xids`                     | 1 М → 10 М → 100 М                          |
-| wal_checkpoint | `requested / total_checkpoints`        | ≥5 % → ≥10 % → ≥20 %                       |
-| locks          | взвешенная сумма факторов блокировок   | см. `penaltyLocks` (накопительный)         |
+| Категория      | Метрика                                | Точки перелома (без штрафа → максимум)        |
+|----------------|-----------------------------------------|-----------------------------------------------|
+| connections    | `total / max_connections`              | 0.60 → 0.80 → 0.95+                            |
+| connections    | `idle_in_transaction` (шт.)            | по 5 баллов за каждый, потолок 30             |
+| connections    | `longest_transaction_seconds`          | >300 с, потолок 20 баллов                     |
+| performance    | `cache_hit_ratio` (%)                  | ≥95 → ≥90 → ≥85 → ниже                        |
+| performance    | `track_io_timing` выключен             | фиксированные 5 баллов (LOW)                  |
+| storage        | `max_dead_ratio` (%)                   | ≤20 → 20–30 → >30                             |
+| storage        | `avg_dead_ratio` (%)                   | >15 — до 30 баллов                            |
+| storage        | `tables_high_bloat` (шт.)              | >5 — до 30 баллов                             |
+| storage        | `hot_update_ratio`                     | <0.80 → <0.65 → <0.50 (5 / 15 / 30 баллов)    |
+| storage        | `newpage_update_ratio` (PG 16+)        | >0.05 → >0.10 → >0.20 (5 / 10 / 20 баллов)    |
+| replication    | `max_replay_lag_seconds`               | >10 с — растёт до максимума                    |
+| replication    | `max_lag_bytes`                        | >16 МиБ — растёт до максимума                 |
+| replication    | `disconnected_replicas`                | каждое отключение даёт 25 баллов              |
+| maintenance    | `max(xid_age, relfrozenxid_age)`       | 200 М → 1.6 Б → 2.1 Б (нарастает до 100)      |
+| maintenance    | `max_vacuum_age_hours`                 | >168 ч → >504 ч → >1440 ч (7/21/60 дней)      |
+| maintenance    | `tables_never_vacuumed`                | по 5 баллов за таблицу, потолок 20            |
+| maintenance    | `tables_with_autovacuum_off`           | по 3 балла за таблицу, потолок 15             |
+| maintenance    | `stale_planner_stats_tables`           | по 2 балла за таблицу, потолок 15             |
+| maintenance    | `autovacuum` / `track_counts` выключен | насыщает категорию (и зажимает score)         |
+| horizon        | `horizon_lag_xids`                     | 1 М → 10 М → 100 М                             |
+| wal_checkpoint | `requested / total_checkpoints`        | ≥5 % → ≥10 % → ≥20 %                          |
+| wal_checkpoint | рассогласование `wal_level`            | minimal+реплики 80 баллов; logical+нет слота 5 |
+| locks          | взвешенная сумма факторов блокировок   | см. `penaltyLocks` (накопительный)            |
 
-Пороги по XID и horizon откалиброваны относительно `autovacuum_freeze_max_age` (200 М) и `vacuum_freeze_table_age` (150 М) из устройства PostgreSQL.
+Штраф по возрасту XID откалиброван по механике заморозки PostgreSQL: начинается на `autovacuum_freeze_max_age` (200 М, аварийный autovacuum), достигает 80 на `vacuum_failsafe_age` (1.6 Б) и 100 на стене останова ~2.1 Б — то есть продолжает расти в опасной зоне, а не упирается в полку. Правило `relfrozenxid_age_outlier` использует ту же кривую через `max(datfrozenxid, relfrozenxid)`. Каждое правило ниже соответствует одному из этих штрафных слагаемых или критическому порогу, поэтому score и рекомендации покрывают одни и те же условия.
 
 ## Правила и severity (рекомендации)
 
@@ -80,7 +98,7 @@ score = 100 − Σ (penalty_i × weight_i)
 - `high_avg_dead_ratio` — то же отношение, усреднённое по таблицам с > 1000 живых строк. Фоновый уровень bloat. Пороги ≥5 / ≥15 / ≥25.
 - `many_bloated_tables` — число таблиц, у которых доля dead-кортежей выше триггера autovacuum (`autovacuum_vacuum_scale_factor`). Пороги ≥5 / ≥10 / ≥20.
 - `low_hot_update_ratio` — `n_tup_hot_upd / NULLIF(n_tup_upd, 0)` по всем user-таблицам. Чем ниже, тем чаще UPDATE кладёт новый кортеж в другое место и переписывает все индексы — index bloat. Пороги <0.80 / <0.65 / <0.50.
-- `high_newpage_update_ratio` — `n_tup_newpage_upd / NULLIF(n_tup_upd, 0)` (PG 16+). Доля UPDATE, разорвавших HOT-цепочку и положивших новый кортеж на свежую страницу. Пороги ≥0.05 / ≥0.15 / ≥0.25.
+- `high_newpage_update_ratio` — `n_tup_newpage_upd / NULLIF(n_tup_upd, 0)` (PG 16+). Доля UPDATE, разорвавших HOT-цепочку и положивших новый кортеж на свежую страницу. Пороги ≥0.05 / ≥0.10 / ≥0.20.
 
 ### Replication
 - `replication_lag_time` — `EXTRACT(EPOCH FROM replay_lag)` для худшей строки `pg_stat_replication`. На сколько standby отстаёт по проигрыванию WAL. Пороги ≥10 / ≥60 / ≥300 секунд.

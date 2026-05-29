@@ -16,11 +16,19 @@ import { INLINE_SPECS, RULES_WITH_INLINE_DETAILS } from './inlineDetails'
 
 const props = defineProps<{
   rec: HealthScoreRecommendation
+  // Drill-down DB from ?database= query param, set when a row in the
+  // Databases table is selected. Distinct from the global ?db= selector
+  // (useClusterInfo.databaseName). When present, inline-detail per-DB
+  // queries use this — otherwise we fall back to the global selector so
+  // a standalone recommendation card still works without drill-down.
+  database?: string | null
 }>()
 
 const { t, te } = useI18n()
 const route = useRoute()
 const { clusterName, hostName, databaseName } = useClusterInfo()
+
+const effectiveDatabase = computed(() => props.database || databaseName.value || '')
 
 const expanded = ref(false)
 
@@ -91,7 +99,7 @@ async function loadInline() {
   if (!clusterName.value || !hostName.value) return
   const spec = inlineSpec.value
   if (!spec) return
-  if (spec.needsDatabase && !databaseName.value) return
+  if (spec.needsDatabase && !effectiveDatabase.value) return
 
   inlineLoading.value = true
   inlineError.value = null
@@ -99,7 +107,7 @@ async function loadInline() {
   try {
     const cluster = clusterName.value
     const host = hostName.value
-    const db = databaseName.value ?? ''
+    const db = effectiveDatabase.value
 
     let res
     switch (props.rec.rule_id) {
@@ -152,7 +160,7 @@ async function loadInline() {
 // selector switches. Collapsed cards skip the fetch — they'll pick up fresh
 // data on next expand because the watcher fires on the expanded transition.
 watch(
-  [expanded, clusterName, hostName, databaseName, () => props.rec.rule_id],
+  [expanded, clusterName, hostName, effectiveDatabase, () => props.rec.rule_id],
   ([open]) => {
     if (open && hasInline.value) {
       void loadInline()
@@ -247,7 +255,7 @@ async function copySql() {
               {{ inlineError }}
             </v-alert>
             <v-alert
-              v-else-if="inlineSpec.needsDatabase && !databaseName"
+              v-else-if="inlineSpec.needsDatabase && !effectiveDatabase"
               type="info"
               variant="tonal"
               density="compact"

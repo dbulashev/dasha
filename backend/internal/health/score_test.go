@@ -55,6 +55,10 @@ func TestCalculate_HealthyDatabase(t *testing.T) {
 		MaxXidAge:                 100_000_000,
 		MaxVacuumAgeHours:         12,
 		TablesNeverVacuumed:       0,
+		AutovacuumEnabled:         true,
+		TrackCountsEnabled:        true,
+		TrackIoTimingEnabled:      true,
+		HotUpdateRatio:            0.95,
 	}
 
 	r := Calculate(m)
@@ -109,10 +113,14 @@ func TestCalculate_CriticalDatabase(t *testing.T) {
 
 func TestCalculate_NoReplication(t *testing.T) {
 	m := RawMetrics{
-		TotalConnections: 10,
-		MaxConnections:   100,
-		CacheHitRatio:    99.5,
-		ReplicaCount:     0,
+		TotalConnections:     10,
+		MaxConnections:       100,
+		CacheHitRatio:        99.5,
+		ReplicaCount:         0,
+		AutovacuumEnabled:    true,
+		TrackCountsEnabled:   true,
+		TrackIoTimingEnabled: true,
+		HotUpdateRatio:       0.95,
 	}
 
 	r := Calculate(m)
@@ -245,6 +253,169 @@ func TestPenaltyMaintenance_XidDanger(t *testing.T) {
 	}
 }
 
+func TestPenaltyMaintenance_XidEscalatesToShutdown(t *testing.T) {
+	// The xid penalty must keep climbing through the danger zone instead of
+	// flat-lining: emergency-autovacuum threshold → 0, failsafe ≈ 80, shutdown
+	// wall → 100, strictly monotonic in between.
+	at := func(age int64) float64 { return penaltyMaintenance(RawMetrics{MaxXidAge: age}).Penalty }
+
+	if p := at(xidFreezeMaxAge); p != 0 {
+		t.Errorf("penalty at emergency-autovacuum threshold should be 0, got %v", p)
+	}
+
+	if p := at(xidFailsafeAge); p < 79 || p > 81 {
+		t.Errorf("penalty at failsafe should be ~80, got %v", p)
+	}
+
+	if p := at(xidShutdownAge); p < 99.9 {
+		t.Errorf("penalty at shutdown wall should be ~100, got %v", p)
+	}
+
+	if at(1_800_000_000) <= at(xidFailsafeAge) {
+		t.Error("penalty must keep increasing past failsafe (was previously flat at 60)")
+	}
+}
+
+func TestCriticalCeiling_FloorsCatastrophicConditions(t *testing.T) {
+	healthy := RawMetrics{
+		TotalConnections: 10, MaxConnections: 100, CacheHitRatio: 99.5,
+		ReplicaCount: 1, MaxReplayLagSeconds: 0.1,
+		MaxXidAge: 50_000_000, MaxVacuumAgeHours: 12,
+		AutovacuumEnabled: true, TrackCountsEnabled: true,
+		TrackIoTimingEnabled: true, HotUpdateRatio: 0.95,
+	}
+
+	cases := []struct {
+		name   string
+		mutate func(*RawMetrics)
+		red    bool
+	}{
+		{"baseline healthy", func(*RawMetrics) {}, false},
+		{"xid at failsafe", func(m *RawMetrics) { m.MaxXidAge = xidFailsafeAge }, true},
+		{"relfrozenxid at failsafe", func(m *RawMetrics) { m.MaxRelfrozenxidAge = xidFailsafeAge }, true},
+		{"autovacuum off", func(m *RawMetrics) { m.AutovacuumEnabled = false }, true},
+		{"track_counts off", func(m *RawMetrics) { m.TrackCountsEnabled = false }, true},
+		{"standby ignores maintenance floor", func(m *RawMetrics) {
+			m.InRecovery = true
+			m.MaxXidAge = 1_900_000_000
+			m.AutovacuumEnabled = false
+		}, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := healthy
+			tc.mutate(&m)
+			score := Calculate(m).Score
+
+			if tc.red && score > criticalScoreCeiling {
+				t.Errorf("expected score clamped to <= %v (red), got %v", criticalScoreCeiling, score)
+			}
+
+			if !tc.red && score <= criticalScoreCeiling {
+				t.Errorf("expected healthy score well above %v, got %v", criticalScoreCeiling, score)
+			}
+		})
+	}
+}
+
+func TestInstanceAdjustments_CoverRuleConditions(t *testing.T) {
+	// Every instance-only condition that produces a rule must also move the
+	// score: the category it belongs to should drop below its clean baseline.
+	base := RawMetrics{
+		TotalConnections: 10, MaxConnections: 100, CacheHitRatio: 99.5,
+		ReplicaCount: 1, MaxReplayLagSeconds: 0.1,
+		MaxXidAge: 50_000_000, MaxVacuumAgeHours: 12,
+		AutovacuumEnabled: true, TrackCountsEnabled: true,
+		TrackIoTimingEnabled: true, HotUpdateRatio: 0.95,
+		WalLevel: "replica",
+	}
+
+	catScore := func(r Result, name string) float64 {
+		for _, c := range r.Categories {
+			if c.Name == name {
+				return c.Score
+			}
+		}
+
+		t.Fatalf("category %q not found", name)
+
+		return 0
+	}
+
+	clean := Calculate(base)
+
+	cases := []struct {
+		name     string
+		category string
+		mutate   func(*RawMetrics)
+	}{
+		{"track_io_timing off", "performance", func(m *RawMetrics) { m.TrackIoTimingEnabled = false }},
+		{"low hot-update ratio", "storage", func(m *RawMetrics) { m.HotUpdateRatio = 0.3 }},
+		{"newpage update ratio", "storage", func(m *RawMetrics) { m.NewpageUpdateRatio = 0.25 }},
+		{"tables with autovacuum off", "maintenance", func(m *RawMetrics) { m.TablesWithAutovacuumOff = 3 }},
+		{"stale planner stats", "maintenance", func(m *RawMetrics) { m.StalePlannerStatsTables = 8 }},
+		{"relfrozenxid outlier", "maintenance", func(m *RawMetrics) { m.MaxRelfrozenxidAge = 1_000_000_000 }},
+		{"wal_level minimal with replicas", "wal_checkpoint", func(m *RawMetrics) { m.WalLevel = "minimal" }},
+		{"wal_level logical without slots", "wal_checkpoint", func(m *RawMetrics) { m.WalLevel = "logical" }},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := base
+			tc.mutate(&m)
+
+			got := catScore(Calculate(m), tc.category)
+			if baseline := catScore(clean, tc.category); got >= baseline {
+				t.Errorf("%s category should drop below clean baseline %v, got %v", tc.category, baseline, got)
+			}
+		})
+	}
+}
+
+func TestInstanceAdjustments_WalLevelTooltipFlag(t *testing.T) {
+	// wal_level can't go in the float64 Details map, so the offending condition
+	// is surfaced as a presence flag for the tooltip. Present only when the
+	// misconfiguration actually holds.
+	walDetail := func(m RawMetrics, key string) bool {
+		for _, c := range Calculate(m).Categories {
+			if c.Name == "wal_checkpoint" {
+				_, ok := c.Details[key]
+				return ok
+			}
+		}
+
+		return false
+	}
+
+	base := RawMetrics{
+		TotalConnections: 10, MaxConnections: 100, CacheHitRatio: 99.5,
+		AutovacuumEnabled: true, TrackCountsEnabled: true,
+		TrackIoTimingEnabled: true, HotUpdateRatio: 0.95,
+		WalLevel: "replica",
+	}
+
+	if walDetail(base, "wal_level_minimal_with_replicas") ||
+		walDetail(base, "wal_level_logical_without_slots") {
+		t.Error("no wal_level flag expected on a healthy replica config")
+	}
+
+	minimal := base
+	minimal.WalLevel = "minimal"
+	minimal.ReplicaCount = 1
+
+	if !walDetail(minimal, "wal_level_minimal_with_replicas") {
+		t.Error("expected wal_level_minimal_with_replicas flag in tooltip details")
+	}
+
+	logical := base
+	logical.WalLevel = "logical"
+
+	if !walDetail(logical, "wal_level_logical_without_slots") {
+		t.Error("expected wal_level_logical_without_slots flag in tooltip details")
+	}
+}
+
 func TestPenaltyMaintenance_StaleVacuum(t *testing.T) {
 	// Relaxed thresholds (7/21/60 days): 10-day age is no longer treated as a
 	// strong signal — read-mostly tables legitimately go weeks without vacuum.
@@ -280,6 +451,9 @@ func TestCalculate_InRecovery_DropsMaintenance(t *testing.T) {
 		MaxVacuumAgeHours:  10_000,
 		AutovacuumEnabled:  false,
 		TrackCountsEnabled: false,
+		// Non-maintenance signals stay healthy so only the maintenance drop is exercised.
+		TrackIoTimingEnabled: true,
+		HotUpdateRatio:       0.95,
 	}
 
 	r := Calculate(m)

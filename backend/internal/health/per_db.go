@@ -35,8 +35,14 @@ var PerDBApplicableCategories = []string{"performance", "storage", "maintenance"
 // ComputePerDB calculates per-database scores for the supplied metrics.
 // Weights are restricted to applicable categories and renormalized so that
 // each per-DB score remains in 0–100 regardless of the absolute weight values.
-func ComputePerDB(metrics []PerDBMetrics, w Weights) []DatabaseScore {
-	w = perDBWeights(w)
+//
+// When inRecovery is true, maintenance is dropped from each per-DB score the
+// same way it is dropped at the instance level (CalculateWithWeights): on a
+// standby autovacuum / ANALYZE do not run, so the per-DB maintenance
+// metrics would only mislead. Its weight is redistributed across the
+// remaining applicable categories.
+func ComputePerDB(metrics []PerDBMetrics, w Weights, inRecovery bool) []DatabaseScore {
+	w = perDBWeights(w, inRecovery)
 
 	result := make([]DatabaseScore, 0, len(metrics))
 
@@ -57,6 +63,16 @@ func ComputePerDB(metrics []PerDBMetrics, w Weights) []DatabaseScore {
 			penaltyMaintenance(raw),
 		}
 
+		if inRecovery {
+			// Zero maintenance penalty so the standby never gets dinged
+			// for primary-side work it cannot perform.
+			for i := range cats {
+				if cats[i].Name == "maintenance" {
+					cats[i].Penalty = 0
+				}
+			}
+		}
+
 		totalPenalty := 0.0
 
 		for i := range cats {
@@ -66,6 +82,16 @@ func ComputePerDB(metrics []PerDBMetrics, w Weights) []DatabaseScore {
 		}
 
 		score := math.Max(0, math.Min(100, 100-totalPenalty))
+
+		// Imminent per-database wraparound clamps the score into the red, the same
+		// way the instance aggregate does. Skipped on a standby, where maintenance
+		// (and with it the xid signal) is dropped — the inherited horizon is the
+		// primary's to fix.
+		if !inRecovery {
+			if c := criticalXidCeiling(m.MaxXidAge); c < score {
+				score = c
+			}
+		}
 
 		result = append(result, DatabaseScore{
 			Database:   m.Database,
@@ -80,7 +106,9 @@ func ComputePerDB(metrics []PerDBMetrics, w Weights) []DatabaseScore {
 
 // PerDBCategoryRollup returns the size-weighted mean per-category score across
 // all databases. The result is keyed by category name and contains the rollup
-// score (0–100) for use by the instance-level aggregate.
+// score (0–100) for use by the instance-level aggregate. Categories dropped for
+// a database (Weight == 0, e.g. maintenance on a standby) are excluded, so a
+// zero-weight Score=100 does not leak into the mean as a misleading green.
 func PerDBCategoryRollup(scores []DatabaseScore) map[string]float64 {
 	if len(scores) == 0 {
 		return nil
@@ -100,6 +128,10 @@ func PerDBCategoryRollup(scores []DatabaseScore) map[string]float64 {
 		}
 
 		for _, c := range ds.Categories {
+			if c.Weight == 0 {
+				continue // dropped category — don't roll its placeholder Score=100 in
+			}
+
 			a, ok := by[c.Name]
 			if !ok {
 				a = &acc{}
@@ -152,7 +184,7 @@ func WorstDatabase(scores []DatabaseScore) *DatabaseScore {
 // defaults projected onto the same applicable set, not to the full default
 // vector — otherwise the per-DB score would silently start counting
 // instance-only categories.
-func perDBWeights(w Weights) Weights {
+func perDBWeights(w Weights, inRecovery bool) Weights {
 	out := Weights{
 		Performance: w.Performance,
 		Storage:     w.Storage,
@@ -166,6 +198,12 @@ func perDBWeights(w Weights) Weights {
 			Storage:     def.Storage,
 			Maintenance: def.Maintenance,
 		}
+	}
+
+	if inRecovery {
+		// Drop maintenance so its share gets redistributed by Normalize
+		// across performance + storage only.
+		out.Maintenance = 0
 	}
 
 	return out.Normalize()

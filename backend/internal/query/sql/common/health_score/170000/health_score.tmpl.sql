@@ -61,8 +61,15 @@ replication_metrics AS (
     FROM pg_stat_replication
 ),
 maintenance_metrics AS (
+    -- max_xid_age is a per-DB scalar from pg_database; cannot be
+    -- cross-joined with pg_stat_user_tables (empty would silently zero
+    -- it out). The rest aggregates user tables.
     SELECT
-        COALESCE(MAX(age(datfrozenxid)), 0)::bigint AS max_xid_age,
+        (
+            SELECT COALESCE(age(datfrozenxid), 0)::bigint
+            FROM pg_database
+            WHERE datname = current_database()
+        ) AS max_xid_age,
         COALESCE(MAX(
             EXTRACT(EPOCH FROM (now() - GREATEST(last_vacuum, last_autovacuum))) / 3600.0
         ) FILTER (WHERE n_live_tup + n_dead_tup > 10000), 0)::float8 AS max_vacuum_age_hours,
@@ -71,15 +78,14 @@ maintenance_metrics AS (
             AND last_vacuum IS NULL
             AND last_autovacuum IS NULL
         )::int AS tables_never_vacuumed
-    FROM pg_stat_user_tables, pg_database
-    WHERE pg_database.datname = current_database()
+    FROM pg_stat_user_tables
 ),
+-- Horizon is cluster-wide; no datname filter (see base template comment).
 horizon_metrics AS (
     SELECT
         COALESCE(MAX(age(backend_xmin))::bigint, 0) AS horizon_lag_xids
     FROM pg_stat_activity
     WHERE backend_xmin IS NOT NULL
-      AND datname = current_database()
 ),
 per_table_metrics AS (
     SELECT

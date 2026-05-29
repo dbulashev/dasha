@@ -286,7 +286,7 @@ var Registry = []Rule{
 		Evaluate: func(m RawMetrics) *Hit {
 			age := float64(m.MaxXidAge)
 
-			sev := severityForRatio(age, 1_600_000_000, 200_000_000, 150_000_000)
+			sev := severityForRatio(age, float64(xidFailsafeAge), float64(xidFreezeMaxAge), float64(xidFreezeTableAge))
 			if sev == "" {
 				return nil
 			}
@@ -361,7 +361,7 @@ var Registry = []Rule{
 		Evaluate: func(m RawMetrics) *Hit {
 			age := float64(m.MaxRelfrozenxidAge)
 
-			sev := severityForRatio(age, 1_600_000_000, 200_000_000, 150_000_000)
+			sev := severityForRatio(age, float64(xidFailsafeAge), float64(xidFreezeMaxAge), float64(xidFreezeTableAge))
 			if sev == "" {
 				return nil
 			}
