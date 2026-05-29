@@ -5,6 +5,6 @@ SELECT
     datname,
     age(datfrozenxid)::bigint AS xid_age
 FROM pg_database
-WHERE datallowconn
+WHERE datallowconn AND NOT datistemplate
 ORDER BY xid_age DESC
 LIMIT 10
