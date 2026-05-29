@@ -18,7 +18,7 @@ const instanceInfoStore = useInstanceInfoStore()
 // reflects replica-only activity, which is misleading — autovacuum runs on the
 // primary. Skip the fetch and show a redirect hint instead.
 const isReplica = computed(() =>
-  instanceInfoStore.isReplica(clusterName.value, hostName.value),
+  instanceInfoStore.isReplica(clusterName.value ?? '', hostName.value ?? ''),
 )
 
 watch([clusterName, hostName], ([c, h]) => {

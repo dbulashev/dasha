@@ -88,7 +88,7 @@ function selectDatabase(name: string) {
         :headers="headers"
         :items="databases"
         :sort-by="[{ key: 'score', order: 'asc' }]"
-        @click:row="(_, { item }) => selectDatabase((item as HealthScoreDatabase).database)"
+        @click:row="(_: unknown, { item }: { item: HealthScoreDatabase }) => selectDatabase(item.database)"
       >
         <template #item.size_bytes="{ item }">
           {{ formatBytes((item as HealthScoreDatabase).size_bytes) }}

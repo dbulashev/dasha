@@ -44,7 +44,8 @@ export const useInstanceInfoStore = defineStore('instanceInfo', {
       if (cached) return cached
 
       const k = key(cluster, host)
-      if (this.inflight[k]) return this.inflight[k]
+      const existing = this.inflight[k] as Promise<InstanceInfo | null> | undefined
+      if (existing) return existing
 
       const p = (async () => {
         try {
