@@ -202,6 +202,130 @@ paths:
                 $ref: '#/components/schemas/HealthScoreRecommendations'
         '404':
           $ref: '#/components/responses/NotFound'
+  /api/common/health-score/details/xid-wraparound-databases:
+    get:
+      operationId: getHealthScoreXidWraparoundDatabases
+      description: >-
+        Inline detail for the xid_wraparound_risk recommendation: per-database
+        transaction-ID age, top 10 by age. Instance-wide.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HealthScoreXidWraparoundDatabase'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/common/health-score/details/tables-autovacuum-off:
+    get:
+      operationId: getHealthScoreTablesAutovacuumOff
+      description: >-
+        Inline detail for the tables_with_autovacuum_off recommendation:
+        tables with autovacuum_enabled=false in reloptions.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HealthScoreTableReloption'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/common/health-score/details/analyze-disabled-tables:
+    get:
+      operationId: getHealthScoreAnalyzeDisabledTables
+      description: >-
+        Inline detail for the analyze_disabled_tables recommendation:
+        tables with autovacuum_analyze_enabled=false in reloptions.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HealthScoreTableReloption'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/common/health-score/details/low-hot-update-tables:
+    get:
+      operationId: getHealthScoreLowHotUpdateTables
+      description: >-
+        Inline detail for the low_hot_update_ratio recommendation:
+        per-table HOT-update ratio sorted ascending.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HealthScoreLowHotUpdateTable'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/common/health-score/details/high-dead-ratio-tables:
+    get:
+      operationId: getHealthScoreHighDeadRatioTables
+      description: >-
+        Inline detail for the high_max_dead_ratio recommendation: top tables
+        by dead-tuple ratio.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HealthScoreHighDeadRatioTable'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/common/health-score/details/horizon-blocking-sessions:
+    get:
+      operationId: getHealthScoreHorizonBlockingSessions
+      description: >-
+        Inline detail for the horizon_lag_xids recommendation: sessions
+        sorted by oldest backend_xmin (they pin the MVCC horizon).
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HealthScoreHorizonBlockingSession'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /api/common/health-score/databases:
     get:
       operationId: getHealthScoreDatabases
@@ -3450,6 +3574,109 @@ components:
             When true, the maintenance category is dropped from the score and
             its weight is redistributed across the remaining categories — same
             handling as the replication category on instances without replicas.
+
+    HealthScoreXidWraparoundDatabase:
+      type: object
+      required:
+        - Database
+        - XidAge
+      properties:
+        Database:
+          type: string
+        XidAge:
+          type: integer
+          format: int64
+
+    HealthScoreTableReloption:
+      type: object
+      required:
+        - Schema
+        - Table
+        - RelOptions
+      properties:
+        Schema:
+          type: string
+        Table:
+          type: string
+        RelOptions:
+          type: string
+
+    HealthScoreLowHotUpdateTable:
+      type: object
+      required:
+        - Schema
+        - Table
+        - Updates
+        - HotUpdates
+        - HotRatio
+      properties:
+        Schema:
+          type: string
+        Table:
+          type: string
+        Updates:
+          type: integer
+          format: int64
+        HotUpdates:
+          type: integer
+          format: int64
+        HotRatio:
+          type: number
+          format: double
+
+    HealthScoreHighDeadRatioTable:
+      type: object
+      required:
+        - Schema
+        - Table
+        - LiveTuples
+        - DeadTuples
+        - DeadRatio
+      properties:
+        Schema:
+          type: string
+        Table:
+          type: string
+        LiveTuples:
+          type: integer
+          format: int64
+        DeadTuples:
+          type: integer
+          format: int64
+        DeadRatio:
+          type: number
+          format: double
+
+    HealthScoreHorizonBlockingSession:
+      type: object
+      required:
+        - PID
+        - Username
+        - State
+        - WaitEventType
+        - WaitEvent
+        - XactDurationSeconds
+        - BackendXmin
+        - Query
+      properties:
+        PID:
+          type: integer
+          format: int32
+        Username:
+          type: string
+        State:
+          type: string
+        WaitEventType:
+          type: string
+        WaitEvent:
+          type: string
+        XactDurationSeconds:
+          type: number
+          format: double
+        BackendXmin:
+          type: string
+        Query:
+          type: string
 
     HealthScoreRecommendation:
       type: object

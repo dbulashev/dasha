@@ -766,6 +766,28 @@
             "resetBtn": "Сбросить к дефолтам",
             "updatedAt": "Обновлено: {ts}"
         },
+        "inline": {
+            "title": "Детализация",
+            "pickDatabase": "Выберите базу в селекторе вверху — это per-DB запрос.",
+            "empty": "Запрос вернул пустой результат — проблема не воспроизводится сейчас.",
+            "col": {
+                "database": "База",
+                "xidAge": "Возраст XID",
+                "schema": "Схема",
+                "table": "Таблица",
+                "reloptions": "reloptions",
+                "updates": "UPDATE",
+                "hotUpdates": "HOT-UPDATE",
+                "hotRatio": "HOT-ratio",
+                "liveTuples": "Live tuples",
+                "deadTuples": "Dead tuples",
+                "deadRatio": "Dead ratio",
+                "username": "Пользователь",
+                "state": "State",
+                "xactDuration": "Длительность транзакции",
+                "query": "Запрос"
+            }
+        },
         "recommendations": {
             "title": "Рекомендации",
             "openRelated": "Перейти",
@@ -796,8 +818,7 @@
             "high_max_dead_ratio": {
                 "title": "Большой dead tuples ratio в таблице",
                 "short": "Максимальный dead ratio: {metric_value}%.",
-                "detail": "Запустите VACUUM ANALYZE для проблемной таблицы. Найдите её через pg_stat_user_tables.",
-                "sql": "-- найти таблицы с большим dead ratio\nSELECT schemaname, relname, n_dead_tup, n_live_tup\nFROM pg_stat_user_tables\nORDER BY n_dead_tup DESC\nLIMIT 10;"
+                "detail": "Запустите VACUUM ANALYZE для проблемной таблицы. Найдите её через pg_stat_user_tables."
             },
             "high_avg_dead_ratio": {
                 "title": "Высокий средний dead ratio по базе",
@@ -851,8 +872,7 @@
             "relfrozenxid_age_outlier": {
                 "title": "Старая таблица без заморозки",
                 "short": "Максимальный возраст relfrozenxid: {metric_value}.",
-                "detail": "В кластере есть таблицы, которые давно не обрабатывались autovacuum freeze. Найдите их и запустите VACUUM FREEZE.",
-                "sql": "SELECT relname, age(relfrozenxid) AS age\nFROM pg_class\nWHERE relkind IN ('r','m','t')\nORDER BY age DESC\nLIMIT 10;"
+                "detail": "В кластере есть таблицы, которые давно не обрабатывались autovacuum freeze. Найдите их и запустите VACUUM FREEZE."
             },
             "horizon_lag_xids": {
                 "title": "Горизонт удерживается долгой транзакцией",
@@ -884,8 +904,7 @@
             "active_lock_waiters": {
                 "title": "Активные ожидания блокировок",
                 "short": "Процессов в ожидании блокировки: {metric_value}.",
-                "detail": "Снимок pg_stat_activity. Высокие значения говорят о контеншене. Найдите блокирующие процессы и решите, оборвать ли долгие транзакции.",
-                "sql": "SELECT pid, usename, state, wait_event_type, wait_event,\n       now() - state_change AS wait_for,\n       pg_blocking_pids(pid) AS blocked_by,\n       query\nFROM pg_stat_activity\nWHERE wait_event_type = 'Lock' AND state = 'active'\nORDER BY state_change\nLIMIT 20;"
+                "detail": "Снимок pg_stat_activity. Высокие значения говорят о контеншене. Найдите блокирующие процессы и решите, оборвать ли долгие транзакции."
             },
             "longest_lock_wait_seconds": {
                 "title": "Долгое ожидание блокировки",
@@ -900,8 +919,7 @@
             "deadlocks_rate": {
                 "title": "Deadlock-и",
                 "short": "Зарегистрировано deadlock-ов: {metric_value} (с момента pg_stat_reset).",
-                "detail": "Любой deadlock — признак проблемы в приложении (разный порядок захвата блокировок). Детали — в логе сервера. Это абсолютный счётчик с последнего pg_stat_database_reset; время сброса можно посмотреть в Home → Status / Stats reset.",
-                "sql": "SELECT datname, deadlocks, stats_reset\nFROM pg_stat_database\nWHERE deadlocks > 0\nORDER BY deadlocks DESC;"
+                "detail": "Любой deadlock — признак проблемы в приложении (разный порядок захвата блокировок). Детали — в логе сервера. Это абсолютный счётчик с последнего pg_stat_database_reset; время сброса можно посмотреть в Home → Status / Stats reset."
             },
             "lock_pool_saturation": {
                 "title": "Lock-пул близок к лимиту",
@@ -922,8 +940,7 @@
             "stale_planner_stats": {
                 "title": "Устаревшая статистика планировщика",
                 "short": "Таблиц с устаревшей статистикой: {metric_value}.",
-                "detail": "Эти таблицы заметно изменились с последнего ANALYZE (>50% от формулы автоанализа) и не анализировались более суток. Планировщик может выбирать неоптимальные планы. Запустите ANALYZE вручную или уменьшите autovacuum_analyze_scale_factor.",
-                "sql": "-- найти таблицы с устаревшей статистикой\nSELECT schemaname, relname,\n       n_mod_since_analyze,\n       last_analyze, last_autoanalyze\nFROM pg_stat_user_tables\nWHERE n_mod_since_analyze > 0\nORDER BY GREATEST(\n    COALESCE(last_analyze, '-infinity'::timestamptz),\n    COALESCE(last_autoanalyze, '-infinity'::timestamptz)\n) ASC\nLIMIT 20;"
+                "detail": "Эти таблицы заметно изменились с последнего ANALYZE (>50% от формулы автоанализа) и не анализировались более суток. Планировщик может выбирать неоптимальные планы. Запустите ANALYZE вручную или уменьшите autovacuum_analyze_scale_factor."
             },
             "analyze_disabled_tables": {
                 "title": "Авто-ANALYZE выключен для части таблиц",

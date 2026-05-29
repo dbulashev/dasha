@@ -1,5 +1,53 @@
 package dto
 
+// HealthScoreXidWraparoundDatabase is one row of the per-database XID age
+// detail for the xid_wraparound_risk recommendation.
+type HealthScoreXidWraparoundDatabase struct {
+	Database string
+	XidAge   int64
+}
+
+// HealthScoreTableReloption is one row of a per-table list keyed by schema
+// and table with the matching reloptions string. Shared by the
+// tables_with_autovacuum_off and analyze_disabled_tables details.
+type HealthScoreTableReloption struct {
+	Schema     string
+	Table      string
+	RelOptions string
+}
+
+// HealthScoreLowHotUpdateTable is one row of the low-HOT-update detail.
+type HealthScoreLowHotUpdateTable struct {
+	Schema     string
+	Table      string
+	Updates    int64
+	HotUpdates int64
+	HotRatio   float64
+}
+
+// HealthScoreHighDeadRatioTable is one row of the top tables by dead-tuple
+// ratio detail for the high_max_dead_ratio recommendation.
+type HealthScoreHighDeadRatioTable struct {
+	Schema     string
+	Table      string
+	LiveTuples int64
+	DeadTuples int64
+	DeadRatio  float64
+}
+
+// HealthScoreHorizonBlockingSession is one row of the horizon-blocking
+// sessions detail (top sessions by oldest backend_xmin).
+type HealthScoreHorizonBlockingSession struct {
+	PID                 int32
+	Username            string
+	State               string
+	WaitEventType       string
+	WaitEvent           string
+	XactDurationSeconds float64
+	BackendXmin         string
+	Query               string
+}
+
 // HealthScoreDatabaseMetrics holds raw per-database metrics applicable on the
 // per-DB level: Performance / Storage / Maintenance.
 // Connections and Replication are instance-wide and not collected here.

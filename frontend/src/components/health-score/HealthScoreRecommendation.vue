@@ -1,8 +1,19 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
+import {
+  getHealthScoreAnalyzeDisabledTables,
+  getHealthScoreHighDeadRatioTables,
+  getHealthScoreHorizonBlockingSessions,
+  getHealthScoreLowHotUpdateTables,
+  getHealthScoreTablesAutovacuumOff,
+  getHealthScoreXidWraparoundDatabases,
+} from '@/api/gen/default/default'
 import type { HealthScoreRecommendation } from '@/api/models/index'
+import { assertOk } from '@/utils/api'
+import { useClusterInfo } from '@/composables/useClusterInfo'
+import { INLINE_SPECS, RULES_WITH_INLINE_DETAILS } from './inlineDetails'
 
 const props = defineProps<{
   rec: HealthScoreRecommendation
@@ -10,6 +21,8 @@ const props = defineProps<{
 
 const { t, te } = useI18n()
 const route = useRoute()
+const { clusterName, hostName, databaseName } = useClusterInfo()
+
 const expanded = ref(false)
 
 // Backend returns plain paths like "/queries" or "/queries?tab=stats".
@@ -57,8 +70,98 @@ const hasDetail = computed(() => te(`${i18nBase.value}.detail`))
 const detail = computed(() =>
   hasDetail.value ? t(`${i18nBase.value}.detail`, i18nContext.value) : '',
 )
-const hasSql = computed(() => te(`${i18nBase.value}.sql`))
+
+// Inline detail support: a rule listed in RULES_WITH_INLINE_DETAILS fetches
+// a small typed dataset from the matching /api/.../details endpoint when
+// expanded. For these rules the i18n `sql` snippet is intentionally hidden
+// — the data is more useful than the query that produced it. ALTER SYSTEM
+// "fix" rules (autovacuum_disabled, track_counts_disabled,
+// track_io_timing_disabled) keep showing the SQL since it IS the action.
+const hasInline = computed(() => RULES_WITH_INLINE_DETAILS.has(props.rec.rule_id))
+const inlineSpec = computed(() => INLINE_SPECS[props.rec.rule_id])
+
+const hasSql = computed(() => !hasInline.value && te(`${i18nBase.value}.sql`))
 const sql = computed(() => (hasSql.value ? t(`${i18nBase.value}.sql`, i18nContext.value) : ''))
+
+const inlineRows = ref<Record<string, unknown>[]>([])
+const inlineLoading = ref(false)
+const inlineError = ref<string | null>(null)
+
+async function loadInline() {
+  if (!hasInline.value) return
+  if (!clusterName.value || !hostName.value) return
+  const spec = inlineSpec.value
+  if (!spec) return
+  if (spec.needsDatabase && !databaseName.value) return
+
+  inlineLoading.value = true
+  inlineError.value = null
+
+  try {
+    const cluster = clusterName.value
+    const host = hostName.value
+    const db = databaseName.value ?? ''
+
+    let res
+    switch (props.rec.rule_id) {
+      case 'xid_wraparound_risk':
+        res = await getHealthScoreXidWraparoundDatabases({ cluster_name: cluster, instance: host })
+        break
+      case 'tables_with_autovacuum_off':
+        res = await getHealthScoreTablesAutovacuumOff({
+          cluster_name: cluster,
+          instance: host,
+          database: db,
+        })
+        break
+      case 'analyze_disabled_tables':
+        res = await getHealthScoreAnalyzeDisabledTables({
+          cluster_name: cluster,
+          instance: host,
+          database: db,
+        })
+        break
+      case 'low_hot_update_ratio':
+        res = await getHealthScoreLowHotUpdateTables({
+          cluster_name: cluster,
+          instance: host,
+          database: db,
+        })
+        break
+      case 'high_max_dead_ratio':
+        res = await getHealthScoreHighDeadRatioTables({
+          cluster_name: cluster,
+          instance: host,
+          database: db,
+        })
+        break
+      case 'horizon_lag_xids':
+        res = await getHealthScoreHorizonBlockingSessions({
+          cluster_name: cluster,
+          instance: host,
+        })
+        break
+      default:
+        return
+    }
+
+    const data = assertOk<unknown[]>(res)
+    inlineRows.value = (data ?? []) as Record<string, unknown>[]
+  } catch (err) {
+    inlineError.value = err instanceof Error ? err.message : String(err)
+    inlineRows.value = []
+  } finally {
+    inlineLoading.value = false
+  }
+}
+
+watch(expanded, (open) => {
+  if (open && hasInline.value && inlineRows.value.length === 0 && !inlineError.value) {
+    void loadInline()
+  }
+})
+
+const showExpander = computed(() => hasDetail.value || hasSql.value || hasInline.value)
 
 const severityColor = computed(() => {
   switch (props.rec.severity) {
@@ -111,7 +214,7 @@ async function copySql() {
         <span class="text-body-1 font-weight-medium">{{ title }}</span>
         <v-spacer />
         <v-btn
-          v-if="relatedLink"
+          v-if="relatedLink && !hasInline"
           variant="text"
           size="small"
           :to="relatedLink"
@@ -128,7 +231,68 @@ async function copySql() {
           <div v-if="detail" class="text-body-2 mb-2" style="white-space: pre-line">
             {{ detail }}
           </div>
-          <div v-if="sql" class="d-flex align-start ga-2">
+
+          <!-- Inline data: small typed table fetched from a details endpoint. -->
+          <template v-if="hasInline && inlineSpec">
+            <div class="text-caption text-medium-emphasis mb-1">
+              {{ t('healthScore.inline.title') }}
+            </div>
+            <v-progress-linear v-if="inlineLoading" indeterminate height="2" />
+            <v-alert
+              v-else-if="inlineError"
+              type="error"
+              variant="tonal"
+              density="compact"
+              class="mt-1"
+            >
+              {{ inlineError }}
+            </v-alert>
+            <v-alert
+              v-else-if="inlineSpec.needsDatabase && !databaseName"
+              type="info"
+              variant="tonal"
+              density="compact"
+              class="mt-1"
+            >
+              {{ t('healthScore.inline.pickDatabase') }}
+            </v-alert>
+            <v-alert
+              v-else-if="!inlineRows.length"
+              type="success"
+              variant="tonal"
+              density="compact"
+              class="mt-1"
+            >
+              {{ t('healthScore.inline.empty') }}
+            </v-alert>
+            <v-table v-else density="compact" class="inline-table rounded mt-1">
+              <thead>
+                <tr>
+                  <th
+                    v-for="col in inlineSpec.columns(t)"
+                    :key="col.key"
+                    class="text-caption"
+                  >
+                    {{ col.title }}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(row, i) in inlineRows" :key="i">
+                  <td
+                    v-for="col in inlineSpec.columns(t)"
+                    :key="col.key"
+                    :class="col.cellClass"
+                  >
+                    {{ col.format ? col.format(row[col.key]) : row[col.key] }}
+                  </td>
+                </tr>
+              </tbody>
+            </v-table>
+          </template>
+
+          <!-- Plain SQL block: only for fix commands (ALTER SYSTEM) now. -->
+          <div v-if="sql" class="d-flex align-start ga-2 mt-2">
             <pre class="rec-sql flex-grow-1"><code>{{ sql }}</code></pre>
             <v-btn
               size="small"
@@ -142,7 +306,7 @@ async function copySql() {
         </div>
       </v-expand-transition>
 
-      <div v-if="hasDetail || hasSql" class="mt-2">
+      <div v-if="showExpander" class="mt-2">
         <v-btn
           variant="text"
           size="small"
@@ -166,5 +330,15 @@ async function copySql() {
   font-size: 0.85em;
   overflow-x: auto;
   margin: 0;
+}
+.inline-table :deep(.inline-query-cell) {
+  font-family: 'Roboto Mono', ui-monospace, monospace;
+  font-size: 0.8em;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-width: 420px;
+}
+.inline-table :deep(td) {
+  font-size: 0.85em;
 }
 </style>

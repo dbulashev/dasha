@@ -187,6 +187,36 @@ type HealthScoreDatabases struct {
 	WorstDatabase        *string               `json:"worst_database"`
 }
 
+// HealthScoreHighDeadRatioTable defines model for HealthScoreHighDeadRatioTable.
+type HealthScoreHighDeadRatioTable struct {
+	DeadRatio  float64 `json:"DeadRatio"`
+	DeadTuples int64   `json:"DeadTuples"`
+	LiveTuples int64   `json:"LiveTuples"`
+	Schema     string  `json:"Schema"`
+	Table      string  `json:"Table"`
+}
+
+// HealthScoreHorizonBlockingSession defines model for HealthScoreHorizonBlockingSession.
+type HealthScoreHorizonBlockingSession struct {
+	BackendXmin         string  `json:"BackendXmin"`
+	PID                 int32   `json:"PID"`
+	Query               string  `json:"Query"`
+	State               string  `json:"State"`
+	Username            string  `json:"Username"`
+	WaitEvent           string  `json:"WaitEvent"`
+	WaitEventType       string  `json:"WaitEventType"`
+	XactDurationSeconds float64 `json:"XactDurationSeconds"`
+}
+
+// HealthScoreLowHotUpdateTable defines model for HealthScoreLowHotUpdateTable.
+type HealthScoreLowHotUpdateTable struct {
+	HotRatio   float64 `json:"HotRatio"`
+	HotUpdates int64   `json:"HotUpdates"`
+	Schema     string  `json:"Schema"`
+	Table      string  `json:"Table"`
+	Updates    int64   `json:"Updates"`
+}
+
 // HealthScoreRecommendation defines model for HealthScoreRecommendation.
 type HealthScoreRecommendation struct {
 	Category     string                            `json:"category"`
@@ -203,6 +233,13 @@ type HealthScoreRecommendationSeverity string
 // HealthScoreRecommendations defines model for HealthScoreRecommendations.
 type HealthScoreRecommendations struct {
 	Recommendations []HealthScoreRecommendation `json:"recommendations"`
+}
+
+// HealthScoreTableReloption defines model for HealthScoreTableReloption.
+type HealthScoreTableReloption struct {
+	RelOptions string `json:"RelOptions"`
+	Schema     string `json:"Schema"`
+	Table      string `json:"Table"`
 }
 
 // HealthScoreWeights defines model for HealthScoreWeights.
@@ -233,6 +270,12 @@ type HealthScoreWeightsUpdate struct {
 	Replication   float64 `json:"replication"`
 	Storage       float64 `json:"storage"`
 	WalCheckpoint float64 `json:"wal_checkpoint"`
+}
+
+// HealthScoreXidWraparoundDatabase defines model for HealthScoreXidWraparoundDatabase.
+type HealthScoreXidWraparoundDatabase struct {
+	Database string `json:"Database"`
+	XidAge   int64  `json:"XidAge"`
 }
 
 // IndexBloat defines model for IndexBloat.
@@ -905,6 +948,46 @@ type GetHealthScoreDatabasesParams struct {
 	Instance    Instance    `form:"instance" json:"instance"`
 }
 
+// GetHealthScoreAnalyzeDisabledTablesParams defines parameters for GetHealthScoreAnalyzeDisabledTables.
+type GetHealthScoreAnalyzeDisabledTablesParams struct {
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance    `form:"instance" json:"instance"`
+	Database    Database    `form:"database" json:"database"`
+}
+
+// GetHealthScoreHighDeadRatioTablesParams defines parameters for GetHealthScoreHighDeadRatioTables.
+type GetHealthScoreHighDeadRatioTablesParams struct {
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance    `form:"instance" json:"instance"`
+	Database    Database    `form:"database" json:"database"`
+}
+
+// GetHealthScoreHorizonBlockingSessionsParams defines parameters for GetHealthScoreHorizonBlockingSessions.
+type GetHealthScoreHorizonBlockingSessionsParams struct {
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance    `form:"instance" json:"instance"`
+}
+
+// GetHealthScoreLowHotUpdateTablesParams defines parameters for GetHealthScoreLowHotUpdateTables.
+type GetHealthScoreLowHotUpdateTablesParams struct {
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance    `form:"instance" json:"instance"`
+	Database    Database    `form:"database" json:"database"`
+}
+
+// GetHealthScoreTablesAutovacuumOffParams defines parameters for GetHealthScoreTablesAutovacuumOff.
+type GetHealthScoreTablesAutovacuumOffParams struct {
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance    `form:"instance" json:"instance"`
+	Database    Database    `form:"database" json:"database"`
+}
+
+// GetHealthScoreXidWraparoundDatabasesParams defines parameters for GetHealthScoreXidWraparoundDatabases.
+type GetHealthScoreXidWraparoundDatabasesParams struct {
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance    `form:"instance" json:"instance"`
+}
+
 // GetHealthScoreRecommendationsParams defines parameters for GetHealthScoreRecommendations.
 type GetHealthScoreRecommendationsParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
@@ -1442,6 +1525,24 @@ type ServerInterface interface {
 	// (GET /api/common/health-score/databases)
 	GetHealthScoreDatabases(ctx echo.Context, params GetHealthScoreDatabasesParams) error
 
+	// (GET /api/common/health-score/details/analyze-disabled-tables)
+	GetHealthScoreAnalyzeDisabledTables(ctx echo.Context, params GetHealthScoreAnalyzeDisabledTablesParams) error
+
+	// (GET /api/common/health-score/details/high-dead-ratio-tables)
+	GetHealthScoreHighDeadRatioTables(ctx echo.Context, params GetHealthScoreHighDeadRatioTablesParams) error
+
+	// (GET /api/common/health-score/details/horizon-blocking-sessions)
+	GetHealthScoreHorizonBlockingSessions(ctx echo.Context, params GetHealthScoreHorizonBlockingSessionsParams) error
+
+	// (GET /api/common/health-score/details/low-hot-update-tables)
+	GetHealthScoreLowHotUpdateTables(ctx echo.Context, params GetHealthScoreLowHotUpdateTablesParams) error
+
+	// (GET /api/common/health-score/details/tables-autovacuum-off)
+	GetHealthScoreTablesAutovacuumOff(ctx echo.Context, params GetHealthScoreTablesAutovacuumOffParams) error
+
+	// (GET /api/common/health-score/details/xid-wraparound-databases)
+	GetHealthScoreXidWraparoundDatabases(ctx echo.Context, params GetHealthScoreXidWraparoundDatabasesParams) error
+
 	// (GET /api/common/health-score/recommendations)
 	GetHealthScoreRecommendations(ctx echo.Context, params GetHealthScoreRecommendationsParams) error
 
@@ -1764,6 +1865,208 @@ func (w *ServerInterfaceWrapper) GetHealthScoreDatabases(ctx echo.Context) error
 
 	// Invoke the callback with all the unmarshaled arguments
 	err = w.Handler.GetHealthScoreDatabases(ctx, params)
+	return err
+}
+
+// GetHealthScoreAnalyzeDisabledTables converts echo context to params.
+func (w *ServerInterfaceWrapper) GetHealthScoreAnalyzeDisabledTables(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	ctx.Set(ApiKeyAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetHealthScoreAnalyzeDisabledTablesParams
+	// ------------- Required query parameter "cluster_name" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "cluster_name", ctx.QueryParams(), &params.ClusterName)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter cluster_name: %s", err))
+	}
+
+	// ------------- Required query parameter "instance" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "instance", ctx.QueryParams(), &params.Instance)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter instance: %s", err))
+	}
+
+	// ------------- Required query parameter "database" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "database", ctx.QueryParams(), &params.Database)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter database: %s", err))
+	}
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.GetHealthScoreAnalyzeDisabledTables(ctx, params)
+	return err
+}
+
+// GetHealthScoreHighDeadRatioTables converts echo context to params.
+func (w *ServerInterfaceWrapper) GetHealthScoreHighDeadRatioTables(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	ctx.Set(ApiKeyAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetHealthScoreHighDeadRatioTablesParams
+	// ------------- Required query parameter "cluster_name" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "cluster_name", ctx.QueryParams(), &params.ClusterName)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter cluster_name: %s", err))
+	}
+
+	// ------------- Required query parameter "instance" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "instance", ctx.QueryParams(), &params.Instance)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter instance: %s", err))
+	}
+
+	// ------------- Required query parameter "database" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "database", ctx.QueryParams(), &params.Database)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter database: %s", err))
+	}
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.GetHealthScoreHighDeadRatioTables(ctx, params)
+	return err
+}
+
+// GetHealthScoreHorizonBlockingSessions converts echo context to params.
+func (w *ServerInterfaceWrapper) GetHealthScoreHorizonBlockingSessions(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	ctx.Set(ApiKeyAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetHealthScoreHorizonBlockingSessionsParams
+	// ------------- Required query parameter "cluster_name" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "cluster_name", ctx.QueryParams(), &params.ClusterName)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter cluster_name: %s", err))
+	}
+
+	// ------------- Required query parameter "instance" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "instance", ctx.QueryParams(), &params.Instance)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter instance: %s", err))
+	}
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.GetHealthScoreHorizonBlockingSessions(ctx, params)
+	return err
+}
+
+// GetHealthScoreLowHotUpdateTables converts echo context to params.
+func (w *ServerInterfaceWrapper) GetHealthScoreLowHotUpdateTables(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	ctx.Set(ApiKeyAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetHealthScoreLowHotUpdateTablesParams
+	// ------------- Required query parameter "cluster_name" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "cluster_name", ctx.QueryParams(), &params.ClusterName)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter cluster_name: %s", err))
+	}
+
+	// ------------- Required query parameter "instance" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "instance", ctx.QueryParams(), &params.Instance)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter instance: %s", err))
+	}
+
+	// ------------- Required query parameter "database" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "database", ctx.QueryParams(), &params.Database)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter database: %s", err))
+	}
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.GetHealthScoreLowHotUpdateTables(ctx, params)
+	return err
+}
+
+// GetHealthScoreTablesAutovacuumOff converts echo context to params.
+func (w *ServerInterfaceWrapper) GetHealthScoreTablesAutovacuumOff(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	ctx.Set(ApiKeyAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetHealthScoreTablesAutovacuumOffParams
+	// ------------- Required query parameter "cluster_name" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "cluster_name", ctx.QueryParams(), &params.ClusterName)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter cluster_name: %s", err))
+	}
+
+	// ------------- Required query parameter "instance" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "instance", ctx.QueryParams(), &params.Instance)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter instance: %s", err))
+	}
+
+	// ------------- Required query parameter "database" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "database", ctx.QueryParams(), &params.Database)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter database: %s", err))
+	}
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.GetHealthScoreTablesAutovacuumOff(ctx, params)
+	return err
+}
+
+// GetHealthScoreXidWraparoundDatabases converts echo context to params.
+func (w *ServerInterfaceWrapper) GetHealthScoreXidWraparoundDatabases(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	ctx.Set(ApiKeyAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetHealthScoreXidWraparoundDatabasesParams
+	// ------------- Required query parameter "cluster_name" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "cluster_name", ctx.QueryParams(), &params.ClusterName)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter cluster_name: %s", err))
+	}
+
+	// ------------- Required query parameter "instance" -------------
+
+	err = runtime.BindQueryParameter("form", true, true, "instance", ctx.QueryParams(), &params.Instance)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter instance: %s", err))
+	}
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.GetHealthScoreXidWraparoundDatabases(ctx, params)
 	return err
 }
 
@@ -4421,6 +4724,12 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 	router.GET(baseURL+"/api/common/database-users", wrapper.GetDatabaseUsers)
 	router.GET(baseURL+"/api/common/health-score", wrapper.GetHealthScore)
 	router.GET(baseURL+"/api/common/health-score/databases", wrapper.GetHealthScoreDatabases)
+	router.GET(baseURL+"/api/common/health-score/details/analyze-disabled-tables", wrapper.GetHealthScoreAnalyzeDisabledTables)
+	router.GET(baseURL+"/api/common/health-score/details/high-dead-ratio-tables", wrapper.GetHealthScoreHighDeadRatioTables)
+	router.GET(baseURL+"/api/common/health-score/details/horizon-blocking-sessions", wrapper.GetHealthScoreHorizonBlockingSessions)
+	router.GET(baseURL+"/api/common/health-score/details/low-hot-update-tables", wrapper.GetHealthScoreLowHotUpdateTables)
+	router.GET(baseURL+"/api/common/health-score/details/tables-autovacuum-off", wrapper.GetHealthScoreTablesAutovacuumOff)
+	router.GET(baseURL+"/api/common/health-score/details/xid-wraparound-databases", wrapper.GetHealthScoreXidWraparoundDatabases)
 	router.GET(baseURL+"/api/common/health-score/recommendations", wrapper.GetHealthScoreRecommendations)
 	router.DELETE(baseURL+"/api/common/health-score/weights", wrapper.DeleteHealthScoreWeights)
 	router.GET(baseURL+"/api/common/health-score/weights", wrapper.GetHealthScoreWeights)
@@ -4597,6 +4906,150 @@ func (response GetHealthScoreDatabases200JSONResponse) VisitGetHealthScoreDataba
 type GetHealthScoreDatabases404Response = NotFoundResponse
 
 func (response GetHealthScoreDatabases404Response) VisitGetHealthScoreDatabasesResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type GetHealthScoreAnalyzeDisabledTablesRequestObject struct {
+	Params GetHealthScoreAnalyzeDisabledTablesParams
+}
+
+type GetHealthScoreAnalyzeDisabledTablesResponseObject interface {
+	VisitGetHealthScoreAnalyzeDisabledTablesResponse(w http.ResponseWriter) error
+}
+
+type GetHealthScoreAnalyzeDisabledTables200JSONResponse []HealthScoreTableReloption
+
+func (response GetHealthScoreAnalyzeDisabledTables200JSONResponse) VisitGetHealthScoreAnalyzeDisabledTablesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetHealthScoreAnalyzeDisabledTables404Response = NotFoundResponse
+
+func (response GetHealthScoreAnalyzeDisabledTables404Response) VisitGetHealthScoreAnalyzeDisabledTablesResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type GetHealthScoreHighDeadRatioTablesRequestObject struct {
+	Params GetHealthScoreHighDeadRatioTablesParams
+}
+
+type GetHealthScoreHighDeadRatioTablesResponseObject interface {
+	VisitGetHealthScoreHighDeadRatioTablesResponse(w http.ResponseWriter) error
+}
+
+type GetHealthScoreHighDeadRatioTables200JSONResponse []HealthScoreHighDeadRatioTable
+
+func (response GetHealthScoreHighDeadRatioTables200JSONResponse) VisitGetHealthScoreHighDeadRatioTablesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetHealthScoreHighDeadRatioTables404Response = NotFoundResponse
+
+func (response GetHealthScoreHighDeadRatioTables404Response) VisitGetHealthScoreHighDeadRatioTablesResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type GetHealthScoreHorizonBlockingSessionsRequestObject struct {
+	Params GetHealthScoreHorizonBlockingSessionsParams
+}
+
+type GetHealthScoreHorizonBlockingSessionsResponseObject interface {
+	VisitGetHealthScoreHorizonBlockingSessionsResponse(w http.ResponseWriter) error
+}
+
+type GetHealthScoreHorizonBlockingSessions200JSONResponse []HealthScoreHorizonBlockingSession
+
+func (response GetHealthScoreHorizonBlockingSessions200JSONResponse) VisitGetHealthScoreHorizonBlockingSessionsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetHealthScoreHorizonBlockingSessions404Response = NotFoundResponse
+
+func (response GetHealthScoreHorizonBlockingSessions404Response) VisitGetHealthScoreHorizonBlockingSessionsResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type GetHealthScoreLowHotUpdateTablesRequestObject struct {
+	Params GetHealthScoreLowHotUpdateTablesParams
+}
+
+type GetHealthScoreLowHotUpdateTablesResponseObject interface {
+	VisitGetHealthScoreLowHotUpdateTablesResponse(w http.ResponseWriter) error
+}
+
+type GetHealthScoreLowHotUpdateTables200JSONResponse []HealthScoreLowHotUpdateTable
+
+func (response GetHealthScoreLowHotUpdateTables200JSONResponse) VisitGetHealthScoreLowHotUpdateTablesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetHealthScoreLowHotUpdateTables404Response = NotFoundResponse
+
+func (response GetHealthScoreLowHotUpdateTables404Response) VisitGetHealthScoreLowHotUpdateTablesResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type GetHealthScoreTablesAutovacuumOffRequestObject struct {
+	Params GetHealthScoreTablesAutovacuumOffParams
+}
+
+type GetHealthScoreTablesAutovacuumOffResponseObject interface {
+	VisitGetHealthScoreTablesAutovacuumOffResponse(w http.ResponseWriter) error
+}
+
+type GetHealthScoreTablesAutovacuumOff200JSONResponse []HealthScoreTableReloption
+
+func (response GetHealthScoreTablesAutovacuumOff200JSONResponse) VisitGetHealthScoreTablesAutovacuumOffResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetHealthScoreTablesAutovacuumOff404Response = NotFoundResponse
+
+func (response GetHealthScoreTablesAutovacuumOff404Response) VisitGetHealthScoreTablesAutovacuumOffResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type GetHealthScoreXidWraparoundDatabasesRequestObject struct {
+	Params GetHealthScoreXidWraparoundDatabasesParams
+}
+
+type GetHealthScoreXidWraparoundDatabasesResponseObject interface {
+	VisitGetHealthScoreXidWraparoundDatabasesResponse(w http.ResponseWriter) error
+}
+
+type GetHealthScoreXidWraparoundDatabases200JSONResponse []HealthScoreXidWraparoundDatabase
+
+func (response GetHealthScoreXidWraparoundDatabases200JSONResponse) VisitGetHealthScoreXidWraparoundDatabasesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetHealthScoreXidWraparoundDatabases404Response = NotFoundResponse
+
+func (response GetHealthScoreXidWraparoundDatabases404Response) VisitGetHealthScoreXidWraparoundDatabasesResponse(w http.ResponseWriter) error {
 	w.WriteHeader(404)
 	return nil
 }
@@ -6292,6 +6745,24 @@ type StrictServerInterface interface {
 	// (GET /api/common/health-score/databases)
 	GetHealthScoreDatabases(ctx context.Context, request GetHealthScoreDatabasesRequestObject) (GetHealthScoreDatabasesResponseObject, error)
 
+	// (GET /api/common/health-score/details/analyze-disabled-tables)
+	GetHealthScoreAnalyzeDisabledTables(ctx context.Context, request GetHealthScoreAnalyzeDisabledTablesRequestObject) (GetHealthScoreAnalyzeDisabledTablesResponseObject, error)
+
+	// (GET /api/common/health-score/details/high-dead-ratio-tables)
+	GetHealthScoreHighDeadRatioTables(ctx context.Context, request GetHealthScoreHighDeadRatioTablesRequestObject) (GetHealthScoreHighDeadRatioTablesResponseObject, error)
+
+	// (GET /api/common/health-score/details/horizon-blocking-sessions)
+	GetHealthScoreHorizonBlockingSessions(ctx context.Context, request GetHealthScoreHorizonBlockingSessionsRequestObject) (GetHealthScoreHorizonBlockingSessionsResponseObject, error)
+
+	// (GET /api/common/health-score/details/low-hot-update-tables)
+	GetHealthScoreLowHotUpdateTables(ctx context.Context, request GetHealthScoreLowHotUpdateTablesRequestObject) (GetHealthScoreLowHotUpdateTablesResponseObject, error)
+
+	// (GET /api/common/health-score/details/tables-autovacuum-off)
+	GetHealthScoreTablesAutovacuumOff(ctx context.Context, request GetHealthScoreTablesAutovacuumOffRequestObject) (GetHealthScoreTablesAutovacuumOffResponseObject, error)
+
+	// (GET /api/common/health-score/details/xid-wraparound-databases)
+	GetHealthScoreXidWraparoundDatabases(ctx context.Context, request GetHealthScoreXidWraparoundDatabasesRequestObject) (GetHealthScoreXidWraparoundDatabasesResponseObject, error)
+
 	// (GET /api/common/health-score/recommendations)
 	GetHealthScoreRecommendations(ctx context.Context, request GetHealthScoreRecommendationsRequestObject) (GetHealthScoreRecommendationsResponseObject, error)
 
@@ -6630,6 +7101,156 @@ func (sh *strictHandler) GetHealthScoreDatabases(ctx echo.Context, params GetHea
 		return err
 	} else if validResponse, ok := response.(GetHealthScoreDatabasesResponseObject); ok {
 		return validResponse.VisitGetHealthScoreDatabasesResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// GetHealthScoreAnalyzeDisabledTables operation middleware
+func (sh *strictHandler) GetHealthScoreAnalyzeDisabledTables(ctx echo.Context, params GetHealthScoreAnalyzeDisabledTablesParams) error {
+	var request GetHealthScoreAnalyzeDisabledTablesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetHealthScoreAnalyzeDisabledTables(ctx.Request().Context(), request.(GetHealthScoreAnalyzeDisabledTablesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetHealthScoreAnalyzeDisabledTables")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(GetHealthScoreAnalyzeDisabledTablesResponseObject); ok {
+		return validResponse.VisitGetHealthScoreAnalyzeDisabledTablesResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// GetHealthScoreHighDeadRatioTables operation middleware
+func (sh *strictHandler) GetHealthScoreHighDeadRatioTables(ctx echo.Context, params GetHealthScoreHighDeadRatioTablesParams) error {
+	var request GetHealthScoreHighDeadRatioTablesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetHealthScoreHighDeadRatioTables(ctx.Request().Context(), request.(GetHealthScoreHighDeadRatioTablesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetHealthScoreHighDeadRatioTables")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(GetHealthScoreHighDeadRatioTablesResponseObject); ok {
+		return validResponse.VisitGetHealthScoreHighDeadRatioTablesResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// GetHealthScoreHorizonBlockingSessions operation middleware
+func (sh *strictHandler) GetHealthScoreHorizonBlockingSessions(ctx echo.Context, params GetHealthScoreHorizonBlockingSessionsParams) error {
+	var request GetHealthScoreHorizonBlockingSessionsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetHealthScoreHorizonBlockingSessions(ctx.Request().Context(), request.(GetHealthScoreHorizonBlockingSessionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetHealthScoreHorizonBlockingSessions")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(GetHealthScoreHorizonBlockingSessionsResponseObject); ok {
+		return validResponse.VisitGetHealthScoreHorizonBlockingSessionsResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// GetHealthScoreLowHotUpdateTables operation middleware
+func (sh *strictHandler) GetHealthScoreLowHotUpdateTables(ctx echo.Context, params GetHealthScoreLowHotUpdateTablesParams) error {
+	var request GetHealthScoreLowHotUpdateTablesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetHealthScoreLowHotUpdateTables(ctx.Request().Context(), request.(GetHealthScoreLowHotUpdateTablesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetHealthScoreLowHotUpdateTables")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(GetHealthScoreLowHotUpdateTablesResponseObject); ok {
+		return validResponse.VisitGetHealthScoreLowHotUpdateTablesResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// GetHealthScoreTablesAutovacuumOff operation middleware
+func (sh *strictHandler) GetHealthScoreTablesAutovacuumOff(ctx echo.Context, params GetHealthScoreTablesAutovacuumOffParams) error {
+	var request GetHealthScoreTablesAutovacuumOffRequestObject
+
+	request.Params = params
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetHealthScoreTablesAutovacuumOff(ctx.Request().Context(), request.(GetHealthScoreTablesAutovacuumOffRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetHealthScoreTablesAutovacuumOff")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(GetHealthScoreTablesAutovacuumOffResponseObject); ok {
+		return validResponse.VisitGetHealthScoreTablesAutovacuumOffResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// GetHealthScoreXidWraparoundDatabases operation middleware
+func (sh *strictHandler) GetHealthScoreXidWraparoundDatabases(ctx echo.Context, params GetHealthScoreXidWraparoundDatabasesParams) error {
+	var request GetHealthScoreXidWraparoundDatabasesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetHealthScoreXidWraparoundDatabases(ctx.Request().Context(), request.(GetHealthScoreXidWraparoundDatabasesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetHealthScoreXidWraparoundDatabases")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(GetHealthScoreXidWraparoundDatabasesResponseObject); ok {
+		return validResponse.VisitGetHealthScoreXidWraparoundDatabasesResponse(ctx.Response())
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
 	}
@@ -8393,128 +9014,138 @@ func (sh *strictHandler) GetTablesTopKBySize(ctx echo.Context, params GetTablesT
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
-	"XJW//Prt/wIAAP//KqoQN1kJAQA=",
+	"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",
+	"j3BZ/PLrt/8PAAD//+TiYzhaHQEA",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

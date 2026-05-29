@@ -43,10 +43,16 @@ import type {
   GetFkTypeMismatchParams,
   GetFksPossibleNullsParams,
   GetFksPossibleSimilarParams,
+  GetHealthScoreAnalyzeDisabledTablesParams,
   GetHealthScoreDatabasesParams,
+  GetHealthScoreHighDeadRatioTablesParams,
+  GetHealthScoreHorizonBlockingSessionsParams,
+  GetHealthScoreLowHotUpdateTablesParams,
   GetHealthScoreParams,
   GetHealthScoreRecommendationsParams,
+  GetHealthScoreTablesAutovacuumOffParams,
   GetHealthScoreWeightsParams,
+  GetHealthScoreXidWraparoundDatabasesParams,
   GetIndexesBloatParams,
   GetIndexesBtreeOnArrayParams,
   GetIndexesCachingParams,
@@ -101,9 +107,14 @@ import type {
   GetTablesTopKBySizeParams,
   HealthScore,
   HealthScoreDatabases,
+  HealthScoreHighDeadRatioTable,
+  HealthScoreHorizonBlockingSession,
+  HealthScoreLowHotUpdateTable,
   HealthScoreRecommendations,
+  HealthScoreTableReloption,
   HealthScoreWeights,
   HealthScoreWeightsUpdate,
+  HealthScoreXidWraparoundDatabase,
   IndexBloat,
   IndexBtreeOnArray,
   IndexCaching,
@@ -1096,6 +1107,770 @@ export function useGetHealthScoreRecommendations<
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetHealthScoreRecommendationsQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Inline detail for the xid_wraparound_risk recommendation: per-database transaction-ID age, top 10 by age. Instance-wide.
+ */
+export type getHealthScoreXidWraparoundDatabasesResponse200 = {
+  data: HealthScoreXidWraparoundDatabase[]
+  status: 200
+}
+
+export type getHealthScoreXidWraparoundDatabasesResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getHealthScoreXidWraparoundDatabasesResponseSuccess =
+  getHealthScoreXidWraparoundDatabasesResponse200 & {
+    headers: Headers
+  }
+export type getHealthScoreXidWraparoundDatabasesResponseError =
+  getHealthScoreXidWraparoundDatabasesResponse404 & {
+    headers: Headers
+  }
+
+export type getHealthScoreXidWraparoundDatabasesResponse =
+  | getHealthScoreXidWraparoundDatabasesResponseSuccess
+  | getHealthScoreXidWraparoundDatabasesResponseError
+
+export const getGetHealthScoreXidWraparoundDatabasesUrl = (
+  params: GetHealthScoreXidWraparoundDatabasesParams,
+) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/common/health-score/details/xid-wraparound-databases?${stringifiedParams}`
+    : `/api/common/health-score/details/xid-wraparound-databases`
+}
+
+export const getHealthScoreXidWraparoundDatabases = async (
+  params: GetHealthScoreXidWraparoundDatabasesParams,
+  options?: RequestInit,
+): Promise<getHealthScoreXidWraparoundDatabasesResponse> => {
+  return customFetch<getHealthScoreXidWraparoundDatabasesResponse>(
+    getGetHealthScoreXidWraparoundDatabasesUrl(params),
+    {
+      ...options,
+      method: 'GET',
+    },
+  )
+}
+
+export const getGetHealthScoreXidWraparoundDatabasesQueryKey = (
+  params?: MaybeRef<GetHealthScoreXidWraparoundDatabasesParams>,
+) => {
+  return [
+    'api',
+    'common',
+    'health-score',
+    'details',
+    'xid-wraparound-databases',
+    ...(params ? [params] : []),
+  ] as const
+}
+
+export const getGetHealthScoreXidWraparoundDatabasesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHealthScoreXidWraparoundDatabases>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreXidWraparoundDatabasesParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreXidWraparoundDatabases>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetHealthScoreXidWraparoundDatabasesQueryKey(params)
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getHealthScoreXidWraparoundDatabases>>
+  > = ({ signal }) =>
+    getHealthScoreXidWraparoundDatabases(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHealthScoreXidWraparoundDatabases>>,
+    TError,
+    TData
+  >
+}
+
+export type GetHealthScoreXidWraparoundDatabasesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHealthScoreXidWraparoundDatabases>>
+>
+export type GetHealthScoreXidWraparoundDatabasesQueryError = NotFoundResponse
+
+export function useGetHealthScoreXidWraparoundDatabases<
+  TData = Awaited<ReturnType<typeof getHealthScoreXidWraparoundDatabases>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreXidWraparoundDatabasesParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreXidWraparoundDatabases>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHealthScoreXidWraparoundDatabasesQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Inline detail for the tables_with_autovacuum_off recommendation: tables with autovacuum_enabled=false in reloptions.
+ */
+export type getHealthScoreTablesAutovacuumOffResponse200 = {
+  data: HealthScoreTableReloption[]
+  status: 200
+}
+
+export type getHealthScoreTablesAutovacuumOffResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getHealthScoreTablesAutovacuumOffResponseSuccess =
+  getHealthScoreTablesAutovacuumOffResponse200 & {
+    headers: Headers
+  }
+export type getHealthScoreTablesAutovacuumOffResponseError =
+  getHealthScoreTablesAutovacuumOffResponse404 & {
+    headers: Headers
+  }
+
+export type getHealthScoreTablesAutovacuumOffResponse =
+  | getHealthScoreTablesAutovacuumOffResponseSuccess
+  | getHealthScoreTablesAutovacuumOffResponseError
+
+export const getGetHealthScoreTablesAutovacuumOffUrl = (
+  params: GetHealthScoreTablesAutovacuumOffParams,
+) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/common/health-score/details/tables-autovacuum-off?${stringifiedParams}`
+    : `/api/common/health-score/details/tables-autovacuum-off`
+}
+
+export const getHealthScoreTablesAutovacuumOff = async (
+  params: GetHealthScoreTablesAutovacuumOffParams,
+  options?: RequestInit,
+): Promise<getHealthScoreTablesAutovacuumOffResponse> => {
+  return customFetch<getHealthScoreTablesAutovacuumOffResponse>(
+    getGetHealthScoreTablesAutovacuumOffUrl(params),
+    {
+      ...options,
+      method: 'GET',
+    },
+  )
+}
+
+export const getGetHealthScoreTablesAutovacuumOffQueryKey = (
+  params?: MaybeRef<GetHealthScoreTablesAutovacuumOffParams>,
+) => {
+  return [
+    'api',
+    'common',
+    'health-score',
+    'details',
+    'tables-autovacuum-off',
+    ...(params ? [params] : []),
+  ] as const
+}
+
+export const getGetHealthScoreTablesAutovacuumOffQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHealthScoreTablesAutovacuumOff>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreTablesAutovacuumOffParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreTablesAutovacuumOff>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetHealthScoreTablesAutovacuumOffQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHealthScoreTablesAutovacuumOff>>> = ({
+    signal,
+  }) => getHealthScoreTablesAutovacuumOff(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHealthScoreTablesAutovacuumOff>>,
+    TError,
+    TData
+  >
+}
+
+export type GetHealthScoreTablesAutovacuumOffQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHealthScoreTablesAutovacuumOff>>
+>
+export type GetHealthScoreTablesAutovacuumOffQueryError = NotFoundResponse
+
+export function useGetHealthScoreTablesAutovacuumOff<
+  TData = Awaited<ReturnType<typeof getHealthScoreTablesAutovacuumOff>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreTablesAutovacuumOffParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreTablesAutovacuumOff>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHealthScoreTablesAutovacuumOffQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Inline detail for the analyze_disabled_tables recommendation: tables with autovacuum_analyze_enabled=false in reloptions.
+ */
+export type getHealthScoreAnalyzeDisabledTablesResponse200 = {
+  data: HealthScoreTableReloption[]
+  status: 200
+}
+
+export type getHealthScoreAnalyzeDisabledTablesResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getHealthScoreAnalyzeDisabledTablesResponseSuccess =
+  getHealthScoreAnalyzeDisabledTablesResponse200 & {
+    headers: Headers
+  }
+export type getHealthScoreAnalyzeDisabledTablesResponseError =
+  getHealthScoreAnalyzeDisabledTablesResponse404 & {
+    headers: Headers
+  }
+
+export type getHealthScoreAnalyzeDisabledTablesResponse =
+  | getHealthScoreAnalyzeDisabledTablesResponseSuccess
+  | getHealthScoreAnalyzeDisabledTablesResponseError
+
+export const getGetHealthScoreAnalyzeDisabledTablesUrl = (
+  params: GetHealthScoreAnalyzeDisabledTablesParams,
+) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/common/health-score/details/analyze-disabled-tables?${stringifiedParams}`
+    : `/api/common/health-score/details/analyze-disabled-tables`
+}
+
+export const getHealthScoreAnalyzeDisabledTables = async (
+  params: GetHealthScoreAnalyzeDisabledTablesParams,
+  options?: RequestInit,
+): Promise<getHealthScoreAnalyzeDisabledTablesResponse> => {
+  return customFetch<getHealthScoreAnalyzeDisabledTablesResponse>(
+    getGetHealthScoreAnalyzeDisabledTablesUrl(params),
+    {
+      ...options,
+      method: 'GET',
+    },
+  )
+}
+
+export const getGetHealthScoreAnalyzeDisabledTablesQueryKey = (
+  params?: MaybeRef<GetHealthScoreAnalyzeDisabledTablesParams>,
+) => {
+  return [
+    'api',
+    'common',
+    'health-score',
+    'details',
+    'analyze-disabled-tables',
+    ...(params ? [params] : []),
+  ] as const
+}
+
+export const getGetHealthScoreAnalyzeDisabledTablesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHealthScoreAnalyzeDisabledTables>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreAnalyzeDisabledTablesParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreAnalyzeDisabledTables>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetHealthScoreAnalyzeDisabledTablesQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHealthScoreAnalyzeDisabledTables>>> = ({
+    signal,
+  }) => getHealthScoreAnalyzeDisabledTables(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHealthScoreAnalyzeDisabledTables>>,
+    TError,
+    TData
+  >
+}
+
+export type GetHealthScoreAnalyzeDisabledTablesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHealthScoreAnalyzeDisabledTables>>
+>
+export type GetHealthScoreAnalyzeDisabledTablesQueryError = NotFoundResponse
+
+export function useGetHealthScoreAnalyzeDisabledTables<
+  TData = Awaited<ReturnType<typeof getHealthScoreAnalyzeDisabledTables>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreAnalyzeDisabledTablesParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreAnalyzeDisabledTables>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHealthScoreAnalyzeDisabledTablesQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Inline detail for the low_hot_update_ratio recommendation: per-table HOT-update ratio sorted ascending.
+ */
+export type getHealthScoreLowHotUpdateTablesResponse200 = {
+  data: HealthScoreLowHotUpdateTable[]
+  status: 200
+}
+
+export type getHealthScoreLowHotUpdateTablesResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getHealthScoreLowHotUpdateTablesResponseSuccess =
+  getHealthScoreLowHotUpdateTablesResponse200 & {
+    headers: Headers
+  }
+export type getHealthScoreLowHotUpdateTablesResponseError =
+  getHealthScoreLowHotUpdateTablesResponse404 & {
+    headers: Headers
+  }
+
+export type getHealthScoreLowHotUpdateTablesResponse =
+  | getHealthScoreLowHotUpdateTablesResponseSuccess
+  | getHealthScoreLowHotUpdateTablesResponseError
+
+export const getGetHealthScoreLowHotUpdateTablesUrl = (
+  params: GetHealthScoreLowHotUpdateTablesParams,
+) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/common/health-score/details/low-hot-update-tables?${stringifiedParams}`
+    : `/api/common/health-score/details/low-hot-update-tables`
+}
+
+export const getHealthScoreLowHotUpdateTables = async (
+  params: GetHealthScoreLowHotUpdateTablesParams,
+  options?: RequestInit,
+): Promise<getHealthScoreLowHotUpdateTablesResponse> => {
+  return customFetch<getHealthScoreLowHotUpdateTablesResponse>(
+    getGetHealthScoreLowHotUpdateTablesUrl(params),
+    {
+      ...options,
+      method: 'GET',
+    },
+  )
+}
+
+export const getGetHealthScoreLowHotUpdateTablesQueryKey = (
+  params?: MaybeRef<GetHealthScoreLowHotUpdateTablesParams>,
+) => {
+  return [
+    'api',
+    'common',
+    'health-score',
+    'details',
+    'low-hot-update-tables',
+    ...(params ? [params] : []),
+  ] as const
+}
+
+export const getGetHealthScoreLowHotUpdateTablesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHealthScoreLowHotUpdateTables>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreLowHotUpdateTablesParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreLowHotUpdateTables>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetHealthScoreLowHotUpdateTablesQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHealthScoreLowHotUpdateTables>>> = ({
+    signal,
+  }) => getHealthScoreLowHotUpdateTables(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHealthScoreLowHotUpdateTables>>,
+    TError,
+    TData
+  >
+}
+
+export type GetHealthScoreLowHotUpdateTablesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHealthScoreLowHotUpdateTables>>
+>
+export type GetHealthScoreLowHotUpdateTablesQueryError = NotFoundResponse
+
+export function useGetHealthScoreLowHotUpdateTables<
+  TData = Awaited<ReturnType<typeof getHealthScoreLowHotUpdateTables>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreLowHotUpdateTablesParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreLowHotUpdateTables>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHealthScoreLowHotUpdateTablesQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Inline detail for the high_max_dead_ratio recommendation: top tables by dead-tuple ratio.
+ */
+export type getHealthScoreHighDeadRatioTablesResponse200 = {
+  data: HealthScoreHighDeadRatioTable[]
+  status: 200
+}
+
+export type getHealthScoreHighDeadRatioTablesResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getHealthScoreHighDeadRatioTablesResponseSuccess =
+  getHealthScoreHighDeadRatioTablesResponse200 & {
+    headers: Headers
+  }
+export type getHealthScoreHighDeadRatioTablesResponseError =
+  getHealthScoreHighDeadRatioTablesResponse404 & {
+    headers: Headers
+  }
+
+export type getHealthScoreHighDeadRatioTablesResponse =
+  | getHealthScoreHighDeadRatioTablesResponseSuccess
+  | getHealthScoreHighDeadRatioTablesResponseError
+
+export const getGetHealthScoreHighDeadRatioTablesUrl = (
+  params: GetHealthScoreHighDeadRatioTablesParams,
+) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/common/health-score/details/high-dead-ratio-tables?${stringifiedParams}`
+    : `/api/common/health-score/details/high-dead-ratio-tables`
+}
+
+export const getHealthScoreHighDeadRatioTables = async (
+  params: GetHealthScoreHighDeadRatioTablesParams,
+  options?: RequestInit,
+): Promise<getHealthScoreHighDeadRatioTablesResponse> => {
+  return customFetch<getHealthScoreHighDeadRatioTablesResponse>(
+    getGetHealthScoreHighDeadRatioTablesUrl(params),
+    {
+      ...options,
+      method: 'GET',
+    },
+  )
+}
+
+export const getGetHealthScoreHighDeadRatioTablesQueryKey = (
+  params?: MaybeRef<GetHealthScoreHighDeadRatioTablesParams>,
+) => {
+  return [
+    'api',
+    'common',
+    'health-score',
+    'details',
+    'high-dead-ratio-tables',
+    ...(params ? [params] : []),
+  ] as const
+}
+
+export const getGetHealthScoreHighDeadRatioTablesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHealthScoreHighDeadRatioTables>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreHighDeadRatioTablesParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreHighDeadRatioTables>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetHealthScoreHighDeadRatioTablesQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHealthScoreHighDeadRatioTables>>> = ({
+    signal,
+  }) => getHealthScoreHighDeadRatioTables(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHealthScoreHighDeadRatioTables>>,
+    TError,
+    TData
+  >
+}
+
+export type GetHealthScoreHighDeadRatioTablesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHealthScoreHighDeadRatioTables>>
+>
+export type GetHealthScoreHighDeadRatioTablesQueryError = NotFoundResponse
+
+export function useGetHealthScoreHighDeadRatioTables<
+  TData = Awaited<ReturnType<typeof getHealthScoreHighDeadRatioTables>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreHighDeadRatioTablesParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreHighDeadRatioTables>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHealthScoreHighDeadRatioTablesQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Inline detail for the horizon_lag_xids recommendation: sessions sorted by oldest backend_xmin (they pin the MVCC horizon).
+ */
+export type getHealthScoreHorizonBlockingSessionsResponse200 = {
+  data: HealthScoreHorizonBlockingSession[]
+  status: 200
+}
+
+export type getHealthScoreHorizonBlockingSessionsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getHealthScoreHorizonBlockingSessionsResponseSuccess =
+  getHealthScoreHorizonBlockingSessionsResponse200 & {
+    headers: Headers
+  }
+export type getHealthScoreHorizonBlockingSessionsResponseError =
+  getHealthScoreHorizonBlockingSessionsResponse404 & {
+    headers: Headers
+  }
+
+export type getHealthScoreHorizonBlockingSessionsResponse =
+  | getHealthScoreHorizonBlockingSessionsResponseSuccess
+  | getHealthScoreHorizonBlockingSessionsResponseError
+
+export const getGetHealthScoreHorizonBlockingSessionsUrl = (
+  params: GetHealthScoreHorizonBlockingSessionsParams,
+) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/common/health-score/details/horizon-blocking-sessions?${stringifiedParams}`
+    : `/api/common/health-score/details/horizon-blocking-sessions`
+}
+
+export const getHealthScoreHorizonBlockingSessions = async (
+  params: GetHealthScoreHorizonBlockingSessionsParams,
+  options?: RequestInit,
+): Promise<getHealthScoreHorizonBlockingSessionsResponse> => {
+  return customFetch<getHealthScoreHorizonBlockingSessionsResponse>(
+    getGetHealthScoreHorizonBlockingSessionsUrl(params),
+    {
+      ...options,
+      method: 'GET',
+    },
+  )
+}
+
+export const getGetHealthScoreHorizonBlockingSessionsQueryKey = (
+  params?: MaybeRef<GetHealthScoreHorizonBlockingSessionsParams>,
+) => {
+  return [
+    'api',
+    'common',
+    'health-score',
+    'details',
+    'horizon-blocking-sessions',
+    ...(params ? [params] : []),
+  ] as const
+}
+
+export const getGetHealthScoreHorizonBlockingSessionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHealthScoreHorizonBlockingSessions>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreHorizonBlockingSessionsParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreHorizonBlockingSessions>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetHealthScoreHorizonBlockingSessionsQueryKey(params)
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getHealthScoreHorizonBlockingSessions>>
+  > = ({ signal }) =>
+    getHealthScoreHorizonBlockingSessions(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHealthScoreHorizonBlockingSessions>>,
+    TError,
+    TData
+  >
+}
+
+export type GetHealthScoreHorizonBlockingSessionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHealthScoreHorizonBlockingSessions>>
+>
+export type GetHealthScoreHorizonBlockingSessionsQueryError = NotFoundResponse
+
+export function useGetHealthScoreHorizonBlockingSessions<
+  TData = Awaited<ReturnType<typeof getHealthScoreHorizonBlockingSessions>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreHorizonBlockingSessionsParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreHorizonBlockingSessions>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHealthScoreHorizonBlockingSessionsQueryOptions(params, options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
 
