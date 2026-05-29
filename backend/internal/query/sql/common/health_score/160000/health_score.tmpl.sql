@@ -137,20 +137,16 @@ locks_guc AS (
     FROM pg_settings
     WHERE name = 'max_locks_per_transaction'
 ),
--- HOT updates: PG 16 introduced n_tup_newpage_upd, so this template (PG 16
--- only — PG 14/15 use 160000/) computes the real newpage ratio. The base
--- template (PG 17+) uses the same formula but reads checkpoint stats from
--- pg_stat_checkpointer, which is why we still need this fork.
+-- PG 14/15 template (selected by findTemplate when serverVersion < 160000).
+-- pg_stat_user_tables.n_tup_newpage_upd was added in PG 16, so this version
+-- surfaces 0 — the high_newpage_update_ratio rule simply won't trigger here.
 hot_update_metrics AS (
     SELECT
         COALESCE(
             SUM(n_tup_hot_upd)::float8 / NULLIF(SUM(n_tup_upd), 0),
             1.0
         )::float8 AS hot_update_ratio,
-        COALESCE(
-            SUM(n_tup_newpage_upd)::float8 / NULLIF(SUM(n_tup_upd), 0),
-            0
-        )::float8 AS newpage_update_ratio
+        0::float8 AS newpage_update_ratio
     FROM pg_stat_user_tables
     WHERE n_tup_upd > 1000
 ),

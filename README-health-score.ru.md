@@ -4,7 +4,7 @@
 
 ## Формула
 
-```
+```text
 score = 100 − Σ (penalty_i × weight_i)
 обрезается до [0..100]
 ```
@@ -96,7 +96,6 @@ score = 100 − Σ (penalty_i × weight_i)
 - `tables_with_autovacuum_off` — таблицы с `autovacuum_enabled=false` в `pg_class.reloptions`. Пороги ≥1 / ≥5 / ≥20.
 - `relfrozenxid_age_outlier` — худший `age(relfrozenxid)` по таблицам из `pg_class`. Потабличная версия `xid_wraparound_risk`. Пороги ≥200 М / ≥500 М / ≥1 Б.
 - `stale_planner_stats` — таблицы, у которых `n_mod_since_analyze` велик относительно `n_live_tup` (статистика планировщика устарела). Пороги ≥3 / ≥10 / ≥30 таблиц.
-- `analyze_disabled_tables` — таблицы с `autovacuum_analyze_threshold=-1` в `reloptions` (ANALYZE отключён на таблице). Пороги ≥1 / ≥5 / ≥20.
 
 ### Horizon
 - `horizon_lag_xids` — `txid_current() - min(backend_xmin)` по `pg_stat_activity`. Сколько транзакций VACUUM не может убрать, потому что их ещё видит какая-то сессия (длинная транзакция, заброшенный replication-слот, prepared tx). Пороги ≥1 М / ≥10 М / ≥100 М.

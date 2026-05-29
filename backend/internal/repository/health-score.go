@@ -74,7 +74,6 @@ func (p *PgxPool) GetHealthScoreMetrics(ctx context.Context, clusterName, instan
 		&m.HotUpdateRatio,
 		&m.NewpageUpdateRatio,
 		&m.StalePlannerStatsTables,
-		&m.AnalyzeDisabledTables,
 		&m.WalLevel,
 		&m.LogicalSlotsActive,
 	)

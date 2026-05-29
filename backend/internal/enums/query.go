@@ -7,7 +7,6 @@ package enums
 //
 //	common/database_users
 //	common/health_score
-//	common/health_score_analyze_disabled_tables
 //	common/health_score_high_dead_ratio_tables
 //	common/health_score_horizon_blocking_sessions
 //	common/health_score_low_hot_update_tables

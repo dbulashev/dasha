@@ -63,16 +63,6 @@ func (p *PgxPool) GetHealthScoreTablesAutovacuumOff(
 		enums.QueryCommonHealthScoreTablesAutovacuumOff)
 }
 
-// GetHealthScoreAnalyzeDisabledTables lists tables with
-// autovacuum_analyze_enabled=false in reloptions.
-func (p *PgxPool) GetHealthScoreAnalyzeDisabledTables(
-	ctx context.Context,
-	clusterName, instanceName, databaseName string,
-) ([]dto.HealthScoreTableReloption, error) {
-	return p.scanTableReloptions(ctx, clusterName, instanceName, databaseName,
-		enums.QueryCommonHealthScoreAnalyzeDisabledTables)
-}
-
 // GetHealthScoreLowHotUpdateTables lists tables with the lowest HOT-update
 // ratio (most UPDATEs that rewrite every index).
 func (p *PgxPool) GetHealthScoreLowHotUpdateTables(

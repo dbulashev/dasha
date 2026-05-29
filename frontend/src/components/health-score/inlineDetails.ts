@@ -8,7 +8,6 @@ import type { ComposerTranslation } from 'vue-i18n'
 export const RULES_WITH_INLINE_DETAILS = new Set<string>([
   'xid_wraparound_risk',
   'tables_with_autovacuum_off',
-  'analyze_disabled_tables',
   'low_hot_update_ratio',
   'high_max_dead_ratio',
   'horizon_lag_xids',
@@ -32,8 +31,14 @@ const fmtBigInt = (v: unknown): string =>
 const fmtRatioPct = (v: unknown): string =>
   typeof v === 'number' && Number.isFinite(v) ? (v * 100).toFixed(1) + '%' : '—'
 
-const fmtSeconds = (v: unknown): string =>
-  typeof v === 'number' && Number.isFinite(v) ? v.toFixed(1) + ' с' : '—'
+// Curried: needs the locale's `t` to resolve the unit suffix at render time.
+// Returns "37.5 с" / "37.5 s" depending on locale; falls back to ASCII "s"
+// if the translation key is missing.
+const fmtSeconds = (t: ComposerTranslation) => (v: unknown): string => {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return '—'
+  const unit = t('healthScore.inline.unit.seconds') || 's'
+  return v.toFixed(1) + ' ' + unit
+}
 
 const fmtXidAge = (v: unknown): string => {
   if (typeof v !== 'number' && typeof v !== 'bigint') return String(v ?? '')
@@ -52,14 +57,6 @@ export const INLINE_SPECS: Record<string, InlineSpec> = {
     ],
   },
   tables_with_autovacuum_off: {
-    needsDatabase: true,
-    columns: (t) => [
-      { key: 'Schema', title: t('healthScore.inline.col.schema') },
-      { key: 'Table', title: t('healthScore.inline.col.table') },
-      { key: 'RelOptions', title: t('healthScore.inline.col.reloptions') },
-    ],
-  },
-  analyze_disabled_tables: {
     needsDatabase: true,
     columns: (t) => [
       { key: 'Schema', title: t('healthScore.inline.col.schema') },
@@ -96,7 +93,7 @@ export const INLINE_SPECS: Record<string, InlineSpec> = {
       {
         key: 'XactDurationSeconds',
         title: t('healthScore.inline.col.xactDuration'),
-        format: fmtSeconds,
+        format: fmtSeconds(t),
       },
       { key: 'BackendXmin', title: 'backend_xmin' },
       {

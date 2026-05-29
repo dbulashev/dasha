@@ -583,18 +583,6 @@ var Registry = []Rule{
 		},
 	},
 	{
-		// Per-table autovacuum_analyze_enabled=false. Rarely intentional —
-		// usually a leftover from an experiment or migration.
-		ID: "analyze_disabled_tables", Category: "maintenance", RelatedRoute: "/maintenance",
-		Evaluate: func(m RawMetrics) *Hit {
-			if m.AnalyzeDisabledTables <= 0 {
-				return nil
-			}
-
-			return &Hit{Severity: SeverityLow, MetricValue: float64(m.AnalyzeDisabledTables)}
-		},
-	},
-	{
 		// wal_level=minimal forbids streaming replication. If replicas are
 		// actually connected, the configuration is internally inconsistent.
 		ID: "wal_level_minimal_with_replicas", Category: "wal_checkpoint", RelatedRoute: "/replication",

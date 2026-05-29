@@ -4,7 +4,7 @@ A composite metric (0–100) summarising overall PostgreSQL instance health acro
 
 ## Formula
 
-```
+```text
 score = 100 − Σ (penalty_i × weight_i)
 clamp(0..100)
 ```
@@ -96,7 +96,6 @@ Each bullet: what's measured / how it's computed, then LOW / MEDIUM / HIGH thres
 - `tables_with_autovacuum_off` — tables with `autovacuum_enabled=false` in `pg_class.reloptions`. Thresholds ≥1 / ≥5 / ≥20.
 - `relfrozenxid_age_outlier` — worst per-table `age(relfrozenxid)` from `pg_class`. Per-table flavour of `xid_wraparound_risk`. Thresholds ≥200 M / ≥500 M / ≥1 B.
 - `stale_planner_stats` — tables whose `n_mod_since_analyze` is large relative to `n_live_tup` (planner has outdated stats). Thresholds ≥3 / ≥10 / ≥30 tables.
-- `analyze_disabled_tables` — tables with `autovacuum_analyze_threshold=-1` in `reloptions` (ANALYZE disabled per-table). Thresholds ≥1 / ≥5 / ≥20.
 
 ### Horizon
 - `horizon_lag_xids` — `txid_current() - min(backend_xmin)` over `pg_stat_activity`. Number of transactions VACUUM cannot reclaim because some session still sees them (long tx, abandoned replication slot, prepared tx). Thresholds ≥1 M / ≥10 M / ≥100 M.

@@ -88,9 +88,6 @@ per_table_metrics AS (
         COUNT(*) FILTER (
             WHERE 'autovacuum_enabled=false' = ANY(COALESCE(reloptions, ARRAY[]::text[]))
         )::int AS tables_with_autovacuum_off,
-        COUNT(*) FILTER (
-            WHERE 'autovacuum_analyze_enabled=false' = ANY(COALESCE(reloptions, ARRAY[]::text[]))
-        )::int AS analyze_disabled_tables,
         COALESCE(MAX(age(relfrozenxid))::bigint, 0) AS max_relfrozenxid_age
     FROM pg_class
     WHERE relkind IN ('r','m','t')
@@ -239,7 +236,6 @@ SELECT
     hot.hot_update_ratio,
     hot.newpage_update_ratio,
     ss.stale_planner_stats_tables,
-    pt.analyze_disabled_tables,
     wl.wal_level,
     ls.active_count AS logical_slots_active
 FROM connection_metrics c,

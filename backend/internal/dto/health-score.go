@@ -8,8 +8,8 @@ type HealthScoreXidWraparoundDatabase struct {
 }
 
 // HealthScoreTableReloption is one row of a per-table list keyed by schema
-// and table with the matching reloptions string. Shared by the
-// tables_with_autovacuum_off and analyze_disabled_tables details.
+// and table with the matching reloptions string. Used by the
+// tables_with_autovacuum_off detail.
 type HealthScoreTableReloption struct {
 	Schema     string
 	Table      string
@@ -125,7 +125,6 @@ type HealthScoreMetrics struct {
 	HotUpdateRatio          float64
 	NewpageUpdateRatio      float64
 	StalePlannerStatsTables int
-	AnalyzeDisabledTables   int
 	WalLevel                string
 	LogicalSlotsActive      int
 }

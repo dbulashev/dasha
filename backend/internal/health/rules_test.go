@@ -567,18 +567,6 @@ func TestRule_StalePlannerStats(t *testing.T) {
 	}
 }
 
-func TestRule_AnalyzeDisabledTables(t *testing.T) {
-	r := findRule(t, "analyze_disabled_tables")
-
-	if hit := r.Evaluate(RawMetrics{AnalyzeDisabledTables: 0}); hit != nil {
-		t.Errorf("0 → nil, got %+v", hit)
-	}
-
-	if hit := r.Evaluate(RawMetrics{AnalyzeDisabledTables: 3}); hit == nil || hit.Severity != SeverityLow {
-		t.Errorf("3 → LOW, got %+v", hit)
-	}
-}
-
 func TestRule_WalLevelMinimalWithReplicas(t *testing.T) {
 	r := findRule(t, "wal_level_minimal_with_replicas")
 

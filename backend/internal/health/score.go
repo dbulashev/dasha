@@ -60,7 +60,6 @@ type RawMetrics struct {
 	HotUpdateRatio          float64
 	NewpageUpdateRatio      float64
 	StalePlannerStatsTables int
-	AnalyzeDisabledTables   int
 	WalLevel                string
 	LogicalSlotsActive      int
 }
@@ -362,10 +361,13 @@ func penaltyMaintenance(m RawMetrics) CategoryResult {
 	}
 
 	// Aligned with stale_vacuum thresholds (7/21/60 days = 168/504/1440 h).
+	// Middle-tier addition capped at 30 so the function stays monotonic at
+	// the 1440 h boundary — without the cap, 1440 h = 15 + 19.5 = 34.5 would
+	// dip back to 30 right after the boundary.
 	if m.MaxVacuumAgeHours > 1440 { // 60 days
 		penalty += 30
 	} else if m.MaxVacuumAgeHours > 504 { // 21 days
-		penalty += 15 + (m.MaxVacuumAgeHours-504)/24*0.5
+		penalty += math.Min(15+(m.MaxVacuumAgeHours-504)/24*0.5, 30)
 	} else if m.MaxVacuumAgeHours > 168 { // 7 days
 		penalty += (m.MaxVacuumAgeHours - 168) / 24 * 1
 	}
@@ -425,11 +427,12 @@ func penaltyWalCheckpoint(m RawMetrics) CategoryResult {
 	if total >= 10 {
 		ratio = float64(m.RequestedCheckpoints) / float64(total)
 
+		// Aligned with requested_checkpoint_ratio rule (0.20 / 0.10 / 0.05).
 		switch {
-		case ratio > 0.30:
-			penalty = 70 + math.Min((ratio-0.30)/0.30*30, 30)
+		case ratio > 0.20:
+			penalty = 70 + math.Min((ratio-0.20)/0.30*30, 30)
 		case ratio > 0.10:
-			penalty = 30 + (ratio-0.10)/0.20*40
+			penalty = 30 + (ratio-0.10)/0.10*40
 		case ratio > 0.05:
 			penalty = (ratio - 0.05) / 0.05 * 30
 		}
@@ -455,13 +458,14 @@ func penaltyWalCheckpoint(m RawMetrics) CategoryResult {
 func penaltyLocks(m RawMetrics) CategoryResult {
 	penalty := 0.0
 
-	// Active lock waiters: 2 / 5 / 10 → roughly 10 / 30 / 60 penalty points.
+	// Active lock waiters — aligned with rule thresholds 1 / 3 / 10
+	// (LOW / MED / HIGH) → roughly 10 / 30 / 60 penalty points.
 	switch {
 	case m.ActiveLockWaiters >= 10:
 		penalty += 60
-	case m.ActiveLockWaiters >= 5:
+	case m.ActiveLockWaiters >= 3:
 		penalty += 30
-	case m.ActiveLockWaiters >= 2:
+	case m.ActiveLockWaiters >= 1:
 		penalty += 10
 	}
 
@@ -475,13 +479,14 @@ func penaltyLocks(m RawMetrics) CategoryResult {
 		penalty += 5
 	}
 
-	// Ungranted locks queue length: 3 / 10 / 20 → up to 30 points.
+	// Ungranted locks queue length — aligned with rule thresholds 2 / 5 / 15
+	// (LOW / MED / HIGH) → up to 30 points.
 	switch {
-	case m.UngrantedLocks >= 20:
+	case m.UngrantedLocks >= 15:
 		penalty += 30
-	case m.UngrantedLocks >= 10:
+	case m.UngrantedLocks >= 5:
 		penalty += 15
-	case m.UngrantedLocks >= 3:
+	case m.UngrantedLocks >= 2:
 		penalty += 5
 	}
 

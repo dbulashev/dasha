@@ -3,7 +3,6 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import {
-  getHealthScoreAnalyzeDisabledTables,
   getHealthScoreHighDeadRatioTables,
   getHealthScoreHorizonBlockingSessions,
   getHealthScoreLowHotUpdateTables,
@@ -114,13 +113,6 @@ async function loadInline() {
           database: db,
         })
         break
-      case 'analyze_disabled_tables':
-        res = await getHealthScoreAnalyzeDisabledTables({
-          cluster_name: cluster,
-          instance: host,
-          database: db,
-        })
-        break
       case 'low_hot_update_ratio':
         res = await getHealthScoreLowHotUpdateTables({
           cluster_name: cluster,
@@ -155,11 +147,18 @@ async function loadInline() {
   }
 }
 
-watch(expanded, (open) => {
-  if (open && hasInline.value && inlineRows.value.length === 0 && !inlineError.value) {
-    void loadInline()
-  }
-})
+// Refetch when the request context changes while the card is open, otherwise
+// inline rows from a previously selected database/host linger after the
+// selector switches. Collapsed cards skip the fetch — they'll pick up fresh
+// data on next expand because the watcher fires on the expanded transition.
+watch(
+  [expanded, clusterName, hostName, databaseName, () => props.rec.rule_id],
+  ([open]) => {
+    if (open && hasInline.value) {
+      void loadInline()
+    }
+  },
+)
 
 const showExpander = computed(() => hasDetail.value || hasSql.value || hasInline.value)
 

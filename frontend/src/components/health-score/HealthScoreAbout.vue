@@ -14,72 +14,73 @@ const CATEGORIES = [
   { name: 'locks', weight: 0.1, icon: 'mdi-lock-outline' },
 ] as const
 
-// Penalty breakpoints — language-independent, hard-coded.
+// Penalty breakpoints. `metric` is a SQL-like identifier (language-neutral);
+// `pointsKey` looks up the localized breakpoint string from i18n.
 const PENALTY_ROWS = [
-  { cat: 'connections', metric: 'total / max_connections', points: '0.60 → 0.80 → 0.95+' },
-  { cat: 'connections', metric: 'idle_in_transaction', points: '+5 / шт., max 30' },
-  { cat: 'connections', metric: 'longest_transaction_seconds', points: '>300 с, max 20' },
-  { cat: 'performance', metric: 'cache_hit_ratio (%)', points: '≥95 → ≥90 → ≥85 → ниже' },
-  { cat: 'storage', metric: 'max_dead_ratio (%)', points: '≤20 → 20–30 → >30' },
-  { cat: 'storage', metric: 'avg_dead_ratio (%)', points: '>15 → +до 30' },
-  { cat: 'storage', metric: 'tables_high_bloat', points: '>5 → +до 30' },
-  { cat: 'replication', metric: 'max_replay_lag_seconds', points: '>10 с → max' },
-  { cat: 'replication', metric: 'max_lag_bytes', points: '>16 МиБ → max' },
-  { cat: 'replication', metric: 'disconnected_replicas', points: '+25 / реплика' },
-  { cat: 'maintenance', metric: 'max_xid_age (xid)', points: '500 M → 1 B → 1.5 B' },
-  { cat: 'maintenance', metric: 'max_vacuum_age_hours', points: '>168 → >504 → >1440 ч' },
-  { cat: 'maintenance', metric: 'tables_never_vacuumed', points: '+5 / шт., max 20' },
-  { cat: 'horizon', metric: 'horizon_lag_xids', points: '1 M → 10 M → 100 M' },
-  { cat: 'wal_checkpoint', metric: 'requested / total_checkpoints', points: '≥5 % → ≥10 % → ≥20 %' },
-  { cat: 'locks', metric: 'penaltyLocks (агрегат)', points: 'накопительный' },
+  { cat: 'connections', metric: 'total / max_connections', pointsKey: 'connection_ratio' },
+  { cat: 'connections', metric: 'idle_in_transaction', pointsKey: 'idle_in_tx' },
+  { cat: 'connections', metric: 'longest_transaction_seconds', pointsKey: 'longest_transaction' },
+  { cat: 'performance', metric: 'cache_hit_ratio (%)', pointsKey: 'cache_hit_ratio' },
+  { cat: 'storage', metric: 'max_dead_ratio (%)', pointsKey: 'max_dead_ratio' },
+  { cat: 'storage', metric: 'avg_dead_ratio (%)', pointsKey: 'avg_dead_ratio' },
+  { cat: 'storage', metric: 'tables_high_bloat', pointsKey: 'tables_high_bloat' },
+  { cat: 'replication', metric: 'max_replay_lag_seconds', pointsKey: 'max_replay_lag' },
+  { cat: 'replication', metric: 'max_lag_bytes', pointsKey: 'max_lag_bytes' },
+  { cat: 'replication', metric: 'disconnected_replicas', pointsKey: 'disconnected_replicas' },
+  { cat: 'maintenance', metric: 'max_xid_age (xid)', pointsKey: 'max_xid_age' },
+  { cat: 'maintenance', metric: 'max_vacuum_age_hours', pointsKey: 'max_vacuum_age_hours' },
+  { cat: 'maintenance', metric: 'tables_never_vacuumed', pointsKey: 'tables_never_vacuumed' },
+  { cat: 'horizon', metric: 'horizon_lag_xids', pointsKey: 'horizon_lag_xids' },
+  { cat: 'wal_checkpoint', metric: 'requested / total_checkpoints', pointsKey: 'requested_checkpoint_ratio' },
+  { cat: 'locks', metric: 'penaltyLocks', pointsKey: 'penalty_locks' },
 ] as const
 
-// Rule thresholds (language-independent). Order within a category matches Registry.
-const RULES_BY_CATEGORY: Record<string, { id: string; thresholds: string }[]> = {
+// Rule order within a category — must match Registry. Threshold strings come
+// from i18n via ruleThresholds(id) to avoid embedding RU/DE units in code.
+const RULES_BY_CATEGORY: Record<string, { id: string }[]> = {
   connections: [
-    { id: 'high_connection_ratio', thresholds: '≥0.70 / ≥0.85 / ≥0.95' },
-    { id: 'idle_in_transaction', thresholds: '≥2 / ≥5 / ≥10' },
-    { id: 'long_running_transaction', thresholds: '≥300 / ≥600 / ≥1800 с' },
+    { id: 'high_connection_ratio' },
+    { id: 'idle_in_transaction' },
+    { id: 'long_running_transaction' },
   ],
   performance: [
-    { id: 'low_cache_hit_ratio', thresholds: '<95 / <90 / <85 %' },
-    { id: 'track_io_timing_disabled', thresholds: 'LOW' },
+    { id: 'low_cache_hit_ratio' },
+    { id: 'track_io_timing_disabled' },
   ],
   storage: [
-    { id: 'high_max_dead_ratio', thresholds: '≥10 / ≥20 / ≥30 %' },
-    { id: 'high_avg_dead_ratio', thresholds: '≥5 / ≥15 / ≥25 %' },
-    { id: 'many_bloated_tables', thresholds: '≥5 / ≥10 / ≥20' },
-    { id: 'low_hot_update_ratio', thresholds: '<0.80 / <0.65 / <0.50' },
-    { id: 'high_newpage_update_ratio', thresholds: '≥0.05 / ≥0.15 / ≥0.25 (PG 16+)' },
+    { id: 'high_max_dead_ratio' },
+    { id: 'high_avg_dead_ratio' },
+    { id: 'many_bloated_tables' },
+    { id: 'low_hot_update_ratio' },
+    { id: 'high_newpage_update_ratio' },
   ],
   replication: [
-    { id: 'replication_lag_time', thresholds: '≥10 / ≥60 / ≥300 с' },
-    { id: 'replication_lag_bytes', thresholds: '≥16 МиБ / ≥256 МиБ / ≥1 ГиБ' },
-    { id: 'disconnected_replicas', thresholds: '≥1 / ≥2 / ≥3' },
+    { id: 'replication_lag_time' },
+    { id: 'replication_lag_bytes' },
+    { id: 'disconnected_replicas' },
   ],
   maintenance: [
-    { id: 'xid_wraparound_risk', thresholds: '≥150 M / ≥200 M / ≥1.6 B' },
-    { id: 'stale_vacuum', thresholds: '≥7 / ≥21 / ≥60 дней' },
-    { id: 'tables_never_vacuumed', thresholds: '≥1 / ≥2 / ≥5' },
-    { id: 'autovacuum_disabled', thresholds: 'HIGH' },
-    { id: 'track_counts_disabled', thresholds: 'HIGH' },
-    { id: 'tables_with_autovacuum_off', thresholds: '≥1 / ≥5 / ≥20' },
-    { id: 'relfrozenxid_age_outlier', thresholds: '≥200 M / ≥500 M / ≥1 B' },
-    { id: 'stale_planner_stats', thresholds: '≥3 / ≥10 / ≥30' },
-    { id: 'analyze_disabled_tables', thresholds: '≥1 / ≥5 / ≥20' },
+    { id: 'xid_wraparound_risk' },
+    { id: 'stale_vacuum' },
+    { id: 'tables_never_vacuumed' },
+    { id: 'autovacuum_disabled' },
+    { id: 'track_counts_disabled' },
+    { id: 'tables_with_autovacuum_off' },
+    { id: 'relfrozenxid_age_outlier' },
+    { id: 'stale_planner_stats' },
   ],
-  horizon: [{ id: 'horizon_lag_xids', thresholds: '≥1 M / ≥10 M / ≥100 M' }],
+  horizon: [{ id: 'horizon_lag_xids' }],
   wal_checkpoint: [
-    { id: 'requested_checkpoint_ratio', thresholds: '≥5 / ≥10 / ≥20 %' },
-    { id: 'wal_level_minimal_with_replicas', thresholds: 'HIGH' },
-    { id: 'wal_level_logical_without_publications', thresholds: 'LOW' },
+    { id: 'requested_checkpoint_ratio' },
+    { id: 'wal_level_minimal_with_replicas' },
+    { id: 'wal_level_logical_without_publications' },
   ],
   locks: [
-    { id: 'active_lock_waiters', thresholds: '≥1 / ≥3 / ≥10' },
-    { id: 'longest_lock_wait_seconds', thresholds: '≥10 / ≥30 / ≥60 с' },
-    { id: 'ungranted_locks', thresholds: '≥2 / ≥5 / ≥15' },
-    { id: 'deadlocks_rate', thresholds: 'LOW при >0' },
-    { id: 'lock_pool_saturation', thresholds: '≥0.4 / ≥0.6 / ≥0.8' },
+    { id: 'active_lock_waiters' },
+    { id: 'longest_lock_wait_seconds' },
+    { id: 'ungranted_locks' },
+    { id: 'deadlocks_rate' },
+    { id: 'lock_pool_saturation' },
   ],
 }
 
@@ -97,6 +98,12 @@ const ruleNote = (id: string): string => {
   const k = `healthScore.about.ruleNotes.${id}`
   return te(k) ? t(k) : ''
 }
+
+const penaltyPoints = (key: string): string =>
+  t(`healthScore.about.penaltyPoints.${key}`)
+
+const ruleThresholds = (id: string): string =>
+  t(`healthScore.about.ruleThresholds.${id}`)
 </script>
 
 <template>
@@ -211,7 +218,7 @@ clamp(0 … 100)</pre>
                   </v-chip>
                 </td>
                 <td><code>{{ row.metric }}</code></td>
-                <td>{{ row.points }}</td>
+                <td>{{ penaltyPoints(row.pointsKey) }}</td>
               </tr>
             </tbody>
           </v-table>
@@ -268,7 +275,7 @@ clamp(0 … 100)</pre>
                   </div>
                 </template>
                 <template #append>
-                  <v-chip size="x-small" variant="tonal">{{ rule.thresholds }}</v-chip>
+                  <v-chip size="x-small" variant="tonal">{{ ruleThresholds(rule.id) }}</v-chip>
                 </template>
               </v-list-item>
             </v-list>

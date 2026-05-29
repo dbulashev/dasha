@@ -106,7 +106,7 @@ const isReplica = computed(() =>
 watch(
   [isReplica, () => route.path],
   ([replica, path]) => {
-    if (replica && path.startsWith('/maintenance/')) {
+    if (replica && (path === '/maintenance' || path.startsWith('/maintenance/'))) {
       router.replace({ path: `/main/${currentCluster.value}`, query: route.query })
     }
   },

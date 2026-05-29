@@ -283,7 +283,6 @@ func (s *Handlers) GetHealthScore(
 		HotUpdateRatio:            metrics.HotUpdateRatio,
 		NewpageUpdateRatio:        metrics.NewpageUpdateRatio,
 		StalePlannerStatsTables:   metrics.StalePlannerStatsTables,
-		AnalyzeDisabledTables:     metrics.AnalyzeDisabledTables,
 		WalLevel:                  metrics.WalLevel,
 		LogicalSlotsActive:        metrics.LogicalSlotsActive,
 	}, weights)
@@ -383,7 +382,6 @@ func (s *Handlers) GetHealthScoreRecommendations(
 		HotUpdateRatio:            metrics.HotUpdateRatio,
 		NewpageUpdateRatio:        metrics.NewpageUpdateRatio,
 		StalePlannerStatsTables:   metrics.StalePlannerStatsTables,
-		AnalyzeDisabledTables:     metrics.AnalyzeDisabledTables,
 		WalLevel:                  metrics.WalLevel,
 		LogicalSlotsActive:        metrics.LogicalSlotsActive,
 	}
@@ -537,31 +535,6 @@ func (s *Handlers) GetHealthScoreTablesAutovacuumOff(
 	return out, nil
 }
 
-func (s *Handlers) GetHealthScoreAnalyzeDisabledTables(
-	ctx context.Context,
-	req serverhttp.GetHealthScoreAnalyzeDisabledTablesRequestObject,
-) (serverhttp.GetHealthScoreAnalyzeDisabledTablesResponseObject, error) {
-	rows, err := s.repo.GetHealthScoreAnalyzeDisabledTables(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
-	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetHealthScoreAnalyzeDisabledTables404Response{}, nil
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("GetHealthScoreAnalyzeDisabledTables | %w", err)
-	}
-
-	out := make(serverhttp.GetHealthScoreAnalyzeDisabledTables200JSONResponse, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, serverhttp.HealthScoreTableReloption{
-			Schema:     r.Schema,
-			Table:      r.Table,
-			RelOptions: r.RelOptions,
-		})
-	}
-
-	return out, nil
-}
-
 func (s *Handlers) GetHealthScoreLowHotUpdateTables(
 	ctx context.Context,
 	req serverhttp.GetHealthScoreLowHotUpdateTablesRequestObject,
@@ -639,7 +612,7 @@ func (s *Handlers) GetHealthScoreHorizonBlockingSessions(
 			WaitEvent:           r.WaitEvent,
 			XactDurationSeconds: r.XactDurationSeconds,
 			BackendXmin:         r.BackendXmin,
-			Query:               r.Query,
+			Query:               sanitize.SQL(r.Query),
 		})
 	}
 
@@ -667,11 +640,14 @@ func (s *Handlers) PutHealthScoreWeights(
 	}
 
 	w := health.Weights{
-		Connections: req.Body.Connections,
-		Performance: req.Body.Performance,
-		Storage:     req.Body.Storage,
-		Replication: req.Body.Replication,
-		Maintenance: req.Body.Maintenance,
+		Connections:   req.Body.Connections,
+		Performance:   req.Body.Performance,
+		Storage:       req.Body.Storage,
+		Replication:   req.Body.Replication,
+		Maintenance:   req.Body.Maintenance,
+		Horizon:       req.Body.Horizon,
+		WalCheckpoint: req.Body.WalCheckpoint,
+		Locks:         req.Body.Locks,
 	}
 
 	if err := w.Validate(); err != nil {
@@ -747,14 +723,17 @@ func (s *Handlers) getHealthScoreWeightsResponse(
 	}
 
 	return serverhttp.HealthScoreWeights{
-		Connections: w.Connections,
-		Performance: w.Performance,
-		Storage:     w.Storage,
-		Replication: w.Replication,
-		Maintenance: w.Maintenance,
-		Source:      source,
-		UpdatedAt:   updatedAt,
-		UpdatedBy:   updatedBy,
+		Connections:   w.Connections,
+		Performance:   w.Performance,
+		Storage:       w.Storage,
+		Replication:   w.Replication,
+		Maintenance:   w.Maintenance,
+		Horizon:       w.Horizon,
+		WalCheckpoint: w.WalCheckpoint,
+		Locks:         w.Locks,
+		Source:        source,
+		UpdatedAt:     updatedAt,
+		UpdatedBy:     updatedBy,
 	}, nil
 }
 

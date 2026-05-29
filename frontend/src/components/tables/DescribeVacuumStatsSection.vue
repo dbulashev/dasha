@@ -21,20 +21,22 @@ const isReplica = computed(() =>
   instanceInfoStore.isReplica(clusterName.value ?? '', hostName.value ?? ''),
 )
 
-watch([clusterName, hostName], ([c, h]) => {
-  if (c && h) instanceInfoStore.ensure(c, h)
-}, { immediate: true })
-
 const data = ref<VacuumStats | null>(null)
 const loading = ref(false)
 
 async function load() {
-  if (isReplica.value) {
+  if (!clusterName.value || !hostName.value || !databaseName.value || !props.schema || !props.table) {
     data.value = null
     return
   }
 
-  if (!clusterName.value || !hostName.value || !databaseName.value || !props.schema || !props.table) {
+  // Await instance-info before checking isReplica — without this, the first
+  // load() on mount races with the store fetch and can issue a stale
+  // vacuum-stats request to a replica before the recovery flag is known.
+  // ensure() is cached and request-deduped, so subsequent calls are cheap.
+  await instanceInfoStore.ensure(clusterName.value, hostName.value)
+
+  if (isReplica.value) {
     data.value = null
     return
   }

@@ -15,8 +15,6 @@ const (
 	QueryCommonDatabaseUsers Query = "common/database_users"
 	// QueryCommonHealthScore is a Query of type common/health_score.
 	QueryCommonHealthScore Query = "common/health_score"
-	// QueryCommonHealthScoreAnalyzeDisabledTables is a Query of type common/health_score_analyze_disabled_tables.
-	QueryCommonHealthScoreAnalyzeDisabledTables Query = "common/health_score_analyze_disabled_tables"
 	// QueryCommonHealthScoreHighDeadRatioTables is a Query of type common/health_score_high_dead_ratio_tables.
 	QueryCommonHealthScoreHighDeadRatioTables Query = "common/health_score_high_dead_ratio_tables"
 	// QueryCommonHealthScoreHorizonBlockingSessions is a Query of type common/health_score_horizon_blocking_sessions.
@@ -182,7 +180,6 @@ var ErrInvalidQuery = fmt.Errorf("not a valid Query, try [%s]", strings.Join(_Qu
 var _QueryNames = []string{
 	string(QueryCommonDatabaseUsers),
 	string(QueryCommonHealthScore),
-	string(QueryCommonHealthScoreAnalyzeDisabledTables),
 	string(QueryCommonHealthScoreHighDeadRatioTables),
 	string(QueryCommonHealthScoreHorizonBlockingSessions),
 	string(QueryCommonHealthScoreLowHotUpdateTables),
@@ -276,7 +273,6 @@ func QueryValues() []Query {
 	return []Query{
 		QueryCommonDatabaseUsers,
 		QueryCommonHealthScore,
-		QueryCommonHealthScoreAnalyzeDisabledTables,
 		QueryCommonHealthScoreHighDeadRatioTables,
 		QueryCommonHealthScoreHorizonBlockingSessions,
 		QueryCommonHealthScoreLowHotUpdateTables,
@@ -374,7 +370,6 @@ func (x Query) IsValid() bool {
 var _QueryValue = map[string]Query{
 	"common/database_users":                         QueryCommonDatabaseUsers,
 	"common/health_score":                           QueryCommonHealthScore,
-	"common/health_score_analyze_disabled_tables":   QueryCommonHealthScoreAnalyzeDisabledTables,
 	"common/health_score_high_dead_ratio_tables":    QueryCommonHealthScoreHighDeadRatioTables,
 	"common/health_score_horizon_blocking_sessions": QueryCommonHealthScoreHorizonBlockingSessions,
 	"common/health_score_low_hot_update_tables":     QueryCommonHealthScoreLowHotUpdateTables,

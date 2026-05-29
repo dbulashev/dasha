@@ -671,7 +671,6 @@
             "hot_update_ratio": "Доля HOT-обновлений",
             "newpage_update_ratio": "Доля разрывов HOT-цепочки",
             "stale_planner_stats_tables": "Таблиц с устаревшей статистикой",
-            "analyze_disabled_tables": "Таблиц с выключенным auto-analyze",
             "wal_level": "wal_level",
             "logical_slots_active": "Активных логических слотов"
         },
@@ -731,7 +730,6 @@
                 "tables_with_autovacuum_off": "Таблицы с autovacuum_enabled=false в reloptions.",
                 "relfrozenxid_age_outlier": "Худший age(relfrozenxid) по таблицам — потабличная версия XID-риска.",
                 "stale_planner_stats": "n_mod_since_analyze велик относительно n_live_tup — статистика планировщика устарела.",
-                "analyze_disabled_tables": "Таблицы с autovacuum_analyze_threshold=-1 (ANALYZE отключён).",
                 "horizon_lag_xids": "txid_current() - min(backend_xmin) — сколько строк VACUUM не может убрать.",
                 "requested_checkpoint_ratio": "checkpoints_req / total — высокая доля = max_wal_size мал или всплеск записи.",
                 "wal_level_minimal_with_replicas": "wal_level=minimal не даёт физическую репликацию — реплики молча сломаны.",
@@ -743,7 +741,57 @@
                 "lock_pool_saturation": "count(*) из pg_locks / (max_connections × max_locks_per_transaction)."
             },
             "drilldownTitle": "Drill down (детализация по базам)",
-            "drilldown": "В таблице «Базы данных» по каждой БД собраны те же метрики, что и для инстанса: cache hit ratio, dead tuples, давность вакуума. Кликните по строке — выбранная база станет фильтром: движок правил пересчитается в её контексте, instance-only категории (Connections / Replication / Horizon / WAL / Locks) при этом скрываются."
+            "drilldown": "В таблице «Базы данных» по каждой БД собраны те же метрики, что и для инстанса: cache hit ratio, dead tuples, давность вакуума. Кликните по строке — выбранная база станет фильтром: движок правил пересчитается в её контексте, instance-only категории (Connections / Replication / Horizon / WAL / Locks) при этом скрываются.",
+            "penaltyPoints": {
+                "connection_ratio": "0.60 → 0.80 → 0.95+",
+                "idle_in_tx": "+5 / шт., max 30",
+                "longest_transaction": ">300 с, max 20",
+                "cache_hit_ratio": "≥95 → ≥90 → ≥85 → ниже",
+                "max_dead_ratio": "≤20 → 20–30 → >30",
+                "avg_dead_ratio": ">15 → +до 30",
+                "tables_high_bloat": ">5 → +до 30",
+                "max_replay_lag": ">10 с → max",
+                "max_lag_bytes": ">16 МиБ → max",
+                "disconnected_replicas": "+25 / реплика",
+                "max_xid_age": "500 M → 1 B → 1.5 B",
+                "max_vacuum_age_hours": ">168 → >504 → >1440 ч",
+                "tables_never_vacuumed": "+5 / шт., max 20",
+                "horizon_lag_xids": "1 M → 10 M → 100 M",
+                "requested_checkpoint_ratio": "≥5 % → ≥10 % → ≥20 %",
+                "penalty_locks": "накопительный"
+            },
+            "ruleThresholds": {
+                "high_connection_ratio": "≥0.70 / ≥0.85 / ≥0.95",
+                "idle_in_transaction": "≥2 / ≥5 / ≥10",
+                "long_running_transaction": "≥300 / ≥600 / ≥1800 с",
+                "low_cache_hit_ratio": "<95 / <90 / <85 %",
+                "track_io_timing_disabled": "LOW",
+                "high_max_dead_ratio": "≥10 / ≥20 / ≥30 %",
+                "high_avg_dead_ratio": "≥5 / ≥15 / ≥25 %",
+                "many_bloated_tables": "≥5 / ≥10 / ≥20",
+                "low_hot_update_ratio": "<0.80 / <0.65 / <0.50",
+                "high_newpage_update_ratio": "≥0.05 / ≥0.15 / ≥0.25 (PG 16+)",
+                "replication_lag_time": "≥10 / ≥60 / ≥300 с",
+                "replication_lag_bytes": "≥16 МиБ / ≥256 МиБ / ≥1 ГиБ",
+                "disconnected_replicas": "≥1 / ≥2 / ≥3",
+                "xid_wraparound_risk": "≥150 M / ≥200 M / ≥1.6 B",
+                "stale_vacuum": "≥7 / ≥21 / ≥60 дней",
+                "tables_never_vacuumed": "≥1 / ≥2 / ≥5",
+                "autovacuum_disabled": "HIGH",
+                "track_counts_disabled": "HIGH",
+                "tables_with_autovacuum_off": "≥1 / ≥5 / ≥20",
+                "relfrozenxid_age_outlier": "≥200 M / ≥500 M / ≥1 B",
+                "stale_planner_stats": "≥3 / ≥10 / ≥30",
+                "horizon_lag_xids": "≥1 M / ≥10 M / ≥100 M",
+                "requested_checkpoint_ratio": "≥5 / ≥10 / ≥20 %",
+                "wal_level_minimal_with_replicas": "HIGH",
+                "wal_level_logical_without_publications": "LOW",
+                "active_lock_waiters": "≥1 / ≥3 / ≥10",
+                "longest_lock_wait_seconds": "≥10 / ≥30 / ≥60 с",
+                "ungranted_locks": "≥2 / ≥5 / ≥15",
+                "deadlocks_rate": "LOW при >0",
+                "lock_pool_saturation": "≥0.4 / ≥0.6 / ≥0.8"
+            }
         },
         "databases": {
             "title": "Базы данных",
@@ -786,6 +834,9 @@
                 "state": "State",
                 "xactDuration": "Длительность транзакции",
                 "query": "Запрос"
+            },
+            "unit": {
+                "seconds": "с"
             }
         },
         "recommendations": {
@@ -941,12 +992,6 @@
                 "title": "Устаревшая статистика планировщика",
                 "short": "Таблиц с устаревшей статистикой: {metric_value}.",
                 "detail": "Эти таблицы заметно изменились с последнего ANALYZE (>50% от формулы автоанализа) и не анализировались более суток. Планировщик может выбирать неоптимальные планы. Запустите ANALYZE вручную или уменьшите autovacuum_analyze_scale_factor."
-            },
-            "analyze_disabled_tables": {
-                "title": "Авто-ANALYZE выключен для части таблиц",
-                "short": "Найдено {metric_value} таблиц с autovacuum_analyze_enabled=false.",
-                "detail": "Обычно это остаточная настройка от миграций или экспериментов. Без авто-ANALYZE статистика становится устаревшей.",
-                "sql": "SELECT relname, reloptions\nFROM pg_class\nWHERE 'autovacuum_analyze_enabled=false' = ANY(reloptions);"
             },
             "wal_level_minimal_with_replicas": {
                 "title": "wal_level=minimal при наличии реплик",

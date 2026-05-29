@@ -626,7 +626,6 @@
       "hot_update_ratio": "Anteil HOT-Updates",
       "newpage_update_ratio": "Anteil HOT-Ketten-Brüche",
       "stale_planner_stats_tables": "Tabellen mit veralteter Statistik",
-      "analyze_disabled_tables": "Tabellen mit deaktiviertem Auto-ANALYZE",
       "wal_level": "wal_level",
       "logical_slots_active": "Aktive logische Slots"
     },
@@ -686,7 +685,6 @@
         "tables_with_autovacuum_off": "Tabellen mit autovacuum_enabled=false in reloptions.",
         "relfrozenxid_age_outlier": "Schlechtestes age(relfrozenxid) je Tabelle — Tabellen-Variante des XID-Risikos.",
         "stale_planner_stats": "n_mod_since_analyze groß relativ zu n_live_tup — Planner-Statistik veraltet.",
-        "analyze_disabled_tables": "Tabellen mit autovacuum_analyze_threshold=-1 (ANALYZE deaktiviert).",
         "horizon_lag_xids": "txid_current() - min(backend_xmin) — Zeilen, die VACUUM nicht entfernen kann.",
         "requested_checkpoint_ratio": "checkpoints_req / total — hoher Anteil = max_wal_size klein oder Schreibspitze.",
         "wal_level_minimal_with_replicas": "wal_level=minimal erlaubt keine physische Replikation — Replicas stumm defekt.",
@@ -698,7 +696,57 @@
         "lock_pool_saturation": "count(*) aus pg_locks / (max_connections × max_locks_per_transaction)."
       },
       "drilldownTitle": "Drill down (Detailansicht pro Datenbank)",
-      "drilldown": "In der Tabelle „Datenbanken“ werden pro DB dieselben Metriken erfasst wie auf Instanzebene: Cache-Hit-Ratio, dead tuples, VACUUM-Alter. Klicke auf eine Zeile — die gewählte Datenbank wird zum Filter: die Regel-Engine wertet im DB-Scope aus, instance-only-Kategorien (Connections / Replication / Horizon / WAL / Locks) werden dabei ausgeblendet."
+      "drilldown": "In der Tabelle „Datenbanken“ werden pro DB dieselben Metriken erfasst wie auf Instanzebene: Cache-Hit-Ratio, dead tuples, VACUUM-Alter. Klicke auf eine Zeile — die gewählte Datenbank wird zum Filter: die Regel-Engine wertet im DB-Scope aus, instance-only-Kategorien (Connections / Replication / Horizon / WAL / Locks) werden dabei ausgeblendet.",
+      "penaltyPoints": {
+        "connection_ratio": "0.60 → 0.80 → 0.95+",
+        "idle_in_tx": "+5 pro Stk., max 30",
+        "longest_transaction": ">300 s, max 20",
+        "cache_hit_ratio": "≥95 → ≥90 → ≥85 → darunter",
+        "max_dead_ratio": "≤20 → 20–30 → >30",
+        "avg_dead_ratio": ">15 → +bis 30",
+        "tables_high_bloat": ">5 → +bis 30",
+        "max_replay_lag": ">10 s → max",
+        "max_lag_bytes": ">16 MiB → max",
+        "disconnected_replicas": "+25 pro Replica",
+        "max_xid_age": "500 M → 1 B → 1.5 B",
+        "max_vacuum_age_hours": ">168 → >504 → >1440 h",
+        "tables_never_vacuumed": "+5 pro Stk., max 20",
+        "horizon_lag_xids": "1 M → 10 M → 100 M",
+        "requested_checkpoint_ratio": "≥5 % → ≥10 % → ≥20 %",
+        "penalty_locks": "kumulativ"
+      },
+      "ruleThresholds": {
+        "high_connection_ratio": "≥0.70 / ≥0.85 / ≥0.95",
+        "idle_in_transaction": "≥2 / ≥5 / ≥10",
+        "long_running_transaction": "≥300 / ≥600 / ≥1800 s",
+        "low_cache_hit_ratio": "<95 / <90 / <85 %",
+        "track_io_timing_disabled": "LOW",
+        "high_max_dead_ratio": "≥10 / ≥20 / ≥30 %",
+        "high_avg_dead_ratio": "≥5 / ≥15 / ≥25 %",
+        "many_bloated_tables": "≥5 / ≥10 / ≥20",
+        "low_hot_update_ratio": "<0.80 / <0.65 / <0.50",
+        "high_newpage_update_ratio": "≥0.05 / ≥0.15 / ≥0.25 (PG 16+)",
+        "replication_lag_time": "≥10 / ≥60 / ≥300 s",
+        "replication_lag_bytes": "≥16 MiB / ≥256 MiB / ≥1 GiB",
+        "disconnected_replicas": "≥1 / ≥2 / ≥3",
+        "xid_wraparound_risk": "≥150 M / ≥200 M / ≥1.6 B",
+        "stale_vacuum": "≥7 / ≥21 / ≥60 Tage",
+        "tables_never_vacuumed": "≥1 / ≥2 / ≥5",
+        "autovacuum_disabled": "HIGH",
+        "track_counts_disabled": "HIGH",
+        "tables_with_autovacuum_off": "≥1 / ≥5 / ≥20",
+        "relfrozenxid_age_outlier": "≥200 M / ≥500 M / ≥1 B",
+        "stale_planner_stats": "≥3 / ≥10 / ≥30",
+        "horizon_lag_xids": "≥1 M / ≥10 M / ≥100 M",
+        "requested_checkpoint_ratio": "≥5 / ≥10 / ≥20 %",
+        "wal_level_minimal_with_replicas": "HIGH",
+        "wal_level_logical_without_publications": "LOW",
+        "active_lock_waiters": "≥1 / ≥3 / ≥10",
+        "longest_lock_wait_seconds": "≥10 / ≥30 / ≥60 s",
+        "ungranted_locks": "≥2 / ≥5 / ≥15",
+        "deadlocks_rate": "LOW bei >0",
+        "lock_pool_saturation": "≥0.4 / ≥0.6 / ≥0.8"
+      }
     },
     "databases": {
       "title": "Datenbanken",
@@ -741,6 +789,9 @@
         "state": "State",
         "xactDuration": "Transaktionsdauer",
         "query": "Query"
+      },
+      "unit": {
+        "seconds": "s"
       }
     },
     "recommendations": {
@@ -896,12 +947,6 @@
         "title": "Veraltete Planer-Statistik",
         "short": "Tabellen mit veralteter Statistik: {metric_value}.",
         "detail": "Diese Tabellen haben sich seit dem letzten ANALYZE deutlich verändert (>50% der Auto-Analyze-Formel) und wurden über 24h nicht analysiert. Der Planer kann suboptimale Pläne wählen. Manueller ANALYZE oder kleinerer autovacuum_analyze_scale_factor."
-      },
-      "analyze_disabled_tables": {
-        "title": "Auto-ANALYZE für Tabellen deaktiviert",
-        "short": "{metric_value} Tabellen mit autovacuum_analyze_enabled=false.",
-        "detail": "Üblicherweise eine Resteinstellung von Migrationen oder Experimenten. Ohne Auto-ANALYZE veraltet die Statistik.",
-        "sql": "SELECT relname, reloptions\nFROM pg_class\nWHERE 'autovacuum_analyze_enabled=false' = ANY(reloptions);"
       },
       "wal_level_minimal_with_replicas": {
         "title": "wal_level=minimal bei vorhandenen Replikaten",
