@@ -1,5 +1,33 @@
 # История изменений
 
+## v1.1.0
+
+### Фичи
+- **Health Score (новая верхнеуровневая страница `/health-score`):** композитная метрика 0–100 по восьми категориям — `connections`, `performance`, `storage`, `replication`, `maintenance`, `horizon`, `wal_checkpoint`, `locks` — с непрерывными штрафными функциями и параллельным движком правил.
+  - 31 правило по восьми категориям.
+  - **Drill down (детализация по базам):** `GET /api/health-score/databases` возвращает `DatabaseScore` для каждой БД с пересчётом правил в database-scope. Таблица «Базы данных» на `/health-score` становится фильтром — клик по строке закрепляет базу как контекст для списка рекомендаций. Instance-only категории (`connections / replication / horizon / wal_checkpoint / locks`) в DB-scope скрываются. Подсветка худшей БД через `WorstDatabase`.
+  - **Авто-отбрасывание категорий без сигнала** с пропорциональным перераспределением веса на остальные, чтобы счёт не искажался: `replication` отбрасывается, если у инстанса нет реплик; `maintenance` отбрасывается на standby (`pg_is_in_recovery() = true`) — там не работают autovacuum / ANALYZE, и метрики отражали бы состояние мастера.
+  - **Inline-таблицы данных для actionable-правил** — шесть типизированных эндпойнтов под `/api/common/health-score/details/*` (по одному на правило, штатная 2-уровневая структура `internal/query/sql/common/health_score_*`): `high-dead-ratio-tables`, `low-hot-update-tables`, `tables-autovacuum-off`, `analyze-disabled-tables`, `xid-wraparound-databases`, `horizon-blocking-sessions`. Карточки рекомендаций показывают сами проблемные строки вместо непрозрачного SQL-сниппета; правила, для которых соответствующая страница Dasha (`/locks`, `/tables` и т.д.) уже показывает данные, оставлены со ссылкой.
+  - **Раскрывающийся блок «Как устроен health-score»** под `/health-score`: формула, веса категорий, точки перелома штрафных функций (с пояснением термина — это значение метрики, в котором меняется крутизна), все 31 правило с описанием и порогами LOW/MEDIUM/HIGH, drill down (детализация).
+  - Карточки рекомендаций показывают долевые метрики в процентах (`HOT-ratio = 37.3%` вместо `0.3733230416811912`) через производное поле `metric_pct` в контексте `vue-i18n`.
+
+### UX
+- **Перекомпоновка главной страницы** (`/main`):
+  - Карточка Health Score — основная сверху; в неё встроены чипы per-database сигналов из бывшего блока «Здоровье БД»: `Conflicts`, `ChecksumFailures`, `RollbackRatio`, `Stats since`. Отдельный компонент `DatabaseHealthSection` удалён.
+  - `CacheHitRates` и `WaitEvents` объединены в одну `v-row` (50/50 на `md+`).
+- **Учёт standby:**
+  - Пункт меню `Maintenance` скрыт, когда текущий хост — реплика. Переход на `/maintenance/<cluster>` на реплике автоматически редиректит на `/main` через watcher на `pg_is_in_recovery()`.
+  - `DescribeVacuumStatsSection` на `/table-describe` на standby пропускает запрос к API и показывает подсказку «смотрите на мастере» — `pg_stat_user_tables.last_*vacuum` на реплике локальный и не отражает реальную работу autovacuum.
+  - Новый Pinia-store `instanceInfo` с ключом `cluster::host` (TTL 30s, дедупликация запросов) переиспользуется в меню, watcher'е редиректа и vacuum-stats секции вместо повторных вызовов `/api/common/instance-info`.
+- **`InstanceInfo` теперь несёт `in_recovery`** сквозь весь стек (swagger → `Result.InRecovery` → ответ `GET /api/health-score`).
+- **Пороги severity пересмотрены** у семи правил: `idle_in_transaction` (2/5/10 вместо 1/2/5), `low_cache_hit_ratio` (95/90/85 вместо 99/95/90), `high_max_dead_ratio` (10/20/30 вместо 10/20/50), `high_avg_dead_ratio` (5/15/25 вместо 5/10/25), `stale_vacuum` (7/21/60 дней вместо 2/7/14), `requested_checkpoint_ratio` (5/10/20% вместо 5/10/30%), `low_hot_update_ratio` (<0.80/<0.65/<0.50 вместо <0.80/<0.60/<0.30). Пороги lock-правил ужесточены: `active_lock_waiters` (1/3/10), `ungranted_locks` (2/5/15), `deadlocks_rate` сведён к LOW при total > 0 (без per-day нормализации MED/HIGH не имеют смысла, так как счётчик накопительный с момента `pg_stat_database_reset`).
+
+### Производительность
+- **Сжатие ответов nginx** (`gzip` и Brotli при наличии модуля в сборке) включено в `deploy/images/nginx.conf.template` и `demo/nginx.conf` для JS/CSS/JSON/SVG/text. Выигрыш и на статике, и на API-ответах; особенно помогает на cold-cache загрузке `/health-score`.
+
+### Документация
+- Новые верхнеуровневые `README-health-score.md` и `README-health-score.ru.md` описывают формулу, веса, точки перелома штрафов, все 31 правило с порогами и что меряет каждая метрика, семантику drop'а replication/maintenance и поведение drill down (детализации) по базам.
+
 ## v1.0.2
 
 ### Багфиксы

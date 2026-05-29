@@ -70,13 +70,18 @@ func TestCalculate_HealthyDatabase(t *testing.T) {
 }
 
 func TestCalculate_CriticalDatabase(t *testing.T) {
+	// With 8 categories, a "critical" snapshot must trip enough of them to
+	// pull the score below 40. Beyond the original five (connections /
+	// performance / storage / replication / maintenance) we engage horizon,
+	// wal_checkpoint and locks too — otherwise their zero-penalty weights
+	// dilute the average.
 	m := RawMetrics{
 		TotalConnections:          95,
 		ActiveConnections:         80,
 		IdleInTransaction:         10,
 		LongestTransactionSeconds: 600,
 		MaxConnections:            100,
-		CacheHitRatio:             85,
+		CacheHitRatio:             80, // <85 → HIGH tier
 		MaxDeadRatio:              60,
 		AvgDeadRatio:              25,
 		TablesHighBloat:           10,
@@ -84,9 +89,16 @@ func TestCalculate_CriticalDatabase(t *testing.T) {
 		MaxReplayLagSeconds:       60,
 		MaxLagBytes:               500 * 1024 * 1024,
 		DisconnectedReplicas:      1,
-		MaxXidAge:                 1_600_000_000,
-		MaxVacuumAgeHours:         300,
+		MaxXidAge:                 1_900_000_000, // near wraparound
+		MaxVacuumAgeHours:         2000,          // >60 days → upper tier
 		TablesNeverVacuumed:       5,
+		HorizonLagXids:            100_000_000, // HIGH tier
+		TimedCheckpoints:          50,
+		RequestedCheckpoints:      50, // 50% requested → HIGH tier
+		ActiveLockWaiters:         15,
+		LongestLockWaitSeconds:    120,
+		UngrantedLocks:            20,
+		DeadlocksTotal:            50,
 	}
 
 	r := Calculate(m)
@@ -234,10 +246,14 @@ func TestPenaltyMaintenance_XidDanger(t *testing.T) {
 }
 
 func TestPenaltyMaintenance_StaleVacuum(t *testing.T) {
-	m := RawMetrics{MaxVacuumAgeHours: 240} // 10 days
+	// Relaxed thresholds (7/21/60 days): 10-day age is no longer treated as a
+	// strong signal — read-mostly tables legitimately go weeks without vacuum.
+	// 30 days lands in the second tier (21–60d) and still triggers a meaningful
+	// penalty.
+	m := RawMetrics{MaxVacuumAgeHours: 720} // 30 days
 	r := penaltyMaintenance(m)
 	if r.Penalty < 10 {
-		t.Errorf("expected penalty >= 10 for 10-day vacuum age, got %v", r.Penalty)
+		t.Errorf("expected penalty >= 10 for 30-day vacuum age, got %v", r.Penalty)
 	}
 }
 
