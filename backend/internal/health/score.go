@@ -366,15 +366,27 @@ func redistributeWeights(categories []CategoryResult, drop []string) {
 		}
 	}
 
-	if droppedSum == 0 || otherSum == 0 {
+	if droppedSum == 0 {
 		return
 	}
 
+	// Always zero out dropped categories so they cannot contribute to the
+	// score, even when otherSum == 0 (pathological case: every non-dropped
+	// category has zero weight). Without this step, an early return would
+	// leave the dropped weights intact and they'd still drive the aggregate.
 	for i := range categories {
 		if dropped[categories[i].Name] {
 			categories[i].Weight = 0
 			categories[i].Penalty = 0
-		} else {
+		}
+	}
+
+	if otherSum == 0 {
+		return
+	}
+
+	for i := range categories {
+		if !dropped[categories[i].Name] {
 			categories[i].Weight += droppedSum * (categories[i].Weight / otherSum)
 		}
 	}

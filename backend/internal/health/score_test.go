@@ -584,3 +584,43 @@ func TestRedistributeWeights(t *testing.T) {
 		}
 	}
 }
+
+func TestRedistributeWeights_OtherSumZero(t *testing.T) {
+	// Pathological input: the only non-zero weight sits on the category we
+	// are dropping. Without the guard, an early return would leave that
+	// weight and penalty intact and they'd still drive the aggregate score.
+	categories := []CategoryResult{
+		{Name: "connections", Weight: 0},
+		{Name: "performance", Weight: 0},
+		{Name: "storage", Weight: 0},
+		{Name: "replication", Weight: 1.0, Penalty: 80},
+		{Name: "maintenance", Weight: 0},
+		{Name: "horizon", Weight: 0},
+		{Name: "wal_checkpoint", Weight: 0},
+		{Name: "locks", Weight: 0},
+	}
+
+	redistributeWeights(categories, []string{"replication"})
+
+	var total float64
+
+	for _, c := range categories {
+		total += c.Weight
+
+		if c.Name == "replication" {
+			if c.Weight != 0 {
+				t.Errorf("dropped replication weight must be 0, got %v", c.Weight)
+			}
+
+			if c.Penalty != 0 {
+				t.Errorf("dropped replication penalty must be 0, got %v", c.Penalty)
+			}
+		}
+	}
+
+	// No surviving weight to absorb the dropped share — sum stays 0,
+	// but the dropped contribution is gone.
+	if total != 0 {
+		t.Errorf("with no surviving categories, total weight must be 0, got %v", total)
+	}
+}

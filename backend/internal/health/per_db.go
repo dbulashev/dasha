@@ -191,19 +191,25 @@ func perDBWeights(w Weights, inRecovery bool) Weights {
 		Maintenance: w.Maintenance,
 	}
 
-	if out.Sum() <= 0 {
-		def := DefaultWeights()
-		out = Weights{
-			Performance: def.Performance,
-			Storage:     def.Storage,
-			Maintenance: def.Maintenance,
-		}
-	}
-
 	if inRecovery {
 		// Drop maintenance so its share gets redistributed by Normalize
 		// across performance + storage only.
 		out.Maintenance = 0
+	}
+
+	// Fallback runs AFTER the recovery drop so a caller whose only non-zero
+	// applicable weight was maintenance does not collapse to an all-zero
+	// vector (Normalize would then return the receiver unchanged and every
+	// per-DB score would silently become 100). On a standby we project
+	// defaults only onto performance + storage; maintenance stays zero.
+	if out.Sum() <= 0 {
+		def := DefaultWeights()
+		out.Performance = def.Performance
+		out.Storage = def.Storage
+
+		if !inRecovery {
+			out.Maintenance = def.Maintenance
+		}
 	}
 
 	return out.Normalize()
