@@ -49,10 +49,13 @@ const RULES_BY_CATEGORY: Record<string, { id: string }[]> = {
     { id: 'high_connection_ratio' },
     { id: 'idle_in_transaction' },
     { id: 'long_running_transaction' },
+    { id: 'host_cpu_saturation' },
+    { id: 'pooler_saturation' },
   ],
   performance: [
     { id: 'low_cache_hit_ratio' },
     { id: 'track_io_timing_disabled' },
+    { id: 'latency_regression' },
   ],
   storage: [
     { id: 'high_max_dead_ratio' },
@@ -60,6 +63,8 @@ const RULES_BY_CATEGORY: Record<string, { id: string }[]> = {
     { id: 'many_bloated_tables' },
     { id: 'low_hot_update_ratio' },
     { id: 'high_newpage_update_ratio' },
+    { id: 'checksum_failures' },
+    { id: 'sequence_exhaustion' },
   ],
   replication: [
     { id: 'replication_lag_time' },
@@ -315,6 +320,42 @@ clamp(0 … 100)</pre>
             {{ t('healthScore.about.drilldownTitle') }}
           </h3>
           <p class="text-body-2">{{ t('healthScore.about.drilldown') }}</p>
+        </section>
+
+        <v-divider class="my-4" />
+
+        <!-- Trend & seasonal baseline (metrics-backed) -->
+        <section class="about-section">
+          <h3 class="text-h6 mb-2 d-flex align-center ga-2">
+            <v-icon size="small">mdi-chart-line</v-icon>
+            {{ t('healthScore.about.trendTitle') }}
+          </h3>
+          <p class="text-body-2 mb-3">{{ t('healthScore.about.trendIntro') }}</p>
+
+          <ul class="text-body-2 ms-4 mb-3">
+            <li>{{ t('healthScore.about.trendBucketing') }}</li>
+            <li>{{ t('healthScore.about.trendMedian') }}</li>
+          </ul>
+
+          <p class="text-body-2 mb-2">{{ t('healthScore.about.trendUsage') }}</p>
+          <ul class="text-body-2 ms-4 mb-3">
+            <li>{{ t('healthScore.about.trendDips') }}</li>
+            <li>{{ t('healthScore.about.trendLatency') }}</li>
+          </ul>
+
+          <v-alert
+            type="info"
+            variant="tonal"
+            density="compact"
+            border="start"
+            icon="mdi-lightbulb-on-outline"
+          >
+            {{ t('healthScore.about.trendExample') }}
+          </v-alert>
+
+          <p class="text-caption text-medium-emphasis mt-3">
+            {{ t('healthScore.about.trendDegrade') }}
+          </p>
         </section>
       </v-expansion-panel-text>
     </v-expansion-panel>

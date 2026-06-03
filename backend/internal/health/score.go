@@ -62,6 +62,16 @@ type RawMetrics struct {
 	StalePlannerStatsTables int
 	WalLevel                string
 	LogicalSlotsActive      int
+
+	// Metrics-backed only (host/pooler saturation, data integrity). The SQL
+	// snapshot leaves these zero, which reads as "absent" and stays neutral.
+	LoadAvg15              float64 // host 15-min load average
+	NumVCPU                float64 // host CPU count (saturation = load / vcpu)
+	PoolerServerConns      float64 // active server-side pooler connections
+	PoolerPoolSize         float64 // configured pool capacity
+	ChecksumFailuresRate   float64 // data-page checksum failures per window (>0 = critical)
+	SequenceExhaustionMax  float64 // worst sequence usage ratio (0..1; near 1 = ID overflow)
+	LatencyRegressionRatio float64 // current latency / seasonal baseline (0 = absent; >1 = regressed)
 }
 
 // CategoryResult holds the penalty calculation result for one category.
@@ -120,6 +130,10 @@ const (
 // number green next to a HIGH wraparound recommendation. The ceiling keeps the
 // number consistent with the rules engine, which surfaces the same conditions.
 const criticalScoreCeiling = 30.0
+
+// sequenceExhaustionCritical is the sequence usage ratio at which ID-space
+// overflow is imminent (writes stop), warranting the critical floor.
+const sequenceExhaustionCritical = 0.95
 
 // Calculate computes the health score from raw metrics using default weights.
 func Calculate(m RawMetrics) Result {
@@ -208,6 +222,12 @@ func CalculateWithWeights(m RawMetrics, w Weights) Result {
 // any action belongs there — mirroring the maintenance-category drop in
 // CalculateWithWeights.
 func criticalCeiling(m RawMetrics) float64 {
+	// Data-page checksum failures are a role-agnostic data-integrity catastrophe —
+	// floor on any instance, including standbys (checked before the recovery gate).
+	if m.ChecksumFailuresRate > 0 {
+		return criticalScoreCeiling
+	}
+
 	if m.InRecovery {
 		return 100
 	}
@@ -227,6 +247,11 @@ func criticalCeiling(m RawMetrics) float64 {
 	// Autovacuum globally off — dead tuples and frozen-xid age grow unbounded.
 	// track_counts off — autovacuum is blind and never triggers, even if enabled.
 	if !m.AutovacuumEnabled || !m.TrackCountsEnabled {
+		return criticalScoreCeiling
+	}
+
+	// Sequence / ID-space exhaustion near the limit — writes stop on overflow.
+	if m.SequenceExhaustionMax >= sequenceExhaustionCritical {
 		return criticalScoreCeiling
 	}
 
@@ -276,6 +301,21 @@ func applyInstanceAdjustments(categories []CategoryResult, m RawMetrics) {
 
 	setDetail(categories, "performance", "track_io_timing_enabled", b2f(m.TrackIoTimingEnabled))
 
+	// Performance: query-latency regression vs the seasonal baseline (metrics-only;
+	// 0 = absent ⇒ neutral, e.g. on the SQL snapshot or before enough history).
+	switch {
+	case m.LatencyRegressionRatio > 6:
+		addPenalty(categories, "performance", 50)
+	case m.LatencyRegressionRatio > 3:
+		addPenalty(categories, "performance", 30)
+	case m.LatencyRegressionRatio > 1.5:
+		addPenalty(categories, "performance", 10)
+	}
+
+	if m.LatencyRegressionRatio > 0 {
+		setDetail(categories, "performance", "latency_regression", math.Round(m.LatencyRegressionRatio*100)/100)
+	}
+
 	// Storage: low HOT-update ratio (inverted — lower is worse). The SQL returns
 	// 1.0 when there are too few updates to judge, so quiet databases score 0.
 	switch {
@@ -301,6 +341,39 @@ func applyInstanceAdjustments(categories []CategoryResult, m RawMetrics) {
 	if m.WalLevel == "logical" && m.LogicalSlotsActive == 0 {
 		addPenalty(categories, "wal_checkpoint", 5) // LOW: wasted WAL overhead
 		setDetail(categories, "wal_checkpoint", "wal_level_logical_without_slots", 1)
+	}
+
+	// Connections: host CPU saturation (load / vCPU) and pooler saturation —
+	// metrics-only signals (zero/absent under the SQL snapshot ⇒ neutral there).
+	// Better signals of real pressure than total/max_connections on pooled setups.
+	if m.NumVCPU > 0 {
+		sat := m.LoadAvg15 / m.NumVCPU
+
+		switch {
+		case sat > 4:
+			addPenalty(categories, "connections", 60)
+		case sat > 2:
+			addPenalty(categories, "connections", 30)
+		case sat > 1:
+			addPenalty(categories, "connections", 10)
+		}
+
+		setDetail(categories, "connections", "host_load_per_vcpu", math.Round(sat*100)/100)
+	}
+
+	if m.PoolerPoolSize > 0 {
+		sat := m.PoolerServerConns / m.PoolerPoolSize
+
+		switch {
+		case sat > 0.8:
+			addPenalty(categories, "connections", 30)
+		case sat > 0.6:
+			addPenalty(categories, "connections", 15)
+		case sat > 0.5:
+			addPenalty(categories, "connections", 5)
+		}
+
+		setDetail(categories, "connections", "pooler_saturation", math.Round(sat*1000)/1000)
 	}
 
 	// Round once, after every addition, to keep penalties at one decimal place

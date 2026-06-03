@@ -21,6 +21,16 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => mode.value === AuthInfoMode.none || user.value !== null)
   const requiresLogin = computed(() => mode.value !== AuthInfoMode.none && !user.value)
 
+  // Admin-equivalent access: the no-RBAC modes (none/token) grant the single
+  // operator full access; under OIDC only the mapped admin role does. Used to
+  // gate features still being validated (Health Score) and admin-only actions.
+  const isAdmin = computed(
+    () =>
+      mode.value === AuthInfoMode.none ||
+      mode.value === AuthInfoMode.token ||
+      user.value?.role === 'admin',
+  )
+
   async function init() {
     if (initialized.value) return
 
@@ -86,5 +96,5 @@ export const useAuthStore = defineStore('auth', () => {
     window.location.href = '/'
   }
 
-  return { mode, oidcLoginUrl, user, initialized, isAuthenticated, requiresLogin, enableQueryStatsReset, init, doLoginRedirect, consumeReturnUrl, logout }
+  return { mode, oidcLoginUrl, user, initialized, isAuthenticated, requiresLogin, isAdmin, enableQueryStatsReset, init, doLoginRedirect, consumeReturnUrl, logout }
 })

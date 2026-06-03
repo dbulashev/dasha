@@ -683,7 +683,10 @@
             "wal_level_minimal_with_replicas": "wal_level",
             "wal_level_logical_without_slots": "wal_level",
             "walMinimalReplicas": "minimal + реплики (репликация не работает)",
-            "walLogicalNoSlots": "logical без активных слотов"
+            "walLogicalNoSlots": "logical без активных слотов",
+            "host_load_per_vcpu": "load / vCPU",
+            "pooler_saturation": "Насыщение пула",
+            "latency_regression": "Регрессия латентности (×)"
         },
         "page": {
             "title": "Health Score",
@@ -754,10 +757,24 @@
                 "longest_lock_wait_seconds": "EXTRACT(EPOCH FROM now() - state_change) самого долгого Lock-wait.",
                 "ungranted_locks": "Строки в pg_locks с granted=false — очередь за держателем.",
                 "deadlocks_rate": "Накопительный счётчик deadlocks с pg_stat_database_reset — без per-day полезен факт «>0».",
-                "lock_pool_saturation": "count(*) из pg_locks / (max_connections × max_locks_per_transaction)."
+                "lock_pool_saturation": "count(*) из pg_locks / (max_connections × max_locks_per_transaction).",
+                "checksum_failures": "Любая ненулевая частота checksum-ошибок — повреждение данных; также зажимает score в красную зону.",
+                "host_cpu_saturation": "load_avg_15 / n_vcpu. >1 означает, что очередь на CPU превышает число ядер.",
+                "pooler_saturation": "server_conns / pool_size пуллера; приближение к 1.0 ставит клиентов в очередь.",
+                "sequence_exhaustion": "Худшая доля использования sequence; при ≥0.95 зажимает score (запись остановится при переполнении).",
+                "latency_regression": "Текущая латентность / сезонный baseline (час×день недели); работает на любом воркладе."
             },
             "drilldownTitle": "Drill down (детализация по базам)",
             "drilldown": "В таблице «Базы данных» по каждой БД собраны те же метрики, что и для инстанса: cache hit ratio, dead tuples, давность вакуума. Кликните по строке — выбранная база станет фильтром: движок правил пересчитается в её контексте, instance-only категории (Connections / Replication / Horizon / WAL / Locks) при этом скрываются.",
+            "trendTitle": "Тренд и сезонная норма",
+            "trendIntro": "Если настроен метрик-datasource, под gauge появляется тренд: score + сезонная норма + латентность. Сезонная норма — это ожидаемое значение метрики для конкретного момента недельного цикла (нагрузка циклична: будни ≠ выходные, день ≠ ночь), а не общее среднее. Строится так:",
+            "trendBucketing": "Бакетирование по «часу недели»: каждая точка истории попадает в один из 168 бакетов (7 дней × 24 часа), hour_of_week = weekday×24 + hour.",
+            "trendMedian": "Медиана на бакет за длинное окно (по умолчанию 28 дней) — устойчива к выбросам: разовый ночной VACUUM или деплой не сдвигают норму.",
+            "trendUsage": "Текущее значение сравнивается с его собственной нормой для этого часа недели, а не с глобальным средним:",
+            "trendDips": "Просадки (dips): балл упал ниже нормы для этого часа недели больше порога → красная точка на тренде. Регулярный ночной batch просадкой не считается — его норма тоже низкая, ложной тревоги нет.",
+            "trendLatency": "Регрессия латентности → performance: текущая латентность / сезонная норма. Работает на любом воркладе, потому что сравнивает запрос с собой, а не с абсолютным порогом 50/200/1000 мс.",
+            "trendExample": "Пример: 50 мс в понедельник 14:00 (норма 45 мс) — почти норма; те же 50 мс в понедельник 03:00 (норма 12 мс) — ~4× нормы, реальная аномалия. Одно значение — два вердикта.",
+            "trendDegrade": "Сезонная норма и просадки появляются по мере накопления истории; пока её мало, тренд деградирует мягко — без линии нормы и отметок просадок.",
             "penaltyPoints": {
                 "connection_ratio": "0.60 → 0.80 → 0.95+",
                 "idle_in_tx": "+5 / шт., max 30",
@@ -813,7 +830,12 @@
                 "longest_lock_wait_seconds": "≥10 / ≥30 / ≥60 с",
                 "ungranted_locks": "≥2 / ≥5 / ≥15",
                 "deadlocks_rate": "LOW при >0",
-                "lock_pool_saturation": "≥0.4 / ≥0.6 / ≥0.8"
+                "lock_pool_saturation": "≥0.4 / ≥0.6 / ≥0.8",
+                "checksum_failures": "HIGH при >0",
+                "host_cpu_saturation": ">1 / >2 / >4 (load/vCPU)",
+                "pooler_saturation": "≥0.5 / ≥0.6 / ≥0.8",
+                "sequence_exhaustion": "≥0.75 / ≥0.85 / ≥0.95",
+                "latency_regression": "×1.5 / ×3 / ×6 vs baseline"
             }
         },
         "databases": {
@@ -1025,7 +1047,42 @@
                 "title": "wal_level=logical без активных публикаций",
                 "short": "wal_level=logical, но активных логических слотов нет.",
                 "detail": "logical-уровень WAL даёт overhead (больше данных в журнале, медленнее VACUUM). Если логическая репликация не используется — переключите на replica."
+            },
+            "checksum_failures": {
+                "title": "Ошибки контрольных сумм страниц",
+                "short": "PostgreSQL обнаружил повреждение данных (checksum failures). Критично — проверьте диск и бэкапы."
+            },
+            "host_cpu_saturation": {
+                "title": "Перегрузка CPU хоста",
+                "short": "15-мин load average выше числа ядер (load/vCPU) — очередь на CPU и рост латентности."
+            },
+            "pooler_saturation": {
+                "title": "Насыщение пула соединений",
+                "short": "Серверные соединения пуллера близки к ёмкости пула — клиенты встают в очередь."
+            },
+            "sequence_exhaustion": {
+                "title": "Исчерпание sequence (переполнение ID)",
+                "short": "Последовательность приближается к пределу типа (например int4 PK). Переполнение остановит запись — планируйте миграцию на bigint."
+            },
+            "latency_regression": {
+                "title": "Регрессия латентности запросов",
+                "short": "Латентность запросов выше своей сезонной нормы — проверьте топ-запросы и нагрузку."
             }
+        },
+        "trend": {
+            "title": "Тренд Health Score",
+            "baselineHelp": "Сезонная норма — медиана score по бакетам «час×день недели» за длинное окно истории (учитывает суточную и недельную цикличность нагрузки). Текущий балл сравнивается с нормой именно этого часа недели; падение ниже неё больше порога помечается красной точкой (просадка).",
+            "score": "Score",
+            "baseline": "Сезонная норма",
+            "latency": "Латентность",
+            "latencyAxis": "мс",
+            "range": {
+                "24h": "24ч",
+                "7d": "7д",
+                "30d": "30д"
+            },
+            "unavailable": "Тренд недоступен: метрик-datasource не настроен или цель не сопоставлена.",
+            "noData": "Нет данных за период."
         }
     }
 }

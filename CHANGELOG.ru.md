@@ -1,5 +1,28 @@
 # История изменений
 
+## v1.2.0
+
+### Фичи
+- **Metrics-backed Health Score (опционально):** если настроен Prometheus/VictoriaMetrics-datasource (`health_score.metrics` в `dasha.yaml`), score, рекомендации и новый тренд считаются из time-series метрик (pgSCV + Yandex MDB + pgbouncer + host), а не из точечного SQL. SQL-snapshot остаётся zero-config фолбэком; поле `source` в `GET /api/common/health-score` показывает `"snapshot"` или `"metrics"`.
+  - **Адаптеры провайдеров + матчинг лейблов per-deployment:** `pgscv` (внутренности PG, в т.ч. YC MDB через удалённый скрейп), `yc_native` (managed host/pooler), `pgbouncer`, `pgscv_system` (host на self-managed). Шаблоны селекторов конфигурируемы; `GET /api/common/health-score/datasource/status` проверяет, что по каждой роли сматчен ровно один ряд.
+  - **Тренд score** (`GET /api/common/health-score/history`): общий балл, баллы категорий и латентность по времени, с **сезонным baseline** (час×день недели) и детектом **просадок (dips)**. Новый график `HealthScoreTrend` на `/health-score` (24ч / 7д / 30д).
+  - **Богатые сигналы**, недоступные SQL-snapshot: сатурация CPU хоста (`load / vCPU`) и сатурация пуллера → `connections`; оконная **латентность** запросов с **регрессией vs сезонный baseline** → `performance`; **checksum-ошибки** и **исчерпание sequence/ID-пространства** → критический floor + правила.
+  - **Расширение floor:** checksum-ошибки (роль-агностично) и близкое к переполнению исчерпание sequence зажимают балл в красную зону — вместе с существующим floor по wraparound / выключенному autovacuum.
+  - **Оверлей каталожных/GUC-фактов сохраняет паритет score↔rules в metrics-режиме:** факты, которые time-series выразить не может — потабличный `autovacuum_enabled=false`, ни разу не вакуумленные таблицы, возраст `relfrozenxid`, дрейф статистики планировщика, `wal_level`, GUC `autovacuum`/`track_counts`, горизонт MVCC, размер lock-pool, in-recovery — накладываются из SQL-снимка на метрик-сигналы. Поэтому каталожные правила (напр. `tables_with_autovacuum_off`) продолжают срабатывать, **и** score продолжает их штрафовать даже при подключённом datasource, а не исчезают молча. Best-effort: сбой чтения снимка оставляет metrics-only score нетронутым. (Исторический **тренд** остаётся чисто time-series.)
+  - **Авто-маппинг дискаверенных кластеров:** кластеры из `discovery:` (напр. Yandex MDB) маппятся на лейблы datasource из метаданных discovery — FQDN хоста → `{{.Host}}`, cloud resource id (id кластера MDB) → `{{.Service}}`, лейбл `folder_id` → `{{.Env}}`, короткий хост → `{{.Container}}`; провайдеры из `providers_default` — поэтому их не нужно перечислять в `targets:`. Статический `targets:` всегда перекрывает; флаги `auto_map_discovered` (по умолч. вкл.) и `discovery_env_label`.
+  - **Auth datasource из окружения:** `datasource.auth` поддерживает `token_from_env` (bearer) и `username` + `password_from_env` (basic) — резолвятся как остальные `*_from_env`-секреты, так что креды инжектятся из Secret, а не лежат инлайн; `auth.type` валидируется (`none|bearer|basic`).
+
+### UX
+- **Health Score пока только для admin** — пока модель калибруется и валидируется на большом числе кластеров: пункт меню и гейдж на главной скрыты от обычных viewer, а прямой заход на `/health-score` редиректит не-admin на `/main` (guard роутера). В режимах без RBAC (`none`/`token`) доступ полный.
+- **Пагинация таблиц детализации рекомендаций:** пять инлайн-таблиц (dead-ratio таблицы, таблицы с autovacuum off, low-HOT таблицы, базы по xid-wraparound, сессии, держащие горизонт) теперь листаются через `limit`/`offset` общим компонентом `PaginationControls`, а не обрезаются жёстким серверным лимитом — длинные списки полностью просматриваются (разумные пороги по размеру строк сохранены).
+- **Снижена избыточная точность** в текстах рекомендаций и тултипах категорий — числовые значения округляются для вывода (напр. `90.22492448754167%` → `90.22%`) общим хелпером `fmtNum`.
+
+### Внутреннее
+- Новый пакет `internal/metrics`: клиент datasource, матчер лейблов (с авто-маппингом из discovery), каталог MetricsQL-запросов, коллектор сигналов, сезонный baseline, детект просадок, history-сервис.
+- Demo-lab расширен стеком VictoriaMetrics + pgSCV + pgbouncer (`demo/docker-compose.metrics.yaml`), pgSCV собирается из исходников под arm64.
+- Helm-чарт `values.yaml`: задокументирован блок `health_score.metrics` — datasource (в т.ч. auth через `*_from_env` / ExternalSecret), провайдеры, шаблоны селекторов, targets, авто-маппинг discovery и тюнинг.
+- Документы дизайна и плана в `plans/` (сравнение, требования, дизайн, workflow).
+
 ## v1.1.0
 
 ### Фичи

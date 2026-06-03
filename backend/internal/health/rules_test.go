@@ -618,3 +618,33 @@ func findRule(t *testing.T, id string) Rule {
 
 	return Rule{}
 }
+
+func TestRules_MetricsBackedConditionsFire(t *testing.T) {
+	cases := []struct {
+		name string
+		m    RawMetrics
+		rule string
+	}{
+		{"checksum", RawMetrics{ChecksumFailuresRate: 1}, "checksum_failures"},
+		{"host cpu", RawMetrics{NumVCPU: 2, LoadAvg15: 8}, "host_cpu_saturation"},
+		{"pooler", RawMetrics{PoolerPoolSize: 10, PoolerServerConns: 9}, "pooler_saturation"},
+		{"sequence", RawMetrics{SequenceExhaustionMax: 0.9}, "sequence_exhaustion"},
+		{"latency", RawMetrics{LatencyRegressionRatio: 4}, "latency_regression"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			found := false
+
+			for _, r := range Evaluate(tc.m, false) {
+				if r.RuleID == tc.rule {
+					found = true
+				}
+			}
+
+			if !found {
+				t.Errorf("expected rule %q to fire for its metrics-backed condition", tc.rule)
+			}
+		})
+	}
+}

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+
+	"github.com/dbulashev/dasha/internal/metrics"
 )
 
 var (
@@ -29,12 +31,12 @@ type AuthToken struct {
 }
 
 type OIDCConfig struct {
-	IssuerURL           string   `mapstructure:"issuer_url"`
-	ClientID            string   `mapstructure:"client_id"`
-	ClientSecret        string   `mapstructure:"client_secret"`
-	ClientSecretFromEnv string   `mapstructure:"client_secret_from_env"`
-	Scopes              []string `mapstructure:"scopes"`
-	RedirectURL         string   `mapstructure:"redirect_url"`
+	IssuerURL           string            `mapstructure:"issuer_url"`
+	ClientID            string            `mapstructure:"client_id"`
+	ClientSecret        string            `mapstructure:"client_secret"`
+	ClientSecretFromEnv string            `mapstructure:"client_secret_from_env"`
+	Scopes              []string          `mapstructure:"scopes"`
+	RedirectURL         string            `mapstructure:"redirect_url"`
 	RoleClaim           string            `mapstructure:"role_claim"`   // default: "realm_access.roles"
 	RoleMapping         map[string]string `mapstructure:"role_mapping"` // e.g. {"dba_team": "admin", "dev_team": "viewer"}
 }
@@ -165,6 +167,14 @@ type Config struct {
 	// EnableQueryStatsReset allows resetting pg_stat_statements statistics via the UI.
 	// Disabled by default for safety.
 	EnableQueryStatsReset bool `mapstructure:"enable_query_stats_reset"`
+
+	// HealthScore groups Health Score settings (metrics-backed mode).
+	HealthScore HealthScoreConfig `mapstructure:"health_score"`
+}
+
+// HealthScoreConfig groups Health Score settings.
+type HealthScoreConfig struct {
+	Metrics metrics.Config `mapstructure:"metrics"`
 }
 
 // Clusters is the interface for obtaining the current list of clusters.
