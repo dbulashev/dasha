@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"slices"
 	"sort"
 	"time"
 )
@@ -71,7 +72,7 @@ func median(vals []float64) float64 {
 		return 0
 	}
 
-	s := append([]float64(nil), vals...)
+	s := slices.Clone(vals)
 	sort.Float64s(s)
 
 	n := len(s)

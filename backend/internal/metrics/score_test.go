@@ -99,13 +99,36 @@ func TestScoreFromSignalsBase_LatencyRegression(t *testing.T) {
 	s := NewSignals(time.Now())
 	s.Set(SigLatencyMs, 400) // 4x a 100ms baseline -> regression
 
-	if got := perf(ScoreFromSignalsBase(s, health.DefaultWeights(), 100)); got >= 100 {
+	if got := perf(ScoreFromSignalsBase(s, health.DefaultWeights(), Baselines{Latency: 100})); got >= 100 {
 		t.Errorf("latency regression should drop performance below 100, got %v", got)
 	}
 
 	// No baseline -> latency must not penalize performance.
-	if got := perf(ScoreFromSignalsBase(s, health.DefaultWeights(), 0)); got < 100 {
+	if got := perf(ScoreFromSignalsBase(s, health.DefaultWeights(), Baselines{})); got < 100 {
 		t.Errorf("without a baseline, latency should be neutral, got %v", got)
+	}
+}
+
+func TestScoreFromSignalsBase_SeqScanRegression(t *testing.T) {
+	perf := func(r health.Result) float64 {
+		for _, c := range r.Categories {
+			if c.Name == "performance" {
+				return c.Score
+			}
+		}
+
+		return -1
+	}
+
+	s := NewSignals(time.Now())
+	s.Set(SigSeqScanRate, 400) // 4x a 100/s baseline -> regression
+
+	if got := perf(ScoreFromSignalsBase(s, health.DefaultWeights(), Baselines{SeqScan: 100})); got >= 100 {
+		t.Errorf("seq-scan regression should drop performance below 100, got %v", got)
+	}
+
+	if got := perf(ScoreFromSignalsBase(s, health.DefaultWeights(), Baselines{})); got < 100 {
+		t.Errorf("without a baseline, seq-scan should be neutral, got %v", got)
 	}
 }
 

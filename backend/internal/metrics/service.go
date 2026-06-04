@@ -17,11 +17,11 @@ type Service struct {
 	catalog *QueryCatalog
 	client  DatasourceClient
 
-	mu       sync.Mutex
-	latCache map[string]latBaselineEntry // per-target seasonal latency baseline
+	mu        sync.Mutex
+	baseCache map[string]baselineEntry // seasonal baseline per (target, signal)
 }
 
-type latBaselineEntry struct {
+type baselineEntry struct {
 	b  Baseline
 	at time.Time
 }
@@ -45,11 +45,11 @@ func NewService(cfg Config, meta MetadataProvider) (*Service, error) {
 	}
 
 	return &Service{
-		cfg:      cfg,
-		matcher:  matcher,
-		catalog:  NewQueryCatalog(),
-		client:   NewVMClient(cfg.Datasource),
-		latCache: make(map[string]latBaselineEntry),
+		cfg:       cfg,
+		matcher:   matcher,
+		catalog:   NewQueryCatalog(),
+		client:    NewVMClient(cfg.Datasource),
+		baseCache: make(map[string]baselineEntry),
 	}, nil
 }
 
@@ -69,26 +69,28 @@ func (s *Service) Collector() *Collector {
 }
 
 // CurrentRaw returns the instant signals as health.RawMetrics with the
-// latency-regression ratio folded in (for the rules engine / recommendations).
+// regression ratios (latency, seq-scan) folded in against their seasonal
+// baselines — for the rules engine / recommendations.
 func (s *Service) CurrentRaw(ctx context.Context, cluster, instance string) (health.RawMetrics, error) {
 	sig, err := s.Collector().Instant(ctx, cluster, instance, time.Now())
 	if err != nil {
 		return health.RawMetrics{}, err
 	}
 
-	lb, _ := s.latencyBaseline(ctx, cluster, instance).Value(sig.At)
+	lb, _ := s.signalBaseline(ctx, cluster, instance, SigLatencyMs).Value(sig.At)
+	sb, _ := s.signalBaseline(ctx, cluster, instance, SigSeqScanRate).Value(sig.At)
 
-	return rawWithRegression(sig, lb), nil
+	return rawWithRegression(sig, Baselines{Latency: lb, SeqScan: sb}), nil
 }
 
-// latencyBaseline returns the per-target seasonal latency baseline, refreshing
+// signalBaseline returns the per-(target, signal) seasonal baseline, refreshing
 // it from the datasource at most once per QueryCacheTTL. A failed refresh yields
-// an empty (unavailable) baseline, which disables the regression penalty.
-func (s *Service) latencyBaseline(ctx context.Context, cluster, instance string) Baseline {
-	key := cluster + "/" + instance
+// an empty (unavailable) baseline, which disables that regression penalty.
+func (s *Service) signalBaseline(ctx context.Context, cluster, instance string, kind SignalKind) Baseline {
+	key := cluster + "/" + instance + "/" + string(kind)
 
 	s.mu.Lock()
-	if e, ok := s.latCache[key]; ok && time.Since(e.at) < s.cfg.Datasource.QueryCacheTTL {
+	if e, ok := s.baseCache[key]; ok && time.Since(e.at) < s.cfg.Datasource.QueryCacheTTL {
 		s.mu.Unlock()
 
 		return e.b
@@ -102,21 +104,21 @@ func (s *Service) latencyBaseline(ctx context.Context, cluster, instance string)
 	var b Baseline
 
 	sigs, err := s.Collector().Range(ctx, cluster, instance,
-		Range{Start: to.Add(-s.cfg.Baseline.Window), End: to, Step: step}, SigLatencyMs)
+		Range{Start: to.Add(-s.cfg.Baseline.Window), End: to, Step: step}, kind)
 	if err == nil {
-		latSeries := make([]SeriesPoint, 0, len(sigs))
+		series := make([]SeriesPoint, 0, len(sigs))
 
 		for _, sig := range sigs {
-			if lat, ok := sig.Get(SigLatencyMs); ok {
-				latSeries = append(latSeries, SeriesPoint{Time: sig.At, Value: lat})
+			if v, ok := sig.Get(kind); ok {
+				series = append(series, SeriesPoint{Time: sig.At, Value: v})
 			}
 		}
 
-		b = BuildBaseline(latSeries, int(s.cfg.Baseline.MinHistory/step))
+		b = BuildBaseline(series, int(s.cfg.Baseline.MinHistory/step))
 	}
 
 	s.mu.Lock()
-	s.latCache[key] = latBaselineEntry{b: b, at: time.Now()}
+	s.baseCache[key] = baselineEntry{b: b, at: time.Now()}
 	s.mu.Unlock()
 
 	return b

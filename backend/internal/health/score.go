@@ -72,6 +72,8 @@ type RawMetrics struct {
 	ChecksumFailuresRate   float64 // data-page checksum failures per window (>0 = critical)
 	SequenceExhaustionMax  float64 // worst sequence usage ratio (0..1; near 1 = ID overflow)
 	LatencyRegressionRatio float64 // current latency / seasonal baseline (0 = absent; >1 = regressed)
+	SeqScanRegressionRatio float64 // current seq-scan rate / seasonal baseline (0 = absent; >1 = regressed)
+	DiskUsedRatio          float64 // host disk used/total (0..1; 0 = absent; >=0.90 = critical)
 }
 
 // CategoryResult holds the penalty calculation result for one category.
@@ -134,6 +136,11 @@ const criticalScoreCeiling = 30.0
 // sequenceExhaustionCritical is the sequence usage ratio at which ID-space
 // overflow is imminent (writes stop), warranting the critical floor.
 const sequenceExhaustionCritical = 0.95
+
+// diskUsedCritical is the host disk usage ratio at which free space is
+// dangerously low: a full data volume stops writes and can corrupt/crash the
+// instance, so it clamps the score into the red on any role (primary or standby).
+const diskUsedCritical = 0.90
 
 // Calculate computes the health score from raw metrics using default weights.
 func Calculate(m RawMetrics) Result {
@@ -228,6 +235,12 @@ func criticalCeiling(m RawMetrics) float64 {
 		return criticalScoreCeiling
 	}
 
+	// Host disk almost full — a role-agnostic availability catastrophe (a full
+	// data volume stops writes), so it also floors before the recovery gate.
+	if m.DiskUsedRatio >= diskUsedCritical {
+		return criticalScoreCeiling
+	}
+
 	if m.InRecovery {
 		return 100
 	}
@@ -235,10 +248,7 @@ func criticalCeiling(m RawMetrics) float64 {
 	// Imminent transaction-ID wraparound. Use the larger of the database
 	// datfrozenxid age and the per-table relfrozenxid age; the latter also
 	// covers a database whose datfrozenxid metric came back empty.
-	xidAge := m.MaxXidAge
-	if m.MaxRelfrozenxidAge > xidAge {
-		xidAge = m.MaxRelfrozenxidAge
-	}
+	xidAge := max(m.MaxRelfrozenxidAge, m.MaxXidAge)
 
 	if c := criticalXidCeiling(xidAge); c < 100 {
 		return c
@@ -316,6 +326,21 @@ func applyInstanceAdjustments(categories []CategoryResult, m RawMetrics) {
 		setDetail(categories, "performance", "latency_regression", math.Round(m.LatencyRegressionRatio*100)/100)
 	}
 
+	// Performance: sequential-scan regression vs the seasonal baseline — indexes
+	// going unused or stale planner stats (ANALYZE). Same shape as latency.
+	switch {
+	case m.SeqScanRegressionRatio > 6:
+		addPenalty(categories, "performance", 40)
+	case m.SeqScanRegressionRatio > 3:
+		addPenalty(categories, "performance", 25)
+	case m.SeqScanRegressionRatio > 1.5:
+		addPenalty(categories, "performance", 10)
+	}
+
+	if m.SeqScanRegressionRatio > 0 {
+		setDetail(categories, "performance", "seq_scan_regression", math.Round(m.SeqScanRegressionRatio*100)/100)
+	}
+
 	// Storage: low HOT-update ratio (inverted — lower is worse). The SQL returns
 	// 1.0 when there are too few updates to judge, so quiet databases score 0.
 	switch {
@@ -328,6 +353,21 @@ func applyInstanceAdjustments(categories []CategoryResult, m RawMetrics) {
 	}
 
 	setDetail(categories, "storage", "hot_update_ratio", m.HotUpdateRatio)
+
+	// Storage: host disk usage (used/total). Free space running low hurts well
+	// before it is critical (the floor handles >=90%). Metrics-only ⇒ neutral at 0.
+	switch {
+	case m.DiskUsedRatio >= diskUsedCritical:
+		addPenalty(categories, "storage", 80)
+	case m.DiskUsedRatio >= 0.80:
+		addPenalty(categories, "storage", 30)
+	case m.DiskUsedRatio >= 0.70:
+		addPenalty(categories, "storage", 10)
+	}
+
+	if m.DiskUsedRatio > 0 {
+		setDetail(categories, "storage", "disk_used_ratio", math.Round(m.DiskUsedRatio*1000)/1000)
+	}
 
 	// WAL & checkpoint: wal_level misconfiguration. wal_level is a string and the
 	// Details map is float64-only, so we flag the offending condition by presence
@@ -642,10 +682,7 @@ func penaltyMaintenance(m RawMetrics) CategoryResult {
 	// forced shutdown scored the same as one merely at failsafe. Continuous and
 	// monotonic:
 	//   200M (emergency autovacuum) → 0, 1.6B (failsafe) → 80, 2.1B (shutdown) → 100.
-	xidAge := m.MaxXidAge
-	if m.MaxRelfrozenxidAge > xidAge {
-		xidAge = m.MaxRelfrozenxidAge
-	}
+	xidAge := max(m.MaxRelfrozenxidAge, m.MaxXidAge)
 
 	switch {
 	case xidAge > xidFailsafeAge:

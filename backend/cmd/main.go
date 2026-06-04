@@ -66,7 +66,8 @@ func migrateExec(cmd *cobra.Command, _ []string) error {
 		logger.Fatal("storage.dsn is not configured")
 	}
 
-	return storage.Migrate(cmd.Context(), cfg.Storage.DSN, logger)
+	// Use the DDL-capable connection (dsn_migration), falling back to dsn.
+	return storage.Migrate(cmd.Context(), cfg.Storage.MigrationDSN(), logger)
 }
 
 func dashaExec(cmd *cobra.Command, _ []string) error {

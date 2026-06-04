@@ -29,6 +29,12 @@ const (
 	SigAvgDeadRatio   SignalKind = "avg_dead_ratio"
 	SigHotUpdateRatio SignalKind = "hot_update_ratio"
 	SigDeadlocksTotal SignalKind = "deadlocks_total"
+	SigDiskUsedRatio  SignalKind = "disk_used_ratio" // host disk used/total (0..1; host role)
+
+	// performance — sequential-scan activity (rate of tuples read by seq scans).
+	// A rise vs the seasonal baseline signals indexes going unused or stale
+	// planner stats (ANALYZE), the same way latency regression works.
+	SigSeqScanRate SignalKind = "seq_scan_tup_rate"
 
 	// maintenance
 	SigXactsLeftWrap SignalKind = "xacts_left_before_wraparound"

@@ -641,7 +641,9 @@
       "walLogicalNoSlots": "logical ohne aktive Slots",
       "host_load_per_vcpu": "load / vCPU",
       "pooler_saturation": "Pooler-Sättigung",
-      "latency_regression": "Latenz-Regression (×)"
+      "latency_regression": "Latenz-Regression (×)",
+      "seq_scan_regression": "Seq-Scan-Regression (×)",
+      "disk_used_ratio": "Plattennutzung"
     },
     "page": {
       "title": "Health Score",
@@ -717,7 +719,9 @@
         "host_cpu_saturation": "load_avg_15 / n_vcpu. >1 heißt, die CPU-Warteschlange übersteigt die Kerne.",
         "pooler_saturation": "server_conns / pool_size des Poolers; nahe 1.0 warten Clients.",
         "sequence_exhaustion": "Schlechteste Sequence-Nutzung; ≥0.95 senkt den Score (Schreibvorgänge stoppen bei Überlauf).",
-        "latency_regression": "Aktuelle Latenz / saisonale Baseline (Stunde×Wochentag); workload-unabhängig."
+        "latency_regression": "Aktuelle Latenz / saisonale Baseline (Stunde×Wochentag); workload-unabhängig.",
+        "seq_scan_regression": "Aktuelle Seq-Scan-Tupelrate / saisonale Baseline; Anstieg = Indizes ungenutzt oder veraltete Statistik (ANALYZE).",
+        "host_disk_space": "Belegung der vollsten Host-Dateisystems (pgSCV/YC); ≥90% senkt den Gesamt-Score in den roten Bereich."
       },
       "drilldownTitle": "Drill down (Detailansicht pro Datenbank)",
       "drilldown": "In der Tabelle „Datenbanken“ werden pro DB dieselben Metriken erfasst wie auf Instanzebene: Cache-Hit-Ratio, dead tuples, VACUUM-Alter. Klicke auf eine Zeile — die gewählte Datenbank wird zum Filter: die Regel-Engine wertet im DB-Scope aus, instance-only-Kategorien (Connections / Replication / Horizon / WAL / Locks) werden dabei ausgeblendet.",
@@ -790,8 +794,10 @@
         "host_cpu_saturation": ">1 / >2 / >4 (load/vCPU)",
         "pooler_saturation": "≥0.5 / ≥0.6 / ≥0.8",
         "sequence_exhaustion": "≥0.75 / ≥0.85 / ≥0.95",
-        "latency_regression": "×1.5 / ×3 / ×6 vs. Baseline"
-      }
+        "latency_regression": "×1.5 / ×3 / ×6 vs. Baseline",
+        "seq_scan_regression": "×1.5 / ×3 / ×6 vs. Baseline",
+        "host_disk_space": "≥70 / ≥80 / ≥90 %"
+}
     },
     "databases": {
       "title": "Datenbanken",
@@ -1022,6 +1028,16 @@
       "latency_regression": {
         "title": "Latenz-Regression bei Abfragen",
         "short": "Die Abfrage-Latenz liegt über ihrer saisonalen Norm — Top-Abfragen und Last prüfen."
+      },
+      "seq_scan_regression": {
+        "title": "Anstieg von Sequential Scans bei großen Tabellen",
+        "short": "Die per Seq-Scan gelesene Tupelmenge liegt über ihrer saisonalen Norm — Indizes werden nicht mehr genutzt oder die Statistik ist veraltet.",
+        "detail": "Die Seq-Scan-Dynamik (Tupel/s) wird mit ihrer saisonalen Norm (Stunde×Wochentag) verglichen, sodass normale analytische Scans nicht als Norm gelten. Ein Anstieg bedeutet meist, dass der Planer den Index verlässt (veraltete Statistik → ANALYZE) oder ein Index fehlt/ungültig ist. Prüfen: ANALYZE auf heißen Tabellen; „Index-Nutzung“ und den Plan der Top-Abfragen ansehen (Seq Scan auf großen Tabellen); bei Bedarf Index hinzufügen/neu aufbauen."
+      },
+      "host_disk_space": {
+        "title": "Wenig freier Speicher auf dem Host",
+        "short": "Plattennutzung: {metric_pct}% (LOW ≥70%, MED ≥80%, HIGH ≥90%). Ab ≥90% wird der Gesamt-Score in den roten Bereich gesenkt.",
+        "detail": "Belegungsanteil des vollsten Host-Dateisystems (aus pgSCV-/Yandex-Cloud-Metriken). Ein volles Daten-Volume stoppt Schreibvorgänge und droht mit Absturz/Korruption — daher wirkt ≥90% als kritischer Floor auf jeder Rolle (Primary und Replica). Maßnahmen: Speicher freigeben (WAL, Logs, temporäre Dateien, alte Backups), Volume vergrößern, Tabellen-/Index-Bloat und WAL-Stau (inaktive Replikations-Slots) prüfen."
       }
     },
     "trend": {

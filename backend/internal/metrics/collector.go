@@ -2,7 +2,7 @@ package metrics
 
 import (
 	"context"
-	"sort"
+	"slices"
 	"time"
 )
 
@@ -35,8 +35,8 @@ var CoreSignals = []SignalKind{
 	SigTimedCheckpoints, SigRequestedCheckpoints, SigLocksNotGranted, SigActiveLockWaiters,
 	SigXactsLeftWrap, SigChecksumFailRate,
 	SigMaxBloatRatio, SigSeqExhaustionMax, SigTypeExhaustionMax,
-	SigLatencyMs,
-	SigLoadAvg15, SigNumVCPU,
+	SigLatencyMs, SigSeqScanRate,
+	SigLoadAvg15, SigNumVCPU, SigDiskUsedRatio,
 	SigPoolerClients, SigPoolerServers, SigPoolerPoolSize,
 }
 
@@ -45,7 +45,7 @@ func signalRole(s SignalKind) Role {
 	switch s {
 	case SigPoolerClients, SigPoolerServers, SigPoolerPoolSize:
 		return RolePooler
-	case SigLoadAvg15, SigNumVCPU:
+	case SigLoadAvg15, SigNumVCPU, SigDiskUsedRatio:
 		return RoleHost
 	default:
 		return RoleCore
@@ -143,7 +143,7 @@ func (co *Collector) Range(ctx context.Context, cluster, instance string, r Rang
 		keys = append(keys, k)
 	}
 
-	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+	slices.Sort(keys)
 
 	out := make([]Signals, 0, len(keys))
 	for _, k := range keys {

@@ -68,6 +68,21 @@ config:
   #      clusters:
   #        - name: ".*"
 
+  # -- Snapshot storage (optional): a PostgreSQL DB for pgss snapshots and Health
+  # Score weight overrides. The DB connection can be split into two roles:
+  #   dsn           — service role used for all reads/writes (DML); in a hardened
+  #                   setup this role has NO privilege to create/alter tables.
+  #   dsn_migration — privileged role that runs DDL: migrations and daily
+  #                   partition creation. Falls back to dsn when unset.
+  # Provide both as *_from_env so credentials come from a Secret, not the ConfigMap.
+  # storage:
+  #   dsn_from_env: DASHA_STORAGE_DSN                      # service role (DML)
+  #   dsn_migration_from_env: DASHA_STORAGE_DSN_MIGRATION  # DDL role (optional)
+  # Run `dasha migrate` (e.g. a Job / initContainer using the migration role) to
+  # create the tables and partitions up front; the long-running service then
+  # only needs the DML role. Partition creation at snapshot-write time also uses
+  # dsn_migration (falling back to dsn).
+
   # -- Metrics-backed Health Score (optional)
   # Computes the score, recommendations and a history trend from a
   # Prometheus/VictoriaMetrics-compatible datasource instead of the point-in-time
@@ -181,6 +196,15 @@ secrets:
     #    remoteRef:
     #      key: dasha/metrics
     #      property: datasource_token
+    #  # Snapshot storage DSNs (service role for DML, migration role for DDL)
+    #  - secretKey: DASHA_STORAGE_DSN
+    #    remoteRef:
+    #      key: dasha/storage
+    #      property: dsn_service
+    #  - secretKey: DASHA_STORAGE_DSN_MIGRATION
+    #    remoteRef:
+    #      key: dasha/storage
+    #      property: dsn_migration
 
 # -- Cloud SA keys for service discovery (one per folder/provider)
 # Each entry creates a volume mount with authorized_key.json

@@ -199,6 +199,10 @@ func provideConfig() (*config.Config, error) {
 		c.Storage.DSN = os.Getenv(c.Storage.DSNFromEnv)
 	}
 
+	if c.Storage.DSNMigrationFromEnv != "" {
+		c.Storage.DSNMigration = os.Getenv(c.Storage.DSNMigrationFromEnv)
+	}
+
 	if env := c.HealthScore.Metrics.Datasource.Auth.TokenFromEnv; env != "" {
 		c.HealthScore.Metrics.Datasource.Auth.Token = os.Getenv(env)
 	}

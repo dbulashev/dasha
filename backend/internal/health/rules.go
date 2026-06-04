@@ -688,6 +688,33 @@ var Registry = []Rule{
 			return &Hit{Severity: sev, MetricValue: m.LatencyRegressionRatio}
 		},
 	},
+	{
+		// Sequential-scan activity regressed above its seasonal baseline
+		// (metrics-only). A rise in tuples read by seq scans signals indexes
+		// going unused or stale planner stats — run ANALYZE / review indexes.
+		ID: "seq_scan_regression", Category: "performance", RelatedRoute: "/indexes-usage",
+		Evaluate: func(m RawMetrics) *Hit {
+			sev := severityForRatio(m.SeqScanRegressionRatio, 6, 3, 1.5)
+			if sev == "" {
+				return nil
+			}
+
+			return &Hit{Severity: sev, MetricValue: m.SeqScanRegressionRatio}
+		},
+	},
+	{
+		// Host disk almost full (metrics-only). Free space running low risks
+		// write failures; >=90% also drives the critical floor.
+		ID: "host_disk_space", Category: "storage", RelatedRoute: "/tables",
+		Evaluate: func(m RawMetrics) *Hit {
+			sev := severityForRatio(m.DiskUsedRatio, diskUsedCritical, 0.80, 0.70)
+			if sev == "" {
+				return nil
+			}
+
+			return &Hit{Severity: sev, MetricValue: m.DiskUsedRatio}
+		},
+	},
 }
 
 // severityForRatio returns HIGH/MEDIUM/LOW when value meets/exceeds the

@@ -44,6 +44,11 @@ func NewQueryCatalog() *QueryCatalog {
 			`clamp_min(postgres_table_tuples_dead_total{%[1]s} + postgres_table_tuples_live_total{%[1]s}, 1))`,
 		{ProviderPgSCV, SigHotUpdateRatio}: `sum(rate(postgres_table_tuples_hot_updated_total{%[1]s}[%[2]s])) / ` +
 			`clamp_min(sum(rate(postgres_table_tuples_updated_total{%[1]s}[%[2]s])), 1)`,
+		// performance — sequential-scan activity: tuples read by seq scans per second
+		// (large tables dominate, so this weights "big-table seq scans" naturally).
+		// Baselined seasonally; a regression flags missing index usage / stale stats.
+		// Metric name per pgSCV internal/collector/postgres_tables.go.
+		{ProviderPgSCV, SigSeqScanRate}: `sum(rate(postgres_table_seq_tup_read_total{%[1]s}[%[2]s]))`,
 		// locks — cumulative deadlocks
 		{ProviderPgSCV, SigDeadlocksTotal}: `sum(postgres_database_deadlocks_total{%[1]s})`,
 		// wal/checkpoint — cumulative counts (the count-based penalty needs totals)
@@ -76,11 +81,20 @@ func NewQueryCatalog() *QueryCatalog {
 		// host saturation — YC native (load / vcpu)
 		{ProviderYCNative, SigLoadAvg15}: `max(load_avg_15min{%[1]s})`,
 		{ProviderYCNative, SigNumVCPU}:   `max(n_cpus{%[1]s})`,
+		// host disk — YC native: worst (fullest) mount, used/total (0..1).
+		{ProviderYCNative, SigDiskUsedRatio}: `max(disk_used_bytes{%[1]s} / disk_total_bytes{%[1]s})`,
 		// host saturation — pgSCV system collector (self-managed). NOTE: node_*
 		// metrics may be host-scoped rather than per-service; confirm the label
 		// scheme in demo-lab and adjust the pgscv_system selector if needed.
 		{ProviderPgSCVSystem, SigLoadAvg15}: `max(node_load15{%[1]s})`,
 		{ProviderPgSCVSystem, SigNumVCPU}:   `count(count by (cpu) (node_cpu_seconds_total{%[1]s}))`,
+		// host disk — pgSCV system collector: worst real filesystem, used/total (0..1).
+		// pgSCV exposes node_filesystem_bytes{usage="used"} and node_filesystem_bytes_total
+		// (labels device/mountpoint/fstype; the collector already filters to ext3/ext4/
+		// xfs/btrfs). The numerator carries an extra `usage` label, so join with
+		// ignoring(usage). See pgSCV internal/collector/linux_filesystem.go.
+		{ProviderPgSCVSystem, SigDiskUsedRatio}: `max(node_filesystem_bytes{%[1]s,usage="used"} / ` +
+			`ignoring(usage) node_filesystem_bytes_total{%[1]s})`,
 
 		// pooler saturation — self-managed pgbouncer
 		{ProviderPgBouncer, SigPoolerClients}:  `sum(pgbouncer_client_connections_in_flight{%[1]s})`,

@@ -56,6 +56,7 @@ const RULES_BY_CATEGORY: Record<string, { id: string }[]> = {
     { id: 'low_cache_hit_ratio' },
     { id: 'track_io_timing_disabled' },
     { id: 'latency_regression' },
+    { id: 'seq_scan_regression' },
   ],
   storage: [
     { id: 'high_max_dead_ratio' },
@@ -65,6 +66,7 @@ const RULES_BY_CATEGORY: Record<string, { id: string }[]> = {
     { id: 'high_newpage_update_ratio' },
     { id: 'checksum_failures' },
     { id: 'sequence_exhaustion' },
+    { id: 'host_disk_space' },
   ],
   replication: [
     { id: 'replication_lag_time' },

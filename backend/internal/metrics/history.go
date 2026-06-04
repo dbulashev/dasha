@@ -57,24 +57,31 @@ func (s *Service) History(
 // seasonal baseline over the full series, then slice the displayed [from, to]
 // window and detect dips against the baseline.
 func buildHistory(sigs []Signals, from, to time.Time, minPoints int, scoreDipPts float64, w health.Weights) History {
-	// Seasonal latency baseline over the same window — drives the per-point
-	// latency-regression penalty (free here, no extra query).
+	// Seasonal baselines over the same window — drive the per-point regression
+	// penalties (free here, no extra query).
 	latSeries := make([]SeriesPoint, 0, len(sigs))
+	seqSeries := make([]SeriesPoint, 0, len(sigs))
 
 	for _, sig := range sigs {
 		if lat, ok := sig.Get(SigLatencyMs); ok {
 			latSeries = append(latSeries, SeriesPoint{Time: sig.At, Value: lat})
 		}
+
+		if v, ok := sig.Get(SigSeqScanRate); ok {
+			seqSeries = append(seqSeries, SeriesPoint{Time: sig.At, Value: v})
+		}
 	}
 
 	latBase := BuildBaseline(latSeries, minPoints)
+	seqBase := BuildBaseline(seqSeries, minPoints)
 
 	scoreSeries := make([]SeriesPoint, 0, len(sigs))
 	full := make([]ScorePoint, 0, len(sigs))
 
 	for _, sig := range sigs {
 		lb, _ := latBase.Value(sig.At)
-		res := ScoreFromSignalsBase(sig, w, lb)
+		sb, _ := seqBase.Value(sig.At)
+		res := ScoreFromSignalsBase(sig, w, Baselines{Latency: lb, SeqScan: sb})
 
 		cats := make(map[string]float64, len(res.Categories))
 		for _, c := range res.Categories {

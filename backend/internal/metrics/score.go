@@ -78,10 +78,7 @@ func (s Signals) ToRawMetrics() health.RawMetrics {
 	}
 
 	if v, ok := s.Get(SigXactsLeftWrap); ok {
-		age := wraparoundXidLimit - int64(v)
-		if age < 0 {
-			age = 0
-		}
+		age := max(wraparoundXidLimit-int64(v), 0)
 
 		m.MaxXidAge = age
 	}
@@ -122,29 +119,46 @@ func (s Signals) ToRawMetrics() health.RawMetrics {
 		m.SequenceExhaustionMax = v
 	}
 
+	if v, ok := s.Get(SigDiskUsedRatio); ok {
+		m.DiskUsedRatio = v
+	}
+
 	return m
+}
+
+// Baselines carries the seasonal baselines folded into the regression penalties.
+// A zero field disables that regression (current/baseline can't be formed).
+type Baselines struct {
+	Latency float64 // seasonal mean query latency
+	SeqScan float64 // seasonal seq-scan tuple-read rate
 }
 
 // ScoreFromSignals computes the health score from normalized signals using the
 // existing engine. The snapshot path (health.Calculate) stays unchanged.
 func ScoreFromSignals(s Signals, w health.Weights) health.Result {
-	return ScoreFromSignalsBase(s, w, 0)
+	return ScoreFromSignalsBase(s, w, Baselines{})
 }
 
-// ScoreFromSignalsBase scores with a seasonal latency baseline for the
-// latency-regression penalty. latencyBaseline <= 0 disables regression.
-func ScoreFromSignalsBase(s Signals, w health.Weights, latencyBaseline float64) health.Result {
-	return health.CalculateWithWeights(rawWithRegression(s, latencyBaseline), w)
+// ScoreFromSignalsBase scores with seasonal baselines for the regression
+// penalties (latency, seq-scan). A zero baseline disables its regression.
+func ScoreFromSignalsBase(s Signals, w health.Weights, b Baselines) health.Result {
+	return health.CalculateWithWeights(rawWithRegression(s, b), w)
 }
 
-// rawWithRegression builds RawMetrics and folds in the latency-regression ratio
-// (current latency / seasonal baseline) when a baseline is available.
-func rawWithRegression(s Signals, latencyBaseline float64) health.RawMetrics {
+// rawWithRegression builds RawMetrics and folds in the regression ratios
+// (current value / seasonal baseline) for each signal with an available baseline.
+func rawWithRegression(s Signals, b Baselines) health.RawMetrics {
 	m := s.ToRawMetrics()
 
-	if latencyBaseline > 0 {
+	if b.Latency > 0 {
 		if lat, ok := s.Get(SigLatencyMs); ok && lat > 0 {
-			m.LatencyRegressionRatio = lat / latencyBaseline
+			m.LatencyRegressionRatio = lat / b.Latency
+		}
+	}
+
+	if b.SeqScan > 0 {
+		if v, ok := s.Get(SigSeqScanRate); ok && v > 0 {
+			m.SeqScanRegressionRatio = v / b.SeqScan
 		}
 	}
 

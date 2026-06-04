@@ -183,6 +183,8 @@ The baseline and dips appear once enough history has accumulated; until then the
 - **Host CPU saturation** (`load_avg_15 / vCPU`) and **pooler saturation** (`server_conns / pool_size`) → `connections` — better pressure signals than `total / max_connections` on pooled setups.
 - **Query-latency regression** → `performance`: windowed mean latency from `pg_stat_statements` compared to its own seasonal baseline (×1.5 / ×3 / ×6), so `performance` moves on real latency rather than just cache-hit ratio. Latency is always collected; the penalty needs a baseline.
 - **Checksum failures** (data-page corruption) and **sequence / ID-space exhaustion** near overflow → critical floor + HIGH rules.
+- **Sequential-scan regression** → `performance`: the rate of tuples read by seq scans vs its own seasonal baseline (×1.5 / ×3 / ×6) — a rise flags indexes going unused or stale planner stats (run `ANALYZE` / review indexes), without false-firing on normal analytical scans. Collected always; the penalty needs a baseline.
+- **Host disk space** → `storage`: used/total of the fullest host filesystem (pgSCV `node_filesystem_*`, Yandex Cloud `disk_used_bytes`/`disk_total_bytes`). LOW/MED/HIGH at ≥70/80/90%, with a **role-agnostic critical floor at ≥90%** — a full data volume stops writes, so it forces the score into the red on primary and standby alike.
 
 ### Configuration
 

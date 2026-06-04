@@ -141,13 +141,31 @@ type DiscoveryEntry struct {
 
 // StorageConfig holds optional snapshot storage database settings.
 type StorageConfig struct {
+	// DSN is the service connection: regular reads/writes (DML). In hardened
+	// installs this role has no DDL privileges.
 	DSN        string `mapstructure:"dsn"`
 	DSNFromEnv string `mapstructure:"dsn_from_env"`
+
+	// DSNMigration is a privileged connection allowed to run DDL — migrations
+	// (CREATE/ALTER tables) and daily partition creation. Falls back to DSN when
+	// empty, so single-role installs keep working unchanged.
+	DSNMigration        string `mapstructure:"dsn_migration"`
+	DSNMigrationFromEnv string `mapstructure:"dsn_migration_from_env"`
 }
 
 // Enabled returns true if the storage DSN is configured.
 func (s *StorageConfig) Enabled() bool {
 	return s.DSN != ""
+}
+
+// MigrationDSN returns the DDL-capable connection string, falling back to the
+// service DSN when no dedicated migration role is configured.
+func (s *StorageConfig) MigrationDSN() string {
+	if s.DSNMigration != "" {
+		return s.DSNMigration
+	}
+
+	return s.DSN
 }
 
 // Config is the top-level application configuration.
