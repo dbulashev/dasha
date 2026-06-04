@@ -8,7 +8,7 @@
   "Queries": "Abfragen",
   "Active Queries": "Aktive Abfragen",
   "Query Stats": "Abfragestatistik",
-  "Query Report": "Abfragebericht",
+  "Query Report": "Detaillierter Abfragebericht",
   "Query Compare": "Abfragevergleich",
   "Tables": "Tabellen",
   "Indexes": "Indizes",
@@ -37,7 +37,6 @@
     "cpuTime": "CPU-Zeit"
   },
   "IO vs CPU Time": "I/O- vs CPU-Zeit",
-  "Query Report": "Detaillierter Abfragebericht",
   "report": {
     "showSql": "SQL anzeigen",
     "avg": "Durchschnitt",
@@ -508,6 +507,7 @@
     "bloatTableLen": "Physische Größe",
     "bloatRows": "Tupel | Tupel",
     "vacuumStats": "Vacuum / Analyze",
+    "replicaVacuumHint": "Dieser Host ist eine Replica. Autovacuum und ANALYZE laufen nur auf dem Master; pg_stat_user_tables auf der Replica spiegelt lokale Operationen wider und entspricht nicht dem tatsächlichen Zustand der Tabelle. Wechseln Sie auf den Master des Clusters.",
     "lastVacuum": "Letztes VACUUM",
     "lastAutovacuum": "Letztes Autovacuum",
     "lastAnalyze": "Letztes ANALYZE",
@@ -579,5 +579,408 @@
     "transactionIdDanger": "Transaction-ID-Erschöpfungsgefahr",
     "transactionsLeft": "Transaktionen übrig",
     "vacuumProgress": "VACUUM-Fortschritt"
+  },
+  "healthScore": {
+    "title": "Health Score",
+    "tooltip": "Gesamtbewertung der PostgreSQL-Instanz (0–100). Berücksichtigt Verbindungen, Performance, Speicherung, Replikation und Wartung.",
+    "openDetailsPage": "Details",
+    "excellent": "Ausgezeichnet",
+    "warning": "Achtung",
+    "problems": "Probleme",
+    "critical": "Kritisch",
+    "categories": {
+      "connections": "Verbindungen",
+      "performance": "Performance",
+      "storage": "Speicherung",
+      "replication": "Replikation",
+      "maintenance": "Wartung",
+      "horizon": "Horizon",
+      "wal_checkpoint": "WAL & Checkpoint",
+      "locks": "Sperren"
+    },
+    "details": {
+      "connection_ratio": "Verbindungsauslastung",
+      "idle_in_transaction": "Idle in transaction (>30 s)",
+      "longest_transaction_seconds": "Längste Transaktion (s)",
+      "cache_hit_ratio": "Cache-Hit-Ratio",
+      "max_dead_ratio": "Max. tote Tupel (%)",
+      "avg_dead_ratio": "Ø tote Tupel (%)",
+      "tables_high_bloat": "Tabellen mit Bloat > 20 %",
+      "replica_count": "Anzahl der Replikate",
+      "max_replay_lag_seconds": "Max. Replay-Lag (s)",
+      "max_lag_bytes": "Max. Lag (Bytes)",
+      "disconnected_replicas": "Getrennte Replikate",
+      "max_xid_age": "Max. XID-Alter",
+      "max_vacuum_age_hours": "Max. VACUUM-Alter (h)",
+      "tables_never_vacuumed": "Tabellen ohne VACUUM",
+      "horizon_lag_xids": "Horizont-Rückstand (XID)",
+      "requested_checkpoint_ratio": "Anteil außerplanmäßiger Checkpoints",
+      "timed_checkpoints": "Geplante Checkpoints",
+      "requested_checkpoints": "Angeforderte Checkpoints",
+      "active_lock_waiters": "Prozesse in Sperren-Wartezustand",
+      "longest_lock_wait_seconds": "Längste Sperrenwartezeit (s)",
+      "ungranted_locks": "Nicht gewährte Sperren (granted=false)",
+      "deadlocks_total": "Deadlocks insgesamt (seit pg_stat_reset)",
+      "heavyweight_locks": "Schwere Sperren insgesamt",
+      "lock_pool_saturation": "Auslastung des Lock-Pools",
+      "hot_update_ratio": "Anteil HOT-Updates",
+      "newpage_update_ratio": "Anteil HOT-Ketten-Brüche",
+      "stale_planner_stats_tables": "Tabellen mit veralteter Statistik",
+      "max_relfrozenxid_age": "relfrozenxid-Alter (schlechteste Tabelle)",
+      "tables_with_autovacuum_off": "Tabellen mit autovacuum_enabled=false",
+      "wal_level": "wal_level",
+      "logical_slots_active": "Aktive logische Slots",
+      "autovacuum_enabled": "autovacuum",
+      "track_counts_enabled": "track_counts",
+      "track_io_timing_enabled": "track_io_timing",
+      "valEnabled": "aktiviert",
+      "valDisabled": "deaktiviert",
+      "wal_level_minimal_with_replicas": "wal_level",
+      "wal_level_logical_without_slots": "wal_level",
+      "walMinimalReplicas": "minimal + Replicas (Replikation funktioniert nicht)",
+      "walLogicalNoSlots": "logical ohne aktive Slots"
+    },
+    "page": {
+      "title": "Health Score",
+      "menuItem": "Health Score",
+      "noRecommendations": "Alles in Ordnung — keine kritischen Befunde."
+    },
+    "about": {
+      "toggle": "Wie der Health Score funktioniert",
+      "intro": "Eine Verbundkennzahl (0–100) für den allgemeinen Zustand einer PostgreSQL-Instanz, gemessen über acht Kategorien. Höher ist besser.",
+      "formulaTitle": "Formel",
+      "formulaDescription": "Für jede Kategorie i wird aus den Rohmetriken ein kontinuierlicher Penalty (0..100) berechnet und mit kategoriespezifischen Gewichten verrechnet (Summe = 1,0). Gewichte werden validiert und normalisiert; ungültige Werte fallen auf Defaults zurück.",
+      "dropTitle": "Wann eine Kategorie verworfen wird",
+      "dropIntro": "Kategorien ohne aussagekräftiges Signal auf der aktuellen Instanz werden verworfen, ihr Gewicht wird proportional auf die übrigen verteilt:",
+      "dropReplication": "Replication — verworfen, wenn die Instanz keine Replicas hat.",
+      "dropMaintenance": "Maintenance — verworfen, wenn pg_is_in_recovery() = true (Standby). Auf einer Replica laufen Autovacuum/ANALYZE nicht; die Metriken spiegeln den Zustand des Primaries.",
+      "rulesEngine": "Parallel bewertet eine Regel-Engine dieselben Metriken und liefert eine Empfehlungsliste mit Links. Regeln und Penalties sind unabhängig: Penalties ergeben den numerischen Score, Regeln die Aktionsliste. Jede Regel hat einen Score-Beitrag (Penalty oder Floor), sodass eine Bedingung nie in den Empfehlungen erscheint, ohne die Zahl zu bewegen.",
+      "criticalTitle": "Kritische Schwelle (Floor)",
+      "criticalIntro": "Ein gewichteter Mittelwert verwässert Katastrophen. Jede der folgenden Bedingungen drückt den Score in den roten Bereich (≤ 30), am Mittelwert vorbei — sonst würde der Notfall in gesunden Kategorien untergehen. Gilt nur auf dem Primary (auf einem Standby gehört die Aktion zum Primary):",
+      "criticalXid": "XID-Wraparound am Failsafe: max(age(datfrozenxid), age(relfrozenxid)) ≥ 1,6 Mrd. (vacuum_failsafe_age), wo PostgreSQL selbst in den Notfall-VACUUM geht.",
+      "criticalAutovacuum": "Autovacuum global aus — Bloat und XID-Alter wachsen unkontrolliert.",
+      "criticalTrackCounts": "track_counts aus — Autovacuum ist „blind“ und startet praktisch nie.",
+      "categoriesTitle": "8 Kategorien mit Standardgewichten",
+      "categoryDescriptions": {
+        "connections": "Verbindungsauslastung, idle in tx, lange Transaktionen",
+        "performance": "Cache hit ratio, track_io_timing",
+        "storage": "Anteil toter Tupel, Bloat, HOT-Update-Effizienz",
+        "replication": "Replikations-Lag (Zeit und Bytes), getrennte Standbys",
+        "maintenance": "XID-Alter, VACUUM-Aktualität, GUCs autovacuum/track_counts, ANALYZE",
+        "horizon": "MVCC-Horizont-Lag (ältester Snapshot, der VACUUM blockiert)",
+        "wal_checkpoint": "Verhältnis requested/timed Checkpoints, wal_level-Konflikt",
+        "locks": "Lock-Wartende, ungewährte Sperren, Deadlocks, Lock-Pool-Auslastung"
+      },
+      "penaltyTitle": "Penalty-Schwellen",
+      "penaltyDescription": "Der Penalty wächst kontinuierlich mit der Metrik. Knickpunkte sind die Metrikwerte, an denen die Steigung der Penalty-Funktion wechselt: vor dem ersten Punkt gibt es keinen Penalty, zwischen den Punkten wächst er gleichmäßig, nach dem letzten erreicht er das Kategorie-Maximum. Die Pfeile „→“ in der Tabelle sind genau so zu lesen: erster Punkt → zweiter Punkt → dritter Punkt.",
+      "thCategory": "Kategorie",
+      "thMetric": "Metrik",
+      "thBreakpoints": "Knickpunkte (kein Penalty → Maximum)",
+      "xidCalibration": "Der XID-Alters-Penalty beginnt bei autovacuum_freeze_max_age (200 M), erreicht 80 bei vacuum_failsafe_age (1,6 B) und 100 an der Shutdown-Grenze ~2,1 B; relfrozenxid fließt über max(datfrozenxid, relfrozenxid) in dieselbe Kurve ein.",
+      "rulesTitle": "Regeln und Severity",
+      "rulesDescription": "Jede Regel löst aus, wenn die Metrik eine diskrete LOW / MEDIUM / HIGH-Schwelle überschreitet. Instance-only-Kategorien werden im Datenbank-Drill-down ausgeblendet; die gesamte Kategorie maintenance wird auf Standbys ausgeblendet.",
+      "ruleNotes": {
+        "high_connection_ratio": "count(*) aus pg_stat_activity / max_connections — Reserve, bevor neue Sessions abgelehnt werden.",
+        "idle_in_transaction": "Sessions mit state='idle in transaction'. Jede hält Sperren und pinnt den MVCC-Horizont.",
+        "long_running_transaction": "now() - xact_start der längsten Transaktion — verstärkt Bloat, verhindert Freezing.",
+        "low_cache_hit_ratio": "heap_blks_hit / (heap_blks_hit + heap_blks_read) aus pg_statio_user_tables — Anteil aus shared_buffers.",
+        "track_io_timing_disabled": "GUC aus — keine I/O-Timings in pg_stat_statements / EXPLAIN ANALYZE.",
+        "high_max_dead_ratio": "Schlechtester Tabellenwert n_dead_tup / (n_live_tup + n_dead_tup), % — Autovacuum kommt nicht hinterher.",
+        "high_avg_dead_ratio": "Dasselbe Verhältnis, gemittelt über Tabellen mit >1000 Live-Tupeln — Hintergrund-Bloat.",
+        "many_bloated_tables": "Anzahl Tabellen, deren Dead-Anteil den Autovacuum-Trigger übersteigt.",
+        "low_hot_update_ratio": "n_tup_hot_upd / n_tup_upd — niedriger Anteil bedeutet Index-Bloat durch UPDATEs.",
+        "high_newpage_update_ratio": "PG 16+: Anteil UPDATEs, die eine HOT-Kette gebrochen haben.",
+        "replication_lag_time": "EXTRACT(EPOCH FROM replay_lag) des schlechtesten Standby — Rückstand beim WAL-Replay.",
+        "replication_lag_bytes": "pg_current_wal_lsn() - replay_lsn — WAL-Rückstand zum Anwenden.",
+        "disconnected_replicas": "Replicas aus dasha.yaml, die nicht in pg_stat_replication erscheinen.",
+        "xid_wraparound_risk": "max(age(datfrozenxid)) — Transaktionen bis zum Wraparound. 200M — Anti-Wraparound-Autovacuum, 2B — Read-Only.",
+        "stale_vacuum": "Tage seit dem letzten last_(auto)vacuum — Hinweis auf festhängendes Autovacuum.",
+        "tables_never_vacuumed": "Tabellen mit last_vacuum IS NULL AND last_autovacuum IS NULL.",
+        "autovacuum_disabled": "Globales autovacuum=off — Bloat und XID-Alter wachsen unkontrolliert.",
+        "track_counts_disabled": "track_counts=off — Autovacuum hat keine Statistik für Entscheidungen.",
+        "tables_with_autovacuum_off": "Tabellen mit autovacuum_enabled=false in reloptions.",
+        "relfrozenxid_age_outlier": "Schlechtestes age(relfrozenxid) je Tabelle — Tabellen-Variante des XID-Risikos.",
+        "stale_planner_stats": "n_mod_since_analyze groß relativ zu n_live_tup — Planner-Statistik veraltet.",
+        "horizon_lag_xids": "txid_current() - min(backend_xmin) — Zeilen, die VACUUM nicht entfernen kann.",
+        "requested_checkpoint_ratio": "checkpoints_req / total — hoher Anteil = max_wal_size klein oder Schreibspitze.",
+        "wal_level_minimal_with_replicas": "wal_level=minimal erlaubt keine physische Replikation — Replicas stumm defekt.",
+        "wal_level_logical_without_publications": "wal_level=logical, aber pg_publication leer — überflüssiger WAL-Overhead.",
+        "active_lock_waiters": "Sessions mit wait_event_type='Lock' — gerade blockiert.",
+        "longest_lock_wait_seconds": "EXTRACT(EPOCH FROM now() - state_change) des längsten Lock-Wait.",
+        "ungranted_locks": "Zeilen in pg_locks mit granted=false — Warteschlange hinter dem Halter.",
+        "deadlocks_rate": "Kumulativer deadlocks-Zähler seit pg_stat_database_reset — ohne per-Tag-Normalisierung nur „>0“ aussagekräftig.",
+        "lock_pool_saturation": "count(*) aus pg_locks / (max_connections × max_locks_per_transaction)."
+      },
+      "drilldownTitle": "Drill down (Detailansicht pro Datenbank)",
+      "drilldown": "In der Tabelle „Datenbanken“ werden pro DB dieselben Metriken erfasst wie auf Instanzebene: Cache-Hit-Ratio, dead tuples, VACUUM-Alter. Klicke auf eine Zeile — die gewählte Datenbank wird zum Filter: die Regel-Engine wertet im DB-Scope aus, instance-only-Kategorien (Connections / Replication / Horizon / WAL / Locks) werden dabei ausgeblendet.",
+      "penaltyPoints": {
+        "connection_ratio": "0.60 → 0.80 → 0.95+",
+        "idle_in_tx": "+5 pro Stk., max 30",
+        "longest_transaction": ">300 s, max 20",
+        "cache_hit_ratio": "≥95 → ≥90 → ≥85 → darunter",
+        "max_dead_ratio": "≤20 → 20–30 → >30",
+        "avg_dead_ratio": ">15 → +bis 30",
+        "tables_high_bloat": ">5 → +bis 30",
+        "max_replay_lag": ">10 s → max",
+        "max_lag_bytes": ">16 MiB → max",
+        "disconnected_replicas": "+25 pro Replica",
+        "max_xid_age": "200 M → 1.6 B → 2.1 B",
+        "max_vacuum_age_hours": ">168 → >504 → >1440 h",
+        "tables_never_vacuumed": "+5 pro Stk., max 20",
+        "horizon_lag_xids": "1 M → 10 M → 100 M",
+        "requested_checkpoint_ratio": "≥5 % → ≥10 % → ≥20 %",
+        "penalty_locks": "kumulativ",
+        "track_io_timing": "aus → 5 Punkte",
+        "hot_update_ratio": "<0.80 → <0.65 → <0.50",
+        "newpage_update_ratio": ">0.05 → >0.10 → >0.20",
+        "tables_with_autovacuum_off": "+3 pro Stk., max 15",
+        "stale_planner_stats": "+2 pro Stk., max 15",
+        "autovacuum_track_counts": "aus → sättigt die Kategorie",
+        "wal_level_mismatch": "minimal+Replicas 80; logical+kein Slot 5"
+      },
+      "ruleThresholds": {
+        "high_connection_ratio": "≥0.70 / ≥0.85 / ≥0.95",
+        "idle_in_transaction": "≥2 / ≥5 / ≥10",
+        "long_running_transaction": "≥300 / ≥600 / ≥1800 s",
+        "low_cache_hit_ratio": "<95 / <90 / <85 %",
+        "track_io_timing_disabled": "LOW",
+        "high_max_dead_ratio": "≥10 / ≥20 / ≥30 %",
+        "high_avg_dead_ratio": "≥5 / ≥15 / ≥25 %",
+        "many_bloated_tables": "≥5 / ≥10 / ≥20",
+        "low_hot_update_ratio": "<0.80 / <0.65 / <0.50",
+        "high_newpage_update_ratio": "≥0.05 / ≥0.10 / ≥0.20 (PG 16+)",
+        "replication_lag_time": "≥10 / ≥60 / ≥300 s",
+        "replication_lag_bytes": "≥16 MiB / ≥256 MiB / ≥1 GiB",
+        "disconnected_replicas": "≥1 / ≥2 / ≥3",
+        "xid_wraparound_risk": "≥150 M / ≥200 M / ≥1.6 B",
+        "stale_vacuum": "≥7 / ≥21 / ≥60 Tage",
+        "tables_never_vacuumed": "≥1 / ≥2 / ≥5",
+        "autovacuum_disabled": "HIGH",
+        "track_counts_disabled": "HIGH",
+        "tables_with_autovacuum_off": "≥1 / ≥5 / ≥20",
+        "relfrozenxid_age_outlier": "≥200 M / ≥500 M / ≥1 B",
+        "stale_planner_stats": "≥3 / ≥10 / ≥30",
+        "horizon_lag_xids": "≥1 M / ≥10 M / ≥100 M",
+        "requested_checkpoint_ratio": "≥5 / ≥10 / ≥20 %",
+        "wal_level_minimal_with_replicas": "HIGH",
+        "wal_level_logical_without_publications": "LOW",
+        "active_lock_waiters": "≥1 / ≥3 / ≥10",
+        "longest_lock_wait_seconds": "≥10 / ≥30 / ≥60 s",
+        "ungranted_locks": "≥2 / ≥5 / ≥15",
+        "deadlocks_rate": "LOW bei >0",
+        "lock_pool_saturation": "≥0.4 / ≥0.6 / ≥0.8"
+      }
+    },
+    "databases": {
+      "title": "Datenbanken",
+      "headers": {
+        "database": "Datenbank",
+        "size": "Größe",
+        "score": "Score"
+      },
+      "worstHint": "Schlechteste DB: {db} (Score {score}). Klicken Sie auf die Zeile für Details."
+    },
+    "weights": {
+      "sectionTitle": "Gewichte konfigurieren",
+      "tooltip": "Kategoriegewichte werden auf 100 % normalisiert. Nützlich z. B. für Replikate, wo Replikation wichtiger ist als Performance.",
+      "source": {
+        "default": "Standard",
+        "override": "Cluster-Override"
+      },
+      "readonlyHint": "Gewichte ändern darf nur ein Administrator.",
+      "saveBtn": "Speichern",
+      "resetBtn": "Auf Standardwerte zurücksetzen",
+      "updatedAt": "Aktualisiert: {ts}"
+    },
+    "inline": {
+      "title": "Detailansicht",
+      "pickDatabase": "Wähle oben eine Datenbank — das ist eine per-DB-Abfrage.",
+      "empty": "Die Abfrage liefert keine Ergebnisse — das Problem tritt aktuell nicht auf.",
+      "col": {
+        "database": "Datenbank",
+        "xidAge": "XID-Alter",
+        "schema": "Schema",
+        "table": "Tabelle",
+        "reloptions": "reloptions",
+        "updates": "UPDATE",
+        "hotUpdates": "HOT-UPDATE",
+        "hotRatio": "HOT-Ratio",
+        "liveTuples": "Live tuples",
+        "deadTuples": "Dead tuples",
+        "deadRatio": "Dead ratio",
+        "username": "Benutzer",
+        "state": "State",
+        "xactDuration": "Transaktionsdauer",
+        "query": "Query"
+      },
+      "unit": {
+        "seconds": "s"
+      }
+    },
+    "recommendations": {
+      "title": "Empfehlungen",
+      "openRelated": "Öffnen",
+      "showHowTo": "Was tun",
+      "hideHowTo": "Einklappen",
+      "copy": "Kopieren",
+      "copied": "Kopiert",
+      "high_connection_ratio": {
+        "title": "Hohe Auslastung des Connection-Pools",
+        "short": "Belegt: {total} von {max_connections} Verbindungen.",
+        "detail": "Prüfen Sie, ob die Anwendung Verbindungen ordnungsgemäß schließt. Bei dauerhaftem Wachstum max_connections erhöhen oder pgbouncer einsetzen."
+      },
+      "idle_in_transaction": {
+        "title": "Hängende idle-in-transaction-Verbindungen",
+        "short": "Verbindungen im Zustand idle in transaction (>30 s): {metric_value}.",
+        "detail": "Von der Anwendung vergessene Transaktionen halten Locks und blockieren Autovacuum."
+      },
+      "long_running_transaction": {
+        "title": "Langlaufende Transaktion",
+        "short": "Älteste Transaktion läuft seit {metric_value} s.",
+        "detail": "Über pg_stat_activity identifizieren und ggf. mit pg_terminate_backend beenden."
+      },
+      "low_cache_hit_ratio": {
+        "title": "Niedrige Cache-Hit-Ratio",
+        "short": "Cache-Hit-Ratio = {metric_value} %.",
+        "detail": "shared_buffers erhöhen (üblicherweise 25 % des RAM)."
+      },
+      "high_max_dead_ratio": {
+        "title": "Hohe Dead-Tuples-Ratio in einer Tabelle",
+        "short": "Maximale Dead-Ratio: {metric_value} %.",
+        "detail": "VACUUM ANALYZE für die betroffene Tabelle ausführen."
+      },
+      "high_avg_dead_ratio": {
+        "title": "Hohe durchschnittliche Dead-Ratio",
+        "short": "Durchschnittliche Dead-Ratio: {metric_value} %.",
+        "detail": "Autovacuum kommt nicht hinterher. autovacuum_vacuum_scale_factor anpassen."
+      },
+      "many_bloated_tables": {
+        "title": "Viele Tabellen mit Bloat",
+        "short": "Tabellen mit Dead-Ratio > 20 %: {metric_value}.",
+        "detail": "Im Tables-Bereich VACUUM für die Liste ausführen."
+      },
+      "replication_lag_time": {
+        "title": "Hoher Replication-Lag (Zeit)",
+        "short": "Max. Replay-Lag: {metric_value} s.",
+        "detail": "Last auf dem Replikat und Netzwerk prüfen."
+      },
+      "replication_lag_bytes": {
+        "title": "Hoher Replication-Lag (Bytes)",
+        "short": "Maximaler Lag in Bytes.",
+        "detail": "Bei wachsendem Lag max_wal_size erhöhen."
+      },
+      "disconnected_replicas": {
+        "title": "Getrennte Replikate",
+        "short": "Replikate nicht im Streaming-Zustand: {metric_value}.",
+        "detail": "Netzwerk und walreceiver-Status prüfen."
+      },
+      "xid_wraparound_risk": {
+        "title": "XID-Wraparound-Risiko",
+        "short": "XID-Alter: {metric_value}.",
+        "detail": "Schwellen entsprechen PG-Mechanismen: 150M — aggressives Freeze (vacuum_freeze_table_age), 200M — Notfall-Autovacuum (autovacuum_freeze_max_age), 1.6B — Failsafe-Modus ohne Index-Cleanup (vacuum_failsafe_age). Bei 2B geht die DB in read-only. VACUUM FREEZE für problematische DBs ausführen.",
+        "sql": "-- XID-Alter pro Datenbank prüfen\nSELECT datname, age(datfrozenxid) AS xid_age\nFROM pg_database\nORDER BY xid_age DESC;"
+      },
+      "autovacuum_disabled": {
+        "title": "Autovacuum ist aus",
+        "short": "Parameter autovacuum=off. Ohne ihn häufen sich tote Tupel ohne manuellen Eingriff.",
+        "detail": "Aktivieren Sie autovacuum in postgresql.conf oder via ALTER SYSTEM. Ohne ihn ist die DB auf manuellen VACUUM angewiesen, Indizes und Tabellen schwellen an.",
+        "sql": "ALTER SYSTEM SET autovacuum = on;\nSELECT pg_reload_conf();"
+      },
+      "track_counts_disabled": {
+        "title": "track_counts ist aus",
+        "short": "Ohne Nutzungsstatistik kann Autovacuum nicht entscheiden, welche Tabellen zu bereinigen sind.",
+        "detail": "Der Parameter track_counts ist kritisch für Autovacuum: er identifiziert «aktive» Datenbanken und Tabellen.",
+        "sql": "ALTER SYSTEM SET track_counts = on;\nSELECT pg_reload_conf();"
+      },
+      "tables_with_autovacuum_off": {
+        "title": "Tabellen mit deaktiviertem Autovacuum",
+        "short": "Es wurden {metric_value} Tabellen mit autovacuum_enabled=false gefunden.",
+        "detail": "Selten ist das beabsichtigt — meist sind es Reste alter Migrationen oder Experimente.",
+        "sql": "SELECT relname, reloptions\nFROM pg_class\nWHERE 'autovacuum_enabled=false' = ANY(reloptions);"
+      },
+      "relfrozenxid_age_outlier": {
+        "title": "Alte Tabelle ohne Freeze",
+        "short": "Max. relfrozenxid-Alter: {metric_value}.",
+        "detail": "Im Cluster gibt es Tabellen, die lange nicht von autovacuum freeze bearbeitet wurden."
+      },
+      "horizon_lag_xids": {
+        "title": "Horizont von langer Transaktion gehalten",
+        "short": "Horizont liegt {metric_value} Transaktionen zurück — VACUUM kann tote Versionen nicht löschen.",
+        "detail": "Lange Transaktionen (Repeatable Read oder idle in transaction) halten den DB-Horizont. VACUUM überspringt tote Versionen «aber noch nicht entfernbar». Finden Sie den Prozess mit dem kleinsten backend_xmin und beenden Sie ihn.",
+        "sql": "SELECT pid, usename, state, query, now() - xact_start AS duration\nFROM pg_stat_activity\nWHERE backend_xmin IS NOT NULL\nORDER BY backend_xmin\nLIMIT 5;"
+      },
+      "requested_checkpoint_ratio": {
+        "title": "Zu viele außerplanmäßige Checkpoints",
+        "short": "Anteil requested checkpoints: {metric_pct}% (timed={timed}, requested={requested}).",
+        "detail": "Außerplanmäßige Checkpoints entstehen bei Erreichen von max_wal_size. Erhöhen Sie max_wal_size oder checkpoint_timeout."
+      },
+      "track_io_timing_disabled": {
+        "title": "track_io_timing ist aus",
+        "short": "Ohne ihn sind detaillierte I/O-Timings in EXPLAIN ANALYZE und pg_stat_statements nicht verfügbar.",
+        "detail": "Auf modernen Betriebssystemen ist der Overhead minimal. Aktivieren für detaillierte I/O-Engpassanalyse.",
+        "sql": "ALTER SYSTEM SET track_io_timing = on;\nSELECT pg_reload_conf();"
+      },
+      "stale_vacuum": {
+        "title": "VACUUM lief lange nicht",
+        "short": "Max. VACUUM-Alter: {metric_value} h.",
+        "detail": "Wenn Autovacuum nicht hinterherkommt, autovacuum_vacuum_scale_factor verschärfen."
+      },
+      "tables_never_vacuumed": {
+        "title": "Tabellen ohne VACUUM",
+        "short": "Nie vakuumierte Tabellen: {metric_value}.",
+        "detail": "VACUUM ANALYZE manuell ausführen oder Autovacuum aktivieren."
+      },
+      "active_lock_waiters": {
+        "title": "Aktive Sperrenwartende",
+        "short": "Prozesse, die auf eine Sperre warten: {metric_value}.",
+        "detail": "Snapshot aus pg_stat_activity. Hohe Werte deuten auf aktuelle Contention hin. Identifizieren Sie blockierende Prozesse und entscheiden Sie über das Abbrechen langer Transaktionen."
+      },
+      "longest_lock_wait_seconds": {
+        "title": "Lange Sperrenwartezeit",
+        "short": "Maximale Wartezeit: {metric_value} s.",
+        "detail": "Ein oder mehrere Prozesse warten zu lange auf eine Sperre. Mögliche Ursachen: lange Transaktion, ernsthafte Contention auf einer Hot-Row, vergessene Tabellensperre (z. B. CREATE INDEX ohne CONCURRENTLY)."
+      },
+      "ungranted_locks": {
+        "title": "Nicht gewährte Sperren in der Warteschlange",
+        "short": "Zeilen in pg_locks mit granted=false: {metric_value}.",
+        "detail": "Länge der Warteschlange. Unterscheidet sich von «aktiven Wartenden» — ein Prozess kann auf mehrere Sperren warten."
+      },
+      "deadlocks_rate": {
+        "title": "Deadlocks",
+        "short": "Erfasste Deadlocks: {metric_value} (seit pg_stat_reset).",
+        "detail": "Jeder Deadlock ist ein Hinweis auf ein Anwendungsproblem (unterschiedliche Sperrreihenfolge). Details im Server-Log. Es ist ein absoluter Zähler seit dem letzten pg_stat_database_reset."
+      },
+      "lock_pool_saturation": {
+        "title": "Lock-Pool nahe Limit",
+        "short": "Belegt {total} von {capacity} ({metric_pct}%).",
+        "detail": "Die Pool-Größe schwerer Sperren ist auf max_locks_per_transaction × max_connections begrenzt. Bei Überlauf liefert PostgreSQL «out of shared memory; consider increasing max_locks_per_transaction». Erhöhen Sie max_locks_per_transaction (erfordert Neustart) oder reduzieren Sie die Parallelität."
+      },
+      "low_hot_update_ratio": {
+        "title": "Niedriger HOT-Update-Anteil",
+        "short": "HOT-Ratio = {metric_pct}%.",
+        "detail": "HOT erlaubt einer neuen Zeilenversion, auf derselben Seite zu bleiben — ohne Eintrag in alle Indizes. Niedrige Quote ⇒ Indizes wachsen, Autovacuum braucht mehr Zeit. Reduzieren Sie den fillfactor häufig aktualisierter Tabellen (typisch 70–90%), um Platz für HOT-Updates zu reservieren.",
+        "sql": "-- Tabellen mit vielen Nicht-HOT-Updates finden\nSELECT schemaname, relname,\n       n_tup_upd, n_tup_hot_upd,\n       round(100.0 * n_tup_hot_upd::numeric / nullif(n_tup_upd, 0), 2) AS hot_pct\nFROM pg_stat_user_tables\nWHERE n_tup_upd > 1000\nORDER BY hot_pct NULLS FIRST\nLIMIT 20;"
+      },
+      "high_newpage_update_ratio": {
+        "title": "Häufige HOT-Ketten-Brüche",
+        "short": "Anteil Updates mit Verschiebung auf neue Seite: {metric_pct}%.",
+        "detail": "PG 16+: n_tup_newpage_upd zählt UPDATEs, die nicht auf der Quellseite Platz fanden — die HOT-Kette bricht, im Index erscheint ein zusätzlicher Eintrag. Reduzieren Sie den fillfactor der betroffenen Tabelle, um Platz auf der Seite zu reservieren."
+      },
+      "stale_planner_stats": {
+        "title": "Veraltete Planer-Statistik",
+        "short": "Tabellen mit veralteter Statistik: {metric_value}.",
+        "detail": "Diese Tabellen haben sich seit dem letzten ANALYZE deutlich verändert (>50% der Auto-Analyze-Formel) und wurden über 24h nicht analysiert. Der Planer kann suboptimale Pläne wählen. Manueller ANALYZE oder kleinerer autovacuum_analyze_scale_factor."
+      },
+      "wal_level_minimal_with_replicas": {
+        "title": "wal_level=minimal bei vorhandenen Replikaten",
+        "short": "wal_level=minimal, aber Replikate angeschlossen: {replicas}.",
+        "detail": "Inkompatible Konfiguration: wal_level=minimal unterstützt kein Streaming Replication. Für Replikate werden replica oder logical benötigt. Parameter umstellen (Neustart erforderlich)."
+      },
+      "wal_level_logical_without_publications": {
+        "title": "wal_level=logical ohne aktive Publikationen",
+        "short": "wal_level=logical, aber keine aktiven logischen Slots.",
+        "detail": "Der logische WAL-Level verursacht Overhead (mehr Daten im Journal, langsameres VACUUM). Wenn logische Replikation nicht genutzt wird — auf replica zurückstellen."
+      }
+    }
   }
 }

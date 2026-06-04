@@ -554,6 +554,7 @@
         "bloatTableLen": "Физический размер",
         "bloatRows": "кортеж | кортежа | кортежей",
         "vacuumStats": "Vacuum / Analyze",
+        "replicaVacuumHint": "Этот хост — реплика. Autovacuum и ANALYZE работают только на мастере, статистика pg_stat_user_tables на реплике отражает локальные операции и не соответствует реальному состоянию таблицы. Переключитесь на мастер кластера.",
         "lastVacuum": "Последний VACUUM",
         "lastAutovacuum": "Последний autovacuum",
         "lastAnalyze": "Последний ANALYZE",
@@ -623,5 +624,408 @@
         "transactionIdDanger": "Опасность исчерпания Transaction ID",
         "transactionsLeft": "Транзакций осталось",
         "vacuumProgress": "Прогресс VACUUM"
+    },
+    "healthScore": {
+        "title": "Health Score",
+        "tooltip": "Комплексная оценка здоровья PostgreSQL инстанса (0–100). Учитывает подключения, производительность, хранение, репликацию и обслуживание.",
+        "openDetailsPage": "Подробнее",
+        "excellent": "Отлично",
+        "warning": "Внимание",
+        "problems": "Проблемы",
+        "critical": "Критично",
+        "categories": {
+            "connections": "Подключения",
+            "performance": "Производительность",
+            "storage": "Хранение",
+            "replication": "Репликация",
+            "maintenance": "Обслуживание",
+            "horizon": "Горизонт",
+            "wal_checkpoint": "WAL и checkpoint",
+            "locks": "Блокировки"
+        },
+        "details": {
+            "connection_ratio": "Загрузка подключений",
+            "idle_in_transaction": "Idle in transaction (>30с)",
+            "longest_transaction_seconds": "Самая длинная транзакция (с)",
+            "cache_hit_ratio": "Cache hit ratio",
+            "max_dead_ratio": "Макс. dead tuples (%)",
+            "avg_dead_ratio": "Средн. dead tuples (%)",
+            "tables_high_bloat": "Таблиц с bloat > 20%",
+            "replica_count": "Количество реплик",
+            "max_replay_lag_seconds": "Макс. replay lag (с)",
+            "max_lag_bytes": "Макс. lag (байты)",
+            "disconnected_replicas": "Отключённые реплики",
+            "max_xid_age": "Макс. возраст XID",
+            "max_vacuum_age_hours": "Макс. возраст vacuum (ч)",
+            "tables_never_vacuumed": "Таблиц без vacuum",
+            "horizon_lag_xids": "Отставание горизонта (XID)",
+            "requested_checkpoint_ratio": "Доля внеплановых checkpoint",
+            "timed_checkpoints": "Checkpoint по расписанию",
+            "requested_checkpoints": "Checkpoint по требованию",
+            "active_lock_waiters": "Процессы в ожидании блокировок",
+            "longest_lock_wait_seconds": "Максимальное ожидание блокировки (с)",
+            "ungranted_locks": "Несогласованные блокировки (granted=false)",
+            "deadlocks_total": "Deadlock-ов всего (с pg_stat_reset)",
+            "heavyweight_locks": "Тяжёлых блокировок всего",
+            "lock_pool_saturation": "Заполненность lock-пула",
+            "hot_update_ratio": "Доля HOT-обновлений",
+            "newpage_update_ratio": "Доля разрывов HOT-цепочки",
+            "stale_planner_stats_tables": "Таблиц с устаревшей статистикой",
+            "max_relfrozenxid_age": "Возраст relfrozenxid (худшая таблица)",
+            "tables_with_autovacuum_off": "Таблиц с autovacuum_enabled=false",
+            "wal_level": "wal_level",
+            "logical_slots_active": "Активных логических слотов",
+            "autovacuum_enabled": "autovacuum",
+            "track_counts_enabled": "track_counts",
+            "track_io_timing_enabled": "track_io_timing",
+            "valEnabled": "включён",
+            "valDisabled": "выключен",
+            "wal_level_minimal_with_replicas": "wal_level",
+            "wal_level_logical_without_slots": "wal_level",
+            "walMinimalReplicas": "minimal + реплики (репликация не работает)",
+            "walLogicalNoSlots": "logical без активных слотов"
+        },
+        "page": {
+            "title": "Health Score",
+            "menuItem": "Health Score",
+            "noRecommendations": "Всё хорошо — критичных замечаний нет."
+        },
+        "about": {
+            "toggle": "Как устроен health-score",
+            "intro": "Композитная метрика (0–100), отражающая общее состояние инстанса PostgreSQL по восьми категориям. Чем выше — тем лучше.",
+            "formulaTitle": "Формула",
+            "formulaDescription": "Для каждой категории i вычисляется непрерывный штраф (0..100) по «сырым» метрикам и складывается с весами, в сумме дающими 1.0. Веса валидируются и нормализуются; некорректные значения откатываются к дефолтам.",
+            "dropTitle": "Когда категория отбрасывается",
+            "dropIntro": "Категории без полезного сигнала на текущем инстансе отбрасываются, а их вес пропорционально перераспределяется на остальные:",
+            "dropReplication": "Replication — отбрасывается, если у инстанса нет реплик.",
+            "dropMaintenance": "Maintenance — отбрасывается, если pg_is_in_recovery() = true (standby). На реплике autovacuum/ANALYZE не работают, метрики отражают состояние мастера.",
+            "rulesEngine": "Параллельно движок правил оценивает те же метрики и формирует список рекомендаций со ссылками. Правила и штрафы независимы: штрафы дают числовой score, правила — список действий. У каждого правила есть вклад в score (штраф или нижний порог), поэтому условие не появится в рекомендациях, не сдвинув число.",
+            "criticalTitle": "Критический порог (floor)",
+            "criticalIntro": "Взвешенное среднее размывает катастрофы. Любое из условий ниже зажимает итоговый балл в красную зону (≤ 30), минуя среднее — иначе авария растворилась бы в здоровых категориях. Применяется только на мастере (на standby действие относится к мастеру):",
+            "criticalXid": "wraparound XID на failsafe: max(age(datfrozenxid), age(relfrozenxid)) ≥ 1.6 млрд (vacuum_failsafe_age), где PostgreSQL сам уходит в аварийный VACUUM.",
+            "criticalAutovacuum": "autovacuum выключен глобально — bloat и возраст XID растут бесконтрольно.",
+            "criticalTrackCounts": "track_counts выключен — autovacuum «слеп» и фактически не запускается.",
+            "categoriesTitle": "8 категорий с весами по умолчанию",
+            "categoryDescriptions": {
+                "connections": "Использование коннектов, idle in tx, длинные транзакции",
+                "performance": "Cache hit ratio, track_io_timing",
+                "storage": "Доля dead-кортежей, bloat, эффективность HOT-обновлений",
+                "replication": "Лаг репликации (время и байты), отключённые реплики",
+                "maintenance": "Возраст XID, давность вакуума, GUC autovacuum/track_counts, ANALYZE",
+                "horizon": "Лаг горизонта MVCC (старейший снепшот, блокирующий VACUUM)",
+                "wal_checkpoint": "Соотношение requested/timed чекпоинтов, рассогласование wal_level",
+                "locks": "Lock-waiters, ungranted locks, deadlocks, насыщение lock pool"
+            },
+            "penaltyTitle": "Пороги штрафов",
+            "penaltyDescription": "Штраф растёт по метрике непрерывно. Точки перелома — это значения метрики, в которых меняется крутизна штрафной функции: до первой точки штрафа нет, между точками он растёт плавно, после последней — достигает максимума категории. Стрелки «→» в таблице читаются именно так: первая точка → вторая точка → третья точка.",
+            "thCategory": "Категория",
+            "thMetric": "Метрика",
+            "thBreakpoints": "Точки перелома (нет штрафа → максимум)",
+            "xidCalibration": "Штраф по возрасту XID начинается на autovacuum_freeze_max_age (200 M), достигает 80 на vacuum_failsafe_age (1.6 B) и 100 на стене останова ~2.1 B; relfrozenxid учитывается той же кривой через max(datfrozenxid, relfrozenxid).",
+            "rulesTitle": "Правила и severity",
+            "rulesDescription": "Каждое правило срабатывает при пересечении дискретного порога LOW / MEDIUM / HIGH. Instance-only категории скрываются при drill-down на конкретную базу, вся категория maintenance скрывается на standby.",
+            "ruleNotes": {
+                "high_connection_ratio": "count(*) из pg_stat_activity / max_connections — запас до отказа в новых соединениях.",
+                "idle_in_transaction": "Сессии со state='idle in transaction'. Каждая держит блокировки и пинит горизонт MVCC.",
+                "long_running_transaction": "now() - xact_start самой долгой транзакции — усиливают bloat, мешают замораживанию.",
+                "low_cache_hit_ratio": "heap_blks_hit / (heap_blks_hit + heap_blks_read) по pg_statio_user_tables, % — доля чтений из shared_buffers.",
+                "track_io_timing_disabled": "GUC выключен — нет timing'ов I/O в pg_stat_statements / EXPLAIN ANALYZE.",
+                "high_max_dead_ratio": "Худший по таблицам n_dead_tup / (n_live_tup + n_dead_tup), % — autovacuum не справляется.",
+                "high_avg_dead_ratio": "То же отношение, усреднённое по таблицам с >1000 живых строк — фоновый bloat.",
+                "many_bloated_tables": "Число таблиц с долей dead выше триггера autovacuum.",
+                "low_hot_update_ratio": "n_tup_hot_upd / n_tup_upd — низкая доля означает рост индексов из-за UPDATE.",
+                "high_newpage_update_ratio": "PG 16+: доля UPDATE, разорвавших HOT-цепочку.",
+                "replication_lag_time": "EXTRACT(EPOCH FROM replay_lag) худшего standby — отставание по WAL-replay.",
+                "replication_lag_bytes": "pg_current_wal_lsn() - replay_lsn — хвост WAL для применения.",
+                "disconnected_replicas": "Реплики из dasha.yaml, которых нет в pg_stat_replication.",
+                "xid_wraparound_risk": "max(age(datfrozenxid)) — транзакций до wraparound. 200M — должен идти anti-wraparound autovacuum, 2B — read-only.",
+                "stale_vacuum": "Дней с последнего last_(auto)vacuum — сигнал застрявшего autovacuum.",
+                "tables_never_vacuumed": "Таблицы с last_vacuum IS NULL AND last_autovacuum IS NULL.",
+                "autovacuum_disabled": "Глобальный autovacuum=off — bloat и XID растут бесконтрольно.",
+                "track_counts_disabled": "track_counts=off — у autovacuum нет статистики для принятия решений.",
+                "tables_with_autovacuum_off": "Таблицы с autovacuum_enabled=false в reloptions.",
+                "relfrozenxid_age_outlier": "Худший age(relfrozenxid) по таблицам — потабличная версия XID-риска.",
+                "stale_planner_stats": "n_mod_since_analyze велик относительно n_live_tup — статистика планировщика устарела.",
+                "horizon_lag_xids": "txid_current() - min(backend_xmin) — сколько строк VACUUM не может убрать.",
+                "requested_checkpoint_ratio": "checkpoints_req / total — высокая доля = max_wal_size мал или всплеск записи.",
+                "wal_level_minimal_with_replicas": "wal_level=minimal не даёт физическую репликацию — реплики молча сломаны.",
+                "wal_level_logical_without_publications": "wal_level=logical, но pg_publication пуст — лишний WAL впустую.",
+                "active_lock_waiters": "Сессии с wait_event_type='Lock' — заблокированы прямо сейчас.",
+                "longest_lock_wait_seconds": "EXTRACT(EPOCH FROM now() - state_change) самого долгого Lock-wait.",
+                "ungranted_locks": "Строки в pg_locks с granted=false — очередь за держателем.",
+                "deadlocks_rate": "Накопительный счётчик deadlocks с pg_stat_database_reset — без per-day полезен факт «>0».",
+                "lock_pool_saturation": "count(*) из pg_locks / (max_connections × max_locks_per_transaction)."
+            },
+            "drilldownTitle": "Drill down (детализация по базам)",
+            "drilldown": "В таблице «Базы данных» по каждой БД собраны те же метрики, что и для инстанса: cache hit ratio, dead tuples, давность вакуума. Кликните по строке — выбранная база станет фильтром: движок правил пересчитается в её контексте, instance-only категории (Connections / Replication / Horizon / WAL / Locks) при этом скрываются.",
+            "penaltyPoints": {
+                "connection_ratio": "0.60 → 0.80 → 0.95+",
+                "idle_in_tx": "+5 / шт., max 30",
+                "longest_transaction": ">300 с, max 20",
+                "cache_hit_ratio": "≥95 → ≥90 → ≥85 → ниже",
+                "max_dead_ratio": "≤20 → 20–30 → >30",
+                "avg_dead_ratio": ">15 → +до 30",
+                "tables_high_bloat": ">5 → +до 30",
+                "max_replay_lag": ">10 с → max",
+                "max_lag_bytes": ">16 МиБ → max",
+                "disconnected_replicas": "+25 / реплика",
+                "max_xid_age": "200 M → 1.6 B → 2.1 B",
+                "max_vacuum_age_hours": ">168 → >504 → >1440 ч",
+                "tables_never_vacuumed": "+5 / шт., max 20",
+                "horizon_lag_xids": "1 M → 10 M → 100 M",
+                "requested_checkpoint_ratio": "≥5 % → ≥10 % → ≥20 %",
+                "penalty_locks": "накопительный",
+                "track_io_timing": "выкл → 5 баллов",
+                "hot_update_ratio": "<0.80 → <0.65 → <0.50",
+                "newpage_update_ratio": ">0.05 → >0.10 → >0.20",
+                "tables_with_autovacuum_off": "+3 / шт., max 15",
+                "stale_planner_stats": "+2 / шт., max 15",
+                "autovacuum_track_counts": "выкл → насыщает категорию",
+                "wal_level_mismatch": "minimal+реплики 80; logical+нет слота 5"
+            },
+            "ruleThresholds": {
+                "high_connection_ratio": "≥0.70 / ≥0.85 / ≥0.95",
+                "idle_in_transaction": "≥2 / ≥5 / ≥10",
+                "long_running_transaction": "≥300 / ≥600 / ≥1800 с",
+                "low_cache_hit_ratio": "<95 / <90 / <85 %",
+                "track_io_timing_disabled": "LOW",
+                "high_max_dead_ratio": "≥10 / ≥20 / ≥30 %",
+                "high_avg_dead_ratio": "≥5 / ≥15 / ≥25 %",
+                "many_bloated_tables": "≥5 / ≥10 / ≥20",
+                "low_hot_update_ratio": "<0.80 / <0.65 / <0.50",
+                "high_newpage_update_ratio": "≥0.05 / ≥0.10 / ≥0.20 (PG 16+)",
+                "replication_lag_time": "≥10 / ≥60 / ≥300 с",
+                "replication_lag_bytes": "≥16 МиБ / ≥256 МиБ / ≥1 ГиБ",
+                "disconnected_replicas": "≥1 / ≥2 / ≥3",
+                "xid_wraparound_risk": "≥150 M / ≥200 M / ≥1.6 B",
+                "stale_vacuum": "≥7 / ≥21 / ≥60 дней",
+                "tables_never_vacuumed": "≥1 / ≥2 / ≥5",
+                "autovacuum_disabled": "HIGH",
+                "track_counts_disabled": "HIGH",
+                "tables_with_autovacuum_off": "≥1 / ≥5 / ≥20",
+                "relfrozenxid_age_outlier": "≥200 M / ≥500 M / ≥1 B",
+                "stale_planner_stats": "≥3 / ≥10 / ≥30",
+                "horizon_lag_xids": "≥1 M / ≥10 M / ≥100 M",
+                "requested_checkpoint_ratio": "≥5 / ≥10 / ≥20 %",
+                "wal_level_minimal_with_replicas": "HIGH",
+                "wal_level_logical_without_publications": "LOW",
+                "active_lock_waiters": "≥1 / ≥3 / ≥10",
+                "longest_lock_wait_seconds": "≥10 / ≥30 / ≥60 с",
+                "ungranted_locks": "≥2 / ≥5 / ≥15",
+                "deadlocks_rate": "LOW при >0",
+                "lock_pool_saturation": "≥0.4 / ≥0.6 / ≥0.8"
+            }
+        },
+        "databases": {
+            "title": "Базы данных",
+            "headers": {
+                "database": "База",
+                "size": "Размер",
+                "score": "Score"
+            },
+            "worstHint": "Самая проблемная БД: {db} (score {score}). Кликните по строке для детализации."
+        },
+        "weights": {
+            "sectionTitle": "Настройка весов",
+            "tooltip": "Веса категорий нормализуются к 100%. Полезно, например, для реплики, где репликация важнее производительности.",
+            "source": {
+                "default": "По умолчанию",
+                "override": "Кластерный override"
+            },
+            "readonlyHint": "Изменение весов доступно только администратору.",
+            "saveBtn": "Сохранить",
+            "resetBtn": "Сбросить к дефолтам",
+            "updatedAt": "Обновлено: {ts}"
+        },
+        "inline": {
+            "title": "Детализация",
+            "pickDatabase": "Выберите базу в селекторе вверху — это per-DB запрос.",
+            "empty": "Запрос вернул пустой результат — проблема не воспроизводится сейчас.",
+            "col": {
+                "database": "База",
+                "xidAge": "Возраст XID",
+                "schema": "Схема",
+                "table": "Таблица",
+                "reloptions": "reloptions",
+                "updates": "UPDATE",
+                "hotUpdates": "HOT-UPDATE",
+                "hotRatio": "HOT-ratio",
+                "liveTuples": "Live tuples",
+                "deadTuples": "Dead tuples",
+                "deadRatio": "Dead ratio",
+                "username": "Пользователь",
+                "state": "State",
+                "xactDuration": "Длительность транзакции",
+                "query": "Запрос"
+            },
+            "unit": {
+                "seconds": "с"
+            }
+        },
+        "recommendations": {
+            "title": "Рекомендации",
+            "openRelated": "Перейти",
+            "showHowTo": "Что делать",
+            "hideHowTo": "Свернуть",
+            "copy": "Копировать",
+            "copied": "Скопировано",
+            "high_connection_ratio": {
+                "title": "Высокая загрузка connection pool",
+                "short": "Используется {total} из {max_connections} соединений.",
+                "detail": "Проверьте, не утекают ли соединения в приложении (пул не закрывает их вовремя). При устойчивом росте увеличьте max_connections или внедрите pgbouncer."
+            },
+            "idle_in_transaction": {
+                "title": "Висящие idle in transaction",
+                "short": "Соединений в состоянии idle in transaction (>30с): {metric_value}.",
+                "detail": "Транзакции, забытые приложением, удерживают блокировки и мешают autovacuum. Проверьте логи приложения и идемпотентность транзакций."
+            },
+            "long_running_transaction": {
+                "title": "Долгая открытая транзакция",
+                "short": "Самая старая транзакция работает уже {metric_value} с.",
+                "detail": "Найдите её через pg_stat_activity и решите, нужно ли её прервать (pg_terminate_backend)."
+            },
+            "low_cache_hit_ratio": {
+                "title": "Низкий cache hit ratio",
+                "short": "Cache hit ratio = {metric_value}%.",
+                "detail": "Увеличьте shared_buffers (обычно 25% от RAM). Также проверьте таблицы с большим числом disk reads."
+            },
+            "high_max_dead_ratio": {
+                "title": "Большой dead tuples ratio в таблице",
+                "short": "Максимальный dead ratio: {metric_value}%.",
+                "detail": "Запустите VACUUM ANALYZE для проблемной таблицы. Найдите её через pg_stat_user_tables."
+            },
+            "high_avg_dead_ratio": {
+                "title": "Высокий средний dead ratio по базе",
+                "short": "Средний dead ratio: {metric_value}%.",
+                "detail": "Autovacuum не справляется. Пересмотрите autovacuum_vacuum_scale_factor и autovacuum_vacuum_cost_limit."
+            },
+            "many_bloated_tables": {
+                "title": "Много таблиц с bloat",
+                "short": "Таблиц с dead ratio > 20%: {metric_value}.",
+                "detail": "Перейдите в раздел Tables → Bloat и запустите VACUUM по списку."
+            },
+            "replication_lag_time": {
+                "title": "Большой replication lag (время)",
+                "short": "Максимальный replay lag: {metric_value} с.",
+                "detail": "Проверьте нагрузку на реплику (тяжёлые SELECT), сеть и wal_receiver_timeout."
+            },
+            "replication_lag_bytes": {
+                "title": "Большой replication lag (байты)",
+                "short": "Максимальный replication lag по байтам.",
+                "detail": "Если lag растёт, увеличьте max_wal_size или ускорьте применение WAL на реплике."
+            },
+            "disconnected_replicas": {
+                "title": "Отключённые реплики",
+                "short": "Реплик в состоянии не streaming: {metric_value}.",
+                "detail": "Проверьте сетевой доступ от реплики к primary и статус walreceiver."
+            },
+            "xid_wraparound_risk": {
+                "title": "Риск XID wraparound",
+                "short": "Возраст XID: {metric_value}.",
+                "detail": "Пороги соответствуют механикам PG: 150M — начинается агрессивная заморозка (vacuum_freeze_table_age), 200M — срабатывает аварийная автоочистка (autovacuum_freeze_max_age), 1.6B — включается failsafe-режим без очистки индексов (vacuum_failsafe_age). При 2B база уйдёт в read-only. Запустите VACUUM FREEZE для проблемных БД.",
+                "sql": "-- проверить возраст XID по базам\nSELECT datname, age(datfrozenxid) AS xid_age\nFROM pg_database\nORDER BY xid_age DESC;"
+            },
+            "autovacuum_disabled": {
+                "title": "Автоочистка выключена",
+                "short": "Параметр autovacuum=off. Без неё мёртвые версии будут копиться без ручного вмешательства.",
+                "detail": "Включите autovacuum в postgresql.conf или через ALTER SYSTEM. Без этого база обречена на ручной режим VACUUM, индексы и таблицы будут раздуваться.",
+                "sql": "ALTER SYSTEM SET autovacuum = on;\nSELECT pg_reload_conf();"
+            },
+            "track_counts_disabled": {
+                "title": "track_counts выключен",
+                "short": "Без статистики использования автоочистка не сможет решить, какие таблицы чистить.",
+                "detail": "Параметр track_counts критичен для работы autovacuum: он определяет «активные» базы и таблицы. Включите его.",
+                "sql": "ALTER SYSTEM SET track_counts = on;\nSELECT pg_reload_conf();"
+            },
+            "tables_with_autovacuum_off": {
+                "title": "Таблицы с выключенной автоочисткой",
+                "short": "Найдено {metric_value} таблиц с autovacuum_enabled=false на уровне storage параметров.",
+                "detail": "Обычно так не делают намеренно — это часто остаточные настройки от старых миграций или экспериментов. Проверьте, что отключение оправдано.",
+                "sql": "SELECT relname, reloptions\nFROM pg_class\nWHERE 'autovacuum_enabled=false' = ANY(reloptions);"
+            },
+            "relfrozenxid_age_outlier": {
+                "title": "Старая таблица без заморозки",
+                "short": "Максимальный возраст relfrozenxid: {metric_value}.",
+                "detail": "В кластере есть таблицы, которые давно не обрабатывались autovacuum freeze. Найдите их и запустите VACUUM FREEZE."
+            },
+            "horizon_lag_xids": {
+                "title": "Горизонт удерживается долгой транзакцией",
+                "short": "Горизонт отстал на {metric_value} транзакций — очистка не может удалить мёртвые версии.",
+                "detail": "Долгие транзакции (Repeatable Read или idle in transaction) удерживают горизонт БД. Очистка пропускает мёртвые версии «но они ещё не подлежат удалению». Найдите процесс с минимальным backend_xmin и завершите.",
+                "sql": "SELECT pid, usename, state, query, now() - xact_start AS duration\nFROM pg_stat_activity\nWHERE backend_xmin IS NOT NULL\nORDER BY backend_xmin\nLIMIT 5;"
+            },
+            "requested_checkpoint_ratio": {
+                "title": "Слишком частые внеплановые checkpoints",
+                "short": "Доля requested checkpoints: {metric_pct}% (timed={timed}, requested={requested}).",
+                "detail": "Внеплановые checkpoint'ы происходят при заполнении max_wal_size. Увеличьте max_wal_size или checkpoint_timeout. Здоровый показатель — практически все checkpoint'ы по расписанию (timed)."
+            },
+            "track_io_timing_disabled": {
+                "title": "track_io_timing выключен",
+                "short": "Без него недоступны детальные тайминги I/O в EXPLAIN ANALYZE и pg_stat_statements.",
+                "detail": "На современных ОС оверхед минимален. Включите для детального анализа I/O узких мест.",
+                "sql": "ALTER SYSTEM SET track_io_timing = on;\nSELECT pg_reload_conf();"
+            },
+            "stale_vacuum": {
+                "title": "Vacuum давно не работал",
+                "short": "Максимальный возраст vacuum: {metric_value} ч.",
+                "detail": "Если autovacuum не успевает, ужесточите autovacuum_vacuum_scale_factor для крупных таблиц."
+            },
+            "tables_never_vacuumed": {
+                "title": "Таблицы без vacuum",
+                "short": "Таблиц, не вакуумированных ни разу: {metric_value}.",
+                "detail": "Запустите VACUUM ANALYZE вручную или включите autovacuum, если он выключен на уровне таблицы."
+            },
+            "active_lock_waiters": {
+                "title": "Активные ожидания блокировок",
+                "short": "Процессов в ожидании блокировки: {metric_value}.",
+                "detail": "Снимок pg_stat_activity. Высокие значения говорят о контеншене. Найдите блокирующие процессы и решите, оборвать ли долгие транзакции."
+            },
+            "longest_lock_wait_seconds": {
+                "title": "Долгое ожидание блокировки",
+                "short": "Максимальное ожидание: {metric_value} с.",
+                "detail": "Один или несколько процессов ждут блокировки слишком долго. Возможные причины: длинная транзакция, серьёзная контеншн на горячей строке, забытая блокировка таблицы (например, после CREATE INDEX без CONCURRENTLY)."
+            },
+            "ungranted_locks": {
+                "title": "Несогласованные блокировки в очереди",
+                "short": "Строк в pg_locks с granted=false: {metric_value}.",
+                "detail": "Длина очереди ожидания. Отличается от «активных ожидающих» — один процесс может ждать несколько блокировок."
+            },
+            "deadlocks_rate": {
+                "title": "Deadlock-и",
+                "short": "Зарегистрировано deadlock-ов: {metric_value} (с момента pg_stat_reset).",
+                "detail": "Любой deadlock — признак проблемы в приложении (разный порядок захвата блокировок). Детали — в логе сервера. Это абсолютный счётчик с последнего pg_stat_database_reset; время сброса можно посмотреть в Home → Status / Stats reset."
+            },
+            "lock_pool_saturation": {
+                "title": "Lock-пул близок к лимиту",
+                "short": "Занято {total} из {capacity} ({metric_pct}%).",
+                "detail": "Размер пула тяжёлых блокировок ограничен max_locks_per_transaction × max_connections. При переполнении PostgreSQL выдаёт «out of shared memory; consider increasing max_locks_per_transaction». Увеличьте max_locks_per_transaction (требует рестарта) или уменьшите конкурентность."
+            },
+            "low_hot_update_ratio": {
+                "title": "Низкая доля HOT-обновлений",
+                "short": "HOT-ratio = {metric_pct}%.",
+                "detail": "HOT-обновление позволяет новой версии строки остаться на той же странице, не порождая записи во всех индексах. Низкая доля = индексы раздуваются, autovacuum тратит больше времени. Уменьшите fillfactor для часто обновляемых таблиц без обновления индексных столбцов (типично 70–90%) — это резервирует место для HOT-обновлений.",
+                "sql": "-- найти таблицы с большим количеством не-HOT обновлений\nSELECT schemaname, relname,\n       n_tup_upd, n_tup_hot_upd,\n       round(100.0 * n_tup_hot_upd::numeric / nullif(n_tup_upd, 0), 2) AS hot_pct\nFROM pg_stat_user_tables\nWHERE n_tup_upd > 1000\nORDER BY hot_pct NULLS FIRST\nLIMIT 20;"
+            },
+            "high_newpage_update_ratio": {
+                "title": "Частые разрывы HOT-цепочки",
+                "short": "Доля обновлений с переносом на новую страницу: {metric_pct}%.",
+                "detail": "PG 16+: счётчик n_tup_newpage_upd показывает, сколько UPDATE не уместилось на исходной странице — HOT-цепочка прервалась, в индексе появилась лишняя запись. Уменьшите fillfactor проблемной таблицы, чтобы зарезервировать место на странице."
+            },
+            "stale_planner_stats": {
+                "title": "Устаревшая статистика планировщика",
+                "short": "Таблиц с устаревшей статистикой: {metric_value}.",
+                "detail": "Эти таблицы заметно изменились с последнего ANALYZE (>50% от формулы автоанализа) и не анализировались более суток. Планировщик может выбирать неоптимальные планы. Запустите ANALYZE вручную или уменьшите autovacuum_analyze_scale_factor."
+            },
+            "wal_level_minimal_with_replicas": {
+                "title": "wal_level=minimal при наличии реплик",
+                "short": "wal_level=minimal, но подключено реплик: {replicas}.",
+                "detail": "Несовместимая конфигурация: wal_level=minimal не поддерживает streaming replication. Для работы реплик нужен replica или logical. Поменяйте параметр (требует рестарта)."
+            },
+            "wal_level_logical_without_publications": {
+                "title": "wal_level=logical без активных публикаций",
+                "short": "wal_level=logical, но активных логических слотов нет.",
+                "detail": "logical-уровень WAL даёт overhead (больше данных в журнале, медленнее VACUUM). Если логическая репликация не используется — переключите на replica."
+            }
+        }
     }
 }

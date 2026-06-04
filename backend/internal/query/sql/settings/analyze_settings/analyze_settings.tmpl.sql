@@ -46,6 +46,9 @@ SELECT 'tooManyCheckpoints', jsonb_build_object('req', num_requested::text, 'tim
   WHERE num_requested > 0.3 * num_timed
     AND num_requested / GREATEST(DATE_PART('day', now() - stats_reset)::integer, 1) > 20
 UNION ALL
-SELECT 'highMaxwrittenClean', jsonb_build_object('value', maxwritten_clean::text)
+-- Normalized per-day rate: maxwritten_clean is a since-reset counter, so an
+-- absolute threshold gives false positives on long-running servers. Matches
+-- the formula used in the 170000/ override for PG <17.
+SELECT 'highMaxwrittenClean', jsonb_build_object('value', (maxwritten_clean / GREATEST(DATE_PART('day', now() - stats_reset)::integer, 1))::text)
   FROM pg_stat_bgwriter
-  WHERE maxwritten_clean > 1000
+  WHERE maxwritten_clean / GREATEST(DATE_PART('day', now() - stats_reset)::integer, 1) > 1000

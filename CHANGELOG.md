@@ -1,5 +1,33 @@
 # Changelog
 
+## v1.1.0
+
+### Features
+- **Health Score (new top-level page `/health-score`):** a composite 0–100 metric across eight categories — `connections`, `performance`, `storage`, `replication`, `maintenance`, `horizon`, `wal_checkpoint`, `locks` — with continuous penalty functions and a parallel rules engine.
+  - 30 rules across the eight categories.
+  - **Per-database drill-down (детализация):** `GET /api/health-score/databases` returns a `DatabaseScore` per DB with the rules engine re-run in database scope. The Databases table on `/health-score` becomes the filter — clicking a row pins it as the context for the recommendation list. Instance-only categories (`connections / replication / horizon / wal_checkpoint / locks`) are hidden in DB scope. Worst-DB hint highlights the lowest score.
+  - **Auto-drop of categories without signal**, with proportional weight redistribution across the remaining categories so the score is not artificially inflated or deflated: `replication` is dropped when the instance has no replicas; `maintenance` is dropped on standbys (`pg_is_in_recovery() = true`) since autovacuum / ANALYZE can't run there and the metrics would reflect primary state.
+  - **Inline data tables for actionable rules** — five typed endpoints under `/api/common/health-score/details/*` (one per rule, conventional 2-level `internal/query/sql/common/health_score_*` layout): `high-dead-ratio-tables`, `low-hot-update-tables`, `tables-autovacuum-off`, `xid-wraparound-databases`, `horizon-blocking-sessions`. Recommendation cards render the actual offending rows instead of an opaque SQL snippet; rules whose linked Dasha page already shows the data (`/locks`, `/tables`, etc.) keep just the link.
+  - **About panel** under `/health-score`: collapsible explanation of the formula, category weights, penalty breakpoints (with an explicit definition of *breakpoint* — the metric value at which the slope changes), all 30 rules with descriptions and LOW/MEDIUM/HIGH thresholds, and the drill-down concept.
+
+
+### UX
+- **Home page restructure** (`/main`):
+  - The Health Score card is the primary view at the top, including the chips for per-database health signals merged from the former "Здоровье БД" card: `Conflicts`, `ChecksumFailures`, `RollbackRatio`, `Stats since`. The standalone `DatabaseHealthSection` component is removed.
+  - `CacheHitRates` and `WaitEvents` are placed in a single `v-row` underneath (50/50 on `md+`).
+- **Standby awareness:**
+  - The `Maintenance` menu item is hidden when the current host is a standby. Navigating to `/maintenance/<cluster>` on a replica auto-redirects to `/main` via a watcher on `pg_is_in_recovery()`.
+  - `DescribeVacuumStatsSection` on `/table-describe` skips its API fetch on standbys and renders a "look at master" hint instead — `pg_stat_user_tables.last_*vacuum` on a replica is local and does not reflect autovacuum activity.
+  - New Pinia store `instanceInfo` keyed by `cluster::host` (TTL 30s, request dedup) reuses `/api/common/instance-info` across the menu, the redirect watcher, and the vacuum-stats section.
+- **`InstanceInfo` carries `in_recovery`** end-to-end (swagger → `Result.InRecovery` → `GET /api/health-score` response).
+- **Severity thresholds recalibrated** across seven rules: `idle_in_transaction` (2/5/10 was 1/2/5), `low_cache_hit_ratio` (95/90/85 was 99/95/90), `high_max_dead_ratio` (10/20/30 was 10/20/50), `high_avg_dead_ratio` (5/15/25 was 5/10/25), `stale_vacuum` (7/21/60 days was 2/7/14), `requested_checkpoint_ratio` (5/10/20% was 5/10/30%), `low_hot_update_ratio` (<0.80/<0.65/<0.50 was <0.80/<0.60/<0.30). Lock thresholds tightened: `active_lock_waiters` (1/3/10), `ungranted_locks` (2/5/15), `deadlocks_rate` simplified to LOW-only when total > 0 (no MED/HIGH without per-day normalisation since the counter accumulates from `pg_stat_database_reset`).
+
+### Performance
+- **nginx response compression** (`gzip` and Brotli when the build provides the module) added to `deploy/images/nginx.conf.template` and `demo/nginx.conf` for JS/CSS/JSON/SVG/text. Static assets and API responses both benefit; smaller payloads especially help cold-cache loads of `/health-score`.
+
+### Docs
+- New top-level `README-health-score.md` and `README-health-score.ru.md` document the formula, weights, penalty breakpoints, all 31 rules with thresholds and what each metric measures, the drop semantics for replication/maintenance, and the per-database drill-down behaviour.
+
 ## v1.0.2
 
 ### Bug Fixes

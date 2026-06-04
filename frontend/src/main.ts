@@ -4,6 +4,7 @@ import piniaPluginPersistedstate from 'pinia-plugin-persistedstate'
 
 import { createI18n } from 'vue-i18n'
 
+import deDE from './locales/de_DE.json'
 import ruRU from './locales/ru_RU.json'
 import createVuetify from './plugins/vuetify'
 
@@ -21,7 +22,8 @@ const i18n = createI18n({
     locale: 'ru_RU',
     fallbackLocale: 'en',
     messages: {
-        'ru_RU': ruRU
+        'ru_RU': ruRU,
+        'de_DE': deDE
     },
     pluralRules: {
         'ru_RU': (choice: number) => {
