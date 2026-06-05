@@ -18,7 +18,7 @@
     "format": "prettier --write src/"
   },
   "dependencies": {
-    "@fontsource/roboto": "^5.2.8",
+    "@fontsource/roboto": "^5.2.10",
     "@tanstack/vue-query": "^5.90.5",
     "chart.js": "^4.5.1",
     "highlight.js": "^11.11.1",
