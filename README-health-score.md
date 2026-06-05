@@ -204,4 +204,3 @@ health_score:
 
 Datasource auth supports `token_from_env` (bearer) and `username` + `password_from_env` (basic), resolved from the environment like the other `*_from_env` secrets — so credentials are injected from a Secret rather than stored inline. `type: none` (default) needs no credentials.
 
-Design details: `plans/health-score-history-{requirements,design,workflow}.md`.

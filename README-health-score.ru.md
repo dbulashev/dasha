@@ -204,6 +204,5 @@ health_score:
 
 Auth datasource поддерживает `token_from_env` (bearer) и `username` + `password_from_env` (basic) — резолвятся из окружения как остальные `*_from_env`-секреты, поэтому креды инжектятся из Secret, а не лежат инлайн. `type: none` (по умолчанию) кредов не требует.
 
-Детали дизайна: `plans/health-score-history-{requirements,design,workflow}.md`.
 
 
