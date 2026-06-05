@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+
+	"github.com/dbulashev/dasha/internal/metrics"
 )
 
 var (
@@ -29,12 +31,12 @@ type AuthToken struct {
 }
 
 type OIDCConfig struct {
-	IssuerURL           string   `mapstructure:"issuer_url"`
-	ClientID            string   `mapstructure:"client_id"`
-	ClientSecret        string   `mapstructure:"client_secret"`
-	ClientSecretFromEnv string   `mapstructure:"client_secret_from_env"`
-	Scopes              []string `mapstructure:"scopes"`
-	RedirectURL         string   `mapstructure:"redirect_url"`
+	IssuerURL           string            `mapstructure:"issuer_url"`
+	ClientID            string            `mapstructure:"client_id"`
+	ClientSecret        string            `mapstructure:"client_secret"`
+	ClientSecretFromEnv string            `mapstructure:"client_secret_from_env"`
+	Scopes              []string          `mapstructure:"scopes"`
+	RedirectURL         string            `mapstructure:"redirect_url"`
 	RoleClaim           string            `mapstructure:"role_claim"`   // default: "realm_access.roles"
 	RoleMapping         map[string]string `mapstructure:"role_mapping"` // e.g. {"dba_team": "admin", "dev_team": "viewer"}
 }
@@ -139,13 +141,31 @@ type DiscoveryEntry struct {
 
 // StorageConfig holds optional snapshot storage database settings.
 type StorageConfig struct {
+	// DSN is the service connection: regular reads/writes (DML). In hardened
+	// installs this role has no DDL privileges.
 	DSN        string `mapstructure:"dsn"`
 	DSNFromEnv string `mapstructure:"dsn_from_env"`
+
+	// DSNMigration is a privileged connection allowed to run DDL — migrations
+	// (CREATE/ALTER tables) and daily partition creation. Falls back to DSN when
+	// empty, so single-role installs keep working unchanged.
+	DSNMigration        string `mapstructure:"dsn_migration"`
+	DSNMigrationFromEnv string `mapstructure:"dsn_migration_from_env"`
 }
 
 // Enabled returns true if the storage DSN is configured.
 func (s *StorageConfig) Enabled() bool {
 	return s.DSN != ""
+}
+
+// MigrationDSN returns the DDL-capable connection string, falling back to the
+// service DSN when no dedicated migration role is configured.
+func (s *StorageConfig) MigrationDSN() string {
+	if s.DSNMigration != "" {
+		return s.DSNMigration
+	}
+
+	return s.DSN
 }
 
 // Config is the top-level application configuration.
@@ -165,6 +185,14 @@ type Config struct {
 	// EnableQueryStatsReset allows resetting pg_stat_statements statistics via the UI.
 	// Disabled by default for safety.
 	EnableQueryStatsReset bool `mapstructure:"enable_query_stats_reset"`
+
+	// HealthScore groups Health Score settings (metrics-backed mode).
+	HealthScore HealthScoreConfig `mapstructure:"health_score"`
+}
+
+// HealthScoreConfig groups Health Score settings.
+type HealthScoreConfig struct {
+	Metrics metrics.Config `mapstructure:"metrics"`
 }
 
 // Clusters is the interface for obtaining the current list of clusters.

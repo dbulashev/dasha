@@ -1,0 +1,66 @@
+# Additive overlay for the metrics-backed Health Score demo (P5.T5.1).
+# Brings up VictoriaMetrics + pgSCV (PG internals + system collector) + pgbouncer
+# on top of the base demo. Use together with the base file:
+#   docker compose -f demo/docker-compose.yaml -f demo/docker-compose.metrics.yaml up -d
+# (mk/demo.mk wires both files automatically.)
+#
+# NOTE: first-run items to confirm in the lab (the point of T5.1):
+#   - exact labels pgSCV emits for static services vs. target_labels;
+#   - whether system-collector node_* metrics carry per-service labels or are
+#     host-scoped (affects host-role label matching);
+#   - pgbouncer admin auth for the pgscv user.
+services:
+  victoria-metrics:
+    image: victoriametrics/victoria-metrics:v1.102.1
+    container_name: dasha-vm
+    command:
+      - "-promscrape.config=/etc/vm/scrape.yml"
+      - "-retentionPeriod=30d"
+    volumes:
+      - ./metrics/vmscrape.yml:/etc/vm/scrape.yml:ro
+    ports:
+      - "8428:8428" # VM UI / API (http://localhost:8428/vmui)
+    networks:
+      - dasha-demo
+    restart: unless-stopped
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: dasha-pgbouncer
+    environment:
+      LISTEN_PORT: "6432" # edoburu defaults to 5432; pgSCV expects pgbouncer on 6432
+      DB_HOST: pg18-master
+      DB_PORT: "5432"
+      DB_USER: demo
+      DB_PASSWORD: demo
+      POOL_MODE: transaction
+      AUTH_TYPE: scram-sha-256
+      ADMIN_USERS: demo
+      STATS_USERS: demo
+    depends_on:
+      - pg18-master
+    networks:
+      - dasha-demo
+    restart: unless-stopped
+
+  pgscv:
+    # Built from pgSCV sources (cherts/pgscv publishes no arm64 image). Uses the
+    # upstream repo as build context so it works on any arch (native Go build).
+    # Alternatives: local sources -> `context: ../../pgscv`; published amd64
+    # image -> `image: cherts/pgscv:latest` + `platform: linux/amd64` (emulated).
+    build:
+      context: https://github.com/CHERTS/pgscv.git
+    image: dasha/pgscv:local
+    container_name: dasha-pgscv
+    privileged: true # system collector needs host visibility
+    command:
+      - "--config-file=/etc/pgscv/pgscv.yaml"
+    volumes:
+      - ./metrics/pgscv.yaml:/etc/pgscv/pgscv.yaml:ro
+    depends_on:
+      - pg18-master
+      - pg17-master
+      - pgbouncer
+    networks:
+      - dasha-demo
+    restart: unless-stopped

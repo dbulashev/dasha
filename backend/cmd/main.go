@@ -66,7 +66,8 @@ func migrateExec(cmd *cobra.Command, _ []string) error {
 		logger.Fatal("storage.dsn is not configured")
 	}
 
-	return storage.Migrate(cmd.Context(), cfg.Storage.DSN, logger)
+	// Use the DDL-capable connection (dsn_migration), falling back to dsn.
+	return storage.Migrate(cmd.Context(), cfg.Storage.MigrationDSN(), logger)
 }
 
 func dashaExec(cmd *cobra.Command, _ []string) error {
@@ -114,7 +115,7 @@ func dashaExec(cmd *cobra.Command, _ []string) error {
 		defer st.Close()
 	}
 
-	d := http.NewDashaHandlers(container.Config(), container.Repository(), st)
+	d := http.NewDashaHandlers(container.Config(), container.Repository(), st, container.Metrics())
 	svc := http.New(d, mw, authMW.RequireHTTPS, authMW.RateLimit, authMW.Auth, authMW.Casbin, logger)
 
 	if container.Config().Auth.Mode == config.AuthModeOIDC {

@@ -44,7 +44,9 @@ import type {
   GetFksPossibleNullsParams,
   GetFksPossibleSimilarParams,
   GetHealthScoreDatabasesParams,
+  GetHealthScoreDatasourceStatusParams,
   GetHealthScoreHighDeadRatioTablesParams,
+  GetHealthScoreHistoryParams,
   GetHealthScoreHorizonBlockingSessionsParams,
   GetHealthScoreLowHotUpdateTablesParams,
   GetHealthScoreParams,
@@ -106,7 +108,9 @@ import type {
   GetTablesTopKBySizeParams,
   HealthScore,
   HealthScoreDatabases,
+  HealthScoreDatasourceStatus,
   HealthScoreHighDeadRatioTable,
+  HealthScoreHistory,
   HealthScoreHorizonBlockingSession,
   HealthScoreLowHotUpdateTable,
   HealthScoreRecommendations,
@@ -1115,7 +1119,7 @@ export function useGetHealthScoreRecommendations<
 }
 
 /**
- * Inline detail for the xid_wraparound_risk recommendation: per-database transaction-ID age, top 10 by age. Instance-wide.
+ * Inline detail for the xid_wraparound_risk recommendation: per-database transaction-ID age, ordered by age descending (paged). Instance-wide.
  */
 export type getHealthScoreXidWraparoundDatabasesResponse200 = {
   data: HealthScoreXidWraparoundDatabase[]
@@ -1845,6 +1849,237 @@ export function useGetHealthScoreDatabases<
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetHealthScoreDatabasesQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Metrics datasource label-matching diagnostics: for each role (core / pooler / host) reports the chosen provider, the rendered series selector and how many series matched (exactly one expected). Returns enabled=false when the metrics-backed mode is off.
+ */
+export type getHealthScoreDatasourceStatusResponse200 = {
+  data: HealthScoreDatasourceStatus
+  status: 200
+}
+
+export type getHealthScoreDatasourceStatusResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getHealthScoreDatasourceStatusResponseSuccess =
+  getHealthScoreDatasourceStatusResponse200 & {
+    headers: Headers
+  }
+export type getHealthScoreDatasourceStatusResponseError =
+  getHealthScoreDatasourceStatusResponse404 & {
+    headers: Headers
+  }
+
+export type getHealthScoreDatasourceStatusResponse =
+  | getHealthScoreDatasourceStatusResponseSuccess
+  | getHealthScoreDatasourceStatusResponseError
+
+export const getGetHealthScoreDatasourceStatusUrl = (
+  params: GetHealthScoreDatasourceStatusParams,
+) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/common/health-score/datasource/status?${stringifiedParams}`
+    : `/api/common/health-score/datasource/status`
+}
+
+export const getHealthScoreDatasourceStatus = async (
+  params: GetHealthScoreDatasourceStatusParams,
+  options?: RequestInit,
+): Promise<getHealthScoreDatasourceStatusResponse> => {
+  return customFetch<getHealthScoreDatasourceStatusResponse>(
+    getGetHealthScoreDatasourceStatusUrl(params),
+    {
+      ...options,
+      method: 'GET',
+    },
+  )
+}
+
+export const getGetHealthScoreDatasourceStatusQueryKey = (
+  params?: MaybeRef<GetHealthScoreDatasourceStatusParams>,
+) => {
+  return [
+    'api',
+    'common',
+    'health-score',
+    'datasource',
+    'status',
+    ...(params ? [params] : []),
+  ] as const
+}
+
+export const getGetHealthScoreDatasourceStatusQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHealthScoreDatasourceStatus>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreDatasourceStatusParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreDatasourceStatus>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetHealthScoreDatasourceStatusQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHealthScoreDatasourceStatus>>> = ({
+    signal,
+  }) => getHealthScoreDatasourceStatus(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHealthScoreDatasourceStatus>>,
+    TError,
+    TData
+  >
+}
+
+export type GetHealthScoreDatasourceStatusQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHealthScoreDatasourceStatus>>
+>
+export type GetHealthScoreDatasourceStatusQueryError = NotFoundResponse
+
+export function useGetHealthScoreDatasourceStatus<
+  TData = Awaited<ReturnType<typeof getHealthScoreDatasourceStatus>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreDatasourceStatusParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreDatasourceStatus>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHealthScoreDatasourceStatusQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Metrics-backed score trend for [from, to]: per-timestamp overall score, per-category scores and latency, with a seasonal (hour-of-week) baseline and detected dips. Requires the metrics datasource (404 otherwise).
+ */
+export type getHealthScoreHistoryResponse200 = {
+  data: HealthScoreHistory
+  status: 200
+}
+
+export type getHealthScoreHistoryResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getHealthScoreHistoryResponseSuccess = getHealthScoreHistoryResponse200 & {
+  headers: Headers
+}
+export type getHealthScoreHistoryResponseError = getHealthScoreHistoryResponse404 & {
+  headers: Headers
+}
+
+export type getHealthScoreHistoryResponse =
+  | getHealthScoreHistoryResponseSuccess
+  | getHealthScoreHistoryResponseError
+
+export const getGetHealthScoreHistoryUrl = (params: GetHealthScoreHistoryParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/common/health-score/history?${stringifiedParams}`
+    : `/api/common/health-score/history`
+}
+
+export const getHealthScoreHistory = async (
+  params: GetHealthScoreHistoryParams,
+  options?: RequestInit,
+): Promise<getHealthScoreHistoryResponse> => {
+  return customFetch<getHealthScoreHistoryResponse>(getGetHealthScoreHistoryUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetHealthScoreHistoryQueryKey = (
+  params?: MaybeRef<GetHealthScoreHistoryParams>,
+) => {
+  return ['api', 'common', 'health-score', 'history', ...(params ? [params] : [])] as const
+}
+
+export const getGetHealthScoreHistoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHealthScoreHistory>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreHistoryParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getHealthScoreHistory>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetHealthScoreHistoryQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHealthScoreHistory>>> = ({ signal }) =>
+    getHealthScoreHistory(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHealthScoreHistory>>,
+    TError,
+    TData
+  >
+}
+
+export type GetHealthScoreHistoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHealthScoreHistory>>
+>
+export type GetHealthScoreHistoryQueryError = NotFoundResponse
+
+export function useGetHealthScoreHistory<
+  TData = Awaited<ReturnType<typeof getHealthScoreHistory>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreHistoryParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getHealthScoreHistory>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHealthScoreHistoryQueryOptions(params, options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
 

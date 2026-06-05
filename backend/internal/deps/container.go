@@ -12,6 +12,7 @@ import (
 	"github.com/dbulashev/dasha/internal/auth"
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/discovery"
+	"github.com/dbulashev/dasha/internal/metrics"
 	"github.com/dbulashev/dasha/internal/repository"
 )
 
@@ -56,7 +57,48 @@ func NewContainer() *Container {
 		return provideDiscovery(cfg, clusters, logger), nil
 	})
 
+	do.Provide(i, func(i *do.Injector) (*metrics.Service, error) {
+		cfg := do.MustInvoke[*config.Config](i)
+		clusters := do.MustInvoke[config.Clusters](i)
+
+		return metrics.NewService(cfg.HealthScore.Metrics, clusterMetaProvider{clusters: clusters})
+	})
+
 	return &Container{i: i}
+}
+
+// clusterMetaProvider adapts the cluster registry to metrics.MetadataProvider so
+// the matcher can auto-map service-discovered clusters that the static targets[]
+// list does not enumerate. Lives here (not in metrics) to keep the metrics
+// package free of a config import (config already imports metrics).
+type clusterMetaProvider struct {
+	clusters config.Clusters
+}
+
+func (p clusterMetaProvider) LookupMeta(cluster, instance string) (metrics.DiscoveryMeta, bool) {
+	all, err := p.clusters.Get(context.Background())
+	if err != nil {
+		return metrics.DiscoveryMeta{}, false
+	}
+
+	for i := range all {
+		c := &all[i]
+		if string(c.Name) != cluster {
+			continue
+		}
+
+		for _, h := range c.Hosts {
+			if string(h) == instance {
+				return metrics.DiscoveryMeta{
+					Source:     c.Source,
+					ProviderID: c.ProviderID,
+					Labels:     c.Labels,
+				}, true
+			}
+		}
+	}
+
+	return metrics.DiscoveryMeta{}, false
 }
 
 func (c *Container) Config() *config.Config {
@@ -77,6 +119,12 @@ func (c *Container) Repository() repository.Repository {
 
 func (c *Container) Discovery() *discovery.Engine {
 	return do.MustInvoke[*discovery.Engine](c.i)
+}
+
+// Metrics returns the metrics-backed Health Score service, or nil when the
+// feature is disabled (the returned *metrics.Service answers Enabled()==false).
+func (c *Container) Metrics() *metrics.Service {
+	return do.MustInvoke[*metrics.Service](c.i)
 }
 
 func (c *Container) AuthMiddlewares(ctx context.Context) (*auth.Middlewares, error) {
@@ -149,6 +197,24 @@ func provideConfig() (*config.Config, error) {
 
 	if c.Storage.DSNFromEnv != "" {
 		c.Storage.DSN = os.Getenv(c.Storage.DSNFromEnv)
+	}
+
+	if c.Storage.DSNMigrationFromEnv != "" {
+		c.Storage.DSNMigration = os.Getenv(c.Storage.DSNMigrationFromEnv)
+	}
+
+	if env := c.HealthScore.Metrics.Datasource.Auth.TokenFromEnv; env != "" {
+		c.HealthScore.Metrics.Datasource.Auth.Token = os.Getenv(env)
+	}
+
+	if env := c.HealthScore.Metrics.Datasource.Auth.PasswordFromEnv; env != "" {
+		c.HealthScore.Metrics.Datasource.Auth.Password = os.Getenv(env)
+	}
+
+	c.HealthScore.Metrics = c.HealthScore.Metrics.WithDefaults()
+
+	if err := c.HealthScore.Metrics.Validate(); err != nil {
+		return nil, fmt.Errorf("provideConfig | health_score.metrics: %w", err)
 	}
 
 	if err := c.Auth.Validate(); err != nil {

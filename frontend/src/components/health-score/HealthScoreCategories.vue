@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { HealthScoreCategory } from '@/api/models/index'
-import { fmtBytes } from '@/utils/format'
+import { fmtBytes, fmtNum } from '@/utils/format'
 
 const props = defineProps<{
   categories: HealthScoreCategory[]
@@ -53,10 +53,11 @@ function formatDetail(key: string, value: number): string {
   if (key === 'wal_level_minimal_with_replicas') return t('healthScore.details.walMinimalReplicas')
   if (key === 'wal_level_logical_without_slots') return t('healthScore.details.walLogicalNoSlots')
   if (key === 'cache_hit_ratio') return value.toFixed(2) + '%'
-  if (key.endsWith('_ratio')) return value.toFixed(3)
+  if (key === 'disk_used_ratio') return (value * 100).toFixed(1) + '%'
+  if (key.endsWith('_ratio')) return value.toFixed(2)
   if (key === 'max_lag_bytes') return fmtBytes(value)
   if (key.endsWith('_seconds') || key.endsWith('_hours')) return value.toFixed(1)
-  return String(value)
+  return String(fmtNum(value))
 }
 
 function detailLabel(key: string): string {

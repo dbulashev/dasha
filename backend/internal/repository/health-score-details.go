@@ -14,6 +14,7 @@ import (
 func (p *PgxPool) GetHealthScoreXidWraparoundDatabases(
 	ctx context.Context,
 	clusterName, instanceName string,
+	limit, offset int,
 ) ([]dto.HealthScoreXidWraparoundDatabase, error) {
 	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, "")
 	if err != nil {
@@ -33,7 +34,7 @@ func (p *PgxPool) GetHealthScoreXidWraparoundDatabases(
 		return nil, fmt.Errorf("query.Get | %w", err)
 	}
 
-	rows, err := pool.Query(ctx, qStr)
+	rows, err := pool.Query(ctx, qStr, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("pool.Query | %w", err)
 	}
@@ -58,9 +59,10 @@ func (p *PgxPool) GetHealthScoreXidWraparoundDatabases(
 func (p *PgxPool) GetHealthScoreTablesAutovacuumOff(
 	ctx context.Context,
 	clusterName, instanceName, databaseName string,
+	limit, offset int,
 ) ([]dto.HealthScoreTableReloption, error) {
 	return p.scanTableReloptions(ctx, clusterName, instanceName, databaseName,
-		enums.QueryCommonHealthScoreTablesAutovacuumOff)
+		enums.QueryCommonHealthScoreTablesAutovacuumOff, limit, offset)
 }
 
 // GetHealthScoreLowHotUpdateTables lists tables with the lowest HOT-update
@@ -68,6 +70,7 @@ func (p *PgxPool) GetHealthScoreTablesAutovacuumOff(
 func (p *PgxPool) GetHealthScoreLowHotUpdateTables(
 	ctx context.Context,
 	clusterName, instanceName, databaseName string,
+	limit, offset int,
 ) ([]dto.HealthScoreLowHotUpdateTable, error) {
 	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
 	if err != nil {
@@ -87,7 +90,7 @@ func (p *PgxPool) GetHealthScoreLowHotUpdateTables(
 		return nil, fmt.Errorf("query.Get | %w", err)
 	}
 
-	rows, err := pool.Query(ctx, qStr)
+	rows, err := pool.Query(ctx, qStr, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("pool.Query | %w", err)
 	}
@@ -113,6 +116,7 @@ func (p *PgxPool) GetHealthScoreLowHotUpdateTables(
 func (p *PgxPool) GetHealthScoreHighDeadRatioTables(
 	ctx context.Context,
 	clusterName, instanceName, databaseName string,
+	limit, offset int,
 ) ([]dto.HealthScoreHighDeadRatioTable, error) {
 	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
 	if err != nil {
@@ -132,7 +136,7 @@ func (p *PgxPool) GetHealthScoreHighDeadRatioTables(
 		return nil, fmt.Errorf("query.Get | %w", err)
 	}
 
-	rows, err := pool.Query(ctx, qStr)
+	rows, err := pool.Query(ctx, qStr, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("pool.Query | %w", err)
 	}
@@ -157,6 +161,7 @@ func (p *PgxPool) GetHealthScoreHighDeadRatioTables(
 func (p *PgxPool) GetHealthScoreHorizonBlockingSessions(
 	ctx context.Context,
 	clusterName, instanceName string,
+	limit, offset int,
 ) ([]dto.HealthScoreHorizonBlockingSession, error) {
 	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, "")
 	if err != nil {
@@ -176,7 +181,7 @@ func (p *PgxPool) GetHealthScoreHorizonBlockingSessions(
 		return nil, fmt.Errorf("query.Get | %w", err)
 	}
 
-	rows, err := pool.Query(ctx, qStr)
+	rows, err := pool.Query(ctx, qStr, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("pool.Query | %w", err)
 	}
@@ -211,6 +216,7 @@ func (p *PgxPool) scanTableReloptions(
 	ctx context.Context,
 	clusterName, instanceName, databaseName string,
 	q enums.Query,
+	limit, offset int,
 ) ([]dto.HealthScoreTableReloption, error) {
 	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
 	if err != nil {
@@ -230,7 +236,7 @@ func (p *PgxPool) scanTableReloptions(
 		return nil, fmt.Errorf("query.Get | %w", err)
 	}
 
-	rows, err := pool.Query(ctx, qStr)
+	rows, err := pool.Query(ctx, qStr, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("pool.Query | %w", err)
 	}

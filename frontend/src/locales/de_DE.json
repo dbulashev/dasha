@@ -638,7 +638,12 @@
       "wal_level_minimal_with_replicas": "wal_level",
       "wal_level_logical_without_slots": "wal_level",
       "walMinimalReplicas": "minimal + Replicas (Replikation funktioniert nicht)",
-      "walLogicalNoSlots": "logical ohne aktive Slots"
+      "walLogicalNoSlots": "logical ohne aktive Slots",
+      "host_load_per_vcpu": "load / vCPU",
+      "pooler_saturation": "Pooler-Sättigung",
+      "latency_regression": "Latenz-Regression (×)",
+      "seq_scan_regression": "Seq-Scan-Regression (×)",
+      "disk_used_ratio": "Plattennutzung"
     },
     "page": {
       "title": "Health Score",
@@ -709,10 +714,26 @@
         "longest_lock_wait_seconds": "EXTRACT(EPOCH FROM now() - state_change) des längsten Lock-Wait.",
         "ungranted_locks": "Zeilen in pg_locks mit granted=false — Warteschlange hinter dem Halter.",
         "deadlocks_rate": "Kumulativer deadlocks-Zähler seit pg_stat_database_reset — ohne per-Tag-Normalisierung nur „>0“ aussagekräftig.",
-        "lock_pool_saturation": "count(*) aus pg_locks / (max_connections × max_locks_per_transaction)."
+        "lock_pool_saturation": "count(*) aus pg_locks / (max_connections × max_locks_per_transaction).",
+        "checksum_failures": "Jede Rate > 0 bedeutet Datenkorruption; senkt den Score zusätzlich in den roten Bereich.",
+        "host_cpu_saturation": "load_avg_15 / n_vcpu. >1 heißt, die CPU-Warteschlange übersteigt die Kerne.",
+        "pooler_saturation": "server_conns / pool_size des Poolers; nahe 1.0 warten Clients.",
+        "sequence_exhaustion": "Schlechteste Sequence-Nutzung; ≥0.95 senkt den Score (Schreibvorgänge stoppen bei Überlauf).",
+        "latency_regression": "Aktuelle Latenz / saisonale Baseline (Stunde×Wochentag); workload-unabhängig.",
+        "seq_scan_regression": "Aktuelle Seq-Scan-Tupelrate / saisonale Baseline; Anstieg = Indizes ungenutzt oder veraltete Statistik (ANALYZE).",
+        "host_disk_space": "Belegung der vollsten Host-Dateisystems (pgSCV/YC); ≥90% senkt den Gesamt-Score in den roten Bereich."
       },
       "drilldownTitle": "Drill down (Detailansicht pro Datenbank)",
       "drilldown": "In der Tabelle „Datenbanken“ werden pro DB dieselben Metriken erfasst wie auf Instanzebene: Cache-Hit-Ratio, dead tuples, VACUUM-Alter. Klicke auf eine Zeile — die gewählte Datenbank wird zum Filter: die Regel-Engine wertet im DB-Scope aus, instance-only-Kategorien (Connections / Replication / Horizon / WAL / Locks) werden dabei ausgeblendet.",
+      "trendTitle": "Trend und saisonale Norm",
+      "trendIntro": "Wenn eine Metrics-Datasource konfiguriert ist, erscheint unter dem Gauge ein Trend: Score + saisonale Norm + Latenz. Die saisonale Norm ist der erwartete Wert einer Metrik für einen bestimmten Punkt im Wochenzyklus (die Last ist zyklisch: Werktage ≠ Wochenende, Tag ≠ Nacht), nicht ein globaler Durchschnitt. Sie wird so gebildet:",
+      "trendBucketing": "Bucketing nach „Wochenstunde“: Jeder Verlaufspunkt fällt in einen von 168 Buckets (7 Tage × 24 Stunden), hour_of_week = weekday×24 + hour.",
+      "trendMedian": "Median pro Bucket über ein längeres Fenster (Standard 28 Tage) — robust gegen Ausreißer: ein einmaliges nächtliches VACUUM oder ein Deploy verschiebt die Norm nicht.",
+      "trendUsage": "Der aktuelle Wert wird mit seiner eigenen Norm für diese Wochenstunde verglichen, nicht mit einem globalen Durchschnitt:",
+      "trendDips": "Einbrüche (Dips): Der Score ist mehr als die Schwelle unter die Norm dieser Wochenstunde gefallen → roter Punkt im Trend. Ein regelmäßiger nächtlicher Batch gilt nicht als Einbruch — seine Norm ist ebenfalls niedrig, kein Fehlalarm.",
+      "trendLatency": "Latenzregression → performance: aktuelle Latenz / saisonale Norm. Funktioniert bei jeder Last, weil die Abfrage mit sich selbst verglichen wird, nicht mit einem absoluten Schwellenwert von 50/200/1000 ms.",
+      "trendExample": "Beispiel: 50 ms am Montag 14:00 (Norm 45 ms) ist fast normal; dieselben 50 ms am Montag 03:00 (Norm 12 ms) sind ~4× der Norm — eine echte Anomalie. Ein Wert, zwei Urteile.",
+      "trendDegrade": "Saisonale Norm und Einbrüche erscheinen, sobald genug Verlauf vorhanden ist; bis dahin degradiert der Trend sanft — ohne Norm-Linie und Einbruch-Markierungen.",
       "penaltyPoints": {
         "connection_ratio": "0.60 → 0.80 → 0.95+",
         "idle_in_tx": "+5 pro Stk., max 30",
@@ -768,8 +789,15 @@
         "longest_lock_wait_seconds": "≥10 / ≥30 / ≥60 s",
         "ungranted_locks": "≥2 / ≥5 / ≥15",
         "deadlocks_rate": "LOW bei >0",
-        "lock_pool_saturation": "≥0.4 / ≥0.6 / ≥0.8"
-      }
+        "lock_pool_saturation": "≥0.4 / ≥0.6 / ≥0.8",
+        "checksum_failures": "HIGH bei >0",
+        "host_cpu_saturation": ">1 / >2 / >4 (load/vCPU)",
+        "pooler_saturation": "≥0.5 / ≥0.6 / ≥0.8",
+        "sequence_exhaustion": "≥0.75 / ≥0.85 / ≥0.95",
+        "latency_regression": "×1.5 / ×3 / ×6 vs. Baseline",
+        "seq_scan_regression": "×1.5 / ×3 / ×6 vs. Baseline",
+        "host_disk_space": "≥70 / ≥80 / ≥90 %"
+}
     },
     "databases": {
       "title": "Datenbanken",
@@ -980,7 +1008,52 @@
         "title": "wal_level=logical ohne aktive Publikationen",
         "short": "wal_level=logical, aber keine aktiven logischen Slots.",
         "detail": "Der logische WAL-Level verursacht Overhead (mehr Daten im Journal, langsameres VACUUM). Wenn logische Replikation nicht genutzt wird — auf replica zurückstellen."
+      },
+      "checksum_failures": {
+        "title": "Prüfsummenfehler bei Datenseiten",
+        "short": "PostgreSQL hat Datenkorruption erkannt (checksum failures). Kritisch — Disk und Backups prüfen."
+      },
+      "host_cpu_saturation": {
+        "title": "Host-CPU-Sättigung",
+        "short": "15-Min-Load-Average über der Kernzahl (load/vCPU) — CPU-Warteschlange und höhere Latenz."
+      },
+      "pooler_saturation": {
+        "title": "Pooler-Sättigung",
+        "short": "Serverseitige Pooler-Verbindungen nahe der Pool-Kapazität — Clients warten in der Warteschlange."
+      },
+      "sequence_exhaustion": {
+        "title": "Sequence-Erschöpfung (ID-Überlauf)",
+        "short": "Eine Sequenz nähert sich dem Typ-Limit (z. B. int4-PK). Überlauf stoppt Schreibvorgänge — Migration auf bigint planen."
+      },
+      "latency_regression": {
+        "title": "Latenz-Regression bei Abfragen",
+        "short": "Die Abfrage-Latenz liegt über ihrer saisonalen Norm — Top-Abfragen und Last prüfen."
+      },
+      "seq_scan_regression": {
+        "title": "Anstieg von Sequential Scans bei großen Tabellen",
+        "short": "Die per Seq-Scan gelesene Tupelmenge liegt über ihrer saisonalen Norm — Indizes werden nicht mehr genutzt oder die Statistik ist veraltet.",
+        "detail": "Die Seq-Scan-Dynamik (Tupel/s) wird mit ihrer saisonalen Norm (Stunde×Wochentag) verglichen, sodass normale analytische Scans nicht als Norm gelten. Ein Anstieg bedeutet meist, dass der Planer den Index verlässt (veraltete Statistik → ANALYZE) oder ein Index fehlt/ungültig ist. Prüfen: ANALYZE auf heißen Tabellen; „Index-Nutzung“ und den Plan der Top-Abfragen ansehen (Seq Scan auf großen Tabellen); bei Bedarf Index hinzufügen/neu aufbauen."
+      },
+      "host_disk_space": {
+        "title": "Wenig freier Speicher auf dem Host",
+        "short": "Plattennutzung: {metric_pct}% (LOW ≥70%, MED ≥80%, HIGH ≥90%). Ab ≥90% wird der Gesamt-Score in den roten Bereich gesenkt.",
+        "detail": "Belegungsanteil des vollsten Host-Dateisystems (aus pgSCV-/Yandex-Cloud-Metriken). Ein volles Daten-Volume stoppt Schreibvorgänge und droht mit Absturz/Korruption — daher wirkt ≥90% als kritischer Floor auf jeder Rolle (Primary und Replica). Maßnahmen: Speicher freigeben (WAL, Logs, temporäre Dateien, alte Backups), Volume vergrößern, Tabellen-/Index-Bloat und WAL-Stau (inaktive Replikations-Slots) prüfen."
       }
+    },
+    "trend": {
+      "title": "Health-Score-Trend",
+      "baselineHelp": "Saisonale Norm — der Median des Scores über „Wochenstunde“-Buckets (Stunde × Wochentag) über ein längeres Verlaufsfenster (berücksichtigt die tägliche und wöchentliche Zyklik der Last). Der aktuelle Score wird mit der Norm genau dieser Wochenstunde verglichen; ein Abfall darunter über die Schwelle wird als roter Punkt markiert (Einbruch).",
+      "score": "Score",
+      "baseline": "Saisonale Norm",
+      "latency": "Latenz",
+      "latencyAxis": "ms",
+      "range": {
+        "24h": "24h",
+        "7d": "7T",
+        "30d": "30T"
+      },
+      "unavailable": "Trend nicht verfügbar: Metrics-Datasource nicht konfiguriert oder Ziel nicht zugeordnet.",
+      "noData": "Keine Daten für den Zeitraum."
     }
   }
 }

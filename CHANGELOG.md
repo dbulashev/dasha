@@ -1,5 +1,30 @@
 # Changelog
 
+## v1.2.0
+
+### Features
+- **Metrics-backed Health Score (optional):** when a Prometheus/VictoriaMetrics datasource is configured (`health_score.metrics` in `dasha.yaml`), the score, recommendations and a new trend are computed from time-series metrics (pgSCV + Yandex MDB + pgbouncer + host) instead of point-in-time SQL. The SQL snapshot stays the zero-config fallback; the `source` field on `GET /api/common/health-score` reports `"snapshot"` or `"metrics"`.
+  - **Provider adapters + per-deployment label matching:** `pgscv` (PG internals, incl. YC MDB via remote scrape), `yc_native` (managed host/pooler), `pgbouncer`, `pgscv_system` (self-managed host). Selector templates are configurable; `GET /api/common/health-score/datasource/status` validates that each role matches exactly one series.
+  - **Score trend** (`GET /api/common/health-score/history`): per-timestamp overall score, per-category scores and latency over a range, with a **seasonal (hour-of-week) baseline** and detected **dips**. New `HealthScoreTrend` chart on `/health-score` (24h / 7d / 30d).
+  - **Richer signals** unavailable to the SQL snapshot: host CPU saturation (`load / vCPU`) and pooler saturation → `connections`; windowed query **latency** with **regression vs the seasonal baseline** → `performance`; data-page **checksum failures** and **sequence / ID-space exhaustion** → critical floor + rules.
+  - **Sequential-scan regression** → `performance`: the rate of tuples read by seq scans, compared to its own seasonal (hour-of-week) baseline — a rise flags indexes going unused or stale planner stats (ANALYZE), without false-firing on normal analytical scans.
+  - **Host disk space** → `storage`: used/total of the fullest host filesystem (from pgSCV `node_filesystem_*` and Yandex Cloud `disk_used_bytes`/`disk_total_bytes`), with LOW/MED/HIGH at ≥70/80/90% and a **role-agnostic critical floor at ≥90%** (a full data volume stops writes).
+  - **Floor extensions:** checksum failures (role-agnostic) and near-overflow sequence exhaustion clamp the score into the red, alongside the existing wraparound / autovacuum-off floor.
+  - **Catalog/GUC overlay keeps score↔rules parity in metrics mode:** facts a time-series datasource cannot express — per-table `autovacuum_enabled=false`, never-vacuumed tables, `relfrozenxid` age, planner-stat drift, `wal_level`, the `autovacuum`/`track_counts` GUCs, the MVCC horizon, lock-pool sizing and in-recovery — are overlaid from the SQL snapshot onto the metrics signals. So catalog-only rules (e.g. `tables_with_autovacuum_off`) keep firing **and** the score keeps penalising them even when a datasource is attached, instead of silently disappearing. Best-effort: a snapshot read failure leaves the metrics-only score intact. (The history **trend** stays time-series-only.)
+  - **Auto-mapping of service-discovered clusters:** clusters from `discovery:` (e.g. Yandex MDB) are mapped to datasource labels from their discovery metadata — host FQDN → `{{.Host}}`, cloud resource id (MDB cluster id) → `{{.Service}}`, `folder_id` label → `{{.Env}}`, short host → `{{.Container}}`; providers from `providers_default` — so they need no hand-written `targets:` entry. A static `targets:` entry always overrides; `auto_map_discovered` (default on) and `discovery_env_label` knobs.
+  - **Datasource auth from environment:** `datasource.auth` supports `token_from_env` (bearer) and `username` + `password_from_env` (basic), resolved like the other `*_from_env` secrets so credentials are injected from a Secret instead of stored inline; `auth.type` is validated (`none|bearer|basic`).
+
+### UX
+- **Health Score is admin-only for now** while the scoring model is still being calibrated and validated across many clusters: the menu item and the Home-page gauge are hidden from regular viewers, and a direct visit to `/health-score` redirects non-admins to `/main` (router guard). No-RBAC modes (`none`/`token`) keep full access.
+- **Paginated recommendation detail tables:** the five inline detail tables (dead-ratio tables, autovacuum-off tables, low-HOT tables, xid-wraparound databases, horizon-blocking sessions) are now paged via `limit`/`offset` with the shared `PaginationControls`, instead of a hard server-side cap, so long lists are fully browsable (sensible row-size thresholds kept).
+- **Reduced numeric precision** in recommendation texts and category tooltips — metric values are rounded for display (e.g. `90.22492448754167%` → `90.22%`) via a shared `fmtNum` helper.
+
+### Internal
+- New `internal/metrics` package: datasource client, label matcher (with discovery-driven auto-mapping), MetricsQL query catalog, signal collector, seasonal baseline, dip detection, history service.
+- Demo lab extended with a VictoriaMetrics + pgSCV + pgbouncer stack (`demo/docker-compose.metrics.yaml`), built from pgSCV sources for arm64 hosts.
+- Helm chart `values.yaml`: documented `health_score.metrics` block — datasource (incl. auth via `*_from_env` / ExternalSecret), providers, selector templates, targets, discovery auto-mapping and tuning.
+- Design and plan documents under `plans/` (comparison, requirements, design, workflow).
+
 ## v1.1.0
 
 ### Features

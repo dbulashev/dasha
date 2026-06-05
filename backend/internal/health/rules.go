@@ -609,6 +609,112 @@ var Registry = []Rule{
 			return &Hit{Severity: SeverityLow, MetricValue: 0}
 		},
 	},
+
+	// === Metrics-backed only (host/pooler saturation, data integrity) ===
+	{
+		// Data-page checksum failures: corruption surfaced by the storage layer.
+		// Any non-zero rate is critical and also drives the score floor.
+		ID: "checksum_failures", Category: "storage", RelatedRoute: "/home",
+		Evaluate: func(m RawMetrics) *Hit {
+			if m.ChecksumFailuresRate <= 0 {
+				return nil
+			}
+
+			return &Hit{Severity: SeverityHigh, MetricValue: m.ChecksumFailuresRate}
+		},
+	},
+	{
+		// Host CPU saturation: 15-min load average relative to the vCPU count.
+		// > 1 means the run queue exceeds the cores; sustained values hurt latency.
+		ID: "host_cpu_saturation", Category: "connections", RelatedRoute: "/queries",
+		Evaluate: func(m RawMetrics) *Hit {
+			if m.NumVCPU <= 0 {
+				return nil
+			}
+
+			sat := m.LoadAvg15 / m.NumVCPU
+
+			sev := severityForRatio(sat, 4, 2, 1)
+			if sev == "" {
+				return nil
+			}
+
+			return &Hit{Severity: sev, MetricValue: sat}
+		},
+	},
+	{
+		// Connection pooler saturation: server-side connections vs pool capacity.
+		// Approaching the limit queues clients and adds latency.
+		ID: "pooler_saturation", Category: "connections", RelatedRoute: "/connections",
+		Evaluate: func(m RawMetrics) *Hit {
+			if m.PoolerPoolSize <= 0 {
+				return nil
+			}
+
+			sat := m.PoolerServerConns / m.PoolerPoolSize
+
+			sev := severityForRatio(sat, 0.8, 0.6, 0.5)
+			if sev == "" {
+				return nil
+			}
+
+			return &Hit{Severity: sev, MetricValue: sat}
+		},
+	},
+	{
+		// Sequence / ID-space exhaustion: a sequence approaching its type limit
+		// (e.g. int4 PK). Overflow stops writes — plan a migration to bigint.
+		// Rule-only by design; the critical floor handles the near-overflow case.
+		ID: "sequence_exhaustion", Category: "storage", RelatedRoute: "/tables",
+		Evaluate: func(m RawMetrics) *Hit {
+			sev := severityForRatio(m.SequenceExhaustionMax, 0.95, 0.85, 0.75)
+			if sev == "" {
+				return nil
+			}
+
+			return &Hit{Severity: sev, MetricValue: m.SequenceExhaustionMax}
+		},
+	},
+	{
+		// Query latency regressed above its seasonal baseline (metrics-only).
+		// Workload-agnostic: compares to this instance's own usual latency.
+		ID: "latency_regression", Category: "performance", RelatedRoute: "/queries",
+		Evaluate: func(m RawMetrics) *Hit {
+			sev := severityForRatio(m.LatencyRegressionRatio, 6, 3, 1.5)
+			if sev == "" {
+				return nil
+			}
+
+			return &Hit{Severity: sev, MetricValue: m.LatencyRegressionRatio}
+		},
+	},
+	{
+		// Sequential-scan activity regressed above its seasonal baseline
+		// (metrics-only). A rise in tuples read by seq scans signals indexes
+		// going unused or stale planner stats — run ANALYZE / review indexes.
+		ID: "seq_scan_regression", Category: "performance", RelatedRoute: "/indexes-usage",
+		Evaluate: func(m RawMetrics) *Hit {
+			sev := severityForRatio(m.SeqScanRegressionRatio, 6, 3, 1.5)
+			if sev == "" {
+				return nil
+			}
+
+			return &Hit{Severity: sev, MetricValue: m.SeqScanRegressionRatio}
+		},
+	},
+	{
+		// Host disk almost full (metrics-only). Free space running low risks
+		// write failures; >=90% also drives the critical floor.
+		ID: "host_disk_space", Category: "storage", RelatedRoute: "/tables",
+		Evaluate: func(m RawMetrics) *Hit {
+			sev := severityForRatio(m.DiskUsedRatio, diskUsedCritical, 0.80, 0.70)
+			if sev == "" {
+				return nil
+			}
+
+			return &Hit{Severity: sev, MetricValue: m.DiskUsedRatio}
+		},
+	},
 }
 
 // severityForRatio returns HIGH/MEDIUM/LOW when value meets/exceeds the

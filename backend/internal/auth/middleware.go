@@ -9,6 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/dbulashev/dasha/internal/config"
+	"slices"
 )
 
 func NewAuthMiddleware(
@@ -132,10 +133,8 @@ func isAPIRequest(c echo.Context) bool {
 func SkipAuth(mw echo.MiddlewareFunc, paths ...string) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			for _, p := range paths {
-				if c.Request().URL.Path == p {
-					return next(c)
-				}
+			if slices.Contains(paths, c.Request().URL.Path) {
+				return next(c)
 			}
 
 			return mw(next)(c)

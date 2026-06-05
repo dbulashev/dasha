@@ -10,4 +10,6 @@ import type { InstanceParameter } from './instanceParameter'
 export type GetHealthScoreXidWraparoundDatabasesParams = {
   cluster_name: ClusterNameParameter
   instance: InstanceParameter
+  limit?: number
+  offset?: number
 }

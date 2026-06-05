@@ -83,6 +83,18 @@ export function fmtAge(createdAt: string | null | undefined, statsReset: string 
   return parts.join(' ')
 }
 
+/**
+ * Round a number to at most `decimals` places, dropping trailing zeros
+ * (5 → 5, 90.22492448754167 → 90.22, 4.571607 → 4.57). Non-finite numbers and
+ * non-number values pass through unchanged, so it is safe to map over a mixed
+ * context object of strings/booleans/numbers (e.g. a recommendation's context).
+ */
+export function fmtNum(value: unknown, decimals = 2): unknown {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return value
+  if (Number.isInteger(value)) return value
+  return Number(value.toFixed(decimals))
+}
+
 export function fmtRowCount(n: number): string {
   if (n >= 1_000_000_000) return parseFloat((n / 1_000_000_000).toFixed(1)) + 'B'
   if (n >= 1_000_000) return parseFloat((n / 1_000_000).toFixed(1)) + 'M'

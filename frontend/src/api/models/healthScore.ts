@@ -10,6 +10,8 @@ export interface HealthScore {
   score: number
   categories: HealthScoreCategory[]
   has_replication: boolean
+  /** Score source: "snapshot" (SQL) or "metrics" (datasource). */
+  source?: string
   /** True when the instance is a standby (pg_is_in_recovery() = true). When true, the maintenance category is dropped from the score and its weight is redistributed across the remaining categories — same handling as the replication category on instances without replicas. */
   in_recovery: boolean
 }
