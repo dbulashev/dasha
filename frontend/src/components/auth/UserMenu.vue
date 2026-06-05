@@ -1,10 +1,14 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { AuthInfoMode } from '@/api/models'
+import PersonalTokensDialog from './PersonalTokensDialog.vue'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
+
+const tokensOpen = ref(false)
 </script>
 
 <template>
@@ -26,13 +30,23 @@ const authStore = useAuthStore()
             <v-chip size="x-small" variant="tonal" class="mt-1">{{ authStore.user.role }}</v-chip>
           </v-card-text>
           <v-divider />
-          <v-card-actions>
+          <v-card-actions class="d-flex flex-column ga-1 pa-2">
+            <v-btn
+              block
+              variant="text"
+              prepend-icon="mdi-key-chain-variant"
+              @click="tokensOpen = true"
+            >
+              {{ t('pat.menuItem') }}
+            </v-btn>
             <v-btn block variant="text" prepend-icon="mdi-logout" @click="authStore.logout">
               {{ t('Logout') }}
             </v-btn>
           </v-card-actions>
         </v-card>
       </v-menu>
+
+      <PersonalTokensDialog v-model="tokensOpen" />
     </template>
     <v-btn v-else icon variant="text" class="ml-1" @click="authStore.doLoginRedirect">
       <v-icon>mdi-login</v-icon>

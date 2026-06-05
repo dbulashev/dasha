@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/samber/do"
 	"github.com/spf13/viper"
@@ -13,7 +14,9 @@ import (
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/discovery"
 	"github.com/dbulashev/dasha/internal/metrics"
+	"github.com/dbulashev/dasha/internal/pkg/pat"
 	"github.com/dbulashev/dasha/internal/repository"
+	"github.com/dbulashev/dasha/internal/storage"
 )
 
 type Container struct {
@@ -127,11 +130,54 @@ func (c *Container) Metrics() *metrics.Service {
 	return do.MustInvoke[*metrics.Service](c.i)
 }
 
-func (c *Container) AuthMiddlewares(ctx context.Context) (*auth.Middlewares, error) {
+func (c *Container) AuthMiddlewares(ctx context.Context, resolver auth.PATResolver) (*auth.Middlewares, error) {
 	cfg := c.Config()
 	logger := c.Logger()
 
-	return auth.NewMiddlewares(ctx, cfg.Auth, logger)
+	return auth.NewMiddlewares(ctx, cfg.Auth, resolver, logger)
+}
+
+// patResolver adapts the snapshot storage to auth.PATResolver: it hashes the
+// presented secret and looks it up, mapping an active token to its owner's
+// identity and role. Lives here (not in auth) to keep auth free of a storage
+// dependency.
+type patResolver struct {
+	storage *storage.Storage
+	logger  *zap.Logger
+}
+
+func (r patResolver) ResolveToken(ctx context.Context, presented string) (*auth.UserContext, bool) {
+	// Fast reject anything that isn't a personal access token before hitting the DB.
+	if !strings.HasPrefix(presented, pat.Prefix) {
+		return nil, false
+	}
+
+	idn, ok, err := r.storage.ResolveAPIToken(ctx, pat.Hash(presented))
+	if err != nil {
+		r.logger.Warn("personal access token resolve failed", zap.Error(err))
+
+		return nil, false
+	}
+
+	if !ok {
+		return nil, false
+	}
+
+	return &auth.UserContext{
+		Name:       idn.Subject,
+		Role:       idn.Role,
+		AuthMethod: auth.MethodPAT,
+	}, true
+}
+
+// NewPATResolver returns an auth.PATResolver backed by storage, or nil (PAT auth
+// disabled) when storage is not configured.
+func NewPATResolver(st *storage.Storage, logger *zap.Logger) auth.PATResolver {
+	if st == nil {
+		return nil
+	}
+
+	return patResolver{storage: st, logger: logger}
 }
 
 func provideLogger(debug bool) *zap.Logger {

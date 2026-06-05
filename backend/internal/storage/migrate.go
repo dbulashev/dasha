@@ -56,6 +56,23 @@ ALTER TABLE health_score_weights
     ADD COLUMN IF NOT EXISTS horizon        DOUBLE PRECISION NOT NULL DEFAULT 0.10 CHECK (horizon        >= 0),
     ADD COLUMN IF NOT EXISTS wal_checkpoint DOUBLE PRECISION NOT NULL DEFAULT 0.10 CHECK (wal_checkpoint >= 0),
     ADD COLUMN IF NOT EXISTS locks          DOUBLE PRECISION NOT NULL DEFAULT 0.10 CHECK (locks          >= 0)`
+
+	createAPITokensSQL = `
+CREATE TABLE IF NOT EXISTS api_tokens (
+    id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    token_hash   bytea NOT NULL UNIQUE,
+    token_prefix text  NOT NULL,
+    name         text  NOT NULL,
+    subject      text  NOT NULL,
+    role         text  NOT NULL CHECK (role IN ('viewer','admin')),
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    expires_at   timestamptz,
+    last_used_at timestamptz,
+    revoked_at   timestamptz
+)`
+
+	createAPITokensSubjectIdxSQL = `
+CREATE INDEX IF NOT EXISTS idx_api_tokens_subject ON api_tokens (subject)`
 )
 
 // Migrate creates parent tables and partitions for the next partitionDaysAhead days.
@@ -94,6 +111,8 @@ func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
 		addPgssStatsResetSQL,
 		createHealthScoreWeightsSQL,
 		addHealthScoreWeightsCategoriesSQL,
+		createAPITokensSQL,
+		createAPITokensSubjectIdxSQL,
 	} {
 		if _, err := s.ddlPool.Exec(ctx, ddl); err != nil {
 			return fmt.Errorf("storage: migrate: %w", err)

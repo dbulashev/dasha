@@ -40,7 +40,7 @@ func (m *Middlewares) Stop() {
 	}
 }
 
-func NewMiddlewares(ctx context.Context, cfg config.AuthConfig, logger *zap.Logger) (*Middlewares, error) {
+func NewMiddlewares(ctx context.Context, cfg config.AuthConfig, resolver PATResolver, logger *zap.Logger) (*Middlewares, error) {
 	if cfg.Mode != config.AuthModeNone && cfg.Mode != "" && !cfg.RequireHTTPS {
 		logger.Warn(
 			"auth enabled without require_https — credentials may be transmitted in plaintext",
@@ -74,7 +74,7 @@ func NewMiddlewares(ctx context.Context, cfg config.AuthConfig, logger *zap.Logg
 	return &Middlewares{
 		RequireHTTPS:   requireHTTPSMiddleware(cfg.RequireHTTPS),
 		RateLimit:      rl.Middleware,
-		Auth:           NewAuthMiddleware(cfg, oidcProvider, sessionMgr, logger),
+		Auth:           NewAuthMiddleware(cfg, oidcProvider, sessionMgr, resolver, logger),
 		Casbin:         NewCasbinMiddleware(cfg, enforcer, logger),
 		OIDCProvider:   oidcProvider,
 		SessionManager: sessionMgr,
@@ -87,6 +87,7 @@ type Method string
 const (
 	MethodToken Method = "token"
 	MethodOIDC  Method = "oidc"
+	MethodPAT   Method = "pat" // personal access token (user-minted)
 )
 
 type UserContext struct {
@@ -109,4 +110,30 @@ func GetUser(c echo.Context) *UserContext {
 
 func SetUser(c echo.Context, u *UserContext) {
 	c.Set(userContextKey, u)
+}
+
+type userCtxKeyType struct{}
+
+// userCtxKey carries the authenticated user inside a context.Context, so strict
+// handlers (which receive context.Context, not echo.Context) can read identity.
+var userCtxKey userCtxKeyType
+
+// WithUser returns a context carrying the authenticated user.
+func WithUser(ctx context.Context, u *UserContext) context.Context {
+	return context.WithValue(ctx, userCtxKey, u)
+}
+
+// UserFromContext returns the authenticated user, or nil when absent.
+func UserFromContext(ctx context.Context) *UserContext {
+	u, _ := ctx.Value(userCtxKey).(*UserContext)
+
+	return u
+}
+
+// PATResolver resolves a presented X-API-Key to a user via a personal access
+// token, checked after the static config tokens. A nil resolver disables PAT
+// auth (e.g. when snapshot storage is not configured). Returns ok=false for an
+// unknown/expired/revoked token, or on a backend error (auth fails closed).
+type PATResolver interface {
+	ResolveToken(ctx context.Context, presented string) (*UserContext, bool)
 }

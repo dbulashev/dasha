@@ -99,13 +99,6 @@ func dashaExec(cmd *cobra.Command, _ []string) error {
 
 	var mw []strictecho.StrictEchoMiddlewareFunc
 
-	authMW, err := container.AuthMiddlewares(cmd.Context())
-	if err != nil {
-		serverLogger.Fatal("failed to initialize auth", zap.Error(err))
-	}
-
-	defer authMW.Stop()
-
 	st, err := storage.New(cmd.Context(), container.Config().Storage, serverLogger)
 	if err != nil {
 		serverLogger.Fatal("failed to initialize storage", zap.Error(err))
@@ -114,6 +107,16 @@ func dashaExec(cmd *cobra.Command, _ []string) error {
 	if st != nil {
 		defer st.Close()
 	}
+
+	// Personal access tokens are resolved against snapshot storage; nil disables them.
+	resolver := deps.NewPATResolver(st, serverLogger)
+
+	authMW, err := container.AuthMiddlewares(cmd.Context(), resolver)
+	if err != nil {
+		serverLogger.Fatal("failed to initialize auth", zap.Error(err))
+	}
+
+	defer authMW.Stop()
 
 	d := http.NewDashaHandlers(container.Config(), container.Repository(), st, container.Metrics())
 	svc := http.New(d, mw, authMW.RequireHTTPS, authMW.RateLimit, authMW.Auth, authMW.Casbin, logger)

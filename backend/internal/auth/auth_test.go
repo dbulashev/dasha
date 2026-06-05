@@ -24,7 +24,7 @@ func TestNewMiddlewares_WarnsWhenAuthWithoutHTTPS(t *testing.T) {
 		},
 	}
 
-	mw, err := NewMiddlewares(context.Background(), cfg, logger)
+	mw, err := NewMiddlewares(context.Background(), cfg, nil, logger)
 	if err != nil {
 		t.Fatalf("NewMiddlewares: %v", err)
 	}
@@ -50,7 +50,7 @@ func TestNewMiddlewares_NoWarnWhenAuthDisabled(t *testing.T) {
 		RequireHTTPS: false,
 	}
 
-	mw, err := NewMiddlewares(context.Background(), cfg, logger)
+	mw, err := NewMiddlewares(context.Background(), cfg, nil, logger)
 	if err != nil {
 		t.Fatalf("NewMiddlewares: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestNewMiddlewares_NoWarnWhenAuthModeEmpty(t *testing.T) {
 		RequireHTTPS: false,
 	}
 
-	mw, err := NewMiddlewares(context.Background(), cfg, logger)
+	mw, err := NewMiddlewares(context.Background(), cfg, nil, logger)
 	if err != nil {
 		t.Fatalf("NewMiddlewares: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestNewMiddlewares_NoWarnWhenRequireHTTPSEnabled(t *testing.T) {
 		},
 	}
 
-	mw, err := NewMiddlewares(context.Background(), cfg, logger)
+	mw, err := NewMiddlewares(context.Background(), cfg, nil, logger)
 	if err != nil {
 		t.Fatalf("NewMiddlewares: %v", err)
 	}

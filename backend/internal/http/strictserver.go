@@ -8,12 +8,27 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	strictecho "github.com/oapi-codegen/runtime/strictmiddleware/echo"
 	"go.uber.org/zap"
 
 	"github.com/dbulashev/dasha/gen/serverhttp"
 	"github.com/dbulashev/dasha/internal/auth"
 	"github.com/dbulashev/dasha/internal/http/logger"
 )
+
+// userContextMiddleware bridges the authenticated user from echo.Context (set by
+// the auth middleware) into the request's context.Context, so strict handlers —
+// which receive context.Context, not echo.Context — can read identity via
+// auth.UserFromContext.
+func userContextMiddleware(f strictecho.StrictEchoHandlerFunc, _ string) strictecho.StrictEchoHandlerFunc {
+	return func(c echo.Context, request interface{}) (interface{}, error) {
+		if u := auth.GetUser(c); u != nil {
+			c.SetRequest(c.Request().WithContext(auth.WithUser(c.Request().Context(), u)))
+		}
+
+		return f(c, request)
+	}
+}
 
 type API struct {
 	Echo   *echo.Echo
@@ -43,7 +58,8 @@ func New(
 	casbinMW echo.MiddlewareFunc,
 	logger *zap.Logger,
 ) *API {
-	ssi := serverhttp.NewStrictHandler(si, middlewares)
+	mws := append([]serverhttp.StrictMiddlewareFunc{userContextMiddleware}, middlewares...)
+	ssi := serverhttp.NewStrictHandler(si, mws)
 
 	e := echo.New()
 	e.HideBanner = true

@@ -11,11 +11,13 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	"github.com/dbulashev/dasha/gen/serverhttp"
+	"github.com/dbulashev/dasha/internal/auth"
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/health"
 	"github.com/dbulashev/dasha/internal/metrics"
 	"github.com/dbulashev/dasha/internal/pkg/mapstruct"
+	"github.com/dbulashev/dasha/internal/pkg/pat"
 	"github.com/dbulashev/dasha/internal/pkg/sanitize"
 	"github.com/dbulashev/dasha/internal/pkg/shortcut"
 	"github.com/dbulashev/dasha/internal/repository"
@@ -150,6 +152,139 @@ func (s *Handlers) GetAuthInfo(
 	}
 
 	return resp, nil
+}
+
+// patSubject is the stable owner key for a user's personal access tokens:
+// the email when present (OIDC), else the identity name.
+func patSubject(u *auth.UserContext) string {
+	if u.Email != "" {
+		return u.Email
+	}
+
+	return u.Name
+}
+
+// patRoleAllowed reports whether a caller with `caller` role may mint a token
+// with `requested` role (least-privilege: a viewer cannot mint an admin token).
+func patRoleAllowed(caller, requested string) bool {
+	if requested != "viewer" && requested != "admin" {
+		return false
+	}
+
+	if caller == "admin" {
+		return true
+	}
+
+	return requested == "viewer"
+}
+
+func (s *Handlers) ListPersonalTokens(
+	ctx context.Context,
+	_ serverhttp.ListPersonalTokensRequestObject,
+) (serverhttp.ListPersonalTokensResponseObject, error) {
+	user := auth.UserFromContext(ctx)
+	if user == nil || s.storage == nil {
+		return serverhttp.ListPersonalTokens200JSONResponse{}, nil
+	}
+
+	rows, err := s.storage.ListAPITokens(ctx, patSubject(user))
+	if err != nil {
+		return nil, fmt.Errorf("ListPersonalTokens | %w", err)
+	}
+
+	out := make(serverhttp.ListPersonalTokens200JSONResponse, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, serverhttp.PersonalAccessToken{
+			Id:         r.ID,
+			Name:       r.Name,
+			Prefix:     r.Prefix,
+			Role:       serverhttp.PersonalAccessTokenRole(r.Role),
+			CreatedAt:  r.CreatedAt,
+			LastUsedAt: r.LastUsedAt,
+			ExpiresAt:  r.ExpiresAt,
+		})
+	}
+
+	return out, nil
+}
+
+func (s *Handlers) CreatePersonalToken(
+	ctx context.Context,
+	req serverhttp.CreatePersonalTokenRequestObject,
+) (serverhttp.CreatePersonalTokenResponseObject, error) {
+	user := auth.UserFromContext(ctx)
+	if user == nil {
+		return serverhttp.CreatePersonalToken403Response{}, nil
+	}
+
+	// Anti-chaining: a leaked PAT must not be able to mint more tokens.
+	if user.AuthMethod == auth.MethodPAT {
+		return serverhttp.CreatePersonalToken403Response{}, nil
+	}
+
+	if req.Body == nil || req.Body.Name == "" {
+		return serverhttp.CreatePersonalToken400Response{}, nil
+	}
+
+	role := "viewer"
+	if req.Body.Role != nil {
+		role = string(*req.Body.Role)
+	}
+
+	if !patRoleAllowed(user.Role, role) {
+		return serverhttp.CreatePersonalToken403Response{}, nil
+	}
+
+	if s.storage == nil {
+		return nil, fmt.Errorf("CreatePersonalToken | storage is not configured")
+	}
+
+	var expiresAt *time.Time
+	if req.Body.ExpiresInDays != nil && *req.Body.ExpiresInDays > 0 {
+		t := time.Now().UTC().Add(time.Duration(*req.Body.ExpiresInDays) * 24 * time.Hour)
+		expiresAt = &t
+	}
+
+	secret, hash, prefix, err := pat.Generate()
+	if err != nil {
+		return nil, fmt.Errorf("CreatePersonalToken | %w", err)
+	}
+
+	id, err := s.storage.CreateAPIToken(ctx, hash, prefix, req.Body.Name, patSubject(user), role, expiresAt)
+	if err != nil {
+		return nil, fmt.Errorf("CreatePersonalToken | %w", err)
+	}
+
+	return serverhttp.CreatePersonalToken201JSONResponse{
+		Id:        id,
+		Name:      req.Body.Name,
+		Prefix:    prefix,
+		Role:      serverhttp.PersonalAccessTokenCreatedRole(role),
+		Token:     secret,
+		CreatedAt: time.Now().UTC(),
+		ExpiresAt: expiresAt,
+	}, nil
+}
+
+func (s *Handlers) RevokePersonalToken(
+	ctx context.Context,
+	req serverhttp.RevokePersonalTokenRequestObject,
+) (serverhttp.RevokePersonalTokenResponseObject, error) {
+	user := auth.UserFromContext(ctx)
+	if user == nil || s.storage == nil {
+		return serverhttp.RevokePersonalToken404Response{}, nil
+	}
+
+	ok, err := s.storage.RevokeAPIToken(ctx, patSubject(user), req.Id)
+	if err != nil {
+		return nil, fmt.Errorf("RevokePersonalToken | %w", err)
+	}
+
+	if !ok {
+		return serverhttp.RevokePersonalToken404Response{}, nil
+	}
+
+	return serverhttp.RevokePersonalToken204Response{}, nil
 }
 
 func (s *Handlers) GetClusters(
