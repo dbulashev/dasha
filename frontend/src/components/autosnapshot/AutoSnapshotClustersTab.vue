@@ -22,12 +22,17 @@ const items = ref<ClusterRow[]>([])
 const loading = ref(false)
 const editCluster = ref<string | null>(null)
 const dialogOpen = ref(false)
+const search = ref('')
+
+const filteredItems = computed(() => {
+  const q = search.value.trim().toLowerCase()
+  return q ? items.value.filter((r) => r.ClusterName.toLowerCase().includes(q)) : items.value
+})
 
 const headers = computed(() => [
   { title: t('autosnapshot.clusters.name'), key: 'ClusterName' },
   { title: t('autosnapshot.clusters.status'), key: 'Status', sortable: false },
   { title: t('autosnapshot.clusters.triggers'), key: 'Triggers', sortable: false },
-  { title: t('autosnapshot.clusters.actions'), key: 'Actions', sortable: false, align: 'end' as const },
 ])
 
 function rowFromOverride(name: string, body: AutoSnapshotClusterOverride): ClusterRow {
@@ -114,14 +119,42 @@ watch(
       {{ t('autosnapshot.clusters.noClusters') }}
     </v-alert>
 
+    <v-text-field
+      v-if="loading || items.length > 0"
+      v-model="search"
+      :label="t('autosnapshot.clusters.filterCluster')"
+      density="compact"
+      variant="outlined"
+      prepend-inner-icon="mdi-magnify"
+      hide-details
+      clearable
+      class="mb-3"
+      style="max-width: 360px"
+    />
+
     <v-data-table
-      v-else
+      v-if="loading || items.length > 0"
       :headers="headers"
-      :items="items"
+      :items="filteredItems"
       :loading="loading"
       item-value="ClusterName"
       hover
     >
+      <template #item.ClusterName="{ item }">
+        <div class="d-flex align-center ga-1">
+          {{ item.ClusterName }}
+          <v-btn
+            v-if="!item.LoadError"
+            v-tooltip="t('autosnapshot.clusters.edit')"
+            icon="mdi-pencil"
+            size="x-small"
+            variant="text"
+            density="comfortable"
+            @click="openDialog(item.ClusterName)"
+          />
+        </div>
+      </template>
+
       <template #item.Status="{ item }">
         <v-tooltip v-if="item.LoadError" :text="item.LoadError" location="top">
           <template #activator="{ props: tipProps }">
@@ -162,16 +195,6 @@ watch(
         </v-chip>
       </template>
 
-      <template #item.Actions="{ item }">
-        <v-btn
-          size="small"
-          variant="text"
-          :disabled="!!item.LoadError"
-          @click="openDialog(item.ClusterName)"
-        >
-          {{ t('autosnapshot.clusters.edit') }}
-        </v-btn>
-      </template>
     </v-data-table>
 
     <AutoSnapshotClusterDialog

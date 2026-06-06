@@ -46,7 +46,7 @@ type Daemon struct {
 
 	mu        sync.Mutex
 	hosts     map[hostKey]*hostState
-	lastAuto  map[string]time.Time
+	lastAuto  map[hostKey]time.Time
 	lastRetry time.Time
 }
 
@@ -59,6 +59,7 @@ type hostState struct {
 	windowSamples       []activitySample
 	lastInRecovery      *bool
 	aboveThresholdSince *time.Time
+	lastBelowBaselineAt *time.Time // throttles below-baseline events to avoid per-poll spam
 }
 
 type activitySample struct {
@@ -105,9 +106,37 @@ func (d *Daemon) Run(ctx context.Context) error {
 		last = map[string]time.Time{}
 	}
 
-	d.lastAuto = last
+	d.lastAuto = d.seedDebounce(ctx, last)
 
 	return d.loop(ctx)
+}
+
+// seedDebounce expands the per-cluster last-auto-snapshot times (from storage)
+// into the per-host debounce map. Every host of a cluster inherits the cluster's
+// most recent auto-snapshot time — a conservative seed so debounce is honoured
+// right after a restart without changing the storage aggregation.
+func (d *Daemon) seedDebounce(ctx context.Context, perCluster map[string]time.Time) map[hostKey]time.Time {
+	out := map[hostKey]time.Time{}
+
+	cls, err := d.clusters.Get(ctx)
+	if err != nil {
+		d.logger.Warn("seed debounce: get clusters failed", zap.Error(err))
+
+		return out
+	}
+
+	for _, cl := range cls {
+		t, ok := perCluster[string(cl.Name)]
+		if !ok {
+			continue
+		}
+
+		for _, h := range cl.Hosts {
+			out[hostKey{Cluster: string(cl.Name), Instance: string(h)}] = t
+		}
+	}
+
+	return out
 }
 
 func (d *Daemon) loop(ctx context.Context) error {
@@ -173,4 +202,3 @@ func (d *Daemon) tick(ctx context.Context, cfg Config) {
 		d.processCluster(ctx, cfg, effective, cl)
 	}
 }
-

@@ -68,20 +68,22 @@ func (d *Daemon) tickActivitySpike(
 
 	threshold := baseline * float64(100+t.ActiveThresholdPct) / 100.0
 
+	// Below the activity floor the spike rule is unreliable (a 2->3 jump is +50%),
+	// so spike detection is skipped. Skips are operational detail, not history —
+	// log at debug (throttled per host) rather than persisting a trigger_event.
 	if baseline < float64(cfg.MinBaselineActive) {
 		state.aboveThresholdSince = nil
 
-		d.insertEvent(ctx, TriggerEvent{
-			ClusterName: string(cl.Name),
-			Instance:    instance,
-			TriggerType: TriggerActivitySpike,
-			Outcome:     OutcomeSkippedBelowBaseline,
-			TriggerContext: map[string]any{
-				"baseline":            baseline,
-				"min_baseline_active": cfg.MinBaselineActive,
-				"current":             count,
-			},
-		})
+		if count >= cfg.MinBaselineActive && belowBaselineDue(state, now, cfg.MaxSnapshotFrequency) {
+			state.lastBelowBaselineAt = &now
+
+			d.logger.Debug("activity below baseline floor",
+				zap.String("cluster", string(cl.Name)),
+				zap.String("instance", instance),
+				zap.Float64("baseline", baseline),
+				zap.Int("current", count),
+				zap.Int("min_baseline_active", cfg.MinBaselineActive))
+		}
 
 		return
 	}
@@ -101,18 +103,12 @@ func (d *Daemon) tickActivitySpike(
 		return
 	}
 
-	if d.debounced(cl.Name, cfg.MaxSnapshotFrequency) {
-		d.insertEvent(ctx, TriggerEvent{
-			ClusterName: string(cl.Name),
-			Instance:    instance,
-			TriggerType: TriggerActivitySpike,
-			Outcome:     OutcomeSkippedDebounce,
-			TriggerContext: map[string]any{
-				"baseline":      baseline,
-				"peak_value":    count,
-				"threshold_pct": t.ActiveThresholdPct,
-			},
-		})
+	if d.debounced(hostKey{Cluster: string(cl.Name), Instance: instance}, cfg.MaxSnapshotFrequency) {
+		d.logger.Debug("activity spike debounced",
+			zap.String("cluster", string(cl.Name)),
+			zap.String("instance", instance),
+			zap.Float64("baseline", baseline),
+			zap.Int("peak_value", count))
 
 		return
 	}
@@ -169,32 +165,22 @@ func (d *Daemon) tickRoleChange(
 	state.lastInRecovery = &current
 
 	if !directionAllowed(t.Direction, direction) {
-		d.insertEvent(ctx, TriggerEvent{
-			ClusterName: string(cl.Name),
-			Instance:    instance,
-			TriggerType: TriggerRoleChange,
-			Outcome:     OutcomeSkippedWrongDirection,
-			TriggerContext: map[string]any{
-				"from_role": from,
-				"to_role":   to,
-				"allowed":   string(t.Direction),
-			},
-		})
+		d.logger.Debug("role change wrong direction",
+			zap.String("cluster", string(cl.Name)),
+			zap.String("instance", instance),
+			zap.String("from_role", from),
+			zap.String("to_role", to),
+			zap.String("allowed", string(t.Direction)))
 
 		return
 	}
 
-	if d.debounced(cl.Name, cfg.MaxSnapshotFrequency) {
-		d.insertEvent(ctx, TriggerEvent{
-			ClusterName: string(cl.Name),
-			Instance:    instance,
-			TriggerType: TriggerRoleChange,
-			Outcome:     OutcomeSkippedDebounce,
-			TriggerContext: map[string]any{
-				"from_role": from,
-				"to_role":   to,
-			},
-		})
+	if d.debounced(hostKey{Cluster: string(cl.Name), Instance: instance}, cfg.MaxSnapshotFrequency) {
+		d.logger.Debug("role change debounced",
+			zap.String("cluster", string(cl.Name)),
+			zap.String("instance", instance),
+			zap.String("from_role", from),
+			zap.String("to_role", to))
 
 		return
 	}
@@ -257,9 +243,9 @@ func (d *Daemon) takeSnapshot(
 
 	d.mu.Lock()
 	if d.lastAuto == nil {
-		d.lastAuto = map[string]time.Time{}
+		d.lastAuto = map[hostKey]time.Time{}
 	}
-	d.lastAuto[string(cl.Name)] = createdAt
+	d.lastAuto[hostKey{Cluster: string(cl.Name), Instance: instance}] = createdAt
 	d.mu.Unlock()
 
 	if d.resetQueryStatsAllow {
@@ -288,16 +274,22 @@ func (d *Daemon) takeSnapshot(
 		zap.String("snapshot_id", id.String()))
 }
 
-func (d *Daemon) debounced(cluster config.ClusterName, maxFreq time.Duration) bool {
+func (d *Daemon) debounced(key hostKey, maxFreq time.Duration) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	last, ok := d.lastAuto[string(cluster)]
+	last, ok := d.lastAuto[key]
 	if !ok {
 		return false
 	}
 
 	return time.Since(last) < maxFreq
+}
+
+// belowBaselineDue reports whether enough time has passed since the last
+// below-baseline event for this host to record another (throttle window).
+func belowBaselineDue(state *hostState, now time.Time, every time.Duration) bool {
+	return state.lastBelowBaselineAt == nil || now.Sub(*state.lastBelowBaselineAt) >= every
 }
 
 func (d *Daemon) insertEvent(ctx context.Context, e TriggerEvent) {

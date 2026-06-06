@@ -128,6 +128,18 @@
         "minBaseline": "Мин. baseline активных соединений",
         "retentionBytes": "Лимит хранения, байт",
         "retentionBytesHint": "0 — без ограничения",
+        "retentionGiB": "Лимит хранения, ГиБ",
+        "invalidDuration": "Неверный формат (напр. 30s, 5m, 1h)",
+        "mustBePositive": "Должно быть ≥ 0",
+        "status": {
+          "enabled": "Включено",
+          "disabled": "Выключено",
+          "daemonActive": "Демон активен",
+          "daemonDown": "Демон не запущен",
+          "lastHeartbeat": "Последний сигнал",
+          "lastEvent": "Последнее событие",
+          "noEvents": "Событий пока нет"
+        },
         "retentionMinDays": "Мин. дней хранения",
         "windowSize": "Размер окна",
         "thresholdPct": "Порог, %",
@@ -144,7 +156,9 @@
         "filter": {
             "cluster": "Кластер",
             "outcome": "Результат",
-            "triggerType": "Тип триггера"
+            "triggerType": "Тип триггера",
+            "from": "С даты",
+            "to": "По дату"
         },
         "history": {
             "when": "Время",
@@ -152,7 +166,8 @@
             "instance": "Хост",
             "trigger": "Триггер",
             "outcome": "Результат",
-            "noContext": "—"
+            "noContext": "—",
+            "openSnapshot": "Открыть снимок"
         },
         "clusters": {
             "name": "Кластер",
@@ -167,7 +182,9 @@
             "loadError": "Не удалось загрузить настройки кластера",
             "saved": "Override сохранён",
             "noClusters": "Нет доступных кластеров",
-            "useDefault": "По умолчанию"
+            "useDefault": "По умолчанию",
+            "resetToDefault": "Сбросить к дефолту",
+            "filterCluster": "Поиск по кластеру"
         },
         "outcome": {
             "snapshot_created": "Снимок создан",
@@ -176,6 +193,18 @@
             "skipped_wrong_direction": "Пропущено (неверное направление)",
             "skipped_storage_unavailable": "Пропущено (хранилище недоступно)",
             "error": "Ошибка"
+        },
+        "context": {
+            "baseline": "Базовая линия",
+            "peak_value": "Пик",
+            "threshold_pct": "Порог",
+            "duration": "Длительность всплеска",
+            "window_size": "Окно",
+            "current": "Текущее значение",
+            "min_baseline_active": "Мин. baseline",
+            "from_role": "Из роли",
+            "to_role": "В роль",
+            "allowed": "Разрешённое направление"
         },
         "trigger": {
             "activity_spike": "Всплеск активности",

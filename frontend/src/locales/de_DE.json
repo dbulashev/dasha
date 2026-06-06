@@ -106,6 +106,18 @@
     "minBaseline": "Min. Baseline aktiver Verbindungen",
     "retentionBytes": "Aufbewahrungslimit, Bytes",
     "retentionBytesHint": "0 — kein Limit",
+    "retentionGiB": "Aufbewahrungslimit, GiB",
+    "invalidDuration": "Ungültiges Format (z. B. 30s, 5m, 1h)",
+    "mustBePositive": "Muss ≥ 0 sein",
+    "status": {
+      "enabled": "Aktiviert",
+      "disabled": "Deaktiviert",
+      "daemonActive": "Daemon aktiv",
+      "daemonDown": "Daemon nicht aktiv",
+      "lastHeartbeat": "Letztes Signal",
+      "lastEvent": "Letztes Ereignis",
+      "noEvents": "Noch keine Ereignisse"
+    },
     "retentionMinDays": "Min. Aufbewahrungstage",
     "windowSize": "Fenstergröße",
     "thresholdPct": "Schwellenwert, %",
@@ -122,7 +134,9 @@
     "filter": {
       "cluster": "Cluster",
       "outcome": "Ergebnis",
-      "triggerType": "Trigger-Typ"
+      "triggerType": "Trigger-Typ",
+      "from": "Ab Datum",
+      "to": "Bis Datum"
     },
     "history": {
       "when": "Zeit",
@@ -130,7 +144,8 @@
       "instance": "Host",
       "trigger": "Trigger",
       "outcome": "Ergebnis",
-      "noContext": "—"
+      "noContext": "—",
+      "openSnapshot": "Snapshot öffnen"
     },
     "clusters": {
       "name": "Cluster",
@@ -145,7 +160,9 @@
       "loadError": "Cluster-Einstellungen konnten nicht geladen werden",
       "saved": "Override gespeichert",
       "noClusters": "Keine Cluster verfügbar",
-      "useDefault": "Standard"
+      "useDefault": "Standard",
+      "resetToDefault": "Auf Standard zurücksetzen",
+      "filterCluster": "Cluster suchen"
     },
     "outcome": {
       "snapshot_created": "Snapshot erstellt",
@@ -154,6 +171,18 @@
       "skipped_wrong_direction": "Übersprungen (falsche Richtung)",
       "skipped_storage_unavailable": "Übersprungen (Speicher nicht verfügbar)",
       "error": "Fehler"
+    },
+    "context": {
+      "baseline": "Baseline",
+      "peak_value": "Spitze",
+      "threshold_pct": "Schwelle",
+      "duration": "Spike-Dauer",
+      "window_size": "Fenster",
+      "current": "Aktueller Wert",
+      "min_baseline_active": "Min. Baseline",
+      "from_role": "Von Rolle",
+      "to_role": "Zu Rolle",
+      "allowed": "Erlaubte Richtung"
     },
     "trigger": {
       "activity_spike": "Aktivitäts-Spike",

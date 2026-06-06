@@ -245,7 +245,7 @@ func (s *Storage) ListTriggerEvents(ctx context.Context, f autosnapshot.TriggerE
 	)
 
 	if f.ClusterName != "" {
-		where = append(where, fmt.Sprintf("cluster_name = $%d", argIdx))
+		where = append(where, fmt.Sprintf("cluster_name ILIKE '%%' || $%d || '%%'", argIdx))
 		args = append(args, f.ClusterName)
 		argIdx++
 	}

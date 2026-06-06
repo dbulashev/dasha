@@ -68,6 +68,17 @@ const directionOptions = computed(() => [
   { value: 'replica_to_master', title: t('autosnapshot.direction.replicaToMaster') },
 ])
 
+// True when the cluster has at least one field overriding the global default.
+const hasAnyOverride = computed(
+  () =>
+    form.activitySpike.Enabled !== null ||
+    form.activitySpike.WindowSize !== null ||
+    form.activitySpike.ActiveThresholdPct !== null ||
+    form.activitySpike.SpikeDuration !== null ||
+    form.roleChange.Enabled !== null ||
+    form.roleChange.Direction !== null,
+)
+
 type OverridesShape = {
   activity_spike?: Partial<{
     enabled: boolean
@@ -364,6 +375,15 @@ onMounted(loadOverride)
       </v-card-text>
 
       <v-card-actions>
+        <v-btn
+          v-if="isAdmin"
+          variant="text"
+          prepend-icon="mdi-restore"
+          :disabled="!hasAnyOverride"
+          @click="resetForm"
+        >
+          {{ t('autosnapshot.clusters.resetToDefault') }}
+        </v-btn>
         <v-spacer />
         <v-btn variant="text" @click="close(false)">{{ t('autosnapshot.clusters.close') }}</v-btn>
         <v-btn
