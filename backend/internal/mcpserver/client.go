@@ -470,10 +470,12 @@ func (d *DashaClient) TableDescribeBloat(ctx context.Context, cluster, instance,
 	return pick(r.JSON200, r.HTTPResponse, "describe_table")
 }
 
-// TableDescribePartitions returns the partitions of one partitioned table.
-func (d *DashaClient) TableDescribePartitions(ctx context.Context, cluster, instance, database, schema, table string) (any, error) {
+// TableDescribePartitions returns up to limit partitions of one partitioned
+// table (heavily partitioned tables can have thousands — the cap keeps the
+// result within the response size limit).
+func (d *DashaClient) TableDescribePartitions(ctx context.Context, cluster, instance, database, schema, table string, limit int) (any, error) {
 	r, err := d.api.GetTablesDescribePartitionsWithResponse(ctx, &apiclient.GetTablesDescribePartitionsParams{
-		ClusterName: cluster, Instance: instance, Database: database, Schema: schema, Table: table,
+		ClusterName: cluster, Instance: instance, Database: database, Schema: schema, Table: table, Limit: &limit,
 	}, d.editor(ctx))
 	if err != nil {
 		return nil, wrapErr("describe_table", err)

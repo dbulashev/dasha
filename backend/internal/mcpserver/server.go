@@ -115,6 +115,13 @@ type describeTableArgs struct {
 	Database string `json:"database" jsonschema:"Database name"`
 	Schema   string `json:"schema,omitempty" jsonschema:"Schema name (default 'public')"`
 	Table    string `json:"table" jsonschema:"Table name"`
+	Limit    int    `json:"limit,omitempty" jsonschema:"Max partitions to list for a partitioned table (default 50)"`
+}
+
+type connectionsArgs struct {
+	Cluster  string `json:"cluster" jsonschema:"Dasha cluster name"`
+	Instance string `json:"instance" jsonschema:"Dasha instance / host name"`
+	Limit    int    `json:"limit,omitempty" jsonschema:"Max pg_stat_activity rows to sample (default 100)"`
 }
 
 type fleetHealthArgs struct {
@@ -325,7 +332,12 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 		Name: "connections",
 		Description: "Diagnose connection usage for a cluster/instance: counts by backend state and by client " +
 			"source, plus a capped pg_stat_activity sample of who holds the connections.",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, a instanceArgs) (*mcp.CallToolResult, any, error) {
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, a connectionsArgs) (*mcp.CallToolResult, any, error) {
+		limit := a.Limit
+		if limit <= 0 {
+			limit = connectionSampleLimit
+		}
+
 		out := map[string]any{}
 
 		st, err := c.ConnectionStates(ctx, a.Cluster, a.Instance)
@@ -334,7 +346,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 		sr, err := c.ConnectionSources(ctx, a.Cluster, a.Instance)
 		section(out, "sources", sr, err)
 
-		act, err := c.ConnectionStatActivity(ctx, a.Cluster, a.Instance, connectionSampleLimit)
+		act, err := c.ConnectionStatActivity(ctx, a.Cluster, a.Instance, limit)
 		section(out, "activity", act, err)
 
 		return jsonResult(out, nil)
@@ -350,6 +362,11 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			schema = "public"
 		}
 
+		partitionLimit := a.Limit
+		if partitionLimit <= 0 {
+			partitionLimit = defaultPartitionLimit
+		}
+
 		out := map[string]any{}
 
 		d, err := c.TableDescribe(ctx, a.Cluster, a.Instance, a.Database, schema, a.Table)
@@ -358,7 +375,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 		bl, err := c.TableDescribeBloat(ctx, a.Cluster, a.Instance, a.Database, schema, a.Table)
 		section(out, "bloat", bl, err)
 
-		pt, err := c.TableDescribePartitions(ctx, a.Cluster, a.Instance, a.Database, schema, a.Table)
+		pt, err := c.TableDescribePartitions(ctx, a.Cluster, a.Instance, a.Database, schema, a.Table, partitionLimit)
 		section(out, "partitions", pt, err)
 
 		re, err := c.TableDescribeRowEstimate(ctx, a.Cluster, a.Instance, a.Database, schema, a.Table)
@@ -483,6 +500,10 @@ func addTool[In, Out any](
 // connectionSampleLimit caps the pg_stat_activity rows the connections tool
 // returns, keeping the result readable while still showing who is connected.
 const connectionSampleLimit = 100
+
+// defaultPartitionLimit caps the partitions describe_table lists, so a heavily
+// partitioned table does not blow the response size limit.
+const defaultPartitionLimit = 50
 
 // maxResultBytes caps a single tool's JSON result so one call cannot flood the
 // model's context window (and the transport). An oversized result is refused
