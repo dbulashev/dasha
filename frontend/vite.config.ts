@@ -28,6 +28,11 @@ export default defineConfig({
     }),
   ],
   server: {
+    // Dev-server only. Vite 6 rejects any Host header except localhost by
+    // default; the OIDC demo issuer is reached via the "keycloak" hostname
+    // (127.0.0.1 keycloak in /etc/hosts), so allow it. Does not affect the
+    // production build (served by nginx).
+    allowedHosts: ['keycloak'],
     proxy: {
       '/api': {
         target: 'http://localhost:8000',

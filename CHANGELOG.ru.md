@@ -1,5 +1,11 @@
 # История изменений
 
+## Unreleased
+
+### Фичи
+- **Персональные API-токены (PAT):** залогиненный пользователь выпускает персональные API-токены (`POST`/`GET`/`DELETE /api/auth/tokens` + диалог *Персональные API-токены* в меню пользователя), передаваемые в заголовке `X-API-Key` — bearer-креды для не-браузерных клиентов (скрипты, будущий MCP-сервер) с сохранением роли (Casbin RBAC). Хранятся в виде хеша в БД снимков (таблица `api_tokens`, создаётся `dasha migrate`); least-privilege (запрашиваемая роль ≤ своей, по умолчанию `viewer`), anti-chaining (нельзя выпустить из-под PAT), одноразовый показ секрета, мгновенный отзыв, опциональный срок. Резолв токена кэшируется с коротким TTL, чтобы не ходить в БД на горячем пути авторизации; `last_used` обновляется не чаще раза за интервал на токен.
+- **MCP-коннектор (`dasha-mcp`):** отдельный read-only [MCP](https://modelcontextprotocol.io)-сервер поверх Dasha API для AI-ассистентов (Claude Desktop / Code, opencode, Cursor, …). 21 read-only tools (кластеры, ранжирование здоровья флота, instance info, health score/тренд/по-базам и рекомендации, top/активные/блокированные запросы, отчёт по запросам и сравнение снимков, индексы, крупнейшие таблицы, детальный разбор таблицы, репликация, анализ настроек, wait events, соединения, риск xid-wraparound) и 5 prompts (`diagnose_cluster`, `explain_health_score`, `find_index_opportunities`, `investigate_slow_queries`, `fleet_overview`). На каждом tool — MCP-аннотации read-only + closed-world, чтобы клиенты могли авто-аппрувить; сервер отдаёт инструкции по использованию для модели, а HTTP-режим шарит один кэш схем между per-token серверами. Работает по **stdio** (одна личность) или **HTTP/SSE** с per-user passthrough токена (общего серверного токена нет — Casbin RBAC сохраняется). Хардненинг: лимит размера ответа tool (слишком большой результат отклоняется, не режется в невалидный JSON), хэшированный и ограниченный кэш серверов по токену, токены не логируются; rate-limit действует через вышестоящий per-identity лимитер Dasha. Типизированный клиент к Dasha API из OpenAPI-спеки; multi-arch образ `deploy/images/Dockerfile.mcp`, публикуется в release-workflow; опциональный gated Helm Deployment + Service (`mcp.enabled`).
+
 ## v1.2.0
 
 ### Фичи

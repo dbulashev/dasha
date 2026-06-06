@@ -16,6 +16,7 @@ import (
 	"context"
 	"flag"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"time"
@@ -27,6 +28,7 @@ import (
 
 func main() {
 	dashaURL := flag.String("dasha-url", "http://localhost:8000", "Dasha API base URL")
+	httpAddr := flag.String("http", "", "listen address for HTTP/SSE transport (e.g. :8765); empty = stdio")
 	timeout := flag.Duration("timeout", 15*time.Second, "per-request timeout for Dasha API calls")
 	flag.Parse()
 
@@ -39,6 +41,25 @@ func main() {
 		log.Fatalf("dasha-mcp: %v", err)
 	}
 
+	if *httpAddr != "" {
+		// HTTP/SSE: each request carries its own token (passthrough); no shared
+		// server token is used.
+		log.Printf("dasha-mcp: HTTP transport on %s (dasha %s)", *httpAddr, *dashaURL)
+
+		srv := &http.Server{ //nolint:exhaustruct
+			Addr:              *httpAddr,
+			Handler:           mcpserver.HTTPHandler(client, version()),
+			ReadHeaderTimeout: 10 * time.Second,
+		}
+
+		if err := srv.ListenAndServe(); err != nil {
+			log.Fatalf("dasha-mcp: %v", err)
+		}
+
+		return
+	}
+
+	// stdio: single identity from DASHA_MCP_TOKEN.
 	server := mcpserver.NewMCPServer(client, version())
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)

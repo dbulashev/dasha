@@ -8,6 +8,9 @@ images:
   frontend:
     repository: dbulashev/dasha-frontend
     tag: ""
+  mcp:
+    repository: dbulashev/dasha-mcp
+    tag: ""  # defaults to appVersion
 
 # -- dasha.yaml config rendered as ConfigMap
 # Passwords must use password_from_env, never inline
@@ -256,6 +259,30 @@ backend:
   #  - name: certs
   #    mountPath: /etc/ssl/pg
   #    readOnly: true
+
+# -- MCP connector (dasha-mcp): optional read-only MCP server over the Dasha API
+# for AI assistants. Runs in HTTP/SSE mode with per-user token passthrough — each
+# client sends its own personal access token in the Authorization header, so the
+# user's RBAC is preserved and there is no shared server token by default.
+mcp:
+  enabled: false
+  replicaCount: 1
+  port: 8765
+  # -- Dasha API base URL the server calls. Empty = in-cluster backend Service.
+  dashaUrl: ""
+  # -- Per-request timeout for outbound Dasha API calls (Go duration).
+  timeout: 30s
+  # -- Optional shared fallback token (DASHA_MCP_TOKEN) for clients that cannot
+  # send per-request auth headers. Leave unset to keep strict per-user passthrough.
+  token:
+    existingSecret: ""
+    secretKey: token
+  resources: {}
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  # To expose the MCP endpoint outside the cluster, front this Service with your
+  # own Ingress/Gateway (TLS terminated there). The pod speaks plain HTTP/SSE.
 
 service:
   type: ClusterIP

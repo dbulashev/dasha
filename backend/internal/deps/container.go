@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/samber/do"
 	"github.com/spf13/viper"
@@ -137,22 +139,58 @@ func (c *Container) AuthMiddlewares(ctx context.Context, resolver auth.PATResolv
 	return auth.NewMiddlewares(ctx, cfg.Auth, resolver, logger)
 }
 
+// PAT resolution tuning. The cache keeps the hot path (every API request that
+// carries a PAT) off the database, while a short TTL bounds how long a revoked
+// token can keep working: revocation only knows the token id, not the secret's
+// hash, so it cannot invalidate the cache directly — the TTL is the staleness
+// window instead. last_used is updated at most once per touch interval per token.
+const (
+	patCacheTTL      = 30 * time.Second
+	patTouchInterval = 5 * time.Minute
+)
+
+// patEntry is a cached resolution of a presented secret's hash.
+type patEntry struct {
+	user      *auth.UserContext
+	expiresAt time.Time
+	touchedAt time.Time
+}
+
+// patStore is the storage surface the resolver needs, expressed as an interface
+// so the resolver's cache/throttle logic can be unit-tested without a database.
+type patStore interface {
+	ResolveAPIToken(ctx context.Context, hash []byte) (*storage.APITokenIdentity, bool, error)
+	TouchAPIToken(ctx context.Context, hash []byte) error
+}
+
 // patResolver adapts the snapshot storage to auth.PATResolver: it hashes the
 // presented secret and looks it up, mapping an active token to its owner's
 // identity and role. Lives here (not in auth) to keep auth free of a storage
-// dependency.
+// dependency. Successful resolutions are cached (TTL-bounded) to spare the DB.
 type patResolver struct {
-	storage *storage.Storage
-	logger  *zap.Logger
+	storage    patStore
+	logger     *zap.Logger
+	ttl        time.Duration
+	touchEvery time.Duration
+
+	mu    sync.Mutex
+	cache map[string]*patEntry
 }
 
-func (r patResolver) ResolveToken(ctx context.Context, presented string) (*auth.UserContext, bool) {
-	// Fast reject anything that isn't a personal access token before hitting the DB.
+func (r *patResolver) ResolveToken(ctx context.Context, presented string) (*auth.UserContext, bool) {
+	// Fast reject anything that isn't a personal access token before hashing or hitting the DB.
 	if !strings.HasPrefix(presented, pat.Prefix) {
 		return nil, false
 	}
 
-	idn, ok, err := r.storage.ResolveAPIToken(ctx, pat.Hash(presented))
+	hash := pat.Hash(presented)
+	key := string(hash)
+
+	if user, ok := r.fromCache(ctx, key, hash); ok {
+		return user, true
+	}
+
+	idn, ok, err := r.storage.ResolveAPIToken(ctx, hash)
 	if err != nil {
 		r.logger.Warn("personal access token resolve failed", zap.Error(err))
 
@@ -163,11 +201,60 @@ func (r patResolver) ResolveToken(ctx context.Context, presented string) (*auth.
 		return nil, false
 	}
 
-	return &auth.UserContext{
+	user := &auth.UserContext{
 		Name:       idn.Subject,
 		Role:       idn.Role,
 		AuthMethod: auth.MethodPAT,
-	}, true
+	}
+	r.store(key, user)
+	r.touch(ctx, hash) // record first use of this resolution window
+
+	return user, true
+}
+
+// fromCache returns a live cached identity, dropping expired entries and
+// throttling the last_used update to once per touch interval.
+func (r *patResolver) fromCache(ctx context.Context, key string, hash []byte) (*auth.UserContext, bool) {
+	now := time.Now()
+
+	r.mu.Lock()
+	entry, ok := r.cache[key]
+	if !ok || now.After(entry.expiresAt) {
+		if ok {
+			delete(r.cache, key)
+		}
+		r.mu.Unlock()
+
+		return nil, false
+	}
+
+	needTouch := now.Sub(entry.touchedAt) >= r.touchEvery
+	if needTouch {
+		entry.touchedAt = now
+	}
+	user := entry.user
+	r.mu.Unlock()
+
+	if needTouch {
+		r.touch(ctx, hash)
+	}
+
+	return user, true
+}
+
+func (r *patResolver) store(key string, user *auth.UserContext) {
+	now := time.Now()
+
+	r.mu.Lock()
+	r.cache[key] = &patEntry{user: user, expiresAt: now.Add(r.ttl), touchedAt: now}
+	r.mu.Unlock()
+}
+
+// touch records last_used best-effort; failures must not block authentication.
+func (r *patResolver) touch(ctx context.Context, hash []byte) {
+	if err := r.storage.TouchAPIToken(ctx, hash); err != nil {
+		r.logger.Debug("personal access token touch failed", zap.Error(err))
+	}
 }
 
 // NewPATResolver returns an auth.PATResolver backed by storage, or nil (PAT auth
@@ -177,7 +264,13 @@ func NewPATResolver(st *storage.Storage, logger *zap.Logger) auth.PATResolver {
 		return nil
 	}
 
-	return patResolver{storage: st, logger: logger}
+	return &patResolver{
+		storage:    st,
+		logger:     logger,
+		ttl:        patCacheTTL,
+		touchEvery: patTouchInterval,
+		cache:      make(map[string]*patEntry),
+	}
 }
 
 func provideLogger(debug bool) *zap.Logger {

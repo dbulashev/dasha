@@ -222,6 +222,25 @@ storage:
 
 Выполните `dasha migrate` для создания секционированных таблиц перед первым использованием.
 
+#### Персональные API-токены (опционально)
+
+Залогиненный пользователь может выпускать **персональные API-токены (PAT)** — bearer-секреты, передаваемые в заголовке `X-API-Key`, — чтобы не-браузерные клиенты (`dasha-mcp`, скрипты) работали с его личностью и ролью (RBAC сохраняется). Требуется хранилище снимков: токены хранятся в виде хеша в `api_tokens`, поэтому сначала выполните `dasha migrate`. Режим auth — `token` или `oidc` (не `none`).
+
+- **Через UI** (OIDC): меню пользователя → *Персональные API-токены* → создать (имя, роль ≤ своей, опциональный срок). Полный секрет показывается **один раз**.
+- **Через API**: выпуск из интерактивной личности (OIDC-сессия или статический config-токен — *не* из другого PAT):
+
+  ```bash
+  curl -sX POST http://localhost:8000/api/auth/tokens \
+    -H "X-API-Key: <статический-config-токен>" \
+    -H "Content-Type: application/json" \
+    -d '{"name":"mcp","role":"viewer"}'
+  # → { "token": "dasha_pat_…", "prefix": "dasha_pat_xxxxxx", ... }   (секрет — один раз)
+
+  curl -H "X-API-Key: dasha_pat_…" http://localhost:8000/api/clusters   # использование
+  ```
+
+Список своих токенов — `GET /api/auth/tokens` (без секретов); отзыв — `DELETE /api/auth/tokens/{id}` (немедленно). Запрашиваемая роль не выше своей (по умолчанию `viewer`); `expires_in_days` опционально (0 / нет = бессрочно).
+
 ### Локальный запуск
 
 ```bash
@@ -250,6 +269,107 @@ make demo-lab-down     # Остановить и очистить
 - **Keycloak**: OIDC-провайдер с настроенным realm, пользователи `admin`/`admin` и `viewer`/`viewer`
 - **БД хранилища**: хранилище снимков с автоматической миграцией при запуске
 - **Генератор нагрузки**: непрерывная фоновая нагрузка для реалистичных данных
+
+## MCP-коннектор (dasha-mcp)
+
+`dasha-mcp` — отдельный **read-only** [MCP](https://modelcontextprotocol.io)-сервер поверх Dasha API. Позволяет AI-ассистентам запрашивать диагностику флота PostgreSQL как tools/prompts, прокидывая токен каждого вызывающего в Dasha (RBAC сохраняется). Подходит любой MCP-совместимый клиент — Claude Desktop, Claude Code, Cursor, Continue, **opencode** и т.д.
+
+- **Tools (21):** `list_clusters`, `fleet_health`, `get_instance_info`, `get_health_score`, `get_health_recommendations`, `health_trend`, `health_databases`, `top_queries` (по времени/WAL), `query_report`, `list_snapshots`, `query_compare`, `running_queries`, `blocked_queries`, `list_indexes` (missing/unused/usage), `top_tables`, `describe_table`, `get_replication`, `settings_analyze`, `wait_events`, `connections`, `vacuum_danger`. Все помечены **read-only** и closed-world, чтобы совместимые клиенты показывали (и авто-аппрувили) их как безопасные. Сервер также отдаёт **инструкции** по использованию, которые подсказывают модели, какой tool/prompt выбрать.
+- **Prompts (5):** `diagnose_cluster`, `explain_health_score`, `find_index_opportunities`, `investigate_slow_queries`, `fleet_overview`.
+
+**Предусловие:** токен Dasha API — [персональный токен](#персональные-api-токены-опционально) (`dasha_pat_…`) или статический config-токен. Он определяет роль (`viewer` достаточно).
+
+### Сборка
+
+```bash
+cd backend && go build -o dasha-mcp ./cmd/dasha-mcp
+# либо образ:
+docker build -f deploy/images/Dockerfile.mcp -t dasha-mcp .
+```
+
+### stdio (локально — Claude Desktop / Claude Code / opencode / Cursor)
+
+Клиент сам запускает бинарь и общается через stdin/stdout; токен — переменная окружения `DASHA_MCP_TOKEN`.
+
+**Claude Desktop** (`claude_desktop_config.json`) или **Cursor** (`.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "dasha": {
+      "command": "/path/to/dasha-mcp",
+      "args": ["--dasha-url", "http://localhost:8000"],
+      "env": { "DASHA_MCP_TOKEN": "dasha_pat_…" }
+    }
+  }
+}
+```
+
+**Claude Code:**
+
+```bash
+claude mcp add dasha --env DASHA_MCP_TOKEN=dasha_pat_… -- /path/to/dasha-mcp --dasha-url http://localhost:8000
+```
+
+**opencode** (`opencode.json` или `~/.config/opencode/opencode.json`):
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "dasha": {
+      "type": "local",
+      "command": ["/path/to/dasha-mcp", "--dasha-url", "http://localhost:8000"],
+      "enabled": true,
+      "environment": { "DASHA_MCP_TOKEN": "dasha_pat_…" }
+    }
+  }
+}
+```
+
+### HTTP/SSE (общий / мультипользовательский)
+
+Запускается как сервис; **каждый запрос несёт свой токен** (общего серверного токена нет), поэтому RBAC сохраняется поперсонально:
+
+```bash
+dasha-mcp --http :8765 --dasha-url http://dasha-backend:8000
+# контейнер:
+docker run -p 8765:8765 dasha-mcp --http :8765 --dasha-url http://dasha-backend:8000
+```
+
+Удалённый MCP-клиент указывает `http://<host>:8765` и шлёт токен в `Authorization: Bearer dasha_pat_…` (или `X-API-Key`). Например, **opencode**:
+
+```json
+{
+  "mcp": {
+    "dasha": {
+      "type": "remote",
+      "url": "http://localhost:8765",
+      "enabled": true,
+      "headers": { "Authorization": "Bearer dasha_pat_…" }
+    }
+  }
+}
+```
+
+Сервер read-only (мутирующих эндпоинтов нет) и работает под non-root. Хардненинг: размер ответа tool ограничен (слишком большой результат отклоняется с подсказкой сузить запрос, а не режется в невалидный JSON); кэш серверов по токену хэширован и ограничен; токены не логируются. В общем HTTP-развёртывании ставьте за TLS; rate-limit обеспечивает вышестоящий per-identity лимитер Dasha (каждый PAT — отдельная личность), поэтому он действует и через passthrough.
+
+### Kubernetes (Helm)
+
+В чарте есть опциональные, выключенные по умолчанию Deployment + Service для MCP (HTTP-режим). При включении сервер автоматически подключается к in-cluster бэкенду:
+
+```yaml
+# values.yaml
+mcp:
+  enabled: true
+  port: 8765
+  # dashaUrl: ""   # пусто = in-cluster Service {release}-backend
+  # token:         # опциональный общий fallback; не задавайте для строгого per-user passthrough
+  #   existingSecret: dasha-mcp-token
+  #   secretKey: token
+```
+
+Создаются `{release}-mcp` Deployment + `ClusterIP` Service на порту `8765`. Чтобы открыть наружу — поставьте перед Service свой Ingress/Gateway (TLS терминируется там), а клиенты шлют `Authorization: Bearer dasha_pat_…` в каждом запросе.
 
 ## Разработка
 

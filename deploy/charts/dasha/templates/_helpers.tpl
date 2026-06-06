@@ -74,6 +74,25 @@ Frontend image
 {{- end }}
 
 {{/*
+MCP connector image
+*/}}
+{{- define "dasha.mcpImage" -}}
+{{ .Values.images.mcp.repository }}:{{ .Values.images.mcp.tag | default .Chart.AppVersion }}
+{{- end }}
+
+{{/*
+In-cluster Dasha API base URL the MCP connector calls.
+Defaults to the backend Service; override with mcp.dashaUrl.
+*/}}
+{{- define "dasha.mcpDashaURL" -}}
+{{- if .Values.mcp.dashaUrl -}}
+{{- .Values.mcp.dashaUrl -}}
+{{- else -}}
+{{- printf "http://%s-backend.%s.svc.cluster.local:%v" (include "dasha.fullname" .) (include "dasha.namespace" .) .Values.backend.port -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Whether TLS is enabled at the ingress / gateway layer.
 Returns "true" or "false" (string — use with eq).
 */}}

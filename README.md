@@ -224,6 +224,25 @@ storage:
 
 Run `dasha migrate` to create partitioned tables before first use.
 
+#### Personal Access Tokens (optional)
+
+A logged-in user can mint **personal access tokens (PATs)** — bearer secrets sent as the `X-API-Key` header — so non-browser clients (the `dasha-mcp` server, scripts) act with that user's identity and role (RBAC is preserved). Requires snapshot storage: tokens are stored hashed in `api_tokens`, so run `dasha migrate` first. Auth mode must be `token` or `oidc` (not `none`).
+
+- **From the UI** (OIDC): user menu → *Personal access tokens* → create (name, role ≤ your own, optional expiry). The full secret is shown **once**.
+- **From the API**: mint with an interactive identity (an OIDC session or a static config token — *not* from another PAT):
+
+  ```bash
+  curl -sX POST http://localhost:8000/api/auth/tokens \
+    -H "X-API-Key: <static-config-token>" \
+    -H "Content-Type: application/json" \
+    -d '{"name":"mcp","role":"viewer"}'
+  # → { "token": "dasha_pat_…", "prefix": "dasha_pat_xxxxxx", ... }   (token returned once)
+
+  curl -H "X-API-Key: dasha_pat_…" http://localhost:8000/api/clusters   # use it
+  ```
+
+List your tokens with `GET /api/auth/tokens` (no secrets); revoke with `DELETE /api/auth/tokens/{id}` (effective immediately). The requested role cannot exceed yours (default `viewer`); `expires_in_days` is optional (0 / omitted = no expiry).
+
 ### Run Locally
 
 ```bash
@@ -252,6 +271,107 @@ The demo includes:
 - **Keycloak**: OIDC provider with preconfigured realm, users `admin`/`admin` and `viewer`/`viewer`
 - **Storage DB**: snapshot storage with auto-migration on startup
 - **Workload generator**: continuous background load for realistic data
+
+## MCP Connector (dasha-mcp)
+
+`dasha-mcp` is a separate, **read-only** [MCP](https://modelcontextprotocol.io) server over the Dasha API. It lets AI assistants query the fleet's PostgreSQL diagnostics as tools/prompts, forwarding each caller's token to Dasha so its RBAC is preserved. Any MCP-compatible client works — Claude Desktop, Claude Code, Cursor, Continue, **opencode**, etc.
+
+- **Tools (21):** `list_clusters`, `fleet_health`, `get_instance_info`, `get_health_score`, `get_health_recommendations`, `health_trend`, `health_databases`, `top_queries` (by time/WAL), `query_report`, `list_snapshots`, `query_compare`, `running_queries`, `blocked_queries`, `list_indexes` (missing/unused/usage), `top_tables`, `describe_table`, `get_replication`, `settings_analyze`, `wait_events`, `connections`, `vacuum_danger`. All are annotated **read-only** and closed-world so compatible clients can surface (and auto-approve) them as safe. The server also ships usage **instructions** that prime the model on which tool/prompt to reach for.
+- **Prompts (5):** `diagnose_cluster`, `explain_health_score`, `find_index_opportunities`, `investigate_slow_queries`, `fleet_overview`.
+
+**Prerequisite:** a Dasha API token — a [personal access token](#personal-access-tokens-optional) (`dasha_pat_…`) or a static config token. It determines the role (`viewer` is enough).
+
+### Build
+
+```bash
+cd backend && go build -o dasha-mcp ./cmd/dasha-mcp
+# or a container image:
+docker build -f deploy/images/Dockerfile.mcp -t dasha-mcp .
+```
+
+### stdio (local — Claude Desktop / Claude Code / opencode / Cursor)
+
+The client launches the binary and talks over stdin/stdout; the token is the `DASHA_MCP_TOKEN` env var.
+
+**Claude Desktop** (`claude_desktop_config.json`) or **Cursor** (`.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "dasha": {
+      "command": "/path/to/dasha-mcp",
+      "args": ["--dasha-url", "http://localhost:8000"],
+      "env": { "DASHA_MCP_TOKEN": "dasha_pat_…" }
+    }
+  }
+}
+```
+
+**Claude Code:**
+
+```bash
+claude mcp add dasha --env DASHA_MCP_TOKEN=dasha_pat_… -- /path/to/dasha-mcp --dasha-url http://localhost:8000
+```
+
+**opencode** (`opencode.json` or `~/.config/opencode/opencode.json`):
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "dasha": {
+      "type": "local",
+      "command": ["/path/to/dasha-mcp", "--dasha-url", "http://localhost:8000"],
+      "enabled": true,
+      "environment": { "DASHA_MCP_TOKEN": "dasha_pat_…" }
+    }
+  }
+}
+```
+
+### HTTP/SSE (shared / multi-user)
+
+Run it as a service; **each request carries its own token** (no shared server token), so per-user RBAC is preserved:
+
+```bash
+dasha-mcp --http :8765 --dasha-url http://dasha-backend:8000
+# container:
+docker run -p 8765:8765 dasha-mcp --http :8765 --dasha-url http://dasha-backend:8000
+```
+
+Point a remote-MCP client at `http://<host>:8765` and send the token as `Authorization: Bearer dasha_pat_…` (or `X-API-Key`). For example, **opencode**:
+
+```json
+{
+  "mcp": {
+    "dasha": {
+      "type": "remote",
+      "url": "http://localhost:8765",
+      "enabled": true,
+      "headers": { "Authorization": "Bearer dasha_pat_…" }
+    }
+  }
+}
+```
+
+The server is read-only (no mutating endpoints are exposed) and runs as a non-root user. Hardening: tool results are size-capped (oversized results are refused with a hint to narrow the request, never truncated into invalid JSON); the per-token server cache is hashed and bounded; tokens are never logged. Put the HTTP transport behind TLS in shared deployments; rate limiting is enforced upstream by Dasha's per-identity limiter (each PAT is a distinct identity), so it applies through the passthrough.
+
+### Kubernetes (Helm)
+
+The chart ships an optional, gated MCP Deployment + Service (HTTP mode). Enable it and the server is wired to the in-cluster backend automatically:
+
+```yaml
+# values.yaml
+mcp:
+  enabled: true
+  port: 8765
+  # dashaUrl: ""   # empty = in-cluster {release}-backend Service
+  # token:         # optional shared fallback; omit for strict per-user passthrough
+  #   existingSecret: dasha-mcp-token
+  #   secretKey: token
+```
+
+This creates `{release}-mcp` Deployment + `ClusterIP` Service on port `8765`. To expose it outside the cluster, front the Service with your own Ingress/Gateway (terminate TLS there) and have clients send `Authorization: Bearer dasha_pat_…` per request.
 
 ## Development
 

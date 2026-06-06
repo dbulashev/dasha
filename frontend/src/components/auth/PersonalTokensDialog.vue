@@ -156,8 +156,8 @@ watch(open, (v) => {
 
         <!-- Create form -->
         <div class="text-subtitle-2 mb-2">{{ t('pat.newToken') }}</div>
-        <v-row dense class="mb-2">
-          <v-col cols="12" sm="5">
+        <v-row dense>
+          <v-col cols="12" sm="6">
             <v-text-field
               v-model="name"
               :label="t('pat.name')"
@@ -175,7 +175,7 @@ watch(open, (v) => {
               hide-details
             />
           </v-col>
-          <v-col cols="6" sm="3">
+          <v-col cols="6" :sm="canPickAdmin ? 3 : 6">
             <v-text-field
               v-model.number="expiresInDays"
               type="number"
@@ -186,19 +186,18 @@ watch(open, (v) => {
               hide-details
             />
           </v-col>
-          <v-col cols="12" sm="1" class="d-flex align-center">
-            <v-btn
-              color="primary"
-              variant="flat"
-              :loading="creating"
-              :disabled="!name.trim()"
-              block
-              @click="create"
-            >
-              {{ t('pat.create') }}
-            </v-btn>
-          </v-col>
         </v-row>
+        <div class="d-flex justify-end mt-2 mb-1">
+          <v-btn
+            color="primary"
+            variant="flat"
+            :loading="creating"
+            :disabled="!name.trim()"
+            @click="create"
+          >
+            {{ t('pat.create') }}
+          </v-btn>
+        </div>
 
         <v-divider class="my-3" />
 
