@@ -250,11 +250,12 @@ func (c Config) Validate() error {
 	switch c.Datasource.Auth.Type {
 	case "", "none":
 	case "bearer":
-		if c.Datasource.Auth.Token == "" {
+		if c.Datasource.Auth.Token == "" && c.Datasource.Auth.TokenFromEnv == "" {
 			return fmt.Errorf("%w: datasource.auth.token (or token_from_env) is required for bearer auth", ErrInvalidConfig)
 		}
 	case "basic":
-		if c.Datasource.Auth.Username == "" || c.Datasource.Auth.Password == "" {
+		if c.Datasource.Auth.Username == "" ||
+			(c.Datasource.Auth.Password == "" && c.Datasource.Auth.PasswordFromEnv == "") {
 			return fmt.Errorf("%w: datasource.auth.username and password (or password_from_env) are required for basic auth", ErrInvalidConfig)
 		}
 	default:
