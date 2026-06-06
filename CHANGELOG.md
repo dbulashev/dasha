@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.1.19
+
+#### New Features
+- **Auto-snapshots of pg_stat_statements**: separate `dasha autosnapshot` daemon creates pgss snapshots automatically on configurable triggers
+  - **Trigger: activity spike** — sliding-window moving average of `count(state='active')` from `pg_stat_activity`; fires when current value exceeds baseline by a configurable percent (default +50%) for a sustained duration (default 5 min)
+  - **Trigger: role change** — detects master↔replica transitions via `pg_is_in_recovery()`, with configurable direction (`both` / `master_to_replica` / `replica_to_master`)
+  - **Global knobs** (stored in storage DB, editable via UI): `poll_interval`, `max_snapshot_frequency` (debounce), `min_baseline_active` (skip when load is low), `retention_bytes`, `retention_min_days`
+  - **Per-cluster overrides**: deep-merged on top of global defaults; clusters can toggle triggers, tune thresholds or disable auto-snapshots individually
+  - **Leader election**: `pg_try_advisory_lock` on storage DB — safe to run the daemon in multiple replicas for HA
+  - **Retention by total size**: drops oldest day-triples (snapshots + query_texts + trigger_events partitions) once total exceeds `retention_bytes`; respects `retention_min_days` floor
+  - **History tab**: filter by cluster / outcome / trigger_type, paginated; records skip reasons (`skipped:debounce`, `skipped:below_baseline`, `skipped:wrong_direction`, `skipped:storage_unavailable`, `error`)
+  - **UI**: new "Auto-snapshots" menu item (`mdi-camera-timer`) with Settings + History tabs; admin-only editing, viewers see read-only state; menu hidden for non-admin when feature is disabled
+  - **API**: `GET/PUT /api/autosnapshot/config`, `GET/PUT /api/autosnapshot/clusters/{name}`, `GET /api/autosnapshot/status`, `GET /api/autosnapshot/trigger-events`
+  - **CLI**: `dasha autosnapshot` (separate command, not started by `dasha serve`)
+  - **Deploy**: Helm chart `autosnapshot` subchart (disabled by default, toggle `autosnapshot.enabled: true`); docker-compose adds `autosnapshot` service alongside `backend` and `frontend`
+
 ## v0.1.18
 
 #### New Features

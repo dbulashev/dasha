@@ -1,0 +1,94 @@
+{{- if .Values.autosnapshot.enabled }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "dasha.fullname" $ }}-autosnapshot
+  namespace: {{ template "dasha.namespace" $ }}
+  labels:
+    {{- include "dasha.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: autosnapshot
+spec:
+  replicas: {{ .Values.autosnapshot.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "dasha.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: autosnapshot
+  template:
+    metadata:
+      annotations:
+        checksum/config: "{{ print .Values.config | sha256sum }}"
+      {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "dasha.selectorLabels" $ | nindent 8 }}
+        app.kubernetes.io/component: autosnapshot
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      terminationGracePeriodSeconds: {{ .Values.autosnapshot.terminationGracePeriodSeconds }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ template "dasha.fullname" $ }}-config
+            defaultMode: 0644
+        {{- range $key := .Values.cloudSAKeys }}
+        - name: sa-{{ $key.name }}
+          secret:
+            {{- if $key.existingSecret }}
+            secretName: {{ $key.existingSecret }}
+            {{- else }}
+            secretName: {{ template "dasha.fullname" $ }}-sa-{{ $key.name }}
+            {{- end }}
+        {{- end }}
+        {{- with .Values.autosnapshot.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      containers:
+        - name: autosnapshot
+          image: {{ include "dasha.backendImage" . }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          args: ["autosnapshot"]
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if or .Values.secrets.externalSecret.enabled (ne .Values.secrets.existingSecret "") }}
+          envFrom:
+            - secretRef:
+                name: {{ include "dasha.envSecretName" . }}
+          {{- end }}
+          volumeMounts:
+            - name: config
+              mountPath: /etc/dasha
+              readOnly: true
+            {{- range $key := .Values.cloudSAKeys }}
+            - name: sa-{{ $key.name }}
+              mountPath: {{ $key.mountPath }}
+              readOnly: true
+            {{- end }}
+            {{- with .Values.autosnapshot.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.autosnapshot.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

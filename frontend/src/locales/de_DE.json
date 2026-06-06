@@ -87,6 +87,76 @@
     "stats": "Gesamt: {total} | Gemeinsam: {both} | Nur in A: {onlyA} | Nur in B: {onlyB}",
     "ageUnknown": "Alter unbekannt"
   },
+  "autosnapshot": {
+    "menu": "Auto-Snapshots",
+    "tabs": {
+      "settings": "Einstellungen",
+      "clusters": "Cluster",
+      "history": "Verlauf"
+    },
+    "globalSection": "Globale Einstellungen",
+    "activitySpike": "Aktivitäts-Spike-Trigger",
+    "roleChange": "Rollenwechsel-Trigger",
+    "enabled": "Aktiviert",
+    "pollInterval": "Polling-Intervall",
+    "maxFrequency": "Max. Snapshot-Frequenz",
+    "minBaseline": "Min. Baseline aktiver Verbindungen",
+    "retentionBytes": "Aufbewahrungslimit, Bytes",
+    "retentionBytesHint": "0 — kein Limit",
+    "retentionMinDays": "Min. Aufbewahrungstage",
+    "windowSize": "Fenstergröße",
+    "thresholdPct": "Schwellenwert, %",
+    "spikeDuration": "Spike-Dauer",
+    "save": "Speichern",
+    "saved": "Einstellungen gespeichert",
+    "overridden": "Überschrieben",
+    "direction": {
+      "label": "Richtung",
+      "both": "Beide Richtungen",
+      "masterToReplica": "Master → Replica",
+      "replicaToMaster": "Replica → Master"
+    },
+    "filter": {
+      "cluster": "Cluster",
+      "outcome": "Ergebnis",
+      "triggerType": "Trigger-Typ"
+    },
+    "history": {
+      "when": "Zeit",
+      "cluster": "Cluster",
+      "instance": "Host",
+      "trigger": "Trigger",
+      "outcome": "Ergebnis",
+      "noContext": "—"
+    },
+    "clusters": {
+      "name": "Cluster",
+      "status": "Status",
+      "triggers": "Trigger",
+      "actions": "Aktionen",
+      "hasOverride": "Override vorhanden",
+      "usesDefaults": "Verwendet Defaults",
+      "editTitle": "Cluster-Einstellungen {name}",
+      "edit": "Bearbeiten",
+      "close": "Schließen",
+      "loadError": "Cluster-Einstellungen konnten nicht geladen werden",
+      "saved": "Override gespeichert",
+      "noClusters": "Keine Cluster verfügbar",
+      "useDefault": "Standard"
+    },
+    "outcome": {
+      "snapshot_created": "Snapshot erstellt",
+      "skipped_debounce": "Übersprungen (Debounce)",
+      "skipped_below_baseline": "Übersprungen (unter Baseline)",
+      "skipped_wrong_direction": "Übersprungen (falsche Richtung)",
+      "skipped_storage_unavailable": "Übersprungen (Speicher nicht verfügbar)",
+      "error": "Fehler"
+    },
+    "trigger": {
+      "activity_spike": "Aktivitäts-Spike",
+      "role_change": "Rollenwechsel"
+    }
+  },
   "cpuTimeWarning": "Abfragen mit negativer CPU-Zeit gefunden (total_plan_time + total_exec_time − blk_read_time − blk_write_time < 0). Wenn pg_stat_statements.track_planning deaktiviert ist, ist plan_time = 0 und der negative Wert weist auf potenziell hohe Planungszeit hin. Aktivieren Sie track_planning für genaue Daten.",
   "header": {
     "lockedItem": "Gesperrtes Objekt",

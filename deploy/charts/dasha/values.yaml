@@ -148,6 +148,18 @@ backend:
   #    mountPath: /etc/ssl/pg
   #    readOnly: true
 
+# -- Auto-snapshot daemon ("dasha autosnapshot")
+# Separate Deployment running the same image with a different entrypoint.
+# Uses storage DB (via config.storage) as coordination backend (advisory lock);
+# safe to set replicaCount=2 for HA — only one replica will do work at a time.
+autosnapshot:
+  enabled: false
+  replicaCount: 1
+  resources: {}
+  terminationGracePeriodSeconds: 30
+  extraVolumes: []
+  extraVolumeMounts: []
+
 service:
   type: ClusterIP
 

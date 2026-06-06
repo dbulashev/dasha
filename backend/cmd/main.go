@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	nethttp "net/http"
 	"os/signal"
@@ -14,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/dbulashev/dasha/internal/auth"
+	"github.com/dbulashev/dasha/internal/autosnapshot"
 	"github.com/dbulashev/dasha/internal/deps"
 	"github.com/dbulashev/dasha/internal/http"
 	"github.com/dbulashev/dasha/internal/storage"
@@ -43,6 +45,7 @@ func Execute(ctx context.Context) error {
 	}
 
 	dasha.AddCommand(migrateCmd())
+	dasha.AddCommand(autosnapshotCmd())
 
 	return dasha.ExecuteContext(ctx) //nolint:wrapcheck
 }
@@ -66,6 +69,67 @@ func migrateExec(cmd *cobra.Command, _ []string) error {
 	}
 
 	return storage.Migrate(cmd.Context(), cfg.Storage.DSN, logger)
+}
+
+func autosnapshotCmd() *cobra.Command {
+	return &cobra.Command{ //nolint: exhaustruct
+		Use:   "autosnapshot",
+		Short: "Run the auto-snapshot daemon (leader-elected, polls clusters for trigger conditions)",
+		RunE:  autosnapshotExec,
+	}
+}
+
+func autosnapshotExec(cmd *cobra.Command, _ []string) error {
+	container := deps.NewContainer()
+
+	cfg := container.Config()
+	logger := container.Logger()
+
+	_ = zap.ReplaceGlobals(logger)
+
+	defer func(l *zap.Logger) {
+		if err := l.Sync(); err != nil {
+			log.Printf("can`t sync zap logs: %s", err)
+		}
+	}(logger)
+
+	if !cfg.Storage.Enabled() {
+		logger.Fatal("storage.dsn is not configured; autosnapshot requires storage")
+	}
+
+	logger.Info("starting Dasha autosnapshot",
+		zap.String("buildNumber", version.GetBuildNumber()),
+		zap.String("buildDate", version.GetBuildDate()),
+	)
+
+	st, err := storage.New(cmd.Context(), cfg.Storage, logger)
+	if err != nil {
+		return fmt.Errorf("initialize storage: %w", err)
+	}
+
+	defer st.Close()
+
+	if engine := container.Discovery(); engine != nil {
+		if err := engine.Start(cmd.Context()); err != nil {
+			logger.Warn("failed to start discovery engine", zap.Error(err))
+		}
+	}
+
+	daemon := autosnapshot.NewDaemon(
+		container.Clusters(),
+		container.Repository(),
+		st,
+		cfg.EnableQueryStatsReset,
+		logger,
+	)
+
+	if err := daemon.Run(cmd.Context()); err != nil {
+		return fmt.Errorf("autosnapshot daemon: %w", err)
+	}
+
+	logger.Info("autosnapshot shutdown complete")
+
+	return nil
 }
 
 func dashaExec(cmd *cobra.Command, _ []string) error {

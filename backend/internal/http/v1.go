@@ -1366,7 +1366,7 @@ func (s *Handlers) PostSnapshot(
 		pgssStatsReset = &resetTime.Time
 	}
 
-	id, createdAt, err := s.storage.CreateSnapshot(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, reports, pgssStatsReset)
+	id, createdAt, err := s.storage.CreateSnapshot(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, reports, storage.SnapshotOpts{PgssStatsReset: pgssStatsReset})
 	if err != nil {
 		return nil, fmt.Errorf("PostSnapshot | create: %w", err)
 	}

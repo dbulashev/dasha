@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/dbulashev/dasha/internal/autosnapshot"
 	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/pkg/sanitize"
 	"github.com/dbulashev/dasha/internal/version"
@@ -27,12 +28,16 @@ type SnapshotListItem struct {
 	PgssStatsReset *time.Time
 }
 
+// SnapshotOpts is re-exported from autosnapshot to keep storage callers working.
+type SnapshotOpts = autosnapshot.SnapshotOpts
+
 // CreateSnapshot stores a pgss snapshot and returns its id and timestamp.
+// Reason defaults to "manual" when empty.
 func (s *Storage) CreateSnapshot(
 	ctx context.Context,
 	clusterName, instance, database string,
 	reports []dto.QueryReport,
-	pgssStatsReset *time.Time,
+	opts SnapshotOpts,
 ) (uuid.UUID, time.Time, error) {
 	now := time.Now().UTC()
 
@@ -50,7 +55,6 @@ func (s *Storage) CreateSnapshot(
 	dayStart := now.Truncate(24 * time.Hour)
 	dayEnd := dayStart.Add(24 * time.Hour)
 
-	// Build JSON: replace Query with query_hash, store texts separately.
 	type reportJSON struct {
 		dto.QueryReport
 		QueryHash string `json:"QueryHash"`
@@ -87,13 +91,26 @@ func (s *Storage) CreateSnapshot(
 		return uuid.Nil, time.Time{}, fmt.Errorf("storage: marshal report: %w", err)
 	}
 
+	reason := opts.Reason
+	if reason == "" {
+		reason = "manual"
+	}
+
+	var triggerCtx []byte
+	if opts.TriggerContext != nil {
+		triggerCtx, err = json.Marshal(opts.TriggerContext)
+		if err != nil {
+			return uuid.Nil, time.Time{}, fmt.Errorf("storage: marshal trigger context: %w", err)
+		}
+	}
+
 	var id uuid.UUID
 
 	err = tx.QueryRow(ctx, `
-		INSERT INTO snapshots (cluster_name, instance, database, dasha_version, json_version, report_data, created_at, pgss_stats_reset)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO snapshots (cluster_name, instance, database, dasha_version, json_version, report_data, created_at, pgss_stats_reset, reason, trigger_context)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING id`,
-		clusterName, instance, database, version.GetBuildNumber(), currentJSONVersion, data, now, pgssStatsReset,
+		clusterName, instance, database, version.GetBuildNumber(), currentJSONVersion, data, now, opts.PgssStatsReset, reason, triggerCtx,
 	).Scan(&id)
 	if err != nil {
 		return uuid.Nil, time.Time{}, fmt.Errorf("storage: insert snapshot: %w", err)

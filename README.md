@@ -23,6 +23,7 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 - `pg_stat_statements` status and reset time tracking
 - **pgss snapshots**: save point-in-time snapshots to a dedicated storage database, view and share via URL
 - **Snapshot comparison**: side-by-side diff of two snapshots or one snapshot vs live data, sortable by any metric
+- **Auto-snapshots**: separate `dasha autosnapshot` daemon creates snapshots automatically on activity spikes (sliding-window avg on `pg_stat_activity`) or master↔replica role changes; configurable per cluster via UI, retention by total size
 
 **Index Analysis**
 - Top-K by size, bloat estimation, duplicate detection
@@ -223,6 +224,22 @@ storage:
 ```
 
 Run `dasha migrate` to create partitioned tables before first use.
+
+#### Auto-snapshots (optional)
+
+When snapshot storage is configured, you can run a separate daemon that creates snapshots automatically on configurable triggers:
+
+```bash
+dasha autosnapshot
+```
+
+The daemon uses the same `dasha.yaml` config. All knobs (triggers, thresholds, retention) are stored in the storage DB and edited from the UI (*Auto-snapshots* menu, admin-only). Safe to run in multiple replicas — `pg_try_advisory_lock` in the storage DB elects a single leader.
+
+Triggers:
+- **activity_spike** — fires when `count(state='active')` in `pg_stat_activity` exceeds the sliding-window baseline by a configurable percent (default +50%) for a sustained duration (default 5 min)
+- **role_change** — fires on master↔replica transitions (direction: `both` / `master_to_replica` / `replica_to_master`)
+
+Retention drops the oldest day-triples once total size exceeds `retention_bytes`, respecting the `retention_min_days` floor.
 
 ### Run Locally
 

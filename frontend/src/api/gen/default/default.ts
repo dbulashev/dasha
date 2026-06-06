@@ -20,6 +20,10 @@ import type { MaybeRef } from 'vue'
 
 import type {
   AuthInfo,
+  AutoSnapshotClusterOverride,
+  AutoSnapshotClusterOverrideInput,
+  AutoSnapshotConfig,
+  AutoSnapshotStatus,
   Cluster,
   CommonSummary,
   ConnectionSource,
@@ -30,6 +34,7 @@ import type {
   FkTypeMismatch,
   FksPossibleNulls,
   FksPossibleSimilar,
+  GetAutosnapshotTriggerEventsParams,
   GetAutovacuumSettingsParams,
   GetCommonSummaryParams,
   GetConnectionSourcesParams,
@@ -145,6 +150,7 @@ import type {
   TableHitRate,
   TablePartition,
   TableTopKBySize,
+  TriggerEventList,
   VacuumStats,
   WaitEvent,
 } from '../../models'
@@ -7247,6 +7253,600 @@ export function useGetSettingsAnalyze<
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetSettingsAnalyzeQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+export type getAutosnapshotStatusResponse200 = {
+  data: AutoSnapshotStatus
+  status: 200
+}
+
+export type getAutosnapshotStatusResponseSuccess = getAutosnapshotStatusResponse200 & {
+  headers: Headers
+}
+export type getAutosnapshotStatusResponse = getAutosnapshotStatusResponseSuccess
+
+export const getGetAutosnapshotStatusUrl = () => {
+  return `/api/autosnapshot/status`
+}
+
+export const getAutosnapshotStatus = async (
+  options?: RequestInit,
+): Promise<getAutosnapshotStatusResponse> => {
+  const res = await fetch(getGetAutosnapshotStatusUrl(), {
+    ...options,
+    method: 'GET',
+  })
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
+
+  const data: getAutosnapshotStatusResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getAutosnapshotStatusResponse
+}
+
+export const getGetAutosnapshotStatusQueryKey = () => {
+  return ['api', 'autosnapshot', 'status'] as const
+}
+
+export const getGetAutosnapshotStatusQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAutosnapshotStatus>>,
+  TError = unknown,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotStatus>>, TError, TData>
+  fetch?: RequestInit
+}) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+
+  const queryKey = getGetAutosnapshotStatusQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAutosnapshotStatus>>> = ({ signal }) =>
+    getAutosnapshotStatus({ signal, ...fetchOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAutosnapshotStatus>>,
+    TError,
+    TData
+  >
+}
+
+export type GetAutosnapshotStatusQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAutosnapshotStatus>>
+>
+export type GetAutosnapshotStatusQueryError = unknown
+
+export function useGetAutosnapshotStatus<
+  TData = Awaited<ReturnType<typeof getAutosnapshotStatus>>,
+  TError = unknown,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotStatus>>, TError, TData>
+  fetch?: RequestInit
+}): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAutosnapshotStatusQueryOptions(options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+export type getAutosnapshotConfigResponse200 = {
+  data: AutoSnapshotConfig
+  status: 200
+}
+
+export type getAutosnapshotConfigResponse501 = {
+  data: void
+  status: 501
+}
+
+export type getAutosnapshotConfigResponseSuccess = getAutosnapshotConfigResponse200 & {
+  headers: Headers
+}
+export type getAutosnapshotConfigResponseError = getAutosnapshotConfigResponse501 & {
+  headers: Headers
+}
+
+export type getAutosnapshotConfigResponse =
+  | getAutosnapshotConfigResponseSuccess
+  | getAutosnapshotConfigResponseError
+
+export const getGetAutosnapshotConfigUrl = () => {
+  return `/api/autosnapshot/config`
+}
+
+export const getAutosnapshotConfig = async (
+  options?: RequestInit,
+): Promise<getAutosnapshotConfigResponse> => {
+  const res = await fetch(getGetAutosnapshotConfigUrl(), {
+    ...options,
+    method: 'GET',
+  })
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
+
+  const data: getAutosnapshotConfigResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getAutosnapshotConfigResponse
+}
+
+export const getGetAutosnapshotConfigQueryKey = () => {
+  return ['api', 'autosnapshot', 'config'] as const
+}
+
+export const getGetAutosnapshotConfigQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAutosnapshotConfig>>,
+  TError = void,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotConfig>>, TError, TData>
+  fetch?: RequestInit
+}) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+
+  const queryKey = getGetAutosnapshotConfigQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAutosnapshotConfig>>> = ({ signal }) =>
+    getAutosnapshotConfig({ signal, ...fetchOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAutosnapshotConfig>>,
+    TError,
+    TData
+  >
+}
+
+export type GetAutosnapshotConfigQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAutosnapshotConfig>>
+>
+export type GetAutosnapshotConfigQueryError = void
+
+export function useGetAutosnapshotConfig<
+  TData = Awaited<ReturnType<typeof getAutosnapshotConfig>>,
+  TError = void,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotConfig>>, TError, TData>
+  fetch?: RequestInit
+}): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAutosnapshotConfigQueryOptions(options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+export type putAutosnapshotConfigResponse204 = {
+  data: void
+  status: 204
+}
+
+export type putAutosnapshotConfigResponse400 = {
+  data: void
+  status: 400
+}
+
+export type putAutosnapshotConfigResponse501 = {
+  data: void
+  status: 501
+}
+
+export type putAutosnapshotConfigResponseSuccess = putAutosnapshotConfigResponse204 & {
+  headers: Headers
+}
+export type putAutosnapshotConfigResponseError = (
+  | putAutosnapshotConfigResponse400
+  | putAutosnapshotConfigResponse501
+) & {
+  headers: Headers
+}
+
+export type putAutosnapshotConfigResponse =
+  | putAutosnapshotConfigResponseSuccess
+  | putAutosnapshotConfigResponseError
+
+export const getPutAutosnapshotConfigUrl = () => {
+  return `/api/autosnapshot/config`
+}
+
+export const putAutosnapshotConfig = async (
+  autoSnapshotConfig: AutoSnapshotConfig,
+  options?: RequestInit,
+): Promise<putAutosnapshotConfigResponse> => {
+  const res = await fetch(getPutAutosnapshotConfigUrl(), {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(autoSnapshotConfig),
+  })
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
+
+  const data: putAutosnapshotConfigResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as putAutosnapshotConfigResponse
+}
+
+export const getPutAutosnapshotConfigMutationOptions = <
+  TError = void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putAutosnapshotConfig>>,
+    TError,
+    { data: AutoSnapshotConfig },
+    TContext
+  >
+  fetch?: RequestInit
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putAutosnapshotConfig>>,
+  TError,
+  { data: AutoSnapshotConfig },
+  TContext
+> => {
+  const mutationKey = ['putAutosnapshotConfig']
+  const { mutation: mutationOptions, fetch: fetchOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, fetch: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putAutosnapshotConfig>>,
+    { data: AutoSnapshotConfig }
+  > = (props) => {
+    const { data } = props ?? {}
+
+    return putAutosnapshotConfig(data, fetchOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type PutAutosnapshotConfigMutationResult = NonNullable<
+  Awaited<ReturnType<typeof putAutosnapshotConfig>>
+>
+export type PutAutosnapshotConfigMutationBody = AutoSnapshotConfig
+export type PutAutosnapshotConfigMutationError = void
+
+export const usePutAutosnapshotConfig = <TError = void, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putAutosnapshotConfig>>,
+    TError,
+    { data: AutoSnapshotConfig },
+    TContext
+  >
+  fetch?: RequestInit
+}): UseMutationReturnType<
+  Awaited<ReturnType<typeof putAutosnapshotConfig>>,
+  TError,
+  { data: AutoSnapshotConfig },
+  TContext
+> => {
+  return useMutation(getPutAutosnapshotConfigMutationOptions(options))
+}
+export type getAutosnapshotClusterResponse200 = {
+  data: AutoSnapshotClusterOverride
+  status: 200
+}
+
+export type getAutosnapshotClusterResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getAutosnapshotClusterResponse501 = {
+  data: void
+  status: 501
+}
+
+export type getAutosnapshotClusterResponseSuccess = getAutosnapshotClusterResponse200 & {
+  headers: Headers
+}
+export type getAutosnapshotClusterResponseError = (
+  | getAutosnapshotClusterResponse404
+  | getAutosnapshotClusterResponse501
+) & {
+  headers: Headers
+}
+
+export type getAutosnapshotClusterResponse =
+  | getAutosnapshotClusterResponseSuccess
+  | getAutosnapshotClusterResponseError
+
+export const getGetAutosnapshotClusterUrl = (name: string) => {
+  return `/api/autosnapshot/clusters/${name}`
+}
+
+export const getAutosnapshotCluster = async (
+  name: string,
+  options?: RequestInit,
+): Promise<getAutosnapshotClusterResponse> => {
+  const res = await fetch(getGetAutosnapshotClusterUrl(name), {
+    ...options,
+    method: 'GET',
+  })
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
+
+  const data: getAutosnapshotClusterResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getAutosnapshotClusterResponse
+}
+
+export const getGetAutosnapshotClusterQueryKey = (name: MaybeRef<string>) => {
+  return ['api', 'autosnapshot', 'clusters', name] as const
+}
+
+export const getGetAutosnapshotClusterQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAutosnapshotCluster>>,
+  TError = NotFoundResponse | void,
+>(
+  name: MaybeRef<string>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotCluster>>, TError, TData>
+    fetch?: RequestInit
+  },
+) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+
+  const queryKey = getGetAutosnapshotClusterQueryKey(name)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAutosnapshotCluster>>> = ({ signal }) =>
+    getAutosnapshotCluster(unref(name), { signal, ...fetchOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: computed(() => !!unref(name)),
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotCluster>>, TError, TData>
+}
+
+export type GetAutosnapshotClusterQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAutosnapshotCluster>>
+>
+export type GetAutosnapshotClusterQueryError = NotFoundResponse | void
+
+export function useGetAutosnapshotCluster<
+  TData = Awaited<ReturnType<typeof getAutosnapshotCluster>>,
+  TError = NotFoundResponse | void,
+>(
+  name: MaybeRef<string>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotCluster>>, TError, TData>
+    fetch?: RequestInit
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAutosnapshotClusterQueryOptions(name, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+export type putAutosnapshotClusterResponse204 = {
+  data: void
+  status: 204
+}
+
+export type putAutosnapshotClusterResponse400 = {
+  data: void
+  status: 400
+}
+
+export type putAutosnapshotClusterResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type putAutosnapshotClusterResponse501 = {
+  data: void
+  status: 501
+}
+
+export type putAutosnapshotClusterResponseSuccess = putAutosnapshotClusterResponse204 & {
+  headers: Headers
+}
+export type putAutosnapshotClusterResponseError = (
+  | putAutosnapshotClusterResponse400
+  | putAutosnapshotClusterResponse404
+  | putAutosnapshotClusterResponse501
+) & {
+  headers: Headers
+}
+
+export type putAutosnapshotClusterResponse =
+  | putAutosnapshotClusterResponseSuccess
+  | putAutosnapshotClusterResponseError
+
+export const getPutAutosnapshotClusterUrl = (name: string) => {
+  return `/api/autosnapshot/clusters/${name}`
+}
+
+export const putAutosnapshotCluster = async (
+  name: string,
+  autoSnapshotClusterOverrideInput: AutoSnapshotClusterOverrideInput,
+  options?: RequestInit,
+): Promise<putAutosnapshotClusterResponse> => {
+  const res = await fetch(getPutAutosnapshotClusterUrl(name), {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(autoSnapshotClusterOverrideInput),
+  })
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
+
+  const data: putAutosnapshotClusterResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as putAutosnapshotClusterResponse
+}
+
+export const getPutAutosnapshotClusterMutationOptions = <
+  TError = void | NotFoundResponse,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putAutosnapshotCluster>>,
+    TError,
+    { name: string; data: AutoSnapshotClusterOverrideInput },
+    TContext
+  >
+  fetch?: RequestInit
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putAutosnapshotCluster>>,
+  TError,
+  { name: string; data: AutoSnapshotClusterOverrideInput },
+  TContext
+> => {
+  const mutationKey = ['putAutosnapshotCluster']
+  const { mutation: mutationOptions, fetch: fetchOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, fetch: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putAutosnapshotCluster>>,
+    { name: string; data: AutoSnapshotClusterOverrideInput }
+  > = (props) => {
+    const { name, data } = props ?? {}
+
+    return putAutosnapshotCluster(name, data, fetchOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type PutAutosnapshotClusterMutationResult = NonNullable<
+  Awaited<ReturnType<typeof putAutosnapshotCluster>>
+>
+export type PutAutosnapshotClusterMutationBody = AutoSnapshotClusterOverrideInput
+export type PutAutosnapshotClusterMutationError = void | NotFoundResponse
+
+export const usePutAutosnapshotCluster = <
+  TError = void | NotFoundResponse,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putAutosnapshotCluster>>,
+    TError,
+    { name: string; data: AutoSnapshotClusterOverrideInput },
+    TContext
+  >
+  fetch?: RequestInit
+}): UseMutationReturnType<
+  Awaited<ReturnType<typeof putAutosnapshotCluster>>,
+  TError,
+  { name: string; data: AutoSnapshotClusterOverrideInput },
+  TContext
+> => {
+  return useMutation(getPutAutosnapshotClusterMutationOptions(options))
+}
+export type getAutosnapshotTriggerEventsResponse200 = {
+  data: TriggerEventList
+  status: 200
+}
+
+export type getAutosnapshotTriggerEventsResponse501 = {
+  data: void
+  status: 501
+}
+
+export type getAutosnapshotTriggerEventsResponseSuccess =
+  getAutosnapshotTriggerEventsResponse200 & {
+    headers: Headers
+  }
+export type getAutosnapshotTriggerEventsResponseError = getAutosnapshotTriggerEventsResponse501 & {
+  headers: Headers
+}
+
+export type getAutosnapshotTriggerEventsResponse =
+  | getAutosnapshotTriggerEventsResponseSuccess
+  | getAutosnapshotTriggerEventsResponseError
+
+export const getGetAutosnapshotTriggerEventsUrl = (params?: GetAutosnapshotTriggerEventsParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/autosnapshot/trigger-events?${stringifiedParams}`
+    : `/api/autosnapshot/trigger-events`
+}
+
+export const getAutosnapshotTriggerEvents = async (
+  params?: GetAutosnapshotTriggerEventsParams,
+  options?: RequestInit,
+): Promise<getAutosnapshotTriggerEventsResponse> => {
+  const res = await fetch(getGetAutosnapshotTriggerEventsUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+
+  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
+
+  const data: getAutosnapshotTriggerEventsResponse['data'] = body ? JSON.parse(body) : {}
+  return { data, status: res.status, headers: res.headers } as getAutosnapshotTriggerEventsResponse
+}
+
+export const getGetAutosnapshotTriggerEventsQueryKey = (
+  params?: MaybeRef<GetAutosnapshotTriggerEventsParams>,
+) => {
+  return ['api', 'autosnapshot', 'trigger-events', ...(params ? [params] : [])] as const
+}
+
+export const getGetAutosnapshotTriggerEventsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAutosnapshotTriggerEvents>>,
+  TError = void,
+>(
+  params?: MaybeRef<GetAutosnapshotTriggerEventsParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotTriggerEvents>>, TError, TData>
+    fetch?: RequestInit
+  },
+) => {
+  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+
+  const queryKey = getGetAutosnapshotTriggerEventsQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAutosnapshotTriggerEvents>>> = ({
+    signal,
+  }) => getAutosnapshotTriggerEvents(unref(params), { signal, ...fetchOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAutosnapshotTriggerEvents>>,
+    TError,
+    TData
+  >
+}
+
+export type GetAutosnapshotTriggerEventsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAutosnapshotTriggerEvents>>
+>
+export type GetAutosnapshotTriggerEventsQueryError = void
+
+export function useGetAutosnapshotTriggerEvents<
+  TData = Awaited<ReturnType<typeof getAutosnapshotTriggerEvents>>,
+  TError = void,
+>(
+  params?: MaybeRef<GetAutosnapshotTriggerEventsParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotTriggerEvents>>, TError, TData>
+    fetch?: RequestInit
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAutosnapshotTriggerEventsQueryOptions(params, options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
 

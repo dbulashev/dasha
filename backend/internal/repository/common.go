@@ -104,6 +104,7 @@ type Repository interface {
 	GetQueriesTop10Chart(ctx context.Context, clusterName, instanceName string) ([]dto.QueryTop10ChartItem, error)
 	GetQueryStatsStatus(ctx context.Context, clusterName, instanceName, databaseName string) (dto.QueryStatsStatus, error)
 	ResetQueryStats(ctx context.Context, clusterName, instanceName, databaseName string) error
+	GetActiveConnectionCount(ctx context.Context, clusterName, instanceName string) (int, error)
 	GetProgressAnalyze(ctx context.Context, clusterName, instanceName string) ([]dto.ProgressAnalyze, error)
 	GetProgressBaseBackup(ctx context.Context, clusterName, instanceName string) ([]dto.ProgressBaseBackup, error)
 	GetProgressCluster(ctx context.Context, clusterName, instanceName string) ([]dto.ProgressCluster, error)

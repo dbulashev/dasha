@@ -38,7 +38,77 @@ CREATE INDEX IF NOT EXISTS idx_snapshots_lookup
 
 	addPgssStatsResetSQL = `
 ALTER TABLE snapshots ADD COLUMN IF NOT EXISTS pgss_stats_reset timestamptz`
+
+	addSnapshotReasonSQL = `
+ALTER TABLE snapshots ADD COLUMN IF NOT EXISTS reason text NOT NULL DEFAULT 'manual'`
+
+	addSnapshotTriggerContextSQL = `
+ALTER TABLE snapshots ADD COLUMN IF NOT EXISTS trigger_context jsonb`
+
+	createAutosnapshotConfigGlobalSQL = `
+CREATE TABLE IF NOT EXISTS autosnapshot_config_global (
+    id                      smallint PRIMARY KEY CHECK (id = 1),
+    enabled                 boolean NOT NULL DEFAULT false,
+    poll_interval           interval NOT NULL DEFAULT '30s',
+    max_snapshot_frequency  interval NOT NULL DEFAULT '1h',
+    retention_bytes         bigint  NOT NULL DEFAULT 10737418240,
+    retention_min_days      int     NOT NULL DEFAULT 7,
+    min_baseline_active     int     NOT NULL DEFAULT 10,
+    defaults                jsonb   NOT NULL,
+    updated_at              timestamptz NOT NULL DEFAULT now(),
+    updated_by              text
+)`
+
+	seedAutosnapshotConfigGlobalSQL = `
+INSERT INTO autosnapshot_config_global (id, defaults)
+VALUES (1, '{
+    "activity_spike": {"enabled": true, "window_size": "5m", "active_threshold_pct": 50, "spike_duration": "5m"},
+    "role_change":    {"enabled": true, "direction": "both"}
+}'::jsonb)
+ON CONFLICT (id) DO NOTHING`
+
+	createAutosnapshotConfigClusterSQL = `
+CREATE TABLE IF NOT EXISTS autosnapshot_config_cluster (
+    cluster_name text PRIMARY KEY,
+    overrides    jsonb NOT NULL DEFAULT '{}'::jsonb,
+    updated_at   timestamptz NOT NULL DEFAULT now(),
+    updated_by   text
+)`
+
+	createTriggerEventsSQL = `
+CREATE TABLE IF NOT EXISTS trigger_events (
+    id              uuid DEFAULT gen_random_uuid(),
+    cluster_name    text NOT NULL,
+    instance        text NOT NULL,
+    database        text,
+    trigger_type    text NOT NULL,
+    outcome         text NOT NULL,
+    snapshot_id     uuid,
+    trigger_context jsonb NOT NULL DEFAULT '{}'::jsonb,
+    error_message   text,
+    created_at      timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT trigger_events_pkey PRIMARY KEY (id, created_at)
+) PARTITION BY RANGE (created_at)`
+
+	createTriggerEventsIdxSQL = `
+CREATE INDEX IF NOT EXISTS idx_trigger_events_lookup
+    ON trigger_events (cluster_name, created_at DESC)`
+
+	createAutosnapshotLeaderSQL = `
+CREATE TABLE IF NOT EXISTS autosnapshot_leader (
+    id             smallint PRIMARY KEY CHECK (id = 1),
+    instance_id    text,
+    last_heartbeat timestamptz NOT NULL DEFAULT now()
+)`
+
+	seedAutosnapshotLeaderSQL = `
+INSERT INTO autosnapshot_leader (id) VALUES (1)
+ON CONFLICT (id) DO NOTHING`
 )
+
+// partitionedTables lists the day-partitioned tables managed together —
+// partitions for each table are created and dropped as a group per day.
+var partitionedTables = []string{"snapshots", "query_texts", "trigger_events"}
 
 // Migrate creates parent tables and partitions for the next partitionDaysAhead days.
 func Migrate(ctx context.Context, cfg string, logger *zap.Logger) error {
@@ -68,7 +138,23 @@ func newFromDSN(ctx context.Context, dsn string) (*Storage, error) {
 }
 
 func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
-	for _, ddl := range []string{createSnapshotsSQL, createQueryTextsSQL, createSnapshotsIdxSQL, addPgssStatsResetSQL} {
+	ddls := []string{
+		createSnapshotsSQL,
+		createQueryTextsSQL,
+		createSnapshotsIdxSQL,
+		addPgssStatsResetSQL,
+		addSnapshotReasonSQL,
+		addSnapshotTriggerContextSQL,
+		createAutosnapshotConfigGlobalSQL,
+		seedAutosnapshotConfigGlobalSQL,
+		createAutosnapshotConfigClusterSQL,
+		createTriggerEventsSQL,
+		createTriggerEventsIdxSQL,
+		createAutosnapshotLeaderSQL,
+		seedAutosnapshotLeaderSQL,
+	}
+
+	for _, ddl := range ddls {
 		if _, err := s.pool.Exec(ctx, ddl); err != nil {
 			return fmt.Errorf("storage: migrate: %w", err)
 		}
@@ -90,13 +176,13 @@ func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
 	return nil
 }
 
-// ensurePartitions creates daily partitions for both tables if they don't exist.
+// ensurePartitions creates daily partitions for all partitioned tables if they don't exist.
 func (s *Storage) ensurePartitions(ctx context.Context, day time.Time) error {
 	dayStr := day.Format("20060102")
 	from := day.Format("2006-01-02")
 	to := day.AddDate(0, 0, 1).Format("2006-01-02")
 
-	for _, table := range []string{"snapshots", "query_texts"} {
+	for _, table := range partitionedTables {
 		sql := fmt.Sprintf(
 			`CREATE TABLE IF NOT EXISTS %s_%s PARTITION OF %s FOR VALUES FROM ('%s') TO ('%s')`,
 			table, dayStr, table, from, to,

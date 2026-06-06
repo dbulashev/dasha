@@ -1474,6 +1474,138 @@ paths:
                   $ref: '#/components/schemas/SettingsNotification'
         '404':
           $ref: '#/components/responses/NotFound'
+  /api/autosnapshot/status:
+    get:
+      operationId: getAutosnapshotStatus
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutoSnapshotStatus'
+  /api/autosnapshot/config:
+    get:
+      operationId: getAutosnapshotConfig
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutoSnapshotConfig'
+        '501':
+          description: Storage not configured
+    put:
+      operationId: putAutosnapshotConfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutoSnapshotConfig'
+      responses:
+        '204':
+          description: Updated
+        '400':
+          description: Validation error
+        '501':
+          description: Storage not configured
+  /api/autosnapshot/clusters/{name}:
+    get:
+      operationId: getAutosnapshotCluster
+      parameters:
+        - in: path
+          name: name
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutoSnapshotClusterOverride'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: Storage not configured
+    put:
+      operationId: putAutosnapshotCluster
+      parameters:
+        - in: path
+          name: name
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutoSnapshotClusterOverrideInput'
+      responses:
+        '204':
+          description: Updated
+        '400':
+          description: Validation error
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: Storage not configured
+  /api/autosnapshot/trigger-events:
+    get:
+      operationId: getAutosnapshotTriggerEvents
+      parameters:
+        - in: query
+          name: cluster_name
+          schema:
+            type: string
+          required: false
+        - in: query
+          name: outcome
+          schema:
+            type: string
+          required: false
+        - in: query
+          name: trigger_type
+          schema:
+            type: string
+          required: false
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date-time
+          required: false
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date-time
+          required: false
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+          required: false
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+          required: false
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TriggerEventList'
+        '501':
+          description: Storage not configured
 
 components:
   securitySchemes:
@@ -3292,6 +3424,183 @@ components:
         CreatedAt:
           type: string
           format: date-time
+
+    ActivitySpikeTrigger:
+      type: object
+      required:
+        - Enabled
+        - WindowSize
+        - ActiveThresholdPct
+        - SpikeDuration
+      properties:
+        Enabled:
+          type: boolean
+        WindowSize:
+          type: string
+          description: Go duration string (e.g. "5m")
+        ActiveThresholdPct:
+          type: integer
+        SpikeDuration:
+          type: string
+          description: Go duration string (e.g. "5m")
+
+    RoleChangeTrigger:
+      type: object
+      required:
+        - Enabled
+        - Direction
+      properties:
+        Enabled:
+          type: boolean
+        Direction:
+          type: string
+          enum: [master_to_replica, replica_to_master, both]
+
+    AutoSnapshotTriggerDefaults:
+      type: object
+      required:
+        - ActivitySpike
+        - RoleChange
+      properties:
+        ActivitySpike:
+          $ref: '#/components/schemas/ActivitySpikeTrigger'
+        RoleChange:
+          $ref: '#/components/schemas/RoleChangeTrigger'
+
+    AutoSnapshotConfig:
+      type: object
+      required:
+        - Enabled
+        - PollInterval
+        - MaxSnapshotFrequency
+        - RetentionBytes
+        - RetentionMinDays
+        - MinBaselineActive
+        - Defaults
+      properties:
+        Enabled:
+          type: boolean
+        PollInterval:
+          type: string
+          description: Go duration string (e.g. "30s")
+        MaxSnapshotFrequency:
+          type: string
+          description: Go duration string (e.g. "1h")
+        RetentionBytes:
+          type: integer
+          format: int64
+          description: Total storage size target in bytes, 0 to disable
+        RetentionMinDays:
+          type: integer
+        MinBaselineActive:
+          type: integer
+        Defaults:
+          $ref: '#/components/schemas/AutoSnapshotTriggerDefaults'
+
+    AutoSnapshotClusterOverride:
+      type: object
+      required:
+        - ClusterName
+        - Overrides
+        - Effective
+      properties:
+        ClusterName:
+          type: string
+        Overrides:
+          type: object
+          description: Partial overrides (activity_spike / role_change subfields)
+          additionalProperties: true
+        Effective:
+          $ref: '#/components/schemas/AutoSnapshotTriggerDefaults'
+
+    AutoSnapshotClusterOverrideInput:
+      type: object
+      required:
+        - Overrides
+      properties:
+        Overrides:
+          type: object
+          description: Partial overrides (activity_spike / role_change subfields)
+          additionalProperties: true
+
+    AutoSnapshotLeaderInfo:
+      type: object
+      required:
+        - IsAlive
+      properties:
+        InstanceId:
+          type: string
+          nullable: true
+        LastHeartbeat:
+          type: string
+          format: date-time
+          nullable: true
+        IsAlive:
+          type: boolean
+
+    AutoSnapshotStatus:
+      type: object
+      required:
+        - Available
+        - Enabled
+      properties:
+        Available:
+          type: boolean
+        Enabled:
+          type: boolean
+        Leader:
+          $ref: '#/components/schemas/AutoSnapshotLeaderInfo'
+
+    TriggerEvent:
+      type: object
+      required:
+        - Id
+        - CreatedAt
+        - ClusterName
+        - Instance
+        - TriggerType
+        - Outcome
+      properties:
+        Id:
+          type: string
+          format: uuid
+        CreatedAt:
+          type: string
+          format: date-time
+        ClusterName:
+          type: string
+        Instance:
+          type: string
+        Database:
+          type: string
+          nullable: true
+        TriggerType:
+          type: string
+        Outcome:
+          type: string
+        SnapshotId:
+          type: string
+          format: uuid
+          nullable: true
+        TriggerContext:
+          type: object
+          additionalProperties: true
+        ErrorMessage:
+          type: string
+          nullable: true
+
+    TriggerEventList:
+      type: object
+      required:
+        - Items
+        - Total
+      properties:
+        Items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TriggerEvent'
+        Total:
+          type: integer
 
     VacuumStats:
       type: object

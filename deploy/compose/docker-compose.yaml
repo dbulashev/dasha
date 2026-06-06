@@ -18,3 +18,14 @@ services:
       - "3000:3000"
     depends_on:
       - backend
+
+  # Auto-snapshot daemon. Runs the same image with "autosnapshot" arg.
+  # Uses storage DB as coordination backend (advisory lock) — safe to scale.
+  autosnapshot:
+    image: dbulashev/dasha-backend:latest
+    restart: unless-stopped
+    command: ["autosnapshot"]
+    volumes:
+      - ./dasha.yaml:/etc/dasha/dasha.yaml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

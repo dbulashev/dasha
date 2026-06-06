@@ -108,6 +108,76 @@
         "stats": "Всего: {total} | Общие: {both} | Только в A: {onlyA} | Только в B: {onlyB}",
         "ageUnknown": "возраст неопределён"
     },
+    "autosnapshot": {
+        "menu": "Авто-снимки",
+        "tabs": {
+            "settings": "Настройки",
+            "clusters": "Кластеры",
+            "history": "История"
+        },
+        "globalSection": "Глобальные настройки",
+        "activitySpike": "Триггер всплеска активности",
+        "roleChange": "Триггер смены роли",
+        "enabled": "Включено",
+        "pollInterval": "Интервал опроса",
+        "maxFrequency": "Макс. частота снимков",
+        "minBaseline": "Мин. baseline активных соединений",
+        "retentionBytes": "Лимит хранения, байт",
+        "retentionBytesHint": "0 — без ограничения",
+        "retentionMinDays": "Мин. дней хранения",
+        "windowSize": "Размер окна",
+        "thresholdPct": "Порог, %",
+        "spikeDuration": "Длительность всплеска",
+        "save": "Сохранить",
+        "saved": "Настройки сохранены",
+        "overridden": "Переопределено",
+        "direction": {
+            "label": "Направление",
+            "both": "Оба направления",
+            "masterToReplica": "Мастер → Реплика",
+            "replicaToMaster": "Реплика → Мастер"
+        },
+        "filter": {
+            "cluster": "Кластер",
+            "outcome": "Результат",
+            "triggerType": "Тип триггера"
+        },
+        "history": {
+            "when": "Время",
+            "cluster": "Кластер",
+            "instance": "Хост",
+            "trigger": "Триггер",
+            "outcome": "Результат",
+            "noContext": "—"
+        },
+        "clusters": {
+            "name": "Кластер",
+            "status": "Статус",
+            "triggers": "Триггеры",
+            "actions": "Действия",
+            "hasOverride": "Есть override",
+            "usesDefaults": "Использует defaults",
+            "editTitle": "Настройки кластера {name}",
+            "edit": "Редактировать",
+            "close": "Закрыть",
+            "loadError": "Не удалось загрузить настройки кластера",
+            "saved": "Override сохранён",
+            "noClusters": "Нет доступных кластеров",
+            "useDefault": "По умолчанию"
+        },
+        "outcome": {
+            "snapshot_created": "Снимок создан",
+            "skipped_debounce": "Пропущено (debounce)",
+            "skipped_below_baseline": "Пропущено (ниже baseline)",
+            "skipped_wrong_direction": "Пропущено (неверное направление)",
+            "skipped_storage_unavailable": "Пропущено (хранилище недоступно)",
+            "error": "Ошибка"
+        },
+        "trigger": {
+            "activity_spike": "Всплеск активности",
+            "role_change": "Смена роли"
+        }
+    },
     "cpuTimeWarning": "Обнаружены запросы с отрицательным CPU time (total_plan_time + total_exec_time − blk_read_time − blk_write_time < 0). Если pg_stat_statements.track_planning отключён, plan_time = 0 и отрицательное значение указывает на потенциально высокое время планирования запроса. Включите track_planning для точных данных.",
     "header": {
         "namespace": "Пространство имён",

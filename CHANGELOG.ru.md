@@ -1,5 +1,21 @@
 # История изменений
 
+## v0.1.19
+
+#### Новые возможности
+- **Автоматические снимки pg_stat_statements**: отдельный демон `dasha autosnapshot` создаёт снимки pgss по настраиваемым триггерам
+  - **Триггер всплеска активности** — скользящее среднее `count(state='active')` из `pg_stat_activity`; срабатывает, когда текущее значение превышает baseline на заданный процент (по умолчанию +50%) в течение заданного времени (по умолчанию 5 минут)
+  - **Триггер смены роли** — определяет переход master↔replica через `pg_is_in_recovery()`, с настраиваемым направлением (`both` / `master_to_replica` / `replica_to_master`)
+  - **Глобальные настройки** (хранятся в storage DB, правятся через UI): `poll_interval`, `max_snapshot_frequency` (debounce), `min_baseline_active` (пропуск при низкой нагрузке), `retention_bytes`, `retention_min_days`
+  - **Per-cluster оверрайды**: deep-merge поверх глобальных настроек; отдельный кластер может включать/выключать триггеры, настраивать пороги или полностью отключать auto-snapshots
+  - **Leader election**: `pg_try_advisory_lock` на storage DB — демон можно запускать в нескольких репликах для HA
+  - **Ретеншен по общему размеру**: удаляет старые «тройки дней» (секции snapshots + query_texts + trigger_events), пока суммарный размер превышает `retention_bytes`; уважает минимальный порог `retention_min_days`
+  - **Вкладка истории**: фильтры по кластеру / outcome / типу триггера, постраничный вывод; фиксирует причины пропуска (`skipped:debounce`, `skipped:below_baseline`, `skipped:wrong_direction`, `skipped:storage_unavailable`, `error`)
+  - **UI**: новый пункт меню «Авто-снимки» (`mdi-camera-timer`) с вкладками Настройки + История; редактирование только admin, viewer видит read-only; для non-admin пункт скрыт, если фича выключена
+  - **API**: `GET/PUT /api/autosnapshot/config`, `GET/PUT /api/autosnapshot/clusters/{name}`, `GET /api/autosnapshot/status`, `GET /api/autosnapshot/trigger-events`
+  - **CLI**: `dasha autosnapshot` (отдельная команда, не стартует вместе с `dasha serve`)
+  - **Деплой**: в Helm чарт добавлен отдельный Deployment `autosnapshot` (по умолчанию отключен, включается флагом `autosnapshot.enabled: true`); в docker-compose добавлен сервис `autosnapshot` рядом с `backend` и `frontend`
+
 ## v0.1.18
 
 #### Новые возможности

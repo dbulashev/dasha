@@ -35,6 +35,25 @@ const (
 	Token AuthInfoMode = "token"
 )
 
+// Defines values for RoleChangeTriggerDirection.
+const (
+	Both            RoleChangeTriggerDirection = "both"
+	MasterToReplica RoleChangeTriggerDirection = "master_to_replica"
+	ReplicaToMaster RoleChangeTriggerDirection = "replica_to_master"
+)
+
+// ActivitySpikeTrigger defines model for ActivitySpikeTrigger.
+type ActivitySpikeTrigger struct {
+	ActiveThresholdPct int  `json:"ActiveThresholdPct"`
+	Enabled            bool `json:"Enabled"`
+
+	// SpikeDuration Go duration string (e.g. "5m")
+	SpikeDuration string `json:"SpikeDuration"`
+
+	// WindowSize Go duration string (e.g. "5m")
+	WindowSize string `json:"WindowSize"`
+}
+
 // AuthInfo defines model for AuthInfo.
 type AuthInfo struct {
 	EnableQueryStatsReset *bool        `json:"enable_query_stats_reset,omitempty"`
@@ -44,6 +63,58 @@ type AuthInfo struct {
 
 // AuthInfoMode defines model for AuthInfo.Mode.
 type AuthInfoMode string
+
+// AutoSnapshotClusterOverride defines model for AutoSnapshotClusterOverride.
+type AutoSnapshotClusterOverride struct {
+	ClusterName string                      `json:"ClusterName"`
+	Effective   AutoSnapshotTriggerDefaults `json:"Effective"`
+
+	// Overrides Partial overrides (activity_spike / role_change subfields)
+	Overrides map[string]interface{} `json:"Overrides"`
+}
+
+// AutoSnapshotClusterOverrideInput defines model for AutoSnapshotClusterOverrideInput.
+type AutoSnapshotClusterOverrideInput struct {
+	// Overrides Partial overrides (activity_spike / role_change subfields)
+	Overrides map[string]interface{} `json:"Overrides"`
+}
+
+// AutoSnapshotConfig defines model for AutoSnapshotConfig.
+type AutoSnapshotConfig struct {
+	Defaults AutoSnapshotTriggerDefaults `json:"Defaults"`
+	Enabled  bool                        `json:"Enabled"`
+
+	// MaxSnapshotFrequency Go duration string (e.g. "1h")
+	MaxSnapshotFrequency string `json:"MaxSnapshotFrequency"`
+	MinBaselineActive    int    `json:"MinBaselineActive"`
+
+	// PollInterval Go duration string (e.g. "30s")
+	PollInterval string `json:"PollInterval"`
+
+	// RetentionBytes Total storage size target in bytes, 0 to disable
+	RetentionBytes   int64 `json:"RetentionBytes"`
+	RetentionMinDays int   `json:"RetentionMinDays"`
+}
+
+// AutoSnapshotLeaderInfo defines model for AutoSnapshotLeaderInfo.
+type AutoSnapshotLeaderInfo struct {
+	InstanceId    *string    `json:"InstanceId"`
+	IsAlive       bool       `json:"IsAlive"`
+	LastHeartbeat *time.Time `json:"LastHeartbeat"`
+}
+
+// AutoSnapshotStatus defines model for AutoSnapshotStatus.
+type AutoSnapshotStatus struct {
+	Available bool                    `json:"Available"`
+	Enabled   bool                    `json:"Enabled"`
+	Leader    *AutoSnapshotLeaderInfo `json:"Leader,omitempty"`
+}
+
+// AutoSnapshotTriggerDefaults defines model for AutoSnapshotTriggerDefaults.
+type AutoSnapshotTriggerDefaults struct {
+	ActivitySpike ActivitySpikeTrigger `json:"ActivitySpike"`
+	RoleChange    RoleChangeTrigger    `json:"RoleChange"`
+}
 
 // Cluster defines model for Cluster.
 type Cluster struct {
@@ -546,6 +617,15 @@ type ReplicationStatus struct {
 	WriteLsn         *string  `json:"WriteLsn,omitempty"`
 }
 
+// RoleChangeTrigger defines model for RoleChangeTrigger.
+type RoleChangeTrigger struct {
+	Direction RoleChangeTriggerDirection `json:"Direction"`
+	Enabled   bool                       `json:"Enabled"`
+}
+
+// RoleChangeTriggerDirection defines model for RoleChangeTrigger.Direction.
+type RoleChangeTriggerDirection string
+
 // RowEstimate defines model for RowEstimate.
 type RowEstimate struct {
 	AvailableSpace    int              `json:"AvailableSpace"`
@@ -732,6 +812,26 @@ type ToastCandidate struct {
 	Storage    string `json:"Storage"`
 }
 
+// TriggerEvent defines model for TriggerEvent.
+type TriggerEvent struct {
+	ClusterName    string                  `json:"ClusterName"`
+	CreatedAt      time.Time               `json:"CreatedAt"`
+	Database       *string                 `json:"Database"`
+	ErrorMessage   *string                 `json:"ErrorMessage"`
+	Id             openapi_types.UUID      `json:"Id"`
+	Instance       string                  `json:"Instance"`
+	Outcome        string                  `json:"Outcome"`
+	SnapshotId     *openapi_types.UUID     `json:"SnapshotId"`
+	TriggerContext *map[string]interface{} `json:"TriggerContext,omitempty"`
+	TriggerType    string                  `json:"TriggerType"`
+}
+
+// TriggerEventList defines model for TriggerEventList.
+type TriggerEventList struct {
+	Items []TriggerEvent `json:"Items"`
+	Total int            `json:"Total"`
+}
+
 // VacuumStats defines model for VacuumStats.
 type VacuumStats struct {
 	AnalyzeThreshold   int64      `json:"AnalyzeThreshold"`
@@ -762,6 +862,17 @@ type Database = string
 
 // Instance defines model for Instance.
 type Instance = string
+
+// GetAutosnapshotTriggerEventsParams defines parameters for GetAutosnapshotTriggerEvents.
+type GetAutosnapshotTriggerEventsParams struct {
+	ClusterName *string    `form:"cluster_name,omitempty" json:"cluster_name,omitempty"`
+	Outcome     *string    `form:"outcome,omitempty" json:"outcome,omitempty"`
+	TriggerType *string    `form:"trigger_type,omitempty" json:"trigger_type,omitempty"`
+	From        *time.Time `form:"from,omitempty" json:"from,omitempty"`
+	To          *time.Time `form:"to,omitempty" json:"to,omitempty"`
+	Limit       *int       `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset      *int       `form:"offset,omitempty" json:"offset,omitempty"`
+}
 
 // GetDatabaseUsersParams defines parameters for GetDatabaseUsers.
 type GetDatabaseUsersParams struct {
@@ -1248,11 +1359,35 @@ type GetTablesTopKBySizeParams struct {
 	Limit       *int        `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
+// PutAutosnapshotClusterJSONRequestBody defines body for PutAutosnapshotCluster for application/json ContentType.
+type PutAutosnapshotClusterJSONRequestBody = AutoSnapshotClusterOverrideInput
+
+// PutAutosnapshotConfigJSONRequestBody defines body for PutAutosnapshotConfig for application/json ContentType.
+type PutAutosnapshotConfigJSONRequestBody = AutoSnapshotConfig
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 
 	// (GET /api/auth/info)
 	GetAuthInfo(ctx echo.Context) error
+
+	// (GET /api/autosnapshot/clusters/{name})
+	GetAutosnapshotCluster(ctx echo.Context, name string) error
+
+	// (PUT /api/autosnapshot/clusters/{name})
+	PutAutosnapshotCluster(ctx echo.Context, name string) error
+
+	// (GET /api/autosnapshot/config)
+	GetAutosnapshotConfig(ctx echo.Context) error
+
+	// (PUT /api/autosnapshot/config)
+	PutAutosnapshotConfig(ctx echo.Context) error
+
+	// (GET /api/autosnapshot/status)
+	GetAutosnapshotStatus(ctx echo.Context) error
+
+	// (GET /api/autosnapshot/trigger-events)
+	GetAutosnapshotTriggerEvents(ctx echo.Context, params GetAutosnapshotTriggerEventsParams) error
 
 	// (GET /api/clusters)
 	GetClusters(ctx echo.Context) error
@@ -1470,6 +1605,149 @@ func (w *ServerInterfaceWrapper) GetAuthInfo(ctx echo.Context) error {
 
 	// Invoke the callback with all the unmarshaled arguments
 	err = w.Handler.GetAuthInfo(ctx)
+	return err
+}
+
+// GetAutosnapshotCluster converts echo context to params.
+func (w *ServerInterfaceWrapper) GetAutosnapshotCluster(ctx echo.Context) error {
+	var err error
+	// ------------- Path parameter "name" -------------
+	var name string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "name", ctx.Param("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter name: %s", err))
+	}
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	ctx.Set(ApiKeyAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.GetAutosnapshotCluster(ctx, name)
+	return err
+}
+
+// PutAutosnapshotCluster converts echo context to params.
+func (w *ServerInterfaceWrapper) PutAutosnapshotCluster(ctx echo.Context) error {
+	var err error
+	// ------------- Path parameter "name" -------------
+	var name string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "name", ctx.Param("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter name: %s", err))
+	}
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	ctx.Set(ApiKeyAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.PutAutosnapshotCluster(ctx, name)
+	return err
+}
+
+// GetAutosnapshotConfig converts echo context to params.
+func (w *ServerInterfaceWrapper) GetAutosnapshotConfig(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	ctx.Set(ApiKeyAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.GetAutosnapshotConfig(ctx)
+	return err
+}
+
+// PutAutosnapshotConfig converts echo context to params.
+func (w *ServerInterfaceWrapper) PutAutosnapshotConfig(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	ctx.Set(ApiKeyAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.PutAutosnapshotConfig(ctx)
+	return err
+}
+
+// GetAutosnapshotStatus converts echo context to params.
+func (w *ServerInterfaceWrapper) GetAutosnapshotStatus(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	ctx.Set(ApiKeyAuthScopes, []string{})
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.GetAutosnapshotStatus(ctx)
+	return err
+}
+
+// GetAutosnapshotTriggerEvents converts echo context to params.
+func (w *ServerInterfaceWrapper) GetAutosnapshotTriggerEvents(ctx echo.Context) error {
+	var err error
+
+	ctx.Set(BearerAuthScopes, []string{})
+
+	ctx.Set(ApiKeyAuthScopes, []string{})
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetAutosnapshotTriggerEventsParams
+	// ------------- Optional query parameter "cluster_name" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "cluster_name", ctx.QueryParams(), &params.ClusterName)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter cluster_name: %s", err))
+	}
+
+	// ------------- Optional query parameter "outcome" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "outcome", ctx.QueryParams(), &params.Outcome)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter outcome: %s", err))
+	}
+
+	// ------------- Optional query parameter "trigger_type" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "trigger_type", ctx.QueryParams(), &params.TriggerType)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter trigger_type: %s", err))
+	}
+
+	// ------------- Optional query parameter "from" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "from", ctx.QueryParams(), &params.From)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter from: %s", err))
+	}
+
+	// ------------- Optional query parameter "to" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "to", ctx.QueryParams(), &params.To)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter to: %s", err))
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", ctx.QueryParams(), &params.Limit)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter limit: %s", err))
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "offset", ctx.QueryParams(), &params.Offset)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter offset: %s", err))
+	}
+
+	// Invoke the callback with all the unmarshaled arguments
+	err = w.Handler.GetAutosnapshotTriggerEvents(ctx, params)
 	return err
 }
 
@@ -4042,6 +4320,12 @@ func RegisterHandlersWithBaseURL(router EchoRouter, si ServerInterface, baseURL 
 	}
 
 	router.GET(baseURL+"/api/auth/info", wrapper.GetAuthInfo)
+	router.GET(baseURL+"/api/autosnapshot/clusters/:name", wrapper.GetAutosnapshotCluster)
+	router.PUT(baseURL+"/api/autosnapshot/clusters/:name", wrapper.PutAutosnapshotCluster)
+	router.GET(baseURL+"/api/autosnapshot/config", wrapper.GetAutosnapshotConfig)
+	router.PUT(baseURL+"/api/autosnapshot/config", wrapper.PutAutosnapshotConfig)
+	router.GET(baseURL+"/api/autosnapshot/status", wrapper.GetAutosnapshotStatus)
+	router.GET(baseURL+"/api/autosnapshot/trigger-events", wrapper.GetAutosnapshotTriggerEvents)
 	router.GET(baseURL+"/api/clusters", wrapper.GetClusters)
 	router.GET(baseURL+"/api/common/database-users", wrapper.GetDatabaseUsers)
 	router.GET(baseURL+"/api/common/instance-info", wrapper.GetInstanceInfo)
@@ -4130,6 +4414,175 @@ func (response GetAuthInfo200JSONResponse) VisitGetAuthInfoResponse(w http.Respo
 	w.WriteHeader(200)
 
 	return json.NewEncoder(w).Encode(response)
+}
+
+type GetAutosnapshotClusterRequestObject struct {
+	Name string `json:"name"`
+}
+
+type GetAutosnapshotClusterResponseObject interface {
+	VisitGetAutosnapshotClusterResponse(w http.ResponseWriter) error
+}
+
+type GetAutosnapshotCluster200JSONResponse AutoSnapshotClusterOverride
+
+func (response GetAutosnapshotCluster200JSONResponse) VisitGetAutosnapshotClusterResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetAutosnapshotCluster404Response = NotFoundResponse
+
+func (response GetAutosnapshotCluster404Response) VisitGetAutosnapshotClusterResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type GetAutosnapshotCluster501Response struct {
+}
+
+func (response GetAutosnapshotCluster501Response) VisitGetAutosnapshotClusterResponse(w http.ResponseWriter) error {
+	w.WriteHeader(501)
+	return nil
+}
+
+type PutAutosnapshotClusterRequestObject struct {
+	Name string `json:"name"`
+	Body *PutAutosnapshotClusterJSONRequestBody
+}
+
+type PutAutosnapshotClusterResponseObject interface {
+	VisitPutAutosnapshotClusterResponse(w http.ResponseWriter) error
+}
+
+type PutAutosnapshotCluster204Response struct {
+}
+
+func (response PutAutosnapshotCluster204Response) VisitPutAutosnapshotClusterResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type PutAutosnapshotCluster400Response struct {
+}
+
+func (response PutAutosnapshotCluster400Response) VisitPutAutosnapshotClusterResponse(w http.ResponseWriter) error {
+	w.WriteHeader(400)
+	return nil
+}
+
+type PutAutosnapshotCluster404Response = NotFoundResponse
+
+func (response PutAutosnapshotCluster404Response) VisitPutAutosnapshotClusterResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
+type PutAutosnapshotCluster501Response struct {
+}
+
+func (response PutAutosnapshotCluster501Response) VisitPutAutosnapshotClusterResponse(w http.ResponseWriter) error {
+	w.WriteHeader(501)
+	return nil
+}
+
+type GetAutosnapshotConfigRequestObject struct {
+}
+
+type GetAutosnapshotConfigResponseObject interface {
+	VisitGetAutosnapshotConfigResponse(w http.ResponseWriter) error
+}
+
+type GetAutosnapshotConfig200JSONResponse AutoSnapshotConfig
+
+func (response GetAutosnapshotConfig200JSONResponse) VisitGetAutosnapshotConfigResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetAutosnapshotConfig501Response struct {
+}
+
+func (response GetAutosnapshotConfig501Response) VisitGetAutosnapshotConfigResponse(w http.ResponseWriter) error {
+	w.WriteHeader(501)
+	return nil
+}
+
+type PutAutosnapshotConfigRequestObject struct {
+	Body *PutAutosnapshotConfigJSONRequestBody
+}
+
+type PutAutosnapshotConfigResponseObject interface {
+	VisitPutAutosnapshotConfigResponse(w http.ResponseWriter) error
+}
+
+type PutAutosnapshotConfig204Response struct {
+}
+
+func (response PutAutosnapshotConfig204Response) VisitPutAutosnapshotConfigResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type PutAutosnapshotConfig400Response struct {
+}
+
+func (response PutAutosnapshotConfig400Response) VisitPutAutosnapshotConfigResponse(w http.ResponseWriter) error {
+	w.WriteHeader(400)
+	return nil
+}
+
+type PutAutosnapshotConfig501Response struct {
+}
+
+func (response PutAutosnapshotConfig501Response) VisitPutAutosnapshotConfigResponse(w http.ResponseWriter) error {
+	w.WriteHeader(501)
+	return nil
+}
+
+type GetAutosnapshotStatusRequestObject struct {
+}
+
+type GetAutosnapshotStatusResponseObject interface {
+	VisitGetAutosnapshotStatusResponse(w http.ResponseWriter) error
+}
+
+type GetAutosnapshotStatus200JSONResponse AutoSnapshotStatus
+
+func (response GetAutosnapshotStatus200JSONResponse) VisitGetAutosnapshotStatusResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetAutosnapshotTriggerEventsRequestObject struct {
+	Params GetAutosnapshotTriggerEventsParams
+}
+
+type GetAutosnapshotTriggerEventsResponseObject interface {
+	VisitGetAutosnapshotTriggerEventsResponse(w http.ResponseWriter) error
+}
+
+type GetAutosnapshotTriggerEvents200JSONResponse TriggerEventList
+
+func (response GetAutosnapshotTriggerEvents200JSONResponse) VisitGetAutosnapshotTriggerEventsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetAutosnapshotTriggerEvents501Response struct {
+}
+
+func (response GetAutosnapshotTriggerEvents501Response) VisitGetAutosnapshotTriggerEventsResponse(w http.ResponseWriter) error {
+	w.WriteHeader(501)
+	return nil
 }
 
 type GetClustersRequestObject struct {
@@ -5767,6 +6220,24 @@ type StrictServerInterface interface {
 	// (GET /api/auth/info)
 	GetAuthInfo(ctx context.Context, request GetAuthInfoRequestObject) (GetAuthInfoResponseObject, error)
 
+	// (GET /api/autosnapshot/clusters/{name})
+	GetAutosnapshotCluster(ctx context.Context, request GetAutosnapshotClusterRequestObject) (GetAutosnapshotClusterResponseObject, error)
+
+	// (PUT /api/autosnapshot/clusters/{name})
+	PutAutosnapshotCluster(ctx context.Context, request PutAutosnapshotClusterRequestObject) (PutAutosnapshotClusterResponseObject, error)
+
+	// (GET /api/autosnapshot/config)
+	GetAutosnapshotConfig(ctx context.Context, request GetAutosnapshotConfigRequestObject) (GetAutosnapshotConfigResponseObject, error)
+
+	// (PUT /api/autosnapshot/config)
+	PutAutosnapshotConfig(ctx context.Context, request PutAutosnapshotConfigRequestObject) (PutAutosnapshotConfigResponseObject, error)
+
+	// (GET /api/autosnapshot/status)
+	GetAutosnapshotStatus(ctx context.Context, request GetAutosnapshotStatusRequestObject) (GetAutosnapshotStatusResponseObject, error)
+
+	// (GET /api/autosnapshot/trigger-events)
+	GetAutosnapshotTriggerEvents(ctx context.Context, request GetAutosnapshotTriggerEventsRequestObject) (GetAutosnapshotTriggerEventsResponseObject, error)
+
 	// (GET /api/clusters)
 	GetClusters(ctx context.Context, request GetClustersRequestObject) (GetClustersResponseObject, error)
 
@@ -6001,6 +6472,162 @@ func (sh *strictHandler) GetAuthInfo(ctx echo.Context) error {
 		return err
 	} else if validResponse, ok := response.(GetAuthInfoResponseObject); ok {
 		return validResponse.VisitGetAuthInfoResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// GetAutosnapshotCluster operation middleware
+func (sh *strictHandler) GetAutosnapshotCluster(ctx echo.Context, name string) error {
+	var request GetAutosnapshotClusterRequestObject
+
+	request.Name = name
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAutosnapshotCluster(ctx.Request().Context(), request.(GetAutosnapshotClusterRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAutosnapshotCluster")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(GetAutosnapshotClusterResponseObject); ok {
+		return validResponse.VisitGetAutosnapshotClusterResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// PutAutosnapshotCluster operation middleware
+func (sh *strictHandler) PutAutosnapshotCluster(ctx echo.Context, name string) error {
+	var request PutAutosnapshotClusterRequestObject
+
+	request.Name = name
+
+	var body PutAutosnapshotClusterJSONRequestBody
+	if err := ctx.Bind(&body); err != nil {
+		return err
+	}
+	request.Body = &body
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.PutAutosnapshotCluster(ctx.Request().Context(), request.(PutAutosnapshotClusterRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutAutosnapshotCluster")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(PutAutosnapshotClusterResponseObject); ok {
+		return validResponse.VisitPutAutosnapshotClusterResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// GetAutosnapshotConfig operation middleware
+func (sh *strictHandler) GetAutosnapshotConfig(ctx echo.Context) error {
+	var request GetAutosnapshotConfigRequestObject
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAutosnapshotConfig(ctx.Request().Context(), request.(GetAutosnapshotConfigRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAutosnapshotConfig")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(GetAutosnapshotConfigResponseObject); ok {
+		return validResponse.VisitGetAutosnapshotConfigResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// PutAutosnapshotConfig operation middleware
+func (sh *strictHandler) PutAutosnapshotConfig(ctx echo.Context) error {
+	var request PutAutosnapshotConfigRequestObject
+
+	var body PutAutosnapshotConfigJSONRequestBody
+	if err := ctx.Bind(&body); err != nil {
+		return err
+	}
+	request.Body = &body
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.PutAutosnapshotConfig(ctx.Request().Context(), request.(PutAutosnapshotConfigRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PutAutosnapshotConfig")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(PutAutosnapshotConfigResponseObject); ok {
+		return validResponse.VisitPutAutosnapshotConfigResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// GetAutosnapshotStatus operation middleware
+func (sh *strictHandler) GetAutosnapshotStatus(ctx echo.Context) error {
+	var request GetAutosnapshotStatusRequestObject
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAutosnapshotStatus(ctx.Request().Context(), request.(GetAutosnapshotStatusRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAutosnapshotStatus")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(GetAutosnapshotStatusResponseObject); ok {
+		return validResponse.VisitGetAutosnapshotStatusResponse(ctx.Response())
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// GetAutosnapshotTriggerEvents operation middleware
+func (sh *strictHandler) GetAutosnapshotTriggerEvents(ctx echo.Context, params GetAutosnapshotTriggerEventsParams) error {
+	var request GetAutosnapshotTriggerEventsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+		return sh.ssi.GetAutosnapshotTriggerEvents(ctx.Request().Context(), request.(GetAutosnapshotTriggerEventsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetAutosnapshotTriggerEvents")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(GetAutosnapshotTriggerEventsResponseObject); ok {
+		return validResponse.VisitGetAutosnapshotTriggerEventsResponse(ctx.Response())
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
 	}
@@ -7706,106 +8333,120 @@ func (sh *strictHandler) GetTablesTopKBySize(ctx echo.Context, params GetTablesT
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
-	"30rVmXmzv3778e3H/wcAAP//zgQQzC3rAAA=",
+	"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",
+	"fwAAAP//N+wh8C4BAQA=",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

@@ -39,6 +39,24 @@ echo "=== Starting long-running query generator ==="
   done
 ) &
 
+# --- Activity spike generator for auto-snapshot demo ---
+# Fires ~every 2 minutes: opens ~20 short concurrent busy queries on pg18-master
+# so that GetActiveConnectionCount crosses the 100% threshold over baseline for
+# spike_duration=20s, which autosnapshot detects and snapshots.
+echo "=== Starting activity spike generator ==="
+(
+  sleep 90
+  while true; do
+    echo "[$(date)] firing activity spike on pg18-master"
+    for i in $(seq 1 20); do
+      psql -h pg18-master -U demo -d demo -c \
+        "SELECT pg_sleep(25), count(*) FROM generate_series(1, 1000000);" 2>/dev/null &
+    done
+    wait
+    sleep 120
+  done
+) &
+
 # --- Deadlock generator for Database Health demo ---
 echo "=== Starting deadlock generator ==="
 (
