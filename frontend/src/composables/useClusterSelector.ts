@@ -69,13 +69,21 @@ export function useClusterSelector() {
       .slice(0, max)
   }
 
-  function pushToUrl() {
+  function pushToUrl(clearExtras = false) {
     if (!selectedCluster.value) return
     const targetHost = selectedHost.value
     const targetDb = selectedDb.value
     if (!targetHost && hostOptions.value.length > 0) return
 
-    const { host: _h, db: _d, ...extraQuery } = route.query
+    // On cluster change, drop cluster-specific query params (schema, table, snapshot, etc.).
+    // On host/db change, preserve them so user stays on the same view.
+    const extraQuery = clearExtras
+      ? {}
+      : (() => {
+          const { host: _h, db: _d, ...rest } = route.query
+          return rest
+        })()
+
     router.replace({
       name: route.name!,
       params: { clustername: selectedCluster.value },
@@ -206,9 +214,10 @@ export function useClusterSelector() {
     isSyncing.value = true
     selectedHost.value = resolveHost(null, hosts)
     selectedDb.value = resolveDb(null, dbs)
-    isSyncing.value = false
-
-    pushToUrl()
+    pushToUrl(true)
+    // Keep isSyncing=true past watcher flush to suppress the [selectedHost, selectedDb]
+    // watcher that would otherwise fire pushToUrl() without clearExtras and re-add schema/table.
+    nextTick(() => { isSyncing.value = false })
   })
 
   // Host or DB change by user → update URL

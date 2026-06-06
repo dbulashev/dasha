@@ -4,6 +4,7 @@ import { computed, provide, ref, watch } from 'vue'
 import { useThemeStore } from './stores/theme'
 import { useAuthStore } from './stores/auth'
 import { useClustersStore } from './stores/clusters'
+import { useInstanceInfoStore } from './stores/instanceInfo'
 import { useSnapshotsStatusStore } from './stores/snapshotsStatus'
 import { useAutosnapshotStatusStore } from './stores/autosnapshotStatus'
 import { useI18n } from 'vue-i18n'
@@ -14,6 +15,7 @@ const { t } = useI18n()
 const themeStore = useThemeStore()
 const authStore = useAuthStore()
 const clusterStore = useClustersStore()
+const instanceInfoStore = useInstanceInfoStore()
 const snapshotsStatusStore = useSnapshotsStatusStore()
 const autosnapshotStatusStore = useAutosnapshotStatusStore()
 
@@ -40,9 +42,10 @@ const autosnapshotVisible = computed(
 const globalError = ref<GlobalError | null>(null)
 provide(errorKey, globalError)
 
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 const route = useRoute()
+const router = useRouter()
 
 import ClusterHostDbSelector from './components/ClusterHostDbSelector.vue'
 import LoginCard from './components/auth/LoginCard.vue'
@@ -66,6 +69,7 @@ function withQuery(base: string) {
 }
 
 const mainLink = computed(() => withQuery("main"));
+const healthScoreLink = computed(() => withQuery("health-score"));
 const connectionsLink = computed(() => withQuery("connections"));
 const queriesLink = computed(() => withQuery("queries"));
 const queryStatsLink = computed(() => withQuery("query-stats"));
@@ -96,23 +100,47 @@ const replicationLink = computed(() => withQuery("replication"));
 const settingsLink = computed(() => withQuery("settings"));
 const autoSnapshotLink = computed(() => withQuery("auto-snapshot"));
 
+// Track whether the currently selected host is a standby. When true the
+// Maintenance menu item is hidden and any visit to /maintenance redirects to
+// /main — autovacuum/ANALYZE run only on the primary, so showing maintenance
+// data from a replica is misleading.
+const currentCluster = computed(() => String(route.params.clustername ?? ''))
+const currentHost = computed(() => String(route.query.host ?? ''))
+
+watch(
+  [currentCluster, currentHost, () => authStore.initialized && !authStore.requiresLogin],
+  ([cluster, host, ready]) => {
+    if (ready && cluster && host) instanceInfoStore.ensure(cluster, host)
+  },
+  { immediate: true },
+)
+
+const isReplica = computed(() =>
+  instanceInfoStore.isReplica(currentCluster.value, currentHost.value),
+)
+
+watch(
+  [isReplica, () => route.path],
+  ([replica, path]) => {
+    if (replica && (path === '/maintenance' || path.startsWith('/maintenance/'))) {
+      router.replace({ path: `/main/${currentCluster.value}`, query: route.query })
+    }
+  },
+  { immediate: true },
+)
+
 const drawer = ref(true)
 
-const openedGroups = ref<string[]>([])
-
-function syncOpenedGroups() {
+const tablesGroupOpen = computed(() => {
   const path = route.path
-  if ((path.includes('/tables') || path.includes('/table-describe')) && !openedGroups.value.includes('tables')) {
-    openedGroups.value.push('tables')
-  }
-  if (path.includes('/indexes') && !openedGroups.value.includes('indexes')) {
-    openedGroups.value.push('indexes')
-  }
-}
+  return path.includes('/tables') || path.includes('/table-describe')
+})
 
-syncOpenedGroups()
+const indexesGroupOpen = computed(() => {
+  return route.path.includes('/indexes')
+})
+
 watch(() => route.path, () => {
-  syncOpenedGroups()
   // Clear transient page errors on navigation, but preserve persistent errors (e.g. no clusters)
   if (clusterStore.clusterList?.length) {
     globalError.value = null
@@ -161,21 +189,22 @@ watch(() => route.path, () => {
       <v-navigation-drawer v-model="drawer"
         :location="$vuetify.display.mobile ? 'bottom' : undefined"
         >
-        <v-list nav :opened="openedGroups">
+        <v-list nav>
           <v-list-item :title="t('Home')"  prepend-icon="mdi-sigma" link :to="mainLink"></v-list-item>
+          <v-list-item :title="t('healthScore.page.menuItem')" prepend-icon="mdi-heart-pulse" link :to="healthScoreLink"></v-list-item>
           <v-list-item :title="t('Connections')" prepend-icon="mdi-connection" link :to="connectionsLink"></v-list-item>
           <v-list-item :title="t('Active Queries')" prepend-icon="mdi-database-clock-outline" link :to="queriesLink"></v-list-item>
           <v-list-item :title="t('Query Stats')" prepend-icon="mdi-chart-bar" link :to="queryStatsLink"></v-list-item>
           <v-list-item :title="t('Query Report')" prepend-icon="mdi-file-chart-outline" link :to="queryReportLink"></v-list-item>
           <v-list-item v-if="snapshotsStatusStore.available" :title="t('Query Compare')" prepend-icon="mdi-compare" link :to="queryCompareLink"></v-list-item>
-          <v-list-group value="tables">
+          <v-list-group value="tables" :model-value="tablesGroupOpen">
             <template #activator="{ props }">
               <v-list-item v-bind="props" :title="t('Tables')" prepend-icon="mdi-table"></v-list-item>
             </template>
             <v-list-item :title="t('tables.menuOverview')" link :to="tablesLink"></v-list-item>
             <v-list-item :title="t('tables.menuDescribe')" link :to="tableDescribeLink"></v-list-item>
           </v-list-group>
-          <v-list-group value="indexes">
+          <v-list-group value="indexes" :model-value="indexesGroupOpen">
             <template #activator="{ props }">
               <v-list-item v-bind="props" :title="t('Indexes')" prepend-icon="mdi-family-tree"></v-list-item>
             </template>
@@ -187,7 +216,7 @@ watch(() => route.path, () => {
           <v-list-item :title="t('Operation progress')" prepend-icon="mdi-progress-question" link :to="progressLink"></v-list-item>
           <v-list-item :title="t('FK Analysis')" prepend-icon="mdi-relation-many-to-many" link :to="fkAnalysisLink"></v-list-item>
           <v-list-item :title="t('Replication')" prepend-icon="mdi-database-sync-outline" link :to="replicationLink"></v-list-item>
-          <v-list-item :title="t('Maintenance')" prepend-icon="mdi-wrench-outline" link :to="maintenanceLink"></v-list-item>
+          <v-list-item v-if="!isReplica" :title="t('Maintenance')" prepend-icon="mdi-wrench-outline" link :to="maintenanceLink"></v-list-item>
           <v-list-item :title="t('Settings')" prepend-icon="mdi-database-settings-outline" link :to="settingsLink"></v-list-item>
           <v-list-item v-if="autosnapshotVisible" :title="t('autosnapshot.menu')" prepend-icon="mdi-camera-timer" link :to="autoSnapshotLink"></v-list-item>
         </v-list>

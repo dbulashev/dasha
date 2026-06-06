@@ -11,11 +11,15 @@ export interface QueryBlocked {
   BlockedUser: string
   BlockedQuery: string
   BlockedDuration: string
+  /** @nullable */
+  BlockedDurationMs?: number | null
   BlockedMode: string
   BlockingPid: number
   BlockingUser: string
   StateOfBlockingProcess: string
   CurrentOrRecentQueryInBlockingProcess: string
   BlockingDuration: string
+  /** @nullable */
+  BlockingDurationMs?: number | null
   BlockingMode: string
 }

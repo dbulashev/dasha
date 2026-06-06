@@ -31,6 +31,7 @@ import type {
   ConnectionState,
   DatabaseHealth,
   DatabaseSize,
+  DeleteHealthScoreWeightsParams,
   FkTypeMismatch,
   FksPossibleNulls,
   FksPossibleSimilar,
@@ -47,6 +48,15 @@ import type {
   GetFkTypeMismatchParams,
   GetFksPossibleNullsParams,
   GetFksPossibleSimilarParams,
+  GetHealthScoreDatabasesParams,
+  GetHealthScoreHighDeadRatioTablesParams,
+  GetHealthScoreHorizonBlockingSessionsParams,
+  GetHealthScoreLowHotUpdateTablesParams,
+  GetHealthScoreParams,
+  GetHealthScoreRecommendationsParams,
+  GetHealthScoreTablesAutovacuumOffParams,
+  GetHealthScoreWeightsParams,
+  GetHealthScoreXidWraparoundDatabasesParams,
   GetIndexesBloatParams,
   GetIndexesBtreeOnArrayParams,
   GetIndexesCachingParams,
@@ -99,6 +109,16 @@ import type {
   GetTablesSchemasParams,
   GetTablesSearchParams,
   GetTablesTopKBySizeParams,
+  HealthScore,
+  HealthScoreDatabases,
+  HealthScoreHighDeadRatioTable,
+  HealthScoreHorizonBlockingSession,
+  HealthScoreLowHotUpdateTable,
+  HealthScoreRecommendations,
+  HealthScoreTableReloption,
+  HealthScoreWeights,
+  HealthScoreWeightsUpdate,
+  HealthScoreXidWraparoundDatabase,
   IndexBloat,
   IndexBtreeOnArray,
   IndexCaching,
@@ -126,6 +146,7 @@ import type {
   ProgressCluster,
   ProgressIndex,
   ProgressVacuum,
+  PutHealthScoreWeightsParams,
   QueryBlocked,
   QueryCompareItem,
   QueryReport,
@@ -155,9 +176,13 @@ import type {
   WaitEvent,
 } from '../../models'
 
+import { customFetch } from '../../customFetch'
+
 type AwaitedInput<T> = PromiseLike<T> | T
 
 type Awaited<O> = O extends AwaitedInput<infer T> ? T : never
+
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1]
 
 export type getAuthInfoResponse200 = {
   data: AuthInfo
@@ -174,15 +199,10 @@ export const getGetAuthInfoUrl = () => {
 }
 
 export const getAuthInfo = async (options?: RequestInit): Promise<getAuthInfoResponse> => {
-  const res = await fetch(getGetAuthInfoUrl(), {
+  return customFetch<getAuthInfoResponse>(getGetAuthInfoUrl(), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getAuthInfoResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getAuthInfoResponse
 }
 
 export const getGetAuthInfoQueryKey = () => {
@@ -194,14 +214,14 @@ export const getGetAuthInfoQueryOptions = <
   TError = unknown,
 >(options?: {
   query?: UseQueryOptions<Awaited<ReturnType<typeof getAuthInfo>>, TError, TData>
-  fetch?: RequestInit
+  request?: SecondParameter<typeof customFetch>
 }) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetAuthInfoQueryKey()
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getAuthInfo>>> = ({ signal }) =>
-    getAuthInfo({ signal, ...fetchOptions })
+    getAuthInfo({ signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getAuthInfo>>,
@@ -218,7 +238,7 @@ export function useGetAuthInfo<
   TError = unknown,
 >(options?: {
   query?: UseQueryOptions<Awaited<ReturnType<typeof getAuthInfo>>, TError, TData>
-  fetch?: RequestInit
+  request?: SecondParameter<typeof customFetch>
 }): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetAuthInfoQueryOptions(options)
 
@@ -244,15 +264,10 @@ export const getGetClustersUrl = () => {
 }
 
 export const getClusters = async (options?: RequestInit): Promise<getClustersResponse> => {
-  const res = await fetch(getGetClustersUrl(), {
+  return customFetch<getClustersResponse>(getGetClustersUrl(), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getClustersResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getClustersResponse
 }
 
 export const getGetClustersQueryKey = () => {
@@ -264,14 +279,14 @@ export const getGetClustersQueryOptions = <
   TError = unknown,
 >(options?: {
   query?: UseQueryOptions<Awaited<ReturnType<typeof getClusters>>, TError, TData>
-  fetch?: RequestInit
+  request?: SecondParameter<typeof customFetch>
 }) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetClustersQueryKey()
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getClusters>>> = ({ signal }) =>
-    getClusters({ signal, ...fetchOptions })
+    getClusters({ signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getClusters>>,
@@ -288,7 +303,7 @@ export function useGetClusters<
   TError = unknown,
 >(options?: {
   query?: UseQueryOptions<Awaited<ReturnType<typeof getClusters>>, TError, TData>
-  fetch?: RequestInit
+  request?: SecondParameter<typeof customFetch>
 }): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetClustersQueryOptions(options)
 
@@ -340,15 +355,10 @@ export const getCommonSummary = async (
   params: GetCommonSummaryParams,
   options?: RequestInit,
 ): Promise<getCommonSummaryResponse> => {
-  const res = await fetch(getGetCommonSummaryUrl(params), {
+  return customFetch<getCommonSummaryResponse>(getGetCommonSummaryUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getCommonSummaryResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getCommonSummaryResponse
 }
 
 export const getGetCommonSummaryQueryKey = (params?: MaybeRef<GetCommonSummaryParams>) => {
@@ -362,15 +372,15 @@ export const getGetCommonSummaryQueryOptions = <
   params: MaybeRef<GetCommonSummaryParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getCommonSummary>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetCommonSummaryQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getCommonSummary>>> = ({ signal }) =>
-    getCommonSummary(unref(params), { signal, ...fetchOptions })
+    getCommonSummary(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getCommonSummary>>,
@@ -389,7 +399,7 @@ export function useGetCommonSummary<
   params: MaybeRef<GetCommonSummaryParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getCommonSummary>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetCommonSummaryQueryOptions(params, options)
@@ -442,15 +452,10 @@ export const getConnectionSources = async (
   params: GetConnectionSourcesParams,
   options?: RequestInit,
 ): Promise<getConnectionSourcesResponse> => {
-  const res = await fetch(getGetConnectionSourcesUrl(params), {
+  return customFetch<getConnectionSourcesResponse>(getGetConnectionSourcesUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getConnectionSourcesResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getConnectionSourcesResponse
 }
 
 export const getGetConnectionSourcesQueryKey = (params?: MaybeRef<GetConnectionSourcesParams>) => {
@@ -464,15 +469,15 @@ export const getGetConnectionSourcesQueryOptions = <
   params: MaybeRef<GetConnectionSourcesParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getConnectionSources>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetConnectionSourcesQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getConnectionSources>>> = ({ signal }) =>
-    getConnectionSources(unref(params), { signal, ...fetchOptions })
+    getConnectionSources(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getConnectionSources>>,
@@ -493,7 +498,7 @@ export function useGetConnectionSources<
   params: MaybeRef<GetConnectionSourcesParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getConnectionSources>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetConnectionSourcesQueryOptions(params, options)
@@ -546,15 +551,10 @@ export const getConnectionStates = async (
   params: GetConnectionStatesParams,
   options?: RequestInit,
 ): Promise<getConnectionStatesResponse> => {
-  const res = await fetch(getGetConnectionStatesUrl(params), {
+  return customFetch<getConnectionStatesResponse>(getGetConnectionStatesUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getConnectionStatesResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getConnectionStatesResponse
 }
 
 export const getGetConnectionStatesQueryKey = (params?: MaybeRef<GetConnectionStatesParams>) => {
@@ -568,15 +568,15 @@ export const getGetConnectionStatesQueryOptions = <
   params: MaybeRef<GetConnectionStatesParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getConnectionStates>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetConnectionStatesQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getConnectionStates>>> = ({ signal }) =>
-    getConnectionStates(unref(params), { signal, ...fetchOptions })
+    getConnectionStates(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getConnectionStates>>,
@@ -597,7 +597,7 @@ export function useGetConnectionStates<
   params: MaybeRef<GetConnectionStatesParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getConnectionStates>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetConnectionStatesQueryOptions(params, options)
@@ -650,15 +650,10 @@ export const getConnectionStatActivity = async (
   params: GetConnectionStatActivityParams,
   options?: RequestInit,
 ): Promise<getConnectionStatActivityResponse> => {
-  const res = await fetch(getGetConnectionStatActivityUrl(params), {
+  return customFetch<getConnectionStatActivityResponse>(getGetConnectionStatActivityUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getConnectionStatActivityResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getConnectionStatActivityResponse
 }
 
 export const getGetConnectionStatActivityQueryKey = (
@@ -674,16 +669,16 @@ export const getGetConnectionStatActivityQueryOptions = <
   params: MaybeRef<GetConnectionStatActivityParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getConnectionStatActivity>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetConnectionStatActivityQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getConnectionStatActivity>>> = ({
     signal,
-  }) => getConnectionStatActivity(unref(params), { signal, ...fetchOptions })
+  }) => getConnectionStatActivity(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getConnectionStatActivity>>,
@@ -704,7 +699,7 @@ export function useGetConnectionStatActivity<
   params: MaybeRef<GetConnectionStatActivityParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getConnectionStatActivity>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetConnectionStatActivityQueryOptions(params, options)
@@ -757,15 +752,10 @@ export const getConnectionWaitEvents = async (
   params: GetConnectionWaitEventsParams,
   options?: RequestInit,
 ): Promise<getConnectionWaitEventsResponse> => {
-  const res = await fetch(getGetConnectionWaitEventsUrl(params), {
+  return customFetch<getConnectionWaitEventsResponse>(getGetConnectionWaitEventsUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getConnectionWaitEventsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getConnectionWaitEventsResponse
 }
 
 export const getGetConnectionWaitEventsQueryKey = (
@@ -781,16 +771,16 @@ export const getGetConnectionWaitEventsQueryOptions = <
   params: MaybeRef<GetConnectionWaitEventsParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getConnectionWaitEvents>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetConnectionWaitEventsQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getConnectionWaitEvents>>> = ({
     signal,
-  }) => getConnectionWaitEvents(unref(params), { signal, ...fetchOptions })
+  }) => getConnectionWaitEvents(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getConnectionWaitEvents>>,
@@ -811,7 +801,7 @@ export function useGetConnectionWaitEvents<
   params: MaybeRef<GetConnectionWaitEventsParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getConnectionWaitEvents>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetConnectionWaitEventsQueryOptions(params, options)
@@ -862,15 +852,10 @@ export const getInstanceInfo = async (
   params: GetInstanceInfoParams,
   options?: RequestInit,
 ): Promise<getInstanceInfoResponse> => {
-  const res = await fetch(getGetInstanceInfoUrl(params), {
+  return customFetch<getInstanceInfoResponse>(getGetInstanceInfoUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getInstanceInfoResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getInstanceInfoResponse
 }
 
 export const getGetInstanceInfoQueryKey = (params?: MaybeRef<GetInstanceInfoParams>) => {
@@ -884,15 +869,15 @@ export const getGetInstanceInfoQueryOptions = <
   params: MaybeRef<GetInstanceInfoParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getInstanceInfo>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetInstanceInfoQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getInstanceInfo>>> = ({ signal }) =>
-    getInstanceInfo(unref(params), { signal, ...fetchOptions })
+    getInstanceInfo(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getInstanceInfo>>,
@@ -911,7 +896,7 @@ export function useGetInstanceInfo<
   params: MaybeRef<GetInstanceInfoParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getInstanceInfo>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetInstanceInfoQueryOptions(params, options)
@@ -923,6 +908,1249 @@ export function useGetInstanceInfo<
   return query
 }
 
+export type getHealthScoreResponse200 = {
+  data: HealthScore
+  status: 200
+}
+
+export type getHealthScoreResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getHealthScoreResponseSuccess = getHealthScoreResponse200 & {
+  headers: Headers
+}
+export type getHealthScoreResponseError = getHealthScoreResponse404 & {
+  headers: Headers
+}
+
+export type getHealthScoreResponse = getHealthScoreResponseSuccess | getHealthScoreResponseError
+
+export const getGetHealthScoreUrl = (params: GetHealthScoreParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/common/health-score?${stringifiedParams}`
+    : `/api/common/health-score`
+}
+
+export const getHealthScore = async (
+  params: GetHealthScoreParams,
+  options?: RequestInit,
+): Promise<getHealthScoreResponse> => {
+  return customFetch<getHealthScoreResponse>(getGetHealthScoreUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetHealthScoreQueryKey = (params?: MaybeRef<GetHealthScoreParams>) => {
+  return ['api', 'common', 'health-score', ...(params ? [params] : [])] as const
+}
+
+export const getGetHealthScoreQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHealthScore>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getHealthScore>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetHealthScoreQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHealthScore>>> = ({ signal }) =>
+    getHealthScore(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHealthScore>>,
+    TError,
+    TData
+  >
+}
+
+export type GetHealthScoreQueryResult = NonNullable<Awaited<ReturnType<typeof getHealthScore>>>
+export type GetHealthScoreQueryError = NotFoundResponse
+
+export function useGetHealthScore<
+  TData = Awaited<ReturnType<typeof getHealthScore>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getHealthScore>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHealthScoreQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+export type getHealthScoreRecommendationsResponse200 = {
+  data: HealthScoreRecommendations
+  status: 200
+}
+
+export type getHealthScoreRecommendationsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getHealthScoreRecommendationsResponseSuccess =
+  getHealthScoreRecommendationsResponse200 & {
+    headers: Headers
+  }
+export type getHealthScoreRecommendationsResponseError =
+  getHealthScoreRecommendationsResponse404 & {
+    headers: Headers
+  }
+
+export type getHealthScoreRecommendationsResponse =
+  | getHealthScoreRecommendationsResponseSuccess
+  | getHealthScoreRecommendationsResponseError
+
+export const getGetHealthScoreRecommendationsUrl = (
+  params: GetHealthScoreRecommendationsParams,
+) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/common/health-score/recommendations?${stringifiedParams}`
+    : `/api/common/health-score/recommendations`
+}
+
+export const getHealthScoreRecommendations = async (
+  params: GetHealthScoreRecommendationsParams,
+  options?: RequestInit,
+): Promise<getHealthScoreRecommendationsResponse> => {
+  return customFetch<getHealthScoreRecommendationsResponse>(
+    getGetHealthScoreRecommendationsUrl(params),
+    {
+      ...options,
+      method: 'GET',
+    },
+  )
+}
+
+export const getGetHealthScoreRecommendationsQueryKey = (
+  params?: MaybeRef<GetHealthScoreRecommendationsParams>,
+) => {
+  return ['api', 'common', 'health-score', 'recommendations', ...(params ? [params] : [])] as const
+}
+
+export const getGetHealthScoreRecommendationsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHealthScoreRecommendations>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreRecommendationsParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreRecommendations>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetHealthScoreRecommendationsQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHealthScoreRecommendations>>> = ({
+    signal,
+  }) => getHealthScoreRecommendations(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHealthScoreRecommendations>>,
+    TError,
+    TData
+  >
+}
+
+export type GetHealthScoreRecommendationsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHealthScoreRecommendations>>
+>
+export type GetHealthScoreRecommendationsQueryError = NotFoundResponse
+
+export function useGetHealthScoreRecommendations<
+  TData = Awaited<ReturnType<typeof getHealthScoreRecommendations>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreRecommendationsParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreRecommendations>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHealthScoreRecommendationsQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Inline detail for the xid_wraparound_risk recommendation: per-database transaction-ID age, top 10 by age. Instance-wide.
+ */
+export type getHealthScoreXidWraparoundDatabasesResponse200 = {
+  data: HealthScoreXidWraparoundDatabase[]
+  status: 200
+}
+
+export type getHealthScoreXidWraparoundDatabasesResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getHealthScoreXidWraparoundDatabasesResponseSuccess =
+  getHealthScoreXidWraparoundDatabasesResponse200 & {
+    headers: Headers
+  }
+export type getHealthScoreXidWraparoundDatabasesResponseError =
+  getHealthScoreXidWraparoundDatabasesResponse404 & {
+    headers: Headers
+  }
+
+export type getHealthScoreXidWraparoundDatabasesResponse =
+  | getHealthScoreXidWraparoundDatabasesResponseSuccess
+  | getHealthScoreXidWraparoundDatabasesResponseError
+
+export const getGetHealthScoreXidWraparoundDatabasesUrl = (
+  params: GetHealthScoreXidWraparoundDatabasesParams,
+) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/common/health-score/details/xid-wraparound-databases?${stringifiedParams}`
+    : `/api/common/health-score/details/xid-wraparound-databases`
+}
+
+export const getHealthScoreXidWraparoundDatabases = async (
+  params: GetHealthScoreXidWraparoundDatabasesParams,
+  options?: RequestInit,
+): Promise<getHealthScoreXidWraparoundDatabasesResponse> => {
+  return customFetch<getHealthScoreXidWraparoundDatabasesResponse>(
+    getGetHealthScoreXidWraparoundDatabasesUrl(params),
+    {
+      ...options,
+      method: 'GET',
+    },
+  )
+}
+
+export const getGetHealthScoreXidWraparoundDatabasesQueryKey = (
+  params?: MaybeRef<GetHealthScoreXidWraparoundDatabasesParams>,
+) => {
+  return [
+    'api',
+    'common',
+    'health-score',
+    'details',
+    'xid-wraparound-databases',
+    ...(params ? [params] : []),
+  ] as const
+}
+
+export const getGetHealthScoreXidWraparoundDatabasesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHealthScoreXidWraparoundDatabases>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreXidWraparoundDatabasesParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreXidWraparoundDatabases>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetHealthScoreXidWraparoundDatabasesQueryKey(params)
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getHealthScoreXidWraparoundDatabases>>
+  > = ({ signal }) =>
+    getHealthScoreXidWraparoundDatabases(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHealthScoreXidWraparoundDatabases>>,
+    TError,
+    TData
+  >
+}
+
+export type GetHealthScoreXidWraparoundDatabasesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHealthScoreXidWraparoundDatabases>>
+>
+export type GetHealthScoreXidWraparoundDatabasesQueryError = NotFoundResponse
+
+export function useGetHealthScoreXidWraparoundDatabases<
+  TData = Awaited<ReturnType<typeof getHealthScoreXidWraparoundDatabases>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreXidWraparoundDatabasesParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreXidWraparoundDatabases>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHealthScoreXidWraparoundDatabasesQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Inline detail for the tables_with_autovacuum_off recommendation: tables with autovacuum_enabled=false in reloptions.
+ */
+export type getHealthScoreTablesAutovacuumOffResponse200 = {
+  data: HealthScoreTableReloption[]
+  status: 200
+}
+
+export type getHealthScoreTablesAutovacuumOffResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getHealthScoreTablesAutovacuumOffResponseSuccess =
+  getHealthScoreTablesAutovacuumOffResponse200 & {
+    headers: Headers
+  }
+export type getHealthScoreTablesAutovacuumOffResponseError =
+  getHealthScoreTablesAutovacuumOffResponse404 & {
+    headers: Headers
+  }
+
+export type getHealthScoreTablesAutovacuumOffResponse =
+  | getHealthScoreTablesAutovacuumOffResponseSuccess
+  | getHealthScoreTablesAutovacuumOffResponseError
+
+export const getGetHealthScoreTablesAutovacuumOffUrl = (
+  params: GetHealthScoreTablesAutovacuumOffParams,
+) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/common/health-score/details/tables-autovacuum-off?${stringifiedParams}`
+    : `/api/common/health-score/details/tables-autovacuum-off`
+}
+
+export const getHealthScoreTablesAutovacuumOff = async (
+  params: GetHealthScoreTablesAutovacuumOffParams,
+  options?: RequestInit,
+): Promise<getHealthScoreTablesAutovacuumOffResponse> => {
+  return customFetch<getHealthScoreTablesAutovacuumOffResponse>(
+    getGetHealthScoreTablesAutovacuumOffUrl(params),
+    {
+      ...options,
+      method: 'GET',
+    },
+  )
+}
+
+export const getGetHealthScoreTablesAutovacuumOffQueryKey = (
+  params?: MaybeRef<GetHealthScoreTablesAutovacuumOffParams>,
+) => {
+  return [
+    'api',
+    'common',
+    'health-score',
+    'details',
+    'tables-autovacuum-off',
+    ...(params ? [params] : []),
+  ] as const
+}
+
+export const getGetHealthScoreTablesAutovacuumOffQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHealthScoreTablesAutovacuumOff>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreTablesAutovacuumOffParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreTablesAutovacuumOff>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetHealthScoreTablesAutovacuumOffQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHealthScoreTablesAutovacuumOff>>> = ({
+    signal,
+  }) => getHealthScoreTablesAutovacuumOff(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHealthScoreTablesAutovacuumOff>>,
+    TError,
+    TData
+  >
+}
+
+export type GetHealthScoreTablesAutovacuumOffQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHealthScoreTablesAutovacuumOff>>
+>
+export type GetHealthScoreTablesAutovacuumOffQueryError = NotFoundResponse
+
+export function useGetHealthScoreTablesAutovacuumOff<
+  TData = Awaited<ReturnType<typeof getHealthScoreTablesAutovacuumOff>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreTablesAutovacuumOffParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreTablesAutovacuumOff>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHealthScoreTablesAutovacuumOffQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Inline detail for the low_hot_update_ratio recommendation: per-table HOT-update ratio sorted ascending.
+ */
+export type getHealthScoreLowHotUpdateTablesResponse200 = {
+  data: HealthScoreLowHotUpdateTable[]
+  status: 200
+}
+
+export type getHealthScoreLowHotUpdateTablesResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getHealthScoreLowHotUpdateTablesResponseSuccess =
+  getHealthScoreLowHotUpdateTablesResponse200 & {
+    headers: Headers
+  }
+export type getHealthScoreLowHotUpdateTablesResponseError =
+  getHealthScoreLowHotUpdateTablesResponse404 & {
+    headers: Headers
+  }
+
+export type getHealthScoreLowHotUpdateTablesResponse =
+  | getHealthScoreLowHotUpdateTablesResponseSuccess
+  | getHealthScoreLowHotUpdateTablesResponseError
+
+export const getGetHealthScoreLowHotUpdateTablesUrl = (
+  params: GetHealthScoreLowHotUpdateTablesParams,
+) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/common/health-score/details/low-hot-update-tables?${stringifiedParams}`
+    : `/api/common/health-score/details/low-hot-update-tables`
+}
+
+export const getHealthScoreLowHotUpdateTables = async (
+  params: GetHealthScoreLowHotUpdateTablesParams,
+  options?: RequestInit,
+): Promise<getHealthScoreLowHotUpdateTablesResponse> => {
+  return customFetch<getHealthScoreLowHotUpdateTablesResponse>(
+    getGetHealthScoreLowHotUpdateTablesUrl(params),
+    {
+      ...options,
+      method: 'GET',
+    },
+  )
+}
+
+export const getGetHealthScoreLowHotUpdateTablesQueryKey = (
+  params?: MaybeRef<GetHealthScoreLowHotUpdateTablesParams>,
+) => {
+  return [
+    'api',
+    'common',
+    'health-score',
+    'details',
+    'low-hot-update-tables',
+    ...(params ? [params] : []),
+  ] as const
+}
+
+export const getGetHealthScoreLowHotUpdateTablesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHealthScoreLowHotUpdateTables>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreLowHotUpdateTablesParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreLowHotUpdateTables>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetHealthScoreLowHotUpdateTablesQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHealthScoreLowHotUpdateTables>>> = ({
+    signal,
+  }) => getHealthScoreLowHotUpdateTables(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHealthScoreLowHotUpdateTables>>,
+    TError,
+    TData
+  >
+}
+
+export type GetHealthScoreLowHotUpdateTablesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHealthScoreLowHotUpdateTables>>
+>
+export type GetHealthScoreLowHotUpdateTablesQueryError = NotFoundResponse
+
+export function useGetHealthScoreLowHotUpdateTables<
+  TData = Awaited<ReturnType<typeof getHealthScoreLowHotUpdateTables>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreLowHotUpdateTablesParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreLowHotUpdateTables>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHealthScoreLowHotUpdateTablesQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Inline detail for the high_max_dead_ratio recommendation: top tables by dead-tuple ratio.
+ */
+export type getHealthScoreHighDeadRatioTablesResponse200 = {
+  data: HealthScoreHighDeadRatioTable[]
+  status: 200
+}
+
+export type getHealthScoreHighDeadRatioTablesResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getHealthScoreHighDeadRatioTablesResponseSuccess =
+  getHealthScoreHighDeadRatioTablesResponse200 & {
+    headers: Headers
+  }
+export type getHealthScoreHighDeadRatioTablesResponseError =
+  getHealthScoreHighDeadRatioTablesResponse404 & {
+    headers: Headers
+  }
+
+export type getHealthScoreHighDeadRatioTablesResponse =
+  | getHealthScoreHighDeadRatioTablesResponseSuccess
+  | getHealthScoreHighDeadRatioTablesResponseError
+
+export const getGetHealthScoreHighDeadRatioTablesUrl = (
+  params: GetHealthScoreHighDeadRatioTablesParams,
+) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/common/health-score/details/high-dead-ratio-tables?${stringifiedParams}`
+    : `/api/common/health-score/details/high-dead-ratio-tables`
+}
+
+export const getHealthScoreHighDeadRatioTables = async (
+  params: GetHealthScoreHighDeadRatioTablesParams,
+  options?: RequestInit,
+): Promise<getHealthScoreHighDeadRatioTablesResponse> => {
+  return customFetch<getHealthScoreHighDeadRatioTablesResponse>(
+    getGetHealthScoreHighDeadRatioTablesUrl(params),
+    {
+      ...options,
+      method: 'GET',
+    },
+  )
+}
+
+export const getGetHealthScoreHighDeadRatioTablesQueryKey = (
+  params?: MaybeRef<GetHealthScoreHighDeadRatioTablesParams>,
+) => {
+  return [
+    'api',
+    'common',
+    'health-score',
+    'details',
+    'high-dead-ratio-tables',
+    ...(params ? [params] : []),
+  ] as const
+}
+
+export const getGetHealthScoreHighDeadRatioTablesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHealthScoreHighDeadRatioTables>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreHighDeadRatioTablesParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreHighDeadRatioTables>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetHealthScoreHighDeadRatioTablesQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHealthScoreHighDeadRatioTables>>> = ({
+    signal,
+  }) => getHealthScoreHighDeadRatioTables(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHealthScoreHighDeadRatioTables>>,
+    TError,
+    TData
+  >
+}
+
+export type GetHealthScoreHighDeadRatioTablesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHealthScoreHighDeadRatioTables>>
+>
+export type GetHealthScoreHighDeadRatioTablesQueryError = NotFoundResponse
+
+export function useGetHealthScoreHighDeadRatioTables<
+  TData = Awaited<ReturnType<typeof getHealthScoreHighDeadRatioTables>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreHighDeadRatioTablesParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreHighDeadRatioTables>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHealthScoreHighDeadRatioTablesQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Inline detail for the horizon_lag_xids recommendation: sessions sorted by oldest backend_xmin (they pin the MVCC horizon).
+ */
+export type getHealthScoreHorizonBlockingSessionsResponse200 = {
+  data: HealthScoreHorizonBlockingSession[]
+  status: 200
+}
+
+export type getHealthScoreHorizonBlockingSessionsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getHealthScoreHorizonBlockingSessionsResponseSuccess =
+  getHealthScoreHorizonBlockingSessionsResponse200 & {
+    headers: Headers
+  }
+export type getHealthScoreHorizonBlockingSessionsResponseError =
+  getHealthScoreHorizonBlockingSessionsResponse404 & {
+    headers: Headers
+  }
+
+export type getHealthScoreHorizonBlockingSessionsResponse =
+  | getHealthScoreHorizonBlockingSessionsResponseSuccess
+  | getHealthScoreHorizonBlockingSessionsResponseError
+
+export const getGetHealthScoreHorizonBlockingSessionsUrl = (
+  params: GetHealthScoreHorizonBlockingSessionsParams,
+) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/common/health-score/details/horizon-blocking-sessions?${stringifiedParams}`
+    : `/api/common/health-score/details/horizon-blocking-sessions`
+}
+
+export const getHealthScoreHorizonBlockingSessions = async (
+  params: GetHealthScoreHorizonBlockingSessionsParams,
+  options?: RequestInit,
+): Promise<getHealthScoreHorizonBlockingSessionsResponse> => {
+  return customFetch<getHealthScoreHorizonBlockingSessionsResponse>(
+    getGetHealthScoreHorizonBlockingSessionsUrl(params),
+    {
+      ...options,
+      method: 'GET',
+    },
+  )
+}
+
+export const getGetHealthScoreHorizonBlockingSessionsQueryKey = (
+  params?: MaybeRef<GetHealthScoreHorizonBlockingSessionsParams>,
+) => {
+  return [
+    'api',
+    'common',
+    'health-score',
+    'details',
+    'horizon-blocking-sessions',
+    ...(params ? [params] : []),
+  ] as const
+}
+
+export const getGetHealthScoreHorizonBlockingSessionsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHealthScoreHorizonBlockingSessions>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreHorizonBlockingSessionsParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreHorizonBlockingSessions>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetHealthScoreHorizonBlockingSessionsQueryKey(params)
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getHealthScoreHorizonBlockingSessions>>
+  > = ({ signal }) =>
+    getHealthScoreHorizonBlockingSessions(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHealthScoreHorizonBlockingSessions>>,
+    TError,
+    TData
+  >
+}
+
+export type GetHealthScoreHorizonBlockingSessionsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHealthScoreHorizonBlockingSessions>>
+>
+export type GetHealthScoreHorizonBlockingSessionsQueryError = NotFoundResponse
+
+export function useGetHealthScoreHorizonBlockingSessions<
+  TData = Awaited<ReturnType<typeof getHealthScoreHorizonBlockingSessions>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreHorizonBlockingSessionsParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreHorizonBlockingSessions>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHealthScoreHorizonBlockingSessionsQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+export type getHealthScoreDatabasesResponse200 = {
+  data: HealthScoreDatabases
+  status: 200
+}
+
+export type getHealthScoreDatabasesResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getHealthScoreDatabasesResponseSuccess = getHealthScoreDatabasesResponse200 & {
+  headers: Headers
+}
+export type getHealthScoreDatabasesResponseError = getHealthScoreDatabasesResponse404 & {
+  headers: Headers
+}
+
+export type getHealthScoreDatabasesResponse =
+  | getHealthScoreDatabasesResponseSuccess
+  | getHealthScoreDatabasesResponseError
+
+export const getGetHealthScoreDatabasesUrl = (params: GetHealthScoreDatabasesParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/common/health-score/databases?${stringifiedParams}`
+    : `/api/common/health-score/databases`
+}
+
+export const getHealthScoreDatabases = async (
+  params: GetHealthScoreDatabasesParams,
+  options?: RequestInit,
+): Promise<getHealthScoreDatabasesResponse> => {
+  return customFetch<getHealthScoreDatabasesResponse>(getGetHealthScoreDatabasesUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetHealthScoreDatabasesQueryKey = (
+  params?: MaybeRef<GetHealthScoreDatabasesParams>,
+) => {
+  return ['api', 'common', 'health-score', 'databases', ...(params ? [params] : [])] as const
+}
+
+export const getGetHealthScoreDatabasesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHealthScoreDatabases>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreDatabasesParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getHealthScoreDatabases>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetHealthScoreDatabasesQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHealthScoreDatabases>>> = ({
+    signal,
+  }) => getHealthScoreDatabases(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHealthScoreDatabases>>,
+    TError,
+    TData
+  >
+}
+
+export type GetHealthScoreDatabasesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHealthScoreDatabases>>
+>
+export type GetHealthScoreDatabasesQueryError = NotFoundResponse
+
+export function useGetHealthScoreDatabases<
+  TData = Awaited<ReturnType<typeof getHealthScoreDatabases>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreDatabasesParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getHealthScoreDatabases>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHealthScoreDatabasesQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+export type getHealthScoreWeightsResponse200 = {
+  data: HealthScoreWeights
+  status: 200
+}
+
+export type getHealthScoreWeightsResponseSuccess = getHealthScoreWeightsResponse200 & {
+  headers: Headers
+}
+export type getHealthScoreWeightsResponse = getHealthScoreWeightsResponseSuccess
+
+export const getGetHealthScoreWeightsUrl = (params: GetHealthScoreWeightsParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/common/health-score/weights?${stringifiedParams}`
+    : `/api/common/health-score/weights`
+}
+
+export const getHealthScoreWeights = async (
+  params: GetHealthScoreWeightsParams,
+  options?: RequestInit,
+): Promise<getHealthScoreWeightsResponse> => {
+  return customFetch<getHealthScoreWeightsResponse>(getGetHealthScoreWeightsUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetHealthScoreWeightsQueryKey = (
+  params?: MaybeRef<GetHealthScoreWeightsParams>,
+) => {
+  return ['api', 'common', 'health-score', 'weights', ...(params ? [params] : [])] as const
+}
+
+export const getGetHealthScoreWeightsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHealthScoreWeights>>,
+  TError = unknown,
+>(
+  params: MaybeRef<GetHealthScoreWeightsParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getHealthScoreWeights>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetHealthScoreWeightsQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHealthScoreWeights>>> = ({ signal }) =>
+    getHealthScoreWeights(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHealthScoreWeights>>,
+    TError,
+    TData
+  >
+}
+
+export type GetHealthScoreWeightsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHealthScoreWeights>>
+>
+export type GetHealthScoreWeightsQueryError = unknown
+
+export function useGetHealthScoreWeights<
+  TData = Awaited<ReturnType<typeof getHealthScoreWeights>>,
+  TError = unknown,
+>(
+  params: MaybeRef<GetHealthScoreWeightsParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getHealthScoreWeights>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHealthScoreWeightsQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+export type putHealthScoreWeightsResponse200 = {
+  data: HealthScoreWeights
+  status: 200
+}
+
+export type putHealthScoreWeightsResponse400 = {
+  data: void
+  status: 400
+}
+
+export type putHealthScoreWeightsResponseSuccess = putHealthScoreWeightsResponse200 & {
+  headers: Headers
+}
+export type putHealthScoreWeightsResponseError = putHealthScoreWeightsResponse400 & {
+  headers: Headers
+}
+
+export type putHealthScoreWeightsResponse =
+  | putHealthScoreWeightsResponseSuccess
+  | putHealthScoreWeightsResponseError
+
+export const getPutHealthScoreWeightsUrl = (params: PutHealthScoreWeightsParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/common/health-score/weights?${stringifiedParams}`
+    : `/api/common/health-score/weights`
+}
+
+export const putHealthScoreWeights = async (
+  healthScoreWeightsUpdate: HealthScoreWeightsUpdate,
+  params: PutHealthScoreWeightsParams,
+  options?: RequestInit,
+): Promise<putHealthScoreWeightsResponse> => {
+  return customFetch<putHealthScoreWeightsResponse>(getPutHealthScoreWeightsUrl(params), {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(healthScoreWeightsUpdate),
+  })
+}
+
+export const getPutHealthScoreWeightsMutationOptions = <
+  TError = void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putHealthScoreWeights>>,
+    TError,
+    { data: HealthScoreWeightsUpdate; params: PutHealthScoreWeightsParams },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putHealthScoreWeights>>,
+  TError,
+  { data: HealthScoreWeightsUpdate; params: PutHealthScoreWeightsParams },
+  TContext
+> => {
+  const mutationKey = ['putHealthScoreWeights']
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putHealthScoreWeights>>,
+    { data: HealthScoreWeightsUpdate; params: PutHealthScoreWeightsParams }
+  > = (props) => {
+    const { data, params } = props ?? {}
+
+    return putHealthScoreWeights(data, params, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type PutHealthScoreWeightsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof putHealthScoreWeights>>
+>
+export type PutHealthScoreWeightsMutationBody = HealthScoreWeightsUpdate
+export type PutHealthScoreWeightsMutationError = void
+
+export const usePutHealthScoreWeights = <TError = void, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putHealthScoreWeights>>,
+    TError,
+    { data: HealthScoreWeightsUpdate; params: PutHealthScoreWeightsParams },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationReturnType<
+  Awaited<ReturnType<typeof putHealthScoreWeights>>,
+  TError,
+  { data: HealthScoreWeightsUpdate; params: PutHealthScoreWeightsParams },
+  TContext
+> => {
+  return useMutation(getPutHealthScoreWeightsMutationOptions(options))
+}
+export type deleteHealthScoreWeightsResponse200 = {
+  data: HealthScoreWeights
+  status: 200
+}
+
+export type deleteHealthScoreWeightsResponseSuccess = deleteHealthScoreWeightsResponse200 & {
+  headers: Headers
+}
+export type deleteHealthScoreWeightsResponse = deleteHealthScoreWeightsResponseSuccess
+
+export const getDeleteHealthScoreWeightsUrl = (params: DeleteHealthScoreWeightsParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/common/health-score/weights?${stringifiedParams}`
+    : `/api/common/health-score/weights`
+}
+
+export const deleteHealthScoreWeights = async (
+  params: DeleteHealthScoreWeightsParams,
+  options?: RequestInit,
+): Promise<deleteHealthScoreWeightsResponse> => {
+  return customFetch<deleteHealthScoreWeightsResponse>(getDeleteHealthScoreWeightsUrl(params), {
+    ...options,
+    method: 'DELETE',
+  })
+}
+
+export const getDeleteHealthScoreWeightsMutationOptions = <
+  TError = unknown,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteHealthScoreWeights>>,
+    TError,
+    { params: DeleteHealthScoreWeightsParams },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteHealthScoreWeights>>,
+  TError,
+  { params: DeleteHealthScoreWeightsParams },
+  TContext
+> => {
+  const mutationKey = ['deleteHealthScoreWeights']
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteHealthScoreWeights>>,
+    { params: DeleteHealthScoreWeightsParams }
+  > = (props) => {
+    const { params } = props ?? {}
+
+    return deleteHealthScoreWeights(params, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type DeleteHealthScoreWeightsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteHealthScoreWeights>>
+>
+
+export type DeleteHealthScoreWeightsMutationError = unknown
+
+export const useDeleteHealthScoreWeights = <TError = unknown, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteHealthScoreWeights>>,
+    TError,
+    { params: DeleteHealthScoreWeightsParams },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationReturnType<
+  Awaited<ReturnType<typeof deleteHealthScoreWeights>>,
+  TError,
+  { params: DeleteHealthScoreWeightsParams },
+  TContext
+> => {
+  return useMutation(getDeleteHealthScoreWeightsMutationOptions(options))
+}
 export type getDatabaseUsersResponse200 = {
   data: string[]
   status: 200
@@ -964,15 +2192,10 @@ export const getDatabaseUsers = async (
   params: GetDatabaseUsersParams,
   options?: RequestInit,
 ): Promise<getDatabaseUsersResponse> => {
-  const res = await fetch(getGetDatabaseUsersUrl(params), {
+  return customFetch<getDatabaseUsersResponse>(getGetDatabaseUsersUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getDatabaseUsersResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getDatabaseUsersResponse
 }
 
 export const getGetDatabaseUsersQueryKey = (params?: MaybeRef<GetDatabaseUsersParams>) => {
@@ -986,15 +2209,15 @@ export const getGetDatabaseUsersQueryOptions = <
   params: MaybeRef<GetDatabaseUsersParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getDatabaseUsers>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetDatabaseUsersQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getDatabaseUsers>>> = ({ signal }) =>
-    getDatabaseUsers(unref(params), { signal, ...fetchOptions })
+    getDatabaseUsers(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getDatabaseUsers>>,
@@ -1013,7 +2236,7 @@ export function useGetDatabaseUsers<
   params: MaybeRef<GetDatabaseUsersParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getDatabaseUsers>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetDatabaseUsersQueryOptions(params, options)
@@ -1066,15 +2289,10 @@ export const getDatabaseHealth = async (
   params: GetDatabaseHealthParams,
   options?: RequestInit,
 ): Promise<getDatabaseHealthResponse> => {
-  const res = await fetch(getGetDatabaseHealthUrl(params), {
+  return customFetch<getDatabaseHealthResponse>(getGetDatabaseHealthUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getDatabaseHealthResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getDatabaseHealthResponse
 }
 
 export const getGetDatabaseHealthQueryKey = (params?: MaybeRef<GetDatabaseHealthParams>) => {
@@ -1088,15 +2306,15 @@ export const getGetDatabaseHealthQueryOptions = <
   params: MaybeRef<GetDatabaseHealthParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getDatabaseHealth>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetDatabaseHealthQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getDatabaseHealth>>> = ({ signal }) =>
-    getDatabaseHealth(unref(params), { signal, ...fetchOptions })
+    getDatabaseHealth(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getDatabaseHealth>>,
@@ -1117,7 +2335,7 @@ export function useGetDatabaseHealth<
   params: MaybeRef<GetDatabaseHealthParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getDatabaseHealth>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetDatabaseHealthQueryOptions(params, options)
@@ -1168,15 +2386,10 @@ export const getDatabaseSize = async (
   params: GetDatabaseSizeParams,
   options?: RequestInit,
 ): Promise<getDatabaseSizeResponse> => {
-  const res = await fetch(getGetDatabaseSizeUrl(params), {
+  return customFetch<getDatabaseSizeResponse>(getGetDatabaseSizeUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getDatabaseSizeResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getDatabaseSizeResponse
 }
 
 export const getGetDatabaseSizeQueryKey = (params?: MaybeRef<GetDatabaseSizeParams>) => {
@@ -1190,15 +2403,15 @@ export const getGetDatabaseSizeQueryOptions = <
   params: MaybeRef<GetDatabaseSizeParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getDatabaseSize>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetDatabaseSizeQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getDatabaseSize>>> = ({ signal }) =>
-    getDatabaseSize(unref(params), { signal, ...fetchOptions })
+    getDatabaseSize(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getDatabaseSize>>,
@@ -1217,7 +2430,7 @@ export function useGetDatabaseSize<
   params: MaybeRef<GetDatabaseSizeParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getDatabaseSize>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetDatabaseSizeQueryOptions(params, options)
@@ -1270,15 +2483,10 @@ export const getPgssStatsResetTime = async (
   params: GetPgssStatsResetTimeParams,
   options?: RequestInit,
 ): Promise<getPgssStatsResetTimeResponse> => {
-  const res = await fetch(getGetPgssStatsResetTimeUrl(params), {
+  return customFetch<getPgssStatsResetTimeResponse>(getGetPgssStatsResetTimeUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getPgssStatsResetTimeResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getPgssStatsResetTimeResponse
 }
 
 export const getGetPgssStatsResetTimeQueryKey = (
@@ -1294,15 +2502,15 @@ export const getGetPgssStatsResetTimeQueryOptions = <
   params: MaybeRef<GetPgssStatsResetTimeParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getPgssStatsResetTime>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetPgssStatsResetTimeQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getPgssStatsResetTime>>> = ({ signal }) =>
-    getPgssStatsResetTime(unref(params), { signal, ...fetchOptions })
+    getPgssStatsResetTime(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getPgssStatsResetTime>>,
@@ -1323,7 +2531,7 @@ export function useGetPgssStatsResetTime<
   params: MaybeRef<GetPgssStatsResetTimeParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getPgssStatsResetTime>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetPgssStatsResetTimeQueryOptions(params, options)
@@ -1376,15 +2584,10 @@ export const getStatsResetTime = async (
   params: GetStatsResetTimeParams,
   options?: RequestInit,
 ): Promise<getStatsResetTimeResponse> => {
-  const res = await fetch(getGetStatsResetTimeUrl(params), {
+  return customFetch<getStatsResetTimeResponse>(getGetStatsResetTimeUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getStatsResetTimeResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getStatsResetTimeResponse
 }
 
 export const getGetStatsResetTimeQueryKey = (params?: MaybeRef<GetStatsResetTimeParams>) => {
@@ -1398,15 +2601,15 @@ export const getGetStatsResetTimeQueryOptions = <
   params: MaybeRef<GetStatsResetTimeParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getStatsResetTime>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetStatsResetTimeQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getStatsResetTime>>> = ({ signal }) =>
-    getStatsResetTime(unref(params), { signal, ...fetchOptions })
+    getStatsResetTime(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getStatsResetTime>>,
@@ -1427,7 +2630,7 @@ export function useGetStatsResetTime<
   params: MaybeRef<GetStatsResetTimeParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getStatsResetTime>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetStatsResetTimeQueryOptions(params, options)
@@ -1480,15 +2683,10 @@ export const getInvalidConstraints = async (
   params: GetInvalidConstraintsParams,
   options?: RequestInit,
 ): Promise<getInvalidConstraintsResponse> => {
-  const res = await fetch(getGetInvalidConstraintsUrl(params), {
+  return customFetch<getInvalidConstraintsResponse>(getGetInvalidConstraintsUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getInvalidConstraintsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getInvalidConstraintsResponse
 }
 
 export const getGetInvalidConstraintsQueryKey = (
@@ -1504,15 +2702,15 @@ export const getGetInvalidConstraintsQueryOptions = <
   params: MaybeRef<GetInvalidConstraintsParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getInvalidConstraints>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetInvalidConstraintsQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getInvalidConstraints>>> = ({ signal }) =>
-    getInvalidConstraints(unref(params), { signal, ...fetchOptions })
+    getInvalidConstraints(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getInvalidConstraints>>,
@@ -1533,7 +2731,7 @@ export function useGetInvalidConstraints<
   params: MaybeRef<GetInvalidConstraintsParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getInvalidConstraints>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetInvalidConstraintsQueryOptions(params, options)
@@ -1586,15 +2784,10 @@ export const getFksPossibleNulls = async (
   params: GetFksPossibleNullsParams,
   options?: RequestInit,
 ): Promise<getFksPossibleNullsResponse> => {
-  const res = await fetch(getGetFksPossibleNullsUrl(params), {
+  return customFetch<getFksPossibleNullsResponse>(getGetFksPossibleNullsUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getFksPossibleNullsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getFksPossibleNullsResponse
 }
 
 export const getGetFksPossibleNullsQueryKey = (params?: MaybeRef<GetFksPossibleNullsParams>) => {
@@ -1608,15 +2801,15 @@ export const getGetFksPossibleNullsQueryOptions = <
   params: MaybeRef<GetFksPossibleNullsParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getFksPossibleNulls>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetFksPossibleNullsQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getFksPossibleNulls>>> = ({ signal }) =>
-    getFksPossibleNulls(unref(params), { signal, ...fetchOptions })
+    getFksPossibleNulls(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getFksPossibleNulls>>,
@@ -1637,7 +2830,7 @@ export function useGetFksPossibleNulls<
   params: MaybeRef<GetFksPossibleNullsParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getFksPossibleNulls>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetFksPossibleNullsQueryOptions(params, options)
@@ -1690,15 +2883,10 @@ export const getFksPossibleSimilar = async (
   params: GetFksPossibleSimilarParams,
   options?: RequestInit,
 ): Promise<getFksPossibleSimilarResponse> => {
-  const res = await fetch(getGetFksPossibleSimilarUrl(params), {
+  return customFetch<getFksPossibleSimilarResponse>(getGetFksPossibleSimilarUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getFksPossibleSimilarResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getFksPossibleSimilarResponse
 }
 
 export const getGetFksPossibleSimilarQueryKey = (
@@ -1714,15 +2902,15 @@ export const getGetFksPossibleSimilarQueryOptions = <
   params: MaybeRef<GetFksPossibleSimilarParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getFksPossibleSimilar>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetFksPossibleSimilarQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getFksPossibleSimilar>>> = ({ signal }) =>
-    getFksPossibleSimilar(unref(params), { signal, ...fetchOptions })
+    getFksPossibleSimilar(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getFksPossibleSimilar>>,
@@ -1743,7 +2931,7 @@ export function useGetFksPossibleSimilar<
   params: MaybeRef<GetFksPossibleSimilarParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getFksPossibleSimilar>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetFksPossibleSimilarQueryOptions(params, options)
@@ -1796,15 +2984,10 @@ export const getFkTypeMismatch = async (
   params: GetFkTypeMismatchParams,
   options?: RequestInit,
 ): Promise<getFkTypeMismatchResponse> => {
-  const res = await fetch(getGetFkTypeMismatchUrl(params), {
+  return customFetch<getFkTypeMismatchResponse>(getGetFkTypeMismatchUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getFkTypeMismatchResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getFkTypeMismatchResponse
 }
 
 export const getGetFkTypeMismatchQueryKey = (params?: MaybeRef<GetFkTypeMismatchParams>) => {
@@ -1818,15 +3001,15 @@ export const getGetFkTypeMismatchQueryOptions = <
   params: MaybeRef<GetFkTypeMismatchParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getFkTypeMismatch>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetFkTypeMismatchQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getFkTypeMismatch>>> = ({ signal }) =>
-    getFkTypeMismatch(unref(params), { signal, ...fetchOptions })
+    getFkTypeMismatch(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getFkTypeMismatch>>,
@@ -1847,7 +3030,7 @@ export function useGetFkTypeMismatch<
   params: MaybeRef<GetFkTypeMismatchParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getFkTypeMismatch>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetFkTypeMismatchQueryOptions(params, options)
@@ -1898,15 +3081,10 @@ export const getIndexesBloat = async (
   params: GetIndexesBloatParams,
   options?: RequestInit,
 ): Promise<getIndexesBloatResponse> => {
-  const res = await fetch(getGetIndexesBloatUrl(params), {
+  return customFetch<getIndexesBloatResponse>(getGetIndexesBloatUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getIndexesBloatResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getIndexesBloatResponse
 }
 
 export const getGetIndexesBloatQueryKey = (params?: MaybeRef<GetIndexesBloatParams>) => {
@@ -1920,15 +3098,15 @@ export const getGetIndexesBloatQueryOptions = <
   params: MaybeRef<GetIndexesBloatParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesBloat>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetIndexesBloatQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getIndexesBloat>>> = ({ signal }) =>
-    getIndexesBloat(unref(params), { signal, ...fetchOptions })
+    getIndexesBloat(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getIndexesBloat>>,
@@ -1947,7 +3125,7 @@ export function useGetIndexesBloat<
   params: MaybeRef<GetIndexesBloatParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesBloat>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetIndexesBloatQueryOptions(params, options)
@@ -2000,15 +3178,10 @@ export const getIndexesBtreeOnArray = async (
   params: GetIndexesBtreeOnArrayParams,
   options?: RequestInit,
 ): Promise<getIndexesBtreeOnArrayResponse> => {
-  const res = await fetch(getGetIndexesBtreeOnArrayUrl(params), {
+  return customFetch<getIndexesBtreeOnArrayResponse>(getGetIndexesBtreeOnArrayUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getIndexesBtreeOnArrayResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getIndexesBtreeOnArrayResponse
 }
 
 export const getGetIndexesBtreeOnArrayQueryKey = (
@@ -2024,15 +3197,15 @@ export const getGetIndexesBtreeOnArrayQueryOptions = <
   params: MaybeRef<GetIndexesBtreeOnArrayParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesBtreeOnArray>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetIndexesBtreeOnArrayQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getIndexesBtreeOnArray>>> = ({ signal }) =>
-    getIndexesBtreeOnArray(unref(params), { signal, ...fetchOptions })
+    getIndexesBtreeOnArray(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getIndexesBtreeOnArray>>,
@@ -2053,7 +3226,7 @@ export function useGetIndexesBtreeOnArray<
   params: MaybeRef<GetIndexesBtreeOnArrayParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesBtreeOnArray>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetIndexesBtreeOnArrayQueryOptions(params, options)
@@ -2106,15 +3279,10 @@ export const getIndexesCaching = async (
   params: GetIndexesCachingParams,
   options?: RequestInit,
 ): Promise<getIndexesCachingResponse> => {
-  const res = await fetch(getGetIndexesCachingUrl(params), {
+  return customFetch<getIndexesCachingResponse>(getGetIndexesCachingUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getIndexesCachingResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getIndexesCachingResponse
 }
 
 export const getGetIndexesCachingQueryKey = (params?: MaybeRef<GetIndexesCachingParams>) => {
@@ -2128,15 +3296,15 @@ export const getGetIndexesCachingQueryOptions = <
   params: MaybeRef<GetIndexesCachingParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesCaching>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetIndexesCachingQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getIndexesCaching>>> = ({ signal }) =>
-    getIndexesCaching(unref(params), { signal, ...fetchOptions })
+    getIndexesCaching(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getIndexesCaching>>,
@@ -2157,7 +3325,7 @@ export function useGetIndexesCaching<
   params: MaybeRef<GetIndexesCachingParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesCaching>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetIndexesCachingQueryOptions(params, options)
@@ -2210,15 +3378,10 @@ export const getIndexesHitRate = async (
   params: GetIndexesHitRateParams,
   options?: RequestInit,
 ): Promise<getIndexesHitRateResponse> => {
-  const res = await fetch(getGetIndexesHitRateUrl(params), {
+  return customFetch<getIndexesHitRateResponse>(getGetIndexesHitRateUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getIndexesHitRateResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getIndexesHitRateResponse
 }
 
 export const getGetIndexesHitRateQueryKey = (params?: MaybeRef<GetIndexesHitRateParams>) => {
@@ -2232,15 +3395,15 @@ export const getGetIndexesHitRateQueryOptions = <
   params: MaybeRef<GetIndexesHitRateParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesHitRate>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetIndexesHitRateQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getIndexesHitRate>>> = ({ signal }) =>
-    getIndexesHitRate(unref(params), { signal, ...fetchOptions })
+    getIndexesHitRate(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getIndexesHitRate>>,
@@ -2261,7 +3424,7 @@ export function useGetIndexesHitRate<
   params: MaybeRef<GetIndexesHitRateParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesHitRate>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetIndexesHitRateQueryOptions(params, options)
@@ -2314,15 +3477,13 @@ export const getIndexesInvalidOrNotReady = async (
   params: GetIndexesInvalidOrNotReadyParams,
   options?: RequestInit,
 ): Promise<getIndexesInvalidOrNotReadyResponse> => {
-  const res = await fetch(getGetIndexesInvalidOrNotReadyUrl(params), {
-    ...options,
-    method: 'GET',
-  })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getIndexesInvalidOrNotReadyResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getIndexesInvalidOrNotReadyResponse
+  return customFetch<getIndexesInvalidOrNotReadyResponse>(
+    getGetIndexesInvalidOrNotReadyUrl(params),
+    {
+      ...options,
+      method: 'GET',
+    },
+  )
 }
 
 export const getGetIndexesInvalidOrNotReadyQueryKey = (
@@ -2338,16 +3499,16 @@ export const getGetIndexesInvalidOrNotReadyQueryOptions = <
   params: MaybeRef<GetIndexesInvalidOrNotReadyParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesInvalidOrNotReady>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetIndexesInvalidOrNotReadyQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getIndexesInvalidOrNotReady>>> = ({
     signal,
-  }) => getIndexesInvalidOrNotReady(unref(params), { signal, ...fetchOptions })
+  }) => getIndexesInvalidOrNotReady(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getIndexesInvalidOrNotReady>>,
@@ -2368,7 +3529,7 @@ export function useGetIndexesInvalidOrNotReady<
   params: MaybeRef<GetIndexesInvalidOrNotReadyParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesInvalidOrNotReady>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetIndexesInvalidOrNotReadyQueryOptions(params, options)
@@ -2421,15 +3582,10 @@ export const getIndexesMissing = async (
   params: GetIndexesMissingParams,
   options?: RequestInit,
 ): Promise<getIndexesMissingResponse> => {
-  const res = await fetch(getGetIndexesMissingUrl(params), {
+  return customFetch<getIndexesMissingResponse>(getGetIndexesMissingUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getIndexesMissingResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getIndexesMissingResponse
 }
 
 export const getGetIndexesMissingQueryKey = (params?: MaybeRef<GetIndexesMissingParams>) => {
@@ -2443,15 +3599,15 @@ export const getGetIndexesMissingQueryOptions = <
   params: MaybeRef<GetIndexesMissingParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesMissing>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetIndexesMissingQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getIndexesMissing>>> = ({ signal }) =>
-    getIndexesMissing(unref(params), { signal, ...fetchOptions })
+    getIndexesMissing(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getIndexesMissing>>,
@@ -2472,7 +3628,7 @@ export function useGetIndexesMissing<
   params: MaybeRef<GetIndexesMissingParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesMissing>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetIndexesMissingQueryOptions(params, options)
@@ -2525,15 +3681,10 @@ export const getIndexesSimilar1 = async (
   params: GetIndexesSimilar1Params,
   options?: RequestInit,
 ): Promise<getIndexesSimilar1Response> => {
-  const res = await fetch(getGetIndexesSimilar1Url(params), {
+  return customFetch<getIndexesSimilar1Response>(getGetIndexesSimilar1Url(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getIndexesSimilar1Response['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getIndexesSimilar1Response
 }
 
 export const getGetIndexesSimilar1QueryKey = (params?: MaybeRef<GetIndexesSimilar1Params>) => {
@@ -2547,15 +3698,15 @@ export const getGetIndexesSimilar1QueryOptions = <
   params: MaybeRef<GetIndexesSimilar1Params>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesSimilar1>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetIndexesSimilar1QueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getIndexesSimilar1>>> = ({ signal }) =>
-    getIndexesSimilar1(unref(params), { signal, ...fetchOptions })
+    getIndexesSimilar1(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getIndexesSimilar1>>,
@@ -2576,7 +3727,7 @@ export function useGetIndexesSimilar1<
   params: MaybeRef<GetIndexesSimilar1Params>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesSimilar1>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetIndexesSimilar1QueryOptions(params, options)
@@ -2629,15 +3780,10 @@ export const getIndexesSimilar2 = async (
   params: GetIndexesSimilar2Params,
   options?: RequestInit,
 ): Promise<getIndexesSimilar2Response> => {
-  const res = await fetch(getGetIndexesSimilar2Url(params), {
+  return customFetch<getIndexesSimilar2Response>(getGetIndexesSimilar2Url(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getIndexesSimilar2Response['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getIndexesSimilar2Response
 }
 
 export const getGetIndexesSimilar2QueryKey = (params?: MaybeRef<GetIndexesSimilar2Params>) => {
@@ -2651,15 +3797,15 @@ export const getGetIndexesSimilar2QueryOptions = <
   params: MaybeRef<GetIndexesSimilar2Params>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesSimilar2>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetIndexesSimilar2QueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getIndexesSimilar2>>> = ({ signal }) =>
-    getIndexesSimilar2(unref(params), { signal, ...fetchOptions })
+    getIndexesSimilar2(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getIndexesSimilar2>>,
@@ -2680,7 +3826,7 @@ export function useGetIndexesSimilar2<
   params: MaybeRef<GetIndexesSimilar2Params>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesSimilar2>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetIndexesSimilar2QueryOptions(params, options)
@@ -2733,15 +3879,10 @@ export const getIndexesSimilar3 = async (
   params: GetIndexesSimilar3Params,
   options?: RequestInit,
 ): Promise<getIndexesSimilar3Response> => {
-  const res = await fetch(getGetIndexesSimilar3Url(params), {
+  return customFetch<getIndexesSimilar3Response>(getGetIndexesSimilar3Url(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getIndexesSimilar3Response['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getIndexesSimilar3Response
 }
 
 export const getGetIndexesSimilar3QueryKey = (params?: MaybeRef<GetIndexesSimilar3Params>) => {
@@ -2755,15 +3896,15 @@ export const getGetIndexesSimilar3QueryOptions = <
   params: MaybeRef<GetIndexesSimilar3Params>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesSimilar3>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetIndexesSimilar3QueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getIndexesSimilar3>>> = ({ signal }) =>
-    getIndexesSimilar3(unref(params), { signal, ...fetchOptions })
+    getIndexesSimilar3(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getIndexesSimilar3>>,
@@ -2784,7 +3925,7 @@ export function useGetIndexesSimilar3<
   params: MaybeRef<GetIndexesSimilar3Params>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesSimilar3>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetIndexesSimilar3QueryOptions(params, options)
@@ -2837,15 +3978,10 @@ export const getIndexesTopKBySize = async (
   params: GetIndexesTopKBySizeParams,
   options?: RequestInit,
 ): Promise<getIndexesTopKBySizeResponse> => {
-  const res = await fetch(getGetIndexesTopKBySizeUrl(params), {
+  return customFetch<getIndexesTopKBySizeResponse>(getGetIndexesTopKBySizeUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getIndexesTopKBySizeResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getIndexesTopKBySizeResponse
 }
 
 export const getGetIndexesTopKBySizeQueryKey = (params?: MaybeRef<GetIndexesTopKBySizeParams>) => {
@@ -2859,15 +3995,15 @@ export const getGetIndexesTopKBySizeQueryOptions = <
   params: MaybeRef<GetIndexesTopKBySizeParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesTopKBySize>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetIndexesTopKBySizeQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getIndexesTopKBySize>>> = ({ signal }) =>
-    getIndexesTopKBySize(unref(params), { signal, ...fetchOptions })
+    getIndexesTopKBySize(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getIndexesTopKBySize>>,
@@ -2888,7 +4024,7 @@ export function useGetIndexesTopKBySize<
   params: MaybeRef<GetIndexesTopKBySizeParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesTopKBySize>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetIndexesTopKBySizeQueryOptions(params, options)
@@ -2941,15 +4077,10 @@ export const getIndexesUnused = async (
   params: GetIndexesUnusedParams,
   options?: RequestInit,
 ): Promise<getIndexesUnusedResponse> => {
-  const res = await fetch(getGetIndexesUnusedUrl(params), {
+  return customFetch<getIndexesUnusedResponse>(getGetIndexesUnusedUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getIndexesUnusedResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getIndexesUnusedResponse
 }
 
 export const getGetIndexesUnusedQueryKey = (params?: MaybeRef<GetIndexesUnusedParams>) => {
@@ -2963,15 +4094,15 @@ export const getGetIndexesUnusedQueryOptions = <
   params: MaybeRef<GetIndexesUnusedParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesUnused>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetIndexesUnusedQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getIndexesUnused>>> = ({ signal }) =>
-    getIndexesUnused(unref(params), { signal, ...fetchOptions })
+    getIndexesUnused(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getIndexesUnused>>,
@@ -2990,7 +4121,7 @@ export function useGetIndexesUnused<
   params: MaybeRef<GetIndexesUnusedParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesUnused>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetIndexesUnusedQueryOptions(params, options)
@@ -3041,15 +4172,10 @@ export const getIndexesUsage = async (
   params: GetIndexesUsageParams,
   options?: RequestInit,
 ): Promise<getIndexesUsageResponse> => {
-  const res = await fetch(getGetIndexesUsageUrl(params), {
+  return customFetch<getIndexesUsageResponse>(getGetIndexesUsageUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getIndexesUsageResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getIndexesUsageResponse
 }
 
 export const getGetIndexesUsageQueryKey = (params?: MaybeRef<GetIndexesUsageParams>) => {
@@ -3063,15 +4189,15 @@ export const getGetIndexesUsageQueryOptions = <
   params: MaybeRef<GetIndexesUsageParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesUsage>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetIndexesUsageQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getIndexesUsage>>> = ({ signal }) =>
-    getIndexesUsage(unref(params), { signal, ...fetchOptions })
+    getIndexesUsage(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getIndexesUsage>>,
@@ -3090,7 +4216,7 @@ export function useGetIndexesUsage<
   params: MaybeRef<GetIndexesUsageParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesUsage>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetIndexesUsageQueryOptions(params, options)
@@ -3143,15 +4269,10 @@ export const getTablesDescribe = async (
   params: GetTablesDescribeParams,
   options?: RequestInit,
 ): Promise<getTablesDescribeResponse> => {
-  const res = await fetch(getGetTablesDescribeUrl(params), {
+  return customFetch<getTablesDescribeResponse>(getGetTablesDescribeUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getTablesDescribeResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getTablesDescribeResponse
 }
 
 export const getGetTablesDescribeQueryKey = (params?: MaybeRef<GetTablesDescribeParams>) => {
@@ -3165,15 +4286,15 @@ export const getGetTablesDescribeQueryOptions = <
   params: MaybeRef<GetTablesDescribeParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesDescribe>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetTablesDescribeQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getTablesDescribe>>> = ({ signal }) =>
-    getTablesDescribe(unref(params), { signal, ...fetchOptions })
+    getTablesDescribe(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getTablesDescribe>>,
@@ -3194,7 +4315,7 @@ export function useGetTablesDescribe<
   params: MaybeRef<GetTablesDescribeParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesDescribe>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetTablesDescribeQueryOptions(params, options)
@@ -3236,15 +4357,10 @@ export const getTablesDescribeBloat = async (
   params: GetTablesDescribeBloatParams,
   options?: RequestInit,
 ): Promise<getTablesDescribeBloatResponse> => {
-  const res = await fetch(getGetTablesDescribeBloatUrl(params), {
+  return customFetch<getTablesDescribeBloatResponse>(getGetTablesDescribeBloatUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getTablesDescribeBloatResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getTablesDescribeBloatResponse
 }
 
 export const getGetTablesDescribeBloatQueryKey = (
@@ -3260,15 +4376,15 @@ export const getGetTablesDescribeBloatQueryOptions = <
   params: MaybeRef<GetTablesDescribeBloatParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesDescribeBloat>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetTablesDescribeBloatQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getTablesDescribeBloat>>> = ({ signal }) =>
-    getTablesDescribeBloat(unref(params), { signal, ...fetchOptions })
+    getTablesDescribeBloat(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getTablesDescribeBloat>>,
@@ -3289,7 +4405,7 @@ export function useGetTablesDescribeBloat<
   params: MaybeRef<GetTablesDescribeBloatParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesDescribeBloat>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetTablesDescribeBloatQueryOptions(params, options)
@@ -3343,15 +4459,13 @@ export const getTablesDescribeVacuumStats = async (
   params: GetTablesDescribeVacuumStatsParams,
   options?: RequestInit,
 ): Promise<getTablesDescribeVacuumStatsResponse> => {
-  const res = await fetch(getGetTablesDescribeVacuumStatsUrl(params), {
-    ...options,
-    method: 'GET',
-  })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getTablesDescribeVacuumStatsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getTablesDescribeVacuumStatsResponse
+  return customFetch<getTablesDescribeVacuumStatsResponse>(
+    getGetTablesDescribeVacuumStatsUrl(params),
+    {
+      ...options,
+      method: 'GET',
+    },
+  )
 }
 
 export const getGetTablesDescribeVacuumStatsQueryKey = (
@@ -3367,16 +4481,16 @@ export const getGetTablesDescribeVacuumStatsQueryOptions = <
   params: MaybeRef<GetTablesDescribeVacuumStatsParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesDescribeVacuumStats>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetTablesDescribeVacuumStatsQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getTablesDescribeVacuumStats>>> = ({
     signal,
-  }) => getTablesDescribeVacuumStats(unref(params), { signal, ...fetchOptions })
+  }) => getTablesDescribeVacuumStats(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getTablesDescribeVacuumStats>>,
@@ -3397,7 +4511,7 @@ export function useGetTablesDescribeVacuumStats<
   params: MaybeRef<GetTablesDescribeVacuumStatsParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesDescribeVacuumStats>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetTablesDescribeVacuumStatsQueryOptions(params, options)
@@ -3451,15 +4565,13 @@ export const getTablesDescribeRowEstimate = async (
   params: GetTablesDescribeRowEstimateParams,
   options?: RequestInit,
 ): Promise<getTablesDescribeRowEstimateResponse> => {
-  const res = await fetch(getGetTablesDescribeRowEstimateUrl(params), {
-    ...options,
-    method: 'GET',
-  })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getTablesDescribeRowEstimateResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getTablesDescribeRowEstimateResponse
+  return customFetch<getTablesDescribeRowEstimateResponse>(
+    getGetTablesDescribeRowEstimateUrl(params),
+    {
+      ...options,
+      method: 'GET',
+    },
+  )
 }
 
 export const getGetTablesDescribeRowEstimateQueryKey = (
@@ -3475,16 +4587,16 @@ export const getGetTablesDescribeRowEstimateQueryOptions = <
   params: MaybeRef<GetTablesDescribeRowEstimateParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesDescribeRowEstimate>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetTablesDescribeRowEstimateQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getTablesDescribeRowEstimate>>> = ({
     signal,
-  }) => getTablesDescribeRowEstimate(unref(params), { signal, ...fetchOptions })
+  }) => getTablesDescribeRowEstimate(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getTablesDescribeRowEstimate>>,
@@ -3505,7 +4617,7 @@ export function useGetTablesDescribeRowEstimate<
   params: MaybeRef<GetTablesDescribeRowEstimateParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesDescribeRowEstimate>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetTablesDescribeRowEstimateQueryOptions(params, options)
@@ -3547,15 +4659,10 @@ export const getPgstattupleAvailable = async (
   params: GetPgstattupleAvailableParams,
   options?: RequestInit,
 ): Promise<getPgstattupleAvailableResponse> => {
-  const res = await fetch(getGetPgstattupleAvailableUrl(params), {
+  return customFetch<getPgstattupleAvailableResponse>(getGetPgstattupleAvailableUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getPgstattupleAvailableResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getPgstattupleAvailableResponse
 }
 
 export const getGetPgstattupleAvailableQueryKey = (
@@ -3571,16 +4678,16 @@ export const getGetPgstattupleAvailableQueryOptions = <
   params: MaybeRef<GetPgstattupleAvailableParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getPgstattupleAvailable>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetPgstattupleAvailableQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getPgstattupleAvailable>>> = ({
     signal,
-  }) => getPgstattupleAvailable(unref(params), { signal, ...fetchOptions })
+  }) => getPgstattupleAvailable(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getPgstattupleAvailable>>,
@@ -3601,7 +4708,7 @@ export function useGetPgstattupleAvailable<
   params: MaybeRef<GetPgstattupleAvailableParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getPgstattupleAvailable>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetPgstattupleAvailableQueryOptions(params, options)
@@ -3643,15 +4750,13 @@ export const getTablesDescribePartitions = async (
   params: GetTablesDescribePartitionsParams,
   options?: RequestInit,
 ): Promise<getTablesDescribePartitionsResponse> => {
-  const res = await fetch(getGetTablesDescribePartitionsUrl(params), {
-    ...options,
-    method: 'GET',
-  })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getTablesDescribePartitionsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getTablesDescribePartitionsResponse
+  return customFetch<getTablesDescribePartitionsResponse>(
+    getGetTablesDescribePartitionsUrl(params),
+    {
+      ...options,
+      method: 'GET',
+    },
+  )
 }
 
 export const getGetTablesDescribePartitionsQueryKey = (
@@ -3667,16 +4772,16 @@ export const getGetTablesDescribePartitionsQueryOptions = <
   params: MaybeRef<GetTablesDescribePartitionsParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesDescribePartitions>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetTablesDescribePartitionsQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getTablesDescribePartitions>>> = ({
     signal,
-  }) => getTablesDescribePartitions(unref(params), { signal, ...fetchOptions })
+  }) => getTablesDescribePartitions(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getTablesDescribePartitions>>,
@@ -3697,7 +4802,7 @@ export function useGetTablesDescribePartitions<
   params: MaybeRef<GetTablesDescribePartitionsParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesDescribePartitions>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetTablesDescribePartitionsQueryOptions(params, options)
@@ -3750,15 +4855,10 @@ export const getTablesSchemas = async (
   params: GetTablesSchemasParams,
   options?: RequestInit,
 ): Promise<getTablesSchemasResponse> => {
-  const res = await fetch(getGetTablesSchemasUrl(params), {
+  return customFetch<getTablesSchemasResponse>(getGetTablesSchemasUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getTablesSchemasResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getTablesSchemasResponse
 }
 
 export const getGetTablesSchemasQueryKey = (params?: MaybeRef<GetTablesSchemasParams>) => {
@@ -3772,15 +4872,15 @@ export const getGetTablesSchemasQueryOptions = <
   params: MaybeRef<GetTablesSchemasParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesSchemas>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetTablesSchemasQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getTablesSchemas>>> = ({ signal }) =>
-    getTablesSchemas(unref(params), { signal, ...fetchOptions })
+    getTablesSchemas(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getTablesSchemas>>,
@@ -3799,7 +4899,7 @@ export function useGetTablesSchemas<
   params: MaybeRef<GetTablesSchemasParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesSchemas>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetTablesSchemasQueryOptions(params, options)
@@ -3850,15 +4950,10 @@ export const getTablesSearch = async (
   params: GetTablesSearchParams,
   options?: RequestInit,
 ): Promise<getTablesSearchResponse> => {
-  const res = await fetch(getGetTablesSearchUrl(params), {
+  return customFetch<getTablesSearchResponse>(getGetTablesSearchUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getTablesSearchResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getTablesSearchResponse
 }
 
 export const getGetTablesSearchQueryKey = (params?: MaybeRef<GetTablesSearchParams>) => {
@@ -3872,15 +4967,15 @@ export const getGetTablesSearchQueryOptions = <
   params: MaybeRef<GetTablesSearchParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesSearch>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetTablesSearchQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getTablesSearch>>> = ({ signal }) =>
-    getTablesSearch(unref(params), { signal, ...fetchOptions })
+    getTablesSearch(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getTablesSearch>>,
@@ -3899,7 +4994,7 @@ export function useGetTablesSearch<
   params: MaybeRef<GetTablesSearchParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesSearch>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetTablesSearchQueryOptions(params, options)
@@ -3952,15 +5047,10 @@ export const getTablesTopKBySize = async (
   params: GetTablesTopKBySizeParams,
   options?: RequestInit,
 ): Promise<getTablesTopKBySizeResponse> => {
-  const res = await fetch(getGetTablesTopKBySizeUrl(params), {
+  return customFetch<getTablesTopKBySizeResponse>(getGetTablesTopKBySizeUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getTablesTopKBySizeResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getTablesTopKBySizeResponse
 }
 
 export const getGetTablesTopKBySizeQueryKey = (params?: MaybeRef<GetTablesTopKBySizeParams>) => {
@@ -3974,15 +5064,15 @@ export const getGetTablesTopKBySizeQueryOptions = <
   params: MaybeRef<GetTablesTopKBySizeParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesTopKBySize>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetTablesTopKBySizeQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getTablesTopKBySize>>> = ({ signal }) =>
-    getTablesTopKBySize(unref(params), { signal, ...fetchOptions })
+    getTablesTopKBySize(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getTablesTopKBySize>>,
@@ -4003,7 +5093,7 @@ export function useGetTablesTopKBySize<
   params: MaybeRef<GetTablesTopKBySizeParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesTopKBySize>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetTablesTopKBySizeQueryOptions(params, options)
@@ -4056,15 +5146,10 @@ export const getTablesCaching = async (
   params: GetTablesCachingParams,
   options?: RequestInit,
 ): Promise<getTablesCachingResponse> => {
-  const res = await fetch(getGetTablesCachingUrl(params), {
+  return customFetch<getTablesCachingResponse>(getGetTablesCachingUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getTablesCachingResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getTablesCachingResponse
 }
 
 export const getGetTablesCachingQueryKey = (params?: MaybeRef<GetTablesCachingParams>) => {
@@ -4078,15 +5163,15 @@ export const getGetTablesCachingQueryOptions = <
   params: MaybeRef<GetTablesCachingParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesCaching>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetTablesCachingQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getTablesCaching>>> = ({ signal }) =>
-    getTablesCaching(unref(params), { signal, ...fetchOptions })
+    getTablesCaching(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getTablesCaching>>,
@@ -4105,7 +5190,7 @@ export function useGetTablesCaching<
   params: MaybeRef<GetTablesCachingParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesCaching>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetTablesCachingQueryOptions(params, options)
@@ -4158,15 +5243,10 @@ export const getTablesHitRate = async (
   params: GetTablesHitRateParams,
   options?: RequestInit,
 ): Promise<getTablesHitRateResponse> => {
-  const res = await fetch(getGetTablesHitRateUrl(params), {
+  return customFetch<getTablesHitRateResponse>(getGetTablesHitRateUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getTablesHitRateResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getTablesHitRateResponse
 }
 
 export const getGetTablesHitRateQueryKey = (params?: MaybeRef<GetTablesHitRateParams>) => {
@@ -4180,15 +5260,15 @@ export const getGetTablesHitRateQueryOptions = <
   params: MaybeRef<GetTablesHitRateParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesHitRate>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetTablesHitRateQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getTablesHitRate>>> = ({ signal }) =>
-    getTablesHitRate(unref(params), { signal, ...fetchOptions })
+    getTablesHitRate(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getTablesHitRate>>,
@@ -4207,7 +5287,7 @@ export function useGetTablesHitRate<
   params: MaybeRef<GetTablesHitRateParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesHitRate>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetTablesHitRateQueryOptions(params, options)
@@ -4260,15 +5340,10 @@ export const getTablesPartitions = async (
   params: GetTablesPartitionsParams,
   options?: RequestInit,
 ): Promise<getTablesPartitionsResponse> => {
-  const res = await fetch(getGetTablesPartitionsUrl(params), {
+  return customFetch<getTablesPartitionsResponse>(getGetTablesPartitionsUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getTablesPartitionsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getTablesPartitionsResponse
 }
 
 export const getGetTablesPartitionsQueryKey = (params?: MaybeRef<GetTablesPartitionsParams>) => {
@@ -4282,15 +5357,15 @@ export const getGetTablesPartitionsQueryOptions = <
   params: MaybeRef<GetTablesPartitionsParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesPartitions>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetTablesPartitionsQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getTablesPartitions>>> = ({ signal }) =>
-    getTablesPartitions(unref(params), { signal, ...fetchOptions })
+    getTablesPartitions(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getTablesPartitions>>,
@@ -4311,7 +5386,7 @@ export function useGetTablesPartitions<
   params: MaybeRef<GetTablesPartitionsParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesPartitions>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetTablesPartitionsQueryOptions(params, options)
@@ -4368,19 +5443,13 @@ export const getMaintenanceAutovacuumFreezeMaxAge = async (
   params: GetMaintenanceAutovacuumFreezeMaxAgeParams,
   options?: RequestInit,
 ): Promise<getMaintenanceAutovacuumFreezeMaxAgeResponse> => {
-  const res = await fetch(getGetMaintenanceAutovacuumFreezeMaxAgeUrl(params), {
-    ...options,
-    method: 'GET',
-  })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getMaintenanceAutovacuumFreezeMaxAgeResponse['data'] = body ? JSON.parse(body) : {}
-  return {
-    data,
-    status: res.status,
-    headers: res.headers,
-  } as getMaintenanceAutovacuumFreezeMaxAgeResponse
+  return customFetch<getMaintenanceAutovacuumFreezeMaxAgeResponse>(
+    getGetMaintenanceAutovacuumFreezeMaxAgeUrl(params),
+    {
+      ...options,
+      method: 'GET',
+    },
+  )
 }
 
 export const getGetMaintenanceAutovacuumFreezeMaxAgeQueryKey = (
@@ -4400,17 +5469,17 @@ export const getGetMaintenanceAutovacuumFreezeMaxAgeQueryOptions = <
       TError,
       TData
     >
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetMaintenanceAutovacuumFreezeMaxAgeQueryKey(params)
 
   const queryFn: QueryFunction<
     Awaited<ReturnType<typeof getMaintenanceAutovacuumFreezeMaxAge>>
   > = ({ signal }) =>
-    getMaintenanceAutovacuumFreezeMaxAge(unref(params), { signal, ...fetchOptions })
+    getMaintenanceAutovacuumFreezeMaxAge(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getMaintenanceAutovacuumFreezeMaxAge>>,
@@ -4435,7 +5504,7 @@ export function useGetMaintenanceAutovacuumFreezeMaxAge<
       TError,
       TData
     >
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetMaintenanceAutovacuumFreezeMaxAgeQueryOptions(params, options)
@@ -4488,15 +5557,10 @@ export const getMaintenanceInfo = async (
   params: GetMaintenanceInfoParams,
   options?: RequestInit,
 ): Promise<getMaintenanceInfoResponse> => {
-  const res = await fetch(getGetMaintenanceInfoUrl(params), {
+  return customFetch<getMaintenanceInfoResponse>(getGetMaintenanceInfoUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getMaintenanceInfoResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getMaintenanceInfoResponse
 }
 
 export const getGetMaintenanceInfoQueryKey = (params?: MaybeRef<GetMaintenanceInfoParams>) => {
@@ -4510,15 +5574,15 @@ export const getGetMaintenanceInfoQueryOptions = <
   params: MaybeRef<GetMaintenanceInfoParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getMaintenanceInfo>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetMaintenanceInfoQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getMaintenanceInfo>>> = ({ signal }) =>
-    getMaintenanceInfo(unref(params), { signal, ...fetchOptions })
+    getMaintenanceInfo(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getMaintenanceInfo>>,
@@ -4539,7 +5603,7 @@ export function useGetMaintenanceInfo<
   params: MaybeRef<GetMaintenanceInfoParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getMaintenanceInfo>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetMaintenanceInfoQueryOptions(params, options)
@@ -4596,19 +5660,13 @@ export const getMaintenanceTransactionIdDanger = async (
   params: GetMaintenanceTransactionIdDangerParams,
   options?: RequestInit,
 ): Promise<getMaintenanceTransactionIdDangerResponse> => {
-  const res = await fetch(getGetMaintenanceTransactionIdDangerUrl(params), {
-    ...options,
-    method: 'GET',
-  })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getMaintenanceTransactionIdDangerResponse['data'] = body ? JSON.parse(body) : {}
-  return {
-    data,
-    status: res.status,
-    headers: res.headers,
-  } as getMaintenanceTransactionIdDangerResponse
+  return customFetch<getMaintenanceTransactionIdDangerResponse>(
+    getGetMaintenanceTransactionIdDangerUrl(params),
+    {
+      ...options,
+      method: 'GET',
+    },
+  )
 }
 
 export const getGetMaintenanceTransactionIdDangerQueryKey = (
@@ -4628,16 +5686,16 @@ export const getGetMaintenanceTransactionIdDangerQueryOptions = <
       TError,
       TData
     >
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetMaintenanceTransactionIdDangerQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getMaintenanceTransactionIdDanger>>> = ({
     signal,
-  }) => getMaintenanceTransactionIdDanger(unref(params), { signal, ...fetchOptions })
+  }) => getMaintenanceTransactionIdDanger(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getMaintenanceTransactionIdDanger>>,
@@ -4662,7 +5720,7 @@ export function useGetMaintenanceTransactionIdDanger<
       TError,
       TData
     >
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetMaintenanceTransactionIdDangerQueryOptions(params, options)
@@ -4716,15 +5774,13 @@ export const getMaintenanceVacuumProgress = async (
   params: GetMaintenanceVacuumProgressParams,
   options?: RequestInit,
 ): Promise<getMaintenanceVacuumProgressResponse> => {
-  const res = await fetch(getGetMaintenanceVacuumProgressUrl(params), {
-    ...options,
-    method: 'GET',
-  })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getMaintenanceVacuumProgressResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getMaintenanceVacuumProgressResponse
+  return customFetch<getMaintenanceVacuumProgressResponse>(
+    getGetMaintenanceVacuumProgressUrl(params),
+    {
+      ...options,
+      method: 'GET',
+    },
+  )
 }
 
 export const getGetMaintenanceVacuumProgressQueryKey = (
@@ -4740,16 +5796,16 @@ export const getGetMaintenanceVacuumProgressQueryOptions = <
   params: MaybeRef<GetMaintenanceVacuumProgressParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getMaintenanceVacuumProgress>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetMaintenanceVacuumProgressQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getMaintenanceVacuumProgress>>> = ({
     signal,
-  }) => getMaintenanceVacuumProgress(unref(params), { signal, ...fetchOptions })
+  }) => getMaintenanceVacuumProgress(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getMaintenanceVacuumProgress>>,
@@ -4770,7 +5826,7 @@ export function useGetMaintenanceVacuumProgress<
   params: MaybeRef<GetMaintenanceVacuumProgressParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getMaintenanceVacuumProgress>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetMaintenanceVacuumProgressQueryOptions(params, options)
@@ -4823,15 +5879,10 @@ export const getQueriesBlocked = async (
   params: GetQueriesBlockedParams,
   options?: RequestInit,
 ): Promise<getQueriesBlockedResponse> => {
-  const res = await fetch(getGetQueriesBlockedUrl(params), {
+  return customFetch<getQueriesBlockedResponse>(getGetQueriesBlockedUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getQueriesBlockedResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getQueriesBlockedResponse
 }
 
 export const getGetQueriesBlockedQueryKey = (params?: MaybeRef<GetQueriesBlockedParams>) => {
@@ -4845,15 +5896,15 @@ export const getGetQueriesBlockedQueryOptions = <
   params: MaybeRef<GetQueriesBlockedParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getQueriesBlocked>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetQueriesBlockedQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getQueriesBlocked>>> = ({ signal }) =>
-    getQueriesBlocked(unref(params), { signal, ...fetchOptions })
+    getQueriesBlocked(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getQueriesBlocked>>,
@@ -4874,7 +5925,7 @@ export function useGetQueriesBlocked<
   params: MaybeRef<GetQueriesBlockedParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getQueriesBlocked>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetQueriesBlockedQueryOptions(params, options)
@@ -4927,15 +5978,10 @@ export const getQueriesRunning = async (
   params: GetQueriesRunningParams,
   options?: RequestInit,
 ): Promise<getQueriesRunningResponse> => {
-  const res = await fetch(getGetQueriesRunningUrl(params), {
+  return customFetch<getQueriesRunningResponse>(getGetQueriesRunningUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getQueriesRunningResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getQueriesRunningResponse
 }
 
 export const getGetQueriesRunningQueryKey = (params?: MaybeRef<GetQueriesRunningParams>) => {
@@ -4949,15 +5995,15 @@ export const getGetQueriesRunningQueryOptions = <
   params: MaybeRef<GetQueriesRunningParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getQueriesRunning>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetQueriesRunningQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getQueriesRunning>>> = ({ signal }) =>
-    getQueriesRunning(unref(params), { signal, ...fetchOptions })
+    getQueriesRunning(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getQueriesRunning>>,
@@ -4978,7 +6024,7 @@ export function useGetQueriesRunning<
   params: MaybeRef<GetQueriesRunningParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getQueriesRunning>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetQueriesRunningQueryOptions(params, options)
@@ -5031,15 +6077,10 @@ export const getQueriesTop10Chart = async (
   params: GetQueriesTop10ChartParams,
   options?: RequestInit,
 ): Promise<getQueriesTop10ChartResponse> => {
-  const res = await fetch(getGetQueriesTop10ChartUrl(params), {
+  return customFetch<getQueriesTop10ChartResponse>(getGetQueriesTop10ChartUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getQueriesTop10ChartResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getQueriesTop10ChartResponse
 }
 
 export const getGetQueriesTop10ChartQueryKey = (params?: MaybeRef<GetQueriesTop10ChartParams>) => {
@@ -5053,15 +6094,15 @@ export const getGetQueriesTop10ChartQueryOptions = <
   params: MaybeRef<GetQueriesTop10ChartParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getQueriesTop10Chart>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetQueriesTop10ChartQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getQueriesTop10Chart>>> = ({ signal }) =>
-    getQueriesTop10Chart(unref(params), { signal, ...fetchOptions })
+    getQueriesTop10Chart(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getQueriesTop10Chart>>,
@@ -5082,7 +6123,7 @@ export function useGetQueriesTop10Chart<
   params: MaybeRef<GetQueriesTop10ChartParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getQueriesTop10Chart>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetQueriesTop10ChartQueryOptions(params, options)
@@ -5135,15 +6176,10 @@ export const getQueriesTop10ByTime = async (
   params: GetQueriesTop10ByTimeParams,
   options?: RequestInit,
 ): Promise<getQueriesTop10ByTimeResponse> => {
-  const res = await fetch(getGetQueriesTop10ByTimeUrl(params), {
+  return customFetch<getQueriesTop10ByTimeResponse>(getGetQueriesTop10ByTimeUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getQueriesTop10ByTimeResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getQueriesTop10ByTimeResponse
 }
 
 export const getGetQueriesTop10ByTimeQueryKey = (
@@ -5159,15 +6195,15 @@ export const getGetQueriesTop10ByTimeQueryOptions = <
   params: MaybeRef<GetQueriesTop10ByTimeParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getQueriesTop10ByTime>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetQueriesTop10ByTimeQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getQueriesTop10ByTime>>> = ({ signal }) =>
-    getQueriesTop10ByTime(unref(params), { signal, ...fetchOptions })
+    getQueriesTop10ByTime(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getQueriesTop10ByTime>>,
@@ -5188,7 +6224,7 @@ export function useGetQueriesTop10ByTime<
   params: MaybeRef<GetQueriesTop10ByTimeParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getQueriesTop10ByTime>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetQueriesTop10ByTimeQueryOptions(params, options)
@@ -5241,15 +6277,10 @@ export const getQueriesTop10ByWal = async (
   params: GetQueriesTop10ByWalParams,
   options?: RequestInit,
 ): Promise<getQueriesTop10ByWalResponse> => {
-  const res = await fetch(getGetQueriesTop10ByWalUrl(params), {
+  return customFetch<getQueriesTop10ByWalResponse>(getGetQueriesTop10ByWalUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getQueriesTop10ByWalResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getQueriesTop10ByWalResponse
 }
 
 export const getGetQueriesTop10ByWalQueryKey = (params?: MaybeRef<GetQueriesTop10ByWalParams>) => {
@@ -5263,15 +6294,15 @@ export const getGetQueriesTop10ByWalQueryOptions = <
   params: MaybeRef<GetQueriesTop10ByWalParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getQueriesTop10ByWal>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetQueriesTop10ByWalQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getQueriesTop10ByWal>>> = ({ signal }) =>
-    getQueriesTop10ByWal(unref(params), { signal, ...fetchOptions })
+    getQueriesTop10ByWal(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getQueriesTop10ByWal>>,
@@ -5292,7 +6323,7 @@ export function useGetQueriesTop10ByWal<
   params: MaybeRef<GetQueriesTop10ByWalParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getQueriesTop10ByWal>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetQueriesTop10ByWalQueryOptions(params, options)
@@ -5345,15 +6376,10 @@ export const getQueriesReport = async (
   params: GetQueriesReportParams,
   options?: RequestInit,
 ): Promise<getQueriesReportResponse> => {
-  const res = await fetch(getGetQueriesReportUrl(params), {
+  return customFetch<getQueriesReportResponse>(getGetQueriesReportUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getQueriesReportResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getQueriesReportResponse
 }
 
 export const getGetQueriesReportQueryKey = (params?: MaybeRef<GetQueriesReportParams>) => {
@@ -5367,15 +6393,15 @@ export const getGetQueriesReportQueryOptions = <
   params: MaybeRef<GetQueriesReportParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getQueriesReport>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetQueriesReportQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getQueriesReport>>> = ({ signal }) =>
-    getQueriesReport(unref(params), { signal, ...fetchOptions })
+    getQueriesReport(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getQueriesReport>>,
@@ -5394,7 +6420,7 @@ export function useGetQueriesReport<
   params: MaybeRef<GetQueriesReportParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getQueriesReport>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetQueriesReportQueryOptions(params, options)
@@ -5447,15 +6473,10 @@ export const getQueryStatsStatus = async (
   params: GetQueryStatsStatusParams,
   options?: RequestInit,
 ): Promise<getQueryStatsStatusResponse> => {
-  const res = await fetch(getGetQueryStatsStatusUrl(params), {
+  return customFetch<getQueryStatsStatusResponse>(getGetQueryStatsStatusUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getQueryStatsStatusResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getQueryStatsStatusResponse
 }
 
 export const getGetQueryStatsStatusQueryKey = (params?: MaybeRef<GetQueryStatsStatusParams>) => {
@@ -5469,15 +6490,15 @@ export const getGetQueryStatsStatusQueryOptions = <
   params: MaybeRef<GetQueryStatsStatusParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getQueryStatsStatus>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetQueryStatsStatusQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getQueryStatsStatus>>> = ({ signal }) =>
-    getQueryStatsStatus(unref(params), { signal, ...fetchOptions })
+    getQueryStatsStatus(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getQueryStatsStatus>>,
@@ -5498,7 +6519,7 @@ export function useGetQueryStatsStatus<
   params: MaybeRef<GetQueryStatsStatusParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getQueryStatsStatus>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetQueryStatsStatusQueryOptions(params, options)
@@ -5559,15 +6580,10 @@ export const postQueriesResetStats = async (
   params: PostQueriesResetStatsParams,
   options?: RequestInit,
 ): Promise<postQueriesResetStatsResponse> => {
-  const res = await fetch(getPostQueriesResetStatsUrl(params), {
+  return customFetch<postQueriesResetStatsResponse>(getPostQueriesResetStatsUrl(params), {
     ...options,
     method: 'POST',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: postQueriesResetStatsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as postQueriesResetStatsResponse
 }
 
 export const getPostQueriesResetStatsMutationOptions = <
@@ -5580,7 +6596,7 @@ export const getPostQueriesResetStatsMutationOptions = <
     { params: PostQueriesResetStatsParams },
     TContext
   >
-  fetch?: RequestInit
+  request?: SecondParameter<typeof customFetch>
 }): UseMutationOptions<
   Awaited<ReturnType<typeof postQueriesResetStats>>,
   TError,
@@ -5588,11 +6604,11 @@ export const getPostQueriesResetStatsMutationOptions = <
   TContext
 > => {
   const mutationKey = ['postQueriesResetStats']
-  const { mutation: mutationOptions, fetch: fetchOptions } = options
+  const { mutation: mutationOptions, request: requestOptions } = options
     ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
       ? options
       : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, fetch: undefined }
+    : { mutation: { mutationKey }, request: undefined }
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof postQueriesResetStats>>,
@@ -5600,7 +6616,7 @@ export const getPostQueriesResetStatsMutationOptions = <
   > = (props) => {
     const { params } = props ?? {}
 
-    return postQueriesResetStats(params, fetchOptions)
+    return postQueriesResetStats(params, requestOptions)
   }
 
   return { mutationFn, ...mutationOptions }
@@ -5622,7 +6638,7 @@ export const usePostQueriesResetStats = <
     { params: PostQueriesResetStatsParams },
     TContext
   >
-  fetch?: RequestInit
+  request?: SecondParameter<typeof customFetch>
 }): UseMutationReturnType<
   Awaited<ReturnType<typeof postQueriesResetStats>>,
   TError,
@@ -5648,15 +6664,10 @@ export const getGetSnapshotsStatusUrl = () => {
 export const getSnapshotsStatus = async (
   options?: RequestInit,
 ): Promise<getSnapshotsStatusResponse> => {
-  const res = await fetch(getGetSnapshotsStatusUrl(), {
+  return customFetch<getSnapshotsStatusResponse>(getGetSnapshotsStatusUrl(), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getSnapshotsStatusResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getSnapshotsStatusResponse
 }
 
 export const getGetSnapshotsStatusQueryKey = () => {
@@ -5668,14 +6679,14 @@ export const getGetSnapshotsStatusQueryOptions = <
   TError = unknown,
 >(options?: {
   query?: UseQueryOptions<Awaited<ReturnType<typeof getSnapshotsStatus>>, TError, TData>
-  fetch?: RequestInit
+  request?: SecondParameter<typeof customFetch>
 }) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetSnapshotsStatusQueryKey()
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getSnapshotsStatus>>> = ({ signal }) =>
-    getSnapshotsStatus({ signal, ...fetchOptions })
+    getSnapshotsStatus({ signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getSnapshotsStatus>>,
@@ -5694,7 +6705,7 @@ export function useGetSnapshotsStatus<
   TError = unknown,
 >(options?: {
   query?: UseQueryOptions<Awaited<ReturnType<typeof getSnapshotsStatus>>, TError, TData>
-  fetch?: RequestInit
+  request?: SecondParameter<typeof customFetch>
 }): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetSnapshotsStatusQueryOptions(options)
 
@@ -5744,15 +6755,10 @@ export const getSnapshots = async (
   params: GetSnapshotsParams,
   options?: RequestInit,
 ): Promise<getSnapshotsResponse> => {
-  const res = await fetch(getGetSnapshotsUrl(params), {
+  return customFetch<getSnapshotsResponse>(getGetSnapshotsUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getSnapshotsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getSnapshotsResponse
 }
 
 export const getGetSnapshotsQueryKey = (params?: MaybeRef<GetSnapshotsParams>) => {
@@ -5766,15 +6772,15 @@ export const getGetSnapshotsQueryOptions = <
   params: MaybeRef<GetSnapshotsParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getSnapshots>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetSnapshotsQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getSnapshots>>> = ({ signal }) =>
-    getSnapshots(unref(params), { signal, ...fetchOptions })
+    getSnapshots(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getSnapshots>>,
@@ -5790,7 +6796,7 @@ export function useGetSnapshots<TData = Awaited<ReturnType<typeof getSnapshots>>
   params: MaybeRef<GetSnapshotsParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getSnapshots>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetSnapshotsQueryOptions(params, options)
@@ -5846,15 +6852,10 @@ export const postSnapshot = async (
   params: PostSnapshotParams,
   options?: RequestInit,
 ): Promise<postSnapshotResponse> => {
-  const res = await fetch(getPostSnapshotUrl(params), {
+  return customFetch<postSnapshotResponse>(getPostSnapshotUrl(params), {
     ...options,
     method: 'POST',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: postSnapshotResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as postSnapshotResponse
 }
 
 export const getPostSnapshotMutationOptions = <
@@ -5867,7 +6868,7 @@ export const getPostSnapshotMutationOptions = <
     { params: PostSnapshotParams },
     TContext
   >
-  fetch?: RequestInit
+  request?: SecondParameter<typeof customFetch>
 }): UseMutationOptions<
   Awaited<ReturnType<typeof postSnapshot>>,
   TError,
@@ -5875,11 +6876,11 @@ export const getPostSnapshotMutationOptions = <
   TContext
 > => {
   const mutationKey = ['postSnapshot']
-  const { mutation: mutationOptions, fetch: fetchOptions } = options
+  const { mutation: mutationOptions, request: requestOptions } = options
     ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
       ? options
       : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, fetch: undefined }
+    : { mutation: { mutationKey }, request: undefined }
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof postSnapshot>>,
@@ -5887,7 +6888,7 @@ export const getPostSnapshotMutationOptions = <
   > = (props) => {
     const { params } = props ?? {}
 
-    return postSnapshot(params, fetchOptions)
+    return postSnapshot(params, requestOptions)
   }
 
   return { mutationFn, ...mutationOptions }
@@ -5904,7 +6905,7 @@ export const usePostSnapshot = <TError = NotFoundResponse | void, TContext = unk
     { params: PostSnapshotParams },
     TContext
   >
-  fetch?: RequestInit
+  request?: SecondParameter<typeof customFetch>
 }): UseMutationReturnType<
   Awaited<ReturnType<typeof postSnapshot>>,
   TError,
@@ -5945,15 +6946,10 @@ export const getSnapshot = async (
   id: string,
   options?: RequestInit,
 ): Promise<getSnapshotResponse> => {
-  const res = await fetch(getGetSnapshotUrl(id), {
+  return customFetch<getSnapshotResponse>(getGetSnapshotUrl(id), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getSnapshotResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getSnapshotResponse
 }
 
 export const getGetSnapshotQueryKey = (id: MaybeRef<string>) => {
@@ -5967,15 +6963,15 @@ export const getGetSnapshotQueryOptions = <
   id: MaybeRef<string>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getSnapshot>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetSnapshotQueryKey(id)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getSnapshot>>> = ({ signal }) =>
-    getSnapshot(unref(id), { signal, ...fetchOptions })
+    getSnapshot(unref(id), { signal, ...requestOptions })
 
   return {
     queryKey,
@@ -5995,7 +6991,7 @@ export function useGetSnapshot<
   id: MaybeRef<string>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getSnapshot>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetSnapshotQueryOptions(id, options)
@@ -6056,15 +7052,10 @@ export const getQueriesCompare = async (
   params: GetQueriesCompareParams,
   options?: RequestInit,
 ): Promise<getQueriesCompareResponse> => {
-  const res = await fetch(getGetQueriesCompareUrl(params), {
+  return customFetch<getQueriesCompareResponse>(getGetQueriesCompareUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getQueriesCompareResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getQueriesCompareResponse
 }
 
 export const getGetQueriesCompareQueryKey = (params?: MaybeRef<GetQueriesCompareParams>) => {
@@ -6078,15 +7069,15 @@ export const getGetQueriesCompareQueryOptions = <
   params: MaybeRef<GetQueriesCompareParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getQueriesCompare>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetQueriesCompareQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getQueriesCompare>>> = ({ signal }) =>
-    getQueriesCompare(unref(params), { signal, ...fetchOptions })
+    getQueriesCompare(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getQueriesCompare>>,
@@ -6107,7 +7098,7 @@ export function useGetQueriesCompare<
   params: MaybeRef<GetQueriesCompareParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getQueriesCompare>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetQueriesCompareQueryOptions(params, options)
@@ -6160,15 +7151,10 @@ export const getProgressAnalyze = async (
   params: GetProgressAnalyzeParams,
   options?: RequestInit,
 ): Promise<getProgressAnalyzeResponse> => {
-  const res = await fetch(getGetProgressAnalyzeUrl(params), {
+  return customFetch<getProgressAnalyzeResponse>(getGetProgressAnalyzeUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getProgressAnalyzeResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getProgressAnalyzeResponse
 }
 
 export const getGetProgressAnalyzeQueryKey = (params?: MaybeRef<GetProgressAnalyzeParams>) => {
@@ -6182,15 +7168,15 @@ export const getGetProgressAnalyzeQueryOptions = <
   params: MaybeRef<GetProgressAnalyzeParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getProgressAnalyze>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetProgressAnalyzeQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getProgressAnalyze>>> = ({ signal }) =>
-    getProgressAnalyze(unref(params), { signal, ...fetchOptions })
+    getProgressAnalyze(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getProgressAnalyze>>,
@@ -6211,7 +7197,7 @@ export function useGetProgressAnalyze<
   params: MaybeRef<GetProgressAnalyzeParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getProgressAnalyze>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetProgressAnalyzeQueryOptions(params, options)
@@ -6264,15 +7250,10 @@ export const getProgressBaseBackup = async (
   params: GetProgressBaseBackupParams,
   options?: RequestInit,
 ): Promise<getProgressBaseBackupResponse> => {
-  const res = await fetch(getGetProgressBaseBackupUrl(params), {
+  return customFetch<getProgressBaseBackupResponse>(getGetProgressBaseBackupUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getProgressBaseBackupResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getProgressBaseBackupResponse
 }
 
 export const getGetProgressBaseBackupQueryKey = (
@@ -6288,15 +7269,15 @@ export const getGetProgressBaseBackupQueryOptions = <
   params: MaybeRef<GetProgressBaseBackupParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getProgressBaseBackup>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetProgressBaseBackupQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getProgressBaseBackup>>> = ({ signal }) =>
-    getProgressBaseBackup(unref(params), { signal, ...fetchOptions })
+    getProgressBaseBackup(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getProgressBaseBackup>>,
@@ -6317,7 +7298,7 @@ export function useGetProgressBaseBackup<
   params: MaybeRef<GetProgressBaseBackupParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getProgressBaseBackup>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetProgressBaseBackupQueryOptions(params, options)
@@ -6370,15 +7351,10 @@ export const getProgressCluster = async (
   params: GetProgressClusterParams,
   options?: RequestInit,
 ): Promise<getProgressClusterResponse> => {
-  const res = await fetch(getGetProgressClusterUrl(params), {
+  return customFetch<getProgressClusterResponse>(getGetProgressClusterUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getProgressClusterResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getProgressClusterResponse
 }
 
 export const getGetProgressClusterQueryKey = (params?: MaybeRef<GetProgressClusterParams>) => {
@@ -6392,15 +7368,15 @@ export const getGetProgressClusterQueryOptions = <
   params: MaybeRef<GetProgressClusterParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getProgressCluster>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetProgressClusterQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getProgressCluster>>> = ({ signal }) =>
-    getProgressCluster(unref(params), { signal, ...fetchOptions })
+    getProgressCluster(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getProgressCluster>>,
@@ -6421,7 +7397,7 @@ export function useGetProgressCluster<
   params: MaybeRef<GetProgressClusterParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getProgressCluster>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetProgressClusterQueryOptions(params, options)
@@ -6474,15 +7450,10 @@ export const getProgressIndex = async (
   params: GetProgressIndexParams,
   options?: RequestInit,
 ): Promise<getProgressIndexResponse> => {
-  const res = await fetch(getGetProgressIndexUrl(params), {
+  return customFetch<getProgressIndexResponse>(getGetProgressIndexUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getProgressIndexResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getProgressIndexResponse
 }
 
 export const getGetProgressIndexQueryKey = (params?: MaybeRef<GetProgressIndexParams>) => {
@@ -6496,15 +7467,15 @@ export const getGetProgressIndexQueryOptions = <
   params: MaybeRef<GetProgressIndexParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getProgressIndex>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetProgressIndexQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getProgressIndex>>> = ({ signal }) =>
-    getProgressIndex(unref(params), { signal, ...fetchOptions })
+    getProgressIndex(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getProgressIndex>>,
@@ -6523,7 +7494,7 @@ export function useGetProgressIndex<
   params: MaybeRef<GetProgressIndexParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getProgressIndex>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetProgressIndexQueryOptions(params, options)
@@ -6576,15 +7547,10 @@ export const getProgressVacuum = async (
   params: GetProgressVacuumParams,
   options?: RequestInit,
 ): Promise<getProgressVacuumResponse> => {
-  const res = await fetch(getGetProgressVacuumUrl(params), {
+  return customFetch<getProgressVacuumResponse>(getGetProgressVacuumUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getProgressVacuumResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getProgressVacuumResponse
 }
 
 export const getGetProgressVacuumQueryKey = (params?: MaybeRef<GetProgressVacuumParams>) => {
@@ -6598,15 +7564,15 @@ export const getGetProgressVacuumQueryOptions = <
   params: MaybeRef<GetProgressVacuumParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getProgressVacuum>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetProgressVacuumQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getProgressVacuum>>> = ({ signal }) =>
-    getProgressVacuum(unref(params), { signal, ...fetchOptions })
+    getProgressVacuum(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getProgressVacuum>>,
@@ -6627,7 +7593,7 @@ export function useGetProgressVacuum<
   params: MaybeRef<GetProgressVacuumParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getProgressVacuum>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetProgressVacuumQueryOptions(params, options)
@@ -6680,15 +7646,10 @@ export const getReplicationStatus = async (
   params: GetReplicationStatusParams,
   options?: RequestInit,
 ): Promise<getReplicationStatusResponse> => {
-  const res = await fetch(getGetReplicationStatusUrl(params), {
+  return customFetch<getReplicationStatusResponse>(getGetReplicationStatusUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getReplicationStatusResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getReplicationStatusResponse
 }
 
 export const getGetReplicationStatusQueryKey = (params?: MaybeRef<GetReplicationStatusParams>) => {
@@ -6702,15 +7663,15 @@ export const getGetReplicationStatusQueryOptions = <
   params: MaybeRef<GetReplicationStatusParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getReplicationStatus>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetReplicationStatusQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getReplicationStatus>>> = ({ signal }) =>
-    getReplicationStatus(unref(params), { signal, ...fetchOptions })
+    getReplicationStatus(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getReplicationStatus>>,
@@ -6731,7 +7692,7 @@ export function useGetReplicationStatus<
   params: MaybeRef<GetReplicationStatusParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getReplicationStatus>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetReplicationStatusQueryOptions(params, options)
@@ -6784,15 +7745,10 @@ export const getReplicationSlots = async (
   params: GetReplicationSlotsParams,
   options?: RequestInit,
 ): Promise<getReplicationSlotsResponse> => {
-  const res = await fetch(getGetReplicationSlotsUrl(params), {
+  return customFetch<getReplicationSlotsResponse>(getGetReplicationSlotsUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getReplicationSlotsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getReplicationSlotsResponse
 }
 
 export const getGetReplicationSlotsQueryKey = (params?: MaybeRef<GetReplicationSlotsParams>) => {
@@ -6806,15 +7762,15 @@ export const getGetReplicationSlotsQueryOptions = <
   params: MaybeRef<GetReplicationSlotsParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getReplicationSlots>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetReplicationSlotsQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getReplicationSlots>>> = ({ signal }) =>
-    getReplicationSlots(unref(params), { signal, ...fetchOptions })
+    getReplicationSlots(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getReplicationSlots>>,
@@ -6835,7 +7791,7 @@ export function useGetReplicationSlots<
   params: MaybeRef<GetReplicationSlotsParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getReplicationSlots>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetReplicationSlotsQueryOptions(params, options)
@@ -6888,15 +7844,10 @@ export const getReplicationConfig = async (
   params: GetReplicationConfigParams,
   options?: RequestInit,
 ): Promise<getReplicationConfigResponse> => {
-  const res = await fetch(getGetReplicationConfigUrl(params), {
+  return customFetch<getReplicationConfigResponse>(getGetReplicationConfigUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getReplicationConfigResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getReplicationConfigResponse
 }
 
 export const getGetReplicationConfigQueryKey = (params?: MaybeRef<GetReplicationConfigParams>) => {
@@ -6910,15 +7861,15 @@ export const getGetReplicationConfigQueryOptions = <
   params: MaybeRef<GetReplicationConfigParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getReplicationConfig>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetReplicationConfigQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getReplicationConfig>>> = ({ signal }) =>
-    getReplicationConfig(unref(params), { signal, ...fetchOptions })
+    getReplicationConfig(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getReplicationConfig>>,
@@ -6939,7 +7890,7 @@ export function useGetReplicationConfig<
   params: MaybeRef<GetReplicationConfigParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getReplicationConfig>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetReplicationConfigQueryOptions(params, options)
@@ -6990,15 +7941,10 @@ export const getPgSettings = async (
   params: GetPgSettingsParams,
   options?: RequestInit,
 ): Promise<getPgSettingsResponse> => {
-  const res = await fetch(getGetPgSettingsUrl(params), {
+  return customFetch<getPgSettingsResponse>(getGetPgSettingsUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getPgSettingsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getPgSettingsResponse
 }
 
 export const getGetPgSettingsQueryKey = (params?: MaybeRef<GetPgSettingsParams>) => {
@@ -7012,15 +7958,15 @@ export const getGetPgSettingsQueryOptions = <
   params: MaybeRef<GetPgSettingsParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getPgSettings>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetPgSettingsQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getPgSettings>>> = ({ signal }) =>
-    getPgSettings(unref(params), { signal, ...fetchOptions })
+    getPgSettings(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getPgSettings>>,
@@ -7039,7 +7985,7 @@ export function useGetPgSettings<
   params: MaybeRef<GetPgSettingsParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getPgSettings>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetPgSettingsQueryOptions(params, options)
@@ -7092,15 +8038,10 @@ export const getAutovacuumSettings = async (
   params: GetAutovacuumSettingsParams,
   options?: RequestInit,
 ): Promise<getAutovacuumSettingsResponse> => {
-  const res = await fetch(getGetAutovacuumSettingsUrl(params), {
+  return customFetch<getAutovacuumSettingsResponse>(getGetAutovacuumSettingsUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getAutovacuumSettingsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getAutovacuumSettingsResponse
 }
 
 export const getGetAutovacuumSettingsQueryKey = (
@@ -7116,15 +8057,15 @@ export const getGetAutovacuumSettingsQueryOptions = <
   params: MaybeRef<GetAutovacuumSettingsParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getAutovacuumSettings>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetAutovacuumSettingsQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getAutovacuumSettings>>> = ({ signal }) =>
-    getAutovacuumSettings(unref(params), { signal, ...fetchOptions })
+    getAutovacuumSettings(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getAutovacuumSettings>>,
@@ -7145,7 +8086,7 @@ export function useGetAutovacuumSettings<
   params: MaybeRef<GetAutovacuumSettingsParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getAutovacuumSettings>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetAutovacuumSettingsQueryOptions(params, options)
@@ -7198,15 +8139,10 @@ export const getSettingsAnalyze = async (
   params: GetSettingsAnalyzeParams,
   options?: RequestInit,
 ): Promise<getSettingsAnalyzeResponse> => {
-  const res = await fetch(getGetSettingsAnalyzeUrl(params), {
+  return customFetch<getSettingsAnalyzeResponse>(getGetSettingsAnalyzeUrl(params), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getSettingsAnalyzeResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getSettingsAnalyzeResponse
 }
 
 export const getGetSettingsAnalyzeQueryKey = (params?: MaybeRef<GetSettingsAnalyzeParams>) => {
@@ -7220,15 +8156,15 @@ export const getGetSettingsAnalyzeQueryOptions = <
   params: MaybeRef<GetSettingsAnalyzeParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getSettingsAnalyze>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetSettingsAnalyzeQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getSettingsAnalyze>>> = ({ signal }) =>
-    getSettingsAnalyze(unref(params), { signal, ...fetchOptions })
+    getSettingsAnalyze(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getSettingsAnalyze>>,
@@ -7249,7 +8185,7 @@ export function useGetSettingsAnalyze<
   params: MaybeRef<GetSettingsAnalyzeParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getSettingsAnalyze>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetSettingsAnalyzeQueryOptions(params, options)
@@ -7278,15 +8214,10 @@ export const getGetAutosnapshotStatusUrl = () => {
 export const getAutosnapshotStatus = async (
   options?: RequestInit,
 ): Promise<getAutosnapshotStatusResponse> => {
-  const res = await fetch(getGetAutosnapshotStatusUrl(), {
+  return customFetch<getAutosnapshotStatusResponse>(getGetAutosnapshotStatusUrl(), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getAutosnapshotStatusResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getAutosnapshotStatusResponse
 }
 
 export const getGetAutosnapshotStatusQueryKey = () => {
@@ -7298,14 +8229,14 @@ export const getGetAutosnapshotStatusQueryOptions = <
   TError = unknown,
 >(options?: {
   query?: UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotStatus>>, TError, TData>
-  fetch?: RequestInit
+  request?: SecondParameter<typeof customFetch>
 }) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetAutosnapshotStatusQueryKey()
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getAutosnapshotStatus>>> = ({ signal }) =>
-    getAutosnapshotStatus({ signal, ...fetchOptions })
+    getAutosnapshotStatus({ signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getAutosnapshotStatus>>,
@@ -7324,7 +8255,7 @@ export function useGetAutosnapshotStatus<
   TError = unknown,
 >(options?: {
   query?: UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotStatus>>, TError, TData>
-  fetch?: RequestInit
+  request?: SecondParameter<typeof customFetch>
 }): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetAutosnapshotStatusQueryOptions(options)
 
@@ -7363,15 +8294,10 @@ export const getGetAutosnapshotConfigUrl = () => {
 export const getAutosnapshotConfig = async (
   options?: RequestInit,
 ): Promise<getAutosnapshotConfigResponse> => {
-  const res = await fetch(getGetAutosnapshotConfigUrl(), {
+  return customFetch<getAutosnapshotConfigResponse>(getGetAutosnapshotConfigUrl(), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getAutosnapshotConfigResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getAutosnapshotConfigResponse
 }
 
 export const getGetAutosnapshotConfigQueryKey = () => {
@@ -7383,14 +8309,14 @@ export const getGetAutosnapshotConfigQueryOptions = <
   TError = void,
 >(options?: {
   query?: UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotConfig>>, TError, TData>
-  fetch?: RequestInit
+  request?: SecondParameter<typeof customFetch>
 }) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetAutosnapshotConfigQueryKey()
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getAutosnapshotConfig>>> = ({ signal }) =>
-    getAutosnapshotConfig({ signal, ...fetchOptions })
+    getAutosnapshotConfig({ signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getAutosnapshotConfig>>,
@@ -7409,7 +8335,7 @@ export function useGetAutosnapshotConfig<
   TError = void,
 >(options?: {
   query?: UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotConfig>>, TError, TData>
-  fetch?: RequestInit
+  request?: SecondParameter<typeof customFetch>
 }): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetAutosnapshotConfigQueryOptions(options)
 
@@ -7457,17 +8383,12 @@ export const putAutosnapshotConfig = async (
   autoSnapshotConfig: AutoSnapshotConfig,
   options?: RequestInit,
 ): Promise<putAutosnapshotConfigResponse> => {
-  const res = await fetch(getPutAutosnapshotConfigUrl(), {
+  return customFetch<putAutosnapshotConfigResponse>(getPutAutosnapshotConfigUrl(), {
     ...options,
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(autoSnapshotConfig),
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: putAutosnapshotConfigResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as putAutosnapshotConfigResponse
 }
 
 export const getPutAutosnapshotConfigMutationOptions = <
@@ -7480,7 +8401,7 @@ export const getPutAutosnapshotConfigMutationOptions = <
     { data: AutoSnapshotConfig },
     TContext
   >
-  fetch?: RequestInit
+  request?: SecondParameter<typeof customFetch>
 }): UseMutationOptions<
   Awaited<ReturnType<typeof putAutosnapshotConfig>>,
   TError,
@@ -7488,11 +8409,11 @@ export const getPutAutosnapshotConfigMutationOptions = <
   TContext
 > => {
   const mutationKey = ['putAutosnapshotConfig']
-  const { mutation: mutationOptions, fetch: fetchOptions } = options
+  const { mutation: mutationOptions, request: requestOptions } = options
     ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
       ? options
       : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, fetch: undefined }
+    : { mutation: { mutationKey }, request: undefined }
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof putAutosnapshotConfig>>,
@@ -7500,7 +8421,7 @@ export const getPutAutosnapshotConfigMutationOptions = <
   > = (props) => {
     const { data } = props ?? {}
 
-    return putAutosnapshotConfig(data, fetchOptions)
+    return putAutosnapshotConfig(data, requestOptions)
   }
 
   return { mutationFn, ...mutationOptions }
@@ -7519,7 +8440,7 @@ export const usePutAutosnapshotConfig = <TError = void, TContext = unknown>(opti
     { data: AutoSnapshotConfig },
     TContext
   >
-  fetch?: RequestInit
+  request?: SecondParameter<typeof customFetch>
 }): UseMutationReturnType<
   Awaited<ReturnType<typeof putAutosnapshotConfig>>,
   TError,
@@ -7565,15 +8486,10 @@ export const getAutosnapshotCluster = async (
   name: string,
   options?: RequestInit,
 ): Promise<getAutosnapshotClusterResponse> => {
-  const res = await fetch(getGetAutosnapshotClusterUrl(name), {
+  return customFetch<getAutosnapshotClusterResponse>(getGetAutosnapshotClusterUrl(name), {
     ...options,
     method: 'GET',
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getAutosnapshotClusterResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getAutosnapshotClusterResponse
 }
 
 export const getGetAutosnapshotClusterQueryKey = (name: MaybeRef<string>) => {
@@ -7587,15 +8503,15 @@ export const getGetAutosnapshotClusterQueryOptions = <
   name: MaybeRef<string>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotCluster>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetAutosnapshotClusterQueryKey(name)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getAutosnapshotCluster>>> = ({ signal }) =>
-    getAutosnapshotCluster(unref(name), { signal, ...fetchOptions })
+    getAutosnapshotCluster(unref(name), { signal, ...requestOptions })
 
   return {
     queryKey,
@@ -7617,7 +8533,7 @@ export function useGetAutosnapshotCluster<
   name: MaybeRef<string>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotCluster>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetAutosnapshotClusterQueryOptions(name, options)
@@ -7673,17 +8589,12 @@ export const putAutosnapshotCluster = async (
   autoSnapshotClusterOverrideInput: AutoSnapshotClusterOverrideInput,
   options?: RequestInit,
 ): Promise<putAutosnapshotClusterResponse> => {
-  const res = await fetch(getPutAutosnapshotClusterUrl(name), {
+  return customFetch<putAutosnapshotClusterResponse>(getPutAutosnapshotClusterUrl(name), {
     ...options,
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(autoSnapshotClusterOverrideInput),
   })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: putAutosnapshotClusterResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as putAutosnapshotClusterResponse
 }
 
 export const getPutAutosnapshotClusterMutationOptions = <
@@ -7696,7 +8607,7 @@ export const getPutAutosnapshotClusterMutationOptions = <
     { name: string; data: AutoSnapshotClusterOverrideInput },
     TContext
   >
-  fetch?: RequestInit
+  request?: SecondParameter<typeof customFetch>
 }): UseMutationOptions<
   Awaited<ReturnType<typeof putAutosnapshotCluster>>,
   TError,
@@ -7704,11 +8615,11 @@ export const getPutAutosnapshotClusterMutationOptions = <
   TContext
 > => {
   const mutationKey = ['putAutosnapshotCluster']
-  const { mutation: mutationOptions, fetch: fetchOptions } = options
+  const { mutation: mutationOptions, request: requestOptions } = options
     ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
       ? options
       : { ...options, mutation: { ...options.mutation, mutationKey } }
-    : { mutation: { mutationKey }, fetch: undefined }
+    : { mutation: { mutationKey }, request: undefined }
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof putAutosnapshotCluster>>,
@@ -7716,7 +8627,7 @@ export const getPutAutosnapshotClusterMutationOptions = <
   > = (props) => {
     const { name, data } = props ?? {}
 
-    return putAutosnapshotCluster(name, data, fetchOptions)
+    return putAutosnapshotCluster(name, data, requestOptions)
   }
 
   return { mutationFn, ...mutationOptions }
@@ -7738,7 +8649,7 @@ export const usePutAutosnapshotCluster = <
     { name: string; data: AutoSnapshotClusterOverrideInput },
     TContext
   >
-  fetch?: RequestInit
+  request?: SecondParameter<typeof customFetch>
 }): UseMutationReturnType<
   Awaited<ReturnType<typeof putAutosnapshotCluster>>,
   TError,
@@ -7789,15 +8700,13 @@ export const getAutosnapshotTriggerEvents = async (
   params?: GetAutosnapshotTriggerEventsParams,
   options?: RequestInit,
 ): Promise<getAutosnapshotTriggerEventsResponse> => {
-  const res = await fetch(getGetAutosnapshotTriggerEventsUrl(params), {
-    ...options,
-    method: 'GET',
-  })
-
-  const body = [204, 205, 304].includes(res.status) ? null : await res.text()
-
-  const data: getAutosnapshotTriggerEventsResponse['data'] = body ? JSON.parse(body) : {}
-  return { data, status: res.status, headers: res.headers } as getAutosnapshotTriggerEventsResponse
+  return customFetch<getAutosnapshotTriggerEventsResponse>(
+    getGetAutosnapshotTriggerEventsUrl(params),
+    {
+      ...options,
+      method: 'GET',
+    },
+  )
 }
 
 export const getGetAutosnapshotTriggerEventsQueryKey = (
@@ -7813,16 +8722,16 @@ export const getGetAutosnapshotTriggerEventsQueryOptions = <
   params?: MaybeRef<GetAutosnapshotTriggerEventsParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotTriggerEvents>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ) => {
-  const { query: queryOptions, fetch: fetchOptions } = options ?? {}
+  const { query: queryOptions, request: requestOptions } = options ?? {}
 
   const queryKey = getGetAutosnapshotTriggerEventsQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getAutosnapshotTriggerEvents>>> = ({
     signal,
-  }) => getAutosnapshotTriggerEvents(unref(params), { signal, ...fetchOptions })
+  }) => getAutosnapshotTriggerEvents(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof getAutosnapshotTriggerEvents>>,
@@ -7843,7 +8752,7 @@ export function useGetAutosnapshotTriggerEvents<
   params?: MaybeRef<GetAutosnapshotTriggerEventsParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotTriggerEvents>>, TError, TData>
-    fetch?: RequestInit
+    request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetAutosnapshotTriggerEventsQueryOptions(params, options)

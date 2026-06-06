@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getTablesDescribeVacuumStats } from '@/api/gen/default/default'
 import type { VacuumStats } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
+import { useInstanceInfoStore } from '@/stores/instanceInfo'
 import { assertOk } from '@/utils/api'
 import { getErrorMessage } from '@/utils/error'
 
@@ -11,12 +12,31 @@ const props = defineProps<{ schema: string; table: string }>()
 
 const { t } = useI18n()
 const { clusterName, hostName, databaseName } = useClusterInfo()
+const instanceInfoStore = useInstanceInfoStore()
+
+// On a standby pg_stat_user_tables.last_*vacuum is local to that replica and
+// reflects replica-only activity, which is misleading — autovacuum runs on the
+// primary. Skip the fetch and show a redirect hint instead.
+const isReplica = computed(() =>
+  instanceInfoStore.isReplica(clusterName.value ?? '', hostName.value ?? ''),
+)
 
 const data = ref<VacuumStats | null>(null)
 const loading = ref(false)
 
 async function load() {
   if (!clusterName.value || !hostName.value || !databaseName.value || !props.schema || !props.table) {
+    data.value = null
+    return
+  }
+
+  // Await instance-info before checking isReplica — without this, the first
+  // load() on mount races with the store fetch and can issue a stale
+  // vacuum-stats request to a replica before the recovery flag is known.
+  // ensure() is cached and request-deduped, so subsequent calls are cheap.
+  await instanceInfoStore.ensure(clusterName.value, hostName.value)
+
+  if (isReplica.value) {
     data.value = null
     return
   }
@@ -38,7 +58,11 @@ async function load() {
   }
 }
 
-watch([clusterName, hostName, databaseName, () => props.schema, () => props.table], () => load(), { immediate: true })
+watch(
+  [clusterName, hostName, databaseName, () => props.schema, () => props.table, isReplica],
+  () => load(),
+  { immediate: true },
+)
 
 function fmtAgo(ts: string | null | undefined): string {
   if (!ts) return t('describe.never')
@@ -72,7 +96,12 @@ function fmtNum(n: number): string {
 <template>
   <v-card class="mb-4">
     <v-card-title>{{ t('describe.vacuumStats') }}</v-card-title>
-    <v-card-text v-if="loading">
+    <v-card-text v-if="isReplica">
+      <v-alert type="info" variant="tonal" density="compact" border="start">
+        {{ t('describe.replicaVacuumHint') }}
+      </v-alert>
+    </v-card-text>
+    <v-card-text v-else-if="loading">
       <v-progress-linear indeterminate />
     </v-card-text>
     <v-card-text v-else-if="data">

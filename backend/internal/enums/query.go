@@ -6,6 +6,13 @@ package enums
 // ENUM(
 //
 //	common/database_users
+//	common/health_score
+//	common/health_score_high_dead_ratio_tables
+//	common/health_score_horizon_blocking_sessions
+//	common/health_score_low_hot_update_tables
+//	common/health_score_per_database
+//	common/health_score_tables_autovacuum_off
+//	common/health_score_xid_wraparound_databases
 //	common/in_recovery
 //	common/query_stats_available
 //	common/query_stats_enabled

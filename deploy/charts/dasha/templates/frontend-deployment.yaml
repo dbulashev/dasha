@@ -28,10 +28,8 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      {{- with .Values.frontend.podSecurityContext }}
       securityContext:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+        {{- toYaml .Values.frontend.podSecurityContext | nindent 8 }}
       {{- with (coalesce .Values.frontend.nodeSelector .Values.nodeSelector) }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -44,6 +42,13 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      volumes:
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-conf-d
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
       containers:
         - name: frontend
           image: {{ include "dasha.frontendImage" . }}
@@ -59,6 +64,15 @@ spec:
           env:
             - name: BACKEND_URL
               value: {{ template "dasha.fullname" $ }}-backend:{{ .Values.backend.port }}
+            - name: FORCE_HTTPS_REDIRECT
+              value: {{ include "dasha.tlsEnabled" . | quote }}
+          volumeMounts:
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-conf-d
+              mountPath: /etc/nginx/conf.d
+            - name: tmp
+              mountPath: /tmp
           livenessProbe:
             httpGet:
               path: /

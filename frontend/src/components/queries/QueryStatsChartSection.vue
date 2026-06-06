@@ -49,7 +49,7 @@ const { items: chartData, loading } = useApiLoader<QueryTop10Chart | null>(
 const barData = computed(() => {
   if (!chartData.value) return null
 
-  const allQueryIds = new Set<number>()
+  const allQueryIds = new Set<string>()
   for (const metric of METRICS) {
     const items = chartData.value[metric] as QueryTop10ChartItem[]
     if (items) {

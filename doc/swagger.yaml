@@ -164,6 +164,204 @@ paths:
                 $ref: '#/components/schemas/InstanceInfo'
         '404':
           $ref: '#/components/responses/NotFound'
+  /api/common/health-score:
+    get:
+      operationId: getHealthScore
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthScore'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/common/health-score/recommendations:
+    get:
+      operationId: getHealthScoreRecommendations
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - name: database
+          in: query
+          required: false
+          schema:
+            type: string
+          description: |
+            When set, only rules applicable at the per-database level are
+            returned (Connections / Replication rules are filtered out).
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthScoreRecommendations'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/common/health-score/details/xid-wraparound-databases:
+    get:
+      operationId: getHealthScoreXidWraparoundDatabases
+      description: >-
+        Inline detail for the xid_wraparound_risk recommendation: per-database
+        transaction-ID age, top 10 by age. Instance-wide.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HealthScoreXidWraparoundDatabase'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/common/health-score/details/tables-autovacuum-off:
+    get:
+      operationId: getHealthScoreTablesAutovacuumOff
+      description: >-
+        Inline detail for the tables_with_autovacuum_off recommendation:
+        tables with autovacuum_enabled=false in reloptions.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HealthScoreTableReloption'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/common/health-score/details/low-hot-update-tables:
+    get:
+      operationId: getHealthScoreLowHotUpdateTables
+      description: >-
+        Inline detail for the low_hot_update_ratio recommendation:
+        per-table HOT-update ratio sorted ascending.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HealthScoreLowHotUpdateTable'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/common/health-score/details/high-dead-ratio-tables:
+    get:
+      operationId: getHealthScoreHighDeadRatioTables
+      description: >-
+        Inline detail for the high_max_dead_ratio recommendation: top tables
+        by dead-tuple ratio.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HealthScoreHighDeadRatioTable'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/common/health-score/details/horizon-blocking-sessions:
+    get:
+      operationId: getHealthScoreHorizonBlockingSessions
+      description: >-
+        Inline detail for the horizon_lag_xids recommendation: sessions
+        sorted by oldest backend_xmin (they pin the MVCC horizon).
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HealthScoreHorizonBlockingSession'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/common/health-score/databases:
+    get:
+      operationId: getHealthScoreDatabases
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthScoreDatabases'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/common/health-score/weights:
+    get:
+      operationId: getHealthScoreWeights
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthScoreWeights'
+    put:
+      operationId: putHealthScoreWeights
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HealthScoreWeightsUpdate'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthScoreWeights'
+        '400':
+          description: Invalid weights
+    delete:
+      operationId: deleteHealthScoreWeights
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthScoreWeights'
   /api/common/database-users:
     get:
       operationId: getDatabaseUsers
@@ -1045,6 +1243,25 @@ paths:
             type: integer
             default: 3
           description: Minimum query duration in seconds
+        - in: query
+          name: query_filter
+          schema:
+            type: string
+            maxLength: 1000
+          description: Case-insensitive substring filter for query text. Use SQL wildcards (%, _) explicitly. Empty disables the filter.
+        - in: query
+          name: query_filter_mode
+          schema:
+            type: string
+            enum: [like, not_like]
+            default: like
+          description: Filter mode for query_filter — `like` keeps matches, `not_like` excludes them.
+        - in: query
+          name: username
+          schema:
+            type: string
+            maxLength: 64
+          description: Filter by exact PostgreSQL role name (`usename`).
       responses:
         '200':
           description: Success
@@ -2265,6 +2482,10 @@ components:
           type: string
         BlockedDuration:
           type: string
+        BlockedDurationMs:
+          type: number
+          format: double
+          nullable: true
         BlockedMode:
           type: string
         BlockingPid:
@@ -2278,6 +2499,10 @@ components:
           type: string
         BlockingDuration:
           type: string
+        BlockingDurationMs:
+          type: number
+          format: double
+          nullable: true
         BlockingMode:
           type: string
 
@@ -2331,8 +2556,8 @@ components:
         - QueryTrunc
       properties:
         QueryID:
-          type: integer
-          format: int64
+          type: string
+          description: pg_stat_statements queryid as string to preserve int64 precision in JavaScript
         ExecTime:
           type: string
         ExecTimeMs:
@@ -2358,8 +2583,8 @@ components:
         - QueryTrunc
       properties:
         QueryID:
-          type: integer
-          format: int64
+          type: string
+          description: pg_stat_statements queryid as string to preserve int64 precision in JavaScript
         WalVolume:
           type: string
         WalBytes:
@@ -2375,8 +2600,8 @@ components:
         - Pct
       properties:
         QueryID:
-          type: integer
-          format: int64
+          type: string
+          description: pg_stat_statements queryid as string to preserve int64 precision in JavaScript
         Pct:
           type: number
           format: double
@@ -2438,10 +2663,26 @@ components:
         - Query
       properties:
         QueryID:
-          type: integer
-          format: int64
+          type: string
+          description: pg_stat_statements queryid as string to preserve int64 precision in JavaScript
         Query:
           type: string
+        Usernames:
+          type: array
+          items:
+            type: string
+          nullable: true
+          description: Distinct PostgreSQL roles that executed this queryid (aggregated across pg_stat_statements rows).
+        StddevExecTimeMs:
+          type: number
+          format: double
+          nullable: true
+          description: max(stddev_exec_time) across aggregated pg_stat_statements rows, in milliseconds.
+        StddevPlanTimeMs:
+          type: number
+          format: double
+          nullable: true
+          description: max(stddev_plan_time) across aggregated pg_stat_statements rows, in milliseconds.
         Rows:
           type: integer
           format: int64
@@ -2554,6 +2795,19 @@ components:
     QueryReportMetrics:
       type: object
       properties:
+        Usernames:
+          type: array
+          items:
+            type: string
+          nullable: true
+        StddevExecTimeMs:
+          type: number
+          format: double
+          nullable: true
+        StddevPlanTimeMs:
+          type: number
+          format: double
+          nullable: true
         Rows:
           type: integer
           format: int64
@@ -2670,8 +2924,8 @@ components:
         - Query
       properties:
         QueryID:
-          type: integer
-          format: int64
+          type: string
+          description: pg_stat_statements queryid as string to preserve int64 precision in JavaScript
         Query:
           type: string
         Left:
@@ -3380,6 +3634,328 @@ components:
           type: integer
           format: int64
           nullable: true
+
+    HealthScoreCategory:
+      type: object
+      required:
+        - name
+        - score
+        - weight
+        - penalty
+        - details
+      properties:
+        name:
+          type: string
+        score:
+          type: number
+          format: double
+        weight:
+          type: number
+          format: double
+        penalty:
+          type: number
+          format: double
+        details:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+
+    HealthScore:
+      type: object
+      required:
+        - score
+        - categories
+        - has_replication
+        - in_recovery
+      properties:
+        score:
+          type: number
+          format: double
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/HealthScoreCategory'
+        has_replication:
+          type: boolean
+        in_recovery:
+          type: boolean
+          description: >-
+            True when the instance is a standby (pg_is_in_recovery() = true).
+            When true, the maintenance category is dropped from the score and
+            its weight is redistributed across the remaining categories — same
+            handling as the replication category on instances without replicas.
+
+    HealthScoreXidWraparoundDatabase:
+      type: object
+      required:
+        - Database
+        - XidAge
+      properties:
+        Database:
+          type: string
+        XidAge:
+          type: integer
+          format: int64
+
+    HealthScoreTableReloption:
+      type: object
+      required:
+        - Schema
+        - Table
+        - RelOptions
+      properties:
+        Schema:
+          type: string
+        Table:
+          type: string
+        RelOptions:
+          type: string
+
+    HealthScoreLowHotUpdateTable:
+      type: object
+      required:
+        - Schema
+        - Table
+        - Updates
+        - HotUpdates
+        - HotRatio
+      properties:
+        Schema:
+          type: string
+        Table:
+          type: string
+        Updates:
+          type: integer
+          format: int64
+        HotUpdates:
+          type: integer
+          format: int64
+        HotRatio:
+          type: number
+          format: double
+
+    HealthScoreHighDeadRatioTable:
+      type: object
+      required:
+        - Schema
+        - Table
+        - LiveTuples
+        - DeadTuples
+        - DeadRatio
+      properties:
+        Schema:
+          type: string
+        Table:
+          type: string
+        LiveTuples:
+          type: integer
+          format: int64
+        DeadTuples:
+          type: integer
+          format: int64
+        DeadRatio:
+          type: number
+          format: double
+
+    HealthScoreHorizonBlockingSession:
+      type: object
+      required:
+        - PID
+        - Username
+        - State
+        - WaitEventType
+        - WaitEvent
+        - XactDurationSeconds
+        - BackendXmin
+        - Query
+      properties:
+        PID:
+          type: integer
+          format: int32
+        Username:
+          type: string
+        State:
+          type: string
+        WaitEventType:
+          type: string
+        WaitEvent:
+          type: string
+        XactDurationSeconds:
+          type: number
+          format: double
+        BackendXmin:
+          type: string
+        Query:
+          type: string
+
+    HealthScoreRecommendation:
+      type: object
+      required:
+        - rule_id
+        - category
+        - severity
+        - metric_value
+      properties:
+        rule_id:
+          type: string
+        category:
+          type: string
+        severity:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+        metric_value:
+          type: number
+          format: double
+        context:
+          type: object
+          additionalProperties: true
+          nullable: true
+        related_route:
+          type: string
+          nullable: true
+
+    HealthScoreRecommendations:
+      type: object
+      required:
+        - recommendations
+      properties:
+        recommendations:
+          type: array
+          items:
+            $ref: '#/components/schemas/HealthScoreRecommendation'
+
+    HealthScoreDatabase:
+      type: object
+      required:
+        - database
+        - size_bytes
+        - score
+        - categories
+      properties:
+        database:
+          type: string
+        size_bytes:
+          type: integer
+          format: int64
+        score:
+          type: number
+          format: double
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/HealthScoreCategory'
+
+    HealthScoreDatabases:
+      type: object
+      required:
+        - databases
+        - applicable_categories
+      properties:
+        databases:
+          type: array
+          items:
+            $ref: '#/components/schemas/HealthScoreDatabase'
+        applicable_categories:
+          type: array
+          items:
+            type: string
+        worst_database:
+          type: string
+          nullable: true
+
+    HealthScoreWeights:
+      type: object
+      required:
+        - connections
+        - performance
+        - storage
+        - replication
+        - maintenance
+        - horizon
+        - wal_checkpoint
+        - locks
+        - source
+      properties:
+        connections:
+          type: number
+          format: double
+        performance:
+          type: number
+          format: double
+        storage:
+          type: number
+          format: double
+        replication:
+          type: number
+          format: double
+        maintenance:
+          type: number
+          format: double
+        horizon:
+          type: number
+          format: double
+        wal_checkpoint:
+          type: number
+          format: double
+        locks:
+          type: number
+          format: double
+        source:
+          type: string
+          enum: [default, override]
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+        updated_by:
+          type: string
+          nullable: true
+
+    HealthScoreWeightsUpdate:
+      type: object
+      required:
+        - connections
+        - performance
+        - storage
+        - replication
+        - maintenance
+        - horizon
+        - wal_checkpoint
+        - locks
+      properties:
+        connections:
+          type: number
+          format: double
+          minimum: 0
+        performance:
+          type: number
+          format: double
+          minimum: 0
+        storage:
+          type: number
+          format: double
+          minimum: 0
+        replication:
+          type: number
+          format: double
+          minimum: 0
+        maintenance:
+          type: number
+          format: double
+          minimum: 0
+        horizon:
+          type: number
+          format: double
+          minimum: 0
+        wal_checkpoint:
+          type: number
+          format: double
+          minimum: 0
+        locks:
+          type: number
+          format: double
+          minimum: 0
 
     SnapshotStatus:
       type: object

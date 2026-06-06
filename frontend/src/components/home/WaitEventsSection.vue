@@ -43,7 +43,7 @@ function eventTypeColor(type: string): string {
 </script>
 
 <template>
-  <v-card class="mb-4">
+  <v-card class="h-100">
     <v-card-title class="d-flex align-center ga-2">
       <v-icon start icon="mdi-timer-sand" />
       {{ t('home.waitEvents') }}

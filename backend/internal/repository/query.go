@@ -38,6 +38,9 @@ func (p *PgxPool) GetQueriesRunning(
 	instanceName,
 	databaseName string,
 	minDuration int,
+	queryFilter *string,
+	queryFilterMode string,
+	username *string,
 ) ([]dto.QueryRunning, error) {
 	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
 	if err != nil {
@@ -49,7 +52,7 @@ func (p *PgxPool) GetQueriesRunning(
 		return nil, fmt.Errorf("get server version | %w", err)
 	}
 
-	ret, err := p.getQueriesRunning(ctx, vNum, pool, minDuration)
+	ret, err := p.getQueriesRunning(ctx, vNum, pool, minDuration, queryFilter, queryFilterMode, username)
 	if err != nil {
 		return nil, fmt.Errorf("getQueriesRunning | %w", err)
 	}
@@ -174,16 +177,17 @@ func (p *PgxPool) getQueriesBlocked(ctx context.Context, serverVersion int, pool
 			lockedItem, blockedUser, blockedQuery, blockedDuration, blockedMode                        string
 			blockingUser, stateOfBlockingProcess, currentOrRecentQuery, blockingDuration, blockingMode string
 			blockedPid, blockingPid                                                                    int32
+			blockedDurationMs, blockingDurationMs                                                      pgtype.Float8
 		)
 
-		err = rows.Scan(&lockedItem, &blockedPid, &blockedUser, &blockedQuery, &blockedDuration,
+		err = rows.Scan(&lockedItem, &blockedPid, &blockedUser, &blockedQuery, &blockedDuration, &blockedDurationMs,
 			&blockedMode, &blockingPid, &blockingUser, &stateOfBlockingProcess,
-			&currentOrRecentQuery, &blockingDuration, &blockingMode)
+			&currentOrRecentQuery, &blockingDuration, &blockingDurationMs, &blockingMode)
 		if err != nil {
 			return nil, fmt.Errorf("getQueriesBlocked | %w", err)
 		}
 
-		ret = append(ret, dto.QueryBlocked{
+		entry := dto.QueryBlocked{
 			LockedItem:                            lockedItem,
 			BlockedPid:                            blockedPid,
 			BlockedUser:                           blockedUser,
@@ -196,7 +200,16 @@ func (p *PgxPool) getQueriesBlocked(ctx context.Context, serverVersion int, pool
 			CurrentOrRecentQueryInBlockingProcess: currentOrRecentQuery,
 			BlockingDuration:                      blockingDuration,
 			BlockingMode:                          blockingMode,
-		})
+		} //nolint: exhaustruct
+		if blockedDurationMs.Valid {
+			entry.BlockedDurationMs = &blockedDurationMs.Float64
+		}
+
+		if blockingDurationMs.Valid {
+			entry.BlockingDurationMs = &blockingDurationMs.Float64
+		}
+
+		ret = append(ret, entry)
 	}
 
 	if err := rows.Err(); err != nil {
@@ -211,6 +224,9 @@ func (p *PgxPool) getQueriesRunning(
 	serverVersion int,
 	pool *pgxpool.Pool,
 	minDuration int,
+	queryFilter *string,
+	queryFilterMode string,
+	username *string,
 ) ([]dto.QueryRunning, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
@@ -220,7 +236,7 @@ func (p *PgxPool) getQueriesRunning(
 		return nil, fmt.Errorf("getQueriesRunning | %w", err)
 	}
 
-	rows, err := pool.Query(ctx, qStr)
+	rows, err := pool.Query(ctx, qStr, queryFilter, queryFilterMode, username)
 	if err != nil {
 		return nil, fmt.Errorf("getQueriesRunning | %w", err)
 	}
@@ -417,31 +433,32 @@ func (p *PgxPool) getQueriesReport( //nolint:gocyclo
 
 	for rows.Next() {
 		var (
-			queryID                                                  int64
-			queryText                                                pgtype.Text
-			rowsVal, calls                                           pgtype.Int8
-			rowsPct, callsPct                                        pgtype.Float8
-			totalTimeMs, totalTimePct                                pgtype.Float8
-			execTimeMs, minExecTimeMs, maxExecTimeMs, meanExecTimeMs pgtype.Float8
-			planTimeMs, minPlanTimeMs, maxPlanTimeMs, meanPlanTimeMs pgtype.Float8
-			ioTimeMs, ioTimePct                                      pgtype.Float8
-			cpuTimeMs, cpuTimePct                                    pgtype.Float8
-			cacheHitRatio                                            pgtype.Float8
-			sharedBlksDirtiedPct, sharedBlksWrittenPct               pgtype.Float8
-			walBytes                                                 pgtype.Int8
-			walBytesPct                                              pgtype.Float8
-			walRecords, walFpi                                       pgtype.Int8
-			tempBlks                                                 pgtype.Int8
-			tempBlksPct                                              pgtype.Float8
+			queryID                                                                    int64
+			queryText                                                                  pgtype.Text
+			usernames                                                                  []string
+			rowsVal, calls                                                             pgtype.Int8
+			rowsPct, callsPct                                                          pgtype.Float8
+			totalTimeMs, totalTimePct                                                  pgtype.Float8
+			execTimeMs, minExecTimeMs, maxExecTimeMs, meanExecTimeMs, stddevExecTimeMs pgtype.Float8
+			planTimeMs, minPlanTimeMs, maxPlanTimeMs, meanPlanTimeMs, stddevPlanTimeMs pgtype.Float8
+			ioTimeMs, ioTimePct                                                        pgtype.Float8
+			cpuTimeMs, cpuTimePct                                                      pgtype.Float8
+			cacheHitRatio                                                              pgtype.Float8
+			sharedBlksDirtiedPct, sharedBlksWrittenPct                                 pgtype.Float8
+			walBytes                                                                   pgtype.Int8
+			walBytesPct                                                                pgtype.Float8
+			walRecords, walFpi                                                         pgtype.Int8
+			tempBlks                                                                   pgtype.Int8
+			tempBlksPct                                                                pgtype.Float8
 		)
 
 		err = rows.Scan(
-			&queryID, &queryText,
+			&queryID, &queryText, &usernames,
 			&rowsVal, &rowsPct,
 			&calls, &callsPct,
 			&totalTimeMs, &totalTimePct,
-			&execTimeMs, &minExecTimeMs, &maxExecTimeMs, &meanExecTimeMs,
-			&planTimeMs, &minPlanTimeMs, &maxPlanTimeMs, &meanPlanTimeMs,
+			&execTimeMs, &minExecTimeMs, &maxExecTimeMs, &meanExecTimeMs, &stddevExecTimeMs,
+			&planTimeMs, &minPlanTimeMs, &maxPlanTimeMs, &meanPlanTimeMs, &stddevPlanTimeMs,
 			&ioTimeMs, &ioTimePct,
 			&cpuTimeMs, &cpuTimePct,
 			&cacheHitRatio,
@@ -453,7 +470,15 @@ func (p *PgxPool) getQueriesReport( //nolint:gocyclo
 			return nil, fmt.Errorf("getQueriesReport | %w", err)
 		}
 
-		r := dto.QueryReport{QueryID: queryID, Query: queryText.String} //nolint: exhaustruct
+		r := dto.QueryReport{QueryID: queryID, Query: queryText.String, Usernames: usernames} //nolint: exhaustruct
+		if stddevExecTimeMs.Valid {
+			r.StddevExecTimeMs = &stddevExecTimeMs.Float64
+		}
+
+		if stddevPlanTimeMs.Valid {
+			r.StddevPlanTimeMs = &stddevPlanTimeMs.Float64
+		}
+
 		if rowsVal.Valid {
 			r.Rows = &rowsVal.Int64
 		}

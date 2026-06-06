@@ -481,24 +481,34 @@ ingress:
 
 cert-manager создаст ресурс `Certificate` в namespace приложения.
 
-#### Ingress с TLS (cert-manager + reflector)
+#### Gateway API с TLS (cert-manager)
 
-Когда ingress controller работает в другом namespace (например, Istio), используйте `reflectToNamespace` для копирования TLS-секрета через [reflector](https://github.com/emberstack/kubernetes-reflector):
+Портативная альтернатива Ingress — работает с любой реализацией Gateway API (Istio, NGINX Gateway Fabric, Envoy Gateway, Cilium):
 
 ```yaml
-ingress:
+gatewayAPI:
   enabled: true
-  className: istio
-  domain: dasha.example.com
+  gatewayClassName: istio
+  hostname: dasha.example.com
+  # Если Gateway живёт в namespace контроллера (например, istio-system),
+  # задайте gatewayNamespace — Certificate создаётся в том же namespace.
+  # gatewayNamespace: istio-system
   tls:
     enabled: true
     certManager:
       enabled: true
       issuer: cluster-issuer
-      reflectToNamespace: istio-ingress
 ```
 
-В этом режиме отдельный ресурс `Certificate` не создаётся. Вместо этого на Ingress добавляются аннотации cert-manager, а сгенерированный TLS-секрет получает аннотации reflector для копирования в указанный namespace.
+`Certificate` от cert-manager создаётся в namespace Gateway (`gatewayNamespace`, по умолчанию — release namespace). Cross-namespace ссылки на secret потребовали бы `ReferenceGrant`, который чарт не рендерит — поэтому Certificate и Gateway держим в одном namespace.
+
+Рендеримые ресурсы (все условны от `gatewayAPI.enabled: true`):
+- `Gateway` — HTTP-listener всегда; HTTPS-listener только при `gatewayAPI.tls.enabled: true`.
+- `HTTPRoute` (основной) — привязан к HTTPS-listener при `tls.enabled`, иначе к HTTP-listener.
+- `HTTPRoute` (редирект HTTP→HTTPS, filter `RequestRedirect`) — только при `gatewayAPI.tls.enabled && gatewayAPI.tls.redirect`.
+- `Certificate` (cert-manager) — только при `gatewayAPI.tls.certManager.enabled`.
+
+`ingress.enabled` и `gatewayAPI.enabled` взаимоисключаются — `helm template` падает, если оба true.
 
 #### Режим только API (без фронтенда)
 
@@ -517,7 +527,7 @@ ingress:
 - **Пароли через env** — `password_from_env` + ESO или существующий Kubernetes Secret
 - **Ключи сервисных аккаунтов** — отдельный `authorized_key.json` для каждого фолдера через ESO или существующий Secret
 - **Фронтенд опционален** — можно развернуть только бэкенд для доступа через API
-- **Ingress** — `/api/` маршрутизируется на бэкенд, `/` на фронтенд (когда включён), поддержка cert-manager + reflector
+- **Ingress / Gateway API** — одно правило `/` на фронтенд (который проксирует `/api/` и `/auth/` на бэкенд); авто-редирект HTTP→HTTPS при включённом TLS; поддержка cert-manager; взаимоисключающий `gatewayAPI.enabled` для K8s Gateway API (`gateway.networking.k8s.io/v1`)
 - **Безопасность** — `podSecurityContext`, `securityContext`, отдельные настройки для фронтенда и бэкенда
 
 ## CI/CD

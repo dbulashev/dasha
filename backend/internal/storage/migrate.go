@@ -104,6 +104,24 @@ CREATE TABLE IF NOT EXISTS autosnapshot_leader (
 	seedAutosnapshotLeaderSQL = `
 INSERT INTO autosnapshot_leader (id) VALUES (1)
 ON CONFLICT (id) DO NOTHING`
+
+	createHealthScoreWeightsSQL = `
+CREATE TABLE IF NOT EXISTS health_score_weights (
+    cluster_name TEXT PRIMARY KEY,
+    connections  DOUBLE PRECISION NOT NULL CHECK (connections >= 0),
+    performance  DOUBLE PRECISION NOT NULL CHECK (performance >= 0),
+    storage      DOUBLE PRECISION NOT NULL CHECK (storage     >= 0),
+    replication  DOUBLE PRECISION NOT NULL CHECK (replication >= 0),
+    maintenance  DOUBLE PRECISION NOT NULL CHECK (maintenance >= 0),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_by   TEXT
+)`
+
+	addHealthScoreWeightsCategoriesSQL = `
+ALTER TABLE health_score_weights
+    ADD COLUMN IF NOT EXISTS horizon        DOUBLE PRECISION NOT NULL DEFAULT 0.10 CHECK (horizon        >= 0),
+    ADD COLUMN IF NOT EXISTS wal_checkpoint DOUBLE PRECISION NOT NULL DEFAULT 0.10 CHECK (wal_checkpoint >= 0),
+    ADD COLUMN IF NOT EXISTS locks          DOUBLE PRECISION NOT NULL DEFAULT 0.10 CHECK (locks          >= 0)`
 )
 
 // partitionedTables lists the day-partitioned tables managed together —
@@ -138,7 +156,7 @@ func newFromDSN(ctx context.Context, dsn string) (*Storage, error) {
 }
 
 func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
-	ddls := []string{
+	for _, ddl := range []string{
 		createSnapshotsSQL,
 		createQueryTextsSQL,
 		createSnapshotsIdxSQL,
@@ -152,9 +170,9 @@ func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
 		createTriggerEventsIdxSQL,
 		createAutosnapshotLeaderSQL,
 		seedAutosnapshotLeaderSQL,
-	}
-
-	for _, ddl := range ddls {
+		createHealthScoreWeightsSQL,
+		addHealthScoreWeightsCategoriesSQL,
+	} {
 		if _, err := s.pool.Exec(ctx, ddl); err != nil {
 			return fmt.Errorf("storage: migrate: %w", err)
 		}

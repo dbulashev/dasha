@@ -16,6 +16,7 @@ import (
 
 	"github.com/dbulashev/dasha/internal/auth"
 	"github.com/dbulashev/dasha/internal/autosnapshot"
+	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/deps"
 	"github.com/dbulashev/dasha/internal/http"
 	"github.com/dbulashev/dasha/internal/storage"
@@ -180,7 +181,7 @@ func dashaExec(cmd *cobra.Command, _ []string) error {
 	d := http.NewDashaHandlers(container.Config(), container.Repository(), st)
 	svc := http.New(d, mw, authMW.RequireHTTPS, authMW.RateLimit, authMW.Auth, authMW.Casbin, logger)
 
-	if authMW.OIDCProvider != nil && authMW.SessionManager != nil {
+	if container.Config().Auth.Mode == config.AuthModeOIDC {
 		auth.RegisterBFFRoutes(svc.Echo, authMW.OIDCProvider, authMW.SessionManager, logger)
 	}
 

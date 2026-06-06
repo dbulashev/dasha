@@ -53,7 +53,15 @@ async function loadDescribe() {
   }
 }
 
-watch([clusterName, hostName, databaseName, schema, table], () => {
+watch([clusterName, hostName, databaseName, schema, table], (newVals, oldVals) => {
+  if (oldVals) {
+    const [newCluster] = newVals
+    const [oldCluster] = oldVals
+    if (oldCluster && newCluster && newCluster !== oldCluster) {
+      data.value = null
+      return
+    }
+  }
   loadDescribe()
 }, { immediate: true })
 
@@ -62,7 +70,7 @@ const isPartitioned = computed(() => data.value?.TableType === 'partitioned_tabl
 
 <template>
 
-  <DescribeTableSelector :loading="loading" />
+  <DescribeTableSelector :key="clusterName ?? ''" :loading="loading" />
 
   <template v-if="data">
     <DescribeHeaderSection :data="data" />

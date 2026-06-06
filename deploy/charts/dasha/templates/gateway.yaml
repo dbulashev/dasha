@@ -1,0 +1,36 @@
+{{- if .Values.gatewayAPI.enabled }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ include "dasha.fullname" . }}
+  namespace: {{ include "dasha.gatewayNamespace" . }}
+  labels:
+    {{- include "dasha.labels" . | nindent 4 }}
+  {{- if and .Values.gatewayAPI.tls.enabled .Values.gatewayAPI.tls.certManager.enabled }}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.gatewayAPI.tls.certManager.issuer }}
+  {{- end }}
+spec:
+  gatewayClassName: {{ .Values.gatewayAPI.gatewayClassName }}
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+      hostname: {{ .Values.gatewayAPI.hostname }}
+      allowedRoutes:
+        {{- toYaml .Values.gatewayAPI.allowedRoutes | nindent 8 }}
+    {{- if .Values.gatewayAPI.tls.enabled }}
+    - name: https
+      port: 443
+      protocol: HTTPS
+      hostname: {{ .Values.gatewayAPI.hostname }}
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: {{ .Values.gatewayAPI.tls.certificateRef.kind }}
+            name: {{ include "dasha.gatewayTLSSecretName" . }}
+      allowedRoutes:
+        {{- toYaml .Values.gatewayAPI.allowedRoutes | nindent 8 }}
+    {{- end }}
+{{- end }}

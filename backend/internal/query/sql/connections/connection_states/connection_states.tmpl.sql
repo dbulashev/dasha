@@ -1,5 +1,5 @@
 SELECT
-    state,
+    COALESCE(state, backend_type) AS state,
     COUNT(*) AS connections
 FROM
     pg_stat_activity

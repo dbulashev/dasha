@@ -483,24 +483,34 @@ ingress:
 
 cert-manager will create a `Certificate` resource in the application namespace.
 
-#### Ingress with TLS (cert-manager + reflector)
+#### Gateway API with TLS (cert-manager)
 
-When the ingress controller runs in a different namespace (e.g. Istio), use `reflectToNamespace` to copy the TLS secret via [reflector](https://github.com/emberstack/kubernetes-reflector):
+Portable alternative to Ingress — works with any Gateway API implementation (Istio, NGINX Gateway Fabric, Envoy Gateway, Cilium):
 
 ```yaml
-ingress:
+gatewayAPI:
   enabled: true
-  className: istio
-  domain: dasha.example.com
+  gatewayClassName: istio
+  hostname: dasha.example.com
+  # When the Gateway lives in a controller-specific namespace (e.g. istio-system),
+  # set gatewayNamespace accordingly — Certificate is created in the same namespace.
+  # gatewayNamespace: istio-system
   tls:
     enabled: true
     certManager:
       enabled: true
       issuer: cluster-issuer
-      reflectToNamespace: istio-ingress
 ```
 
-In this mode, no separate `Certificate` resource is created. Instead, cert-manager annotations are added to the Ingress, and the generated TLS secret gets reflector annotations to be copied to the specified namespace.
+The cert-manager `Certificate` is created in the Gateway's namespace (`gatewayNamespace`, defaults to the release namespace). Cross-namespace secret refs would require a `ReferenceGrant`, which the chart does not render — keeping Certificate and Gateway colocated avoids that.
+
+Rendered resources (all conditional on `gatewayAPI.enabled: true`):
+- `Gateway` — HTTP listener always; HTTPS listener only when `gatewayAPI.tls.enabled: true`.
+- `HTTPRoute` (main) — attached to the HTTPS listener when `tls.enabled`, otherwise to the HTTP listener.
+- `HTTPRoute` (HTTP→HTTPS redirect, `RequestRedirect` filter) — only when `gatewayAPI.tls.enabled && gatewayAPI.tls.redirect`.
+- `Certificate` (cert-manager) — only when `gatewayAPI.tls.certManager.enabled`.
+
+`ingress.enabled` and `gatewayAPI.enabled` are mutually exclusive — `helm template` fails if both are true.
 
 #### API-only mode (without frontend)
 
@@ -519,7 +529,7 @@ ingress:
 - **Passwords via env** — `password_from_env` + ESO or existing Kubernetes Secret
 - **Cloud SA keys** — per-folder `authorized_key.json` via ESO or existing Secret
 - **Frontend optional** — deploy backend only for API access
-- **Ingress** — `/api/` routed to backend, `/` to frontend (when enabled), cert-manager + reflector support
+- **Ingress / Gateway API** — single `/` rule routes to frontend (which proxies `/api/` and `/auth/` to backend); auto HTTP→HTTPS redirect when TLS is enabled; cert-manager support; mutually exclusive `gatewayAPI.enabled` for K8s Gateway API (`gateway.networking.k8s.io/v1`)
 - **Security** — `podSecurityContext`, `securityContext`, separate settings for frontend/backend
 
 ## CI/CD

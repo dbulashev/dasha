@@ -54,7 +54,7 @@ const { items, loading, page, hasMore, load } = usePaginatedApiLoader<IndexUsage
         <template #item.Table="{ item }">
           <router-link :to="describeLink(item.Schema, item.Table)" class="text-decoration-none">{{ item.Table }}</router-link>
         </template>
-        <template #item.PercentOfTimesIndexUsed="{ value }">{{ value != null ? value + '%' : t('insufficientData') }}</template>
+        <template #item.PercentOfTimesIndexUsed="{ value }">{{ value != null ? value + '%' : '—' }}</template>
       </v-data-table>
       <PaginationControls :page="page" :has-more="hasMore" @update:page="load" />
     </v-card-text>

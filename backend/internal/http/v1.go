@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,6 +13,7 @@ import (
 	"github.com/dbulashev/dasha/gen/serverhttp"
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/dto"
+	"github.com/dbulashev/dasha/internal/health"
 	"github.com/dbulashev/dasha/internal/pkg/mapstruct"
 	"github.com/dbulashev/dasha/internal/pkg/sanitize"
 	"github.com/dbulashev/dasha/internal/pkg/shortcut"
@@ -31,8 +33,11 @@ func NewDashaHandlers(cfg *config.Config, repo repository.Repository, st *storag
 
 func mapQueryReport(t dto.QueryReport) serverhttp.QueryReport {
 	return serverhttp.QueryReport{
-		QueryID:              t.QueryID,
+		QueryID:              strconv.FormatInt(t.QueryID, 10),
 		Query:                t.Query,
+		Usernames:            usernamesPtr(t.Usernames),
+		StddevExecTimeMs:     t.StddevExecTimeMs,
+		StddevPlanTimeMs:     t.StddevPlanTimeMs,
 		Rows:                 t.Rows,
 		RowsPct:              t.RowsPct,
 		Calls:                t.Calls,
@@ -63,8 +68,21 @@ func mapQueryReport(t dto.QueryReport) serverhttp.QueryReport {
 	}
 }
 
+// usernamesPtr returns nil for an empty slice so the JSON field is rendered as null
+// (consistent with other nullable arrays in the API).
+func usernamesPtr(u []string) *[]string {
+	if len(u) == 0 {
+		return nil
+	}
+
+	return &u
+}
+
 func mapQueryReportMetrics(t dto.QueryReport) serverhttp.QueryReportMetrics {
 	return serverhttp.QueryReportMetrics{
+		Usernames:            usernamesPtr(t.Usernames),
+		StddevExecTimeMs:     t.StddevExecTimeMs,
+		StddevPlanTimeMs:     t.StddevPlanTimeMs,
 		Rows:                 t.Rows,
 		RowsPct:              t.RowsPct,
 		Calls:                t.Calls,
@@ -210,6 +228,520 @@ func (s *Handlers) GetInstanceInfo(
 	}
 
 	return ret, nil
+}
+
+func (s *Handlers) GetHealthScore(
+	ctx context.Context,
+	req serverhttp.GetHealthScoreRequestObject,
+) (serverhttp.GetHealthScoreResponseObject, error) {
+	metrics, err := s.repo.GetHealthScoreMetrics(ctx, req.Params.ClusterName, req.Params.Instance, "")
+	if errors.Is(err, repository.ErrNotFound) {
+		return serverhttp.GetHealthScore404Response{}, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("GetHealthScore | %w", err)
+	}
+
+	weights, err := s.loadHealthWeights(ctx, req.Params.ClusterName)
+	if err != nil {
+		return nil, fmt.Errorf("GetHealthScore | loadHealthWeights | %w", err)
+	}
+
+	result := health.CalculateWithWeights(health.RawMetrics{
+		InRecovery:                metrics.InRecovery,
+		TotalConnections:          metrics.TotalConnections,
+		ActiveConnections:         metrics.ActiveConnections,
+		IdleInTransaction:         metrics.IdleInTransaction,
+		LongestTransactionSeconds: metrics.LongestTransactionSeconds,
+		MaxConnections:            metrics.MaxConnections,
+		CacheHitRatio:             metrics.CacheHitRatio,
+		TrackIoTimingEnabled:      metrics.TrackIoTimingEnabled,
+		MaxDeadRatio:              metrics.MaxDeadRatio,
+		AvgDeadRatio:              metrics.AvgDeadRatio,
+		TablesHighBloat:           metrics.TablesHighBloat,
+		ReplicaCount:              metrics.ReplicaCount,
+		MaxReplayLagSeconds:       metrics.MaxReplayLagSeconds,
+		MaxLagBytes:               metrics.MaxLagBytes,
+		DisconnectedReplicas:      metrics.DisconnectedReplicas,
+		MaxXidAge:                 metrics.MaxXidAge,
+		MaxVacuumAgeHours:         metrics.MaxVacuumAgeHours,
+		TablesNeverVacuumed:       metrics.TablesNeverVacuumed,
+		AutovacuumEnabled:         metrics.AutovacuumEnabled,
+		TrackCountsEnabled:        metrics.TrackCountsEnabled,
+		TablesWithAutovacuumOff:   metrics.TablesWithAutovacuumOff,
+		MaxRelfrozenxidAge:        metrics.MaxRelfrozenxidAge,
+		HorizonLagXids:            metrics.HorizonLagXids,
+		TimedCheckpoints:          metrics.TimedCheckpoints,
+		RequestedCheckpoints:      metrics.RequestedCheckpoints,
+		ActiveLockWaiters:         metrics.ActiveLockWaiters,
+		LongestLockWaitSeconds:    metrics.LongestLockWaitSeconds,
+		UngrantedLocks:            metrics.UngrantedLocks,
+		DeadlocksTotal:            metrics.DeadlocksTotal,
+		HeavyweightLocksTotal:     metrics.HeavyweightLocksTotal,
+		MaxLocksPerTransaction:    metrics.MaxLocksPerTransaction,
+		HotUpdateRatio:            metrics.HotUpdateRatio,
+		NewpageUpdateRatio:        metrics.NewpageUpdateRatio,
+		StalePlannerStatsTables:   metrics.StalePlannerStatsTables,
+		WalLevel:                  metrics.WalLevel,
+		LogicalSlotsActive:        metrics.LogicalSlotsActive,
+	}, weights)
+
+	categories := make([]serverhttp.HealthScoreCategory, 0, len(result.Categories))
+	for _, c := range result.Categories {
+		categories = append(categories, serverhttp.HealthScoreCategory{
+			Name:    c.Name,
+			Score:   c.Score,
+			Weight:  c.Weight,
+			Penalty: c.Penalty,
+			Details: c.Details,
+		})
+	}
+
+	return serverhttp.GetHealthScore200JSONResponse{
+		Score:          result.Score,
+		Categories:     categories,
+		HasReplication: result.HasReplication,
+		InRecovery:     result.InRecovery,
+	}, nil
+}
+
+// loadHealthWeights returns per-cluster weights override from storage,
+// or DefaultWeights when no storage is configured / no override exists.
+// A non-nil error is returned only when the storage read itself failed —
+// callers should propagate it (5xx) instead of silently scoring with defaults
+// while the storage backend is misbehaving. The returned Weights is always
+// DefaultWeights when err != nil, so the caller can choose graceful degradation.
+func (s *Handlers) loadHealthWeights(ctx context.Context, clusterName string) (health.Weights, error) {
+	if s.storage == nil {
+		return health.DefaultWeights(), nil
+	}
+
+	rec, err := s.storage.GetHealthWeights(ctx, clusterName)
+	if err != nil {
+		return health.DefaultWeights(), err
+	}
+
+	if rec == nil {
+		return health.DefaultWeights(), nil
+	}
+
+	return rec.Weights, nil
+}
+
+func (s *Handlers) GetHealthScoreRecommendations(
+	ctx context.Context,
+	req serverhttp.GetHealthScoreRecommendationsRequestObject,
+) (serverhttp.GetHealthScoreRecommendationsResponseObject, error) {
+	database := ""
+	if req.Params.Database != nil {
+		database = *req.Params.Database
+	}
+
+	metrics, err := s.repo.GetHealthScoreMetrics(ctx, req.Params.ClusterName, req.Params.Instance, database)
+	if errors.Is(err, repository.ErrNotFound) {
+		return serverhttp.GetHealthScoreRecommendations404Response{}, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("GetHealthScoreRecommendations | %w", err)
+	}
+
+	raw := health.RawMetrics{
+		InRecovery:                metrics.InRecovery,
+		TotalConnections:          metrics.TotalConnections,
+		ActiveConnections:         metrics.ActiveConnections,
+		IdleInTransaction:         metrics.IdleInTransaction,
+		LongestTransactionSeconds: metrics.LongestTransactionSeconds,
+		MaxConnections:            metrics.MaxConnections,
+		CacheHitRatio:             metrics.CacheHitRatio,
+		TrackIoTimingEnabled:      metrics.TrackIoTimingEnabled,
+		MaxDeadRatio:              metrics.MaxDeadRatio,
+		AvgDeadRatio:              metrics.AvgDeadRatio,
+		TablesHighBloat:           metrics.TablesHighBloat,
+		ReplicaCount:              metrics.ReplicaCount,
+		MaxReplayLagSeconds:       metrics.MaxReplayLagSeconds,
+		MaxLagBytes:               metrics.MaxLagBytes,
+		DisconnectedReplicas:      metrics.DisconnectedReplicas,
+		MaxXidAge:                 metrics.MaxXidAge,
+		MaxVacuumAgeHours:         metrics.MaxVacuumAgeHours,
+		TablesNeverVacuumed:       metrics.TablesNeverVacuumed,
+		AutovacuumEnabled:         metrics.AutovacuumEnabled,
+		TrackCountsEnabled:        metrics.TrackCountsEnabled,
+		TablesWithAutovacuumOff:   metrics.TablesWithAutovacuumOff,
+		MaxRelfrozenxidAge:        metrics.MaxRelfrozenxidAge,
+		HorizonLagXids:            metrics.HorizonLagXids,
+		TimedCheckpoints:          metrics.TimedCheckpoints,
+		RequestedCheckpoints:      metrics.RequestedCheckpoints,
+		ActiveLockWaiters:         metrics.ActiveLockWaiters,
+		LongestLockWaitSeconds:    metrics.LongestLockWaitSeconds,
+		UngrantedLocks:            metrics.UngrantedLocks,
+		DeadlocksTotal:            metrics.DeadlocksTotal,
+		HeavyweightLocksTotal:     metrics.HeavyweightLocksTotal,
+		MaxLocksPerTransaction:    metrics.MaxLocksPerTransaction,
+		HotUpdateRatio:            metrics.HotUpdateRatio,
+		NewpageUpdateRatio:        metrics.NewpageUpdateRatio,
+		StalePlannerStatsTables:   metrics.StalePlannerStatsTables,
+		WalLevel:                  metrics.WalLevel,
+		LogicalSlotsActive:        metrics.LogicalSlotsActive,
+	}
+
+	recs := health.Evaluate(raw, database != "")
+
+	out := make([]serverhttp.HealthScoreRecommendation, 0, len(recs))
+	for _, r := range recs {
+		var ctxPtr *map[string]any
+		if len(r.Context) > 0 {
+			c := r.Context
+			ctxPtr = &c
+		}
+
+		var routePtr *string
+		if r.RelatedRoute != "" {
+			route := r.RelatedRoute
+			routePtr = &route
+		}
+
+		out = append(out, serverhttp.HealthScoreRecommendation{
+			RuleId:       r.RuleID,
+			Category:     r.Category,
+			Severity:     serverhttp.HealthScoreRecommendationSeverity(r.Severity),
+			MetricValue:  r.MetricValue,
+			Context:      ctxPtr,
+			RelatedRoute: routePtr,
+		})
+	}
+
+	return serverhttp.GetHealthScoreRecommendations200JSONResponse{
+		Recommendations: out,
+	}, nil
+}
+
+func (s *Handlers) GetHealthScoreDatabases(
+	ctx context.Context,
+	req serverhttp.GetHealthScoreDatabasesRequestObject,
+) (serverhttp.GetHealthScoreDatabasesResponseObject, error) {
+	metrics, err := s.repo.GetHealthScorePerDatabase(ctx, req.Params.ClusterName, req.Params.Instance)
+	if errors.Is(err, repository.ErrNotFound) {
+		return serverhttp.GetHealthScoreDatabases404Response{}, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("GetHealthScoreDatabases | %w", err)
+	}
+
+	weights, err := s.loadHealthWeights(ctx, req.Params.ClusterName)
+	if err != nil {
+		return nil, fmt.Errorf("GetHealthScoreDatabases | loadHealthWeights | %w", err)
+	}
+
+	// Mirror the instance-level behaviour: drop maintenance per-DB on
+	// standbys, where autovacuum / ANALYZE do not run.
+	info, err := s.repo.GetInstanceInfo(ctx, req.Params.ClusterName, req.Params.Instance)
+	if err != nil {
+		return nil, fmt.Errorf("GetHealthScoreDatabases | GetInstanceInfo | %w", err)
+	}
+
+	per := make([]health.PerDBMetrics, 0, len(metrics))
+	for _, m := range metrics {
+		per = append(per, health.PerDBMetrics{
+			Database:            m.Database,
+			SizeBytes:           m.SizeBytes,
+			CacheHitRatio:       m.CacheHitRatio,
+			MaxDeadRatio:        m.MaxDeadRatio,
+			AvgDeadRatio:        m.AvgDeadRatio,
+			TablesHighBloat:     m.TablesHighBloat,
+			MaxXidAge:           m.MaxXidAge,
+			MaxVacuumAgeHours:   m.MaxVacuumAgeHours,
+			TablesNeverVacuumed: m.TablesNeverVacuumed,
+		})
+	}
+
+	scores := health.ComputePerDB(per, weights, info.InRecovery)
+
+	databases := make([]serverhttp.HealthScoreDatabase, 0, len(scores))
+	for _, ds := range scores {
+		cats := make([]serverhttp.HealthScoreCategory, 0, len(ds.Categories))
+		for _, c := range ds.Categories {
+			cats = append(cats, serverhttp.HealthScoreCategory{
+				Name:    c.Name,
+				Score:   c.Score,
+				Weight:  c.Weight,
+				Penalty: c.Penalty,
+				Details: c.Details,
+			})
+		}
+
+		databases = append(databases, serverhttp.HealthScoreDatabase{
+			Database:   ds.Database,
+			SizeBytes:  ds.SizeBytes,
+			Score:      ds.Score,
+			Categories: cats,
+		})
+	}
+
+	var worst *string
+	if w := health.WorstDatabase(scores); w != nil {
+		name := w.Database
+		worst = &name
+	}
+
+	return serverhttp.GetHealthScoreDatabases200JSONResponse{
+		Databases:            databases,
+		ApplicableCategories: health.PerDBApplicableCategories,
+		WorstDatabase:        worst,
+	}, nil
+}
+
+func (s *Handlers) GetHealthScoreXidWraparoundDatabases(
+	ctx context.Context,
+	req serverhttp.GetHealthScoreXidWraparoundDatabasesRequestObject,
+) (serverhttp.GetHealthScoreXidWraparoundDatabasesResponseObject, error) {
+	rows, err := s.repo.GetHealthScoreXidWraparoundDatabases(ctx, req.Params.ClusterName, req.Params.Instance)
+	if errors.Is(err, repository.ErrNotFound) {
+		return serverhttp.GetHealthScoreXidWraparoundDatabases404Response{}, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("GetHealthScoreXidWraparoundDatabases | %w", err)
+	}
+
+	out := make(serverhttp.GetHealthScoreXidWraparoundDatabases200JSONResponse, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, serverhttp.HealthScoreXidWraparoundDatabase{
+			Database: r.Database,
+			XidAge:   r.XidAge,
+		})
+	}
+
+	return out, nil
+}
+
+func (s *Handlers) GetHealthScoreTablesAutovacuumOff(
+	ctx context.Context,
+	req serverhttp.GetHealthScoreTablesAutovacuumOffRequestObject,
+) (serverhttp.GetHealthScoreTablesAutovacuumOffResponseObject, error) {
+	rows, err := s.repo.GetHealthScoreTablesAutovacuumOff(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
+	if errors.Is(err, repository.ErrNotFound) {
+		return serverhttp.GetHealthScoreTablesAutovacuumOff404Response{}, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("GetHealthScoreTablesAutovacuumOff | %w", err)
+	}
+
+	out := make(serverhttp.GetHealthScoreTablesAutovacuumOff200JSONResponse, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, serverhttp.HealthScoreTableReloption{
+			Schema:     r.Schema,
+			Table:      r.Table,
+			RelOptions: r.RelOptions,
+		})
+	}
+
+	return out, nil
+}
+
+func (s *Handlers) GetHealthScoreLowHotUpdateTables(
+	ctx context.Context,
+	req serverhttp.GetHealthScoreLowHotUpdateTablesRequestObject,
+) (serverhttp.GetHealthScoreLowHotUpdateTablesResponseObject, error) {
+	rows, err := s.repo.GetHealthScoreLowHotUpdateTables(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
+	if errors.Is(err, repository.ErrNotFound) {
+		return serverhttp.GetHealthScoreLowHotUpdateTables404Response{}, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("GetHealthScoreLowHotUpdateTables | %w", err)
+	}
+
+	out := make(serverhttp.GetHealthScoreLowHotUpdateTables200JSONResponse, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, serverhttp.HealthScoreLowHotUpdateTable{
+			Schema:     r.Schema,
+			Table:      r.Table,
+			Updates:    r.Updates,
+			HotUpdates: r.HotUpdates,
+			HotRatio:   r.HotRatio,
+		})
+	}
+
+	return out, nil
+}
+
+func (s *Handlers) GetHealthScoreHighDeadRatioTables(
+	ctx context.Context,
+	req serverhttp.GetHealthScoreHighDeadRatioTablesRequestObject,
+) (serverhttp.GetHealthScoreHighDeadRatioTablesResponseObject, error) {
+	rows, err := s.repo.GetHealthScoreHighDeadRatioTables(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
+	if errors.Is(err, repository.ErrNotFound) {
+		return serverhttp.GetHealthScoreHighDeadRatioTables404Response{}, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("GetHealthScoreHighDeadRatioTables | %w", err)
+	}
+
+	out := make(serverhttp.GetHealthScoreHighDeadRatioTables200JSONResponse, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, serverhttp.HealthScoreHighDeadRatioTable{
+			Schema:     r.Schema,
+			Table:      r.Table,
+			LiveTuples: r.LiveTuples,
+			DeadTuples: r.DeadTuples,
+			DeadRatio:  r.DeadRatio,
+		})
+	}
+
+	return out, nil
+}
+
+func (s *Handlers) GetHealthScoreHorizonBlockingSessions(
+	ctx context.Context,
+	req serverhttp.GetHealthScoreHorizonBlockingSessionsRequestObject,
+) (serverhttp.GetHealthScoreHorizonBlockingSessionsResponseObject, error) {
+	rows, err := s.repo.GetHealthScoreHorizonBlockingSessions(ctx, req.Params.ClusterName, req.Params.Instance)
+	if errors.Is(err, repository.ErrNotFound) {
+		return serverhttp.GetHealthScoreHorizonBlockingSessions404Response{}, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("GetHealthScoreHorizonBlockingSessions | %w", err)
+	}
+
+	out := make(serverhttp.GetHealthScoreHorizonBlockingSessions200JSONResponse, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, serverhttp.HealthScoreHorizonBlockingSession{
+			PID:                 r.PID,
+			Username:            r.Username,
+			State:               r.State,
+			WaitEventType:       r.WaitEventType,
+			WaitEvent:           r.WaitEvent,
+			XactDurationSeconds: r.XactDurationSeconds,
+			BackendXmin:         r.BackendXmin,
+			Query:               sanitize.SQL(r.Query),
+		})
+	}
+
+	return out, nil
+}
+
+func (s *Handlers) GetHealthScoreWeights(
+	ctx context.Context,
+	req serverhttp.GetHealthScoreWeightsRequestObject,
+) (serverhttp.GetHealthScoreWeightsResponseObject, error) {
+	resp, err := s.getHealthScoreWeightsResponse(ctx, req.Params.ClusterName)
+	if err != nil {
+		return nil, fmt.Errorf("GetHealthScoreWeights | %w", err)
+	}
+
+	return serverhttp.GetHealthScoreWeights200JSONResponse(resp), nil
+}
+
+func (s *Handlers) PutHealthScoreWeights(
+	ctx context.Context,
+	req serverhttp.PutHealthScoreWeightsRequestObject,
+) (serverhttp.PutHealthScoreWeightsResponseObject, error) {
+	if req.Body == nil {
+		return serverhttp.PutHealthScoreWeights400Response{}, nil
+	}
+
+	w := health.Weights{
+		Connections:   req.Body.Connections,
+		Performance:   req.Body.Performance,
+		Storage:       req.Body.Storage,
+		Replication:   req.Body.Replication,
+		Maintenance:   req.Body.Maintenance,
+		Horizon:       req.Body.Horizon,
+		WalCheckpoint: req.Body.WalCheckpoint,
+		Locks:         req.Body.Locks,
+	}
+
+	if err := w.Validate(); err != nil {
+		return serverhttp.PutHealthScoreWeights400Response{}, nil
+	}
+
+	if s.storage == nil {
+		return nil, fmt.Errorf("PutHealthScoreWeights | storage is not configured")
+	}
+
+	if err := s.storage.UpsertHealthWeights(ctx, req.Params.ClusterName, w.Normalize(), ""); err != nil {
+		return nil, fmt.Errorf("PutHealthScoreWeights | %w", err)
+	}
+
+	resp, err := s.getHealthScoreWeightsResponse(ctx, req.Params.ClusterName)
+	if err != nil {
+		return nil, fmt.Errorf("PutHealthScoreWeights | %w", err)
+	}
+
+	return serverhttp.PutHealthScoreWeights200JSONResponse(resp), nil
+}
+
+func (s *Handlers) DeleteHealthScoreWeights(
+	ctx context.Context,
+	req serverhttp.DeleteHealthScoreWeightsRequestObject,
+) (serverhttp.DeleteHealthScoreWeightsResponseObject, error) {
+	if s.storage != nil {
+		if err := s.storage.DeleteHealthWeights(ctx, req.Params.ClusterName); err != nil {
+			return nil, fmt.Errorf("DeleteHealthScoreWeights | %w", err)
+		}
+	}
+
+	resp, err := s.getHealthScoreWeightsResponse(ctx, req.Params.ClusterName)
+	if err != nil {
+		return nil, fmt.Errorf("DeleteHealthScoreWeights | %w", err)
+	}
+
+	return serverhttp.DeleteHealthScoreWeights200JSONResponse(resp), nil
+}
+
+func (s *Handlers) getHealthScoreWeightsResponse(
+	ctx context.Context,
+	clusterName string,
+) (serverhttp.HealthScoreWeights, error) {
+	var (
+		w         health.Weights
+		source    = serverhttp.Default
+		updatedAt *time.Time
+		updatedBy *string
+	)
+
+	if s.storage != nil {
+		rec, err := s.storage.GetHealthWeights(ctx, clusterName)
+		if err != nil {
+			return serverhttp.HealthScoreWeights{}, err
+		}
+
+		if rec != nil {
+			w = rec.Weights
+			source = serverhttp.Override
+			ts := rec.UpdatedAt
+			updatedAt = &ts
+
+			if rec.UpdatedBy != "" {
+				by := rec.UpdatedBy
+				updatedBy = &by
+			}
+		}
+	}
+
+	if source == serverhttp.Default {
+		w = health.DefaultWeights()
+	}
+
+	return serverhttp.HealthScoreWeights{
+		Connections:   w.Connections,
+		Performance:   w.Performance,
+		Storage:       w.Storage,
+		Replication:   w.Replication,
+		Maintenance:   w.Maintenance,
+		Horizon:       w.Horizon,
+		WalCheckpoint: w.WalCheckpoint,
+		Locks:         w.Locks,
+		Source:        source,
+		UpdatedAt:     updatedAt,
+		UpdatedBy:     updatedBy,
+	}, nil
 }
 
 func (s *Handlers) GetDatabaseUsers(
@@ -1016,12 +1548,14 @@ func (s *Handlers) GetQueriesBlocked(
 				BlockedUser:                           t.BlockedUser,
 				BlockedQuery:                          sanitize.SQL(t.BlockedQuery),
 				BlockedDuration:                       t.BlockedDuration,
+				BlockedDurationMs:                     t.BlockedDurationMs,
 				BlockedMode:                           t.BlockedMode,
 				BlockingPid:                           t.BlockingPid,
 				BlockingUser:                          t.BlockingUser,
 				StateOfBlockingProcess:                t.StateOfBlockingProcess,
 				CurrentOrRecentQueryInBlockingProcess: sanitize.SQL(t.CurrentOrRecentQueryInBlockingProcess),
 				BlockingDuration:                      t.BlockingDuration,
+				BlockingDurationMs:                    t.BlockingDurationMs,
 				BlockingMode:                          t.BlockingMode,
 			}
 		})
@@ -1033,12 +1567,28 @@ func (s *Handlers) GetQueriesRunning(
 	ctx context.Context,
 	req serverhttp.GetQueriesRunningRequestObject,
 ) (serverhttp.GetQueriesRunningResponseObject, error) {
-	minDuration := 3
+	minDuration := 10
 	if req.Params.MinDuration != nil {
 		minDuration = *req.Params.MinDuration
 	}
 
-	queries, err := s.repo.GetQueriesRunning(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, minDuration)
+	// Filter by query text (ILIKE / NOT ILIKE) and by exact usename. Empty values disable the filter.
+	var queryFilter *string
+	if req.Params.QueryFilter != nil && *req.Params.QueryFilter != "" {
+		queryFilter = req.Params.QueryFilter
+	}
+
+	queryFilterMode := "like"
+	if req.Params.QueryFilterMode != nil && *req.Params.QueryFilterMode == serverhttp.NotLike {
+		queryFilterMode = "not_like"
+	}
+
+	var username *string
+	if req.Params.Username != nil && *req.Params.Username != "" {
+		username = req.Params.Username
+	}
+
+	queries, err := s.repo.GetQueriesRunning(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, minDuration, queryFilter, queryFilterMode, username)
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.GetQueriesRunning404Response{}, nil
 	}
@@ -1084,7 +1634,7 @@ func (s *Handlers) GetQueriesTop10ByTime(
 		queries,
 		func(t dto.QueryTop10ByTime) serverhttp.QueryTop10ByTime {
 			return serverhttp.QueryTop10ByTime{
-				QueryID:    t.QueryID,
+				QueryID:    strconv.FormatInt(t.QueryID, 10),
 				ExecTime:   t.ExecTime,
 				ExecTimeMs: t.ExecTimeMs,
 				IoCpuPct:   t.IoCpuPct,
@@ -1114,7 +1664,7 @@ func (s *Handlers) GetQueriesTop10ByWal(
 		queries,
 		func(t dto.QueryTop10ByWal) serverhttp.QueryTop10ByWal {
 			return serverhttp.QueryTop10ByWal{
-				QueryID:    t.QueryID,
+				QueryID:    strconv.FormatInt(t.QueryID, 10),
 				WalVolume:  t.WalVolume,
 				WalBytes:   t.WalBytes,
 				QueryTrunc: sanitize.SQL(t.QueryTrunc),
@@ -1141,7 +1691,7 @@ func (s *Handlers) GetQueriesTop10Chart(
 
 	for _, item := range items {
 		entry := serverhttp.QueryTop10ChartItem{
-			QueryID: item.QueryID,
+			QueryID: strconv.FormatInt(item.QueryID, 10),
 			Pct:     item.Pct,
 		}
 
@@ -1281,7 +1831,7 @@ func (s *Handlers) GetQueriesCompare(
 		}
 
 		items = append(items, serverhttp.QueryCompareItem{
-			QueryID: queryID,
+			QueryID: strconv.FormatInt(queryID, 10),
 			Query:   query,
 			Left:    left,
 			Right:   right,
