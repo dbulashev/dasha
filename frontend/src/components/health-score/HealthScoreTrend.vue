@@ -33,9 +33,14 @@ const loading = ref(false)
 const unavailable = ref(false)
 const history = ref<HealthScoreHistory | null>(null)
 
+// Monotonic nonce: rapid watch triggers (e.g. range switches) can race, so each
+// call captures an id and only the latest response is allowed to mutate state.
+let requestId = 0
+
 async function load() {
   if (!clusterName.value || !hostName.value) return
 
+  const id = ++requestId
   loading.value = true
   unavailable.value = false
 
@@ -49,14 +54,17 @@ async function load() {
       to: new Date(now).toISOString(),
       step_seconds: step,
     })
+    if (id !== requestId) return
     history.value = assertOk<HealthScoreHistory>(res)
   } catch {
     // 404 / error: metrics datasource not configured or target unmapped — the
     // trend is supplementary, so degrade gracefully instead of erroring the view.
+    if (id !== requestId) return
     history.value = null
     unavailable.value = true
   } finally {
-    loading.value = false
+    // Only the latest in-flight request clears the spinner.
+    if (id === requestId) loading.value = false
   }
 }
 

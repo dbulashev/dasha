@@ -115,15 +115,34 @@ func mapQueryReportMetrics(t dto.QueryReport) serverhttp.QueryReportMetrics {
 	}
 }
 
+// maxLimit caps a client-supplied pagination limit so a SQL LIMIT can never be
+// handed a negative or absurdly large value regardless of what the client sends.
+const maxLimit = 1000
+
 func paginationDefaults(limitPtr, offsetPtr *int, defaultLimit int) (int, int) {
 	limit := defaultLimit
 	if limitPtr != nil {
 		limit = *limitPtr
 	}
 
+	// Clamp to a sane range: a non-positive limit falls back to the per-endpoint
+	// default, and an oversized one is capped so the SQL LIMIT stays bounded.
+	if limit <= 0 {
+		limit = defaultLimit
+	}
+
+	if limit > maxLimit {
+		limit = maxLimit
+	}
+
 	offset := 0
 	if offsetPtr != nil {
 		offset = *offsetPtr
+	}
+
+	// A negative offset is meaningless to SQL OFFSET; floor it at zero.
+	if offset < 0 {
+		offset = 0
 	}
 
 	return limit, offset
@@ -399,9 +418,11 @@ func overlayCatalogFacts(raw *health.RawMetrics, m *dto.HealthScoreMetrics) {
 
 // metricsRawWithCatalog returns the instant metrics-backed RawMetrics enriched
 // with the catalog overlay, or ok=false when the datasource is disabled,
-// unreachable or the target is unmapped (caller then falls back to the pure
-// snapshot). A snapshot read failure does not sink the metrics result — the
-// overlay is best-effort so a brief DB hiccup keeps the time-series score alive.
+// unreachable, the target is unmapped, or the catalog snapshot cannot be read
+// (caller then falls back to the pure snapshot). The overlay is mandatory: a
+// metrics-only RawMetrics carries zero-valued catalog/GUC facts that the scorer
+// would misread as "autovacuum off" and similar, so a snapshot read failure
+// must sink the metrics result rather than emit a wrong-but-alive score.
 func (s *Handlers) metricsRawWithCatalog(ctx context.Context, cluster, instance string) (health.RawMetrics, bool) {
 	if !s.metrics.Enabled() {
 		return health.RawMetrics{}, false
@@ -412,9 +433,12 @@ func (s *Handlers) metricsRawWithCatalog(ctx context.Context, cluster, instance 
 		return health.RawMetrics{}, false
 	}
 
-	if m, sErr := s.repo.GetHealthScoreMetrics(ctx, cluster, instance, ""); sErr == nil {
-		overlayCatalogFacts(&raw, m)
+	m, sErr := s.repo.GetHealthScoreMetrics(ctx, cluster, instance, "")
+	if sErr != nil {
+		return health.RawMetrics{}, false
 	}
+
+	overlayCatalogFacts(&raw, m)
 
 	return raw, true
 }

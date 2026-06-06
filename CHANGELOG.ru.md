@@ -21,7 +21,7 @@
 
 ### Внутреннее
 - Новый пакет `internal/metrics`: клиент datasource, матчер лейблов (с авто-маппингом из discovery), каталог MetricsQL-запросов, коллектор сигналов, сезонный baseline, детект просадок, history-сервис.
-- Demo-lab расширен стеком VictoriaMetrics + pgSCV + pgbouncer (`demo/docker-compose.metrics.yaml`), pgSCV собирается из исходников под arm64.
+- Demo-lab расширен стеком VictoriaMetrics + pgSCV + pgbouncer (`demo/docker-compose.metrics.yaml`).
 - Helm-чарт `values.yaml`: задокументирован блок `health_score.metrics` — datasource (в т.ч. auth через `*_from_env` / ExternalSecret), провайдеры, шаблоны селекторов, targets, авто-маппинг discovery и тюнинг.
 
 ## v1.1.0

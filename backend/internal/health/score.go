@@ -314,11 +314,11 @@ func applyInstanceAdjustments(categories []CategoryResult, m RawMetrics) {
 	// Performance: query-latency regression vs the seasonal baseline (metrics-only;
 	// 0 = absent ⇒ neutral, e.g. on the SQL snapshot or before enough history).
 	switch {
-	case m.LatencyRegressionRatio > 6:
+	case m.LatencyRegressionRatio >= 6:
 		addPenalty(categories, "performance", 50)
-	case m.LatencyRegressionRatio > 3:
+	case m.LatencyRegressionRatio >= 3:
 		addPenalty(categories, "performance", 30)
-	case m.LatencyRegressionRatio > 1.5:
+	case m.LatencyRegressionRatio >= 1.5:
 		addPenalty(categories, "performance", 10)
 	}
 
@@ -329,11 +329,11 @@ func applyInstanceAdjustments(categories []CategoryResult, m RawMetrics) {
 	// Performance: sequential-scan regression vs the seasonal baseline — indexes
 	// going unused or stale planner stats (ANALYZE). Same shape as latency.
 	switch {
-	case m.SeqScanRegressionRatio > 6:
+	case m.SeqScanRegressionRatio >= 6:
 		addPenalty(categories, "performance", 40)
-	case m.SeqScanRegressionRatio > 3:
+	case m.SeqScanRegressionRatio >= 3:
 		addPenalty(categories, "performance", 25)
-	case m.SeqScanRegressionRatio > 1.5:
+	case m.SeqScanRegressionRatio >= 1.5:
 		addPenalty(categories, "performance", 10)
 	}
 
@@ -390,11 +390,11 @@ func applyInstanceAdjustments(categories []CategoryResult, m RawMetrics) {
 		sat := m.LoadAvg15 / m.NumVCPU
 
 		switch {
-		case sat > 4:
+		case sat >= 4:
 			addPenalty(categories, "connections", 60)
-		case sat > 2:
+		case sat >= 2:
 			addPenalty(categories, "connections", 30)
-		case sat > 1:
+		case sat >= 1:
 			addPenalty(categories, "connections", 10)
 		}
 
@@ -405,11 +405,11 @@ func applyInstanceAdjustments(categories []CategoryResult, m RawMetrics) {
 		sat := m.PoolerServerConns / m.PoolerPoolSize
 
 		switch {
-		case sat > 0.8:
+		case sat >= 0.8:
 			addPenalty(categories, "connections", 30)
-		case sat > 0.6:
+		case sat >= 0.6:
 			addPenalty(categories, "connections", 15)
-		case sat > 0.5:
+		case sat >= 0.5:
 			addPenalty(categories, "connections", 5)
 		}
 

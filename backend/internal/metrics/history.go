@@ -48,7 +48,9 @@ func (s *Service) History(
 		return History{}, err
 	}
 
-	minPoints := int(s.cfg.Baseline.MinHistory / step)
+	// Ceiling division, clamped to at least one point — otherwise a step coarser
+	// than min_history would yield 0 and Enough could never become true.
+	minPoints := max(1, int((s.cfg.Baseline.MinHistory+step-1)/step))
 
 	return buildHistory(sigs, from, to, minPoints, s.cfg.Dips.ScorePoints, w), nil
 }

@@ -75,8 +75,18 @@ func NewSignals(t time.Time) Signals {
 	}
 }
 
-// Set records a value for a signal and marks it present.
-func (s Signals) Set(k SignalKind, v float64) {
+// Set records a value for a signal and marks it present. It uses a pointer
+// receiver and lazily allocates the maps so a zero-value Signals is safe to
+// fill (the zero value is documented as a valid, empty reading).
+func (s *Signals) Set(k SignalKind, v float64) {
+	if s.Value == nil {
+		s.Value = make(map[SignalKind]float64)
+	}
+
+	if s.Have == nil {
+		s.Have = make(map[SignalKind]bool)
+	}
+
 	s.Value[k] = v
 	s.Have[k] = true
 }

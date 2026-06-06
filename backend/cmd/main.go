@@ -62,8 +62,11 @@ func migrateExec(cmd *cobra.Command, _ []string) error {
 	cfg := container.Config()
 	logger := container.Logger()
 
-	if !cfg.Storage.Enabled() {
-		logger.Fatal("storage.dsn is not configured")
+	// A DDL-only install may set storage.dsn_migration without storage.dsn, so
+	// gate on the effective migration DSN rather than Enabled() (which only looks
+	// at storage.dsn).
+	if !cfg.Storage.Enabled() && cfg.Storage.MigrationDSN() == "" {
+		logger.Fatal("storage is not configured: set at least one of storage.dsn or storage.dsn_migration")
 	}
 
 	// Use the DDL-capable connection (dsn_migration), falling back to dsn.

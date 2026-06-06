@@ -21,7 +21,7 @@
 
 ### Internal
 - New `internal/metrics` package: datasource client, label matcher (with discovery-driven auto-mapping), MetricsQL query catalog, signal collector, seasonal baseline, dip detection, history service.
-- Demo lab extended with a VictoriaMetrics + pgSCV + pgbouncer stack (`demo/docker-compose.metrics.yaml`), built from pgSCV sources for arm64 hosts.
+- Demo lab extended with a VictoriaMetrics + pgSCV + pgbouncer stack (`demo/docker-compose.metrics.yaml`).
 - Helm chart `values.yaml`: documented `health_score.metrics` block — datasource (incl. auth via `*_from_env` / ExternalSecret), providers, selector templates, targets, discovery auto-mapping and tuning.
 
 ## v1.1.0
