@@ -3,7 +3,9 @@
 package repository
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -74,6 +76,65 @@ func TestGetQueriesBlocked(t *testing.T) {
 		assert.NotEmpty(t, q.BlockedUser)
 		assert.NotZero(t, q.BlockingPid)
 		assert.NotEmpty(t, q.BlockingUser)
+	}
+}
+
+// TestGetBlockedSessionCount creates a real row-lock contention between two
+// connections and verifies the background lock sampler detects it.
+func TestGetBlockedSessionCount(t *testing.T) {
+	t.Parallel()
+	pool := testinfra.IsolatePool(t)
+	p := NewTestPgxPool(pool, zap.NewNop())
+	ctx := t.Context()
+
+	// Baseline: nothing is blocked.
+	n, err := p.getBlockedSessionCount(ctx, pool)
+	require.NoError(t, err)
+	assert.Equal(t, 0, n)
+
+	// Hold a row lock in a dedicated connection.
+	holder, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	defer holder.Release()
+
+	_, err = holder.Exec(ctx, "BEGIN")
+	require.NoError(t, err)
+	_, err = holder.Exec(ctx, "SELECT id FROM users ORDER BY id LIMIT 1 FOR UPDATE")
+	require.NoError(t, err)
+
+	// A second connection blocks on the same row until the holder releases.
+	// Use a bounded context so a pathological pool state fails fast instead of
+	// hanging CI forever.
+	bgCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	blockerDone := make(chan struct{})
+	go func() {
+		defer close(blockerDone)
+		c, e := pool.Acquire(bgCtx)
+		if e != nil {
+			return
+		}
+		defer c.Release()
+		_, _ = c.Exec(bgCtx, "BEGIN")
+		_, _ = c.Exec(bgCtx, "SELECT id FROM users ORDER BY id LIMIT 1 FOR UPDATE")
+		_, _ = c.Exec(bgCtx, "ROLLBACK")
+	}()
+
+	// The blocked session should be detected by the count query.
+	require.Eventually(t, func() bool {
+		got, e := p.getBlockedSessionCount(ctx, pool)
+		return e == nil && got >= 1
+	}, 5*time.Second, 100*time.Millisecond, "blocked session should be detected")
+
+	// Release the lock so the blocker proceeds and the goroutine exits.
+	_, err = holder.Exec(ctx, "ROLLBACK")
+	require.NoError(t, err)
+
+	select {
+	case <-blockerDone:
+	case <-time.After(10 * time.Second):
+		t.Fatal("blocker goroutine did not finish")
 	}
 }
 

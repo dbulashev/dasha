@@ -6,7 +6,9 @@ import { useAuthStore } from './stores/auth'
 import { useClustersStore } from './stores/clusters'
 import { useInstanceInfoStore } from './stores/instanceInfo'
 import { useSnapshotsStatusStore } from './stores/snapshotsStatus'
+import { useAutosnapshotStatusStore } from './stores/autosnapshotStatus'
 import { useI18n } from 'vue-i18n'
+import { AuthInfoMode } from '@/api/models'
 import { errorKey, type GlobalError } from './composables/useViewError'
 
 const { t } = useI18n()
@@ -15,13 +17,26 @@ const authStore = useAuthStore()
 const clusterStore = useClustersStore()
 const instanceInfoStore = useInstanceInfoStore()
 const snapshotsStatusStore = useSnapshotsStatusStore()
+const autosnapshotStatusStore = useAutosnapshotStatusStore()
 
 watch(
   () => authStore.initialized && !authStore.requiresLogin,
   (ready) => {
-    if (ready) snapshotsStatusStore.ensureLoaded()
+    if (ready) {
+      snapshotsStatusStore.ensureLoaded()
+      autosnapshotStatusStore.ensureLoaded()
+    }
   },
   { immediate: true },
+)
+
+const isAdmin = computed(
+  () => authStore.mode === AuthInfoMode.none || authStore.user?.role === 'admin',
+)
+const autosnapshotVisible = computed(
+  () =>
+    autosnapshotStatusStore.available &&
+    (autosnapshotStatusStore.enabled || isAdmin.value),
 )
 
 const globalError = ref<GlobalError | null>(null)
@@ -83,6 +98,7 @@ const fkAnalysisLink = computed(() => withQuery("fk-analysis"));
 const maintenanceLink = computed(() => withQuery("maintenance"));
 const replicationLink = computed(() => withQuery("replication"));
 const settingsLink = computed(() => withQuery("settings"));
+const autoSnapshotLink = computed(() => withQuery("auto-snapshot"));
 
 // Track whether the currently selected host is a standby. When true the
 // Maintenance menu item is hidden and any visit to /maintenance redirects to
@@ -202,6 +218,7 @@ watch(() => route.path, () => {
           <v-list-item :title="t('Replication')" prepend-icon="mdi-database-sync-outline" link :to="replicationLink"></v-list-item>
           <v-list-item v-if="!isReplica" :title="t('Maintenance')" prepend-icon="mdi-wrench-outline" link :to="maintenanceLink"></v-list-item>
           <v-list-item :title="t('Settings')" prepend-icon="mdi-database-settings-outline" link :to="settingsLink"></v-list-item>
+          <v-list-item v-if="autosnapshotVisible" :title="t('autosnapshot.menu')" prepend-icon="mdi-camera-timer" link :to="autoSnapshotLink"></v-list-item>
         </v-list>
       </v-navigation-drawer>
 

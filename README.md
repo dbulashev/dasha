@@ -23,6 +23,8 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 - `pg_stat_statements` status and reset time tracking
 - **pgss snapshots**: save point-in-time snapshots to a dedicated storage database, view and share via URL
 - **Snapshot comparison**: side-by-side diff of two snapshots or one snapshot vs live data, sortable by any metric
+- **Auto-snapshots**: separate `dasha autosnapshot` daemon creates snapshots automatically on activity spikes (sliding-window avg on `pg_stat_activity`) or master↔replica role changes; configurable per cluster via UI, retention by total size
+- **Lock snapshots**: an activity-spike snapshot can also capture the `pg_blocking_pids` lock-contention graph — a background blocked-count sampler runs during the spike, then a short burst of probes keeps the harshest graph (most distinct blocked sessions); also available on demand via a "with locks" manual snapshot
 
 **Index Analysis**
 - Top-K by size, bloat estimation, duplicate detection
@@ -223,6 +225,24 @@ storage:
 ```
 
 Run `dasha migrate` to create partitioned tables before first use.
+
+#### Auto-snapshots (optional)
+
+When snapshot storage is configured, you can run a separate daemon that creates snapshots automatically on configurable triggers:
+
+```bash
+dasha autosnapshot
+```
+
+The daemon uses the same `dasha.yaml` config. All knobs (triggers, thresholds, retention) are stored in the storage DB and edited from the UI (*Auto-snapshots* menu, admin-only). Run a single instance by default; to run multiple replicas for HA, enable advisory-lock leader election with `storage.leader_election: true` (off by default, since a session-level advisory lock needs a dedicated connection and is incompatible with transaction-pooling proxies like PgBouncer in transaction mode).
+
+On an activity-spike trigger the daemon can additionally capture the lock-contention graph (`capture_locks`, on by default): a cheap blocked-session counter runs in the background during the spike, and at trigger time a short burst of probes (`lock_probe_count` × `lock_probe_interval`, default 5 × 500 ms) records the full `pg_blocking_pids` graph, keeping the probe with the most distinct blocked sessions. The result is stored in `snapshots.locks_data` and viewable from the snapshot view in *Query Stats*.
+
+Triggers:
+- **activity_spike** — fires when `count(state='active')` in `pg_stat_activity` exceeds the sliding-window baseline by a configurable percent (default +50%) for a sustained duration (default 5 min)
+- **role_change** — fires on master↔replica transitions (direction: `both` / `master_to_replica` / `replica_to_master`)
+
+Retention drops the oldest day-triples once total size exceeds `retention_bytes`, respecting the `retention_min_days` floor.
 
 ### Run Locally
 

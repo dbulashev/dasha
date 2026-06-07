@@ -154,6 +154,20 @@ backend:
   #    mountPath: /etc/ssl/pg
   #    readOnly: true
 
+# -- Auto-snapshot daemon ("dasha autosnapshot")
+# Separate Deployment running the same image with a different entrypoint.
+# Runs a single instance by default. For HA (replicaCount>=2) you MUST enable
+# advisory-lock leader election by setting `storage.leader_election: true` in the
+# config, otherwise every replica runs independently and takes duplicate snapshots.
+# Leader election is off by default (incompatible with transaction-pooling proxies).
+autosnapshot:
+  enabled: false
+  replicaCount: 1
+  resources: {}
+  terminationGracePeriodSeconds: 30
+  extraVolumes: []
+  extraVolumeMounts: []
+
 service:
   type: ClusterIP
 

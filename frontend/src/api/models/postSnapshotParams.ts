@@ -12,4 +12,8 @@ export type PostSnapshotParams = {
   cluster_name: ClusterNameParameter
   instance: InstanceParameter
   database: DatabaseParameter
+  /**
+   * Also capture a lock snapshot (probes blocked sessions)
+   */
+  include_locks?: boolean
 }

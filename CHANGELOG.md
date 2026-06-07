@@ -1,5 +1,31 @@
 # Changelog
 
+## v1.2.0
+
+### New Features
+- **Auto-snapshots of pg_stat_statements**: separate `dasha autosnapshot` daemon creates pgss snapshots automatically on configurable triggers
+  - **Trigger: activity spike** — sliding-window moving average of `count(state='active')` from `pg_stat_activity`; fires when current value exceeds baseline by a configurable percent (default +50%) for a sustained duration (default 5 min)
+  - **Trigger: role change** — detects master↔replica transitions via `pg_is_in_recovery()`, with configurable direction (`both` / `master_to_replica` / `replica_to_master`)
+  - **Trigger: activity drop** (`recovery_duration`) — after a spike, snapshots the aftermath once activity stays below the threshold long enough; paired with reset this gives two clean pgss windows per incident (the buildup and the spike's actual execution). `0s` disables
+  - **Deferred follow-up** (`deferred_interval`) — after a spike snapshot, schedules a follow-up snapshot in a persisted queue (`autosnapshot_pending`, survives daemon restarts) — a safety net/fixed-offset capture for spikes that never resolve. **Auto-cancelled when the spike resolves** (the drop snapshot already captured the incident, so the deferred would only snapshot the quiet aftermath). `0s` disables. Both are per-cluster overridable
+  - **Global knobs** (stored in storage DB, editable via UI): `poll_interval`, `max_snapshot_frequency` (debounce), `min_baseline_active` (skip when load is low), `retention_bytes`, `retention_min_days`, `reset_query_stats` (reset `pg_stat_statements` after each auto-snapshot — independent of the manual UI reset flag)
+  - **Custom pgss reset function** (`pgss_reset_function` in `dasha.yaml`): call a schema-qualified wrapper instead of `pg_stat_statements_reset()` when the monitoring role lacks `EXECUTE` (mirrors `pg_stats_view`); applies to both auto and manual resets
+  - **Per-cluster overrides**: deep-merged on top of global defaults; clusters can toggle triggers, tune thresholds or disable auto-snapshots individually
+  - **Leader election** (opt-in, `storage.leader_election`, off by default): `pg_try_advisory_lock` on the storage DB lets the daemon run in multiple replicas for HA; disabled by default because a session-level advisory lock needs a dedicated connection and is incompatible with transaction-pooling proxies (PgBouncer transaction mode)
+  - **Retention by total size**: drops oldest day-triples (snapshots + query_texts + trigger_events partitions) once total exceeds `retention_bytes`; respects `retention_min_days` floor
+  - **History tab**: filter by cluster / outcome / trigger_type, paginated; persists snapshot creations and errors only — transient skips (debounce, below-baseline, wrong-direction) are logged at debug level and not written to history to avoid noise
+  - **UI**: new "Auto-snapshots" menu item (`mdi-camera-timer`) with Settings + History tabs; admin-only editing, viewers see read-only state; menu hidden for non-admin when feature is disabled
+  - **API**: `GET/PUT /api/autosnapshot/config`, `GET/PUT /api/autosnapshot/clusters/{name}`, `GET /api/autosnapshot/status`, `GET /api/autosnapshot/trigger-events`
+  - **CLI**: `dasha autosnapshot` (separate command, not started by `dasha serve`)
+  - **Deploy**: Helm chart `autosnapshot` subchart (disabled by default, toggle `autosnapshot.enabled: true`); docker-compose adds `autosnapshot` service alongside `backend` and `frontend`
+- **DB connection-pool tuning** (`dasha.yaml`): the pools to monitored clusters are now configurable — `db_pool` (`max_conns`, `max_conn_idle_time`, `max_conn_lifetime`; 0 = pgx default) for `dasha serve`, and `autosnapshot_db_pool` (per-field override) for the `dasha autosnapshot` daemon. Lets the daemon free monitoring-user connections quickly (e.g. `max_conn_idle_time: 5s`) under a tight connection budget. The storage pool stays tunable via `storage.dsn` query params (`pool_max_conns`, `pool_max_conn_idle_time`, ...)
+- **Lock snapshots on triggers**: an activity-spike snapshot can additionally capture the lock-contention graph alongside `pg_stat_statements`
+  - **Hybrid timing**: cheap blocked-session counting runs in the background during the spike and records a `background_peak`; at trigger time a short burst of N detailed probes (default 5 × 500 ms) captures the full `pg_blocking_pids` graph
+  - **Harshest probe wins**: the probe with the most distinct blocked sessions is kept (tie-break by longest wait); up to 100 rows are stored, sorted by wait descending
+  - **Storage**: new `snapshots.locks_data jsonb` column; `GET /api/queries/snapshot/{id}/locks` serves it; the snapshot list now carries `has_locks`
+  - **Knobs** (global + per-cluster): `capture_locks` (default on), `lock_probe_count` (1–20), `lock_probe_interval` (100 ms–5 s)
+  - **Manual capture**: a "with locks" option on the manual snapshot button; the captured lock graph is viewable from the Query Stats snapshot view
+
 ## v1.1.0
 
 ### Features

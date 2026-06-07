@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	"github.com/dbulashev/dasha/gen/serverhttp"
+	"github.com/dbulashev/dasha/internal/autosnapshot"
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/health"
@@ -1916,7 +1918,27 @@ func (s *Handlers) PostSnapshot(
 		pgssStatsReset = &resetTime.Time
 	}
 
-	id, createdAt, err := s.storage.CreateSnapshot(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, reports, pgssStatsReset)
+	var locks *autosnapshot.LockCapture
+	if req.Params.IncludeLocks != nil && *req.Params.IncludeLocks {
+		probeCount, probeInterval := 5, 500*time.Millisecond
+		if cfg, cerr := s.storage.GetAutosnapshotConfig(ctx); cerr == nil {
+			if cfg.LockProbeCount > 0 {
+				probeCount = cfg.LockProbeCount
+			}
+
+			if cfg.LockProbeInterval > 0 {
+				probeInterval = cfg.LockProbeInterval
+			}
+		}
+
+		lc := autosnapshot.CaptureLocks(ctx, s.repo, req.Params.ClusterName, req.Params.Instance, req.Params.Database, probeCount, probeInterval)
+		locks = &lc
+	}
+
+	id, createdAt, err := s.storage.CreateSnapshot(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, reports, storage.SnapshotOpts{
+		PgssStatsReset: pgssStatsReset,
+		LocksData:      locks,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("PostSnapshot | create: %w", err)
 	}
@@ -1943,12 +1965,17 @@ func (s *Handlers) GetSnapshots(
 	var ret serverhttp.GetSnapshots200JSONResponse = mapstruct.SliceMap(
 		items,
 		func(item storage.SnapshotListItem) serverhttp.SnapshotListItem {
+			hasLocks := item.HasLocks
+			reason := item.Reason
+
 			return serverhttp.SnapshotListItem{
 				Id:             openapi_types.UUID(item.ID),
 				CreatedAt:      item.CreatedAt,
 				DashaVersion:   item.DashaVersion,
 				JsonVersion:    item.JsonVersion,
 				PgssStatsReset: item.PgssStatsReset,
+				HasLocks:       &hasLocks,
+				Reason:         &reason,
 			}
 		})
 
@@ -1976,6 +2003,31 @@ func (s *Handlers) GetSnapshot(
 		reports, mapQueryReport)
 
 	return ret, nil
+}
+
+func (s *Handlers) GetSnapshotLocks(
+	ctx context.Context,
+	req serverhttp.GetSnapshotLocksRequestObject,
+) (serverhttp.GetSnapshotLocksResponseObject, error) {
+	if s.storage == nil {
+		return serverhttp.GetSnapshotLocks501Response{}, nil
+	}
+
+	raw, ok, err := s.storage.GetSnapshotLocks(ctx, req.Id)
+	if err != nil {
+		return nil, fmt.Errorf("GetSnapshotLocks | %w", err)
+	}
+
+	if !ok {
+		return serverhttp.GetSnapshotLocks404Response{}, nil
+	}
+
+	var ls serverhttp.LockSnapshot
+	if err := json.Unmarshal(raw, &ls); err != nil {
+		return nil, fmt.Errorf("GetSnapshotLocks | unmarshal: %w", err)
+	}
+
+	return serverhttp.GetSnapshotLocks200JSONResponse(ls), nil
 }
 
 func (s *Handlers) GetProgressAnalyze(
