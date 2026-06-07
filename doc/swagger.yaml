@@ -4056,6 +4056,8 @@ components:
         - WindowSize
         - ActiveThresholdPct
         - SpikeDuration
+        - RecoveryDuration
+        - DeferredInterval
       properties:
         Enabled:
           type: boolean
@@ -4067,6 +4069,12 @@ components:
         SpikeDuration:
           type: string
           description: Go duration string (e.g. "5m")
+        RecoveryDuration:
+          type: string
+          description: Snapshot the aftermath once activity stays below threshold this long; "0s" disables
+        DeferredInterval:
+          type: string
+          description: Scheduled follow-up snapshot this long after a spike (persisted queue); "0s" disables
 
     RoleChangeTrigger:
       type: object
@@ -4148,6 +4156,7 @@ components:
         - CaptureLocks
         - LockProbeCount
         - LockProbeInterval
+        - ResetQueryStats
         - Defaults
       properties:
         Enabled:
@@ -4173,6 +4182,9 @@ components:
         LockProbeInterval:
           type: string
           description: Go duration string between lock probes (e.g. "500ms")
+        ResetQueryStats:
+          type: boolean
+          description: Reset pg_stat_statements after each auto-snapshot (independent of the manual UI reset flag)
         Defaults:
           $ref: '#/components/schemas/AutoSnapshotTriggerDefaults'
 

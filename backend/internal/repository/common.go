@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -137,6 +138,8 @@ type Repository interface {
 
 const defaultPgStatsView = "pg_catalog.pg_stats"
 
+const defaultPgssResetFunc = "pg_stat_statements_reset"
+
 // validPgIdentifier matches schema-qualified or plain SQL identifiers (no injection risk).
 var validPgIdentifier = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)?$`)
 
@@ -155,10 +158,38 @@ type PgxPool struct {
 	logger              *zap.Logger
 	pgStatsViewConfig   string   // configured pg_stats_view from global config
 	resolvedPgStatsView sync.Map // *pgxpool.Pool → string (resolved view name)
+	pgssResetFuncConfig string   // configured pgss_reset_function from global config
+	poolConfig          config.PoolConfig
 }
 
-func NewRepositoryPgxPool(clusters config.Clusters, pgStatsView string, logger *zap.Logger) Repository {
-	return &PgxPool{clusters: clusters, pools: PgxPools{}, mu: sync.RWMutex{}, logger: logger, pgStatsViewConfig: pgStatsView}
+func NewRepositoryPgxPool(clusters config.Clusters, pgStatsView, pgssResetFunc string, poolCfg config.PoolConfig, logger *zap.Logger) Repository {
+	return &PgxPool{
+		clusters:            clusters,
+		pools:               PgxPools{},
+		mu:                  sync.RWMutex{},
+		logger:              logger,
+		pgStatsViewConfig:   pgStatsView,
+		pgssResetFuncConfig: pgssResetFunc,
+		poolConfig:          poolCfg,
+	}
+}
+
+// pgssResetFunction returns the configured pgss reset function, or the default
+// when unset/invalid. Validated against validPgIdentifier (no injection risk).
+func (p *PgxPool) pgssResetFunction() string {
+	f := strings.TrimSpace(p.pgssResetFuncConfig)
+	if f == "" {
+		return defaultPgssResetFunc
+	}
+
+	if !validPgIdentifier.MatchString(f) {
+		p.logger.Warn("invalid pgss_reset_function, using default",
+			zap.String("configured", f), zap.String("default", defaultPgssResetFunc))
+
+		return defaultPgssResetFunc
+	}
+
+	return f
 }
 
 func (p *PgxPool) Clusters(ctx context.Context) ([]dto.ClusterInfo, error) {
@@ -376,6 +407,20 @@ func (p *PgxPool) getPool(ctx context.Context, dsn string) (*pgxpool.Pool, error
 
 	databaseConfig.ConnConfig.ConnectTimeout = poolConnectTimeout
 	databaseConfig.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+
+	// Apply pool tuning from config (0 = keep pgx default). Lets the autosnapshot
+	// daemon free idle connections fast under a tight monitoring-user budget.
+	if p.poolConfig.MaxConns > 0 {
+		databaseConfig.MaxConns = p.poolConfig.MaxConns
+	}
+
+	if p.poolConfig.MaxConnIdleTime > 0 {
+		databaseConfig.MaxConnIdleTime = p.poolConfig.MaxConnIdleTime
+	}
+
+	if p.poolConfig.MaxConnLifetime > 0 {
+		databaseConfig.MaxConnLifetime = p.poolConfig.MaxConnLifetime
+	}
 
 	if databaseConfig.ConnConfig.RuntimeParams == nil {
 		databaseConfig.ConnConfig.RuntimeParams = make(map[string]string)

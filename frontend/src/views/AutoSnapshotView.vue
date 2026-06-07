@@ -148,7 +148,7 @@ const filterTo = ref('')
 
 // Only snapshot_created and error are persisted now (skips are debug logs).
 const outcomeValues = ['snapshot_created', 'error']
-const triggerTypeValues = ['activity_spike', 'role_change']
+const triggerTypeValues = ['activity_spike', 'role_change', 'activity_drop', 'deferred']
 
 const outcomeOptions = computed(() =>
   outcomeValues.map((v) => ({ value: v, title: t(outcomeI18nKey(v), v) })),
@@ -326,6 +326,17 @@ onMounted(() => {
                   />
                 </v-col>
                 <v-col cols="12" sm="6" md="3">
+                  <v-switch
+                    v-model="cfg.ResetQueryStats"
+                    :label="t('autosnapshot.resetQueryStats')"
+                    :disabled="!isAdmin"
+                    color="primary"
+                    density="compact"
+                    hide-details
+                    v-tooltip="t('autosnapshot.resetQueryStatsHint')"
+                  />
+                </v-col>
+                <v-col cols="12" sm="6" md="3">
                   <v-text-field
                     v-model="cfg.PollInterval"
                     :label="t('autosnapshot.pollInterval')"
@@ -424,6 +435,28 @@ onMounted(() => {
                     :rules="[durationRule]"
                     density="compact"
                     placeholder="5m"
+                  />
+                </v-col>
+                <v-col cols="12" sm="6" md="3">
+                  <v-text-field
+                    v-model="cfg.Defaults.ActivitySpike.RecoveryDuration"
+                    :label="t('autosnapshot.recoveryDuration')"
+                    :disabled="!isAdmin"
+                    :rules="[durationRule]"
+                    density="compact"
+                    placeholder="0s"
+                    v-tooltip="t('autosnapshot.recoveryDurationHint')"
+                  />
+                </v-col>
+                <v-col cols="12" sm="6" md="3">
+                  <v-text-field
+                    v-model="cfg.Defaults.ActivitySpike.DeferredInterval"
+                    :label="t('autosnapshot.deferredInterval')"
+                    :disabled="!isAdmin"
+                    :rules="[durationRule]"
+                    density="compact"
+                    placeholder="0s"
+                    v-tooltip="t('autosnapshot.deferredIntervalHint')"
                   />
                 </v-col>
               </v-row>

@@ -34,18 +34,21 @@ type Store interface {
 	InsertTriggerEvent(ctx context.Context, e TriggerEvent) error
 	CreateSnapshot(ctx context.Context, clusterName, instance, database string, reports []dto.QueryReport, opts SnapshotOpts) (uuid.UUID, time.Time, error)
 
+	EnqueuePendingSnapshot(ctx context.Context, p PendingSnapshot, dueAt time.Time) error
+	ClaimDuePendingSnapshots(ctx context.Context) ([]PendingSnapshot, error)
+	DeletePendingSnapshot(ctx context.Context, clusterName, instance string) error
+
 	ComputePartitionSizes(ctx context.Context) ([]PartitionSize, error)
 	DropDayPartitions(ctx context.Context, day time.Time) error
 }
 
 // Daemon is the long-running auto-snapshot worker.
 type Daemon struct {
-	clusters             config.Clusters
-	repo                 Repo
-	store                Store
-	logger               *zap.Logger
-	resetQueryStatsAllow bool
-	leaderElection       bool
+	clusters       config.Clusters
+	repo           Repo
+	store          Store
+	logger         *zap.Logger
+	leaderElection bool
 
 	mu        sync.Mutex
 	hosts     map[hostKey]*hostState
@@ -64,6 +67,8 @@ type hostState struct {
 	aboveThresholdSince *time.Time
 	lastBelowBaselineAt *time.Time      // throttles below-baseline events to avoid per-poll spam
 	lockPeak            *BackgroundPeak // worst blocked-session count during a forming spike (hybrid lock capture)
+	inSpike             bool            // a spike snapshot was taken and not yet resolved
+	recoveryBelowSince  *time.Time      // debounce for the activity_drop (recovery) snapshot
 }
 
 type activitySample struct {
@@ -76,18 +81,16 @@ func NewDaemon(
 	clusters config.Clusters,
 	repo Repo,
 	store Store,
-	resetQueryStatsAllow bool,
 	leaderElection bool,
 	logger *zap.Logger,
 ) *Daemon {
 	return &Daemon{
-		clusters:             clusters,
-		repo:                 repo,
-		store:                store,
-		logger:               logger,
-		resetQueryStatsAllow: resetQueryStatsAllow,
-		leaderElection:       leaderElection,
-		hosts:                map[hostKey]*hostState{},
+		clusters:       clusters,
+		repo:           repo,
+		store:          store,
+		logger:         logger,
+		leaderElection: leaderElection,
+		hosts:          map[hostKey]*hostState{},
 	}
 }
 
@@ -183,6 +186,7 @@ func (d *Daemon) loop(ctx context.Context) error {
 
 		if cfg.Enabled {
 			d.tick(ctx, cfg)
+			d.processPending(ctx, cfg)
 		}
 
 		d.maybeRunRetention(ctx, cfg)
@@ -218,5 +222,39 @@ func (d *Daemon) tick(ctx context.Context, cfg Config) {
 	for _, cl := range cls {
 		effective := cfg.EffectiveFor(overrides[string(cl.Name)])
 		d.processCluster(ctx, cfg, effective, cl)
+	}
+}
+
+// processPending takes any deferred snapshots whose due time has passed.
+func (d *Daemon) processPending(ctx context.Context, cfg Config) {
+	pending, err := d.store.ClaimDuePendingSnapshots(ctx)
+	if err != nil {
+		d.logger.Warn("claim pending snapshots failed", zap.Error(err))
+		return
+	}
+
+	if len(pending) == 0 {
+		return
+	}
+
+	cls, err := d.clusters.Get(ctx)
+	if err != nil {
+		d.logger.Warn("pending: get clusters failed", zap.Error(err))
+		return
+	}
+
+	byName := make(map[string]config.Cluster, len(cls))
+	for _, cl := range cls {
+		byName[string(cl.Name)] = cl
+	}
+
+	for _, p := range pending {
+		cl, ok := byName[p.ClusterName]
+		if !ok {
+			continue // cluster removed since enqueue
+		}
+
+		trigCtx := map[string]any{"trigger": "deferred", "host": p.Instance}
+		d.takeSnapshot(ctx, cfg, cl, p.Instance, p.Database, TriggerDeferred, p.Reason, trigCtx, nil)
 	}
 }

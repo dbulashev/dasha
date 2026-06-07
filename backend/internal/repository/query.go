@@ -606,9 +606,11 @@ func (p *PgxPool) ResetQueryStats(ctx context.Context, clusterName, instanceName
 	queryCtx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	_, err = pool.Exec(queryCtx, "SELECT pg_stat_statements_reset()")
+	fn := p.pgssResetFunction()
+
+	_, err = pool.Exec(queryCtx, "SELECT "+fn+"()")
 	if err != nil {
-		return fmt.Errorf("pg_stat_statements_reset | %w", err)
+		return fmt.Errorf("%s | %w", fn, err)
 	}
 
 	return nil

@@ -19,6 +19,7 @@ import (
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/deps"
 	"github.com/dbulashev/dasha/internal/http"
+	"github.com/dbulashev/dasha/internal/repository"
 	"github.com/dbulashev/dasha/internal/storage"
 	"github.com/dbulashev/dasha/internal/version"
 )
@@ -116,11 +117,20 @@ func autosnapshotExec(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
+	// Dedicated repository with the daemon pool profile (e.g. short idle time so
+	// the daemon frees monitoring-user connections between polls).
+	repo := repository.NewRepositoryPgxPool(
+		container.Clusters(),
+		cfg.PgStatsView,
+		cfg.PgssResetFunction,
+		cfg.EffectiveAutosnapshotPool(),
+		logger,
+	)
+
 	daemon := autosnapshot.NewDaemon(
 		container.Clusters(),
-		container.Repository(),
+		repo,
 		st,
-		cfg.EnableQueryStatsReset,
 		cfg.Storage.LeaderElection,
 		logger,
 	)

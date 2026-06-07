@@ -73,6 +73,7 @@ func (d *Daemon) tickActivitySpike(
 	// log at debug (throttled per host) rather than persisting a trigger_event.
 	if baseline < float64(cfg.MinBaselineActive) {
 		state.aboveThresholdSince = nil
+		d.handleRecovery(ctx, cfg, t, cl, instance, database, state, now)
 
 		if count >= cfg.MinBaselineActive && belowBaselineDue(state, now, cfg.MaxSnapshotFrequency) {
 			state.lastBelowBaselineAt = &now
@@ -91,9 +92,13 @@ func (d *Daemon) tickActivitySpike(
 	if float64(count) < threshold {
 		state.aboveThresholdSince = nil
 		state.lockPeak = nil
+		d.handleRecovery(ctx, cfg, t, cl, instance, database, state, now)
 
 		return
 	}
+
+	// Back above the threshold — cancel any pending recovery debounce.
+	state.recoveryBelowSince = nil
 
 	// At/above the spike threshold: cheaply sample blocked sessions so the snapshot
 	// can report the background lock peak even if the trigger fires after the storm
@@ -139,6 +144,73 @@ func (d *Daemon) tickActivitySpike(
 	d.takeSnapshot(ctx, cfg, cl, instance, database, TriggerActivitySpike, "auto:activity_spike", trigCtx, state.lockPeak)
 	state.aboveThresholdSince = nil
 	state.lockPeak = nil
+	state.inSpike = true
+	state.recoveryBelowSince = nil
+
+	// Schedule a deferred follow-up to capture the spike's execution at a fixed offset.
+	if t.DeferredInterval > 0 {
+		p := PendingSnapshot{ClusterName: string(cl.Name), Instance: instance, Database: database, Reason: "auto:deferred"}
+		if err := d.store.EnqueuePendingSnapshot(ctx, p, now.Add(t.DeferredInterval)); err != nil {
+			d.logger.Warn("enqueue deferred snapshot failed",
+				zap.String("cluster", string(cl.Name)),
+				zap.String("instance", instance),
+				zap.Error(err))
+		}
+	}
+}
+
+// handleRecovery takes one activity_drop snapshot when a host that was in a spike
+// stays below the threshold for t.RecoveryDuration — the spike's clean aftermath
+// window. Fires once per incident (inSpike cleared); no debounce, since it is the
+// other half of the spike snapshot.
+func (d *Daemon) handleRecovery(
+	ctx context.Context,
+	cfg Config,
+	t ActivitySpikeTrigger,
+	cl config.Cluster,
+	instance, database string,
+	state *hostState,
+	now time.Time,
+) {
+	if t.RecoveryDuration <= 0 {
+		state.inSpike = false
+		state.recoveryBelowSince = nil
+
+		return
+	}
+
+	if !state.inSpike {
+		state.recoveryBelowSince = nil
+		return
+	}
+
+	if state.recoveryBelowSince == nil {
+		state.recoveryBelowSince = &now
+		return
+	}
+
+	if now.Sub(*state.recoveryBelowSince) < t.RecoveryDuration {
+		return
+	}
+
+	trigCtx := map[string]any{
+		"trigger": "activity_drop",
+		"host":    instance,
+	}
+
+	d.takeSnapshot(ctx, cfg, cl, instance, database, TriggerActivityDrop, "auto:activity_drop", trigCtx, nil)
+	state.inSpike = false
+	state.recoveryBelowSince = nil
+
+	// The incident resolved and the drop snapshot captured it — cancel any pending
+	// deferred follow-up (it would just snapshot the quiet aftermath). The deferred
+	// only stays for spikes that never resolve.
+	if err := d.store.DeletePendingSnapshot(ctx, string(cl.Name), instance); err != nil {
+		d.logger.Warn("cancel pending deferred snapshot failed",
+			zap.String("cluster", string(cl.Name)),
+			zap.String("instance", instance),
+			zap.Error(err))
+	}
 }
 
 func (d *Daemon) tickRoleChange(
@@ -275,7 +347,7 @@ func (d *Daemon) takeSnapshot(
 	d.lastAuto[hostKey{Cluster: string(cl.Name), Instance: instance}] = createdAt
 	d.mu.Unlock()
 
-	if d.resetQueryStatsAllow {
+	if cfg.ResetQueryStats {
 		if err := d.repo.ResetQueryStats(ctx, string(cl.Name), instance, database); err != nil {
 			d.logger.Warn("pg_stat_statements_reset failed after snapshot",
 				zap.String("cluster", string(cl.Name)),

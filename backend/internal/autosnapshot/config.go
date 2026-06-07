@@ -19,6 +19,12 @@ type ActivitySpikeTrigger struct {
 	WindowSize         time.Duration `json:"window_size"`
 	ActiveThresholdPct int           `json:"active_threshold_pct"`
 	SpikeDuration      time.Duration `json:"spike_duration"`
+	// RecoveryDuration: after a spike, take a snapshot once activity stays below
+	// the threshold for this long (captures the spike's aftermath). 0 = disabled.
+	RecoveryDuration time.Duration `json:"recovery_duration"`
+	// DeferredInterval: after a spike snapshot, enqueue a follow-up snapshot this
+	// long later (persisted queue, survives restarts). 0 = disabled.
+	DeferredInterval time.Duration `json:"deferred_interval"`
 }
 
 type RoleChangeTrigger struct {
@@ -41,6 +47,7 @@ type Config struct {
 	CaptureLocks         bool
 	LockProbeCount       int
 	LockProbeInterval    time.Duration
+	ResetQueryStats      bool // reset pg_stat_statements after each auto-snapshot
 	Defaults             TriggerDefaults
 	UpdatedAt            time.Time
 	UpdatedBy            *string
@@ -80,6 +87,16 @@ func (c Config) EffectiveFor(override map[string]any) TriggerDefaults {
 				res.ActivitySpike.SpikeDuration = d
 			}
 		}
+		if v, ok := spike["recovery_duration"].(string); ok {
+			if d, err := time.ParseDuration(v); err == nil {
+				res.ActivitySpike.RecoveryDuration = d
+			}
+		}
+		if v, ok := spike["deferred_interval"].(string); ok {
+			if d, err := time.ParseDuration(v); err == nil {
+				res.ActivitySpike.DeferredInterval = d
+			}
+		}
 	}
 
 	if role, ok := override["role_change"].(map[string]any); ok {
@@ -99,6 +116,8 @@ type TriggerType string
 const (
 	TriggerActivitySpike TriggerType = "activity_spike"
 	TriggerRoleChange    TriggerType = "role_change"
+	TriggerActivityDrop  TriggerType = "activity_drop" // spike resolved (back below threshold)
+	TriggerDeferred      TriggerType = "deferred"      // scheduled follow-up after a spike
 )
 
 type Outcome string
@@ -133,6 +152,14 @@ type TriggerEventFilter struct {
 	To          *time.Time
 	Limit       int
 	Offset      int
+}
+
+// PendingSnapshot is a deferred (scheduled) snapshot waiting in the queue.
+type PendingSnapshot struct {
+	ClusterName string
+	Instance    string
+	Database    string
+	Reason      string
 }
 
 // ClusterSummary aggregates trigger-event counts per cluster — powers the

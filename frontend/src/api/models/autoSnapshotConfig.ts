@@ -20,5 +20,7 @@ export interface AutoSnapshotConfig {
   LockProbeCount: number
   /** Go duration string between lock probes (e.g. "500ms") */
   LockProbeInterval: string
+  /** Reset pg_stat_statements after each auto-snapshot (independent of the manual UI reset flag) */
+  ResetQueryStats: boolean
   Defaults: AutoSnapshotTriggerDefaults
 }

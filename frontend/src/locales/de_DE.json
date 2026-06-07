@@ -109,6 +109,8 @@
       "empty": "Noch keine Auto-Snapshot-Ereignisse"
     },
     "globalSection": "Globale Einstellungen",
+    "resetQueryStats": "pgss nach Snapshot zurücksetzen",
+    "resetQueryStatsHint": "Nach jedem Auto-Snapshot pg_stat_statements zurücksetzen, damit der nächste Snapshot das Delta enthält. Die Reset-Funktion kann über pgss_reset_function in dasha.yaml überschrieben werden, falls die Rolle kein Recht auf pg_stat_statements_reset() hat.",
     "activitySpike": "Aktivitäts-Spike-Trigger",
     "roleChange": "Rollenwechsel-Trigger",
     "enabled": "Aktiviert",
@@ -154,6 +156,10 @@
     "windowSize": "Fenstergröße",
     "thresholdPct": "Schwellenwert, %",
     "spikeDuration": "Spike-Dauer",
+    "recoveryDuration": "Snapshot bei Rückgang",
+    "recoveryDurationHint": "Nach einem Spike einen Snapshot erstellen, wenn die Aktivität so lange unter dem Schwellwert bleibt (erfasst die Nachwirkungen). 0s = aus.",
+    "deferredInterval": "Verzögerter Snapshot",
+    "deferredIntervalHint": "Nach dem Spike-Snapshot einen weiteren Snapshot nach diesem Intervall einreihen (Queue übersteht Neustarts). 0s = aus.",
     "save": "Speichern",
     "saved": "Einstellungen gespeichert",
     "overridden": "Überschrieben",
@@ -219,7 +225,9 @@
     },
     "trigger": {
       "activity_spike": "Aktivitäts-Spike",
-      "role_change": "Rollenwechsel"
+      "role_change": "Rollenwechsel",
+      "activity_drop": "Aktivitäts-Rückgang",
+      "deferred": "Verzögert"
     }
   },
   "cpuTimeWarning": "Abfragen mit negativer CPU-Zeit gefunden (total_plan_time + total_exec_time − blk_read_time − blk_write_time < 0). Wenn pg_stat_statements.track_planning deaktiviert ist, ist plan_time = 0 und der negative Wert weist auf potenziell hohe Planungszeit hin. Aktivieren Sie track_planning für genaue Daten.",

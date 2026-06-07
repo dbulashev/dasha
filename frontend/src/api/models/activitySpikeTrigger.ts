@@ -12,4 +12,8 @@ export interface ActivitySpikeTrigger {
   ActiveThresholdPct: number
   /** Go duration string (e.g. "5m") */
   SpikeDuration: string
+  /** Snapshot the aftermath once activity stays below threshold this long; "0s" disables */
+  RecoveryDuration: string
+  /** Scheduled follow-up snapshot this long after a spike (persisted queue); "0s" disables */
+  DeferredInterval: string
 }

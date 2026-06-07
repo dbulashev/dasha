@@ -30,12 +30,14 @@ func (s *Storage) GetAutosnapshotConfig(ctx context.Context) (autosnapshot.Confi
 		SELECT enabled, poll_interval, max_snapshot_frequency,
 		       retention_bytes, retention_min_days, min_baseline_active,
 		       capture_locks, lock_probe_count, lock_probe_interval,
+		       reset_query_stats,
 		       defaults, updated_at, updated_by
 		FROM autosnapshot_config_global WHERE id = 1`,
 	).Scan(
 		&cfg.Enabled, &pollInterval, &maxFreq,
 		&cfg.RetentionBytes, &cfg.RetentionMinDays, &cfg.MinBaselineActive,
 		&cfg.CaptureLocks, &cfg.LockProbeCount, &lockInterval,
+		&cfg.ResetQueryStats,
 		&defaultsJSON, &cfg.UpdatedAt, &cfg.UpdatedBy,
 	)
 	if err != nil {
@@ -52,6 +54,8 @@ func (s *Storage) GetAutosnapshotConfig(ctx context.Context) (autosnapshot.Confi
 			WindowSize         string `json:"window_size"`
 			ActiveThresholdPct int    `json:"active_threshold_pct"`
 			SpikeDuration      string `json:"spike_duration"`
+			RecoveryDuration   string `json:"recovery_duration"`
+			DeferredInterval   string `json:"deferred_interval"`
 		} `json:"activity_spike"`
 		RoleChange struct {
 			Enabled   bool   `json:"enabled"`
@@ -76,6 +80,21 @@ func (s *Storage) GetAutosnapshotConfig(ctx context.Context) (autosnapshot.Confi
 		return cfg, fmt.Errorf("storage: parse ActivitySpike.SpikeDuration %q: %w", raw.ActivitySpike.SpikeDuration, err)
 	}
 
+	// Optional (0 = disabled): only parse when set.
+	if raw.ActivitySpike.RecoveryDuration != "" {
+		cfg.Defaults.ActivitySpike.RecoveryDuration, err = time.ParseDuration(raw.ActivitySpike.RecoveryDuration)
+		if err != nil {
+			return cfg, fmt.Errorf("storage: parse ActivitySpike.RecoveryDuration %q: %w", raw.ActivitySpike.RecoveryDuration, err)
+		}
+	}
+
+	if raw.ActivitySpike.DeferredInterval != "" {
+		cfg.Defaults.ActivitySpike.DeferredInterval, err = time.ParseDuration(raw.ActivitySpike.DeferredInterval)
+		if err != nil {
+			return cfg, fmt.Errorf("storage: parse ActivitySpike.DeferredInterval %q: %w", raw.ActivitySpike.DeferredInterval, err)
+		}
+	}
+
 	cfg.Defaults.RoleChange.Enabled = raw.RoleChange.Enabled
 	cfg.Defaults.RoleChange.Direction = autosnapshot.Direction(raw.RoleChange.Direction)
 
@@ -90,6 +109,8 @@ func (s *Storage) SetAutosnapshotConfig(ctx context.Context, cfg autosnapshot.Co
 			"window_size":          cfg.Defaults.ActivitySpike.WindowSize.String(),
 			"active_threshold_pct": cfg.Defaults.ActivitySpike.ActiveThresholdPct,
 			"spike_duration":       cfg.Defaults.ActivitySpike.SpikeDuration.String(),
+			"recovery_duration":    cfg.Defaults.ActivitySpike.RecoveryDuration.String(),
+			"deferred_interval":    cfg.Defaults.ActivitySpike.DeferredInterval.String(),
 		},
 		"role_change": map[string]any{
 			"enabled":   cfg.Defaults.RoleChange.Enabled,
@@ -107,11 +128,13 @@ func (s *Storage) SetAutosnapshotConfig(ctx context.Context, cfg autosnapshot.Co
 		SET enabled = $1, poll_interval = $2, max_snapshot_frequency = $3,
 		    retention_bytes = $4, retention_min_days = $5, min_baseline_active = $6,
 		    capture_locks = $7, lock_probe_count = $8, lock_probe_interval = $9,
-		    defaults = $10::jsonb, updated_at = now(), updated_by = $11
+		    reset_query_stats = $10,
+		    defaults = $11::jsonb, updated_at = now(), updated_by = $12
 		WHERE id = 1`,
 		cfg.Enabled, cfg.PollInterval, cfg.MaxSnapshotFrequency,
 		cfg.RetentionBytes, cfg.RetentionMinDays, cfg.MinBaselineActive,
 		cfg.CaptureLocks, cfg.LockProbeCount, cfg.LockProbeInterval,
+		cfg.ResetQueryStats,
 		data, nullStringPtr(updatedBy),
 	)
 	if err != nil {
@@ -376,6 +399,64 @@ func (s *Storage) SummarizeTriggerEvents(ctx context.Context) ([]autosnapshot.Cl
 		}
 
 		out = append(out, c)
+	}
+
+	return out, rows.Err()
+}
+
+// EnqueuePendingSnapshot schedules a deferred snapshot for a host (one pending per
+// host — a newer spike replaces the old due time).
+func (s *Storage) EnqueuePendingSnapshot(ctx context.Context, p autosnapshot.PendingSnapshot, dueAt time.Time) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO autosnapshot_pending (cluster_name, instance, database, due_at, reason)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (cluster_name, instance)
+		DO UPDATE SET database = EXCLUDED.database, due_at = EXCLUDED.due_at, reason = EXCLUDED.reason`,
+		p.ClusterName, p.Instance, p.Database, dueAt, p.Reason,
+	)
+	if err != nil {
+		return fmt.Errorf("storage: enqueue pending snapshot: %w", err)
+	}
+
+	return nil
+}
+
+// DeletePendingSnapshot cancels a host's pending deferred snapshot — used once the
+// spike has resolved and the drop snapshot already captured the incident, so the
+// deferred follow-up would only snapshot the quiet aftermath.
+func (s *Storage) DeletePendingSnapshot(ctx context.Context, clusterName, instance string) error {
+	_, err := s.pool.Exec(ctx,
+		`DELETE FROM autosnapshot_pending WHERE cluster_name = $1 AND instance = $2`,
+		clusterName, instance,
+	)
+	if err != nil {
+		return fmt.Errorf("storage: delete pending snapshot: %w", err)
+	}
+
+	return nil
+}
+
+// ClaimDuePendingSnapshots atomically removes and returns all pending snapshots
+// whose due_at has passed (DELETE ... RETURNING, so they are taken exactly once).
+func (s *Storage) ClaimDuePendingSnapshots(ctx context.Context) ([]autosnapshot.PendingSnapshot, error) {
+	rows, err := s.pool.Query(ctx, `
+		DELETE FROM autosnapshot_pending
+		WHERE due_at <= now()
+		RETURNING cluster_name, instance, database, reason`)
+	if err != nil {
+		return nil, fmt.Errorf("storage: claim due pending snapshots: %w", err)
+	}
+	defer rows.Close()
+
+	var out []autosnapshot.PendingSnapshot
+
+	for rows.Next() {
+		var p autosnapshot.PendingSnapshot
+		if err := rows.Scan(&p.ClusterName, &p.Instance, &p.Database, &p.Reason); err != nil {
+			return nil, fmt.Errorf("storage: scan pending snapshot: %w", err)
+		}
+
+		out = append(out, p)
 	}
 
 	return out, rows.Err()

@@ -131,6 +131,20 @@ ALTER TABLE autosnapshot_config_global
     ADD COLUMN IF NOT EXISTS capture_locks       boolean  NOT NULL DEFAULT true,
     ADD COLUMN IF NOT EXISTS lock_probe_count    int      NOT NULL DEFAULT 5,
     ADD COLUMN IF NOT EXISTS lock_probe_interval interval NOT NULL DEFAULT '500ms'`
+
+	addAutosnapshotResetConfigSQL = `
+ALTER TABLE autosnapshot_config_global
+    ADD COLUMN IF NOT EXISTS reset_query_stats boolean NOT NULL DEFAULT false`
+
+	createAutosnapshotPendingSQL = `
+CREATE TABLE IF NOT EXISTS autosnapshot_pending (
+    cluster_name text        NOT NULL,
+    instance     text        NOT NULL,
+    database     text        NOT NULL,
+    due_at       timestamptz NOT NULL,
+    reason       text        NOT NULL,
+    PRIMARY KEY (cluster_name, instance)
+)`
 )
 
 // partitionedTables lists the day-partitioned tables managed together —
@@ -183,6 +197,8 @@ func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
 		addHealthScoreWeightsCategoriesSQL,
 		addSnapshotLocksDataSQL,
 		addAutosnapshotLockConfigSQL,
+		addAutosnapshotResetConfigSQL,
+		createAutosnapshotPendingSQL,
 	} {
 		if _, err := s.pool.Exec(ctx, ddl); err != nil {
 			return fmt.Errorf("storage: migrate: %w", err)

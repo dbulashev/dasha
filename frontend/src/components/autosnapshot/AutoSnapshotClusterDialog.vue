@@ -71,6 +71,15 @@ type ActivitySpikeForm = {
   WindowSize: string | null
   ActiveThresholdPct: number | null
   SpikeDuration: string | null
+  RecoveryDuration: string | null
+  DeferredInterval: string | null
+}
+
+// Allows empty (use default) or a valid duration >= 0 (incl. "0s" to disable).
+const durationGteZeroRule = (v: string | null) => {
+  if (isEmpty(v)) return true
+  const ms = goDurationToMs(String(v))
+  return (ms !== null && ms >= 0) || t('autosnapshot.invalidDuration')
 }
 type RoleChangeForm = {
   Enabled: boolean | null
@@ -86,6 +95,8 @@ const form = reactive<{
     WindowSize: null,
     ActiveThresholdPct: null,
     SpikeDuration: null,
+    RecoveryDuration: null,
+    DeferredInterval: null,
   },
   roleChange: {
     Enabled: null,
@@ -112,6 +123,8 @@ const hasAnyOverride = computed(
     form.activitySpike.WindowSize !== null ||
     form.activitySpike.ActiveThresholdPct !== null ||
     form.activitySpike.SpikeDuration !== null ||
+    form.activitySpike.RecoveryDuration !== null ||
+    form.activitySpike.DeferredInterval !== null ||
     form.roleChange.Enabled !== null ||
     form.roleChange.Direction !== null,
 )
@@ -122,6 +135,8 @@ type OverridesShape = {
     window_size: string
     active_threshold_pct: number
     spike_duration: string
+    recovery_duration: string
+    deferred_interval: string
   }>
   role_change?: Partial<{
     enabled: boolean
@@ -134,6 +149,8 @@ function resetForm() {
   form.activitySpike.WindowSize = null
   form.activitySpike.ActiveThresholdPct = null
   form.activitySpike.SpikeDuration = null
+  form.activitySpike.RecoveryDuration = null
+  form.activitySpike.DeferredInterval = null
   form.roleChange.Enabled = null
   form.roleChange.Direction = null
 }
@@ -147,6 +164,8 @@ function fillFormFromOverrides(overrides: unknown) {
     if (typeof o.activity_spike.window_size === 'string') form.activitySpike.WindowSize = o.activity_spike.window_size
     if (typeof o.activity_spike.active_threshold_pct === 'number') form.activitySpike.ActiveThresholdPct = o.activity_spike.active_threshold_pct
     if (typeof o.activity_spike.spike_duration === 'string') form.activitySpike.SpikeDuration = o.activity_spike.spike_duration
+    if (typeof o.activity_spike.recovery_duration === 'string') form.activitySpike.RecoveryDuration = o.activity_spike.recovery_duration
+    if (typeof o.activity_spike.deferred_interval === 'string') form.activitySpike.DeferredInterval = o.activity_spike.deferred_interval
   }
   if (o.role_change) {
     if (typeof o.role_change.enabled === 'boolean') form.roleChange.Enabled = o.role_change.enabled
@@ -161,6 +180,8 @@ function buildOverrides(): Record<string, unknown> {
   if (form.activitySpike.WindowSize !== null) as.window_size = form.activitySpike.WindowSize
   if (form.activitySpike.ActiveThresholdPct !== null) as.active_threshold_pct = form.activitySpike.ActiveThresholdPct
   if (form.activitySpike.SpikeDuration !== null) as.spike_duration = form.activitySpike.SpikeDuration
+  if (form.activitySpike.RecoveryDuration !== null) as.recovery_duration = form.activitySpike.RecoveryDuration
+  if (form.activitySpike.DeferredInterval !== null) as.deferred_interval = form.activitySpike.DeferredInterval
   if (Object.keys(as).length) out.activity_spike = as
 
   const rc: OverridesShape['role_change'] = {}
@@ -346,6 +367,52 @@ onMounted(loadOverride)
                 <template #append-inner>
                   <v-icon
                     v-if="isOverridden('activitySpike', 'SpikeDuration')"
+                    size="x-small"
+                    color="primary"
+                    v-tooltip="t('autosnapshot.overridden')"
+                  >
+                    mdi-circle-medium
+                  </v-icon>
+                </template>
+              </v-text-field>
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model="form.activitySpike.RecoveryDuration"
+                :label="t('autosnapshot.recoveryDuration')"
+                :placeholder="data.Effective.ActivitySpike.RecoveryDuration"
+                :disabled="!isAdmin"
+                :rules="[durationGteZeroRule]"
+                density="compact"
+                persistent-placeholder
+                clearable
+              >
+                <template #append-inner>
+                  <v-icon
+                    v-if="isOverridden('activitySpike', 'RecoveryDuration')"
+                    size="x-small"
+                    color="primary"
+                    v-tooltip="t('autosnapshot.overridden')"
+                  >
+                    mdi-circle-medium
+                  </v-icon>
+                </template>
+              </v-text-field>
+            </v-col>
+            <v-col cols="12" sm="6">
+              <v-text-field
+                v-model="form.activitySpike.DeferredInterval"
+                :label="t('autosnapshot.deferredInterval')"
+                :placeholder="data.Effective.ActivitySpike.DeferredInterval"
+                :disabled="!isAdmin"
+                :rules="[durationGteZeroRule]"
+                density="compact"
+                persistent-placeholder
+                clearable
+              >
+                <template #append-inner>
+                  <v-icon
+                    v-if="isOverridden('activitySpike', 'DeferredInterval')"
                     size="x-small"
                     color="primary"
                     v-tooltip="t('autosnapshot.overridden')"

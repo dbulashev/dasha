@@ -241,6 +241,7 @@ func configToAPI(cfg autosnapshot.Config) serverhttp.AutoSnapshotConfig {
 		CaptureLocks:         cfg.CaptureLocks,
 		LockProbeCount:       cfg.LockProbeCount,
 		LockProbeInterval:    cfg.LockProbeInterval.String(),
+		ResetQueryStats:      cfg.ResetQueryStats,
 		Defaults:             triggerDefaultsToAPI(cfg.Defaults),
 	}
 }
@@ -252,6 +253,8 @@ func triggerDefaultsToAPI(t autosnapshot.TriggerDefaults) serverhttp.AutoSnapsho
 			WindowSize:         t.ActivitySpike.WindowSize.String(),
 			ActiveThresholdPct: t.ActivitySpike.ActiveThresholdPct,
 			SpikeDuration:      t.ActivitySpike.SpikeDuration.String(),
+			RecoveryDuration:   t.ActivitySpike.RecoveryDuration.String(),
+			DeferredInterval:   t.ActivitySpike.DeferredInterval.String(),
 		},
 		RoleChange: serverhttp.RoleChangeTrigger{
 			Enabled:   t.RoleChange.Enabled,
@@ -286,6 +289,16 @@ func configFromAPI(api serverhttp.AutoSnapshotConfig) (autosnapshot.Config, erro
 		return autosnapshot.Config{}, fmt.Errorf("lock_probe_interval: %w", err)
 	}
 
+	recoveryDur, err := parseOptionalDuration(api.Defaults.ActivitySpike.RecoveryDuration)
+	if err != nil {
+		return autosnapshot.Config{}, fmt.Errorf("recovery_duration: %w", err)
+	}
+
+	deferredInterval, err := parseOptionalDuration(api.Defaults.ActivitySpike.DeferredInterval)
+	if err != nil {
+		return autosnapshot.Config{}, fmt.Errorf("deferred_interval: %w", err)
+	}
+
 	return autosnapshot.Config{
 		Enabled:              api.Enabled,
 		PollInterval:         poll,
@@ -296,12 +309,15 @@ func configFromAPI(api serverhttp.AutoSnapshotConfig) (autosnapshot.Config, erro
 		CaptureLocks:         api.CaptureLocks,
 		LockProbeCount:       api.LockProbeCount,
 		LockProbeInterval:    lockInterval,
+		ResetQueryStats:      api.ResetQueryStats,
 		Defaults: autosnapshot.TriggerDefaults{
 			ActivitySpike: autosnapshot.ActivitySpikeTrigger{
 				Enabled:            api.Defaults.ActivitySpike.Enabled,
 				WindowSize:         windowSize,
 				ActiveThresholdPct: api.Defaults.ActivitySpike.ActiveThresholdPct,
 				SpikeDuration:      spikeDur,
+				RecoveryDuration:   recoveryDur,
+				DeferredInterval:   deferredInterval,
 			},
 			RoleChange: autosnapshot.RoleChangeTrigger{
 				Enabled:   api.Defaults.RoleChange.Enabled,
@@ -309,6 +325,15 @@ func configFromAPI(api serverhttp.AutoSnapshotConfig) (autosnapshot.Config, erro
 			},
 		},
 	}, nil
+}
+
+// parseOptionalDuration parses a Go duration string; empty means 0 (disabled).
+func parseOptionalDuration(s string) (time.Duration, error) {
+	if s == "" {
+		return 0, nil
+	}
+
+	return time.ParseDuration(s)
 }
 
 func validateAutosnapshotConfig(cfg autosnapshot.Config) error {
@@ -353,6 +378,14 @@ func validateAutosnapshotConfig(cfg autosnapshot.Config) error {
 		return errors.New("spike_duration must be > 0")
 	}
 
+	if spike.RecoveryDuration < 0 {
+		return errors.New("recovery_duration must be >= 0 (0 disables)")
+	}
+
+	if spike.DeferredInterval < 0 {
+		return errors.New("deferred_interval must be >= 0 (0 disables)")
+	}
+
 	if spike.SpikeDuration > 2*spike.WindowSize {
 		return errors.New("spike_duration must be <= 2 * window_size")
 	}
@@ -390,6 +423,14 @@ func validateClusterOverrides(overrides map[string]any) error {
 		}
 
 		if err := validatePosDurationField(spike, "spike_duration"); err != nil {
+			return err
+		}
+
+		if err := validateNonNegDurationField(spike, "recovery_duration"); err != nil {
+			return err
+		}
+
+		if err := validateNonNegDurationField(spike, "deferred_interval"); err != nil {
 			return err
 		}
 
@@ -454,6 +495,29 @@ func validatePosDurationField(m map[string]any, key string) error {
 
 	if d <= 0 {
 		return fmt.Errorf("%s must be > 0", key)
+	}
+
+	return nil
+}
+
+func validateNonNegDurationField(m map[string]any, key string) error {
+	v, ok := m[key]
+	if !ok {
+		return nil
+	}
+
+	s, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("%s must be a duration string", key)
+	}
+
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return fmt.Errorf("%s: %w", key, err)
+	}
+
+	if d < 0 {
+		return fmt.Errorf("%s must be >= 0", key)
 	}
 
 	return nil

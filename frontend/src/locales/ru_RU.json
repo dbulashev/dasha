@@ -131,6 +131,8 @@
             "empty": "Пока нет событий авто-снимков"
         },
         "globalSection": "Глобальные настройки",
+        "resetQueryStats": "Сбрасывать pgss после снимка",
+        "resetQueryStatsHint": "После каждого авто-снимка вызывать reset pg_stat_statements, чтобы следующий снимок содержал дельту. Функцию сброса можно переопределить через pgss_reset_function в dasha.yaml, если у роли нет прав на pg_stat_statements_reset().",
         "activitySpike": "Триггер всплеска активности",
         "roleChange": "Триггер смены роли",
         "enabled": "Включено",
@@ -176,6 +178,10 @@
         "windowSize": "Размер окна",
         "thresholdPct": "Порог, %",
         "spikeDuration": "Длительность всплеска",
+        "recoveryDuration": "Снимок на спаде",
+        "recoveryDurationHint": "После всплеска сделать снимок, когда активность держится ниже порога столько времени (захват последствий всплеска). 0s — выключено.",
+        "deferredInterval": "Отложенный снимок",
+        "deferredIntervalHint": "После снимка всплеска поставить в очередь ещё один снимок через указанный интервал (очередь переживает рестарт). 0s — выключено.",
         "save": "Сохранить",
         "saved": "Настройки сохранены",
         "overridden": "Переопределено",
@@ -241,7 +247,9 @@
         },
         "trigger": {
             "activity_spike": "Всплеск активности",
-            "role_change": "Смена роли"
+            "role_change": "Смена роли",
+            "activity_drop": "Спад активности",
+            "deferred": "Отложенный"
         }
     },
     "cpuTimeWarning": "Обнаружены запросы с отрицательным CPU time (total_plan_time + total_exec_time − blk_read_time − blk_write_time < 0). Если pg_stat_statements.track_planning отключён, plan_time = 0 и отрицательное значение указывает на потенциально высокое время планирования запроса. Включите track_planning для точных данных.",
