@@ -8,13 +8,19 @@
   - **Trigger: role change** — detects master↔replica transitions via `pg_is_in_recovery()`, with configurable direction (`both` / `master_to_replica` / `replica_to_master`)
   - **Global knobs** (stored in storage DB, editable via UI): `poll_interval`, `max_snapshot_frequency` (debounce), `min_baseline_active` (skip when load is low), `retention_bytes`, `retention_min_days`
   - **Per-cluster overrides**: deep-merged on top of global defaults; clusters can toggle triggers, tune thresholds or disable auto-snapshots individually
-  - **Leader election**: `pg_try_advisory_lock` on storage DB — safe to run the daemon in multiple replicas for HA
+  - **Leader election** (opt-in, `storage.leader_election`, off by default): `pg_try_advisory_lock` on the storage DB lets the daemon run in multiple replicas for HA; disabled by default because a session-level advisory lock needs a dedicated connection and is incompatible with transaction-pooling proxies (PgBouncer transaction mode)
   - **Retention by total size**: drops oldest day-triples (snapshots + query_texts + trigger_events partitions) once total exceeds `retention_bytes`; respects `retention_min_days` floor
-  - **History tab**: filter by cluster / outcome / trigger_type, paginated; records skip reasons (`skipped:debounce`, `skipped:below_baseline`, `skipped:wrong_direction`, `skipped:storage_unavailable`, `error`)
+  - **History tab**: filter by cluster / outcome / trigger_type, paginated; persists snapshot creations and errors only — transient skips (debounce, below-baseline, wrong-direction) are logged at debug level and not written to history to avoid noise
   - **UI**: new "Auto-snapshots" menu item (`mdi-camera-timer`) with Settings + History tabs; admin-only editing, viewers see read-only state; menu hidden for non-admin when feature is disabled
   - **API**: `GET/PUT /api/autosnapshot/config`, `GET/PUT /api/autosnapshot/clusters/{name}`, `GET /api/autosnapshot/status`, `GET /api/autosnapshot/trigger-events`
   - **CLI**: `dasha autosnapshot` (separate command, not started by `dasha serve`)
   - **Deploy**: Helm chart `autosnapshot` subchart (disabled by default, toggle `autosnapshot.enabled: true`); docker-compose adds `autosnapshot` service alongside `backend` and `frontend`
+- **Lock snapshots on triggers**: an activity-spike snapshot can additionally capture the lock-contention graph alongside `pg_stat_statements`
+  - **Hybrid timing**: cheap blocked-session counting runs in the background during the spike and records a `background_peak`; at trigger time a short burst of N detailed probes (default 5 × 500 ms) captures the full `pg_blocking_pids` graph
+  - **Harshest probe wins**: the probe with the most distinct blocked sessions is kept (tie-break by longest wait); up to 100 rows are stored, sorted by wait descending
+  - **Storage**: new `snapshots.locks_data jsonb` column; `GET /api/queries/snapshot/{id}/locks` serves it; the snapshot list now carries `has_locks`
+  - **Knobs** (global + per-cluster): `capture_locks` (default on), `lock_probe_count` (1–20), `lock_probe_interval` (100 ms–5 s)
+  - **Manual capture**: a "with locks" option on the manual snapshot button; the captured lock graph is viewable from the Query Stats snapshot view
 
 ## v1.1.0
 

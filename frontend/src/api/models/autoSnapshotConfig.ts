@@ -16,5 +16,9 @@ export interface AutoSnapshotConfig {
   RetentionBytes: number
   RetentionMinDays: number
   MinBaselineActive: number
+  CaptureLocks: boolean
+  LockProbeCount: number
+  /** Go duration string between lock probes (e.g. "500ms") */
+  LockProbeInterval: string
   Defaults: AutoSnapshotTriggerDefaults
 }

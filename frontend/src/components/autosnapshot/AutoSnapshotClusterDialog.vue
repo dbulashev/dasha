@@ -34,6 +34,36 @@ const loading = ref(false)
 const saving = ref(false)
 const error = ref<string | null>(null)
 const data = ref<AutoSnapshotClusterOverride | null>(null)
+const formRef = ref()
+
+// Validators — empty means "use the global default" (the field is clearable), so an
+// empty value is always valid. Bounds mirror the backend (validateClusterOverrides).
+function isEmpty(v: unknown): boolean {
+  return v === null || v === undefined || v === ''
+}
+const durationUnitMs: Record<string, number> = {
+  ns: 1e-6, us: 1e-3, 'µs': 1e-3, ms: 1, s: 1000, m: 60000, h: 3600000,
+}
+function goDurationToMs(v: string): number | null {
+  const str = (v ?? '').trim()
+  if (!/^(\d+(?:\.\d+)?(?:ns|us|µs|ms|s|m|h))+$/.test(str)) return null
+  const re = /(\d+(?:\.\d+)?)(ns|us|µs|ms|s|m|h)/g
+  let total = 0
+  let m: RegExpExecArray | null
+  while ((m = re.exec(str)) !== null) {
+    total += parseFloat(m[1]) * durationUnitMs[m[2]]
+  }
+  return total
+}
+const durationRule = (v: string | null) => {
+  if (isEmpty(v)) return true
+  const ms = goDurationToMs(String(v))
+  return (ms !== null && ms > 0) || t('autosnapshot.invalidDuration')
+}
+const thresholdRule = (v: number | null) =>
+  isEmpty(v) ||
+  (Number.isInteger(Number(v)) && Number(v) > 0 && Number(v) <= 10000) ||
+  t('autosnapshot.clusters.thresholdRange')
 
 type ActivitySpikeForm = {
   Enabled: boolean | null
@@ -67,6 +97,12 @@ const directionOptions = computed(() => [
   { value: 'master_to_replica', title: t('autosnapshot.direction.masterToReplica') },
   { value: 'replica_to_master', title: t('autosnapshot.direction.replicaToMaster') },
 ])
+
+// Human label for an effective direction value (used as the placeholder).
+function directionLabel(v: string | null | undefined): string {
+  if (!v) return ''
+  return directionOptions.value.find((o) => o.value === v)?.title ?? v
+}
 
 // True when the cluster has at least one field overriding the global default.
 const hasAnyOverride = computed(
@@ -151,6 +187,10 @@ async function loadOverride() {
 
 async function save() {
   if (!data.value) return
+  if (formRef.value) {
+    const { valid } = await formRef.value.validate()
+    if (!valid) return
+  }
   saving.value = true
   error.value = null
   try {
@@ -211,7 +251,7 @@ onMounted(loadOverride)
         <v-progress-linear v-if="loading" indeterminate />
         <v-alert v-if="error" type="error" class="mb-4">{{ error }}</v-alert>
 
-        <template v-if="data">
+        <v-form v-if="data" ref="formRef">
           <!-- Activity spike -->
           <div class="text-subtitle-1 mb-2">{{ t('autosnapshot.activitySpike') }}</div>
           <v-row dense>
@@ -250,6 +290,7 @@ onMounted(loadOverride)
                 :label="t('autosnapshot.windowSize')"
                 :placeholder="data.Effective.ActivitySpike.WindowSize"
                 :disabled="!isAdmin"
+                :rules="[durationRule]"
                 density="compact"
                 persistent-placeholder
                 clearable
@@ -272,6 +313,7 @@ onMounted(loadOverride)
                 :label="t('autosnapshot.thresholdPct')"
                 :placeholder="String(data.Effective.ActivitySpike.ActiveThresholdPct)"
                 :disabled="!isAdmin"
+                :rules="[thresholdRule]"
                 type="number"
                 density="compact"
                 persistent-placeholder
@@ -295,6 +337,7 @@ onMounted(loadOverride)
                 :label="t('autosnapshot.spikeDuration')"
                 :placeholder="data.Effective.ActivitySpike.SpikeDuration"
                 :disabled="!isAdmin"
+                :rules="[durationRule]"
                 density="compact"
                 persistent-placeholder
                 clearable
@@ -352,7 +395,7 @@ onMounted(loadOverride)
                 v-model="form.roleChange.Direction"
                 :items="directionOptions"
                 :label="t('autosnapshot.direction.label')"
-                :placeholder="data.Effective.RoleChange.Direction"
+                :placeholder="directionLabel(data.Effective.RoleChange.Direction)"
                 :disabled="!isAdmin"
                 density="compact"
                 persistent-placeholder
@@ -371,7 +414,7 @@ onMounted(loadOverride)
               </v-select>
             </v-col>
           </v-row>
-        </template>
+        </v-form>
       </v-card-text>
 
       <v-card-actions>

@@ -95,7 +95,18 @@
     "tabs": {
       "settings": "Einstellungen",
       "clusters": "Cluster",
-      "history": "Verlauf"
+      "history": "Verlauf",
+      "summary": "Übersicht"
+    },
+    "summary": {
+      "title": "Snapshots pro Cluster",
+      "cluster": "Cluster",
+      "snapshots": "Snapshots",
+      "activitySpike": "Lastspitzen",
+      "roleChange": "Rollenwechsel",
+      "errors": "Fehler",
+      "total": "Snapshots gesamt",
+      "empty": "Noch keine Auto-Snapshot-Ereignisse"
     },
     "globalSection": "Globale Einstellungen",
     "activitySpike": "Aktivitäts-Spike-Trigger",
@@ -109,6 +120,27 @@
     "retentionGiB": "Aufbewahrungslimit, GiB",
     "invalidDuration": "Ungültiges Format (z. B. 30s, 5m, 1h)",
     "mustBePositive": "Muss ≥ 0 sein",
+    "locks": {
+      "title": "Sperren",
+      "hint": "Sperrgraph beim Auslösen des Aktivitäts-Spikes erfassen",
+      "capture": "Sperren erfassen",
+      "probeCount": "Anzahl Proben",
+      "probeInterval": "Proben-Intervall",
+      "section": "Sperren zum Snapshot-Zeitpunkt",
+      "blocked": "Blockiert",
+      "maxWait": "Max. Wartezeit",
+      "peakWas": "Spitze war {count} um {at}",
+      "none": "Keine Sperren erfasst",
+      "open": "Sperren anzeigen",
+      "withLocks": "Mit Sperren",
+      "blockedPid": "Blockierte PID",
+      "blockedQuery": "Blockierte Abfrage",
+      "wait": "Wartezeit",
+      "blockingPid": "Blockierende PID",
+      "blockingQuery": "Blockierende Abfrage",
+      "probeCountRange": "Muss zwischen 1 und 20 liegen",
+      "probeIntervalRange": "Muss zwischen 100ms und 5s liegen"
+    },
     "status": {
       "enabled": "Aktiviert",
       "disabled": "Deaktiviert",
@@ -162,7 +194,8 @@
       "noClusters": "Keine Cluster verfügbar",
       "useDefault": "Standard",
       "resetToDefault": "Auf Standard zurücksetzen",
-      "filterCluster": "Cluster suchen"
+      "filterCluster": "Cluster suchen",
+      "thresholdRange": "Muss eine Ganzzahl in (0, 10000] sein"
     },
     "outcome": {
       "snapshot_created": "Snapshot erstellt",

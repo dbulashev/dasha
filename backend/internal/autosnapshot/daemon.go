@@ -17,8 +17,10 @@ import (
 // Declared locally to avoid pulling the full Repository into autosnapshot tests.
 type Repo interface {
 	GetActiveConnectionCount(ctx context.Context, clusterName, instanceName string) (int, error)
+	GetBlockedSessionCount(ctx context.Context, clusterName, instanceName, databaseName string) (int, error)
 	GetInstanceInfo(ctx context.Context, clusterName, instanceName string) (dto.InstanceInfo, error)
 	GetQueriesReport(ctx context.Context, clusterName, instanceName string, excludeUsers []string) ([]dto.QueryReport, error)
+	GetQueriesBlocked(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.QueryBlocked, error)
 	GetPgssStatsResetTime(ctx context.Context, clusterName, instanceName, databaseName string) (*dto.StatsResetTime, error)
 	ResetQueryStats(ctx context.Context, clusterName, instanceName, databaseName string) error
 }
@@ -43,6 +45,7 @@ type Daemon struct {
 	store                Store
 	logger               *zap.Logger
 	resetQueryStatsAllow bool
+	leaderElection       bool
 
 	mu        sync.Mutex
 	hosts     map[hostKey]*hostState
@@ -59,7 +62,8 @@ type hostState struct {
 	windowSamples       []activitySample
 	lastInRecovery      *bool
 	aboveThresholdSince *time.Time
-	lastBelowBaselineAt *time.Time // throttles below-baseline events to avoid per-poll spam
+	lastBelowBaselineAt *time.Time      // throttles below-baseline events to avoid per-poll spam
+	lockPeak            *BackgroundPeak // worst blocked-session count during a forming spike (hybrid lock capture)
 }
 
 type activitySample struct {
@@ -73,6 +77,7 @@ func NewDaemon(
 	repo Repo,
 	store Store,
 	resetQueryStatsAllow bool,
+	leaderElection bool,
 	logger *zap.Logger,
 ) *Daemon {
 	return &Daemon{
@@ -81,20 +86,33 @@ func NewDaemon(
 		store:                store,
 		logger:               logger,
 		resetQueryStatsAllow: resetQueryStatsAllow,
+		leaderElection:       leaderElection,
 		hosts:                map[hostKey]*hostState{},
 	}
 }
 
-// Run acquires leader lock and loops until ctx is cancelled.
+// Run optionally acquires the leader lock, then loops until ctx is cancelled.
+// Leader election is opt-in (storage.leader_election); when disabled the daemon
+// assumes a single instance and skips the advisory lock — see StorageConfig.
 func (d *Daemon) Run(ctx context.Context) error {
 	leader := NewLeader(d.store, d.logger)
 
-	if err := leader.Acquire(ctx); err != nil {
-		return fmt.Errorf("autosnapshot: acquire leader: %w", err)
+	// Advisory-lock leader election is opt-in (storage.leader_election). When off,
+	// the daemon runs as a single instance and skips the lock (its dedicated
+	// session is incompatible with transaction-pooling proxies).
+	if d.leaderElection {
+		if err := leader.Acquire(ctx); err != nil {
+			return fmt.Errorf("autosnapshot: acquire leader: %w", err)
+		}
+
+		defer leader.Release()
+	} else {
+		d.logger.Info("autosnapshot: leader election disabled, running as single instance")
 	}
 
-	defer leader.Release()
-
+	// The heartbeat always runs (a plain pooled UPDATE, transaction-pooling safe)
+	// so the UI liveness check works regardless of leader election. In HA mode only
+	// the elected leader reaches this point, so the heartbeat reflects the leader.
 	hbCtx, cancelHB := context.WithCancel(ctx)
 	defer cancelHB()
 

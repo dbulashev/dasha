@@ -141,6 +141,10 @@ func (s *Handlers) PutAutosnapshotCluster(
 		return serverhttp.PutAutosnapshotCluster400Response{}, nil
 	}
 
+	if err := validateClusterOverrides(req.Body.Overrides); err != nil {
+		return serverhttp.PutAutosnapshotCluster400Response{}, nil
+	}
+
 	user := userNameFromContext(ctx)
 
 	if err := s.storage.SetClusterOverride(ctx, req.Name, req.Body.Overrides, user); err != nil {
@@ -183,7 +187,7 @@ func (s *Handlers) GetAutosnapshotTriggerEvents(
 		filter.Offset = *req.Params.Offset
 	}
 
-	items, total, err := s.storage.ListTriggerEvents(ctx, filter)
+	items, err := s.storage.ListTriggerEvents(ctx, filter)
 	if err != nil {
 		return nil, fmt.Errorf("GetAutosnapshotTriggerEvents | %w", err)
 	}
@@ -193,10 +197,35 @@ func (s *Handlers) GetAutosnapshotTriggerEvents(
 		out = append(out, triggerEventToAPI(e))
 	}
 
-	return serverhttp.GetAutosnapshotTriggerEvents200JSONResponse{
-		Items: out,
-		Total: total,
-	}, nil
+	return serverhttp.GetAutosnapshotTriggerEvents200JSONResponse(out), nil
+}
+
+// GetAutosnapshotSummary returns per-cluster snapshot/error counts for the summary tab.
+func (s *Handlers) GetAutosnapshotSummary(
+	ctx context.Context,
+	_ serverhttp.GetAutosnapshotSummaryRequestObject,
+) (serverhttp.GetAutosnapshotSummaryResponseObject, error) {
+	if s.storage == nil {
+		return serverhttp.GetAutosnapshotSummary501Response{}, nil
+	}
+
+	items, err := s.storage.SummarizeTriggerEvents(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("GetAutosnapshotSummary | %w", err)
+	}
+
+	out := make([]serverhttp.ClusterSnapshotSummary, 0, len(items))
+	for _, c := range items {
+		out = append(out, serverhttp.ClusterSnapshotSummary{
+			ClusterName:   c.ClusterName,
+			Snapshots:     c.Snapshots,
+			ActivitySpike: c.ActivitySpike,
+			RoleChange:    c.RoleChange,
+			Errors:        c.Errors,
+		})
+	}
+
+	return serverhttp.GetAutosnapshotSummary200JSONResponse(out), nil
 }
 
 // --- helpers -------------------------------------------------------------
@@ -209,6 +238,9 @@ func configToAPI(cfg autosnapshot.Config) serverhttp.AutoSnapshotConfig {
 		RetentionBytes:       cfg.RetentionBytes,
 		RetentionMinDays:     cfg.RetentionMinDays,
 		MinBaselineActive:    cfg.MinBaselineActive,
+		CaptureLocks:         cfg.CaptureLocks,
+		LockProbeCount:       cfg.LockProbeCount,
+		LockProbeInterval:    cfg.LockProbeInterval.String(),
 		Defaults:             triggerDefaultsToAPI(cfg.Defaults),
 	}
 }
@@ -249,6 +281,11 @@ func configFromAPI(api serverhttp.AutoSnapshotConfig) (autosnapshot.Config, erro
 		return autosnapshot.Config{}, fmt.Errorf("spike_duration: %w", err)
 	}
 
+	lockInterval, err := time.ParseDuration(api.LockProbeInterval)
+	if err != nil {
+		return autosnapshot.Config{}, fmt.Errorf("lock_probe_interval: %w", err)
+	}
+
 	return autosnapshot.Config{
 		Enabled:              api.Enabled,
 		PollInterval:         poll,
@@ -256,6 +293,9 @@ func configFromAPI(api serverhttp.AutoSnapshotConfig) (autosnapshot.Config, erro
 		RetentionBytes:       api.RetentionBytes,
 		RetentionMinDays:     api.RetentionMinDays,
 		MinBaselineActive:    api.MinBaselineActive,
+		CaptureLocks:         api.CaptureLocks,
+		LockProbeCount:       api.LockProbeCount,
+		LockProbeInterval:    lockInterval,
 		Defaults: autosnapshot.TriggerDefaults{
 			ActivitySpike: autosnapshot.ActivitySpikeTrigger{
 				Enabled:            api.Defaults.ActivitySpike.Enabled,
@@ -292,6 +332,14 @@ func validateAutosnapshotConfig(cfg autosnapshot.Config) error {
 		return errors.New("min_baseline_active must be >= 0")
 	}
 
+	if cfg.LockProbeCount < 1 || cfg.LockProbeCount > 20 {
+		return errors.New("lock_probe_count must be between 1 and 20")
+	}
+
+	if cfg.LockProbeInterval < 100*time.Millisecond || cfg.LockProbeInterval > 5*time.Second {
+		return errors.New("lock_probe_interval must be between 100ms and 5s")
+	}
+
 	spike := cfg.Defaults.ActivitySpike
 	if spike.WindowSize <= 0 {
 		return errors.New("window_size must be > 0")
@@ -315,6 +363,97 @@ func validateAutosnapshotConfig(cfg autosnapshot.Config) error {
 		autosnapshot.DirectionBoth:
 	default:
 		return fmt.Errorf("invalid direction: %q", cfg.Defaults.RoleChange.Direction)
+	}
+
+	return nil
+}
+
+// validateClusterOverrides rejects malformed per-cluster overrides before they are
+// stored. EffectiveFor silently ignores unparseable values (falling back to the
+// global default), so without this an admin could "save" garbage that never takes
+// effect — validate the known fields up front instead.
+func validateClusterOverrides(overrides map[string]any) error {
+	if raw, ok := overrides["activity_spike"]; ok {
+		spike, ok := raw.(map[string]any)
+		if !ok {
+			return errors.New("activity_spike must be an object")
+		}
+
+		if v, ok := spike["enabled"]; ok {
+			if _, ok := v.(bool); !ok {
+				return errors.New("activity_spike.enabled must be a boolean")
+			}
+		}
+
+		if err := validatePosDurationField(spike, "window_size"); err != nil {
+			return err
+		}
+
+		if err := validatePosDurationField(spike, "spike_duration"); err != nil {
+			return err
+		}
+
+		if v, ok := spike["active_threshold_pct"]; ok {
+			n, ok := v.(float64)
+			if !ok {
+				return errors.New("active_threshold_pct must be a number")
+			}
+
+			if n != float64(int(n)) || n <= 0 || n > 10000 {
+				return errors.New("active_threshold_pct must be an integer in (0, 10000]")
+			}
+		}
+	}
+
+	if raw, ok := overrides["role_change"]; ok {
+		role, ok := raw.(map[string]any)
+		if !ok {
+			return errors.New("role_change must be an object")
+		}
+
+		if v, ok := role["enabled"]; ok {
+			if _, ok := v.(bool); !ok {
+				return errors.New("role_change.enabled must be a boolean")
+			}
+		}
+
+		if v, ok := role["direction"]; ok {
+			s, ok := v.(string)
+			if !ok {
+				return errors.New("direction must be a string")
+			}
+
+			switch autosnapshot.Direction(s) {
+			case autosnapshot.DirectionMasterToReplica,
+				autosnapshot.DirectionReplicaToMaster,
+				autosnapshot.DirectionBoth:
+			default:
+				return fmt.Errorf("invalid direction: %q", s)
+			}
+		}
+	}
+
+	return nil
+}
+
+func validatePosDurationField(m map[string]any, key string) error {
+	v, ok := m[key]
+	if !ok {
+		return nil
+	}
+
+	s, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("%s must be a duration string", key)
+	}
+
+	d, err := time.ParseDuration(s)
+	if err != nil {
+		return fmt.Errorf("%s: %w", key, err)
+	}
+
+	if d <= 0 {
+		return fmt.Errorf("%s must be > 0", key)
 	}
 
 	return nil

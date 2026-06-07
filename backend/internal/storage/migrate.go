@@ -122,6 +122,15 @@ ALTER TABLE health_score_weights
     ADD COLUMN IF NOT EXISTS horizon        DOUBLE PRECISION NOT NULL DEFAULT 0.10 CHECK (horizon        >= 0),
     ADD COLUMN IF NOT EXISTS wal_checkpoint DOUBLE PRECISION NOT NULL DEFAULT 0.10 CHECK (wal_checkpoint >= 0),
     ADD COLUMN IF NOT EXISTS locks          DOUBLE PRECISION NOT NULL DEFAULT 0.10 CHECK (locks          >= 0)`
+
+	addSnapshotLocksDataSQL = `
+ALTER TABLE snapshots ADD COLUMN IF NOT EXISTS locks_data jsonb`
+
+	addAutosnapshotLockConfigSQL = `
+ALTER TABLE autosnapshot_config_global
+    ADD COLUMN IF NOT EXISTS capture_locks       boolean  NOT NULL DEFAULT true,
+    ADD COLUMN IF NOT EXISTS lock_probe_count    int      NOT NULL DEFAULT 5,
+    ADD COLUMN IF NOT EXISTS lock_probe_interval interval NOT NULL DEFAULT '500ms'`
 )
 
 // partitionedTables lists the day-partitioned tables managed together —
@@ -172,6 +181,8 @@ func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
 		seedAutosnapshotLeaderSQL,
 		createHealthScoreWeightsSQL,
 		addHealthScoreWeightsCategoriesSQL,
+		addSnapshotLocksDataSQL,
+		addAutosnapshotLockConfigSQL,
 	} {
 		if _, err := s.pool.Exec(ctx, ddl); err != nil {
 			return fmt.Errorf("storage: migrate: %w", err)

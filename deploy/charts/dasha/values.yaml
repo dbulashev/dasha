@@ -156,8 +156,10 @@ backend:
 
 # -- Auto-snapshot daemon ("dasha autosnapshot")
 # Separate Deployment running the same image with a different entrypoint.
-# Uses storage DB (via config.storage) as coordination backend (advisory lock);
-# safe to set replicaCount=2 for HA — only one replica will do work at a time.
+# Runs a single instance by default. For HA (replicaCount>=2) you MUST enable
+# advisory-lock leader election by setting `storage.leader_election: true` in the
+# config, otherwise every replica runs independently and takes duplicate snapshots.
+# Leader election is off by default (incompatible with transaction-pooling proxies).
 autosnapshot:
   enabled: false
   replicaCount: 1

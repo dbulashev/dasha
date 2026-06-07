@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { getAutosnapshotCluster } from '@/api/gen/default/default'
 import type { AutoSnapshotClusterOverride } from '@/api/models'
 import { useClustersStore } from '@/stores/clusters'
+import { useDebouncedRef } from '@/composables/useDebouncedRef'
 import { assertOk } from '@/utils/api'
 import AutoSnapshotClusterDialog from './AutoSnapshotClusterDialog.vue'
 
@@ -22,10 +23,12 @@ const items = ref<ClusterRow[]>([])
 const loading = ref(false)
 const editCluster = ref<string | null>(null)
 const dialogOpen = ref(false)
-const search = ref('')
+const search = ref<string | null>('')
+const debouncedSearch = useDebouncedRef(search, 200)
 
 const filteredItems = computed(() => {
-  const q = search.value.trim().toLowerCase()
+  // `clearable` sets the model to null on clear — guard before trim().
+  const q = (debouncedSearch.value ?? '').trim().toLowerCase()
   return q ? items.value.filter((r) => r.ClusterName.toLowerCase().includes(q)) : items.value
 })
 
@@ -119,27 +122,28 @@ watch(
       {{ t('autosnapshot.clusters.noClusters') }}
     </v-alert>
 
-    <v-text-field
-      v-if="loading || items.length > 0"
-      v-model="search"
-      :label="t('autosnapshot.clusters.filterCluster')"
-      density="compact"
-      variant="outlined"
-      prepend-inner-icon="mdi-magnify"
-      hide-details
-      clearable
-      class="mb-3"
-      style="max-width: 360px"
-    />
+    <v-card v-if="loading || items.length > 0">
+      <v-card-text class="pb-0">
+        <v-text-field
+          v-model="search"
+          :label="t('autosnapshot.clusters.filterCluster')"
+          density="compact"
+          variant="outlined"
+          prepend-inner-icon="mdi-magnify"
+          hide-details
+          clearable
+          class="mt-1"
+          style="max-width: 360px"
+        />
+      </v-card-text>
 
-    <v-data-table
-      v-if="loading || items.length > 0"
-      :headers="headers"
-      :items="filteredItems"
-      :loading="loading"
-      item-value="ClusterName"
-      hover
-    >
+      <v-data-table
+        :headers="headers"
+        :items="filteredItems"
+        :loading="loading"
+        item-value="ClusterName"
+        hover
+      >
       <template #item.ClusterName="{ item }">
         <div class="d-flex align-center ga-1">
           {{ item.ClusterName }}
@@ -195,7 +199,8 @@ watch(
         </v-chip>
       </template>
 
-    </v-data-table>
+      </v-data-table>
+    </v-card>
 
     <AutoSnapshotClusterDialog
       v-if="editCluster && dialogOpen"

@@ -8,13 +8,19 @@
   - **Триггер смены роли** — определяет переход master↔replica через `pg_is_in_recovery()`, с настраиваемым направлением (`both` / `master_to_replica` / `replica_to_master`)
   - **Глобальные настройки** (хранятся в storage DB, правятся через UI): `poll_interval`, `max_snapshot_frequency` (debounce), `min_baseline_active` (пропуск при низкой нагрузке), `retention_bytes`, `retention_min_days`
   - **Per-cluster оверрайды**: deep-merge поверх глобальных настроек; отдельный кластер может включать/выключать триггеры, настраивать пороги или полностью отключать auto-snapshots
-  - **Leader election**: `pg_try_advisory_lock` на storage DB — демон можно запускать в нескольких репликах для HA
+  - **Leader election** (опционально, `storage.leader_election`, по умолчанию выключено): `pg_try_advisory_lock` на storage DB позволяет запускать демон в нескольких репликах для HA; по умолчанию выключено, т.к. session-level advisory lock требует отдельного соединения и несовместим с транзакционным пулингом (PgBouncer transaction mode)
   - **Ретеншен по общему размеру**: удаляет старые «тройки дней» (секции snapshots + query_texts + trigger_events), пока суммарный размер превышает `retention_bytes`; уважает минимальный порог `retention_min_days`
-  - **Вкладка истории**: фильтры по кластеру / outcome / типу триггера, постраничный вывод; фиксирует причины пропуска (`skipped:debounce`, `skipped:below_baseline`, `skipped:wrong_direction`, `skipped:storage_unavailable`, `error`)
+  - **Вкладка истории**: фильтры по кластеру / outcome / типу триггера, постраничный вывод; в историю пишутся только создания снимков и ошибки — временные пропуски (debounce, ниже baseline, неверное направление) логируются на уровне debug и не сохраняются, чтобы не зашумлять историю
   - **UI**: новый пункт меню «Авто-снимки» (`mdi-camera-timer`) с вкладками Настройки + История; редактирование только admin, viewer видит read-only; для non-admin пункт скрыт, если фича выключена
   - **API**: `GET/PUT /api/autosnapshot/config`, `GET/PUT /api/autosnapshot/clusters/{name}`, `GET /api/autosnapshot/status`, `GET /api/autosnapshot/trigger-events`
   - **CLI**: `dasha autosnapshot` (отдельная команда, не стартует вместе с `dasha serve`)
   - **Деплой**: в Helm чарт добавлен отдельный Deployment `autosnapshot` (по умолчанию отключен, включается флагом `autosnapshot.enabled: true`); в docker-compose добавлен сервис `autosnapshot` рядом с `backend` и `frontend`
+- **Снимки блокировок по триггеру**: при срабатывании триггера всплеска активности снимок может дополнительно сохранять граф блокировок вместе с `pg_stat_statements`
+  - **Гибридный тайминг**: во время всплеска в фоне идёт дешёвый подсчёт заблокированных сессий и фиксируется `background_peak`; в момент триггера серия из N детальных проб (по умолчанию 5 × 500 мс) снимает полный граф `pg_blocking_pids`
+  - **Берётся самая жёсткая проба**: сохраняется проба с наибольшим числом различных заблокированных сессий (при равенстве — с максимальным временем ожидания); до 100 строк, отсортированных по убыванию ожидания
+  - **Хранилище**: новая колонка `snapshots.locks_data jsonb`; `GET /api/queries/snapshot/{id}/locks` отдаёт её; в списке снимков появился флаг `has_locks`
+  - **Настройки** (глобальные + per-cluster): `capture_locks` (по умолчанию вкл.), `lock_probe_count` (1–20), `lock_probe_interval` (100 мс–5 с)
+  - **Ручной захват**: опция «со снимком блокировок» у кнопки ручного снимка; сохранённый граф блокировок виден из просмотра снимка в Статистике запросов
 
 ## v1.1.0
 

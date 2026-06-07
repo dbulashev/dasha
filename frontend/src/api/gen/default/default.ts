@@ -25,6 +25,7 @@ import type {
   AutoSnapshotConfig,
   AutoSnapshotStatus,
   Cluster,
+  ClusterSnapshotSummary,
   CommonSummary,
   ConnectionSource,
   ConnectionStatActivity,
@@ -133,6 +134,7 @@ import type {
   IndexUsage,
   InstanceInfo,
   InvalidConstraint,
+  LockSnapshot,
   MaintenanceAutovacuumFreezeMaxAge,
   MaintenanceInfo,
   MaintenanceTransactionIdDanger,
@@ -171,7 +173,7 @@ import type {
   TableHitRate,
   TablePartition,
   TableTopKBySize,
-  TriggerEventList,
+  TriggerEvent,
   VacuumStats,
   WaitEvent,
 } from '../../models'
@@ -7003,6 +7005,100 @@ export function useGetSnapshot<
   return query
 }
 
+export type getSnapshotLocksResponse200 = {
+  data: LockSnapshot
+  status: 200
+}
+
+export type getSnapshotLocksResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getSnapshotLocksResponse501 = {
+  data: void
+  status: 501
+}
+
+export type getSnapshotLocksResponseSuccess = getSnapshotLocksResponse200 & {
+  headers: Headers
+}
+export type getSnapshotLocksResponseError = (
+  | getSnapshotLocksResponse404
+  | getSnapshotLocksResponse501
+) & {
+  headers: Headers
+}
+
+export type getSnapshotLocksResponse =
+  | getSnapshotLocksResponseSuccess
+  | getSnapshotLocksResponseError
+
+export const getGetSnapshotLocksUrl = (id: string) => {
+  return `/api/queries/snapshot/${id}/locks`
+}
+
+export const getSnapshotLocks = async (
+  id: string,
+  options?: RequestInit,
+): Promise<getSnapshotLocksResponse> => {
+  return customFetch<getSnapshotLocksResponse>(getGetSnapshotLocksUrl(id), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetSnapshotLocksQueryKey = (id: MaybeRef<string>) => {
+  return ['api', 'queries', 'snapshot', id, 'locks'] as const
+}
+
+export const getGetSnapshotLocksQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSnapshotLocks>>,
+  TError = NotFoundResponse | void,
+>(
+  id: MaybeRef<string>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getSnapshotLocks>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetSnapshotLocksQueryKey(id)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSnapshotLocks>>> = ({ signal }) =>
+    getSnapshotLocks(unref(id), { signal, ...requestOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: computed(() => !!unref(id)),
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getSnapshotLocks>>, TError, TData>
+}
+
+export type GetSnapshotLocksQueryResult = NonNullable<Awaited<ReturnType<typeof getSnapshotLocks>>>
+export type GetSnapshotLocksQueryError = NotFoundResponse | void
+
+export function useGetSnapshotLocks<
+  TData = Awaited<ReturnType<typeof getSnapshotLocks>>,
+  TError = NotFoundResponse | void,
+>(
+  id: MaybeRef<string>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getSnapshotLocks>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSnapshotLocksQueryOptions(id, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
 export type getQueriesCompareResponse200 = {
   data: QueryCompareItem[]
   status: 200
@@ -8659,7 +8755,7 @@ export const usePutAutosnapshotCluster = <
   return useMutation(getPutAutosnapshotClusterMutationOptions(options))
 }
 export type getAutosnapshotTriggerEventsResponse200 = {
-  data: TriggerEventList
+  data: TriggerEvent[]
   status: 200
 }
 
@@ -8756,6 +8852,89 @@ export function useGetAutosnapshotTriggerEvents<
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetAutosnapshotTriggerEventsQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Per-cluster snapshot/error counts (all retained history) for the summary tab.
+ */
+export type getAutosnapshotSummaryResponse200 = {
+  data: ClusterSnapshotSummary[]
+  status: 200
+}
+
+export type getAutosnapshotSummaryResponse501 = {
+  data: void
+  status: 501
+}
+
+export type getAutosnapshotSummaryResponseSuccess = getAutosnapshotSummaryResponse200 & {
+  headers: Headers
+}
+export type getAutosnapshotSummaryResponseError = getAutosnapshotSummaryResponse501 & {
+  headers: Headers
+}
+
+export type getAutosnapshotSummaryResponse =
+  | getAutosnapshotSummaryResponseSuccess
+  | getAutosnapshotSummaryResponseError
+
+export const getGetAutosnapshotSummaryUrl = () => {
+  return `/api/autosnapshot/summary`
+}
+
+export const getAutosnapshotSummary = async (
+  options?: RequestInit,
+): Promise<getAutosnapshotSummaryResponse> => {
+  return customFetch<getAutosnapshotSummaryResponse>(getGetAutosnapshotSummaryUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetAutosnapshotSummaryQueryKey = () => {
+  return ['api', 'autosnapshot', 'summary'] as const
+}
+
+export const getGetAutosnapshotSummaryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAutosnapshotSummary>>,
+  TError = void,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotSummary>>, TError, TData>
+  request?: SecondParameter<typeof customFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetAutosnapshotSummaryQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAutosnapshotSummary>>> = ({ signal }) =>
+    getAutosnapshotSummary({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAutosnapshotSummary>>,
+    TError,
+    TData
+  >
+}
+
+export type GetAutosnapshotSummaryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAutosnapshotSummary>>
+>
+export type GetAutosnapshotSummaryQueryError = void
+
+export function useGetAutosnapshotSummary<
+  TData = Awaited<ReturnType<typeof getAutosnapshotSummary>>,
+  TError = void,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotSummary>>, TError, TData>
+  request?: SecondParameter<typeof customFetch>
+}): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAutosnapshotSummaryQueryOptions(options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
 

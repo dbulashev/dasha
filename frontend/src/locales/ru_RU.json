@@ -117,7 +117,18 @@
         "tabs": {
             "settings": "Настройки",
             "clusters": "Кластеры",
-            "history": "История"
+            "history": "История",
+            "summary": "Сводка"
+        },
+        "summary": {
+            "title": "Снимки по кластерам",
+            "cluster": "Кластер",
+            "snapshots": "Снимки",
+            "activitySpike": "Всплески",
+            "roleChange": "Смена роли",
+            "errors": "Ошибки",
+            "total": "Всего снимков",
+            "empty": "Пока нет событий авто-снимков"
         },
         "globalSection": "Глобальные настройки",
         "activitySpike": "Триггер всплеска активности",
@@ -131,6 +142,27 @@
         "retentionGiB": "Лимит хранения, ГиБ",
         "invalidDuration": "Неверный формат (напр. 30s, 5m, 1h)",
         "mustBePositive": "Должно быть ≥ 0",
+        "locks": {
+          "title": "Блокировки",
+          "hint": "Снимать граф блокировок при срабатывании триггера всплеска",
+          "capture": "Снимать блокировки",
+          "probeCount": "Число проб",
+          "probeInterval": "Интервал проб",
+          "section": "Блокировки на момент снимка",
+          "blocked": "Заблокировано",
+          "maxWait": "Макс. ожидание",
+          "peakWas": "Пик был {count} в {at}",
+          "none": "Блокировок не зафиксировано",
+          "open": "Показать блокировки",
+          "withLocks": "С блокировками",
+          "blockedPid": "Заблок. PID",
+          "blockedQuery": "Заблокированный запрос",
+          "wait": "Ожидание",
+          "blockingPid": "Блокирующий PID",
+          "blockingQuery": "Блокирующий запрос",
+          "probeCountRange": "Должно быть от 1 до 20",
+          "probeIntervalRange": "Должно быть от 100ms до 5s"
+        },
         "status": {
           "enabled": "Включено",
           "disabled": "Выключено",
@@ -184,7 +216,8 @@
             "noClusters": "Нет доступных кластеров",
             "useDefault": "По умолчанию",
             "resetToDefault": "Сбросить к дефолту",
-            "filterCluster": "Поиск по кластеру"
+            "filterCluster": "Поиск по кластеру",
+            "thresholdRange": "Должно быть целым в (0, 10000]"
         },
         "outcome": {
             "snapshot_created": "Снимок создан",

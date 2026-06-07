@@ -19,6 +19,7 @@ import { useAuthStore } from '@/stores/auth'
 import { assertOk } from '@/utils/api'
 import { fmtAge } from '@/utils/format'
 import QueryReportSection from '@/components/queries/QueryReportSection.vue'
+import LockSnapshotDialog from '@/components/queries/LockSnapshotDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -95,6 +96,8 @@ const selectedSnapshotId = ref<string | null>(null)
 const snapshotData = ref<QueryReport[] | null>(null)
 const snapshotLoading = ref(false)
 const snapshotCreating = ref(false)
+const createWithLocks = ref(false)
+const locksDialogOpen = ref(false)
 const snapshotSnackbar = ref(false)
 const snapshotSnackbarMsg = ref('')
 const snapshotSnackbarColor = ref('success')
@@ -151,6 +154,7 @@ async function doCreateSnapshot() {
       cluster_name: clusterName.value,
       instance: hostName.value,
       database: databaseName.value,
+      include_locks: createWithLocks.value,
     })
     if (res.status === 201) {
       snapshotSnackbarMsg.value = t('snapshotCreated')
@@ -265,8 +269,18 @@ watch([clusterName, hostName, databaseName], async () => {
   await loadSnapshotsStatus()
   await loadSnapshotsList()
 
-  // Restore snapshot from URL or reset
   const urlSnapshot = route.query.snapshot as string | undefined
+
+  // Cluster context may still be resolving (clusters store loads asynchronously,
+  // so clusterName/hostName from useClusterInfo are null on the first run after an
+  // SPA navigation). In that case loadSnapshotsList() returned an empty list — do
+  // NOT treat the URL snapshot as "not found" or strip it from the URL yet. The
+  // watch re-fires once clusterName/hostName settle, and the snapshot is restored.
+  if (!clusterName.value || !hostName.value || !databaseName.value) {
+    return
+  }
+
+  // Restore snapshot from URL or reset
   if (urlSnapshot && snapshotIdsSet.value.has(urlSnapshot)) {
     if (selectedSnapshotId.value === urlSnapshot) {
       await loadSnapshotData(urlSnapshot)
@@ -303,7 +317,24 @@ watch([clusterName, hostName, databaseName], async () => {
     <span v-if="ageText" class="text-caption text-medium-emphasis">
       {{ t('compare.age') }}: {{ ageText }}
     </span>
+    <v-btn
+      v-if="isViewingSnapshot && selectedSnapshot && selectedSnapshot.HasLocks"
+      variant="tonal"
+      size="small"
+      prepend-icon="mdi-lock-outline"
+      @click="locksDialogOpen = true"
+    >
+      {{ t('autosnapshot.locks.open') }}
+    </v-btn>
     <v-spacer />
+    <v-checkbox
+      v-if="showSnapshotButton"
+      v-model="createWithLocks"
+      :label="t('autosnapshot.locks.withLocks')"
+      density="compact"
+      hide-details
+      class="flex-grow-0 mr-1"
+    />
     <v-btn
       v-if="showSnapshotButton"
       color="primary"
@@ -330,6 +361,8 @@ watch([clusterName, hostName, databaseName], async () => {
 
   <v-progress-linear v-if="snapshotLoading" indeterminate class="mb-4" />
   <QueryReportSection v-else :snapshot-data="isViewingSnapshot ? snapshotData : undefined" />
+
+  <LockSnapshotDialog v-model="locksDialogOpen" :snapshot-id="selectedSnapshotId" />
 
   <v-dialog v-model="resetConfirmDialog" max-width="420">
     <v-card>

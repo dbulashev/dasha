@@ -22,17 +22,20 @@ func (s *Storage) GetAutosnapshotConfig(ctx context.Context) (autosnapshot.Confi
 		cfg          autosnapshot.Config
 		pollInterval time.Duration
 		maxFreq      time.Duration
+		lockInterval time.Duration
 		defaultsJSON []byte
 	)
 
 	err := s.pool.QueryRow(ctx, `
 		SELECT enabled, poll_interval, max_snapshot_frequency,
 		       retention_bytes, retention_min_days, min_baseline_active,
+		       capture_locks, lock_probe_count, lock_probe_interval,
 		       defaults, updated_at, updated_by
 		FROM autosnapshot_config_global WHERE id = 1`,
 	).Scan(
 		&cfg.Enabled, &pollInterval, &maxFreq,
 		&cfg.RetentionBytes, &cfg.RetentionMinDays, &cfg.MinBaselineActive,
+		&cfg.CaptureLocks, &cfg.LockProbeCount, &lockInterval,
 		&defaultsJSON, &cfg.UpdatedAt, &cfg.UpdatedBy,
 	)
 	if err != nil {
@@ -41,6 +44,7 @@ func (s *Storage) GetAutosnapshotConfig(ctx context.Context) (autosnapshot.Confi
 
 	cfg.PollInterval = pollInterval
 	cfg.MaxSnapshotFrequency = maxFreq
+	cfg.LockProbeInterval = lockInterval
 
 	var raw struct {
 		ActivitySpike struct {
@@ -93,10 +97,12 @@ func (s *Storage) SetAutosnapshotConfig(ctx context.Context, cfg autosnapshot.Co
 		UPDATE autosnapshot_config_global
 		SET enabled = $1, poll_interval = $2, max_snapshot_frequency = $3,
 		    retention_bytes = $4, retention_min_days = $5, min_baseline_active = $6,
-		    defaults = $7::jsonb, updated_at = now(), updated_by = $8
+		    capture_locks = $7, lock_probe_count = $8, lock_probe_interval = $9,
+		    defaults = $10::jsonb, updated_at = now(), updated_by = $11
 		WHERE id = 1`,
 		cfg.Enabled, cfg.PollInterval, cfg.MaxSnapshotFrequency,
 		cfg.RetentionBytes, cfg.RetentionMinDays, cfg.MinBaselineActive,
+		cfg.CaptureLocks, cfg.LockProbeCount, cfg.LockProbeInterval,
 		data, nullStringPtr(updatedBy),
 	)
 	if err != nil {
@@ -237,7 +243,9 @@ func (s *Storage) InsertTriggerEvent(ctx context.Context, e autosnapshot.Trigger
 }
 
 // ListTriggerEvents returns events filtered by optional fields, paginated.
-func (s *Storage) ListTriggerEvents(ctx context.Context, f autosnapshot.TriggerEventFilter) ([]autosnapshot.TriggerEvent, int, error) {
+// No total count is returned: the frontend pages with the project-standard
+// "hasMore = full page" heuristic, so a COUNT(*) per request is avoided.
+func (s *Storage) ListTriggerEvents(ctx context.Context, f autosnapshot.TriggerEventFilter) ([]autosnapshot.TriggerEvent, error) {
 	var (
 		where  []string
 		args   []any
@@ -279,15 +287,6 @@ func (s *Storage) ListTriggerEvents(ctx context.Context, f autosnapshot.TriggerE
 		whereClause = "WHERE " + strings.Join(where, " AND ")
 	}
 
-	var total int
-
-	err := s.pool.QueryRow(ctx,
-		"SELECT COUNT(*) FROM trigger_events "+whereClause, args...,
-	).Scan(&total)
-	if err != nil {
-		return nil, 0, fmt.Errorf("storage: count trigger events: %w", err)
-	}
-
 	limit := f.Limit
 	if limit <= 0 || limit > 500 {
 		limit = 50
@@ -305,7 +304,7 @@ func (s *Storage) ListTriggerEvents(ctx context.Context, f autosnapshot.TriggerE
 
 	rows, err := s.pool.Query(ctx, q, args...)
 	if err != nil {
-		return nil, 0, fmt.Errorf("storage: list trigger events: %w", err)
+		return nil, fmt.Errorf("storage: list trigger events: %w", err)
 	}
 	defer rows.Close()
 
@@ -323,7 +322,7 @@ func (s *Storage) ListTriggerEvents(ctx context.Context, f autosnapshot.TriggerE
 			&e.ID, &e.CreatedAt, &e.ClusterName, &e.Instance, &e.Database,
 			&typ, &outcome, &e.SnapshotID, &ctxData, &e.ErrorMessage,
 		); err != nil {
-			return nil, 0, fmt.Errorf("storage: scan trigger event: %w", err)
+			return nil, fmt.Errorf("storage: scan trigger event: %w", err)
 		}
 
 		e.TriggerType = autosnapshot.TriggerType(typ)
@@ -331,14 +330,46 @@ func (s *Storage) ListTriggerEvents(ctx context.Context, f autosnapshot.TriggerE
 
 		if len(ctxData) > 0 {
 			if err := json.Unmarshal(ctxData, &e.TriggerContext); err != nil {
-				return nil, 0, fmt.Errorf("storage: unmarshal trigger context: %w", err)
+				return nil, fmt.Errorf("storage: unmarshal trigger context: %w", err)
 			}
 		}
 
 		items = append(items, e)
 	}
 
-	return items, total, rows.Err()
+	return items, rows.Err()
+}
+
+// SummarizeTriggerEvents returns per-cluster snapshot/error counts (all retained
+// history), ordered by snapshot count desc — the summary tab's data source.
+func (s *Storage) SummarizeTriggerEvents(ctx context.Context) ([]autosnapshot.ClusterSummary, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT
+			cluster_name,
+			count(*) FILTER (WHERE outcome = 'snapshot_created')                                      AS snapshots,
+			count(*) FILTER (WHERE outcome = 'snapshot_created' AND trigger_type = 'activity_spike')  AS activity_spike,
+			count(*) FILTER (WHERE outcome = 'snapshot_created' AND trigger_type = 'role_change')      AS role_change,
+			count(*) FILTER (WHERE outcome = 'error')                                                  AS errors
+		FROM trigger_events
+		GROUP BY cluster_name
+		ORDER BY snapshots DESC, errors DESC, cluster_name`)
+	if err != nil {
+		return nil, fmt.Errorf("storage: summarize trigger events: %w", err)
+	}
+	defer rows.Close()
+
+	var out []autosnapshot.ClusterSummary
+
+	for rows.Next() {
+		var c autosnapshot.ClusterSummary
+		if err := rows.Scan(&c.ClusterName, &c.Snapshots, &c.ActivitySpike, &c.RoleChange, &c.Errors); err != nil {
+			return nil, fmt.Errorf("storage: scan cluster summary: %w", err)
+		}
+
+		out = append(out, c)
+	}
+
+	return out, rows.Err()
 }
 
 // LastAutoSnapshotAt returns the timestamp of the latest auto snapshot per cluster,

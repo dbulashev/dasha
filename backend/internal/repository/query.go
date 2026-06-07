@@ -636,3 +636,34 @@ func (p *PgxPool) GetActiveConnectionCount(ctx context.Context, clusterName, ins
 
 	return n, nil
 }
+
+// GetBlockedSessionCount returns how many backends are currently blocked on a
+// lock — a cheap, instance-wide probe used for background lock-spike tracking.
+func (p *PgxPool) GetBlockedSessionCount(ctx context.Context, clusterName, instanceName, databaseName string) (int, error) {
+	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
+	if err != nil {
+		return 0, fmt.Errorf("GetBlockedSessionCount | %w", err)
+	}
+
+	queryCtx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	return p.getBlockedSessionCount(queryCtx, pool)
+}
+
+func (p *PgxPool) getBlockedSessionCount(ctx context.Context, pool *pgxpool.Pool) (int, error) {
+	var n int
+
+	// Scope to the connected database so the cheap background count matches the
+	// detailed capture (blocked.tmpl.sql filters datname = current_database()).
+	err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM pg_stat_activity a
+		 WHERE a.datname = current_database()
+		   AND cardinality(pg_blocking_pids(a.pid)) > 0`,
+	).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("blocked count | %w", err)
+	}
+
+	return n, nil
+}

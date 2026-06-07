@@ -90,8 +90,21 @@ func (d *Daemon) tickActivitySpike(
 
 	if float64(count) < threshold {
 		state.aboveThresholdSince = nil
+		state.lockPeak = nil
 
 		return
+	}
+
+	// At/above the spike threshold: cheaply sample blocked sessions so the snapshot
+	// can report the background lock peak even if the trigger fires after the storm
+	// has subsided (hybrid capture). Only while a spike is forming; we keep just the
+	// running peak (O(1)) so a long sustained spike can't grow an unbounded slice.
+	if cfg.CaptureLocks {
+		if n, err := d.repo.GetBlockedSessionCount(ctx, string(cl.Name), instance, database); err == nil && n > 0 {
+			if state.lockPeak == nil || n > state.lockPeak.BlockedCount {
+				state.lockPeak = &BackgroundPeak{BlockedCount: n, At: now}
+			}
+		}
 	}
 
 	if state.aboveThresholdSince == nil {
@@ -123,8 +136,9 @@ func (d *Daemon) tickActivitySpike(
 		"host":          instance,
 	}
 
-	d.takeSnapshot(ctx, cfg, cl, instance, database, TriggerActivitySpike, "auto:activity_spike", trigCtx)
+	d.takeSnapshot(ctx, cfg, cl, instance, database, TriggerActivitySpike, "auto:activity_spike", trigCtx, state.lockPeak)
 	state.aboveThresholdSince = nil
+	state.lockPeak = nil
 }
 
 func (d *Daemon) tickRoleChange(
@@ -192,23 +206,25 @@ func (d *Daemon) tickRoleChange(
 		"to_role":   to,
 	}
 
-	d.takeSnapshot(ctx, cfg, cl, instance, database, TriggerRoleChange, "auto:role_change", trigCtx)
+	d.takeSnapshot(ctx, cfg, cl, instance, database, TriggerRoleChange, "auto:role_change", trigCtx, nil)
 }
 
 func (d *Daemon) takeSnapshot(
 	ctx context.Context,
-	_ Config,
+	cfg Config,
 	cl config.Cluster,
 	instance, database string,
 	trigType TriggerType,
 	reason string,
 	trigCtx map[string]any,
+	bgPeak *BackgroundPeak,
 ) {
 	reports, err := d.repo.GetQueriesReport(ctx, string(cl.Name), instance, nil)
 	if err != nil {
 		d.insertEvent(ctx, TriggerEvent{
 			ClusterName:    string(cl.Name),
 			Instance:       instance,
+			Database:       &database,
 			TriggerType:    trigType,
 			Outcome:        OutcomeError,
 			TriggerContext: trigCtx,
@@ -223,15 +239,26 @@ func (d *Daemon) takeSnapshot(
 		pgssReset = &t.Time
 	}
 
+	// Locks are captured only for activity spikes (contention correlates with load,
+	// not role changes). Best-effort: capture failure never fails the snapshot.
+	var locks *LockCapture
+	if cfg.CaptureLocks && trigType == TriggerActivitySpike {
+		lc := CaptureLocks(ctx, d.repo, string(cl.Name), instance, database, cfg.LockProbeCount, cfg.LockProbeInterval)
+		lc.BackgroundPeak = bgPeak
+		locks = &lc
+	}
+
 	id, createdAt, err := d.store.CreateSnapshot(ctx, string(cl.Name), instance, database, reports, SnapshotOpts{
 		PgssStatsReset: pgssReset,
 		Reason:         reason,
 		TriggerContext: trigCtx,
+		LocksData:      locks,
 	})
 	if err != nil {
 		d.insertEvent(ctx, TriggerEvent{
 			ClusterName:    string(cl.Name),
 			Instance:       instance,
+			Database:       &database,
 			TriggerType:    trigType,
 			Outcome:        OutcomeError,
 			TriggerContext: trigCtx,
@@ -261,6 +288,7 @@ func (d *Daemon) takeSnapshot(
 	d.insertEvent(ctx, TriggerEvent{
 		ClusterName:    string(cl.Name),
 		Instance:       instance,
+		Database:       &database,
 		TriggerType:    trigType,
 		Outcome:        OutcomeSnapshotCreated,
 		SnapshotID:     &snapID,

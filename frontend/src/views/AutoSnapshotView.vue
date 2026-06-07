@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   getAutosnapshotConfig,
@@ -12,10 +12,12 @@ import { AuthInfoMode } from '@/api/models'
 import { useAuthStore } from '@/stores/auth'
 import { useAutosnapshotStatusStore } from '@/stores/autosnapshotStatus'
 import { useViewError } from '@/composables/useViewError'
+import { usePaginatedApiLoader } from '@/composables/useApiLoader'
 import { assertOk } from '@/utils/api'
 import { getErrorMessage } from '@/utils/error'
 import { outcomeI18nKey, triggerI18nKey } from '@/utils/autosnapshot'
 import AutoSnapshotClustersTab from '@/components/autosnapshot/AutoSnapshotClustersTab.vue'
+import AutoSnapshotSummaryTab from '@/components/autosnapshot/AutoSnapshotSummaryTab.vue'
 import PaginationControls from '@/components/PaginationControls.vue'
 
 const { t } = useI18n()
@@ -27,7 +29,7 @@ const isAdmin = computed(
   () => authStore.mode === AuthInfoMode.none || authStore.user?.role === 'admin',
 )
 
-const tab = ref<'settings' | 'clusters' | 'history'>('settings')
+const tab = ref<'settings' | 'clusters' | 'history' | 'summary'>('settings')
 
 // --- Status panel ---------------------------------------------------------
 
@@ -43,12 +45,12 @@ async function loadStatus() {
     status.value = null
   }
   try {
-    const body = assertOk<{ Items?: TriggerEvent[] }>(
+    const body = assertOk<TriggerEvent[]>(
       await getAutosnapshotTriggerEvents({ limit: 1, offset: 0 } as Parameters<
         typeof getAutosnapshotTriggerEvents
       >[0]),
     )
-    lastEvent.value = body?.Items?.[0] ?? null
+    lastEvent.value = body?.[0] ?? null
   } catch {
     lastEvent.value = null
   }
@@ -82,6 +84,31 @@ const durationRule = (v: string) =>
   durationRe.test((v ?? '').trim()) || t('autosnapshot.invalidDuration')
 const positiveRule = (v: number) => (Number(v) >= 0 ? true : t('autosnapshot.mustBePositive'))
 
+// Parse a Go-duration string to milliseconds (returns null if unparseable).
+function goDurationToMs(v: string): number | null {
+  const unit: Record<string, number> = {
+    ns: 1e-6, us: 1e-3, 'µs': 1e-3, ms: 1, s: 1000, m: 60000, h: 3600000,
+  }
+  const re = /(\d+(?:\.\d+)?)(ns|us|µs|ms|s|m|h)/g
+  let total = 0
+  let matched = false
+  let m: RegExpExecArray | null
+  while ((m = re.exec((v ?? '').trim())) !== null) {
+    matched = true
+    total += parseFloat(m[1]) * unit[m[2]]
+  }
+  return matched ? total : null
+}
+
+// Backend bounds (http/autosnapshot.go): lock_probe_count 1..20, lock_probe_interval 100ms..5s.
+const probeCountRule = (v: number) =>
+  (Number.isInteger(Number(v)) && Number(v) >= 1 && Number(v) <= 20) ||
+  t('autosnapshot.locks.probeCountRange')
+const probeIntervalRule = (v: string) => {
+  const ms = goDurationToMs(v)
+  return (ms !== null && ms >= 100 && ms <= 5000) || t('autosnapshot.locks.probeIntervalRange')
+}
+
 async function loadConfig() {
   cfgLoading.value = true
   try {
@@ -112,18 +139,12 @@ async function saveConfig() {
 
 // --- History tab ----------------------------------------------------------
 
-const events = ref<TriggerEvent[]>([])
-const total = ref(0)
-const page = ref(1)
-const perPage = 15
-const histLoading = ref(false)
+const HISTORY_PAGE_SIZE = 15
 const filterCluster = ref('')
 const filterOutcome = ref('')
 const filterTriggerType = ref('')
 const filterFrom = ref('')
 const filterTo = ref('')
-
-const hasMore = computed(() => page.value * perPage < total.value)
 
 // Only snapshot_created and error are persisted now (skips are debug logs).
 const outcomeValues = ['snapshot_created', 'error']
@@ -136,34 +157,31 @@ const triggerTypeOptions = computed(() =>
   triggerTypeValues.map((v) => ({ value: v, title: t(triggerI18nKey(v), v) })),
 )
 
-async function loadEvents() {
-  histLoading.value = true
-  try {
-    const params: Record<string, unknown> = {
-      limit: perPage,
-      offset: (page.value - 1) * perPage,
-    }
+// Server-paginated history via the shared composable (page-based prev/next,
+// hasMore = full page). Filters are deps: changing one reloads from page 1.
+const {
+  items: events,
+  loading: histLoading,
+  page,
+  hasMore,
+  load: loadEvents,
+} = usePaginatedApiLoader<TriggerEvent>(
+  (limit, offset) => {
+    const params: Record<string, unknown> = { limit, offset }
     if (filterCluster.value) params.cluster_name = filterCluster.value
     if (filterOutcome.value) params.outcome = filterOutcome.value
     if (filterTriggerType.value) params.trigger_type = filterTriggerType.value
     if (filterFrom.value) params.from = new Date(filterFrom.value + 'T00:00:00').toISOString()
     if (filterTo.value) params.to = new Date(filterTo.value + 'T23:59:59.999').toISOString()
-
-    const body = assertOk<{ Items?: TriggerEvent[]; Total?: number }>(
-      await getAutosnapshotTriggerEvents(
-        params as Parameters<typeof getAutosnapshotTriggerEvents>[0],
-      ),
-    )
-    events.value = body?.Items ?? []
-    total.value = body?.Total ?? 0
-  } catch (e) {
-    onError(getErrorMessage(e), e)
-    events.value = []
-    total.value = 0
-  } finally {
-    histLoading.value = false
-  }
-}
+    return getAutosnapshotTriggerEvents(params as Parameters<typeof getAutosnapshotTriggerEvents>[0])
+  },
+  {
+    pageSize: HISTORY_PAGE_SIZE,
+    deps: [filterCluster, filterOutcome, filterTriggerType, filterFrom, filterTo],
+    guard: () => true,
+    onError,
+  },
+)
 
 function outcomeColor(o: string): string {
   if (o === 'snapshot_created') return 'success'
@@ -213,17 +231,9 @@ const historyHeaders = computed(() => [
   { title: t('autosnapshot.history.outcome'), key: 'Outcome' },
 ])
 
-// Reset to first page when filters change, then (re)load.
-watch([filterCluster, filterOutcome, filterTriggerType, filterFrom, filterTo], () => {
-  page.value = 1
-  loadEvents()
-})
-watch(page, () => loadEvents())
-
 onMounted(() => {
   loadStatus()
   loadConfig()
-  loadEvents()
 })
 </script>
 
@@ -278,6 +288,7 @@ onMounted(() => {
       <v-tab value="settings">{{ t('autosnapshot.tabs.settings') }}</v-tab>
       <v-tab value="clusters">{{ t('autosnapshot.tabs.clusters') }}</v-tab>
       <v-tab value="history">{{ t('autosnapshot.tabs.history') }}</v-tab>
+      <v-tab value="summary">{{ t('autosnapshot.tabs.summary') }}</v-tab>
     </v-tabs>
 
     <v-window v-model="tab">
@@ -299,6 +310,8 @@ onMounted(() => {
           </v-alert>
 
           <v-card class="mb-4">
+            <v-card-text>
+              <v-card variant="outlined" class="mb-3">
             <v-card-title class="text-subtitle-1">{{ t('autosnapshot.globalSection') }}</v-card-title>
             <v-card-text>
               <v-row dense>
@@ -368,7 +381,7 @@ onMounted(() => {
             </v-card-text>
           </v-card>
 
-          <v-card class="mb-4">
+          <v-card variant="outlined" class="mb-3">
             <v-card-title class="text-subtitle-1">{{ t('autosnapshot.activitySpike') }}</v-card-title>
             <v-card-text>
               <v-row dense>
@@ -417,7 +430,46 @@ onMounted(() => {
             </v-card-text>
           </v-card>
 
-          <v-card class="mb-4">
+          <v-card variant="outlined" class="mb-3">
+            <v-card-title class="text-subtitle-1">{{ t('autosnapshot.locks.title') }}</v-card-title>
+            <v-card-text>
+              <div class="text-caption text-medium-emphasis mb-2">{{ t('autosnapshot.locks.hint') }}</div>
+              <v-row dense>
+                <v-col cols="12" sm="6" md="3">
+                  <v-switch
+                    v-model="cfg.CaptureLocks"
+                    :label="t('autosnapshot.locks.capture')"
+                    :disabled="!isAdmin"
+                    color="primary"
+                    density="compact"
+                    hide-details
+                  />
+                </v-col>
+                <v-col cols="12" sm="6" md="3">
+                  <v-text-field
+                    v-model.number="cfg.LockProbeCount"
+                    :label="t('autosnapshot.locks.probeCount')"
+                    :disabled="!isAdmin || !cfg.CaptureLocks"
+                    :rules="[probeCountRule]"
+                    type="number"
+                    density="compact"
+                  />
+                </v-col>
+                <v-col cols="12" sm="6" md="3">
+                  <v-text-field
+                    v-model="cfg.LockProbeInterval"
+                    :label="t('autosnapshot.locks.probeInterval')"
+                    :disabled="!isAdmin || !cfg.CaptureLocks"
+                    :rules="[durationRule, probeIntervalRule]"
+                    density="compact"
+                    placeholder="500ms"
+                  />
+                </v-col>
+              </v-row>
+            </v-card-text>
+          </v-card>
+
+          <v-card variant="outlined">
             <v-card-title class="text-subtitle-1">{{ t('autosnapshot.roleChange') }}</v-card-title>
             <v-card-text>
               <v-row dense>
@@ -443,6 +495,8 @@ onMounted(() => {
                 </v-col>
               </v-row>
             </v-card-text>
+              </v-card>
+            </v-card-text>
           </v-card>
 
           <v-btn
@@ -464,8 +518,8 @@ onMounted(() => {
 
       <!-- History -->
       <v-window-item value="history">
-        <v-card class="mb-4">
-          <v-card-text>
+        <v-card>
+          <v-card-text class="pb-0">
             <v-row dense>
               <v-col cols="12" sm="6" md="4">
                 <v-text-field
@@ -518,9 +572,7 @@ onMounted(() => {
               </v-col>
             </v-row>
           </v-card-text>
-        </v-card>
 
-        <v-card>
           <v-data-table
             :headers="historyHeaders"
             :items="events"
@@ -529,7 +581,7 @@ onMounted(() => {
             hover
             show-expand
             :expand-on-click="false"
-            :items-per-page="perPage"
+            :items-per-page="HISTORY_PAGE_SIZE"
             hide-default-footer
           >
             <template #item.CreatedAt="{ item }">
@@ -573,8 +625,13 @@ onMounted(() => {
             </template>
           </v-data-table>
 
-          <PaginationControls v-model:page="page" :has-more="hasMore" />
+          <PaginationControls :page="page" :has-more="hasMore" @update:page="loadEvents" />
         </v-card>
+      </v-window-item>
+
+      <!-- Summary -->
+      <v-window-item value="summary">
+        <AutoSnapshotSummaryTab />
       </v-window-item>
     </v-window>
   </div>

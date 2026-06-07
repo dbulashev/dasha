@@ -29,12 +29,12 @@ type AuthToken struct {
 }
 
 type OIDCConfig struct {
-	IssuerURL           string   `mapstructure:"issuer_url"`
-	ClientID            string   `mapstructure:"client_id"`
-	ClientSecret        string   `mapstructure:"client_secret"`
-	ClientSecretFromEnv string   `mapstructure:"client_secret_from_env"`
-	Scopes              []string `mapstructure:"scopes"`
-	RedirectURL         string   `mapstructure:"redirect_url"`
+	IssuerURL           string            `mapstructure:"issuer_url"`
+	ClientID            string            `mapstructure:"client_id"`
+	ClientSecret        string            `mapstructure:"client_secret"`
+	ClientSecretFromEnv string            `mapstructure:"client_secret_from_env"`
+	Scopes              []string          `mapstructure:"scopes"`
+	RedirectURL         string            `mapstructure:"redirect_url"`
 	RoleClaim           string            `mapstructure:"role_claim"`   // default: "realm_access.roles"
 	RoleMapping         map[string]string `mapstructure:"role_mapping"` // e.g. {"dba_team": "admin", "dev_team": "viewer"}
 }
@@ -141,6 +141,15 @@ type DiscoveryEntry struct {
 type StorageConfig struct {
 	DSN        string `mapstructure:"dsn"`
 	DSNFromEnv string `mapstructure:"dsn_from_env"`
+
+	// LeaderElection enables advisory-lock leader election for the autosnapshot
+	// daemon, making it safe to run multiple replicas (one becomes leader).
+	// Disabled by default: a session-level advisory lock requires a dedicated,
+	// long-lived connection, which is incompatible with transaction-pooling
+	// proxies (e.g. PgBouncer in transaction mode). Enable only when the daemon
+	// reaches the storage DB via a direct/session-pooled connection and you run
+	// more than one replica.
+	LeaderElection bool `mapstructure:"leader_election"`
 }
 
 // Enabled returns true if the storage DSN is configured.

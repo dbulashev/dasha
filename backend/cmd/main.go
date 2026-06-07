@@ -121,6 +121,7 @@ func autosnapshotExec(cmd *cobra.Command, _ []string) error {
 		container.Repository(),
 		st,
 		cfg.EnableQueryStatsReset,
+		cfg.Storage.LeaderElection,
 		logger,
 	)
 

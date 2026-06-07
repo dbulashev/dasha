@@ -38,6 +38,9 @@ type Config struct {
 	RetentionBytes       int64
 	RetentionMinDays     int
 	MinBaselineActive    int
+	CaptureLocks         bool
+	LockProbeCount       int
+	LockProbeInterval    time.Duration
 	Defaults             TriggerDefaults
 	UpdatedAt            time.Time
 	UpdatedBy            *string
@@ -132,6 +135,16 @@ type TriggerEventFilter struct {
 	Offset      int
 }
 
+// ClusterSummary aggregates trigger-event counts per cluster — powers the
+// summary tab (where to look first: many spikes or many errors).
+type ClusterSummary struct {
+	ClusterName   string
+	Snapshots     int // outcome = snapshot_created (total)
+	ActivitySpike int // snapshot_created via activity_spike
+	RoleChange    int // snapshot_created via role_change
+	Errors        int // outcome = error
+}
+
 type LeaderInfo struct {
 	InstanceID    *string
 	LastHeartbeat *time.Time
@@ -148,6 +161,7 @@ type SnapshotOpts struct {
 	PgssStatsReset *time.Time
 	Reason         string
 	TriggerContext map[string]any
+	LocksData      *LockCapture
 }
 
 // PartitionSize is a single day-triple partition group with its combined size.
