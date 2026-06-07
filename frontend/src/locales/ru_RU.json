@@ -249,7 +249,8 @@
             "activity_spike": "Всплеск активности",
             "role_change": "Смена роли",
             "activity_drop": "Спад активности",
-            "deferred": "Отложенный"
+            "deferred": "Отложенный",
+            "manual": "Ручной"
         }
     },
     "cpuTimeWarning": "Обнаружены запросы с отрицательным CPU time (total_plan_time + total_exec_time − blk_read_time − blk_write_time < 0). Если pg_stat_statements.track_planning отключён, plan_time = 0 и отрицательное значение указывает на потенциально высокое время планирования запроса. Включите track_planning для точных данных.",

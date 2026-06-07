@@ -331,7 +331,7 @@ func (s *Storage) ListTriggerEvents(ctx context.Context, f autosnapshot.TriggerE
 		       trigger_type, outcome, snapshot_id, trigger_context, error_message
 		FROM trigger_events
 		%s
-		ORDER BY created_at DESC
+		ORDER BY created_at DESC, id DESC
 		LIMIT $%d OFFSET $%d`, whereClause, argIdx, argIdx+1)
 
 	rows, err := s.pool.Query(ctx, q, args...)

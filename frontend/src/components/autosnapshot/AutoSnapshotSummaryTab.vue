@@ -17,12 +17,16 @@ const { onError } = useViewError()
 // Global, no cluster context — load once on mount (matches the clusters tab).
 const items = ref<ClusterSnapshotSummary[]>([])
 const loading = ref(false)
+const loaded = ref(false)
 
 async function load() {
   loading.value = true
   try {
     items.value = assertOk<ClusterSnapshotSummary[]>(await getAutosnapshotSummary()) ?? []
+    loaded.value = true
   } catch (e) {
+    // Keep loaded=false so the empty-state alert is not shown on failure
+    // (the global error banner explains it).
     onError(getErrorMessage(e), e)
     items.value = []
   } finally {
@@ -85,7 +89,7 @@ const chartOptions = computed(() => ({
 
 <template>
   <div>
-    <v-alert v-if="!loading && items.length === 0" type="info">
+    <v-alert v-if="loaded && items.length === 0" type="info">
       {{ t('autosnapshot.summary.empty') }}
     </v-alert>
 

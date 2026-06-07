@@ -28,9 +28,11 @@ export const useAutosnapshotStatusStore = defineStore('autosnapshotStatus', {
         this.enabled = !!body?.Enabled
         this.cachedAt = Date.now()
       } catch {
-        // Don't cache failures — leave cachedAt unset so ensureLoaded() retries.
-        this.available = false
-        this.enabled = false
+        // Transient failure: keep the last-known state (don't flip the menu off)
+        // and invalidate the cache so the next ensureLoaded() retries. Flipping
+        // available=false here while a prior cachedAt is still valid would wedge
+        // the menu hidden until the cache expired.
+        this.cachedAt = null
       } finally {
         this.loading = false
       }
@@ -42,13 +44,11 @@ export const useAutosnapshotStatusStore = defineStore('autosnapshotStatus', {
   persist: {
     storage: localStorage,
     afterHydrate(ctx) {
-      const store = ctx.store
-      if (store.cachedAt !== null && Date.now() - store.cachedAt > CACHE_TTL_MS) {
-        store.available = false
-        store.enabled = false
-        store.cachedAt = null
-      }
-      store.loading = false
+      // Always re-validate on load: drop the cache so ensureLoaded() refetches
+      // the real status. Persisted available/enabled still render instantly; the
+      // fetch corrects them. This also un-wedges any stale persisted state.
+      ctx.store.cachedAt = null
+      ctx.store.loading = false
     },
   },
 })

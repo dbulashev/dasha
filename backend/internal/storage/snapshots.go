@@ -27,6 +27,7 @@ type SnapshotListItem struct {
 	JsonVersion    int
 	PgssStatsReset *time.Time
 	HasLocks       bool
+	Reason         string // "manual" or "auto:<trigger_type>"
 }
 
 // SnapshotOpts is re-exported from autosnapshot to keep storage callers working.
@@ -138,7 +139,7 @@ func (s *Storage) ListSnapshots(
 	clusterName, instance, database string,
 ) ([]SnapshotListItem, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, created_at, dasha_version, json_version, pgss_stats_reset, locks_data IS NOT NULL
+		SELECT id, created_at, dasha_version, json_version, pgss_stats_reset, locks_data IS NOT NULL, reason
 		FROM snapshots
 		WHERE cluster_name = $1 AND instance = $2 AND database = $3
 		ORDER BY created_at DESC
@@ -154,7 +155,7 @@ func (s *Storage) ListSnapshots(
 
 	for rows.Next() {
 		var item SnapshotListItem
-		if err := rows.Scan(&item.ID, &item.CreatedAt, &item.DashaVersion, &item.JsonVersion, &item.PgssStatsReset, &item.HasLocks); err != nil {
+		if err := rows.Scan(&item.ID, &item.CreatedAt, &item.DashaVersion, &item.JsonVersion, &item.PgssStatsReset, &item.HasLocks, &item.Reason); err != nil {
 			return nil, fmt.Errorf("storage: scan snapshot: %w", err)
 		}
 

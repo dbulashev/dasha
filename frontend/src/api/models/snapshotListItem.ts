@@ -14,4 +14,6 @@ export interface SnapshotListItem {
   PgssStatsReset?: string | null
   /** True when a lock snapshot was captured alongside this snapshot */
   HasLocks?: boolean
+  /** Why the snapshot was created: "manual" or "auto:<trigger_type>" */
+  Reason?: string
 }

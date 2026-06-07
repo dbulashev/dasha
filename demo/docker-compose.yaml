@@ -322,6 +322,11 @@ services:
   workload-generator:
     image: postgres:18-alpine
     entrypoint: ["/workload-generator.sh"]
+    # Set SPIKE_GENERATOR=off to disable the built-in periodic activity spiker
+    # (keeps the steady baseline) for a clean controlled test via spike-test.sh:
+    #   SPIKE_GENERATOR=off docker compose -f demo/docker-compose.yaml up -d --force-recreate workload-generator
+    environment:
+      SPIKE_GENERATOR: "${SPIKE_GENERATOR:-on}"
     volumes:
       - ./scripts/workload-generator.sh:/workload-generator.sh:ro
     depends_on:

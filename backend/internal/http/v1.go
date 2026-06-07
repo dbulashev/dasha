@@ -1966,6 +1966,7 @@ func (s *Handlers) GetSnapshots(
 		items,
 		func(item storage.SnapshotListItem) serverhttp.SnapshotListItem {
 			hasLocks := item.HasLocks
+			reason := item.Reason
 
 			return serverhttp.SnapshotListItem{
 				Id:             openapi_types.UUID(item.ID),
@@ -1974,6 +1975,7 @@ func (s *Handlers) GetSnapshots(
 				JsonVersion:    item.JsonVersion,
 				PgssStatsReset: item.PgssStatsReset,
 				HasLocks:       &hasLocks,
+				Reason:         &reason,
 			}
 		})
 

@@ -4035,6 +4035,9 @@ components:
         HasLocks:
           type: boolean
           description: True when a lock snapshot was captured alongside this snapshot
+        Reason:
+          type: string
+          description: 'Why the snapshot was created: "manual" or "auto:<trigger_type>"'
 
     SnapshotCreated:
       type: object
@@ -4113,7 +4116,7 @@ components:
 
     LockSnapshot:
       type: object
-      description: Lock graph captured alongside an auto-snapshot (snapshots.locks_data).
+      description: Lock-contention graph captured alongside an auto-snapshot.
       required:
         - captured
         - blocked_count

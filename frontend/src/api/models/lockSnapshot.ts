@@ -8,7 +8,7 @@ import type { LockBackgroundPeak } from './lockBackgroundPeak'
 import type { QueryBlocked } from './queryBlocked'
 
 /**
- * Lock graph captured alongside an auto-snapshot (snapshots.locks_data).
+ * Lock-contention graph captured alongside an auto-snapshot.
  */
 export interface LockSnapshot {
   captured: boolean

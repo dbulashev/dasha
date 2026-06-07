@@ -69,6 +69,7 @@ type hostState struct {
 	lockPeak            *BackgroundPeak // worst blocked-session count during a forming spike (hybrid lock capture)
 	inSpike             bool            // a spike snapshot was taken and not yet resolved
 	recoveryBelowSince  *time.Time      // debounce for the activity_drop (recovery) snapshot
+	spikeThreshold      float64         // frozen threshold at spike onset — recovery is judged against it, not the live (inflated) one
 }
 
 type activitySample struct {
@@ -227,16 +228,8 @@ func (d *Daemon) tick(ctx context.Context, cfg Config) {
 
 // processPending takes any deferred snapshots whose due time has passed.
 func (d *Daemon) processPending(ctx context.Context, cfg Config) {
-	pending, err := d.store.ClaimDuePendingSnapshots(ctx)
-	if err != nil {
-		d.logger.Warn("claim pending snapshots failed", zap.Error(err))
-		return
-	}
-
-	if len(pending) == 0 {
-		return
-	}
-
+	// Resolve clusters first — ClaimDuePendingSnapshots is a destructive
+	// DELETE ... RETURNING, so a failed cluster lookup must not drop the jobs.
 	cls, err := d.clusters.Get(ctx)
 	if err != nil {
 		d.logger.Warn("pending: get clusters failed", zap.Error(err))
@@ -248,6 +241,12 @@ func (d *Daemon) processPending(ctx context.Context, cfg Config) {
 		byName[string(cl.Name)] = cl
 	}
 
+	pending, err := d.store.ClaimDuePendingSnapshots(ctx)
+	if err != nil {
+		d.logger.Warn("claim pending snapshots failed", zap.Error(err))
+		return
+	}
+
 	for _, p := range pending {
 		cl, ok := byName[p.ClusterName]
 		if !ok {
@@ -255,6 +254,6 @@ func (d *Daemon) processPending(ctx context.Context, cfg Config) {
 		}
 
 		trigCtx := map[string]any{"trigger": "deferred", "host": p.Instance}
-		d.takeSnapshot(ctx, cfg, cl, p.Instance, p.Database, TriggerDeferred, p.Reason, trigCtx, nil)
+		_ = d.takeSnapshot(ctx, cfg, cl, p.Instance, p.Database, TriggerDeferred, p.Reason, trigCtx, nil)
 	}
 }

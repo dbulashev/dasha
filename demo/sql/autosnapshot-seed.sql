@@ -13,5 +13,6 @@ SET enabled                = true,
       "activity_spike": {"enabled": true, "window_size": "1m", "active_threshold_pct": 50, "spike_duration": "20s", "recovery_duration": "20s", "deferred_interval": "0s"},
       "role_change":    {"enabled": true, "direction": "both"}
     }'::jsonb,
+    updated_at = now(),
     updated_by = 'demo-seed'
 WHERE id = 1;

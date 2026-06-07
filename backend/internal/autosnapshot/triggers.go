@@ -73,7 +73,7 @@ func (d *Daemon) tickActivitySpike(
 	// log at debug (throttled per host) rather than persisting a trigger_event.
 	if baseline < float64(cfg.MinBaselineActive) {
 		state.aboveThresholdSince = nil
-		d.handleRecovery(ctx, cfg, t, cl, instance, database, state, now)
+		d.handleRecovery(ctx, cfg, t, cl, instance, database, state, now, count)
 
 		if count >= cfg.MinBaselineActive && belowBaselineDue(state, now, cfg.MaxSnapshotFrequency) {
 			state.lastBelowBaselineAt = &now
@@ -92,7 +92,7 @@ func (d *Daemon) tickActivitySpike(
 	if float64(count) < threshold {
 		state.aboveThresholdSince = nil
 		state.lockPeak = nil
-		d.handleRecovery(ctx, cfg, t, cl, instance, database, state, now)
+		d.handleRecovery(ctx, cfg, t, cl, instance, database, state, now, count)
 
 		return
 	}
@@ -114,6 +114,15 @@ func (d *Daemon) tickActivitySpike(
 
 	if state.aboveThresholdSince == nil {
 		state.aboveThresholdSince = &now
+		// Freeze the recovery reference at the CLEAN pre-spike threshold (the moving
+		// baseline here excludes the just-crossed sample, so it is not yet inflated
+		// by the spike). Capturing it later (at fire time) would set it above the
+		// spike's own sustained level and make the drop fire mid-incident. Only on a
+		// fresh incident — a re-crossing while inSpike must not re-inflate it.
+		if !state.inSpike {
+			state.spikeThreshold = threshold
+		}
+
 		return
 	}
 
@@ -141,9 +150,17 @@ func (d *Daemon) tickActivitySpike(
 		"host":          instance,
 	}
 
-	d.takeSnapshot(ctx, cfg, cl, instance, database, TriggerActivitySpike, "auto:activity_spike", trigCtx, state.lockPeak)
+	err = d.takeSnapshot(ctx, cfg, cl, instance, database, TriggerActivitySpike, "auto:activity_spike", trigCtx, state.lockPeak)
 	state.aboveThresholdSince = nil
 	state.lockPeak = nil
+
+	// Snapshot failed (error event already recorded): don't advance the incident
+	// state or enqueue a deferred follow-up. The spike retries on the next
+	// sustained crossing (throttled by spike_duration).
+	if err != nil {
+		return
+	}
+
 	state.inSpike = true
 	state.recoveryBelowSince = nil
 
@@ -160,9 +177,11 @@ func (d *Daemon) tickActivitySpike(
 }
 
 // handleRecovery takes one activity_drop snapshot when a host that was in a spike
-// stays below the threshold for t.RecoveryDuration — the spike's clean aftermath
-// window. Fires once per incident (inSpike cleared); no debounce, since it is the
-// other half of the spike snapshot.
+// returns near its pre-spike level for t.RecoveryDuration — the spike's clean
+// aftermath window. Recovery is judged against the FROZEN spike-onset threshold,
+// not the live one: a sustained spike inflates the moving-average baseline, so the
+// live threshold would eventually exceed the still-high count and falsely look
+// "recovered" mid-spike. Fires once per incident (inSpike cleared); no debounce.
 func (d *Daemon) handleRecovery(
 	ctx context.Context,
 	cfg Config,
@@ -171,6 +190,7 @@ func (d *Daemon) handleRecovery(
 	instance, database string,
 	state *hostState,
 	now time.Time,
+	count int,
 ) {
 	if t.RecoveryDuration <= 0 {
 		state.inSpike = false
@@ -180,6 +200,12 @@ func (d *Daemon) handleRecovery(
 	}
 
 	if !state.inSpike {
+		state.recoveryBelowSince = nil
+		return
+	}
+
+	// Still at/above the spike-onset threshold → the spike has not resolved.
+	if float64(count) >= state.spikeThreshold {
 		state.recoveryBelowSince = nil
 		return
 	}
@@ -198,7 +224,13 @@ func (d *Daemon) handleRecovery(
 		"host":    instance,
 	}
 
-	d.takeSnapshot(ctx, cfg, cl, instance, database, TriggerActivityDrop, "auto:activity_drop", trigCtx, nil)
+	if err := d.takeSnapshot(ctx, cfg, cl, instance, database, TriggerActivityDrop, "auto:activity_drop", trigCtx, nil); err != nil {
+		// Drop snapshot failed (error event recorded): keep inSpike so it retries;
+		// reset the debounce so we wait recovery_duration again before re-trying.
+		state.recoveryBelowSince = nil
+		return
+	}
+
 	state.inSpike = false
 	state.recoveryBelowSince = nil
 
@@ -278,7 +310,9 @@ func (d *Daemon) tickRoleChange(
 		"to_role":   to,
 	}
 
-	d.takeSnapshot(ctx, cfg, cl, instance, database, TriggerRoleChange, "auto:role_change", trigCtx, nil)
+	// Role change is a one-shot transition (lastInRecovery already advanced); a
+	// failure is recorded as an error event inside takeSnapshot.
+	_ = d.takeSnapshot(ctx, cfg, cl, instance, database, TriggerRoleChange, "auto:role_change", trigCtx, nil)
 }
 
 func (d *Daemon) takeSnapshot(
@@ -290,7 +324,7 @@ func (d *Daemon) takeSnapshot(
 	reason string,
 	trigCtx map[string]any,
 	bgPeak *BackgroundPeak,
-) {
+) error {
 	reports, err := d.repo.GetQueriesReport(ctx, string(cl.Name), instance, nil)
 	if err != nil {
 		d.insertEvent(ctx, TriggerEvent{
@@ -303,7 +337,7 @@ func (d *Daemon) takeSnapshot(
 			ErrorMessage:   strPtr(fmt.Sprintf("get report: %v", err)),
 		})
 
-		return
+		return err
 	}
 
 	var pgssReset *time.Time
@@ -337,7 +371,7 @@ func (d *Daemon) takeSnapshot(
 			ErrorMessage:   strPtr(fmt.Sprintf("create snapshot: %v", err)),
 		})
 
-		return
+		return err
 	}
 
 	d.mu.Lock()
@@ -372,6 +406,8 @@ func (d *Daemon) takeSnapshot(
 		zap.String("instance", instance),
 		zap.String("reason", reason),
 		zap.String("snapshot_id", id.String()))
+
+	return nil
 }
 
 func (d *Daemon) debounced(key hostKey, maxFreq time.Duration) bool {
