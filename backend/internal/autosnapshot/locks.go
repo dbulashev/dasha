@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/dbulashev/dasha/internal/dto"
+	"github.com/dbulashev/dasha/internal/pkg/sanitize"
 )
 
 // maxLockRows caps how many blocked/blocking pairs are stored, so a mass-lock
@@ -118,6 +119,13 @@ func CaptureLocks(
 
 	if len(best) > maxLockRows {
 		best = best[:maxLockRows]
+	}
+
+	// Redact SQL literals before persisting into locks_data — the same masking the
+	// live blocked-queries endpoint applies (sanitize.SQL on both query fields).
+	for i := range best {
+		best[i].BlockedQuery = sanitize.SQL(best[i].BlockedQuery)
+		best[i].CurrentOrRecentQueryInBlockingProcess = sanitize.SQL(best[i].CurrentOrRecentQueryInBlockingProcess)
 	}
 
 	now := time.Now().UTC()

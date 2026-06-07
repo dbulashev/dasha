@@ -81,8 +81,8 @@ const lockTree = computed<LockTreeNode[]>(() => {
         </div>
         <v-list density="compact" lines="two">
           <v-list-item
-            v-for="b in node.blocked"
-            :key="b.pid"
+            v-for="(b, i) in node.blocked"
+            :key="`${node.pid}-${b.pid}-${i}`"
             prepend-icon="mdi-arrow-right-bold"
           >
             <v-list-item-title class="d-flex align-center ga-2">

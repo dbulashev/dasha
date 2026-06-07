@@ -28,9 +28,9 @@ export const useAutosnapshotStatusStore = defineStore('autosnapshotStatus', {
         this.enabled = !!body?.Enabled
         this.cachedAt = Date.now()
       } catch {
+        // Don't cache failures — leave cachedAt unset so ensureLoaded() retries.
         this.available = false
         this.enabled = false
-        this.cachedAt = Date.now()
       } finally {
         this.loading = false
       }

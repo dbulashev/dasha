@@ -12,6 +12,7 @@ import type {
 import { AuthInfoMode } from '@/api/models'
 import { useAuthStore } from '@/stores/auth'
 import { assertOk } from '@/utils/api'
+import { getErrorMessage } from '@/utils/error'
 
 const props = defineProps<{
   modelValue: boolean
@@ -179,7 +180,7 @@ async function loadOverride() {
     data.value = body
     fillFormFromOverrides(body?.Overrides)
   } catch (e) {
-    error.value = t('autosnapshot.clusters.loadError') + ': ' + String(e)
+    error.value = t('autosnapshot.clusters.loadError') + ': ' + getErrorMessage(e)
   } finally {
     loading.value = false
   }
@@ -202,7 +203,7 @@ async function save() {
     emit('saved', props.clusterName)
     close(false)
   } catch (e) {
-    error.value = String(e)
+    error.value = getErrorMessage(e)
   } finally {
     saving.value = false
   }

@@ -2,7 +2,7 @@
 
 ## v1.3.0
 
-#### New Features
+### New Features
 - **Auto-snapshots of pg_stat_statements**: separate `dasha autosnapshot` daemon creates pgss snapshots automatically on configurable triggers
   - **Trigger: activity spike** — sliding-window moving average of `count(state='active')` from `pg_stat_activity`; fires when current value exceeds baseline by a configurable percent (default +50%) for a sustained duration (default 5 min)
   - **Trigger: role change** — detects master↔replica transitions via `pg_is_in_recovery()`, with configurable direction (`both` / `master_to_replica` / `replica_to_master`)

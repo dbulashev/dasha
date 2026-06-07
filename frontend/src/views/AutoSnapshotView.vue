@@ -598,6 +598,7 @@ onMounted(() => {
                 <v-btn
                   v-if="item.SnapshotId"
                   v-tooltip="t('autosnapshot.history.openSnapshot')"
+                  :aria-label="t('autosnapshot.history.openSnapshot')"
                   icon="mdi-open-in-new"
                   size="x-small"
                   variant="text"

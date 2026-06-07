@@ -461,15 +461,20 @@ func validatePosDurationField(m map[string]any, key string) error {
 
 func triggerEventToAPI(e autosnapshot.TriggerEvent) serverhttp.TriggerEvent {
 	out := serverhttp.TriggerEvent{
-		Id:             openapi_types.UUID(e.ID),
-		CreatedAt:      e.CreatedAt,
-		ClusterName:    e.ClusterName,
-		Instance:       e.Instance,
-		Database:       e.Database,
-		TriggerType:    string(e.TriggerType),
-		Outcome:        string(e.Outcome),
-		TriggerContext: &e.TriggerContext,
-		ErrorMessage:   e.ErrorMessage,
+		Id:           openapi_types.UUID(e.ID),
+		CreatedAt:    e.CreatedAt,
+		ClusterName:  e.ClusterName,
+		Instance:     e.Instance,
+		Database:     e.Database,
+		TriggerType:  string(e.TriggerType),
+		Outcome:      string(e.Outcome),
+		ErrorMessage: e.ErrorMessage,
+	}
+
+	// Only set the pointer when there is context, otherwise it serializes as null.
+	if len(e.TriggerContext) > 0 {
+		tc := e.TriggerContext
+		out.TriggerContext = &tc
 	}
 
 	if e.SnapshotID != nil {

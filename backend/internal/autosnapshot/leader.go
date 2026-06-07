@@ -88,7 +88,10 @@ func (l *Leader) Release() {
 		return
 	}
 
-	if err := l.conn.Close(context.Background()); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := l.conn.Close(ctx); err != nil {
 		l.logger.Warn("leader conn close failed", zap.Error(err))
 	}
 

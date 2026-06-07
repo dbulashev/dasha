@@ -20,7 +20,7 @@ services:
       - backend
 
   # Auto-snapshot daemon. Runs the same image with "autosnapshot" arg.
-  # Uses storage DB as coordination backend (advisory lock) — safe to scale.
+  # Single instance by default; to scale, enable storage.leader_election in dasha.yaml.
   autosnapshot:
     image: dbulashev/dasha-backend:latest
     restart: unless-stopped
@@ -29,3 +29,5 @@ services:
       - ./dasha.yaml:/etc/dasha/dasha.yaml:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    depends_on:
+      - backend

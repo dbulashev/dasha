@@ -34,9 +34,15 @@ async function load() {
   }
 }
 
-watch(open, (v) => {
-  if (v) load()
-})
+// Load when the dialog opens, when mounted already open, and when the snapshot
+// id changes while open.
+watch(
+  [open, () => props.snapshotId],
+  ([isOpen]) => {
+    if (isOpen) load()
+  },
+  { immediate: true },
+)
 
 const rows = computed<QueryBlocked[]>(() => data.value?.rows ?? [])
 

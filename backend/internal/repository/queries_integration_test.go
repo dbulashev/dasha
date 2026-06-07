@@ -103,17 +103,22 @@ func TestGetBlockedSessionCount(t *testing.T) {
 	require.NoError(t, err)
 
 	// A second connection blocks on the same row until the holder releases.
+	// Use a bounded context so a pathological pool state fails fast instead of
+	// hanging CI forever.
+	bgCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
 	blockerDone := make(chan struct{})
 	go func() {
 		defer close(blockerDone)
-		c, e := pool.Acquire(context.Background())
+		c, e := pool.Acquire(bgCtx)
 		if e != nil {
 			return
 		}
 		defer c.Release()
-		_, _ = c.Exec(context.Background(), "BEGIN")
-		_, _ = c.Exec(context.Background(), "SELECT id FROM users ORDER BY id LIMIT 1 FOR UPDATE")
-		_, _ = c.Exec(context.Background(), "ROLLBACK")
+		_, _ = c.Exec(bgCtx, "BEGIN")
+		_, _ = c.Exec(bgCtx, "SELECT id FROM users ORDER BY id LIMIT 1 FOR UPDATE")
+		_, _ = c.Exec(bgCtx, "ROLLBACK")
 	}()
 
 	// The blocked session should be detected by the count query.
@@ -125,7 +130,12 @@ func TestGetBlockedSessionCount(t *testing.T) {
 	// Release the lock so the blocker proceeds and the goroutine exits.
 	_, err = holder.Exec(ctx, "ROLLBACK")
 	require.NoError(t, err)
-	<-blockerDone
+
+	select {
+	case <-blockerDone:
+	case <-time.After(10 * time.Second):
+		t.Fatal("blocker goroutine did not finish")
+	}
 }
 
 func TestGetQueriesRunning(t *testing.T) {

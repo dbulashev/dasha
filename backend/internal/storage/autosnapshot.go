@@ -64,9 +64,18 @@ func (s *Storage) GetAutosnapshotConfig(ctx context.Context) (autosnapshot.Confi
 	}
 
 	cfg.Defaults.ActivitySpike.Enabled = raw.ActivitySpike.Enabled
-	cfg.Defaults.ActivitySpike.WindowSize, _ = time.ParseDuration(raw.ActivitySpike.WindowSize)
 	cfg.Defaults.ActivitySpike.ActiveThresholdPct = raw.ActivitySpike.ActiveThresholdPct
-	cfg.Defaults.ActivitySpike.SpikeDuration, _ = time.ParseDuration(raw.ActivitySpike.SpikeDuration)
+
+	cfg.Defaults.ActivitySpike.WindowSize, err = time.ParseDuration(raw.ActivitySpike.WindowSize)
+	if err != nil {
+		return cfg, fmt.Errorf("storage: parse ActivitySpike.WindowSize %q: %w", raw.ActivitySpike.WindowSize, err)
+	}
+
+	cfg.Defaults.ActivitySpike.SpikeDuration, err = time.ParseDuration(raw.ActivitySpike.SpikeDuration)
+	if err != nil {
+		return cfg, fmt.Errorf("storage: parse ActivitySpike.SpikeDuration %q: %w", raw.ActivitySpike.SpikeDuration, err)
+	}
+
 	cfg.Defaults.RoleChange.Enabled = raw.RoleChange.Enabled
 	cfg.Defaults.RoleChange.Direction = autosnapshot.Direction(raw.RoleChange.Direction)
 
@@ -423,7 +432,10 @@ func (s *Storage) TryAcquireLeaderLock(ctx context.Context) (*pgx.Conn, bool, er
 		return nil, false, nil
 	}
 
-	return conn.Conn(), true, nil
+	// Hijack removes the connection from the pool so the session-level advisory
+	// lock is held on a dedicated conn the caller owns and Closes (Leader.Release).
+	// Using conn.Conn() instead would leak the pool checkout.
+	return conn.Hijack(), true, nil
 }
 
 // UpdateLeaderHeartbeat writes the current leader identity and heartbeat time.

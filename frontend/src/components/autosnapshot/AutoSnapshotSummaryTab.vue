@@ -1,22 +1,36 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { Doughnut } from 'vue-chartjs'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
 import { useI18n } from 'vue-i18n'
 import { getAutosnapshotSummary } from '@/api/gen/default/default'
 import type { ClusterSnapshotSummary } from '@/api/models'
-import { useApiLoader } from '@/composables/useApiLoader'
 import { useViewError } from '@/composables/useViewError'
+import { assertOk } from '@/utils/api'
+import { getErrorMessage } from '@/utils/error'
 
 ChartJS.register(ArcElement, Tooltip, Legend)
 
 const { t } = useI18n()
 const { onError } = useViewError()
 
-const { items, loading } = useApiLoader<ClusterSnapshotSummary[]>(
-  () => getAutosnapshotSummary(),
-  { deps: [], guard: () => true, onError },
-)
+// Global, no cluster context — load once on mount (matches the clusters tab).
+const items = ref<ClusterSnapshotSummary[]>([])
+const loading = ref(false)
+
+async function load() {
+  loading.value = true
+  try {
+    items.value = assertOk<ClusterSnapshotSummary[]>(await getAutosnapshotSummary()) ?? []
+  } catch (e) {
+    onError(getErrorMessage(e), e)
+    items.value = []
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(load)
 
 const headers = computed(() => [
   { title: t('autosnapshot.summary.cluster'), key: 'ClusterName' },
