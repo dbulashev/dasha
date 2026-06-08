@@ -93,7 +93,7 @@ type Result struct {
 	InRecovery     bool             `json:"in_recovery"`
 }
 
-// Default category weights, sum to 1.00. Rationale: see plans/health-score-v3-design.md §1.2.
+// Default category weights, sum to 1.00.
 const (
 	weightConnections   = 0.15
 	weightPerformance   = 0.15

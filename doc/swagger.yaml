@@ -1533,6 +1533,12 @@ paths:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
         - $ref: '#/components/parameters/Database'
+        - name: include_locks
+          in: query
+          required: false
+          description: Also capture a lock snapshot (probes blocked sessions)
+          schema:
+            type: boolean
       responses:
         '201':
           description: Snapshot created
@@ -1563,6 +1569,27 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/QueryReport'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: Storage not configured
+  /api/queries/snapshot/{id}/locks:
+    get:
+      operationId: getSnapshotLocks
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LockSnapshot'
         '404':
           $ref: '#/components/responses/NotFound'
         '501':
@@ -1808,6 +1835,156 @@ paths:
                   $ref: '#/components/schemas/SettingsNotification'
         '404':
           $ref: '#/components/responses/NotFound'
+  /api/autosnapshot/status:
+    get:
+      operationId: getAutosnapshotStatus
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutoSnapshotStatus'
+  /api/autosnapshot/config:
+    get:
+      operationId: getAutosnapshotConfig
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutoSnapshotConfig'
+        '501':
+          description: Storage not configured
+    put:
+      operationId: putAutosnapshotConfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutoSnapshotConfig'
+      responses:
+        '204':
+          description: Updated
+        '400':
+          description: Validation error
+        '501':
+          description: Storage not configured
+  /api/autosnapshot/clusters/{name}:
+    get:
+      operationId: getAutosnapshotCluster
+      parameters:
+        - in: path
+          name: name
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutoSnapshotClusterOverride'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: Storage not configured
+    put:
+      operationId: putAutosnapshotCluster
+      parameters:
+        - in: path
+          name: name
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutoSnapshotClusterOverrideInput'
+      responses:
+        '204':
+          description: Updated
+        '400':
+          description: Validation error
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: Storage not configured
+  /api/autosnapshot/trigger-events:
+    get:
+      operationId: getAutosnapshotTriggerEvents
+      parameters:
+        - in: query
+          name: cluster_name
+          schema:
+            type: string
+          required: false
+        - in: query
+          name: outcome
+          schema:
+            type: string
+          required: false
+        - in: query
+          name: trigger_type
+          schema:
+            type: string
+          required: false
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date-time
+          required: false
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date-time
+          required: false
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+          required: false
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+          required: false
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TriggerEvent'
+        '501':
+          description: Storage not configured
+
+  /api/autosnapshot/summary:
+    get:
+      operationId: getAutosnapshotSummary
+      description: Per-cluster snapshot/error counts (all retained history) for the summary tab.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ClusterSnapshotSummary'
+        '501':
+          description: Storage not configured
 
 components:
   securitySchemes:
@@ -4098,6 +4275,12 @@ components:
           type: string
           format: date-time
           nullable: true
+        HasLocks:
+          type: boolean
+          description: True when a lock snapshot was captured alongside this snapshot
+        Reason:
+          type: string
+          description: 'Why the snapshot was created: "manual" or "auto:<trigger_type>"'
 
     SnapshotCreated:
       type: object
@@ -4111,6 +4294,261 @@ components:
         CreatedAt:
           type: string
           format: date-time
+
+    ActivitySpikeTrigger:
+      type: object
+      required:
+        - Enabled
+        - WindowSize
+        - ActiveThresholdPct
+        - SpikeDuration
+        - RecoveryDuration
+        - DeferredInterval
+      properties:
+        Enabled:
+          type: boolean
+        WindowSize:
+          type: string
+          description: Go duration string (e.g. "5m")
+        ActiveThresholdPct:
+          type: integer
+        SpikeDuration:
+          type: string
+          description: Go duration string (e.g. "5m")
+        RecoveryDuration:
+          type: string
+          description: Snapshot the aftermath once activity stays below threshold this long; "0s" disables
+        DeferredInterval:
+          type: string
+          description: Scheduled follow-up snapshot this long after a spike (persisted queue); "0s" disables
+
+    RoleChangeTrigger:
+      type: object
+      required:
+        - Enabled
+        - Direction
+      properties:
+        Enabled:
+          type: boolean
+        Direction:
+          type: string
+          enum: [master_to_replica, replica_to_master, both]
+
+    AutoSnapshotTriggerDefaults:
+      type: object
+      required:
+        - ActivitySpike
+        - RoleChange
+      properties:
+        ActivitySpike:
+          $ref: '#/components/schemas/ActivitySpikeTrigger'
+        RoleChange:
+          $ref: '#/components/schemas/RoleChangeTrigger'
+
+    LockBackgroundPeak:
+      type: object
+      required:
+        - blocked_count
+        - at
+      properties:
+        blocked_count:
+          type: integer
+        at:
+          type: string
+          format: date-time
+
+    LockSnapshot:
+      type: object
+      description: Lock-contention graph captured alongside an auto-snapshot.
+      required:
+        - captured
+        - blocked_count
+      properties:
+        captured:
+          type: boolean
+        probes:
+          type: integer
+        probe_interval:
+          type: string
+          description: Go duration string between probes
+        harshest_at:
+          type: string
+          format: date-time
+          nullable: true
+        blocked_count:
+          type: integer
+          description: Distinct blocked sessions in the harshest probe
+        max_wait_ms:
+          type: number
+          format: double
+        background_peak:
+          $ref: '#/components/schemas/LockBackgroundPeak'
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueryBlocked'
+        error:
+          type: string
+
+    AutoSnapshotConfig:
+      type: object
+      required:
+        - Enabled
+        - PollInterval
+        - MaxSnapshotFrequency
+        - RetentionBytes
+        - RetentionMinDays
+        - MinBaselineActive
+        - CaptureLocks
+        - LockProbeCount
+        - LockProbeInterval
+        - ResetQueryStats
+        - Defaults
+      properties:
+        Enabled:
+          type: boolean
+        PollInterval:
+          type: string
+          description: Go duration string (e.g. "30s")
+        MaxSnapshotFrequency:
+          type: string
+          description: Go duration string (e.g. "1h")
+        RetentionBytes:
+          type: integer
+          format: int64
+          description: Total storage size target in bytes, 0 to disable
+        RetentionMinDays:
+          type: integer
+        MinBaselineActive:
+          type: integer
+        CaptureLocks:
+          type: boolean
+        LockProbeCount:
+          type: integer
+        LockProbeInterval:
+          type: string
+          description: Go duration string between lock probes (e.g. "500ms")
+        ResetQueryStats:
+          type: boolean
+          description: Reset pg_stat_statements after each auto-snapshot (independent of the manual UI reset flag)
+        Defaults:
+          $ref: '#/components/schemas/AutoSnapshotTriggerDefaults'
+
+    AutoSnapshotClusterOverride:
+      type: object
+      required:
+        - ClusterName
+        - Overrides
+        - Effective
+      properties:
+        ClusterName:
+          type: string
+        Overrides:
+          type: object
+          description: Partial overrides (activity_spike / role_change subfields)
+          additionalProperties: true
+        Effective:
+          $ref: '#/components/schemas/AutoSnapshotTriggerDefaults'
+
+    AutoSnapshotClusterOverrideInput:
+      type: object
+      required:
+        - Overrides
+      properties:
+        Overrides:
+          type: object
+          description: Partial overrides (activity_spike / role_change subfields)
+          additionalProperties: true
+
+    AutoSnapshotLeaderInfo:
+      type: object
+      required:
+        - IsAlive
+      properties:
+        InstanceId:
+          type: string
+          nullable: true
+        LastHeartbeat:
+          type: string
+          format: date-time
+          nullable: true
+        IsAlive:
+          type: boolean
+
+    AutoSnapshotStatus:
+      type: object
+      required:
+        - Available
+        - Enabled
+      properties:
+        Available:
+          type: boolean
+        Enabled:
+          type: boolean
+        Leader:
+          $ref: '#/components/schemas/AutoSnapshotLeaderInfo'
+
+    ClusterSnapshotSummary:
+      type: object
+      required:
+        - ClusterName
+        - Snapshots
+        - ActivitySpike
+        - RoleChange
+        - Errors
+      properties:
+        ClusterName:
+          type: string
+        Snapshots:
+          type: integer
+          description: Total created snapshots (outcome = snapshot_created)
+        ActivitySpike:
+          type: integer
+          description: Created snapshots via the activity_spike trigger
+        RoleChange:
+          type: integer
+          description: Created snapshots via the role_change trigger
+        Errors:
+          type: integer
+          description: Failed attempts (outcome = error)
+
+    TriggerEvent:
+      type: object
+      required:
+        - Id
+        - CreatedAt
+        - ClusterName
+        - Instance
+        - TriggerType
+        - Outcome
+      properties:
+        Id:
+          type: string
+          format: uuid
+        CreatedAt:
+          type: string
+          format: date-time
+        ClusterName:
+          type: string
+        Instance:
+          type: string
+        Database:
+          type: string
+          nullable: true
+        TriggerType:
+          type: string
+        Outcome:
+          type: string
+        SnapshotId:
+          type: string
+          format: uuid
+          nullable: true
+        TriggerContext:
+          type: object
+          additionalProperties: true
+        ErrorMessage:
+          type: string
+          nullable: true
 
     VacuumStats:
       type: object

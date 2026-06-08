@@ -98,6 +98,8 @@ type UserContext struct {
 
 const userContextKey = "auth_user"
 
+type ctxUserKey struct{}
+
 func GetUser(c echo.Context) *UserContext {
 	u, ok := c.Get(userContextKey).(*UserContext)
 	if !ok {
@@ -107,6 +109,17 @@ func GetUser(c echo.Context) *UserContext {
 	return u
 }
 
+// UserFromContext returns the authenticated user from a stdlib context.
+// Populated by SetUser so strict-server handlers (which receive context.Context,
+// not echo.Context) can still identify the caller.
+func UserFromContext(ctx context.Context) *UserContext {
+	u, _ := ctx.Value(ctxUserKey{}).(*UserContext)
+	return u
+}
+
 func SetUser(c echo.Context, u *UserContext) {
 	c.Set(userContextKey, u)
+
+	req := c.Request()
+	c.SetRequest(req.WithContext(context.WithValue(req.Context(), ctxUserKey{}, u)))
 }

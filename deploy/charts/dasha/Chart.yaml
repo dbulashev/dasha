@@ -3,4 +3,4 @@ name: dasha
 description: PostgreSQL performance dashboard
 type: application
 version: 0.1.0
-appVersion: "0.1.5"
+appVersion: "0.1.18"

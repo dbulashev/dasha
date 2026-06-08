@@ -19,6 +19,7 @@ import { useViewError } from '@/composables/useViewError'
 import { useExcludeUsersStore } from '@/stores/excludeUsers'
 import { assertOk } from '@/utils/api'
 import { fmtAge } from '@/utils/format'
+import { snapshotReasonI18nKey } from '@/utils/autosnapshot'
 import type { CompareSortKey } from '@/components/queries/compare-types'
 import { compareSortFieldMap } from '@/components/queries/compare-types'
 import CompareCard from '@/components/queries/CompareCard.vue'
@@ -79,10 +80,13 @@ const sortOptions = computed(() => [
   { value: 'temp_blks', title: t('report.sort.temp_blks') },
 ])
 
+const snapshotTitle = (s: SnapshotListItem) =>
+  `${new Date(s.CreatedAt).toLocaleString()} · ${t(snapshotReasonI18nKey(s.Reason), s.Reason ?? 'manual')}`
+
 const selectorAItems = computed(() =>
   snapshotsList.value.map(s => ({
     value: s.Id,
-    title: new Date(s.CreatedAt).toLocaleString(),
+    title: snapshotTitle(s),
   })),
 )
 
@@ -90,7 +94,7 @@ const selectorBItems = computed(() => {
   const live = { value: null as string | null, title: t('compare.liveData') }
   const items = snapshotsList.value.map(s => ({
     value: s.Id as string | null,
-    title: new Date(s.CreatedAt).toLocaleString(),
+    title: snapshotTitle(s),
   }))
   return [live, ...items]
 })

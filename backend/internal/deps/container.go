@@ -229,7 +229,7 @@ func provideClusters(cfg config.Config) config.Clusters {
 }
 
 func provideRepository(cfg config.Config, clusters config.Clusters, logger *zap.Logger) repository.Repository {
-	return repository.NewRepositoryPgxPool(clusters, cfg.PgStatsView, logger)
+	return repository.NewRepositoryPgxPool(clusters, cfg.PgStatsView, cfg.PgssResetFunction, cfg.DBPool, logger)
 }
 
 func provideDiscovery(cfg *config.Config, clusters config.Clusters, logger *zap.Logger) *discovery.Engine {

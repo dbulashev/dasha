@@ -1,6 +1,6 @@
 # История изменений
 
-## v1.2.0
+## v1.3.0
 
 ### Фичи
 - **Metrics-backed Health Score (опционально):** если настроен Prometheus/VictoriaMetrics-datasource (`health_score.metrics` в `dasha.yaml`), score, рекомендации и новый тренд считаются из time-series метрик (pgSCV + Yandex MDB + pgbouncer + host), а не из точечного SQL. SQL-snapshot остаётся zero-config фолбэком; поле `source` в `GET /api/common/health-score` показывает `"snapshot"` или `"metrics"`.
@@ -23,6 +23,32 @@
 - Новый пакет `internal/metrics`: клиент datasource, матчер лейблов (с авто-маппингом из discovery), каталог MetricsQL-запросов, коллектор сигналов, сезонный baseline, детект просадок, history-сервис.
 - Demo-lab расширен стеком VictoriaMetrics + pgSCV + pgbouncer (`demo/docker-compose.metrics.yaml`).
 - Helm-чарт `values.yaml`: задокументирован блок `health_score.metrics` — datasource (в т.ч. auth через `*_from_env` / ExternalSecret), провайдеры, шаблоны селекторов, targets, авто-маппинг discovery и тюнинг.
+
+## v1.2.1
+
+### Новые возможности
+- **Автоматические снимки pg_stat_statements**: отдельный демон `dasha autosnapshot` создаёт снимки pgss по настраиваемым триггерам
+  - **Триггер всплеска активности** — скользящее среднее `count(state='active')` из `pg_stat_activity`; срабатывает, когда текущее значение превышает baseline на заданный процент (по умолчанию +50%) в течение заданного времени (по умолчанию 5 минут)
+  - **Триггер смены роли** — определяет переход master↔replica через `pg_is_in_recovery()`, с настраиваемым направлением (`both` / `master_to_replica` / `replica_to_master`)
+  - **Триггер спада активности** (`recovery_duration`) — после всплеска делает снимок, когда активность держится ниже порога достаточно долго; вместе с reset даёт два чистых pgss-окна на инцидент (разгон и само выполнение всплеска). `0s` — выключено
+  - **Отложенный снимок** (`deferred_interval`) — после снимка всплеска ставит follow-up в персистентную очередь (`autosnapshot_pending`, переживает рестарт демона) — страховка для всплесков, которые **не отпускают**. **Автоматически отменяется при спаде** (снимок спада уже зафиксировал инцидент, иначе отложенный снял бы просто тихое окно после). `0s` — выключено. Оба настраиваются per-cluster
+  - **Глобальные настройки** (хранятся в storage DB, правятся через UI): `poll_interval`, `max_snapshot_frequency` (debounce), `min_baseline_active` (пропуск при низкой нагрузке), `retention_bytes`, `retention_min_days`, `reset_query_stats` (reset `pg_stat_statements` после каждого авто-снимка — независимо от ручного флага UI)
+  - **Кастомная функция reset pgss** (`pgss_reset_function` в `dasha.yaml`): вызывать обёртку с указанием схемы вместо `pg_stat_statements_reset()`, когда у роли мониторинга нет `EXECUTE` (по аналогии с `pg_stats_view`); применяется и к авто-, и к ручному сбросу
+  - **Per-cluster оверрайды**: deep-merge поверх глобальных настроек; отдельный кластер может включать/выключать триггеры, настраивать пороги или полностью отключать auto-snapshots
+  - **Leader election** (опционально, `storage.leader_election`, по умолчанию выключено): `pg_try_advisory_lock` на storage DB позволяет запускать демон в нескольких репликах для HA; по умолчанию выключено, т.к. session-level advisory lock требует отдельного соединения и несовместим с транзакционным пулингом (PgBouncer transaction mode)
+  - **Ретеншен по общему размеру**: удаляет старые «тройки дней» (секции snapshots + query_texts + trigger_events), пока суммарный размер превышает `retention_bytes`; уважает минимальный порог `retention_min_days`
+  - **Вкладка истории**: фильтры по кластеру / outcome / типу триггера, постраничный вывод; в историю пишутся только создания снимков и ошибки — временные пропуски (debounce, ниже baseline, неверное направление) логируются на уровне debug и не сохраняются, чтобы не зашумлять историю
+  - **UI**: новый пункт меню «Авто-снимки» (`mdi-camera-timer`) с вкладками Настройки + История; редактирование только admin, viewer видит read-only; для non-admin пункт скрыт, если фича выключена
+  - **API**: `GET/PUT /api/autosnapshot/config`, `GET/PUT /api/autosnapshot/clusters/{name}`, `GET /api/autosnapshot/status`, `GET /api/autosnapshot/trigger-events`
+  - **CLI**: `dasha autosnapshot` (отдельная команда, не стартует вместе с `dasha serve`)
+  - **Деплой**: в Helm чарт добавлен отдельный Deployment `autosnapshot` (по умолчанию отключен, включается флагом `autosnapshot.enabled: true`); в docker-compose добавлен сервис `autosnapshot` рядом с `backend` и `frontend`
+- **Тюнинг пула соединений к БД** (`dasha.yaml`): пулы к мониторимым кластерам теперь настраиваются — `db_pool` (`max_conns`, `max_conn_idle_time`, `max_conn_lifetime`; 0 = дефолт pgx) для `dasha serve`, и `autosnapshot_db_pool` (override по полям) для демона `dasha autosnapshot`. Позволяет демону быстро освобождать соединения мониторинг-роли (например `max_conn_idle_time: 5s`) при жёстком лимите соединений. Пул к storage-БД по-прежнему тюнится через query-параметры `storage.dsn` (`pool_max_conns`, `pool_max_conn_idle_time`, ...)
+- **Снимки блокировок по триггеру**: при срабатывании триггера всплеска активности снимок может дополнительно сохранять граф блокировок вместе с `pg_stat_statements`
+  - **Гибридный тайминг**: во время всплеска в фоне идёт дешёвый подсчёт заблокированных сессий и фиксируется `background_peak`; в момент триггера серия из N детальных проб (по умолчанию 5 × 500 мс) снимает полный граф `pg_blocking_pids`
+  - **Берётся самая жёсткая проба**: сохраняется проба с наибольшим числом различных заблокированных сессий (при равенстве — с максимальным временем ожидания); до 100 строк, отсортированных по убыванию ожидания
+  - **Хранилище**: новая колонка `snapshots.locks_data jsonb`; `GET /api/queries/snapshot/{id}/locks` отдаёт её; в списке снимков появился флаг `has_locks`
+  - **Настройки** (глобальные + per-cluster): `capture_locks` (по умолчанию вкл.), `lock_probe_count` (1–20), `lock_probe_interval` (100 мс–5 с)
+  - **Ручной захват**: опция «со снимком блокировок» у кнопки ручного снимка; сохранённый граф блокировок виден из просмотра снимка в Статистике запросов
 
 ## v1.1.0
 

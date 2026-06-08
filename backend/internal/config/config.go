@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/dbulashev/dasha/internal/metrics"
 )
@@ -151,6 +152,15 @@ type StorageConfig struct {
 	// empty, so single-role installs keep working unchanged.
 	DSNMigration        string `mapstructure:"dsn_migration"`
 	DSNMigrationFromEnv string `mapstructure:"dsn_migration_from_env"`
+
+	// LeaderElection enables advisory-lock leader election for the autosnapshot
+	// daemon, making it safe to run multiple replicas (one becomes leader).
+	// Disabled by default: a session-level advisory lock requires a dedicated,
+	// long-lived connection, which is incompatible with transaction-pooling
+	// proxies (e.g. PgBouncer in transaction mode). Enable only when the daemon
+	// reaches the storage DB via a direct/session-pooled connection and you run
+	// more than one replica.
+	LeaderElection bool `mapstructure:"leader_election"`
 }
 
 // Enabled returns true if the storage DSN is configured.
@@ -186,8 +196,53 @@ type Config struct {
 	// Disabled by default for safety.
 	EnableQueryStatsReset bool `mapstructure:"enable_query_stats_reset"`
 
+	// PgssResetFunction is an optional custom function (schema-qualified, no args)
+	// to call instead of pg_stat_statements_reset(). Useful when the connecting
+	// role lacks EXECUTE on pg_stat_statements_reset but a DBA exposes a SECURITY
+	// DEFINER wrapper (e.g. "monitoring.reset_pgss"). Empty = pg_stat_statements_reset.
+	PgssResetFunction string `mapstructure:"pgss_reset_function"`
+
+	// DBPool tunes the connection pools to monitored clusters (one pool per
+	// host/database). The storage pool is tuned via storage.dsn query params
+	// (pool_max_conns, pool_max_conn_idle_time, ...) instead.
+	DBPool PoolConfig `mapstructure:"db_pool"`
+
+	// AutosnapshotDBPool overrides DBPool for the `dasha autosnapshot` daemon —
+	// e.g. a short max_conn_idle_time so the daemon frees connections between
+	// polls when the monitoring role has a tight connection budget. Per-field:
+	// unset (zero) fields inherit DBPool.
+	AutosnapshotDBPool PoolConfig `mapstructure:"autosnapshot_db_pool"`
+
 	// HealthScore groups Health Score settings (metrics-backed mode).
 	HealthScore HealthScoreConfig `mapstructure:"health_score"`
+}
+
+// PoolConfig tunes a pgx connection pool. Zero values keep the pgx defaults
+// (MaxConns = max(4, NumCPU), MaxConnIdleTime = 30m, MaxConnLifetime = 1h).
+type PoolConfig struct {
+	MaxConns        int32         `mapstructure:"max_conns"`
+	MaxConnIdleTime time.Duration `mapstructure:"max_conn_idle_time"`
+	MaxConnLifetime time.Duration `mapstructure:"max_conn_lifetime"`
+}
+
+// EffectiveAutosnapshotPool returns DBPool with any non-zero AutosnapshotDBPool
+// fields applied on top (per-field override).
+func (c Config) EffectiveAutosnapshotPool() PoolConfig {
+	p := c.DBPool
+
+	if c.AutosnapshotDBPool.MaxConns != 0 {
+		p.MaxConns = c.AutosnapshotDBPool.MaxConns
+	}
+
+	if c.AutosnapshotDBPool.MaxConnIdleTime != 0 {
+		p.MaxConnIdleTime = c.AutosnapshotDBPool.MaxConnIdleTime
+	}
+
+	if c.AutosnapshotDBPool.MaxConnLifetime != 0 {
+		p.MaxConnLifetime = c.AutosnapshotDBPool.MaxConnLifetime
+	}
+
+	return p
 }
 
 // HealthScoreConfig groups Health Score settings.
