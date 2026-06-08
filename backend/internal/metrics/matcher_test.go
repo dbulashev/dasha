@@ -15,7 +15,7 @@ func testConfig() Config {
 	c.Targets = []TargetMapping{
 		{
 			Cluster: "prod-mdb", Instance: "rc1a-abc.mdb.yandexcloud.net",
-			Env: "dev", Service: "pharma_stocks",
+			Env: "dev", Service: "my_cluster",
 			Host: "rc1a-abc.mdb.yandexcloud.net", Container: "rc1a-abc",
 		},
 	}
@@ -39,10 +39,10 @@ func TestMatcher_ResolveAndSelectors(t *testing.T) {
 		role     Role
 		contains []string
 	}{
-		{ProviderPgSCV, RoleCore, []string{`cluster="dev"`, `service_id="pharma_stocks"`, `container="rc1a-abc"`}},
-		{ProviderYCNative, RoleHost, []string{`cluster="dev"`, `resource_id="pharma_stocks"`}},
-		{ProviderYCNative, RolePooler, []string{`cluster="dev"`, `subcluster_name="pharma_stocks"`}},
-		{ProviderPgBouncer, RolePooler, []string{`service_id="pharma_stocks"`, `container="rc1a-abc"`}},
+		{ProviderPgSCV, RoleCore, []string{`cluster="dev"`, `service_id="my_cluster"`, `container="rc1a-abc"`}},
+		{ProviderYCNative, RoleHost, []string{`cluster="dev"`, `resource_id="my_cluster"`}},
+		{ProviderYCNative, RolePooler, []string{`cluster="dev"`, `subcluster_name="my_cluster"`}},
+		{ProviderPgBouncer, RolePooler, []string{`service_id="my_cluster"`, `container="rc1a-abc"`}},
 	}
 
 	for _, tc := range cases {
