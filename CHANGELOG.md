@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.2.0
+## v1.2.1
 
 ### New Features
 - **Auto-snapshots of pg_stat_statements**: separate `dasha autosnapshot` daemon creates pgss snapshots automatically on configurable triggers
