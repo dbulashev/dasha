@@ -114,7 +114,7 @@ func dashaExec(cmd *cobra.Command, _ []string) error {
 		defer st.Close()
 	}
 
-	d := http.NewDashaHandlers(container.Config(), container.Repository(), st)
+	d := http.NewDashaHandlers(container.Config(), container.Repository(), st, container.Logs())
 	svc := http.New(d, mw, authMW.RequireHTTPS, authMW.RateLimit, authMW.Auth, authMW.Casbin, logger)
 
 	if container.Config().Auth.Mode == config.AuthModeOIDC {

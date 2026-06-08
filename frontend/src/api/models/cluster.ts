@@ -8,6 +8,8 @@ import type { ClusterInstance } from './clusterInstance'
 
 export interface Cluster {
   name?: string
+  /** cluster origin, e.g. "static" or "yandex-mdb" */
+  source?: string
   instances?: ClusterInstance[]
   databases?: string[]
 }

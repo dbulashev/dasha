@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.2.0
+
+### Features
+- **Yandex Cloud log search (new top-level page `/logs`):** for clusters discovered via Yandex MDB service discovery, search and view PostgreSQL server logs and connection pooler (Odyssey) logs through the Yandex MDB API.
+  - New endpoint `GET /api/logs` (`getLogs`). The backend reads `StreamClusterLogs` as a bounded historical read (`from`/`to` set), so it can fetch past windows rather than only tailing live.
+  - **Native server-side filters** for `severity` and `host` (the only fields the Yandex API filters on); `message` substring, `database` and `user` are filtered Dasha-side over the stream. The native filter expression is built only from an allowlist (severity enum + validated cluster hosts), so it is injection-safe. Severity casing follows the service: PostgreSQL `UPPER` (`error_severity`), pooler `lower` (`level`).
+  - **Optional deduplication** groups near-identical messages by normalized text with `count` + `first_seen` / `last_seen` and a representative (most severe) severity.
+  - **Cursor pagination** (`next_page_token`) for non-deduped results with a "load more" button; a `partial` banner is shown when the scan limit (`max_scan`) is reached.
+  - Sensitive text is masked through `sanitize.SQL()` per service type before leaving the backend; service-account keys never leave the backend (reused from discovery via an internal SDK registry).
+  - Access is `viewer+` (covered by the existing `GET /api/*` policy). The `Logs` menu item appears only when at least one `yandex-mdb` cluster is present.
+  - New global config `log_search` (`max_scan` default 5000, `max_page_size` default 1000, `timeout_seconds` default 30).
+  - `Cluster` API objects now expose `source` (`static` | `yandex-mdb`).
+
 ## v1.1.0
 
 ### Features

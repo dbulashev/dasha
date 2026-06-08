@@ -12,6 +12,8 @@ import (
 	"github.com/dbulashev/dasha/internal/auth"
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/discovery"
+	"github.com/dbulashev/dasha/internal/discovery/yandex"
+	"github.com/dbulashev/dasha/internal/logs"
 	"github.com/dbulashev/dasha/internal/repository"
 )
 
@@ -48,12 +50,26 @@ func NewContainer() *Container {
 		return provideRepository(*cfg, clusters, logger), nil
 	})
 
+	do.Provide(i, func(_ *do.Injector) (*yandex.Registry, error) {
+		return yandex.NewRegistry(), nil
+	})
+
 	do.Provide(i, func(i *do.Injector) (*discovery.Engine, error) {
 		cfg := do.MustInvoke[*config.Config](i)
 		clusters := do.MustInvoke[config.Clusters](i)
+		registry := do.MustInvoke[*yandex.Registry](i)
 		logger := do.MustInvoke[*zap.Logger](i)
 
-		return provideDiscovery(cfg, clusters, logger), nil
+		return provideDiscovery(cfg, clusters, registry, logger), nil
+	})
+
+	do.Provide(i, func(i *do.Injector) (logs.Service, error) {
+		cfg := do.MustInvoke[*config.Config](i)
+		clusters := do.MustInvoke[config.Clusters](i)
+		registry := do.MustInvoke[*yandex.Registry](i)
+		logger := do.MustInvoke[*zap.Logger](i)
+
+		return logs.NewService(clusters, registry, cfg.LogSearch, logger), nil
 	})
 
 	return &Container{i: i}
@@ -77,6 +93,10 @@ func (c *Container) Repository() repository.Repository {
 
 func (c *Container) Discovery() *discovery.Engine {
 	return do.MustInvoke[*discovery.Engine](c.i)
+}
+
+func (c *Container) Logs() logs.Service {
+	return do.MustInvoke[logs.Service](c.i)
 }
 
 func (c *Container) AuthMiddlewares(ctx context.Context) (*auth.Middlewares, error) {
@@ -166,10 +186,15 @@ func provideRepository(cfg config.Config, clusters config.Clusters, logger *zap.
 	return repository.NewRepositoryPgxPool(clusters, cfg.PgStatsView, logger)
 }
 
-func provideDiscovery(cfg *config.Config, clusters config.Clusters, logger *zap.Logger) *discovery.Engine {
+func provideDiscovery(
+	cfg *config.Config,
+	clusters config.Clusters,
+	registry *yandex.Registry,
+	logger *zap.Logger,
+) *discovery.Engine {
 	if len(cfg.Discovery) == 0 {
 		return nil
 	}
 
-	return discovery.NewEngine(cfg.Discovery, clusters, logger)
+	return discovery.NewEngine(cfg.Discovery, clusters, registry, logger)
 }

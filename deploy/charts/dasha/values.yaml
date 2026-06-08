@@ -16,6 +16,12 @@ config:
   # pg_stats_view: monitoring.pg_stats  # custom view when user lacks pg_catalog.pg_stats access
   # enable_query_stats_reset: false  # allow resetting pg_stat_statements via UI
 
+  # -- Yandex Cloud log search limits (page /logs), applies to yandex-mdb clusters
+  # log_search:
+  #   max_scan: 5000          # max records scanned per search
+  #   max_page_size: 1000     # upper bound for page_size
+  #   timeout_seconds: 30     # upstream read timeout
+
   # -- Authentication & authorization
   # auth:
   #   mode: none  # none | token | oidc

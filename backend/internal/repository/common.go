@@ -165,6 +165,16 @@ func (p *PgxPool) Clusters(ctx context.Context) ([]dto.ClusterInfo, error) {
 		return nil, fmt.Errorf("ensure pool: %w", err)
 	}
 
+	// Build a cluster name -> source lookup from the live cluster provider so
+	// the API can expose where each cluster came from (static / yandex-mdb).
+	sources := make(map[config.ClusterName]string)
+
+	if cls, cfgErr := p.clusters.Get(ctx); cfgErr == nil {
+		for _, c := range cls {
+			sources[c.Name] = c.Source
+		}
+	}
+
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
@@ -185,6 +195,7 @@ func (p *PgxPool) Clusters(ctx context.Context) ([]dto.ClusterInfo, error) {
 
 		ret = append(ret, dto.ClusterInfo{
 			Name:      clusterName,
+			Source:    sources[clusterName],
 			Instances: instances,
 			Databases: databases,
 		})

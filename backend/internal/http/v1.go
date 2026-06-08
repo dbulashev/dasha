@@ -14,6 +14,7 @@ import (
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/health"
+	"github.com/dbulashev/dasha/internal/logs"
 	"github.com/dbulashev/dasha/internal/pkg/mapstruct"
 	"github.com/dbulashev/dasha/internal/pkg/sanitize"
 	"github.com/dbulashev/dasha/internal/pkg/shortcut"
@@ -25,10 +26,11 @@ type Handlers struct {
 	cfg     *config.Config
 	repo    repository.Repository
 	storage *storage.Storage
+	logs    logs.Service
 }
 
-func NewDashaHandlers(cfg *config.Config, repo repository.Repository, st *storage.Storage) *Handlers {
-	return &Handlers{cfg: cfg, repo: repo, storage: st}
+func NewDashaHandlers(cfg *config.Config, repo repository.Repository, st *storage.Storage, logsSvc logs.Service) *Handlers {
+	return &Handlers{cfg: cfg, repo: repo, storage: st, logs: logsSvc}
 }
 
 func mapQueryReport(t dto.QueryReport) serverhttp.QueryReport {
@@ -170,6 +172,7 @@ func (s *Handlers) GetClusters(
 
 		ret = append(ret, serverhttp.Cluster{
 			Name:      shortcut.Ptr(v.Name.String()),
+			Source:    shortcut.Ptr(v.Source),
 			Instances: &instances,
 			Databases: &v.Databases,
 		})

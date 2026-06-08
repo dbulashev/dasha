@@ -8,7 +8,10 @@ ENV VITE_APP_VERSION=$BUILD_NUMBER
 RUN npm run build-only
 
 FROM nginx:alpine
+# Patch OS-package CVEs present in the base image (e.g. libxml2 CVE-2026-6732,
+# fixed in 2.13.9-r1) without touching nginx itself.
 RUN apk add --no-cache gettext && \
+    apk add --no-cache --upgrade libxml2 && \
     sed -i '/^user  *nginx;/d' /etc/nginx/nginx.conf && \
     sed -i -E 's|^pid[[:space:]]+/[^;]*nginx\.pid;|pid /tmp/nginx.pid;|' /etc/nginx/nginx.conf && \
     grep -qE '^pid[[:space:]]+/tmp/nginx\.pid;' /etc/nginx/nginx.conf

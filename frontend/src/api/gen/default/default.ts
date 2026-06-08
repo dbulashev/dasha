@@ -66,6 +66,7 @@ import type {
   GetIndexesUsageParams,
   GetInstanceInfoParams,
   GetInvalidConstraintsParams,
+  GetLogsParams,
   GetMaintenanceAutovacuumFreezeMaxAgeParams,
   GetMaintenanceInfoParams,
   GetMaintenanceTransactionIdDangerParams,
@@ -128,6 +129,7 @@ import type {
   IndexUsage,
   InstanceInfo,
   InvalidConstraint,
+  LogSearchResult,
   MaintenanceAutovacuumFreezeMaxAge,
   MaintenanceInfo,
   MaintenanceTransactionIdDanger,
@@ -8183,6 +8185,131 @@ export function useGetSettingsAnalyze<
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetSettingsAnalyzeQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Search Yandex Cloud cluster logs (PostgreSQL/pooler) via the MDB API.
+ */
+export type getLogsResponse200 = {
+  data: LogSearchResult
+  status: 200
+}
+
+export type getLogsResponse400 = {
+  data: void
+  status: 400
+}
+
+export type getLogsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getLogsResponse502 = {
+  data: void
+  status: 502
+}
+
+export type getLogsResponse504 = {
+  data: void
+  status: 504
+}
+
+export type getLogsResponseSuccess = getLogsResponse200 & {
+  headers: Headers
+}
+export type getLogsResponseError = (
+  | getLogsResponse400
+  | getLogsResponse404
+  | getLogsResponse502
+  | getLogsResponse504
+) & {
+  headers: Headers
+}
+
+export type getLogsResponse = getLogsResponseSuccess | getLogsResponseError
+
+export const getGetLogsUrl = (params: GetLogsParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ['severity']
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : v.toString())
+      })
+      return
+    }
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0 ? `/api/logs?${stringifiedParams}` : `/api/logs`
+}
+
+export const getLogs = async (
+  params: GetLogsParams,
+  options?: RequestInit,
+): Promise<getLogsResponse> => {
+  return customFetch<getLogsResponse>(getGetLogsUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetLogsQueryKey = (params?: MaybeRef<GetLogsParams>) => {
+  return ['api', 'logs', ...(params ? [params] : [])] as const
+}
+
+export const getGetLogsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLogs>>,
+  TError = void | NotFoundResponse,
+>(
+  params: MaybeRef<GetLogsParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getLogs>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetLogsQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getLogs>>> = ({ signal }) =>
+    getLogs(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getLogs>>,
+    TError,
+    TData
+  >
+}
+
+export type GetLogsQueryResult = NonNullable<Awaited<ReturnType<typeof getLogs>>>
+export type GetLogsQueryError = void | NotFoundResponse
+
+export function useGetLogs<
+  TData = Awaited<ReturnType<typeof getLogs>>,
+  TError = void | NotFoundResponse,
+>(
+  params: MaybeRef<GetLogsParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getLogs>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLogsQueryOptions(params, options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
 

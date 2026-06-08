@@ -137,6 +137,37 @@ type DiscoveryEntry struct {
 	Config YandexMDBConfig `mapstructure:"config"`
 }
 
+// LogSearchConfig holds global limits for Yandex Cloud log search.
+type LogSearchConfig struct {
+	MaxScan        int `mapstructure:"max_scan"`        // max records scanned per search; default 5000
+	MaxPageSize    int `mapstructure:"max_page_size"`   // upper bound for page_size; default 1000
+	TimeoutSeconds int `mapstructure:"timeout_seconds"` // upstream read timeout; default 30
+}
+
+// Defaults for LogSearchConfig when values are unset (<= 0).
+const (
+	DefaultLogSearchMaxScan        = 5000
+	DefaultLogSearchMaxPageSize    = 1000
+	DefaultLogSearchTimeoutSeconds = 30
+)
+
+// WithDefaults returns a copy with unset (<=0) fields filled from defaults.
+func (c LogSearchConfig) WithDefaults() LogSearchConfig {
+	if c.MaxScan <= 0 {
+		c.MaxScan = DefaultLogSearchMaxScan
+	}
+
+	if c.MaxPageSize <= 0 {
+		c.MaxPageSize = DefaultLogSearchMaxPageSize
+	}
+
+	if c.TimeoutSeconds <= 0 {
+		c.TimeoutSeconds = DefaultLogSearchTimeoutSeconds
+	}
+
+	return c
+}
+
 // StorageConfig holds optional snapshot storage database settings.
 type StorageConfig struct {
 	DSN        string `mapstructure:"dsn"`
@@ -165,6 +196,9 @@ type Config struct {
 	// EnableQueryStatsReset allows resetting pg_stat_statements statistics via the UI.
 	// Disabled by default for safety.
 	EnableQueryStatsReset bool `mapstructure:"enable_query_stats_reset"`
+
+	// LogSearch holds global limits for Yandex Cloud log search.
+	LogSearch LogSearchConfig `mapstructure:"log_search"`
 }
 
 // Clusters is the interface for obtaining the current list of clusters.
