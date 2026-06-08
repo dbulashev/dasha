@@ -95,15 +95,12 @@ func NewDaemon(
 	}
 }
 
-// Run optionally acquires the leader lock, then loops until ctx is cancelled.
-// Leader election is opt-in (storage.leader_election); when disabled the daemon
-// assumes a single instance and skips the advisory lock — see StorageConfig.
+// Run optionally acquires the advisory-lock leader (opt-in, storage.leader_election;
+// off by default since the dedicated session is incompatible with transaction-pooling
+// proxies), then loops until ctx is cancelled.
 func (d *Daemon) Run(ctx context.Context) error {
 	leader := NewLeader(d.store, d.logger)
 
-	// Advisory-lock leader election is opt-in (storage.leader_election). When off,
-	// the daemon runs as a single instance and skips the lock (its dedicated
-	// session is incompatible with transaction-pooling proxies).
 	if d.leaderElection {
 		if err := leader.Acquire(ctx); err != nil {
 			return fmt.Errorf("autosnapshot: acquire leader: %w", err)
@@ -114,9 +111,8 @@ func (d *Daemon) Run(ctx context.Context) error {
 		d.logger.Info("autosnapshot: leader election disabled, running as single instance")
 	}
 
-	// The heartbeat always runs (a plain pooled UPDATE, transaction-pooling safe)
-	// so the UI liveness check works regardless of leader election. In HA mode only
-	// the elected leader reaches this point, so the heartbeat reflects the leader.
+	// Heartbeat always runs (a plain pooled UPDATE) so UI liveness works regardless
+	// of leader election; in HA mode only the elected leader reaches here.
 	hbCtx, cancelHB := context.WithCancel(ctx)
 	defer cancelHB()
 
@@ -133,10 +129,8 @@ func (d *Daemon) Run(ctx context.Context) error {
 	return d.loop(ctx)
 }
 
-// seedDebounce expands the per-cluster last-auto-snapshot times (from storage)
-// into the per-host debounce map. Every host of a cluster inherits the cluster's
-// most recent auto-snapshot time — a conservative seed so debounce is honoured
-// right after a restart without changing the storage aggregation.
+// seedDebounce expands the per-cluster last-auto-snapshot times into the per-host
+// debounce map (each host inherits the cluster's latest — a conservative restart seed).
 func (d *Daemon) seedDebounce(ctx context.Context, perCluster map[string]time.Time) map[hostKey]time.Time {
 	out := map[hostKey]time.Time{}
 

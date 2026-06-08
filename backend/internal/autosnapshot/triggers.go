@@ -68,9 +68,8 @@ func (d *Daemon) tickActivitySpike(
 
 	threshold := baseline * float64(100+t.ActiveThresholdPct) / 100.0
 
-	// Below the activity floor the spike rule is unreliable (a 2->3 jump is +50%),
-	// so spike detection is skipped. Skips are operational detail, not history —
-	// log at debug (throttled per host) rather than persisting a trigger_event.
+	// Below the activity floor the spike rule is unreliable (a 2→3 jump is +50%);
+	// skip it and debug-log (throttled) rather than persist a trigger_event.
 	if baseline < float64(cfg.MinBaselineActive) {
 		state.aboveThresholdSince = nil
 		d.handleRecovery(ctx, cfg, t, cl, instance, database, state, now, count)
@@ -97,13 +96,10 @@ func (d *Daemon) tickActivitySpike(
 		return
 	}
 
-	// Back above the threshold — cancel any pending recovery debounce.
 	state.recoveryBelowSince = nil
 
-	// At/above the spike threshold: cheaply sample blocked sessions so the snapshot
-	// can report the background lock peak even if the trigger fires after the storm
-	// has subsided (hybrid capture). Only while a spike is forming; we keep just the
-	// running peak (O(1)) so a long sustained spike can't grow an unbounded slice.
+	// Sample blocked sessions while the spike forms, keeping only the running peak,
+	// so the snapshot can report it even if the trigger fires after the storm subsided.
 	if cfg.CaptureLocks {
 		if n, err := d.repo.GetBlockedSessionCount(ctx, string(cl.Name), instance, database); err == nil && n > 0 {
 			if state.lockPeak == nil || n > state.lockPeak.BlockedCount {
@@ -114,11 +110,9 @@ func (d *Daemon) tickActivitySpike(
 
 	if state.aboveThresholdSince == nil {
 		state.aboveThresholdSince = &now
-		// Freeze the recovery reference at the CLEAN pre-spike threshold (the moving
-		// baseline here excludes the just-crossed sample, so it is not yet inflated
-		// by the spike). Capturing it later (at fire time) would set it above the
-		// spike's own sustained level and make the drop fire mid-incident. Only on a
-		// fresh incident — a re-crossing while inSpike must not re-inflate it.
+		// Freeze the recovery reference at the clean pre-spike threshold; capturing it
+		// at fire time (baseline already inflated by the spike) makes the drop fire
+		// mid-incident. Don't re-inflate it on a re-crossing within the same incident.
 		if !state.inSpike {
 			state.spikeThreshold = threshold
 		}
@@ -154,9 +148,8 @@ func (d *Daemon) tickActivitySpike(
 	state.aboveThresholdSince = nil
 	state.lockPeak = nil
 
-	// Snapshot failed (error event already recorded): don't advance the incident
-	// state or enqueue a deferred follow-up. The spike retries on the next
-	// sustained crossing (throttled by spike_duration).
+	// On failure don't advance incident state or enqueue a deferred follow-up;
+	// the spike retries on the next sustained crossing.
 	if err != nil {
 		return
 	}
@@ -164,7 +157,6 @@ func (d *Daemon) tickActivitySpike(
 	state.inSpike = true
 	state.recoveryBelowSince = nil
 
-	// Schedule a deferred follow-up to capture the spike's execution at a fixed offset.
 	if t.DeferredInterval > 0 {
 		p := PendingSnapshot{ClusterName: string(cl.Name), Instance: instance, Database: database, Reason: "auto:deferred"}
 		if err := d.store.EnqueuePendingSnapshot(ctx, p, now.Add(t.DeferredInterval)); err != nil {
@@ -176,12 +168,10 @@ func (d *Daemon) tickActivitySpike(
 	}
 }
 
-// handleRecovery takes one activity_drop snapshot when a host that was in a spike
-// returns near its pre-spike level for t.RecoveryDuration — the spike's clean
-// aftermath window. Recovery is judged against the FROZEN spike-onset threshold,
-// not the live one: a sustained spike inflates the moving-average baseline, so the
-// live threshold would eventually exceed the still-high count and falsely look
-// "recovered" mid-spike. Fires once per incident (inSpike cleared); no debounce.
+// handleRecovery takes one activity_drop snapshot once a host that was in a spike
+// stays below the FROZEN spike-onset threshold for t.RecoveryDuration. Judging
+// against the frozen (not live) threshold avoids a false "recovered" mid-spike,
+// since a sustained spike inflates the live moving-average threshold past the count.
 func (d *Daemon) handleRecovery(
 	ctx context.Context,
 	cfg Config,
@@ -204,7 +194,6 @@ func (d *Daemon) handleRecovery(
 		return
 	}
 
-	// Still at/above the spike-onset threshold → the spike has not resolved.
 	if float64(count) >= state.spikeThreshold {
 		state.recoveryBelowSince = nil
 		return
@@ -225,8 +214,7 @@ func (d *Daemon) handleRecovery(
 	}
 
 	if err := d.takeSnapshot(ctx, cfg, cl, instance, database, TriggerActivityDrop, "auto:activity_drop", trigCtx, nil); err != nil {
-		// Drop snapshot failed (error event recorded): keep inSpike so it retries;
-		// reset the debounce so we wait recovery_duration again before re-trying.
+		// keep inSpike so it retries; reset the debounce to wait recovery_duration again
 		state.recoveryBelowSince = nil
 		return
 	}
@@ -234,9 +222,7 @@ func (d *Daemon) handleRecovery(
 	state.inSpike = false
 	state.recoveryBelowSince = nil
 
-	// The incident resolved and the drop snapshot captured it — cancel any pending
-	// deferred follow-up (it would just snapshot the quiet aftermath). The deferred
-	// only stays for spikes that never resolve.
+	// Incident resolved — cancel the pending deferred (it only stays for spikes that never resolve).
 	if err := d.store.DeletePendingSnapshot(ctx, string(cl.Name), instance); err != nil {
 		d.logger.Warn("cancel pending deferred snapshot failed",
 			zap.String("cluster", string(cl.Name)),

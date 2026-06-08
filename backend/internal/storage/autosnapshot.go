@@ -421,9 +421,8 @@ func (s *Storage) EnqueuePendingSnapshot(ctx context.Context, p autosnapshot.Pen
 	return nil
 }
 
-// DeletePendingSnapshot cancels a host's pending deferred snapshot — used once the
-// spike has resolved and the drop snapshot already captured the incident, so the
-// deferred follow-up would only snapshot the quiet aftermath.
+// DeletePendingSnapshot cancels a host's pending deferred snapshot (used when the
+// spike resolved and the drop snapshot already captured the incident).
 func (s *Storage) DeletePendingSnapshot(ctx context.Context, clusterName, instance string) error {
 	_, err := s.pool.Exec(ctx,
 		`DELETE FROM autosnapshot_pending WHERE cluster_name = $1 AND instance = $2`,
@@ -513,9 +512,8 @@ func (s *Storage) TryAcquireLeaderLock(ctx context.Context) (*pgx.Conn, bool, er
 		return nil, false, nil
 	}
 
-	// Hijack removes the connection from the pool so the session-level advisory
-	// lock is held on a dedicated conn the caller owns and Closes (Leader.Release).
-	// Using conn.Conn() instead would leak the pool checkout.
+	// Hijack hands the conn to the caller (it Closes it in Leader.Release); conn.Conn()
+	// would leak the pool checkout while the session-level lock is held.
 	return conn.Hijack(), true, nil
 }
 

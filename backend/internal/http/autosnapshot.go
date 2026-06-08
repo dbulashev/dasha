@@ -401,10 +401,8 @@ func validateAutosnapshotConfig(cfg autosnapshot.Config) error {
 	return nil
 }
 
-// validateClusterOverrides rejects malformed per-cluster overrides before they are
-// stored. EffectiveFor silently ignores unparseable values (falling back to the
-// global default), so without this an admin could "save" garbage that never takes
-// effect — validate the known fields up front instead.
+// validateClusterOverrides rejects malformed overrides before storing — EffectiveFor
+// silently ignores bad values, so without this an admin could "save" inert garbage.
 func validateClusterOverrides(overrides map[string]any) error {
 	if raw, ok := overrides["activity_spike"]; ok {
 		spike, ok := raw.(map[string]any)

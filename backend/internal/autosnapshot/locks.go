@@ -10,16 +10,11 @@ import (
 	"github.com/dbulashev/dasha/internal/pkg/sanitize"
 )
 
-// maxLockRows caps how many blocked/blocking pairs are stored, so a mass-lock
-// event does not produce a huge jsonb blob. Rows are sorted by blocked wait
-// (descending) before truncation, so the worst offenders are kept.
+// maxLockRows caps stored blocked/blocking pairs (kept by wait desc) to bound the jsonb size.
 const maxLockRows = 100
 
-// maxCaptureDuration bounds the total wall time CaptureLocks may spend, so
-// pathological probe settings (validation allows up to 20 × 5s = 100s) cannot
-// stall the daemon's sequential tick loop or block the manual-snapshot HTTP
-// request. Probes that don't fit the budget are skipped — capture stays
-// best-effort and returns whatever completed probes found.
+// maxCaptureDuration caps total CaptureLocks wall time so pathological probe settings
+// (up to 20 × 5s) can't stall the tick loop or the manual-snapshot request.
 const maxCaptureDuration = 15 * time.Second
 
 // BackgroundPeak is the worst blocked-session count seen by the cheap background
@@ -49,11 +44,9 @@ type blockedProber interface {
 	GetQueriesBlocked(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.QueryBlocked, error)
 }
 
-// CaptureLocks runs probeCount probes spaced by interval, keeping the harshest
-// (most blocked sessions, tie-broken by longest wait). Best-effort: when every
-// probe errors it returns Captured=false rather than failing the snapshot.
-// Exported so the manual snapshot API path can reuse it (the daemon calls it for
-// activity-spike auto-snapshots).
+// CaptureLocks runs probeCount probes spaced by interval, keeping the harshest (most
+// blocked sessions, tie-broken by longest wait). Best-effort: all-probes-error returns
+// Captured=false rather than failing the snapshot. Exported for reuse by the manual path.
 func CaptureLocks(
 	ctx context.Context,
 	repo blockedProber,
@@ -65,9 +58,7 @@ func CaptureLocks(
 		probeCount = 1
 	}
 
-	// Cap total wall time (see maxCaptureDuration). Generous query slack on top of
-	// the configured sleeps; probes finish early in the normal case, so this only
-	// bites pathological settings.
+	// Cap total wall time (see maxCaptureDuration); slack on top of the configured sleeps.
 	budget := time.Duration(probeCount)*interval + 5*time.Second
 	if budget > maxCaptureDuration {
 		budget = maxCaptureDuration
@@ -121,8 +112,7 @@ func CaptureLocks(
 		best = best[:maxLockRows]
 	}
 
-	// Redact SQL literals before persisting into locks_data — the same masking the
-	// live blocked-queries endpoint applies (sanitize.SQL on both query fields).
+	// Redact SQL literals before persisting (same masking as the live blocked endpoint).
 	for i := range best {
 		best[i].BlockedQuery = sanitize.SQL(best[i].BlockedQuery)
 		best[i].CurrentOrRecentQueryInBlockingProcess = sanitize.SQL(best[i].CurrentOrRecentQueryInBlockingProcess)
