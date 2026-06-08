@@ -1,5 +1,8 @@
 * text=auto eol=lf
-/backend/gen/** -diff
-/frontend/api/*** -diff
-/frontend/src/api/gen/default/** -diff
-/frontend/src/api/models/** -diff
+
+# Generated code: hide content from `git diff` (-diff → "Bin") and collapse in
+# GitHub PR review (linguist-generated). Keep paths specific — src/api/customFetch.ts
+# is hand-written.
+/backend/gen/** -diff linguist-generated=true
+/frontend/src/api/gen/** -diff linguist-generated=true
+/frontend/src/api/models/** -diff linguist-generated=true

@@ -4,8 +4,7 @@
 // series selectors, and a catalog of MetricsQL templates per signal/provider.
 //
 // It is additive to the existing SQL snapshot path: when disabled or when a
-// target cannot be matched, callers fall back to the snapshot score. See
-// plans/health-score-history-design.md.
+// target cannot be matched, callers fall back to the snapshot score.
 package metrics
 
 import (
@@ -134,8 +133,7 @@ const (
 	SelectorPgSCVSystem    = "pgscv_system"
 )
 
-// Default returns the built-in defaults (feature disabled). Selector templates
-// match the real label schemes captured in the requirements (Appendix A).
+// Default returns the built-in defaults (feature disabled).
 func Default() Config {
 	return Config{
 		Enabled: false,
