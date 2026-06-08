@@ -30,7 +30,7 @@ func (t ServiceType) proto() postgresql.StreamClusterLogsRequest_ServiceType {
 }
 
 // LogRecord is a single decoded log line: a timestamp, the raw message map
-// whose keys depend on the service type (see the design doc for column lists),
+// whose keys depend on the service type,
 // and the cursor token that resumes streaming right after this record.
 type LogRecord struct {
 	Timestamp time.Time
