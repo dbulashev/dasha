@@ -65,7 +65,7 @@ func (s *Service) ValidateTarget(ctx context.Context, cluster, instance string) 
 
 // Collector returns a catalog-driven collector over the configured window.
 func (s *Service) Collector() *Collector {
-	return NewCollector(s.matcher, s.catalog, s.client, "5m")
+	return NewCollector(s.matcher, s.catalog, s.client, "5m", s.cfg.roleExclusion())
 }
 
 // CurrentRaw returns the instant signals as health.RawMetrics with the

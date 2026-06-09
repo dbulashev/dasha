@@ -145,6 +145,14 @@ config:
   #     # dips:     { score_points: 10, latency_factor: 2.0 }
   #     # floor:    { wraparound_left: 200000000 }        # xacts-left below this -> critical
   #
+  #     # Role connection saturation (yc_native pooler provider): scores the worst
+  #     # per-role sessions/conn_limit ratio. Drop service roles so a busy exporter
+  #     # or migrator does not inflate the score. role_label is the series label
+  #     # carrying the role name; exclude_roles replaces the default and is matched
+  #     # against it with a negative regex.
+  #     # role_label: query_type
+  #     # exclude_roles: [postgres_exporter, migrator]
+  #
   #   ## Self-managed example (VictoriaMetrics + pgSCV + pgbouncer):
   #   # metrics:
   #   #   enabled: true

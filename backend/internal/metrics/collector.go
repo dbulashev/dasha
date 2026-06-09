@@ -14,15 +14,17 @@ type Collector struct {
 	catalog *QueryCatalog
 	client  DatasourceClient
 	window  string // rate window for counter signals, e.g. "5m"
+	exclude string // role-exclusion label fragment for per-role signals (may be empty)
 }
 
-// NewCollector wires the collector. window is the PromQL rate window string.
-func NewCollector(m *Matcher, c *QueryCatalog, client DatasourceClient, window string) *Collector {
+// NewCollector wires the collector. window is the PromQL rate window string;
+// exclude is the role-exclusion label fragment (see Config.roleExclusion).
+func NewCollector(m *Matcher, c *QueryCatalog, client DatasourceClient, window, exclude string) *Collector {
 	if window == "" {
 		window = "5m"
 	}
 
-	return &Collector{matcher: m, catalog: c, client: client, window: window}
+	return &Collector{matcher: m, catalog: c, client: client, window: window, exclude: exclude}
 }
 
 // CoreSignals is the default set collected for a score. Extended as signals
@@ -164,5 +166,5 @@ func (co *Collector) exprFor(rt ResolvedTarget, sig SignalKind) (string, bool) {
 		return "", false
 	}
 
-	return co.catalog.Expr(provider, sig, sel, co.window)
+	return co.catalog.Expr(provider, sig, sel, co.window, co.exclude)
 }

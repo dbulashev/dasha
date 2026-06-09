@@ -3,9 +3,8 @@ package metrics
 import "fmt"
 
 // QueryCatalog maps (provider, signal) to a MetricsQL template. Templates use
-// fmt indexed verbs: %[1]s = inner label selector, %[2]s = rate window. Seed set
-// derived from the real dashboards (requirements Appendix A); extended in later
-// phases as signals come online.
+// fmt indexed verbs: %[1]s = inner label selector, %[2]s = rate window,
+// %[3]s = optional role-exclusion fragment (leading comma, empty when unused).
 type QueryCatalog struct {
 	templates map[catalogKey]string
 }
@@ -100,8 +99,14 @@ func NewQueryCatalog() *QueryCatalog {
 		{ProviderPgBouncer, SigPoolerClients}:  `sum(pgbouncer_client_connections_in_flight{%[1]s})`,
 		{ProviderPgBouncer, SigPoolerServers}:  `sum(pgbouncer_pool_connections_in_flight{%[1]s})`,
 		{ProviderPgBouncer, SigPoolerPoolSize}: `sum(pgbouncer_service_database_pool_size{%[1]s})`,
-		// pooler saturation — YC native
-		{ProviderYCNative, SigPoolerServers}: `sum(pooler_pgbouncer_tcp_connections{%[1]s})`,
+		// connection saturation — YC native exposes per-role session and conn_limit
+		// gauges (RoleLabel = role). The worst role's sessions/conn_limit ratio is
+		// computed in PromQL with service roles dropped via %[3]s; conn_limit>0 skips
+		// roles left at the PG default -1 (unlimited). pool_size is a presence
+		// sentinel (1 when any bounded role exists), so the generic servers/pool_size
+		// saturation rule consumes the ready-made ratio unchanged.
+		{ProviderYCNative, SigPoolerServers}:  `max(postgres_role_sessions{%[1]s%[3]s} / (postgres_role_conn_limit{%[1]s%[3]s} > 0))`,
+		{ProviderYCNative, SigPoolerPoolSize}: `clamp_max(count(postgres_role_conn_limit{%[1]s%[3]s} > 0), 1)`,
 	}
 
 	return &QueryCatalog{templates: t}
@@ -109,13 +114,13 @@ func NewQueryCatalog() *QueryCatalog {
 
 // Expr renders the expression for (provider, signal). Returns ("", false) when
 // the pair is not catalogued.
-func (c *QueryCatalog) Expr(p Provider, s SignalKind, selector, window string) (string, bool) {
+func (c *QueryCatalog) Expr(p Provider, s SignalKind, selector, window, exclude string) (string, bool) {
 	tpl, ok := c.templates[catalogKey{p, s}]
 	if !ok {
 		return "", false
 	}
 
-	return fmt.Sprintf(tpl, selector, window), true
+	return fmt.Sprintf(tpl, selector, window, exclude), true
 }
 
 // Supports reports whether the catalog can build a query for (provider, signal).
