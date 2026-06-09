@@ -59,10 +59,7 @@ func CaptureLocks(
 	}
 
 	// Cap total wall time (see maxCaptureDuration); slack on top of the configured sleeps.
-	budget := time.Duration(probeCount)*interval + 5*time.Second
-	if budget > maxCaptureDuration {
-		budget = maxCaptureDuration
-	}
+	budget := min(time.Duration(probeCount)*interval+5*time.Second, maxCaptureDuration)
 
 	ctx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()

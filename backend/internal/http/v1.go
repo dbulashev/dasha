@@ -292,7 +292,7 @@ func (s *Handlers) GetHealthScore(
 	categories := make([]serverhttp.HealthScoreCategory, 0, len(result.Categories))
 	for _, c := range result.Categories {
 		categories = append(categories, serverhttp.HealthScoreCategory{
-			Name:    c.Name,
+			Name:    string(c.Name),
 			Score:   c.Score,
 			Weight:  c.Weight,
 			Penalty: c.Penalty,
@@ -500,7 +500,7 @@ func (s *Handlers) GetHealthScoreRecommendations(
 
 		out = append(out, serverhttp.HealthScoreRecommendation{
 			RuleId:       r.RuleID,
-			Category:     r.Category,
+			Category:     string(r.Category),
 			Severity:     serverhttp.HealthScoreRecommendationSeverity(r.Severity),
 			MetricValue:  r.MetricValue,
 			Context:      ctxPtr,
@@ -560,7 +560,7 @@ func (s *Handlers) GetHealthScoreDatabases(
 		cats := make([]serverhttp.HealthScoreCategory, 0, len(ds.Categories))
 		for _, c := range ds.Categories {
 			cats = append(cats, serverhttp.HealthScoreCategory{
-				Name:    c.Name,
+				Name:    string(c.Name),
 				Score:   c.Score,
 				Weight:  c.Weight,
 				Penalty: c.Penalty,
@@ -584,7 +584,7 @@ func (s *Handlers) GetHealthScoreDatabases(
 
 	return serverhttp.GetHealthScoreDatabases200JSONResponse{
 		Databases:            databases,
-		ApplicableCategories: health.PerDBApplicableCategories,
+		ApplicableCategories: health.CategoryStrings(health.PerDBApplicableCategories),
 		WorstDatabase:        worst,
 	}, nil
 }

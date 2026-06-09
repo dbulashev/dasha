@@ -4,6 +4,8 @@ import (
 	"context"
 	"slices"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 // Collector assembles normalized Signals for a target by querying the
@@ -15,16 +17,22 @@ type Collector struct {
 	client  DatasourceClient
 	window  string // rate window for counter signals, e.g. "5m"
 	exclude string // role-exclusion label fragment for per-role signals (may be empty)
+	log     *zap.Logger
 }
 
 // NewCollector wires the collector. window is the PromQL rate window string;
-// exclude is the role-exclusion label fragment (see Config.roleExclusion).
-func NewCollector(m *Matcher, c *QueryCatalog, client DatasourceClient, window, exclude string) *Collector {
+// exclude is the role-exclusion label fragment (see Config.roleExclusion). A nil
+// logger is replaced with a no-op.
+func NewCollector(m *Matcher, c *QueryCatalog, client DatasourceClient, window, exclude string, logger *zap.Logger) *Collector {
 	if window == "" {
 		window = "5m"
 	}
 
-	return &Collector{matcher: m, catalog: c, client: client, window: window, exclude: exclude}
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+
+	return &Collector{matcher: m, catalog: c, client: client, window: window, exclude: exclude, log: logger}
 }
 
 // CoreSignals is the default set collected for a score. Extended as signals
@@ -163,6 +171,18 @@ func (co *Collector) exprFor(rt ResolvedTarget, sig SignalKind) (string, bool) {
 
 	sel, err := co.matcher.Selector(provider, role, rt)
 	if err != nil {
+		// A selector failure is a config/template problem (not a missing signal),
+		// so surface it instead of silently dropping the signal.
+		co.log.Warn("metrics: selector unavailable, skipping signal",
+			zap.String("provider", string(provider)),
+			zap.String("role", string(role)),
+			zap.String("signal", string(sig)),
+			zap.String("env", rt.Env),
+			zap.String("service", rt.Service),
+			zap.String("host", rt.Host),
+			zap.Error(err),
+		)
+
 		return "", false
 	}
 

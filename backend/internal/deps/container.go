@@ -60,8 +60,9 @@ func NewContainer() *Container {
 	do.Provide(i, func(i *do.Injector) (*metrics.Service, error) {
 		cfg := do.MustInvoke[*config.Config](i)
 		clusters := do.MustInvoke[config.Clusters](i)
+		logger := do.MustInvoke[*zap.Logger](i)
 
-		return metrics.NewService(cfg.HealthScore.Metrics, clusterMetaProvider{clusters: clusters})
+		return metrics.NewService(cfg.HealthScore.Metrics, clusterMetaProvider{clusters: clusters}, logger)
 	})
 
 	return &Container{i: i}

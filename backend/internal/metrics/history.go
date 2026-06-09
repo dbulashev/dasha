@@ -87,7 +87,7 @@ func buildHistory(sigs []Signals, from, to time.Time, minPoints int, scoreDipPts
 
 		cats := make(map[string]float64, len(res.Categories))
 		for _, c := range res.Categories {
-			cats[c.Name] = c.Score
+			cats[string(c.Name)] = c.Score
 		}
 
 		lat, _ := sig.Get(SigLatencyMs)

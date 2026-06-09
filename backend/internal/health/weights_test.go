@@ -104,7 +104,7 @@ func TestWeights_ByCategory(t *testing.T) {
 		Horizon: 0.6, WalCheckpoint: 0.7, Locks: 0.8,
 	}
 
-	for name, want := range map[string]float64{
+	for name, want := range map[Category]float64{
 		"connections":    0.1,
 		"performance":    0.2,
 		"storage":        0.3,

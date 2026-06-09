@@ -333,7 +333,7 @@ func TestInstanceAdjustments_CoverRuleConditions(t *testing.T) {
 
 	catScore := func(r Result, name string) float64 {
 		for _, c := range r.Categories {
-			if c.Name == name {
+			if string(c.Name) == name {
 				return c.Score
 			}
 		}
@@ -553,7 +553,7 @@ func TestRedistributeWeights(t *testing.T) {
 		{Name: "locks", Weight: 0.10},
 	}
 
-	redistributeWeights(categories, []string{"replication"})
+	redistributeWeights(categories, []Category{"replication"})
 
 	var total float64
 	for _, c := range categories {
@@ -600,7 +600,7 @@ func TestRedistributeWeights_OtherSumZero(t *testing.T) {
 		{Name: "locks", Weight: 0},
 	}
 
-	redistributeWeights(categories, []string{"replication"})
+	redistributeWeights(categories, []Category{"replication"})
 
 	var total float64
 

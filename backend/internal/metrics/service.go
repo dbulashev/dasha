@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/dbulashev/dasha/internal/health"
 )
 
@@ -16,6 +18,7 @@ type Service struct {
 	matcher *Matcher
 	catalog *QueryCatalog
 	client  DatasourceClient
+	log     *zap.Logger
 
 	mu        sync.Mutex
 	baseCache map[string]baselineEntry // seasonal baseline per (target, signal)
@@ -29,8 +32,8 @@ type baselineEntry struct {
 // NewService builds the facade from config. Returns (nil, nil) when disabled so
 // the DI container can hand callers a nil that still answers Enabled()==false.
 // meta is optional: when provided, discovered clusters absent from Targets are
-// auto-mapped from their discovery metadata.
-func NewService(cfg Config, meta MetadataProvider) (*Service, error) {
+// auto-mapped from their discovery metadata. A nil logger is replaced with a no-op.
+func NewService(cfg Config, meta MetadataProvider, logger *zap.Logger) (*Service, error) {
 	if !cfg.Enabled {
 		return nil, nil //nolint:nilnil
 	}
@@ -44,11 +47,16 @@ func NewService(cfg Config, meta MetadataProvider) (*Service, error) {
 		return nil, err
 	}
 
+	if logger == nil {
+		logger = zap.NewNop()
+	}
+
 	return &Service{
 		cfg:       cfg,
 		matcher:   matcher,
 		catalog:   NewQueryCatalog(),
 		client:    NewVMClient(cfg.Datasource),
+		log:       logger,
 		baseCache: make(map[string]baselineEntry),
 	}, nil
 }
@@ -65,7 +73,7 @@ func (s *Service) ValidateTarget(ctx context.Context, cluster, instance string) 
 
 // Collector returns a catalog-driven collector over the configured window.
 func (s *Service) Collector() *Collector {
-	return NewCollector(s.matcher, s.catalog, s.client, "5m", s.cfg.roleExclusion())
+	return NewCollector(s.matcher, s.catalog, s.client, "5m", s.cfg.roleExclusion(), s.log)
 }
 
 // CurrentRaw returns the instant signals as health.RawMetrics with the

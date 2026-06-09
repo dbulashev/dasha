@@ -33,7 +33,7 @@ func newTestCollector(t *testing.T, v float64) *Collector {
 		t.Fatalf("NewMatcher: %v", err)
 	}
 
-	return NewCollector(m, NewQueryCatalog(), valueClient{v: v}, "5m", "")
+	return NewCollector(m, NewQueryCatalog(), valueClient{v: v}, "5m", "", nil)
 }
 
 func TestCollector_InstantCollectsCataloguedSignals(t *testing.T) {
