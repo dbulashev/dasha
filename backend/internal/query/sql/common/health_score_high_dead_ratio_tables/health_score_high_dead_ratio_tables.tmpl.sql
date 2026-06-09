@@ -14,4 +14,4 @@ FROM pg_stat_user_tables
 -- out real offenders here either.
 WHERE n_live_tup + n_dead_tup > 10000
 ORDER BY dead_ratio DESC NULLS LAST, n_dead_tup DESC
-LIMIT 20
+LIMIT $1 OFFSET $2

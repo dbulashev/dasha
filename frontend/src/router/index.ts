@@ -115,6 +115,14 @@ router.beforeEach(async (to) => {
     await auth.init()
   }
 
+  // Health Score is admin-only while the scoring model is still being calibrated
+  // and validated across many clusters. Hide it from regular viewers: the menu
+  // item is gated via isAdmin, and any direct visit (bookmark, shared link) is
+  // redirected to /main here before the view renders.
+  if (!auth.isAdmin && to.name === 'HealthScore') {
+    return { path: `/main/${to.params.clustername ?? ''}`, query: to.query }
+  }
+
   if (auth.isAuthenticated) {
     const returnUrl = auth.consumeReturnUrl()
     if (returnUrl && returnUrl !== to.fullPath) {

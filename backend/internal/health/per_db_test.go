@@ -14,7 +14,7 @@ func TestComputePerDB_OnlyApplicableCategories(t *testing.T) {
 		t.Fatalf("expected 1 score, got %d", len(scores))
 	}
 
-	names := make(map[string]bool, len(scores[0].Categories))
+	names := make(map[Category]bool, len(scores[0].Categories))
 	for _, c := range scores[0].Categories {
 		names[c.Name] = true
 	}
@@ -25,7 +25,7 @@ func TestComputePerDB_OnlyApplicableCategories(t *testing.T) {
 		}
 	}
 
-	for forbidden := range map[string]struct{}{"connections": {}, "replication": {}} {
+	for forbidden := range map[Category]struct{}{"connections": {}, "replication": {}} {
 		if names[forbidden] {
 			t.Errorf("category %q must not appear in per-DB result", forbidden)
 		}
@@ -204,7 +204,7 @@ func TestPerDBWeights_DropsInapplicable(t *testing.T) {
 
 	w := perDBWeights(in, false)
 
-	for _, ic := range []string{"connections", "replication", "horizon", "wal_checkpoint", "locks"} {
+	for _, ic := range []Category{"connections", "replication", "horizon", "wal_checkpoint", "locks"} {
 		if w.byCategory(ic) != 0 {
 			t.Errorf("instance-only category %q must be zero, got %v", ic, w.byCategory(ic))
 		}
@@ -233,7 +233,7 @@ func TestPerDBWeights_FallbackKeepsApplicableOnly(t *testing.T) {
 
 	w := perDBWeights(in, false)
 
-	for _, ic := range []string{"connections", "replication", "horizon", "wal_checkpoint", "locks"} {
+	for _, ic := range []Category{"connections", "replication", "horizon", "wal_checkpoint", "locks"} {
 		if w.byCategory(ic) != 0 {
 			t.Errorf("instance-only category %q must stay zero in fallback, got %v", ic, w.byCategory(ic))
 		}

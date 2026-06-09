@@ -46,3 +46,45 @@ clusters:
       - demo
     hosts:
       - pg18-standalone
+
+# Metrics-backed Health Score (demo). Reads from the overlay's VictoriaMetrics
+# (demo/docker-compose.metrics.yaml). Providers are self-managed: pgSCV for PG
+# internals, pgbouncer for the pooler, pgSCV system collector for host. Selector
+# templates default to the Appendix-A schemes (filled by WithDefaults).
+# Validate the matching at: GET /api/common/health-score/datasource/status
+health_score:
+  metrics:
+    enabled: true
+    datasource:
+      url: "http://dasha-vm:8428"
+    providers_default:
+      core: pgscv
+      pooler: pgbouncer
+      host: pgscv_system
+    # Selectors overridden for the SELF-MANAGED pgSCV scheme seen in the lab:
+    # {host, service_id="<name>:<port>", job="pgscv"} — no cluster/container;
+    # system metrics are host-scoped under service_id="system:0" (per pgSCV
+    # instance, not per PG). pgbouncer matches its own service_id.
+    selectors:
+      pgscv: 'host="{{.Host}}",job="pgscv"'
+      pgbouncer: 'service_id="pgbouncer:6432",job="pgscv"'
+      pgscv_system: 'service_id="system:0",job="pgscv"'
+    targets:
+      - cluster: pg18-cluster
+        instance: pg18-master
+        env: demo
+        service: pg18-master
+        host: pg18-master
+        container: pg18-master
+      - cluster: pg17-cluster
+        instance: pg17-master
+        env: demo
+        service: pg17-master
+        host: pg17-master
+        container: pg17-master
+      - cluster: pg18-standalone
+        instance: pg18-standalone
+        env: demo
+        service: pg18-standalone
+        host: pg18-standalone
+        container: pg18-standalone

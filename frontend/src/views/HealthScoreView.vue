@@ -9,6 +9,7 @@ import { useApiLoader } from '@/composables/useApiLoader'
 import { useViewError } from '@/composables/useViewError'
 import HealthScoreGauge from '@/components/health-score/HealthScoreGauge.vue'
 import HealthScoreCategories from '@/components/health-score/HealthScoreCategories.vue'
+import HealthScoreTrend from '@/components/health-score/HealthScoreTrend.vue'
 import HealthScoreDatabases from '@/components/health-score/HealthScoreDatabases.vue'
 import HealthScoreRecommendations from '@/components/health-score/HealthScoreRecommendations.vue'
 import HealthScoreAbout from '@/components/health-score/HealthScoreAbout.vue'
@@ -63,6 +64,8 @@ const { items: data, loading } = useApiLoader<HealthScore | null>(
         </div>
       </v-card-text>
     </v-card>
+
+    <HealthScoreTrend class="mb-4" />
 
     <HealthScoreDatabases class="mb-4" />
 

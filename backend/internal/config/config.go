@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/dbulashev/dasha/internal/metrics"
 )
 
 var (
@@ -140,8 +142,16 @@ type DiscoveryEntry struct {
 
 // StorageConfig holds optional snapshot storage database settings.
 type StorageConfig struct {
+	// DSN is the service connection: regular reads/writes (DML). In hardened
+	// installs this role has no DDL privileges.
 	DSN        string `mapstructure:"dsn"`
 	DSNFromEnv string `mapstructure:"dsn_from_env"`
+
+	// DSNMigration is a privileged connection allowed to run DDL — migrations
+	// (CREATE/ALTER tables) and daily partition creation. Falls back to DSN when
+	// empty, so single-role installs keep working unchanged.
+	DSNMigration        string `mapstructure:"dsn_migration"`
+	DSNMigrationFromEnv string `mapstructure:"dsn_migration_from_env"`
 
 	// LeaderElection enables advisory-lock leader election for the autosnapshot
 	// daemon, making it safe to run multiple replicas (one becomes leader).
@@ -156,6 +166,16 @@ type StorageConfig struct {
 // Enabled returns true if the storage DSN is configured.
 func (s *StorageConfig) Enabled() bool {
 	return s.DSN != ""
+}
+
+// MigrationDSN returns the DDL-capable connection string, falling back to the
+// service DSN when no dedicated migration role is configured.
+func (s *StorageConfig) MigrationDSN() string {
+	if s.DSNMigration != "" {
+		return s.DSNMigration
+	}
+
+	return s.DSN
 }
 
 // Config is the top-level application configuration.
@@ -192,6 +212,9 @@ type Config struct {
 	// polls when the monitoring role has a tight connection budget. Per-field:
 	// unset (zero) fields inherit DBPool.
 	AutosnapshotDBPool PoolConfig `mapstructure:"autosnapshot_db_pool"`
+
+	// HealthScore groups Health Score settings (metrics-backed mode).
+	HealthScore HealthScoreConfig `mapstructure:"health_score"`
 }
 
 // PoolConfig tunes a pgx connection pool. Zero values keep the pgx defaults
@@ -220,6 +243,11 @@ func (c Config) EffectiveAutosnapshotPool() PoolConfig {
 	}
 
 	return p
+}
+
+// HealthScoreConfig groups Health Score settings.
+type HealthScoreConfig struct {
+	Metrics metrics.Config `mapstructure:"metrics"`
 }
 
 // Clusters is the interface for obtaining the current list of clusters.

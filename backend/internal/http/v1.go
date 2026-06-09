@@ -16,6 +16,7 @@ import (
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/health"
+	"github.com/dbulashev/dasha/internal/metrics"
 	"github.com/dbulashev/dasha/internal/pkg/mapstruct"
 	"github.com/dbulashev/dasha/internal/pkg/sanitize"
 	"github.com/dbulashev/dasha/internal/pkg/shortcut"
@@ -27,10 +28,11 @@ type Handlers struct {
 	cfg     *config.Config
 	repo    repository.Repository
 	storage *storage.Storage
+	metrics *metrics.Service
 }
 
-func NewDashaHandlers(cfg *config.Config, repo repository.Repository, st *storage.Storage) *Handlers {
-	return &Handlers{cfg: cfg, repo: repo, storage: st}
+func NewDashaHandlers(cfg *config.Config, repo repository.Repository, st *storage.Storage, ms *metrics.Service) *Handlers {
+	return &Handlers{cfg: cfg, repo: repo, storage: st, metrics: ms}
 }
 
 func mapQueryReport(t dto.QueryReport) serverhttp.QueryReport {
@@ -115,15 +117,34 @@ func mapQueryReportMetrics(t dto.QueryReport) serverhttp.QueryReportMetrics {
 	}
 }
 
+// maxLimit caps a client-supplied pagination limit so a SQL LIMIT can never be
+// handed a negative or absurdly large value regardless of what the client sends.
+const maxLimit = 1000
+
 func paginationDefaults(limitPtr, offsetPtr *int, defaultLimit int) (int, int) {
 	limit := defaultLimit
 	if limitPtr != nil {
 		limit = *limitPtr
 	}
 
+	// Clamp to a sane range: a non-positive limit falls back to the per-endpoint
+	// default, and an oversized one is capped so the SQL LIMIT stays bounded.
+	if limit <= 0 {
+		limit = defaultLimit
+	}
+
+	if limit > maxLimit {
+		limit = maxLimit
+	}
+
 	offset := 0
 	if offsetPtr != nil {
 		offset = *offsetPtr
+	}
+
+	// A negative offset is meaningless to SQL OFFSET; floor it at zero.
+	if offset < 0 {
+		offset = 0
 	}
 
 	return limit, offset
@@ -236,63 +257,42 @@ func (s *Handlers) GetHealthScore(
 	ctx context.Context,
 	req serverhttp.GetHealthScoreRequestObject,
 ) (serverhttp.GetHealthScoreResponseObject, error) {
-	metrics, err := s.repo.GetHealthScoreMetrics(ctx, req.Params.ClusterName, req.Params.Instance, "")
-	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetHealthScore404Response{}, nil
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("GetHealthScore | %w", err)
-	}
-
 	weights, err := s.loadHealthWeights(ctx, req.Params.ClusterName)
 	if err != nil {
 		return nil, fmt.Errorf("GetHealthScore | loadHealthWeights | %w", err)
 	}
 
-	result := health.CalculateWithWeights(health.RawMetrics{
-		InRecovery:                metrics.InRecovery,
-		TotalConnections:          metrics.TotalConnections,
-		ActiveConnections:         metrics.ActiveConnections,
-		IdleInTransaction:         metrics.IdleInTransaction,
-		LongestTransactionSeconds: metrics.LongestTransactionSeconds,
-		MaxConnections:            metrics.MaxConnections,
-		CacheHitRatio:             metrics.CacheHitRatio,
-		TrackIoTimingEnabled:      metrics.TrackIoTimingEnabled,
-		MaxDeadRatio:              metrics.MaxDeadRatio,
-		AvgDeadRatio:              metrics.AvgDeadRatio,
-		TablesHighBloat:           metrics.TablesHighBloat,
-		ReplicaCount:              metrics.ReplicaCount,
-		MaxReplayLagSeconds:       metrics.MaxReplayLagSeconds,
-		MaxLagBytes:               metrics.MaxLagBytes,
-		DisconnectedReplicas:      metrics.DisconnectedReplicas,
-		MaxXidAge:                 metrics.MaxXidAge,
-		MaxVacuumAgeHours:         metrics.MaxVacuumAgeHours,
-		TablesNeverVacuumed:       metrics.TablesNeverVacuumed,
-		AutovacuumEnabled:         metrics.AutovacuumEnabled,
-		TrackCountsEnabled:        metrics.TrackCountsEnabled,
-		TablesWithAutovacuumOff:   metrics.TablesWithAutovacuumOff,
-		MaxRelfrozenxidAge:        metrics.MaxRelfrozenxidAge,
-		HorizonLagXids:            metrics.HorizonLagXids,
-		TimedCheckpoints:          metrics.TimedCheckpoints,
-		RequestedCheckpoints:      metrics.RequestedCheckpoints,
-		ActiveLockWaiters:         metrics.ActiveLockWaiters,
-		LongestLockWaitSeconds:    metrics.LongestLockWaitSeconds,
-		UngrantedLocks:            metrics.UngrantedLocks,
-		DeadlocksTotal:            metrics.DeadlocksTotal,
-		HeavyweightLocksTotal:     metrics.HeavyweightLocksTotal,
-		MaxLocksPerTransaction:    metrics.MaxLocksPerTransaction,
-		HotUpdateRatio:            metrics.HotUpdateRatio,
-		NewpageUpdateRatio:        metrics.NewpageUpdateRatio,
-		StalePlannerStatsTables:   metrics.StalePlannerStatsTables,
-		WalLevel:                  metrics.WalLevel,
-		LogicalSlotsActive:        metrics.LogicalSlotsActive,
-	}, weights)
+	var (
+		result health.Result
+		source = "snapshot"
+	)
+
+	// Prefer the metrics-backed score when the datasource is configured and the
+	// target is mapped; otherwise fall back to the SQL snapshot (graceful). The
+	// metrics raw is overlaid with catalog/GUC facts so the score stays in
+	// lockstep with its recommendations (score<->rules parity).
+	if raw, ok := s.metricsRawWithCatalog(ctx, req.Params.ClusterName, req.Params.Instance); ok {
+		result = health.CalculateWithWeights(raw, weights)
+		source = "metrics"
+	}
+
+	if source == "snapshot" {
+		m, err := s.repo.GetHealthScoreMetrics(ctx, req.Params.ClusterName, req.Params.Instance, "")
+		if errors.Is(err, repository.ErrNotFound) {
+			return serverhttp.GetHealthScore404Response{}, nil
+		}
+
+		if err != nil {
+			return nil, fmt.Errorf("GetHealthScore | %w", err)
+		}
+
+		result = health.CalculateWithWeights(rawFromSnapshot(m), weights)
+	}
 
 	categories := make([]serverhttp.HealthScoreCategory, 0, len(result.Categories))
 	for _, c := range result.Categories {
 		categories = append(categories, serverhttp.HealthScoreCategory{
-			Name:    c.Name,
+			Name:    string(c.Name),
 			Score:   c.Score,
 			Weight:  c.Weight,
 			Penalty: c.Penalty,
@@ -300,11 +300,14 @@ func (s *Handlers) GetHealthScore(
 		})
 	}
 
+	src := source
+
 	return serverhttp.GetHealthScore200JSONResponse{
 		Score:          result.Score,
 		Categories:     categories,
 		HasReplication: result.HasReplication,
 		InRecovery:     result.InRecovery,
+		Source:         &src,
 	}, nil
 }
 
@@ -331,6 +334,117 @@ func (s *Handlers) loadHealthWeights(ctx context.Context, clusterName string) (h
 	return rec.Weights, nil
 }
 
+// rawFromSnapshot maps the SQL snapshot onto the score engine's input. Shared by
+// the snapshot scoring/recommendation paths and the metrics-mode catalog overlay.
+func rawFromSnapshot(m *dto.HealthScoreMetrics) health.RawMetrics {
+	return health.RawMetrics{
+		InRecovery:                m.InRecovery,
+		TotalConnections:          m.TotalConnections,
+		ActiveConnections:         m.ActiveConnections,
+		IdleInTransaction:         m.IdleInTransaction,
+		LongestTransactionSeconds: m.LongestTransactionSeconds,
+		MaxConnections:            m.MaxConnections,
+		CacheHitRatio:             m.CacheHitRatio,
+		TrackIoTimingEnabled:      m.TrackIoTimingEnabled,
+		MaxDeadRatio:              m.MaxDeadRatio,
+		AvgDeadRatio:              m.AvgDeadRatio,
+		TablesHighBloat:           m.TablesHighBloat,
+		ReplicaCount:              m.ReplicaCount,
+		MaxReplayLagSeconds:       m.MaxReplayLagSeconds,
+		MaxLagBytes:               m.MaxLagBytes,
+		DisconnectedReplicas:      m.DisconnectedReplicas,
+		MaxXidAge:                 m.MaxXidAge,
+		MaxVacuumAgeHours:         m.MaxVacuumAgeHours,
+		TablesNeverVacuumed:       m.TablesNeverVacuumed,
+		AutovacuumEnabled:         m.AutovacuumEnabled,
+		TrackCountsEnabled:        m.TrackCountsEnabled,
+		TablesWithAutovacuumOff:   m.TablesWithAutovacuumOff,
+		MaxRelfrozenxidAge:        m.MaxRelfrozenxidAge,
+		HorizonLagXids:            m.HorizonLagXids,
+		TimedCheckpoints:          m.TimedCheckpoints,
+		RequestedCheckpoints:      m.RequestedCheckpoints,
+		ActiveLockWaiters:         m.ActiveLockWaiters,
+		LongestLockWaitSeconds:    m.LongestLockWaitSeconds,
+		UngrantedLocks:            m.UngrantedLocks,
+		DeadlocksTotal:            m.DeadlocksTotal,
+		HeavyweightLocksTotal:     m.HeavyweightLocksTotal,
+		MaxLocksPerTransaction:    m.MaxLocksPerTransaction,
+		HotUpdateRatio:            m.HotUpdateRatio,
+		NewpageUpdateRatio:        m.NewpageUpdateRatio,
+		StalePlannerStatsTables:   m.StalePlannerStatsTables,
+		WalLevel:                  m.WalLevel,
+		LogicalSlotsActive:        m.LogicalSlotsActive,
+	}
+}
+
+// overlayCatalogFacts fills metrics-derived RawMetrics with catalog/GUC facts a
+// Prometheus-style datasource cannot express (per-table autovacuum/vacuum state,
+// relfrozenxid age, planner-stat drift, GUCs, wal_level, MVCC horizon, lock-pool
+// sizing, in-recovery). Time-series-derived fields keep their metrics values;
+// only the gaps the collector leaves neutral are written, so catalog-only rules
+// (e.g. tables_with_autovacuum_off) keep firing — and the score keeps penalising
+// them — even when a datasource is configured.
+func overlayCatalogFacts(raw *health.RawMetrics, m *dto.HealthScoreMetrics) {
+	raw.InRecovery = m.InRecovery
+
+	// Connections — longest transaction is a catalog/activity fact, not scraped.
+	raw.LongestTransactionSeconds = m.LongestTransactionSeconds
+
+	// Performance — track_io_timing GUC.
+	raw.TrackIoTimingEnabled = m.TrackIoTimingEnabled
+
+	// Storage — bloat-table count and newpage-update ratio.
+	raw.TablesHighBloat = m.TablesHighBloat
+	raw.NewpageUpdateRatio = m.NewpageUpdateRatio
+
+	// Maintenance — per-table autovacuum/vacuum state, relfrozenxid, GUCs.
+	raw.TablesNeverVacuumed = m.TablesNeverVacuumed
+	raw.TablesWithAutovacuumOff = m.TablesWithAutovacuumOff
+	raw.MaxRelfrozenxidAge = m.MaxRelfrozenxidAge
+	raw.StalePlannerStatsTables = m.StalePlannerStatsTables
+	raw.AutovacuumEnabled = m.AutovacuumEnabled
+	raw.TrackCountsEnabled = m.TrackCountsEnabled
+
+	// Horizon — oldest backend_xmin pinning VACUUM.
+	raw.HorizonLagXids = m.HorizonLagXids
+
+	// WAL / checkpoint configuration.
+	raw.WalLevel = m.WalLevel
+	raw.LogicalSlotsActive = m.LogicalSlotsActive
+
+	// Locks — heavyweight-pool sizing and longest wait (catalog/activity).
+	raw.LongestLockWaitSeconds = m.LongestLockWaitSeconds
+	raw.HeavyweightLocksTotal = m.HeavyweightLocksTotal
+	raw.MaxLocksPerTransaction = m.MaxLocksPerTransaction
+}
+
+// metricsRawWithCatalog returns the instant metrics-backed RawMetrics enriched
+// with the catalog overlay, or ok=false when the datasource is disabled,
+// unreachable, the target is unmapped, or the catalog snapshot cannot be read
+// (caller then falls back to the pure snapshot). The overlay is mandatory: a
+// metrics-only RawMetrics carries zero-valued catalog/GUC facts that the scorer
+// would misread as "autovacuum off" and similar, so a snapshot read failure
+// must sink the metrics result rather than emit a wrong-but-alive score.
+func (s *Handlers) metricsRawWithCatalog(ctx context.Context, cluster, instance string) (health.RawMetrics, bool) {
+	if !s.metrics.Enabled() {
+		return health.RawMetrics{}, false
+	}
+
+	raw, err := s.metrics.CurrentRaw(ctx, cluster, instance)
+	if err != nil {
+		return health.RawMetrics{}, false
+	}
+
+	m, sErr := s.repo.GetHealthScoreMetrics(ctx, cluster, instance, "")
+	if sErr != nil {
+		return health.RawMetrics{}, false
+	}
+
+	overlayCatalogFacts(&raw, m)
+
+	return raw, true
+}
+
 func (s *Handlers) GetHealthScoreRecommendations(
 	ctx context.Context,
 	req serverhttp.GetHealthScoreRecommendationsRequestObject,
@@ -340,52 +454,32 @@ func (s *Handlers) GetHealthScoreRecommendations(
 		database = *req.Params.Database
 	}
 
-	metrics, err := s.repo.GetHealthScoreMetrics(ctx, req.Params.ClusterName, req.Params.Instance, database)
-	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetHealthScoreRecommendations404Response{}, nil
+	var raw health.RawMetrics
+
+	// Metrics-backed recommendations at instance scope when available (overlaid
+	// with catalog/GUC facts so catalog-only rules still fire); the per-DB
+	// drill-down (database != "") stays on the SQL snapshot since the collector
+	// is instance-level.
+	useMetrics := false
+
+	if database == "" {
+		if r, ok := s.metricsRawWithCatalog(ctx, req.Params.ClusterName, req.Params.Instance); ok {
+			raw = r
+			useMetrics = true
+		}
 	}
 
-	if err != nil {
-		return nil, fmt.Errorf("GetHealthScoreRecommendations | %w", err)
-	}
+	if !useMetrics {
+		m, err := s.repo.GetHealthScoreMetrics(ctx, req.Params.ClusterName, req.Params.Instance, database)
+		if errors.Is(err, repository.ErrNotFound) {
+			return serverhttp.GetHealthScoreRecommendations404Response{}, nil
+		}
 
-	raw := health.RawMetrics{
-		InRecovery:                metrics.InRecovery,
-		TotalConnections:          metrics.TotalConnections,
-		ActiveConnections:         metrics.ActiveConnections,
-		IdleInTransaction:         metrics.IdleInTransaction,
-		LongestTransactionSeconds: metrics.LongestTransactionSeconds,
-		MaxConnections:            metrics.MaxConnections,
-		CacheHitRatio:             metrics.CacheHitRatio,
-		TrackIoTimingEnabled:      metrics.TrackIoTimingEnabled,
-		MaxDeadRatio:              metrics.MaxDeadRatio,
-		AvgDeadRatio:              metrics.AvgDeadRatio,
-		TablesHighBloat:           metrics.TablesHighBloat,
-		ReplicaCount:              metrics.ReplicaCount,
-		MaxReplayLagSeconds:       metrics.MaxReplayLagSeconds,
-		MaxLagBytes:               metrics.MaxLagBytes,
-		DisconnectedReplicas:      metrics.DisconnectedReplicas,
-		MaxXidAge:                 metrics.MaxXidAge,
-		MaxVacuumAgeHours:         metrics.MaxVacuumAgeHours,
-		TablesNeverVacuumed:       metrics.TablesNeverVacuumed,
-		AutovacuumEnabled:         metrics.AutovacuumEnabled,
-		TrackCountsEnabled:        metrics.TrackCountsEnabled,
-		TablesWithAutovacuumOff:   metrics.TablesWithAutovacuumOff,
-		MaxRelfrozenxidAge:        metrics.MaxRelfrozenxidAge,
-		HorizonLagXids:            metrics.HorizonLagXids,
-		TimedCheckpoints:          metrics.TimedCheckpoints,
-		RequestedCheckpoints:      metrics.RequestedCheckpoints,
-		ActiveLockWaiters:         metrics.ActiveLockWaiters,
-		LongestLockWaitSeconds:    metrics.LongestLockWaitSeconds,
-		UngrantedLocks:            metrics.UngrantedLocks,
-		DeadlocksTotal:            metrics.DeadlocksTotal,
-		HeavyweightLocksTotal:     metrics.HeavyweightLocksTotal,
-		MaxLocksPerTransaction:    metrics.MaxLocksPerTransaction,
-		HotUpdateRatio:            metrics.HotUpdateRatio,
-		NewpageUpdateRatio:        metrics.NewpageUpdateRatio,
-		StalePlannerStatsTables:   metrics.StalePlannerStatsTables,
-		WalLevel:                  metrics.WalLevel,
-		LogicalSlotsActive:        metrics.LogicalSlotsActive,
+		if err != nil {
+			return nil, fmt.Errorf("GetHealthScoreRecommendations | %w", err)
+		}
+
+		raw = rawFromSnapshot(m)
 	}
 
 	recs := health.Evaluate(raw, database != "")
@@ -406,7 +500,7 @@ func (s *Handlers) GetHealthScoreRecommendations(
 
 		out = append(out, serverhttp.HealthScoreRecommendation{
 			RuleId:       r.RuleID,
-			Category:     r.Category,
+			Category:     string(r.Category),
 			Severity:     serverhttp.HealthScoreRecommendationSeverity(r.Severity),
 			MetricValue:  r.MetricValue,
 			Context:      ctxPtr,
@@ -466,7 +560,7 @@ func (s *Handlers) GetHealthScoreDatabases(
 		cats := make([]serverhttp.HealthScoreCategory, 0, len(ds.Categories))
 		for _, c := range ds.Categories {
 			cats = append(cats, serverhttp.HealthScoreCategory{
-				Name:    c.Name,
+				Name:    string(c.Name),
 				Score:   c.Score,
 				Weight:  c.Weight,
 				Penalty: c.Penalty,
@@ -490,16 +584,24 @@ func (s *Handlers) GetHealthScoreDatabases(
 
 	return serverhttp.GetHealthScoreDatabases200JSONResponse{
 		Databases:            databases,
-		ApplicableCategories: health.PerDBApplicableCategories,
+		ApplicableCategories: health.CategoryStrings(health.PerDBApplicableCategories),
 		WorstDatabase:        worst,
 	}, nil
 }
+
+// defaultHealthScoreDetailLimit is the page size for the inline recommendation
+// detail tables; it matches the frontend DEFAULT_PAGE_SIZE so has-more paging
+// over the full result set works (the lists can be long, e.g. every table with
+// a high dead-tuple ratio).
+const defaultHealthScoreDetailLimit = 15
 
 func (s *Handlers) GetHealthScoreXidWraparoundDatabases(
 	ctx context.Context,
 	req serverhttp.GetHealthScoreXidWraparoundDatabasesRequestObject,
 ) (serverhttp.GetHealthScoreXidWraparoundDatabasesResponseObject, error) {
-	rows, err := s.repo.GetHealthScoreXidWraparoundDatabases(ctx, req.Params.ClusterName, req.Params.Instance)
+	limit, offset := paginationDefaults(req.Params.Limit, req.Params.Offset, defaultHealthScoreDetailLimit)
+
+	rows, err := s.repo.GetHealthScoreXidWraparoundDatabases(ctx, req.Params.ClusterName, req.Params.Instance, limit, offset)
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.GetHealthScoreXidWraparoundDatabases404Response{}, nil
 	}
@@ -523,7 +625,9 @@ func (s *Handlers) GetHealthScoreTablesAutovacuumOff(
 	ctx context.Context,
 	req serverhttp.GetHealthScoreTablesAutovacuumOffRequestObject,
 ) (serverhttp.GetHealthScoreTablesAutovacuumOffResponseObject, error) {
-	rows, err := s.repo.GetHealthScoreTablesAutovacuumOff(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
+	limit, offset := paginationDefaults(req.Params.Limit, req.Params.Offset, defaultHealthScoreDetailLimit)
+
+	rows, err := s.repo.GetHealthScoreTablesAutovacuumOff(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, limit, offset)
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.GetHealthScoreTablesAutovacuumOff404Response{}, nil
 	}
@@ -548,7 +652,9 @@ func (s *Handlers) GetHealthScoreLowHotUpdateTables(
 	ctx context.Context,
 	req serverhttp.GetHealthScoreLowHotUpdateTablesRequestObject,
 ) (serverhttp.GetHealthScoreLowHotUpdateTablesResponseObject, error) {
-	rows, err := s.repo.GetHealthScoreLowHotUpdateTables(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
+	limit, offset := paginationDefaults(req.Params.Limit, req.Params.Offset, defaultHealthScoreDetailLimit)
+
+	rows, err := s.repo.GetHealthScoreLowHotUpdateTables(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, limit, offset)
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.GetHealthScoreLowHotUpdateTables404Response{}, nil
 	}
@@ -575,7 +681,9 @@ func (s *Handlers) GetHealthScoreHighDeadRatioTables(
 	ctx context.Context,
 	req serverhttp.GetHealthScoreHighDeadRatioTablesRequestObject,
 ) (serverhttp.GetHealthScoreHighDeadRatioTablesResponseObject, error) {
-	rows, err := s.repo.GetHealthScoreHighDeadRatioTables(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
+	limit, offset := paginationDefaults(req.Params.Limit, req.Params.Offset, defaultHealthScoreDetailLimit)
+
+	rows, err := s.repo.GetHealthScoreHighDeadRatioTables(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, limit, offset)
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.GetHealthScoreHighDeadRatioTables404Response{}, nil
 	}
@@ -602,7 +710,9 @@ func (s *Handlers) GetHealthScoreHorizonBlockingSessions(
 	ctx context.Context,
 	req serverhttp.GetHealthScoreHorizonBlockingSessionsRequestObject,
 ) (serverhttp.GetHealthScoreHorizonBlockingSessionsResponseObject, error) {
-	rows, err := s.repo.GetHealthScoreHorizonBlockingSessions(ctx, req.Params.ClusterName, req.Params.Instance)
+	limit, offset := paginationDefaults(req.Params.Limit, req.Params.Offset, defaultHealthScoreDetailLimit)
+
+	rows, err := s.repo.GetHealthScoreHorizonBlockingSessions(ctx, req.Params.ClusterName, req.Params.Instance, limit, offset)
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.GetHealthScoreHorizonBlockingSessions404Response{}, nil
 	}
@@ -626,6 +736,119 @@ func (s *Handlers) GetHealthScoreHorizonBlockingSessions(
 	}
 
 	return out, nil
+}
+
+func (s *Handlers) GetHealthScoreDatasourceStatus(
+	ctx context.Context,
+	req serverhttp.GetHealthScoreDatasourceStatusRequestObject,
+) (serverhttp.GetHealthScoreDatasourceStatusResponseObject, error) {
+	if !s.metrics.Enabled() {
+		return serverhttp.GetHealthScoreDatasourceStatus200JSONResponse{
+			Enabled: false,
+			Roles:   []serverhttp.HealthScoreDatasourceRole{},
+		}, nil
+	}
+
+	diag, err := s.metrics.ValidateTarget(ctx, req.Params.ClusterName, req.Params.Instance)
+	if errors.Is(err, metrics.ErrTargetNotMapped) {
+		return serverhttp.GetHealthScoreDatasourceStatus404Response{}, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("GetHealthScoreDatasourceStatus | %w", err)
+	}
+
+	roles := make([]serverhttp.HealthScoreDatasourceRole, 0, len(diag.Roles))
+	for _, rd := range diag.Roles {
+		role := serverhttp.HealthScoreDatasourceRole{
+			Role:     string(rd.Role),
+			Provider: string(rd.Provider),
+			Metric:   rd.Metric,
+			Selector: rd.Selector,
+			Matched:  rd.Matched,
+		}
+
+		if rd.Err != "" {
+			e := rd.Err
+			role.Error = &e
+		}
+
+		if len(rd.Sample) > 0 {
+			labels := rd.Sample
+			role.SampleLabels = &labels
+		}
+
+		roles = append(roles, role)
+	}
+
+	return serverhttp.GetHealthScoreDatasourceStatus200JSONResponse{
+		Enabled: true,
+		Target:  diag.Target,
+		Roles:   roles,
+	}, nil
+}
+
+func (s *Handlers) GetHealthScoreHistory(
+	ctx context.Context,
+	req serverhttp.GetHealthScoreHistoryRequestObject,
+) (serverhttp.GetHealthScoreHistoryResponseObject, error) {
+	if !s.metrics.Enabled() {
+		return serverhttp.GetHealthScoreHistory404Response{}, nil
+	}
+
+	weights, err := s.loadHealthWeights(ctx, req.Params.ClusterName)
+	if err != nil {
+		return nil, fmt.Errorf("GetHealthScoreHistory | loadHealthWeights | %w", err)
+	}
+
+	step := 5 * time.Minute
+	if req.Params.StepSeconds != nil && *req.Params.StepSeconds > 0 {
+		step = time.Duration(*req.Params.StepSeconds) * time.Second
+	}
+
+	h, err := s.metrics.History(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.From, req.Params.To, step, weights)
+	if errors.Is(err, metrics.ErrTargetNotMapped) {
+		return serverhttp.GetHealthScoreHistory404Response{}, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("GetHealthScoreHistory | %w", err)
+	}
+
+	points := make([]serverhttp.HealthScoreHistoryPoint, 0, len(h.Points))
+	for _, p := range h.Points {
+		points = append(points, serverhttp.HealthScoreHistoryPoint{
+			Time:       p.Time,
+			Score:      p.Score,
+			LatencyMs:  p.LatencyMs,
+			Categories: p.Categories,
+		})
+	}
+
+	baseline := make([]serverhttp.HealthScoreHistoryBaseline, 0, len(h.Baseline))
+	for _, b := range h.Baseline {
+		baseline = append(baseline, serverhttp.HealthScoreHistoryBaseline{
+			Time:  b.Time,
+			Value: b.Value,
+		})
+	}
+
+	dips := make([]serverhttp.HealthScoreHistoryDip, 0, len(h.Dips))
+	for _, d := range h.Dips {
+		dips = append(dips, serverhttp.HealthScoreHistoryDip{
+			Time:     d.Time,
+			Value:    d.Value,
+			Baseline: d.Baseline,
+			Drop:     d.Drop,
+		})
+	}
+
+	return serverhttp.GetHealthScoreHistory200JSONResponse{
+		Points:            points,
+		Baseline:          baseline,
+		Dips:              dips,
+		BaselineAvailable: h.BaselineEnough,
+	}, nil
 }
 
 func (s *Handlers) GetHealthScoreWeights(

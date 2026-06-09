@@ -191,7 +191,7 @@ watch(() => route.path, () => {
         >
         <v-list nav>
           <v-list-item :title="t('Home')"  prepend-icon="mdi-sigma" link :to="mainLink"></v-list-item>
-          <v-list-item :title="t('healthScore.page.menuItem')" prepend-icon="mdi-heart-pulse" link :to="healthScoreLink"></v-list-item>
+          <v-list-item v-if="authStore.isAdmin" :title="t('healthScore.page.menuItem')" prepend-icon="mdi-heart-pulse" link :to="healthScoreLink"></v-list-item>
           <v-list-item :title="t('Connections')" prepend-icon="mdi-connection" link :to="connectionsLink"></v-list-item>
           <v-list-item :title="t('Active Queries')" prepend-icon="mdi-database-clock-outline" link :to="queriesLink"></v-list-item>
           <v-list-item :title="t('Query Stats')" prepend-icon="mdi-chart-bar" link :to="queryStatsLink"></v-list-item>

@@ -7,4 +7,4 @@ SELECT
 FROM pg_database
 WHERE datallowconn AND NOT datistemplate
 ORDER BY xid_age DESC
-LIMIT 10
+LIMIT $1 OFFSET $2

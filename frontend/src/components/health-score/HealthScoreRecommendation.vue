@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import {
@@ -10,8 +10,11 @@ import {
   getHealthScoreXidWraparoundDatabases,
 } from '@/api/gen/default/default'
 import type { HealthScoreRecommendation } from '@/api/models/index'
-import { assertOk } from '@/utils/api'
+import { fmtNum } from '@/utils/format'
 import { useClusterInfo } from '@/composables/useClusterInfo'
+import { usePaginatedApiLoader } from '@/composables/useApiLoader'
+import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
+import PaginationControls from '@/components/PaginationControls.vue'
 import { INLINE_SPECS, RULES_WITH_INLINE_DETAILS } from './inlineDetails'
 
 const props = defineProps<{
@@ -61,14 +64,18 @@ const i18nBase = computed(() => `healthScore.recommendations.${props.rec.rule_id
 
 const i18nContext = computed<Record<string, unknown>>(() => {
   const raw = props.rec.metric_value
-  // metric_pct: same value rendered as a percentage with one decimal,
-  // for rules whose metric_value is a 0..1 ratio (HOT, newpage, requested_checkpoints,
-  // lock_pool_saturation). Locale strings choose which form to use.
-  return {
-    metric_value: raw,
+  // Round for display: raw metric/context values can carry full float precision
+  // (e.g. "90.22492448754167%"). metric_pct: same value as a percentage with one
+  // decimal, for rules whose metric_value is a 0..1 ratio (HOT, newpage,
+  // requested_checkpoints, lock_pool_saturation). Locale strings choose the form.
+  const ctx: Record<string, unknown> = {
+    metric_value: fmtNum(raw),
     metric_pct: Number.isFinite(raw) ? (raw * 100).toFixed(1) : raw,
-    ...(props.rec.context ?? {}),
   }
+  for (const [key, val] of Object.entries(props.rec.context ?? {})) {
+    ctx[key] = fmtNum(val)
+  }
+  return ctx
 })
 
 const title = computed(() => t(`${i18nBase.value}.title`, i18nContext.value))
@@ -90,81 +97,69 @@ const inlineSpec = computed(() => INLINE_SPECS[props.rec.rule_id])
 const hasSql = computed(() => !hasInline.value && te(`${i18nBase.value}.sql`))
 const sql = computed(() => (hasSql.value ? t(`${i18nBase.value}.sql`, i18nContext.value) : ''))
 
-const inlineRows = ref<Record<string, unknown>[]>([])
-const inlineLoading = ref(false)
 const inlineError = ref<string | null>(null)
 
-async function loadInline() {
-  if (!hasInline.value) return
-  if (!clusterName.value || !hostName.value) return
-  const spec = inlineSpec.value
-  if (!spec) return
-  if (spec.needsDatabase && !effectiveDatabase.value) return
+// Dispatch the inline-detail request for the current rule. Lists can be long
+// (e.g. every table over the dead-tuple threshold), so each endpoint is paged
+// with limit/offset rather than capped server-side.
+function inlineFetcher(
+  limit: number,
+  offset: number,
+): Promise<{ data: unknown; status: number }> {
+  const cluster = clusterName.value as string
+  const host = hostName.value as string
+  const db = effectiveDatabase.value
 
-  inlineLoading.value = true
-  inlineError.value = null
-
-  try {
-    const cluster = clusterName.value
-    const host = hostName.value
-    const db = effectiveDatabase.value
-
-    let res
-    switch (props.rec.rule_id) {
-      case 'xid_wraparound_risk':
-        res = await getHealthScoreXidWraparoundDatabases({ cluster_name: cluster, instance: host })
-        break
-      case 'tables_with_autovacuum_off':
-        res = await getHealthScoreTablesAutovacuumOff({
-          cluster_name: cluster,
-          instance: host,
-          database: db,
-        })
-        break
-      case 'low_hot_update_ratio':
-        res = await getHealthScoreLowHotUpdateTables({
-          cluster_name: cluster,
-          instance: host,
-          database: db,
-        })
-        break
-      case 'high_max_dead_ratio':
-        res = await getHealthScoreHighDeadRatioTables({
-          cluster_name: cluster,
-          instance: host,
-          database: db,
-        })
-        break
-      case 'horizon_lag_xids':
-        res = await getHealthScoreHorizonBlockingSessions({
-          cluster_name: cluster,
-          instance: host,
-        })
-        break
-      default:
-        return
-    }
-
-    const data = assertOk<unknown[]>(res)
-    inlineRows.value = (data ?? []) as Record<string, unknown>[]
-  } catch (err) {
-    inlineError.value = err instanceof Error ? err.message : String(err)
-    inlineRows.value = []
-  } finally {
-    inlineLoading.value = false
+  switch (props.rec.rule_id) {
+    case 'xid_wraparound_risk':
+      return getHealthScoreXidWraparoundDatabases({ cluster_name: cluster, instance: host, limit, offset })
+    case 'tables_with_autovacuum_off':
+      return getHealthScoreTablesAutovacuumOff({ cluster_name: cluster, instance: host, database: db, limit, offset })
+    case 'low_hot_update_ratio':
+      return getHealthScoreLowHotUpdateTables({ cluster_name: cluster, instance: host, database: db, limit, offset })
+    case 'high_max_dead_ratio':
+      return getHealthScoreHighDeadRatioTables({ cluster_name: cluster, instance: host, database: db, limit, offset })
+    case 'horizon_lag_xids':
+      return getHealthScoreHorizonBlockingSessions({ cluster_name: cluster, instance: host, limit, offset })
+    default:
+      // The hasInline guard means this rule is listed in RULES_WITH_INLINE_DETAILS
+      // but has no fetcher case here — contract drift. Fail loudly instead of
+      // silently rendering an empty list.
+      return Promise.reject(
+        new Error(
+          `No inline-detail fetcher for rule "${props.rec.rule_id}" ` +
+            `(cluster=${cluster}, instance=${host}, database=${db || '-'})`,
+        ),
+      )
   }
 }
 
-// Refetch when the request context changes while the card is open, otherwise
-// inline rows from a previously selected database/host linger after the
-// selector switches. Collapsed cards skip the fetch — they'll pick up fresh
-// data on next expand because the watcher fires on the expanded transition.
-watch(
-  [expanded, clusterName, hostName, effectiveDatabase, () => props.rec.rule_id],
-  ([open]) => {
-    if (open && hasInline.value) {
-      void loadInline()
-    }
+// Paginated, lazy: only fetches once the card is expanded and the request
+// context is complete. Any change to host/database/rule (deps) resets to page 1;
+// collapsing skips the fetch and re-expanding reloads fresh data.
+const {
+  items: inlineRows,
+  loading: inlineLoading,
+  page,
+  hasMore,
+  load,
+} = usePaginatedApiLoader<Record<string, unknown>>(
+  (limit, offset) => {
+    inlineError.value = null
+    return inlineFetcher(limit, offset)
+  },
+  {
+    pageSize: DEFAULT_PAGE_SIZE,
+    deps: [expanded, clusterName, hostName, effectiveDatabase, () => props.rec.rule_id],
+    guard: () =>
+      expanded.value &&
+      hasInline.value &&
+      !!clusterName.value &&
+      !!hostName.value &&
+      (!inlineSpec.value?.needsDatabase || !!effectiveDatabase.value),
+    onError: (msg) => {
+      inlineError.value = msg
+    },
   },
 )
 
@@ -239,14 +234,13 @@ async function copySql() {
             {{ detail }}
           </div>
 
-          <!-- Inline data: small typed table fetched from a details endpoint. -->
+          <!-- Inline data: typed, paginated table fetched from a details endpoint. -->
           <template v-if="hasInline && inlineSpec">
             <div class="text-caption text-medium-emphasis mb-1">
               {{ t('healthScore.inline.title') }}
             </div>
-            <v-progress-linear v-if="inlineLoading" indeterminate height="2" />
             <v-alert
-              v-else-if="inlineError"
+              v-if="inlineError"
               type="error"
               variant="tonal"
               density="compact"
@@ -263,39 +257,43 @@ async function copySql() {
             >
               {{ t('healthScore.inline.pickDatabase') }}
             </v-alert>
-            <v-alert
-              v-else-if="!inlineRows.length"
-              type="success"
-              variant="tonal"
-              density="compact"
-              class="mt-1"
-            >
-              {{ t('healthScore.inline.empty') }}
-            </v-alert>
-            <v-table v-else density="compact" class="inline-table rounded mt-1">
-              <thead>
-                <tr>
-                  <th
-                    v-for="col in inlineSpec.columns(t)"
-                    :key="col.key"
-                    class="text-caption"
-                  >
-                    {{ col.title }}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="(row, i) in inlineRows" :key="i">
-                  <td
-                    v-for="col in inlineSpec.columns(t)"
-                    :key="col.key"
-                    :class="col.cellClass"
-                  >
-                    {{ col.format ? col.format(row[col.key]) : row[col.key] }}
-                  </td>
-                </tr>
-              </tbody>
-            </v-table>
+            <template v-else>
+              <v-progress-linear v-if="inlineLoading" indeterminate height="2" class="mt-1" />
+              <v-alert
+                v-else-if="!inlineRows.length"
+                type="success"
+                variant="tonal"
+                density="compact"
+                class="mt-1"
+              >
+                {{ t('healthScore.inline.empty') }}
+              </v-alert>
+              <v-table v-else density="compact" class="inline-table rounded mt-1">
+                <thead>
+                  <tr>
+                    <th
+                      v-for="col in inlineSpec.columns(t)"
+                      :key="col.key"
+                      class="text-caption"
+                    >
+                      {{ col.title }}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(row, i) in inlineRows" :key="i">
+                    <td
+                      v-for="col in inlineSpec.columns(t)"
+                      :key="col.key"
+                      :class="col.cellClass"
+                    >
+                      {{ col.format ? col.format(row[col.key]) : row[col.key] }}
+                    </td>
+                  </tr>
+                </tbody>
+              </v-table>
+              <PaginationControls :page="page" :has-more="hasMore" @update:page="load" />
+            </template>
           </template>
 
           <!-- Plain SQL block: only for fix commands (ALTER SYSTEM) now. -->

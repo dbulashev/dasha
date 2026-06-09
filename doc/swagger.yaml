@@ -207,10 +207,22 @@ paths:
       operationId: getHealthScoreXidWraparoundDatabases
       description: >-
         Inline detail for the xid_wraparound_risk recommendation: per-database
-        transaction-ID age, top 10 by age. Instance-wide.
+        transaction-ID age, ordered by age descending (paged). Instance-wide.
       parameters:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 15
+          required: false
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+          required: false
       responses:
         '200':
           description: Success
@@ -232,6 +244,18 @@ paths:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
         - $ref: '#/components/parameters/Database'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 15
+          required: false
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+          required: false
       responses:
         '200':
           description: Success
@@ -253,6 +277,18 @@ paths:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
         - $ref: '#/components/parameters/Database'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 15
+          required: false
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+          required: false
       responses:
         '200':
           description: Success
@@ -274,6 +310,18 @@ paths:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
         - $ref: '#/components/parameters/Database'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 15
+          required: false
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+          required: false
       responses:
         '200':
           description: Success
@@ -294,6 +342,18 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 15
+          required: false
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+          required: false
       responses:
         '200':
           description: Success
@@ -318,6 +378,63 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthScoreDatabases'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/common/health-score/datasource/status:
+    get:
+      operationId: getHealthScoreDatasourceStatus
+      description: >-
+        Metrics datasource label-matching diagnostics: for each role
+        (core / pooler / host) reports the chosen provider, the rendered series
+        selector and how many series matched (exactly one expected). Returns
+        enabled=false when the metrics-backed mode is off.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthScoreDatasourceStatus'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/common/health-score/history:
+    get:
+      operationId: getHealthScoreHistory
+      description: >-
+        Metrics-backed score trend for [from, to]: per-timestamp overall score,
+        per-category scores and latency, with a seasonal (hour-of-week) baseline
+        and detected dips. Requires the metrics datasource (404 otherwise).
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: step_seconds
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Sampling step in seconds (default 300).
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthScoreHistory'
         '404':
           $ref: '#/components/responses/NotFound'
   /api/common/health-score/weights:
@@ -3723,6 +3840,9 @@ components:
             $ref: '#/components/schemas/HealthScoreCategory'
         has_replication:
           type: boolean
+        source:
+          type: string
+          description: 'Score source: "snapshot" (SQL) or "metrics" (datasource).'
         in_recovery:
           type: boolean
           description: >-
@@ -3908,6 +4028,129 @@ components:
         worst_database:
           type: string
           nullable: true
+
+    HealthScoreDatasourceStatus:
+      type: object
+      required:
+        - enabled
+        - target
+        - roles
+      properties:
+        enabled:
+          type: boolean
+        target:
+          type: string
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/HealthScoreDatasourceRole'
+
+    HealthScoreDatasourceRole:
+      type: object
+      required:
+        - role
+        - provider
+        - metric
+        - selector
+        - matched
+      properties:
+        role:
+          type: string
+        provider:
+          type: string
+        metric:
+          type: string
+        selector:
+          type: string
+        matched:
+          description: Number of matching series (exactly 1 means OK).
+          type: integer
+        error:
+          type: string
+        sample_labels:
+          type: object
+          additionalProperties:
+            type: string
+
+    HealthScoreHistory:
+      type: object
+      required:
+        - points
+        - baseline
+        - dips
+        - baseline_available
+      properties:
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/HealthScoreHistoryPoint'
+        baseline:
+          type: array
+          items:
+            $ref: '#/components/schemas/HealthScoreHistoryBaseline'
+        dips:
+          type: array
+          items:
+            $ref: '#/components/schemas/HealthScoreHistoryDip'
+        baseline_available:
+          type: boolean
+
+    HealthScoreHistoryPoint:
+      type: object
+      required:
+        - time
+        - score
+        - latency_ms
+        - categories
+      properties:
+        time:
+          type: string
+          format: date-time
+        score:
+          type: number
+          format: double
+        latency_ms:
+          type: number
+          format: double
+        categories:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+
+    HealthScoreHistoryBaseline:
+      type: object
+      required:
+        - time
+        - value
+      properties:
+        time:
+          type: string
+          format: date-time
+        value:
+          type: number
+          format: double
+
+    HealthScoreHistoryDip:
+      type: object
+      required:
+        - time
+        - value
+        - baseline
+        - drop
+      properties:
+        time:
+          type: string
+          format: date-time
+        value:
+          type: number
+          format: double
+        baseline:
+          type: number
+          format: double
+        drop:
+          type: number
+          format: double
 
     HealthScoreWeights:
       type: object

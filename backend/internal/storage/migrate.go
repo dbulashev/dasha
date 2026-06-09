@@ -175,7 +175,8 @@ func newFromDSN(ctx context.Context, dsn string) (*Storage, error) {
 		return nil, fmt.Errorf("storage: connect: %w", err)
 	}
 
-	return &Storage{pool: pool}, nil
+	// The migrate command connects as the DDL role, so both pools alias it.
+	return &Storage{pool: pool, ddlPool: pool}, nil
 }
 
 func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
@@ -200,7 +201,7 @@ func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
 		addAutosnapshotResetConfigSQL,
 		createAutosnapshotPendingSQL,
 	} {
-		if _, err := s.pool.Exec(ctx, ddl); err != nil {
+		if _, err := s.ddlPool.Exec(ctx, ddl); err != nil {
 			return fmt.Errorf("storage: migrate: %w", err)
 		}
 	}
@@ -221,7 +222,9 @@ func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
 	return nil
 }
 
-// ensurePartitions creates daily partitions for all partitioned tables if they don't exist.
+// ensurePartitions creates daily partitions for all partitioned tables if they don't
+// exist. Runs on the DDL pool (the migration role) so the DML-only service role does
+// not need partition-creation privileges at snapshot-write time.
 func (s *Storage) ensurePartitions(ctx context.Context, day time.Time) error {
 	dayStr := day.Format("20060102")
 	from := day.Format("2006-01-02")
@@ -233,7 +236,7 @@ func (s *Storage) ensurePartitions(ctx context.Context, day time.Time) error {
 			table, dayStr, table, from, to,
 		)
 
-		if _, err := s.pool.Exec(ctx, sql); err != nil {
+		if _, err := s.ddlPool.Exec(ctx, sql); err != nil {
 			return fmt.Errorf("partition %s_%s: %w", table, dayStr, err)
 		}
 	}
