@@ -7350,6 +7350,13 @@ func (response GetTablesDescribeBloat200JSONResponse) VisitGetTablesDescribeBloa
 	return json.NewEncoder(w).Encode(response)
 }
 
+type GetTablesDescribeBloat404Response = NotFoundResponse
+
+func (response GetTablesDescribeBloat404Response) VisitGetTablesDescribeBloatResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
+}
+
 type GetTablesDescribePartitionsRequestObject struct {
 	Params GetTablesDescribePartitionsParams
 }
@@ -7365,6 +7372,13 @@ func (response GetTablesDescribePartitions200JSONResponse) VisitGetTablesDescrib
 	w.WriteHeader(200)
 
 	return json.NewEncoder(w).Encode(response)
+}
+
+type GetTablesDescribePartitions404Response = NotFoundResponse
+
+func (response GetTablesDescribePartitions404Response) VisitGetTablesDescribePartitionsResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
 }
 
 type GetTablesDescribeRowEstimateRequestObject struct {
@@ -7480,6 +7494,13 @@ func (response GetPgstattupleAvailable200JSONResponse) VisitGetPgstattupleAvaila
 	w.WriteHeader(200)
 
 	return json.NewEncoder(w).Encode(response)
+}
+
+type GetPgstattupleAvailable404Response = NotFoundResponse
+
+func (response GetPgstattupleAvailable404Response) VisitGetPgstattupleAvailableResponse(w http.ResponseWriter) error {
+	w.WriteHeader(404)
+	return nil
 }
 
 type GetTablesSchemasRequestObject struct {
@@ -10257,12 +10278,12 @@ var swaggerSpec = []string{
 	"5SCpuxcxBEvc66hM4bmvGj+KjL8F8zVRd8RsVmSR39Y2t43XpZzzplz/o+B1k6wNcJtHHc5pCauziD66",
 	"DIw18jZlXSoi6HQeykh+Z8VgBwvBOC2bEQMHIUiy6BW5dmbaPs7INUvdRyrI3MDavBSK9wX2tzaJFOH1",
 	"FvvHFkiyMIRtXBLpopcEcgSfE7o/Kj3QFR/75LzRlRyfU948LIVRUtlwyhujMxrwDLqV5sC2/K7imrQg",
-	"2o7C+9Z5U9VkhwC6y82HEkkukc2oyKQzeV5VUb6/HHpPQltMHr1ex4x1DUgxE6SzoF5VDU6KPs+6cCNA",
-	"LUvg60exBDZUZtBi6FdbRq8mwAWJO1K7VRX3lF69s52eNff+rVhZHhta8ezu1kbN9VMc/ZDgAcfOPTHF",
-	"KcvjbhWnT/5IrSvP6SMVHzacPtKIaYgb89Ddl83Jar1V+RaktZD2V2RpBBN8iUmkjEt7pRbbYTdv/yiF",
-	"lzJJvCC6926ZOc1cSyVr/FupbRGvSWf/hmDg1sBoSPc8OjMNH/ck6np4dJfzhANm7UUIjCR0u8fvmdQ4",
-	"rcg2kd9bRx+OfnrXN7nLn6Pb3a39eKfbrPvUwd5ZErUqPvQkicNF++p+d9AbzLX4bTziEGRMVYz97e/R",
-	"HmAGbDcTy9Hb336XrNtNyU+wyn/5/dv/BgAA///Xdzvg800BAA==",
+	"2o7C+9Z5U9VkhwC6y82HEkkukc2oyKQzeV5VUb6/HHpPQltMHr3NqEyKmSCdFfiqenNS9HlWnhsBalkz",
+	"Xz+KNbOhMve0ek4YvZoAFyTuSB5X1fRTevXOdnpW9fu3k2V5bEhx7P7ZxuX1Uxz9VOEBR+c9McUpy+Nu",
+	"FadPhkqtK88JKhUfNpyg0ohpiN/z0P2dzcnqvpbxdCHtr8jSCCb4EpNIGZf2WjC2w27e/lEKL2WSeEF0",
+	"790yc5rZnErW+LdS2yIilM7+DcFdbz6MSnVPvDPT8HHPuq63UHcqCsCsvS6CkYRu9/hdmRqnFdkmGH3r",
+	"6MPRT+/65pv5c3S7+8Ef73Qjd5862Dtxo1bFh563cbhoX93vHn2D6R+/jUccgoypIra//T3aA8yA7WZi",
+	"OXr72++Sdbsp+QlW+S+/f/vfAAAA///gVJlUhk4BAA==",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

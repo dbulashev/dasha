@@ -4569,10 +4569,21 @@ export type getTablesDescribeBloatResponse200 = {
   status: 200
 }
 
+export type getTablesDescribeBloatResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
 export type getTablesDescribeBloatResponseSuccess = getTablesDescribeBloatResponse200 & {
   headers: Headers
 }
-export type getTablesDescribeBloatResponse = getTablesDescribeBloatResponseSuccess
+export type getTablesDescribeBloatResponseError = getTablesDescribeBloatResponse404 & {
+  headers: Headers
+}
+
+export type getTablesDescribeBloatResponse =
+  | getTablesDescribeBloatResponseSuccess
+  | getTablesDescribeBloatResponseError
 
 export const getGetTablesDescribeBloatUrl = (params: GetTablesDescribeBloatParams) => {
   const normalizedParams = new URLSearchParams()
@@ -4608,7 +4619,7 @@ export const getGetTablesDescribeBloatQueryKey = (
 
 export const getGetTablesDescribeBloatQueryOptions = <
   TData = Awaited<ReturnType<typeof getTablesDescribeBloat>>,
-  TError = unknown,
+  TError = NotFoundResponse,
 >(
   params: MaybeRef<GetTablesDescribeBloatParams>,
   options?: {
@@ -4633,11 +4644,11 @@ export const getGetTablesDescribeBloatQueryOptions = <
 export type GetTablesDescribeBloatQueryResult = NonNullable<
   Awaited<ReturnType<typeof getTablesDescribeBloat>>
 >
-export type GetTablesDescribeBloatQueryError = unknown
+export type GetTablesDescribeBloatQueryError = NotFoundResponse
 
 export function useGetTablesDescribeBloat<
   TData = Awaited<ReturnType<typeof getTablesDescribeBloat>>,
-  TError = unknown,
+  TError = NotFoundResponse,
 >(
   params: MaybeRef<GetTablesDescribeBloatParams>,
   options?: {
@@ -4871,10 +4882,21 @@ export type getPgstattupleAvailableResponse200 = {
   status: 200
 }
 
+export type getPgstattupleAvailableResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
 export type getPgstattupleAvailableResponseSuccess = getPgstattupleAvailableResponse200 & {
   headers: Headers
 }
-export type getPgstattupleAvailableResponse = getPgstattupleAvailableResponseSuccess
+export type getPgstattupleAvailableResponseError = getPgstattupleAvailableResponse404 & {
+  headers: Headers
+}
+
+export type getPgstattupleAvailableResponse =
+  | getPgstattupleAvailableResponseSuccess
+  | getPgstattupleAvailableResponseError
 
 export const getGetPgstattupleAvailableUrl = (params: GetPgstattupleAvailableParams) => {
   const normalizedParams = new URLSearchParams()
@@ -4910,7 +4932,7 @@ export const getGetPgstattupleAvailableQueryKey = (
 
 export const getGetPgstattupleAvailableQueryOptions = <
   TData = Awaited<ReturnType<typeof getPgstattupleAvailable>>,
-  TError = unknown,
+  TError = NotFoundResponse,
 >(
   params: MaybeRef<GetPgstattupleAvailableParams>,
   options?: {
@@ -4936,11 +4958,11 @@ export const getGetPgstattupleAvailableQueryOptions = <
 export type GetPgstattupleAvailableQueryResult = NonNullable<
   Awaited<ReturnType<typeof getPgstattupleAvailable>>
 >
-export type GetPgstattupleAvailableQueryError = unknown
+export type GetPgstattupleAvailableQueryError = NotFoundResponse
 
 export function useGetPgstattupleAvailable<
   TData = Awaited<ReturnType<typeof getPgstattupleAvailable>>,
-  TError = unknown,
+  TError = NotFoundResponse,
 >(
   params: MaybeRef<GetPgstattupleAvailableParams>,
   options?: {
@@ -4962,10 +4984,21 @@ export type getTablesDescribePartitionsResponse200 = {
   status: 200
 }
 
+export type getTablesDescribePartitionsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
 export type getTablesDescribePartitionsResponseSuccess = getTablesDescribePartitionsResponse200 & {
   headers: Headers
 }
-export type getTablesDescribePartitionsResponse = getTablesDescribePartitionsResponseSuccess
+export type getTablesDescribePartitionsResponseError = getTablesDescribePartitionsResponse404 & {
+  headers: Headers
+}
+
+export type getTablesDescribePartitionsResponse =
+  | getTablesDescribePartitionsResponseSuccess
+  | getTablesDescribePartitionsResponseError
 
 export const getGetTablesDescribePartitionsUrl = (params: GetTablesDescribePartitionsParams) => {
   const normalizedParams = new URLSearchParams()
@@ -5004,7 +5037,7 @@ export const getGetTablesDescribePartitionsQueryKey = (
 
 export const getGetTablesDescribePartitionsQueryOptions = <
   TData = Awaited<ReturnType<typeof getTablesDescribePartitions>>,
-  TError = unknown,
+  TError = NotFoundResponse,
 >(
   params: MaybeRef<GetTablesDescribePartitionsParams>,
   options?: {
@@ -5030,11 +5063,11 @@ export const getGetTablesDescribePartitionsQueryOptions = <
 export type GetTablesDescribePartitionsQueryResult = NonNullable<
   Awaited<ReturnType<typeof getTablesDescribePartitions>>
 >
-export type GetTablesDescribePartitionsQueryError = unknown
+export type GetTablesDescribePartitionsQueryError = NotFoundResponse
 
 export function useGetTablesDescribePartitions<
   TData = Awaited<ReturnType<typeof getTablesDescribePartitions>>,
-  TError = unknown,
+  TError = NotFoundResponse,
 >(
   params: MaybeRef<GetTablesDescribePartitionsParams>,
   options?: {
