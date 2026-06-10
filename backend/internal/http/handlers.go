@@ -7,6 +7,7 @@ import (
 	"github.com/dbulashev/dasha/internal/storage"
 )
 
+// Handlers holds the HTTP handler dependencies used by the server.
 type Handlers struct {
 	cfg     *config.Config
 	repo    repository.Repository
@@ -14,6 +15,7 @@ type Handlers struct {
 	metrics *metrics.Service
 }
 
+// NewDashaHandlers constructs a new Handlers instance from its dependencies.
 func NewDashaHandlers(cfg *config.Config, repo repository.Repository, st *storage.Storage, ms *metrics.Service) *Handlers {
 	return &Handlers{cfg: cfg, repo: repo, storage: st, metrics: ms}
 }

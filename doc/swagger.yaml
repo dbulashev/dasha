@@ -973,6 +973,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TableDescribeBloat'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /api/tables/describe-vacuum-stats:
     get:
@@ -1047,6 +1049,8 @@ paths:
                 properties:
                   Available:
                     type: boolean
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /api/tables/describe-partitions:
     get:
@@ -1086,6 +1090,8 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/TableDescribePartition'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /api/tables/schemas:
     get:

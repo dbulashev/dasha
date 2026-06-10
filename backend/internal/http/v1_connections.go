@@ -74,15 +74,7 @@ func (s *Handlers) GetConnectionStatActivity(
 	ctx context.Context,
 	req serverhttp.GetConnectionStatActivityRequestObject,
 ) (serverhttp.GetConnectionStatActivityResponseObject, error) {
-	limit := defaultConnectionStatActivityLimit
-	if req.Params.Limit != nil {
-		limit = *req.Params.Limit
-	}
-
-	offset := 0
-	if req.Params.Offset != nil {
-		offset = *req.Params.Offset
-	}
+	limit, offset := paginationDefaults(req.Params.Limit, req.Params.Offset, defaultConnectionStatActivityLimit)
 
 	var username, state string
 	if req.Params.Username != nil {

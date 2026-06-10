@@ -12,6 +12,7 @@ import (
 	"github.com/dbulashev/dasha/gen/serverhttp"
 	"github.com/dbulashev/dasha/internal/autosnapshot"
 	"github.com/dbulashev/dasha/internal/pkg/mapstruct"
+	"github.com/dbulashev/dasha/internal/pkg/shortcut"
 	"github.com/dbulashev/dasha/internal/repository"
 	"github.com/dbulashev/dasha/internal/storage"
 )
@@ -96,17 +97,14 @@ func (s *Handlers) GetSnapshots(
 	var ret serverhttp.GetSnapshots200JSONResponse = mapstruct.SliceMap(
 		items,
 		func(item storage.SnapshotListItem) serverhttp.SnapshotListItem {
-			hasLocks := item.HasLocks
-			reason := item.Reason
-
 			return serverhttp.SnapshotListItem{
 				Id:             openapi_types.UUID(item.ID),
 				CreatedAt:      item.CreatedAt,
 				DashaVersion:   item.DashaVersion,
 				JsonVersion:    item.JsonVersion,
 				PgssStatsReset: item.PgssStatsReset,
-				HasLocks:       &hasLocks,
-				Reason:         &reason,
+				HasLocks:       shortcut.Ptr(item.HasLocks),
+				Reason:         shortcut.Ptr(item.Reason),
 			}
 		})
 

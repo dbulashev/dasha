@@ -33,10 +33,7 @@ func (s *Handlers) GetTablesSearch(
 	ctx context.Context,
 	req serverhttp.GetTablesSearchRequestObject,
 ) (serverhttp.GetTablesSearchResponseObject, error) {
-	limit := 50
-	if req.Params.Limit != nil {
-		limit = *req.Params.Limit
-	}
+	limit, _ := paginationDefaults(req.Params.Limit, nil, 50)
 
 	q := ""
 	if req.Params.Q != nil {
@@ -69,10 +66,7 @@ func (s *Handlers) GetTablesTopKBySize(
 	ctx context.Context,
 	req serverhttp.GetTablesTopKBySizeRequestObject,
 ) (serverhttp.GetTablesTopKBySizeResponseObject, error) {
-	limit := 10
-	if req.Params.Limit != nil {
-		limit = *req.Params.Limit
-	}
+	limit, _ := paginationDefaults(req.Params.Limit, nil, 10)
 
 	tables, err := s.repo.GetTablesTopKBySize(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, limit)
 	if errors.Is(err, repository.ErrNotFound) {

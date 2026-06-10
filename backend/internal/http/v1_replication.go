@@ -66,23 +66,15 @@ func (s *Handlers) GetReplicationSlots(
 	var ret serverhttp.GetReplicationSlots200JSONResponse = mapstruct.SliceMap(
 		items,
 		func(t dto.ReplicationSlot) serverhttp.ReplicationSlot {
-			r := serverhttp.ReplicationSlot{
-				SlotName:  t.SlotName,
-				SlotType:  t.SlotType,
-				Active:    t.Active,
-				Database:  shortcut.Ptr(t.Database),
-				WalStatus: shortcut.Ptr(t.WalStatus),
+			return serverhttp.ReplicationSlot{
+				SlotName:     t.SlotName,
+				SlotType:     t.SlotType,
+				Active:       t.Active,
+				Database:     shortcut.Ptr(t.Database),
+				WalStatus:    shortcut.Ptr(t.WalStatus),
+				SafeWalSize:  t.SafeWalSize,
+				BacklogBytes: t.BacklogBytes,
 			}
-
-			if t.SafeWalSize != nil {
-				r.SafeWalSize = t.SafeWalSize
-			}
-
-			if t.BacklogBytes != nil {
-				r.BacklogBytes = t.BacklogBytes
-			}
-
-			return r
 		})
 
 	return ret, nil

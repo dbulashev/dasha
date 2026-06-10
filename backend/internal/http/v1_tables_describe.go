@@ -104,6 +104,10 @@ func (s *Handlers) GetPgstattupleAvailable(
 		req.Params.Instance,
 		req.Params.Database,
 	)
+	if errors.Is(err, repository.ErrNotFound) {
+		return serverhttp.GetPgstattupleAvailable404Response{}, nil
+	}
+
 	if err != nil {
 		return nil, fmt.Errorf("GetPgstattupleAvailable | %w", err)
 	}
@@ -124,7 +128,7 @@ func (s *Handlers) GetTablesDescribeBloat(
 		req.Params.Table,
 	)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetTablesDescribeBloat200JSONResponse{}, nil
+		return serverhttp.GetTablesDescribeBloat404Response{}, nil
 	}
 
 	if err != nil {
@@ -280,7 +284,7 @@ func (s *Handlers) GetTablesDescribePartitions(
 		limit, offset,
 	)
 	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.GetTablesDescribePartitions200JSONResponse{}, nil
+		return serverhttp.GetTablesDescribePartitions404Response{}, nil
 	}
 
 	if err != nil {
