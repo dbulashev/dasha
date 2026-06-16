@@ -1,18 +1,18 @@
 SELECT
-    COALESCE(blockingl.relation::regclass::text,blockingl.locktype) as locked_item,
+    COALESCE(blockingl.relation::regclass::text, blockingl.locktype, '') as locked_item,
     blockeda.pid AS blocked_pid,
-    blockeda.usename AS blocked_user,
+    COALESCE(blockeda.usename, '') AS blocked_user,
     blockeda.query as blocked_query,
     age(now(), blockeda.query_start) AS blocked_duration,
     EXTRACT(EPOCH FROM age(now(), blockeda.query_start)) * 1000.0 AS blocked_duration_ms,
     blockedl.mode as blocked_mode,
-    blockinga.pid AS blocking_pid,
-    blockinga.usename AS blocking_user,
-    blockinga.state AS state_of_blocking_process,
-    blockinga.query AS current_or_recent_query_in_blocking_process,
-    age(now(), blockinga.query_start) AS blocking_duration,
+    COALESCE(blockinga.pid, blockingl.pid, 0) AS blocking_pid,
+    COALESCE(blockinga.usename, '') AS blocking_user,
+    COALESCE(blockinga.state, '') AS state_of_blocking_process,
+    COALESCE(blockinga.query, '') AS current_or_recent_query_in_blocking_process,
+    COALESCE(age(now(), blockinga.query_start)::text, '') AS blocking_duration,
     EXTRACT(EPOCH FROM age(now(), blockinga.query_start)) * 1000.0 AS blocking_duration_ms,
-    blockingl.mode as blocking_mode
+    COALESCE(blockingl.mode, '') as blocking_mode
 FROM
     pg_catalog.pg_locks blockedl
         LEFT JOIN
