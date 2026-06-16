@@ -9,7 +9,7 @@ RUN npm run build-only
 
 FROM nginx:alpine
 RUN apk add --no-cache gettext && \
-    apk add --no-cache --upgrade libxml2 && \
+    apk add --no-cache --upgrade libxml2 libcrypto3 libssl3 && \
     sed -i '/^user  *nginx;/d' /etc/nginx/nginx.conf && \
     sed -i -E 's|^pid[[:space:]]+/[^;]*nginx\.pid;|pid /tmp/nginx.pid;|' /etc/nginx/nginx.conf && \
     grep -qE '^pid[[:space:]]+/tmp/nginx\.pid;' /etc/nginx/nginx.conf
