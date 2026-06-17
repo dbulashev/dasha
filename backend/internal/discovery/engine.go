@@ -190,6 +190,7 @@ func (e *Engine) discover(
 			ProviderID: yc.ID,
 			Labels: map[string]string{
 				"folder_id": folderID,
+				"folder":    folderName,
 			},
 		})
 	}
