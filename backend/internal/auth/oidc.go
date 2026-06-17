@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"go.uber.org/zap"
@@ -14,44 +16,84 @@ import (
 	"github.com/dbulashev/dasha/internal/config"
 )
 
-type OIDCProvider struct {
-	provider      *oidc.Provider
+// oidcState holds the data derived from OIDC discovery. It is nil until the
+// first successful discovery and is published atomically, so the provider shell
+// can exist before the IdP is reachable and become usable later via retry.
+type oidcState struct {
 	verifier      *oidc.IDTokenVerifier
-	OAuth2Cfg     oauth2.Config
+	oauth2Cfg     oauth2.Config
+	endSessionURL string
+	revocationURL string
+}
+
+// OIDCProvider wraps OIDC discovery behind an atomically-published state, so a
+// transient failure at startup (slow/unreachable IdP) does not require a restart:
+// discovery is retried in the background until it succeeds.
+type OIDCProvider struct {
+	cfg           config.OIDCConfig
 	roleClaim     string
 	roleMapping   map[string]string // corporate group → dasha role
 	logger        *zap.Logger
-	endSessionURL string
-	revocationURL string
 	postLogoutURI string
+	state         atomic.Pointer[oidcState]
 }
 
-func NewOIDCProvider(ctx context.Context, cfg config.OIDCConfig, logger *zap.Logger) (*OIDCProvider, error) {
-	provider, err := oidc.NewProvider(ctx, cfg.IssuerURL)
-	if err != nil {
-		return nil, fmt.Errorf("OIDC discovery failed for %s: %w", cfg.IssuerURL, err)
-	}
+const (
+	oidcRetryInterval    = 30 * time.Second
+	oidcDiscoveryTimeout = 15 * time.Second
+)
 
-	verifier := provider.Verifier(&oidc.Config{ //nolint:exhaustruct
-		ClientID: cfg.ClientID,
-	})
-
-	scopes := cfg.Scopes
-	if len(scopes) == 0 {
-		scopes = []string{oidc.ScopeOpenID, "profile", "email"}
-	}
-
-	oauth2Cfg := oauth2.Config{ //nolint:exhaustruct
-		ClientID:     cfg.ClientID,
-		ClientSecret: cfg.ClientSecret,
-		Endpoint:     provider.Endpoint(),
-		RedirectURL:  cfg.RedirectURL,
-		Scopes:       scopes,
-	}
-
+// NewOIDCProvider builds the provider and attempts OIDC discovery. It always
+// returns a non-nil shell: when discovery fails it keeps retrying in the
+// background until the IdP is reachable, so SSO self-heals without a restart.
+// ctx (the service lifetime) cancels the retry loop.
+func NewOIDCProvider(ctx context.Context, cfg config.OIDCConfig, logger *zap.Logger) *OIDCProvider {
 	roleClaim := cfg.RoleClaim
 	if roleClaim == "" {
 		roleClaim = "realm_access.roles"
+	}
+
+	postLogoutURI := "/"
+	if parsed, err := url.Parse(cfg.RedirectURL); err == nil {
+		postLogoutURI = parsed.Scheme + "://" + parsed.Host + "/"
+	}
+
+	p := &OIDCProvider{ //nolint:exhaustruct
+		cfg:           cfg,
+		roleClaim:     roleClaim,
+		roleMapping:   cfg.RoleMapping,
+		logger:        logger,
+		postLogoutURI: postLogoutURI,
+	}
+
+	if err := p.discover(ctx); err != nil {
+		logger.Warn("OIDC provider initialization failed; retrying in the background until the IdP is reachable", zap.Error(err))
+
+		go p.retryInit(ctx)
+	}
+
+	return p
+}
+
+// Ready reports whether OIDC discovery has completed and logins can be served.
+func (p *OIDCProvider) Ready() bool {
+	return p.state.Load() != nil
+}
+
+// discover runs one time-bounded discovery attempt and, on success, publishes
+// the derived state.
+func (p *OIDCProvider) discover(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, oidcDiscoveryTimeout)
+	defer cancel()
+
+	provider, err := oidc.NewProvider(ctx, p.cfg.IssuerURL)
+	if err != nil {
+		return fmt.Errorf("OIDC discovery failed for %s: %w", p.cfg.IssuerURL, err)
+	}
+
+	scopes := p.cfg.Scopes
+	if len(scopes) == 0 {
+		scopes = []string{oidc.ScopeOpenID, "profile", "email"}
 	}
 
 	var providerClaims struct {
@@ -61,26 +103,76 @@ func NewOIDCProvider(ctx context.Context, cfg config.OIDCConfig, logger *zap.Log
 
 	_ = provider.Claims(&providerClaims)
 
-	postLogoutURI := "/"
-	if parsed, err := url.Parse(cfg.RedirectURL); err == nil {
-		postLogoutURI = parsed.Scheme + "://" + parsed.Host + "/"
-	}
-
-	return &OIDCProvider{
-		provider:      provider,
-		verifier:      verifier,
-		OAuth2Cfg:     oauth2Cfg,
-		roleClaim:     roleClaim,
-		roleMapping:   cfg.RoleMapping,
-		logger:        logger,
+	p.state.Store(&oidcState{
+		verifier: provider.Verifier(&oidc.Config{ //nolint:exhaustruct
+			ClientID: p.cfg.ClientID,
+		}),
+		oauth2Cfg: oauth2.Config{ //nolint:exhaustruct
+			ClientID:     p.cfg.ClientID,
+			ClientSecret: p.cfg.ClientSecret,
+			Endpoint:     provider.Endpoint(),
+			RedirectURL:  p.cfg.RedirectURL,
+			Scopes:       scopes,
+		},
 		endSessionURL: providerClaims.EndSessionURL,
 		revocationURL: providerClaims.RevocationURL,
-		postLogoutURI: postLogoutURI,
-	}, nil
+	})
+
+	p.logger.Info("OIDC provider initialized", zap.String("issuer", p.cfg.IssuerURL))
+
+	return nil
+}
+
+// retryInit re-attempts discovery on a fixed interval until it succeeds or ctx
+// is cancelled.
+func (p *OIDCProvider) retryInit(ctx context.Context) {
+	ticker := time.NewTicker(oidcRetryInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := p.discover(ctx); err != nil {
+				p.logger.Warn("OIDC provider retry failed; will retry", zap.Error(err))
+
+				continue
+			}
+
+			return
+		}
+	}
 }
 
 func (p *OIDCProvider) VerifyIDToken(ctx context.Context, rawIDToken string) (*oidc.IDToken, error) {
-	return p.verifier.Verify(ctx, rawIDToken) //nolint:wrapcheck
+	s := p.state.Load()
+	if s == nil {
+		return nil, errOIDCUnavailable
+	}
+
+	return s.verifier.Verify(ctx, rawIDToken) //nolint:wrapcheck
+}
+
+// AuthCodeURL returns the IdP authorization URL, or "" when discovery has not
+// completed yet (callers gate on Ready()).
+func (p *OIDCProvider) AuthCodeURL(state string) string {
+	s := p.state.Load()
+	if s == nil {
+		return ""
+	}
+
+	return s.oauth2Cfg.AuthCodeURL(state)
+}
+
+// Exchange swaps an authorization code for tokens, erroring when not ready.
+func (p *OIDCProvider) Exchange(ctx context.Context, code string) (*oauth2.Token, error) {
+	s := p.state.Load()
+	if s == nil {
+		return nil, errOIDCUnavailable
+	}
+
+	return s.oauth2Cfg.Exchange(ctx, code) //nolint:wrapcheck
 }
 
 func (p *OIDCProvider) ExtractRole(claims map[string]any) string {
@@ -98,24 +190,32 @@ func (p *OIDCProvider) ExtractRole(claims map[string]any) string {
 	return role
 }
 
+// TokenSource returns a refreshing token source, or nil when discovery has not
+// completed yet (callers must nil-check).
 func (p *OIDCProvider) TokenSource(ctx context.Context, refreshToken string) oauth2.TokenSource {
-	return p.OAuth2Cfg.TokenSource(ctx, &oauth2.Token{ //nolint:exhaustruct
+	s := p.state.Load()
+	if s == nil {
+		return nil
+	}
+
+	return s.oauth2Cfg.TokenSource(ctx, &oauth2.Token{ //nolint:exhaustruct
 		RefreshToken: refreshToken,
 	})
 }
 
 func (p *OIDCProvider) LogoutURL(idTokenHint string) string {
-	if p.endSessionURL == "" {
+	s := p.state.Load()
+	if s == nil || s.endSessionURL == "" {
 		return ""
 	}
 
-	u, err := url.Parse(p.endSessionURL)
+	u, err := url.Parse(s.endSessionURL)
 	if err != nil {
 		return ""
 	}
 
 	q := u.Query()
-	q.Set("client_id", p.OAuth2Cfg.ClientID)
+	q.Set("client_id", s.oauth2Cfg.ClientID)
 	q.Set("post_logout_redirect_uri", p.postLogoutURI)
 
 	if idTokenHint != "" {
@@ -128,18 +228,19 @@ func (p *OIDCProvider) LogoutURL(idTokenHint string) string {
 }
 
 func (p *OIDCProvider) RevokeRefreshToken(ctx context.Context, refreshToken string) error {
-	if p.revocationURL == "" || refreshToken == "" {
+	s := p.state.Load()
+	if s == nil || s.revocationURL == "" || refreshToken == "" {
 		return nil
 	}
 
 	data := url.Values{
 		"token":           {refreshToken},
 		"token_type_hint": {"refresh_token"},
-		"client_id":       {p.OAuth2Cfg.ClientID},
-		"client_secret":   {p.OAuth2Cfg.ClientSecret},
+		"client_id":       {s.oauth2Cfg.ClientID},
+		"client_secret":   {s.oauth2Cfg.ClientSecret},
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.revocationURL, strings.NewReader(data.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.revocationURL, strings.NewReader(data.Encode()))
 	if err != nil {
 		return fmt.Errorf("create revocation request: %w", err)
 	}
