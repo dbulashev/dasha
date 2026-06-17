@@ -33,6 +33,20 @@ type SnapshotListItem struct {
 // SnapshotOpts is re-exported from autosnapshot to keep storage callers working.
 type SnapshotOpts = autosnapshot.SnapshotOpts
 
+// jsonbArg renders a marshaled JSON payload for a jsonb column as a string rather
+// than []byte. Under pgx's simple query protocol — used when the storage pool
+// reaches the DB through a transaction pooler (e.g. Odyssey) via
+// default_query_exec_mode=simple — a []byte is interpolated as a bytea literal
+// (\x...), which jsonb rejects; a string is interpolated as a text literal that
+// coerces to jsonb. Nil maps to SQL NULL.
+func jsonbArg(b []byte) any {
+	if b == nil {
+		return nil
+	}
+
+	return string(b)
+}
+
 // CreateSnapshot stores a pgss snapshot and returns its id and timestamp.
 // Reason defaults to "manual" when empty.
 func (s *Storage) CreateSnapshot(
@@ -118,9 +132,9 @@ func (s *Storage) CreateSnapshot(
 
 	err = tx.QueryRow(ctx, `
 		INSERT INTO snapshots (cluster_name, instance, database, dasha_version, json_version, report_data, created_at, pgss_stats_reset, reason, trigger_context, locks_data)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10::jsonb, $11::jsonb)
 		RETURNING id`,
-		clusterName, instance, database, version.GetBuildNumber(), currentJSONVersion, data, now, opts.PgssStatsReset, reason, triggerCtx, locksData,
+		clusterName, instance, database, version.GetBuildNumber(), currentJSONVersion, jsonbArg(data), now, opts.PgssStatsReset, reason, jsonbArg(triggerCtx), jsonbArg(locksData),
 	).Scan(&id)
 	if err != nil {
 		return uuid.Nil, time.Time{}, fmt.Errorf("storage: insert snapshot: %w", err)
