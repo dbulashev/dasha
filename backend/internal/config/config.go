@@ -217,8 +217,10 @@ type Config struct {
 	HealthScore HealthScoreConfig `mapstructure:"health_score"`
 }
 
-// PoolConfig tunes a pgx connection pool. Zero values keep the pgx defaults
-// (MaxConns = max(4, NumCPU), MaxConnIdleTime = 30m, MaxConnLifetime = 1h).
+// PoolConfig tunes a pgx connection pool. Zero MaxConns/MaxConnIdleTime fall back
+// to Dasha's pooler-friendly defaults (4 / 2m) rather than pgx's (max(4,NumCPU) /
+// 30m), since Dasha opens one pool per (host,database) behind a per-user pooler.
+// Zero MaxConnLifetime keeps the pgx default (1h).
 type PoolConfig struct {
 	MaxConns        int32         `mapstructure:"max_conns"`
 	MaxConnIdleTime time.Duration `mapstructure:"max_conn_idle_time"`

@@ -54,14 +54,12 @@ func NewMiddlewares(ctx context.Context, cfg config.AuthConfig, logger *zap.Logg
 	)
 
 	if cfg.Mode == config.AuthModeOIDC {
-		var err error
-
-		oidcProvider, err = NewOIDCProvider(ctx, *cfg.OIDC, logger)
-		if err != nil {
-			logger.Warn("OIDC provider initialization failed; SSO login will show error page until config is fixed and service restarted", zap.Error(err))
+		if len(cfg.CookieSecret) < minSecretLen {
+			logger.Warn("auth.cookie_secret is unset or too short — session cookies are keyed with an ephemeral random key that changes on every restart and differs per replica; users get logged out on restarts/scale-out. Set a stable cookie_secret (>=32 chars), ideally via cookie_secret_from_env.")
 		}
 
-		sessionMgr = NewSessionManager(cfg)
+		oidcProvider = NewOIDCProvider(ctx, *cfg.OIDC, logger)
+		sessionMgr = NewSessionManager(cfg, logger)
 	}
 
 	enforcer, err := NewCasbinEnforcer()

@@ -16,6 +16,19 @@ config:
   # pg_stats_view: monitoring.pg_stats  # custom view when user lacks pg_catalog.pg_stats access
   # enable_query_stats_reset: false  # allow resetting pg_stat_statements via UI
 
+  # -- Connection pools to monitored clusters (one pool per host+database).
+  # Defaults: max_conns 4, max_conn_idle_time 2m. Behind a per-user connection
+  # pooler (Odyssey/PgBouncer) keep (hosts × databases) × max_conns + the
+  # autosnapshot pool under the user's pool_size limit; a short idle time returns
+  # connections to the pooler between refreshes. Example tightening below the
+  # defaults to fit a small per-user pool_size:
+  # db_pool:
+  #   max_conns: 2
+  #   max_conn_idle_time: 30s
+  # autosnapshot_db_pool:   # the daemon connects as the same user; per-field override of db_pool
+  #   max_conns: 2
+  #   max_conn_idle_time: 15s
+
   # -- Authentication & authorization
   # auth:
   #   mode: none  # none | token | oidc

@@ -399,6 +399,17 @@ func (p *PgxPool) ensurePool(ctx context.Context) error {
 	return nil
 }
 
+// Dasha opens one pool per (host, database) and connects as a single monitoring
+// role, so pgx's default of MaxConns = max(4, NumCPU) multiplies badly behind a
+// per-user connection pooler (e.g. Odyssey/PgBouncer pool_size). Default to a
+// small pool with a short idle time so the footprint stays low and idle
+// connections are returned to the pooler between dashboard refreshes;
+// db_pool / autosnapshot_db_pool override per field.
+const (
+	defaultPoolMaxConns        = 4
+	defaultPoolMaxConnIdleTime = 2 * time.Minute
+)
+
 func (p *PgxPool) getPool(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 	databaseConfig, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
@@ -408,12 +419,14 @@ func (p *PgxPool) getPool(ctx context.Context, dsn string) (*pgxpool.Pool, error
 	databaseConfig.ConnConfig.ConnectTimeout = poolConnectTimeout
 	databaseConfig.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
 
-	// Apply pool tuning from config (0 = keep pgx default). Lets the autosnapshot
-	// daemon free idle connections fast under a tight monitoring-user budget.
+	// Conservative defaults (above), overridden per field by db_pool /
+	// autosnapshot_db_pool when set (> 0).
+	databaseConfig.MaxConns = defaultPoolMaxConns
 	if p.poolConfig.MaxConns > 0 {
 		databaseConfig.MaxConns = p.poolConfig.MaxConns
 	}
 
+	databaseConfig.MaxConnIdleTime = defaultPoolMaxConnIdleTime
 	if p.poolConfig.MaxConnIdleTime > 0 {
 		databaseConfig.MaxConnIdleTime = p.poolConfig.MaxConnIdleTime
 	}

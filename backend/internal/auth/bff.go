@@ -43,9 +43,9 @@ func renderOIDCUnavailable(c echo.Context, status int, message string, showRetry
 
 func loginHandler(provider *OIDCProvider, sm *SessionManager, logger *zap.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		if provider == nil {
-			logger.Warn("SSO login requested but OIDC provider is not initialized")
-			return renderOIDCUnavailable(c, http.StatusServiceUnavailable, "", false)
+		if provider == nil || !provider.Ready() {
+			logger.Warn("SSO login requested but OIDC provider is not ready (discovery pending or failed)")
+			return renderOIDCUnavailable(c, http.StatusServiceUnavailable, "Single Sign-On is starting up or the identity provider is unreachable. Please try again shortly.", true)
 		}
 
 		state, err := sm.SetStateCookie(c)
@@ -54,14 +54,14 @@ func loginHandler(provider *OIDCProvider, sm *SessionManager, logger *zap.Logger
 			return renderOIDCUnavailable(c, http.StatusInternalServerError, "Failed to start login: state cookie could not be generated.", true)
 		}
 
-		return c.Redirect(http.StatusFound, provider.OAuth2Cfg.AuthCodeURL(state))
+		return c.Redirect(http.StatusFound, provider.AuthCodeURL(state))
 	}
 }
 
 func callbackHandler(provider *OIDCProvider, sm *SessionManager, logger *zap.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		if provider == nil {
-			logger.Warn("OIDC callback received but provider is not initialized")
+		if provider == nil || !provider.Ready() {
+			logger.Warn("OIDC callback received but provider is not ready")
 			return renderOIDCUnavailable(c, http.StatusServiceUnavailable, "", false)
 		}
 
