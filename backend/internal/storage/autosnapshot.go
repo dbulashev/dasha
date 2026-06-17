@@ -135,7 +135,7 @@ func (s *Storage) SetAutosnapshotConfig(ctx context.Context, cfg autosnapshot.Co
 		cfg.RetentionBytes, cfg.RetentionMinDays, cfg.MinBaselineActive,
 		cfg.CaptureLocks, cfg.LockProbeCount, cfg.LockProbeInterval,
 		cfg.ResetQueryStats,
-		data, nullStringPtr(updatedBy),
+		jsonbArg(data), nullStringPtr(updatedBy),
 	)
 	if err != nil {
 		return fmt.Errorf("storage: set autosnapshot config: %w", err)
@@ -204,7 +204,7 @@ func (s *Storage) SetClusterOverride(ctx context.Context, clusterName string, ov
 		SET overrides = EXCLUDED.overrides,
 		    updated_at = now(),
 		    updated_by = EXCLUDED.updated_by`,
-		clusterName, data, nullStringPtr(updatedBy),
+		clusterName, jsonbArg(data), nullStringPtr(updatedBy),
 	)
 	if err != nil {
 		return fmt.Errorf("storage: set cluster override: %w", err)
@@ -265,7 +265,7 @@ func (s *Storage) InsertTriggerEvent(ctx context.Context, e autosnapshot.Trigger
 		VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)`,
 		e.ClusterName, e.Instance, e.Database,
 		string(e.TriggerType), string(e.Outcome),
-		e.SnapshotID, ctxJSON, e.ErrorMessage,
+		e.SnapshotID, jsonbArg(ctxJSON), e.ErrorMessage,
 	)
 	if err != nil {
 		return fmt.Errorf("storage: insert trigger event: %w", err)
