@@ -17,4 +17,4 @@ RUN apk add --no-cache ca-certificates && \
 COPY --from=builder /dasha /usr/local/bin/dasha
 USER dasha
 EXPOSE 8000
-CMD ["sh", "-c", "dasha migrate && dasha"]
+CMD ["sh", "-c", "dasha migrate && exec dasha"]
