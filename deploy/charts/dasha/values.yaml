@@ -138,7 +138,10 @@ config:
   #     # providers come from providers_default (e.g. core: pgscv, pooler/host:
   #     # yc_native). A static targets[] entry always overrides the derived one.
   #     # auto_map_discovered: true       # set false to require explicit targets[]
-  #     # discovery_env_label: folder_id  # discovery label feeding {{.Env}}
+  #     # discovery_env_label: folder_id  # discovery label feeding {{.Env}}.
+  #     #   Built-in labels per discovered cluster: folder_id (cloud folder UUID)
+  #     #   and folder (the `discovery:` map key, e.g. dev/uat/prod). Set this to
+  #     #   `folder` when your metrics carry cluster="<env>" matching that key.
   #
   #     # Tuning (optional; sensible defaults shown):
   #     # baseline: { window: 672h, min_history: 336h }  # seasonal baseline window / min history
