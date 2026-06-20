@@ -15,9 +15,10 @@ type PerDBMetrics struct {
 	AvgDeadRatio    float64
 	TablesHighBloat int
 
-	MaxXidAge           int64
-	MaxVacuumAgeHours   float64
-	TablesNeverVacuumed int
+	MaxXidAge                int64
+	VacuumBacklogTables      int
+	MaxOverdueVacuumAgeHours float64
+	TablesNeverVacuumed      int
 }
 
 // DatabaseScore is the computed score for a single database.
@@ -48,13 +49,14 @@ func ComputePerDB(metrics []PerDBMetrics, w Weights, inRecovery bool) []Database
 
 	for _, m := range metrics {
 		raw := RawMetrics{
-			CacheHitRatio:       m.CacheHitRatio,
-			MaxDeadRatio:        m.MaxDeadRatio,
-			AvgDeadRatio:        m.AvgDeadRatio,
-			TablesHighBloat:     m.TablesHighBloat,
-			MaxXidAge:           m.MaxXidAge,
-			MaxVacuumAgeHours:   m.MaxVacuumAgeHours,
-			TablesNeverVacuumed: m.TablesNeverVacuumed,
+			CacheHitRatio:            m.CacheHitRatio,
+			MaxDeadRatio:             m.MaxDeadRatio,
+			AvgDeadRatio:             m.AvgDeadRatio,
+			TablesHighBloat:          m.TablesHighBloat,
+			MaxXidAge:                m.MaxXidAge,
+			VacuumBacklogTables:      m.VacuumBacklogTables,
+			MaxOverdueVacuumAgeHours: m.MaxOverdueVacuumAgeHours,
+			TablesNeverVacuumed:      m.TablesNeverVacuumed,
 		}
 
 		cats := []CategoryResult{

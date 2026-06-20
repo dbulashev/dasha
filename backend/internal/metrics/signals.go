@@ -36,9 +36,10 @@ const (
 	// planner stats (ANALYZE), the same way latency regression works.
 	SigSeqScanRate SignalKind = "seq_scan_tup_rate"
 
-	// maintenance
+	// maintenance. Vacuum-queue signals (backlog/overdue age) are intentionally
+	// snapshot-only: they need reltuples + per-table reloptions + autovacuum GUCs,
+	// which the metrics providers don't expose faithfully (see catalog.go).
 	SigXactsLeftWrap SignalKind = "xacts_left_before_wraparound"
-	SigMaxVacuumAgeH SignalKind = "max_vacuum_age_hours"
 
 	// replication / wal / locks
 	SigReplLagBytes         SignalKind = "repl_lag_bytes"

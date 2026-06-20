@@ -255,14 +255,14 @@ func TestComputePerDB_InRecoveryDropsMaintenance(t *testing.T) {
 	// drop behaviour. Maintenance weight is redistributed onto performance +
 	// storage by perDBWeights().
 	m := PerDBMetrics{
-		Database:            "replica-db",
-		SizeBytes:           1 << 30,
-		CacheHitRatio:       99.9,
-		MaxDeadRatio:        1,
-		AvgDeadRatio:        0.5,
-		MaxXidAge:           1_900_000_000, // near wraparound
-		MaxVacuumAgeHours:   10_000,
-		TablesNeverVacuumed: 5,
+		Database:                 "replica-db",
+		SizeBytes:                1 << 30,
+		CacheHitRatio:            99.9,
+		MaxDeadRatio:             1,
+		AvgDeadRatio:             0.5,
+		MaxXidAge:                1_900_000_000, // near wraparound
+		MaxOverdueVacuumAgeHours: 10_000,
+		TablesNeverVacuumed:      5,
 	}
 
 	primary := ComputePerDB([]PerDBMetrics{m}, DefaultWeights(), false)[0]

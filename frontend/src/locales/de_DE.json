@@ -753,7 +753,8 @@
       "max_lag_bytes": "Max. Lag (Bytes)",
       "disconnected_replicas": "Getrennte Replikate",
       "max_xid_age": "Max. XID-Alter",
-      "max_vacuum_age_hours": "Max. VACUUM-Alter (h)",
+      "vacuum_backlog_tables": "Tabellen in VACUUM-Warteschlange",
+      "max_overdue_vacuum_age_hours": "Max. überfälliges VACUUM-Alter (h)",
       "tables_never_vacuumed": "Tabellen ohne VACUUM",
       "horizon_lag_xids": "Horizont-Rückstand (XID)",
       "requested_checkpoint_ratio": "Anteil außerplanmäßiger Checkpoints",
@@ -841,7 +842,8 @@
         "replication_lag_bytes": "pg_current_wal_lsn() - replay_lsn — WAL-Rückstand zum Anwenden.",
         "disconnected_replicas": "Replicas aus dasha.yaml, die nicht in pg_stat_replication erscheinen.",
         "xid_wraparound_risk": "max(age(datfrozenxid)) — Transaktionen bis zum Wraparound. 200M — Anti-Wraparound-Autovacuum, 2B — Read-Only.",
-        "stale_vacuum": "Tage seit dem letzten last_(auto)vacuum — Hinweis auf festhängendes Autovacuum.",
+        "vacuum_backlog": "Tabellen über ihrer Autovacuum-Schwelle (Dead-Tupel oder Inserts), inkl. reloptions — Länge der VACUUM-Warteschlange.",
+        "stale_vacuum": "Tage seit dem letzten last_(auto)vacuum unter den überfälligen Tabellen (über ihrer Autovacuum-Schwelle) — Hinweis auf festhängendes Autovacuum.",
         "tables_never_vacuumed": "Tabellen mit last_vacuum IS NULL AND last_autovacuum IS NULL.",
         "autovacuum_disabled": "Globales autovacuum=off — Bloat und XID-Alter wachsen unkontrolliert.",
         "track_counts_disabled": "track_counts=off — Autovacuum hat keine Statistik für Entscheidungen.",
@@ -888,7 +890,8 @@
         "max_lag_bytes": ">16 MiB → max",
         "disconnected_replicas": "+25 pro Replica",
         "max_xid_age": "200 M → 1.6 B → 2.1 B",
-        "max_vacuum_age_hours": ">168 → >504 → >1440 h",
+        "vacuum_backlog_tables": ">5 → +1.5 pro Stk., max 15",
+        "max_overdue_vacuum_age_hours": ">168 → >504 → >1440 h",
         "tables_never_vacuumed": "+5 pro Stk., max 20",
         "horizon_lag_xids": "1 M → 10 M → 100 M",
         "requested_checkpoint_ratio": "≥5 % → ≥10 % → ≥20 %",
@@ -916,6 +919,7 @@
         "replication_lag_bytes": "≥16 MiB / ≥256 MiB / ≥1 GiB",
         "disconnected_replicas": "≥1 / ≥2 / ≥3",
         "xid_wraparound_risk": "≥150 M / ≥200 M / ≥1.6 B",
+        "vacuum_backlog": "≥6 / ≥15 / ≥30 Tabellen",
         "stale_vacuum": "≥7 / ≥21 / ≥60 Tage",
         "tables_never_vacuumed": "≥1 / ≥2 / ≥5",
         "autovacuum_disabled": "HIGH",
@@ -1090,10 +1094,15 @@
         "detail": "Auf modernen Betriebssystemen ist der Overhead minimal. Aktivieren für detaillierte I/O-Engpassanalyse.",
         "sql": "ALTER SYSTEM SET track_io_timing = on;\nSELECT pg_reload_conf();"
       },
+      "vacuum_backlog": {
+        "title": "VACUUM-Warteschlange wächst",
+        "short": "Tabellen, die auf Autovacuum warten: {metric_value}.",
+        "detail": "Anzahl der Tabellen über ihrer Autovacuum-Schwelle (Dead-Tupel oder Inserts, inkl. reloptions). Eine tiefe Warteschlange bedeutet, dass Autovacuum nicht hinterherkommt: autovacuum_max_workers erhöhen, autovacuum_vacuum_cost_limit anheben oder autovacuum_vacuum_cost_delay senken."
+      },
       "stale_vacuum": {
         "title": "VACUUM lief lange nicht",
-        "short": "Max. VACUUM-Alter: {metric_value} h.",
-        "detail": "Wenn Autovacuum nicht hinterherkommt, autovacuum_vacuum_scale_factor verschärfen."
+        "short": "Max. überfälliges VACUUM-Alter: {metric_value} h.",
+        "detail": "Alter der ältesten Tabelle, die bereits über ihrer Autovacuum-Schwelle liegt, aber lange nicht vakuumiert wurde. Wenn Autovacuum nicht hinterherkommt, autovacuum_vacuum_scale_factor für große Tabellen verschärfen."
       },
       "tables_never_vacuumed": {
         "title": "Tabellen ohne VACUUM",

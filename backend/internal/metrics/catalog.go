@@ -33,16 +33,33 @@ func NewQueryCatalog() *QueryCatalog {
 		// performance — buffer cache hit ratio (%)
 		{ProviderPgSCV, SigCacheHitRatio}: `100 * sum(rate(postgres_database_blocks_total{%[1]s,access="hit"}[%[2]s])) / ` +
 			`clamp_min(sum(rate(postgres_database_blocks_total{%[1]s}[%[2]s])), 1)`,
-		// storage — worst per-table dead-tuple ratio (%)
-		{ProviderPgSCV, SigMaxDeadRatio}: `100 * max(postgres_table_tuples_dead_total{%[1]s} / ` +
-			`clamp_min(postgres_table_tuples_dead_total{%[1]s} + postgres_table_tuples_live_total{%[1]s}, 1))`,
-		// maintenance — worst time since last vacuum (hours)
-		{ProviderPgSCV, SigMaxVacuumAgeH}: `max(postgres_table_since_last_vacuum_seconds_total{%[1]s}) / 3600`,
+		// storage — worst per-table dead-tuple ratio (%). Ignore tables with <=10000
+		// tuples (the `and ... > 10000`) so a near-empty table (e.g. 0 live + a few
+		// dead = 100%) cannot dominate — matches the SQL snapshot's `n_live + n_dead
+		// > 10000` cut and the high-dead-ratio drill-down filter.
+		{ProviderPgSCV, SigMaxDeadRatio}: `100 * max((postgres_table_tuples_dead_total{%[1]s} / ` +
+			`clamp_min(postgres_table_tuples_dead_total{%[1]s} + postgres_table_tuples_live_total{%[1]s}, 1)) ` +
+			`and (postgres_table_tuples_dead_total{%[1]s} + postgres_table_tuples_live_total{%[1]s} > 10000))`,
+		// NB: the vacuum queue (backlog / overdue age) is deliberately absent here.
+		// It needs reltuples, n_ins_since_vacuum, per-table reloptions and the
+		// autovacuum_*_threshold/scale_factor GUCs to mirror PostgreSQL's own
+		// trigger — none of which the metrics providers expose faithfully. So
+		// maintenance vacuum signals come from the SQL snapshot only (the dual-path
+		// overlay fills them per-signal), avoiding a lossy PromQL approximation.
 		// storage — average dead-tuple ratio + HOT-update ratio
-		{ProviderPgSCV, SigAvgDeadRatio}: `100 * avg(postgres_table_tuples_dead_total{%[1]s} / ` +
-			`clamp_min(postgres_table_tuples_dead_total{%[1]s} + postgres_table_tuples_live_total{%[1]s}, 1))`,
-		{ProviderPgSCV, SigHotUpdateRatio}: `sum(rate(postgres_table_tuples_hot_updated_total{%[1]s}[%[2]s])) / ` +
-			`clamp_min(sum(rate(postgres_table_tuples_updated_total{%[1]s}[%[2]s])), 1)`,
+		{ProviderPgSCV, SigAvgDeadRatio}: `100 * avg((postgres_table_tuples_dead_total{%[1]s} / ` +
+			`clamp_min(postgres_table_tuples_dead_total{%[1]s} + postgres_table_tuples_live_total{%[1]s}, 1)) ` +
+			`and (postgres_table_tuples_dead_total{%[1]s} + postgres_table_tuples_live_total{%[1]s} > 10000))`,
+		// HOT-update ratio. Reports the real ratio only under meaningful update
+		// activity (>0.1 upd/s); under that it falls back to 1.0 (healthy) so a quiet
+		// instance is not flagged as "low HOT" — mirrors the SQL snapshot's
+		// COALESCE(..., 1.0) over tables with >1000 updates. The fallback is gated on
+		// the updated-metric existing (>= bool 0), so a fully unmatched target keeps
+		// this signal absent and still trips the metrics-degraded guard.
+		{ProviderPgSCV, SigHotUpdateRatio}: `(sum(rate(postgres_table_tuples_hot_updated_total{%[1]s}[%[2]s])) / ` +
+			`sum(rate(postgres_table_tuples_updated_total{%[1]s}[%[2]s])) ` +
+			`and sum(rate(postgres_table_tuples_updated_total{%[1]s}[%[2]s])) > 0.1) ` +
+			`or (sum(rate(postgres_table_tuples_updated_total{%[1]s}[%[2]s])) >= bool 0)`,
 		// performance — sequential-scan activity: tuples read by seq scans per second
 		// (large tables dominate, so this weights "big-table seq scans" naturally).
 		// Baselined seasonally; a regression flags missing index usage / stale stats.

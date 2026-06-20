@@ -39,15 +39,16 @@ func (s *Handlers) GetHealthScoreDatabases(
 	per := make([]health.PerDBMetrics, 0, len(metrics))
 	for _, m := range metrics {
 		per = append(per, health.PerDBMetrics{
-			Database:            m.Database,
-			SizeBytes:           m.SizeBytes,
-			CacheHitRatio:       m.CacheHitRatio,
-			MaxDeadRatio:        m.MaxDeadRatio,
-			AvgDeadRatio:        m.AvgDeadRatio,
-			TablesHighBloat:     m.TablesHighBloat,
-			MaxXidAge:           m.MaxXidAge,
-			MaxVacuumAgeHours:   m.MaxVacuumAgeHours,
-			TablesNeverVacuumed: m.TablesNeverVacuumed,
+			Database:                 m.Database,
+			SizeBytes:                m.SizeBytes,
+			CacheHitRatio:            m.CacheHitRatio,
+			MaxDeadRatio:             m.MaxDeadRatio,
+			AvgDeadRatio:             m.AvgDeadRatio,
+			TablesHighBloat:          m.TablesHighBloat,
+			MaxXidAge:                m.MaxXidAge,
+			VacuumBacklogTables:      m.VacuumBacklogTables,
+			MaxOverdueVacuumAgeHours: m.MaxOverdueVacuumAgeHours,
+			TablesNeverVacuumed:      m.TablesNeverVacuumed,
 		})
 	}
 
