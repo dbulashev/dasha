@@ -31,7 +31,8 @@ const PENALTY_ROWS = [
   { cat: 'replication', metric: 'max_lag_bytes', pointsKey: 'max_lag_bytes' },
   { cat: 'replication', metric: 'disconnected_replicas', pointsKey: 'disconnected_replicas' },
   { cat: 'maintenance', metric: 'max(xid_age, relfrozenxid_age)', pointsKey: 'max_xid_age' },
-  { cat: 'maintenance', metric: 'max_vacuum_age_hours', pointsKey: 'max_vacuum_age_hours' },
+  { cat: 'maintenance', metric: 'vacuum_backlog_tables', pointsKey: 'vacuum_backlog_tables' },
+  { cat: 'maintenance', metric: 'max_overdue_vacuum_age_hours', pointsKey: 'max_overdue_vacuum_age_hours' },
   { cat: 'maintenance', metric: 'tables_never_vacuumed', pointsKey: 'tables_never_vacuumed' },
   { cat: 'maintenance', metric: 'tables_with_autovacuum_off', pointsKey: 'tables_with_autovacuum_off' },
   { cat: 'maintenance', metric: 'stale_planner_stats_tables', pointsKey: 'stale_planner_stats' },
@@ -76,6 +77,7 @@ const RULES_BY_CATEGORY: Record<string, { id: string }[]> = {
   maintenance: [
     { id: 'xid_wraparound_risk' },
     { id: 'stale_vacuum' },
+    { id: 'vacuum_backlog' },
     { id: 'tables_never_vacuumed' },
     { id: 'autovacuum_disabled' },
     { id: 'track_counts_disabled' },

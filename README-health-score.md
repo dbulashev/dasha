@@ -37,7 +37,7 @@ In parallel, a **rules engine** evaluates the same metrics and emits a list of L
 | `performance`   | 0.15   | Cache hit ratio, `track_io_timing`                                |
 | `storage`       | 0.10   | Dead-tuple ratio, bloat, HOT-update efficiency                    |
 | `replication`   | 0.15   | Lag (time and bytes), disconnected standbys                       |
-| `maintenance`   | 0.15   | XID age, vacuum freshness, autovacuum/track_counts GUCs, ANALYZE  |
+| `maintenance`   | 0.15   | XID age, vacuum backlog & freshness, autovacuum/track_counts GUCs, ANALYZE  |
 | `horizon`       | 0.10   | MVCC horizon lag (oldest snapshot blocking VACUUM)                |
 | `wal_checkpoint`| 0.10   | Requested vs. timed checkpoints, `wal_level` mismatch             |
 | `locks`         | 0.10   | Lock-waiters, ungranted locks, deadlocks, lock-pool saturation    |
@@ -63,7 +63,8 @@ Penalties grow smoothly with the metric. A **breakpoint** is the metric value at
 | replication    | `max_lag_bytes`                     | >16 MiB ramps up to full                        |
 | replication    | `disconnected_replicas`             | each disconnect adds 25 pts                     |
 | maintenance    | `max(xid_age, relfrozenxid_age)`    | 200 M → 1.6 B → 2.1 B (escalates to 100)       |
-| maintenance    | `max_vacuum_age_hours`              | >168 h → >504 h → >1440 h (7/21/60 days)        |
+| maintenance    | `vacuum_backlog_tables`             | >5 tables → +1.5 pts each, capped at 15         |
+| maintenance    | `max_overdue_vacuum_age_hours`      | >168 h → >504 h → >1440 h (7/21/60 days)        |
 | maintenance    | `tables_never_vacuumed`             | each table adds 5 pts, capped at 20             |
 | maintenance    | `tables_with_autovacuum_off`        | 3 pts each, capped at 15                        |
 | maintenance    | `stale_planner_stats_tables`        | 2 pts each, capped at 15                        |
@@ -107,13 +108,14 @@ Each bullet: what's measured / how it's computed, then LOW / MEDIUM / HIGH thres
 
 ### Maintenance
 - `xid_wraparound_risk` — `max(age(datfrozenxid))` across `pg_database`. Number of transactions until wraparound forces shutdown. Calibrated against `autovacuum_freeze_max_age=200M` (autovacuum should already be in anti-wraparound mode) and the 2 B hard limit. Thresholds ≥150 M / ≥200 M / ≥1.6 B.
-- `stale_vacuum` — days since the most recent `last_vacuum`/`last_autovacuum` over user tables. Detects stalled autovacuum. Thresholds ≥7 / ≥21 / ≥60 days.
+- `vacuum_backlog` — tables currently past their autovacuum trigger: `n_dead_tup` over `autovacuum_vacuum_threshold + autovacuum_vacuum_scale_factor·reltuples`, or `n_ins_since_vacuum` over the insert threshold. Per-table `reloptions` override the global GUCs (PostgreSQL's own trigger). The vacuum-queue depth — a deep queue means autovacuum is outpaced. Thresholds ≥6 / ≥15 / ≥30 tables.
+- `stale_vacuum` — oldest `last_vacuum`/`last_autovacuum` age, in days, **among the backlog tables** (those past their autovacuum trigger). Static / read-mostly tables never enter the queue, so they no longer false-positive. Detects stalled autovacuum. Thresholds ≥7 / ≥21 / ≥60 days.
 - `tables_never_vacuumed` — tables with both `last_vacuum IS NULL` and `last_autovacuum IS NULL`. Thresholds ≥1 / ≥2 / ≥5.
 - `autovacuum_disabled` — global GUC `autovacuum=off`. Bloat and XID age grow unchecked. HIGH.
 - `track_counts_disabled` — global GUC `track_counts=off`. Autovacuum has no statistics to act on and effectively stops. HIGH.
 - `tables_with_autovacuum_off` — tables with `autovacuum_enabled=false` in `pg_class.reloptions`. Thresholds ≥1 / ≥5 / ≥20.
 - `relfrozenxid_age_outlier` — worst per-table `age(relfrozenxid)` from `pg_class`. Per-table flavour of `xid_wraparound_risk`. Thresholds ≥200 M / ≥500 M / ≥1 B.
-- `stale_planner_stats` — tables whose `n_mod_since_analyze` is large relative to `n_live_tup` (planner has outdated stats). Thresholds ≥3 / ≥10 / ≥30 tables.
+- `stale_planner_stats` — tables whose `n_mod_since_analyze` exceeds half their (reloption-aware) auto-analyze threshold and that have not been analyzed in 24 h (planner has outdated stats). Thresholds ≥3 / ≥10 / ≥30 tables.
 
 ### Horizon
 - `horizon_lag_xids` — `txid_current() - min(backend_xmin)` over `pg_stat_activity`. Number of transactions VACUUM cannot reclaim because some session still sees them (long tx, abandoned replication slot, prepared tx). Thresholds ≥1 M / ≥10 M / ≥100 M.

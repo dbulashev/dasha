@@ -37,7 +37,7 @@ score = 100 − Σ (penalty_i × weight_i)
 | `performance`   | 0.15   | Cache hit ratio, `track_io_timing`                                   |
 | `storage`       | 0.10   | Доля dead-кортежей, bloat, эффективность HOT-обновлений             |
 | `replication`   | 0.15   | Лаг репликации (время и байты), отключённые реплики                 |
-| `maintenance`   | 0.15   | Возраст XID, давность вакуума, GUC autovacuum/track_counts, ANALYZE |
+| `maintenance`   | 0.15   | Возраст XID, очередь и давность вакуума, GUC autovacuum/track_counts, ANALYZE |
 | `horizon`       | 0.10   | Лаг горизонта MVCC (старейший снепшот, блокирующий VACUUM)          |
 | `wal_checkpoint`| 0.10   | Соотношение requested/timed чекпоинтов, рассогласование `wal_level` |
 | `locks`         | 0.10   | Lock-waiters, ungranted locks, deadlocks, насыщение lock pool       |
@@ -63,7 +63,8 @@ score = 100 − Σ (penalty_i × weight_i)
 | replication    | `max_lag_bytes`                        | >16 МиБ — растёт до максимума                 |
 | replication    | `disconnected_replicas`                | каждое отключение даёт 25 баллов              |
 | maintenance    | `max(xid_age, relfrozenxid_age)`       | 200 М → 1.6 Б → 2.1 Б (нарастает до 100)      |
-| maintenance    | `max_vacuum_age_hours`                 | >168 ч → >504 ч → >1440 ч (7/21/60 дней)      |
+| maintenance    | `vacuum_backlog_tables`                | >5 таблиц → +1.5 балла за шт., потолок 15     |
+| maintenance    | `max_overdue_vacuum_age_hours`         | >168 ч → >504 ч → >1440 ч (7/21/60 дней)      |
 | maintenance    | `tables_never_vacuumed`                | по 5 баллов за таблицу, потолок 20            |
 | maintenance    | `tables_with_autovacuum_off`           | по 3 балла за таблицу, потолок 15             |
 | maintenance    | `stale_planner_stats_tables`           | по 2 балла за таблицу, потолок 15             |
@@ -107,13 +108,14 @@ score = 100 − Σ (penalty_i × weight_i)
 
 ### Maintenance
 - `xid_wraparound_risk` — `max(age(datfrozenxid))` по `pg_database`. Число транзакций до wraparound-аварии. Откалибровано по `autovacuum_freeze_max_age=200 М` (на этой границе должен включаться anti-wraparound autovacuum) и жёсткому пределу 2 Б. Пороги ≥150 М / ≥200 М / ≥1.6 Б.
-- `stale_vacuum` — дней с последнего `last_vacuum`/`last_autovacuum` по user-таблицам. Сигнал застрявшего autovacuum. Пороги ≥7 / ≥21 / ≥60 дней.
+- `vacuum_backlog` — таблицы, уже превысившие порог срабатывания autovacuum: `n_dead_tup` выше `autovacuum_vacuum_threshold + autovacuum_vacuum_scale_factor·reltuples`, либо `n_ins_since_vacuum` выше insert-порога. Потабличные `reloptions` переопределяют глобальные GUC (формула самого PostgreSQL). Длина очереди на vacuum — глубокая очередь означает, что autovacuum не успевает. Пороги ≥6 / ≥15 / ≥30 таблиц.
+- `stale_vacuum` — возраст самого старого `last_vacuum`/`last_autovacuum`, в днях, **среди таблиц из очереди** (превысивших свой порог autovacuum). Статичные / преимущественно читаемые таблицы в очередь не попадают и больше не дают ложных срабатываний. Сигнал застрявшего autovacuum. Пороги ≥7 / ≥21 / ≥60 дней.
 - `tables_never_vacuumed` — таблицы, у которых одновременно `last_vacuum IS NULL` и `last_autovacuum IS NULL`. Пороги ≥1 / ≥2 / ≥5.
 - `autovacuum_disabled` — глобальный GUC `autovacuum=off`. Bloat и возраст XID растут бесконтрольно. HIGH.
 - `track_counts_disabled` — глобальный GUC `track_counts=off`. У autovacuum нет статистики, фактически он не работает. HIGH.
 - `tables_with_autovacuum_off` — таблицы с `autovacuum_enabled=false` в `pg_class.reloptions`. Пороги ≥1 / ≥5 / ≥20.
 - `relfrozenxid_age_outlier` — худший `age(relfrozenxid)` по таблицам из `pg_class`. Потабличная версия `xid_wraparound_risk`. Пороги ≥200 М / ≥500 М / ≥1 Б.
-- `stale_planner_stats` — таблицы, у которых `n_mod_since_analyze` велик относительно `n_live_tup` (статистика планировщика устарела). Пороги ≥3 / ≥10 / ≥30 таблиц.
+- `stale_planner_stats` — таблицы, у которых `n_mod_since_analyze` превышает половину их (с учётом reloptions) порога auto-analyze и которые не анализировались более 24 ч (статистика планировщика устарела). Пороги ≥3 / ≥10 / ≥30 таблиц.
 
 ### Horizon
 - `horizon_lag_xids` — `txid_current() - min(backend_xmin)` по `pg_stat_activity`. Сколько транзакций VACUUM не может убрать, потому что их ещё видит какая-то сессия (длинная транзакция, заброшенный replication-слот, prepared tx). Пороги ≥1 М / ≥10 М / ≥100 М.

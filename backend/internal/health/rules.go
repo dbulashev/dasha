@@ -317,17 +317,31 @@ var Registry = []Rule{
 	{
 		ID: "stale_vacuum", Category: CategoryMaintenance, RelatedRoute: "/maintenance",
 		Evaluate: func(m RawMetrics) *Hit {
-			days := m.MaxVacuumAgeHours / 24
+			days := m.MaxOverdueVacuumAgeHours / 24
 
-			// Raised thresholds (was 2/7/14): read-mostly tables legitimately
-			// go months without vacuum. 7/21/60 days catches real autovacuum
-			// stalls without false-positives on low-churn workloads.
+			// Age of the oldest table actually due for vacuum (the queue). Tables
+			// not over their autovacuum threshold never count, so read-mostly /
+			// static tables no longer false-positive. 7/21/60 days catches real
+			// autovacuum stalls.
 			sev := severityFor(days, 60, 21, 7)
 			if sev == "" {
 				return nil
 			}
 
-			return &Hit{Severity: sev, MetricValue: m.MaxVacuumAgeHours}
+			return &Hit{Severity: sev, MetricValue: m.MaxOverdueVacuumAgeHours}
+		},
+	},
+	{
+		// Tables eligible for autovacuum right now (dead-tuple or insert trigger,
+		// reloption-aware). A deep queue means autovacuum is outpaced.
+		ID: "vacuum_backlog", Category: CategoryMaintenance, RelatedRoute: "/maintenance",
+		Evaluate: func(m RawMetrics) *Hit {
+			sev := severityFor(m.VacuumBacklogTables, 30, 15, 6)
+			if sev == "" {
+				return nil
+			}
+
+			return &Hit{Severity: sev, MetricValue: float64(m.VacuumBacklogTables)}
 		},
 	},
 	{

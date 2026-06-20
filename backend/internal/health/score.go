@@ -33,13 +33,14 @@ type RawMetrics struct {
 	DisconnectedReplicas int
 
 	// Maintenance
-	MaxXidAge               int64
-	MaxVacuumAgeHours       float64
-	TablesNeverVacuumed     int
-	AutovacuumEnabled       bool
-	TrackCountsEnabled      bool
-	TablesWithAutovacuumOff int
-	MaxRelfrozenxidAge      int64
+	MaxXidAge                int64
+	VacuumBacklogTables      int     // tables currently eligible for autovacuum (queue depth)
+	MaxOverdueVacuumAgeHours float64 // oldest vacuum among queued tables
+	TablesNeverVacuumed      int
+	AutovacuumEnabled        bool
+	TrackCountsEnabled       bool
+	TablesWithAutovacuumOff  int
+	MaxRelfrozenxidAge       int64
 
 	// Horizon
 	HorizonLagXids int64
@@ -691,16 +692,24 @@ func penaltyMaintenance(m RawMetrics) CategoryResult {
 		penalty = float64(xidAge-xidFreezeMaxAge) / float64(xidFailsafeAge-xidFreezeMaxAge) * 80
 	}
 
-	// Aligned with stale_vacuum thresholds (7/21/60 days = 168/504/1440 h).
-	// Middle-tier addition capped at 30 so the function stays monotonic at
-	// the 1440 h boundary — without the cap, 1440 h = 15 + 19.5 = 34.5 would
-	// dip back to 30 right after the boundary.
-	if m.MaxVacuumAgeHours > 1440 { // 60 days
+	// Oldest vacuum among tables actually due for it (the queue). Aligned with
+	// stale_vacuum thresholds (7/21/60 days = 168/504/1440 h). Middle-tier
+	// addition capped at 30 so the function stays monotonic at the 1440 h
+	// boundary — without the cap, 1440 h = 15 + 19.5 = 34.5 would dip back to 30
+	// right after the boundary.
+	if m.MaxOverdueVacuumAgeHours > 1440 { // 60 days
 		penalty += 30
-	} else if m.MaxVacuumAgeHours > 504 { // 21 days
-		penalty += math.Min(15+(m.MaxVacuumAgeHours-504)/24*0.5, 30)
-	} else if m.MaxVacuumAgeHours > 168 { // 7 days
-		penalty += (m.MaxVacuumAgeHours - 168) / 24 * 1
+	} else if m.MaxOverdueVacuumAgeHours > 504 { // 21 days
+		penalty += math.Min(15+(m.MaxOverdueVacuumAgeHours-504)/24*0.5, 30)
+	} else if m.MaxOverdueVacuumAgeHours > 168 { // 7 days
+		penalty += (m.MaxOverdueVacuumAgeHours - 168) / 24 * 1
+	}
+
+	// Vacuum queue depth: a few tables in flight is normal (autovacuum picks them
+	// up within a naptime cycle), so tolerate a handful, then a gentle per-table
+	// penalty for a backlog autovacuum is not draining.
+	if m.VacuumBacklogTables > 5 {
+		penalty += math.Min(float64(m.VacuumBacklogTables-5)*1.5, 15)
 	}
 
 	if m.TablesNeverVacuumed > 0 {
@@ -726,12 +735,13 @@ func penaltyMaintenance(m RawMetrics) CategoryResult {
 		Weight:  weightMaintenance,
 		Penalty: math.Round(penalty*10) / 10,
 		Details: map[string]float64{
-			"max_xid_age":                float64(m.MaxXidAge),
-			"max_relfrozenxid_age":       float64(m.MaxRelfrozenxidAge),
-			"max_vacuum_age_hours":       m.MaxVacuumAgeHours,
-			"tables_never_vacuumed":      float64(m.TablesNeverVacuumed),
-			"tables_with_autovacuum_off": float64(m.TablesWithAutovacuumOff),
-			"stale_planner_stats_tables": float64(m.StalePlannerStatsTables),
+			"max_xid_age":                  float64(m.MaxXidAge),
+			"max_relfrozenxid_age":         float64(m.MaxRelfrozenxidAge),
+			"vacuum_backlog_tables":        float64(m.VacuumBacklogTables),
+			"max_overdue_vacuum_age_hours": m.MaxOverdueVacuumAgeHours,
+			"tables_never_vacuumed":        float64(m.TablesNeverVacuumed),
+			"tables_with_autovacuum_off":   float64(m.TablesWithAutovacuumOff),
+			"stale_planner_stats_tables":   float64(m.StalePlannerStatsTables),
 		},
 	}
 }

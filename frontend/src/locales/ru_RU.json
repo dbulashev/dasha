@@ -798,7 +798,8 @@
             "max_lag_bytes": "Макс. lag (байты)",
             "disconnected_replicas": "Отключённые реплики",
             "max_xid_age": "Макс. возраст XID",
-            "max_vacuum_age_hours": "Макс. возраст vacuum (ч)",
+            "vacuum_backlog_tables": "Таблиц в очереди на vacuum",
+            "max_overdue_vacuum_age_hours": "Макс. возраст просроченного vacuum (ч)",
             "tables_never_vacuumed": "Таблиц без vacuum",
             "horizon_lag_xids": "Отставание горизонта (XID)",
             "requested_checkpoint_ratio": "Доля внеплановых checkpoint",
@@ -886,7 +887,8 @@
                 "replication_lag_bytes": "pg_current_wal_lsn() - replay_lsn — хвост WAL для применения.",
                 "disconnected_replicas": "Реплики из dasha.yaml, которых нет в pg_stat_replication.",
                 "xid_wraparound_risk": "max(age(datfrozenxid)) — транзакций до wraparound. 200M — должен идти anti-wraparound autovacuum, 2B — read-only.",
-                "stale_vacuum": "Дней с последнего last_(auto)vacuum — сигнал застрявшего autovacuum.",
+                "vacuum_backlog": "Таблицы, превысившие порог autovacuum (по dead-кортежам или insert), с учётом reloptions — длина очереди на vacuum.",
+                "stale_vacuum": "Дней с последнего last_(auto)vacuum среди просроченных таблиц (превысивших свой порог autovacuum) — сигнал застрявшего autovacuum.",
                 "tables_never_vacuumed": "Таблицы с last_vacuum IS NULL AND last_autovacuum IS NULL.",
                 "autovacuum_disabled": "Глобальный autovacuum=off — bloat и XID растут бесконтрольно.",
                 "track_counts_disabled": "track_counts=off — у autovacuum нет статистики для принятия решений.",
@@ -933,7 +935,8 @@
                 "max_lag_bytes": ">16 МиБ → max",
                 "disconnected_replicas": "+25 / реплика",
                 "max_xid_age": "200 M → 1.6 B → 2.1 B",
-                "max_vacuum_age_hours": ">168 → >504 → >1440 ч",
+                "vacuum_backlog_tables": ">5 → +1.5 / шт., max 15",
+                "max_overdue_vacuum_age_hours": ">168 → >504 → >1440 ч",
                 "tables_never_vacuumed": "+5 / шт., max 20",
                 "horizon_lag_xids": "1 M → 10 M → 100 M",
                 "requested_checkpoint_ratio": "≥5 % → ≥10 % → ≥20 %",
@@ -961,6 +964,7 @@
                 "replication_lag_bytes": "≥16 МиБ / ≥256 МиБ / ≥1 ГиБ",
                 "disconnected_replicas": "≥1 / ≥2 / ≥3",
                 "xid_wraparound_risk": "≥150 M / ≥200 M / ≥1.6 B",
+                "vacuum_backlog": "≥6 / ≥15 / ≥30 таблиц",
                 "stale_vacuum": "≥7 / ≥21 / ≥60 дней",
                 "tables_never_vacuumed": "≥1 / ≥2 / ≥5",
                 "autovacuum_disabled": "HIGH",
@@ -1135,10 +1139,15 @@
                 "detail": "На современных ОС оверхед минимален. Включите для детального анализа I/O узких мест.",
                 "sql": "ALTER SYSTEM SET track_io_timing = on;\nSELECT pg_reload_conf();"
             },
+            "vacuum_backlog": {
+                "title": "Очередь на vacuum растёт",
+                "short": "Таблиц, ожидающих autovacuum: {metric_value}.",
+                "detail": "Число таблиц, превысивших порог срабатывания autovacuum (по dead-кортежам или вставкам, с учётом reloptions). Глубокая очередь означает, что autovacuum не успевает: увеличьте autovacuum_max_workers, поднимите autovacuum_vacuum_cost_limit или снизьте autovacuum_vacuum_cost_delay."
+            },
             "stale_vacuum": {
                 "title": "Vacuum давно не работал",
-                "short": "Максимальный возраст vacuum: {metric_value} ч.",
-                "detail": "Если autovacuum не успевает, ужесточите autovacuum_vacuum_scale_factor для крупных таблиц."
+                "short": "Макс. возраст просроченного vacuum: {metric_value} ч.",
+                "detail": "Возраст самой старой таблицы, которая уже превысила порог autovacuum, но давно не вакуумировалась. Если autovacuum не успевает, ужесточите autovacuum_vacuum_scale_factor для крупных таблиц."
             },
             "tables_never_vacuumed": {
                 "title": "Таблицы без vacuum",

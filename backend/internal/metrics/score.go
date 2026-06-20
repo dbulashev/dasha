@@ -43,10 +43,6 @@ func (s Signals) ToRawMetrics() health.RawMetrics {
 		m.DeadlocksTotal = int64(v)
 	}
 
-	if v, ok := s.Get(SigMaxVacuumAgeH); ok {
-		m.MaxVacuumAgeHours = v
-	}
-
 	if v, ok := s.Get(SigReplLagSeconds); ok {
 		m.MaxReplayLagSeconds = v
 		m.ReplicaCount = 1 // presence of replication lag implies a replica

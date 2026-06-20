@@ -39,7 +39,7 @@ func NewCollector(m *Matcher, c *QueryCatalog, client DatasourceClient, window, 
 // come online (Phase 4); a provider that lacks one simply skips it.
 var CoreSignals = []SignalKind{
 	SigTotalConns, SigActiveConns, SigIdleInTx, SigMaxConns,
-	SigCacheHitRatio, SigMaxDeadRatio, SigAvgDeadRatio, SigHotUpdateRatio, SigMaxVacuumAgeH,
+	SigCacheHitRatio, SigMaxDeadRatio, SigAvgDeadRatio, SigHotUpdateRatio,
 	SigDeadlocksTotal,
 	SigReplLagSeconds, SigReplLagBytes,
 	SigTimedCheckpoints, SigRequestedCheckpoints, SigLocksNotGranted, SigActiveLockWaiters,

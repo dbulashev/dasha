@@ -95,7 +95,8 @@ func rawFromSnapshot(m *dto.HealthScoreMetrics) health.RawMetrics {
 		MaxLagBytes:               m.MaxLagBytes,
 		DisconnectedReplicas:      m.DisconnectedReplicas,
 		MaxXidAge:                 m.MaxXidAge,
-		MaxVacuumAgeHours:         m.MaxVacuumAgeHours,
+		VacuumBacklogTables:       m.VacuumBacklogTables,
+		MaxOverdueVacuumAgeHours:  m.MaxOverdueVacuumAgeHours,
 		TablesNeverVacuumed:       m.TablesNeverVacuumed,
 		AutovacuumEnabled:         m.AutovacuumEnabled,
 		TrackCountsEnabled:        m.TrackCountsEnabled,
@@ -139,6 +140,11 @@ func overlayCatalogFacts(raw *health.RawMetrics, m *dto.HealthScoreMetrics) {
 	raw.NewpageUpdateRatio = m.NewpageUpdateRatio
 
 	// Maintenance — per-table autovacuum/vacuum state, relfrozenxid, GUCs.
+	// The vacuum queue (backlog + overdue age) is snapshot-only (no metrics
+	// signal), so it must be overlaid here or both vacuum rules would silently
+	// drop out in metrics mode and break score↔rules parity.
+	raw.VacuumBacklogTables = m.VacuumBacklogTables
+	raw.MaxOverdueVacuumAgeHours = m.MaxOverdueVacuumAgeHours
 	raw.TablesNeverVacuumed = m.TablesNeverVacuumed
 	raw.TablesWithAutovacuumOff = m.TablesWithAutovacuumOff
 	raw.MaxRelfrozenxidAge = m.MaxRelfrozenxidAge

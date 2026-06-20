@@ -56,7 +56,8 @@ func (p *PgxPool) GetHealthScoreMetrics(ctx context.Context, clusterName, instan
 		&m.MaxLagBytes,
 		&m.DisconnectedReplicas,
 		&m.MaxXidAge,
-		&m.MaxVacuumAgeHours,
+		&m.VacuumBacklogTables,
+		&m.MaxOverdueVacuumAgeHours,
 		&m.TablesNeverVacuumed,
 		&m.AutovacuumEnabled,
 		&m.TrackCountsEnabled,
@@ -188,7 +189,8 @@ func (p *PgxPool) collectHealthScorePerDatabase(
 		&m.AvgDeadRatio,
 		&m.TablesHighBloat,
 		&m.MaxXidAge,
-		&m.MaxVacuumAgeHours,
+		&m.VacuumBacklogTables,
+		&m.MaxOverdueVacuumAgeHours,
 		&m.TablesNeverVacuumed,
 	)
 	if err != nil {
@@ -201,4 +203,3 @@ func (p *PgxPool) collectHealthScorePerDatabase(
 
 	return m, nil
 }
-
