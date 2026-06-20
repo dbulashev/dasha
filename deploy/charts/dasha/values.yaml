@@ -124,8 +124,12 @@ config:
   #       host: yc_native     # yc_native (YC host)   | pgscv_system (self-managed system collector)
   #
   #     # Label-selector templates per provider — Go templates over a target's
-  #     # {{.Env}} {{.Service}} {{.Host}} {{.Container}}. Omit to use the built-in
-  #     # YC MDB scheme below; override to match the labels your exporters emit.
+  #     # vars: {{.Env}} (discovery label, e.g. folder), {{.Cluster}}/{{.Service}}
+  #     # (cluster name — most YC MDB + pgscv schemes key by name), {{.ServiceID}}
+  #     # (MDB cluster UUID, for schemes keyed by id), {{.Host}} (FQDN), {{.Container}}
+  #     # (short host). The defaults below already use the name, so a YC MDB + pgscv
+  #     # setup typically needs NO selectors override; set them only to match a
+  #     # different label scheme (e.g. resource_id="{{.ServiceID}}" if you key by UUID).
   #     # selectors:
   #     #   pgscv:            'cluster="{{.Env}}",service_id="{{.Service}}",container="{{.Container}}"'
   #     #   yc_native_host:   'cluster="{{.Env}}",resource_id="{{.Service}}"'

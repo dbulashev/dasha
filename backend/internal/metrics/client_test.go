@@ -32,7 +32,7 @@ func TestVMClient_QueryInstant(t *testing.T) {
 	srv := newTestServer(t)
 	defer srv.Close()
 
-	c := NewVMClient(DatasourceConfig{URL: srv.URL})
+	c := NewVMClient(DatasourceConfig{URL: srv.URL}, nil)
 
 	samples, err := c.QueryInstant(context.Background(), "postgres_up{}", time.Time{})
 	if err != nil {
@@ -56,7 +56,7 @@ func TestVMClient_QueryRange(t *testing.T) {
 	srv := newTestServer(t)
 	defer srv.Close()
 
-	c := NewVMClient(DatasourceConfig{URL: srv.URL})
+	c := NewVMClient(DatasourceConfig{URL: srv.URL}, nil)
 
 	series, err := c.QueryRange(context.Background(), "rate(x[5m])", Range{
 		Start: time.Unix(1700000000, 0), End: time.Unix(1700000060, 0), Step: time.Minute,
@@ -81,7 +81,7 @@ func TestVMClient_QueryError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewVMClient(DatasourceConfig{URL: srv.URL})
+	c := NewVMClient(DatasourceConfig{URL: srv.URL}, nil)
 
 	if _, err := c.QueryInstant(context.Background(), "x", time.Time{}); err == nil {
 		t.Fatal("expected error on status=error response")

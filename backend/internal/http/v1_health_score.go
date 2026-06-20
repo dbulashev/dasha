@@ -21,17 +21,22 @@ func (s *Handlers) GetHealthScore(
 	}
 
 	var (
-		result health.Result
-		source = "snapshot"
+		result          health.Result
+		source          = "snapshot"
+		metricsDegraded bool
 	)
 
 	// Prefer the metrics-backed score when the datasource is configured and the
 	// target is mapped; otherwise fall back to the SQL snapshot (graceful). The
 	// metrics raw is overlaid with catalog/GUC facts so the score stays in
 	// lockstep with its recommendations (score<->rules parity).
-	if raw, ok := s.metricsRawWithCatalog(ctx, req.Params.ClusterName, req.Params.Instance); ok {
+	if raw, matched, ok := s.metricsRawWithCatalog(ctx, req.Params.ClusterName, req.Params.Instance); ok {
 		result = health.CalculateWithWeights(raw, weights)
 		source = "metrics"
+		// Resolved but no series matched any selector — the metrics score is built
+		// from absent signals (looks green), so flag it for the UI instead of
+		// silently hiding the gap.
+		metricsDegraded = matched == 0
 	}
 
 	if source == "snapshot" {
@@ -61,11 +66,12 @@ func (s *Handlers) GetHealthScore(
 	src := source
 
 	return serverhttp.GetHealthScore200JSONResponse{
-		Score:          result.Score,
-		Categories:     categories,
-		HasReplication: result.HasReplication,
-		InRecovery:     result.InRecovery,
-		Source:         &src,
+		Score:           result.Score,
+		Categories:      categories,
+		HasReplication:  result.HasReplication,
+		InRecovery:      result.InRecovery,
+		Source:          &src,
+		MetricsDegraded: &metricsDegraded,
 	}, nil
 }
 
@@ -160,24 +166,27 @@ func overlayCatalogFacts(raw *health.RawMetrics, m *dto.HealthScoreMetrics) {
 // metrics-only RawMetrics carries zero-valued catalog/GUC facts that the scorer
 // would misread as "autovacuum off" and similar, so a snapshot read failure
 // must sink the metrics result rather than emit a wrong-but-alive score.
-func (s *Handlers) metricsRawWithCatalog(ctx context.Context, cluster, instance string) (health.RawMetrics, bool) {
+// The middle return value is the number of datasource signals that matched; 0
+// with ok=true means the target resolved but no selector matched a series, so
+// the score is metrics-backed yet effectively empty (caller flags it degraded).
+func (s *Handlers) metricsRawWithCatalog(ctx context.Context, cluster, instance string) (health.RawMetrics, int, bool) {
 	if !s.metrics.Enabled() {
-		return health.RawMetrics{}, false
+		return health.RawMetrics{}, 0, false
 	}
 
-	raw, err := s.metrics.CurrentRaw(ctx, cluster, instance)
+	raw, matched, err := s.metrics.CurrentRaw(ctx, cluster, instance)
 	if err != nil {
-		return health.RawMetrics{}, false
+		return health.RawMetrics{}, 0, false
 	}
 
 	m, sErr := s.repo.GetHealthScoreMetrics(ctx, cluster, instance, "")
 	if sErr != nil {
-		return health.RawMetrics{}, false
+		return health.RawMetrics{}, 0, false
 	}
 
 	overlayCatalogFacts(&raw, m)
 
-	return raw, true
+	return raw, matched, true
 }
 
 func (s *Handlers) GetHealthScoreRecommendations(
@@ -198,7 +207,7 @@ func (s *Handlers) GetHealthScoreRecommendations(
 	useMetrics := false
 
 	if database == "" {
-		if r, ok := s.metricsRawWithCatalog(ctx, req.Params.ClusterName, req.Params.Instance); ok {
+		if r, _, ok := s.metricsRawWithCatalog(ctx, req.Params.ClusterName, req.Params.Instance); ok {
 			raw = r
 			useMetrics = true
 		}

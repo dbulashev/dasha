@@ -149,7 +149,7 @@ func TestMatcher_ValidateAgainstRealDatasource(t *testing.T) {
 		t.Fatalf("NewMatcher: %v", err)
 	}
 
-	diag, err := m.Validate(context.Background(), NewVMClient(cfg.Datasource), "real", "real")
+	diag, err := m.Validate(context.Background(), NewVMClient(cfg.Datasource, nil), "real", "real")
 	if err != nil {
 		t.Fatalf("Validate: %v", err)
 	}
@@ -200,8 +200,12 @@ func TestMatcher_AutoMapDiscovered(t *testing.T) {
 		t.Fatalf("Resolve discovered: %v", err)
 	}
 
-	if rt.Service != "mdbcluster123" {
-		t.Errorf("Service = %q, want mdbcluster123 (ProviderID)", rt.Service)
+	if rt.Service != "folderA_prod" {
+		t.Errorf("Service = %q, want folderA_prod (cluster name)", rt.Service)
+	}
+
+	if rt.ServiceID != "mdbcluster123" {
+		t.Errorf("ServiceID = %q, want mdbcluster123 (ProviderID)", rt.ServiceID)
 	}
 
 	if rt.Host != "rc1a-abc.mdb.yandexcloud.net" {

@@ -307,7 +307,7 @@
     "parentSchema": "Eltern-Schema",
     "parent": "Elterntabelle",
     "childsCount": "Anzahl Partitionen",
-    "childsSize": "Partitionsgröße",
+    "childsSize": "Größe aller Partitionen",
     "childsAvgSize": "Durchschnittliche Partitionsgröße"
   },
   "noData": "Keine Daten",
@@ -725,6 +725,7 @@
     "title": "Health Score",
     "tooltip": "Gesamtbewertung der PostgreSQL-Instanz (0–100). Berücksichtigt Verbindungen, Performance, Speicherung, Replikation und Wartung.",
     "openDetailsPage": "Details",
+    "metricsDegraded": "Metrik-Modus (Datasource) aktiv, Ziel zugeordnet, aber keine Metrik-Serie passte auf die Selektoren — der Score basiert auf fehlenden Signalen und ist möglicherweise zu niedrig. Prüfe das Label-Matching: GET /api/common/health-score/datasource/status.",
     "excellent": "Ausgezeichnet",
     "warning": "Achtung",
     "problems": "Probleme",
