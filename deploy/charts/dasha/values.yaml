@@ -150,9 +150,9 @@ config:
   #
   #     # Service discovery: clusters found via `discovery:` (e.g. Yandex MDB) are
   #     # auto-mapped from their discovery metadata, so you can OMIT them from
-  #     # targets[] above. Host FQDN -> {{.Host}}, cloud resource id (MDB cluster
-  #     # id) -> {{.Service}}, folder label -> {{.Env}}, short host -> {{.Container}};
-  #     # providers come from providers_default (e.g. core: pgscv, pooler/host:
+  #     # targets[] above. Host FQDN -> {{.Host}}, cluster name -> {{.Cluster}}/{{.Service}},
+  #     # cloud resource id (MDB cluster id) -> {{.ServiceID}}, folder label -> {{.Env}},
+  #     # short host -> {{.Container}}; providers come from providers_default (e.g. core: pgscv, pooler/host:
   #     # yc_native). A static targets[] entry always overrides the derived one.
   #     # auto_map_discovered: true       # set false to require explicit targets[]
   #     # discovery_env_label: folder_id  # discovery label feeding {{.Env}}.
