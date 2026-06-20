@@ -12,8 +12,10 @@ import (
 // ResolvedTarget is a Dasha target projected onto datasource identifiers and
 // the providers chosen for each role.
 type ResolvedTarget struct {
+	Cluster   string // Dasha cluster name (selector var {{.Cluster}})
 	Env       string
-	Service   string
+	Service   string // {{.Service}}: cluster name for discovered targets (most YC/pgscv metrics key by name)
+	ServiceID string // {{.ServiceID}}: cloud resource id (MDB cluster UUID), for metrics keyed by id
 	Host      string
 	Container string
 	Providers ProvidersConfig
@@ -70,8 +72,10 @@ func (m *Matcher) Resolve(cluster, instance string) (ResolvedTarget, error) {
 		t := &m.cfg.Targets[i]
 		if t.Cluster == cluster && t.Instance == instance {
 			return ResolvedTarget{
+				Cluster:   cluster,
 				Env:       t.Env,
 				Service:   t.Service,
+				ServiceID: t.Service,
 				Host:      t.Host,
 				Container: t.Container,
 				Providers: m.cfg.providersFor(t),
@@ -84,22 +88,26 @@ func (m *Matcher) Resolve(cluster, instance string) (ResolvedTarget, error) {
 	// stays unmapped and the caller falls back to the SQL snapshot.
 	if m.meta != nil && m.cfg.autoMapEnabled() {
 		if md, ok := m.meta.LookupMeta(cluster, instance); ok && isDiscovered(md.Source) {
-			return m.deriveTarget(instance, md), nil
+			return m.deriveTarget(cluster, instance, md), nil
 		}
 	}
 
 	return ResolvedTarget{}, fmt.Errorf("%w: %s/%s", ErrTargetNotMapped, cluster, instance)
 }
 
-// deriveTarget builds a ResolvedTarget from discovery metadata: the host FQDN is
-// the Dasha instance, Service is the cloud resource id (e.g. MDB cluster id),
-// Env is the configured discovery label (default folder_id) and Container is the
-// short hostname. Providers come from providers_default; the selector templates
-// stay the customization surface for the real label scheme.
-func (m *Matcher) deriveTarget(instance string, md DiscoveryMeta) ResolvedTarget {
+// deriveTarget builds a ResolvedTarget from discovery metadata. Service defaults
+// to the cluster name (Cluster), since most YC MDB + pgscv metric schemes key by
+// name (resource_id/subcluster_name/service_id = cluster name); the MDB cluster
+// UUID is exposed separately as ServiceID for schemes that key by id. Host is the
+// FQDN, Container the short hostname, Env the configured discovery label (default
+// folder_id). Providers come from providers_default; selector templates stay the
+// customization surface for the real label scheme.
+func (m *Matcher) deriveTarget(cluster, instance string, md DiscoveryMeta) ResolvedTarget {
 	return ResolvedTarget{
+		Cluster:   cluster,
 		Env:       md.Labels[m.cfg.envLabelKey()],
-		Service:   md.ProviderID,
+		Service:   cluster,
+		ServiceID: md.ProviderID,
 		Host:      instance,
 		Container: shortHost(instance),
 		Providers: m.cfg.providersFor(nil),

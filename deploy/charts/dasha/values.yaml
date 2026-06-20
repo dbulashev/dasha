@@ -124,8 +124,12 @@ config:
   #       host: yc_native     # yc_native (YC host)   | pgscv_system (self-managed system collector)
   #
   #     # Label-selector templates per provider — Go templates over a target's
-  #     # {{.Env}} {{.Service}} {{.Host}} {{.Container}}. Omit to use the built-in
-  #     # YC MDB scheme below; override to match the labels your exporters emit.
+  #     # vars: {{.Env}} (discovery label, e.g. folder), {{.Cluster}}/{{.Service}}
+  #     # (cluster name — most YC MDB + pgscv schemes key by name), {{.ServiceID}}
+  #     # (MDB cluster UUID, for schemes keyed by id), {{.Host}} (FQDN), {{.Container}}
+  #     # (short host). The defaults below already use the name, so a YC MDB + pgscv
+  #     # setup typically needs NO selectors override; set them only to match a
+  #     # different label scheme (e.g. resource_id="{{.ServiceID}}" if you key by UUID).
   #     # selectors:
   #     #   pgscv:            'cluster="{{.Env}}",service_id="{{.Service}}",container="{{.Container}}"'
   #     #   yc_native_host:   'cluster="{{.Env}}",resource_id="{{.Service}}"'
@@ -146,9 +150,9 @@ config:
   #
   #     # Service discovery: clusters found via `discovery:` (e.g. Yandex MDB) are
   #     # auto-mapped from their discovery metadata, so you can OMIT them from
-  #     # targets[] above. Host FQDN -> {{.Host}}, cloud resource id (MDB cluster
-  #     # id) -> {{.Service}}, folder label -> {{.Env}}, short host -> {{.Container}};
-  #     # providers come from providers_default (e.g. core: pgscv, pooler/host:
+  #     # targets[] above. Host FQDN -> {{.Host}}, cluster name -> {{.Cluster}}/{{.Service}},
+  #     # cloud resource id (MDB cluster id) -> {{.ServiceID}}, folder label -> {{.Env}},
+  #     # short host -> {{.Container}}; providers come from providers_default (e.g. core: pgscv, pooler/host:
   #     # yc_native). A static targets[] entry always overrides the derived one.
   #     # auto_map_discovered: true       # set false to require explicit targets[]
   #     # discovery_env_label: folder_id  # discovery label feeding {{.Env}}.
