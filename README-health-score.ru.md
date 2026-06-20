@@ -108,8 +108,8 @@ score = 100 − Σ (penalty_i × weight_i)
 
 ### Maintenance
 - `xid_wraparound_risk` — `max(age(datfrozenxid))` по `pg_database`. Число транзакций до wraparound-аварии. Откалибровано по `autovacuum_freeze_max_age=200 М` (на этой границе должен включаться anti-wraparound autovacuum) и жёсткому пределу 2 Б. Пороги ≥150 М / ≥200 М / ≥1.6 Б.
-- `vacuum_backlog` — таблицы, уже превысившие порог срабатывания autovacuum: `n_dead_tup` выше `autovacuum_vacuum_threshold + autovacuum_vacuum_scale_factor·reltuples`, либо `n_ins_since_vacuum` выше insert-порога. Потабличные `reloptions` переопределяют глобальные GUC (формула самого PostgreSQL). Длина очереди на vacuum — глубокая очередь означает, что autovacuum не успевает. Пороги ≥6 / ≥15 / ≥30 таблиц.
 - `stale_vacuum` — возраст самого старого `last_vacuum`/`last_autovacuum`, в днях, **среди таблиц из очереди** (превысивших свой порог autovacuum). Статичные / преимущественно читаемые таблицы в очередь не попадают и больше не дают ложных срабатываний. Сигнал застрявшего autovacuum. Пороги ≥7 / ≥21 / ≥60 дней.
+- `vacuum_backlog` — таблицы, уже превысившие порог срабатывания autovacuum: `n_dead_tup` выше `autovacuum_vacuum_threshold + autovacuum_vacuum_scale_factor·reltuples`, либо `n_ins_since_vacuum` выше insert-порога. Потабличные `reloptions` переопределяют глобальные GUC (формула самого PostgreSQL). Длина очереди на vacuum — глубокая очередь означает, что autovacuum не успевает. Пороги ≥6 / ≥15 / ≥30 таблиц.
 - `tables_never_vacuumed` — таблицы, у которых одновременно `last_vacuum IS NULL` и `last_autovacuum IS NULL`. Пороги ≥1 / ≥2 / ≥5.
 - `autovacuum_disabled` — глобальный GUC `autovacuum=off`. Bloat и возраст XID растут бесконтрольно. HIGH.
 - `track_counts_disabled` — глобальный GUC `track_counts=off`. У autovacuum нет статистики, фактически он не работает. HIGH.
