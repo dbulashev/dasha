@@ -66,18 +66,12 @@ func migrateExec(cmd *cobra.Command, _ []string) error {
 	cfg := container.Config()
 	logger := container.Logger()
 
-	// Storage (snapshots) is optional, so a missing DSN is not an error: skip the
-	// migration and exit 0 so `dasha migrate && dasha` keeps working for installs
-	// without storage. A DDL-only install may set storage.dsn_migration without
-	// storage.dsn, so gate on the effective migration DSN rather than Enabled()
-	// (which only looks at storage.dsn).
 	if !cfg.Storage.Enabled() && cfg.Storage.MigrationDSN() == "" {
 		logger.Info("storage is not configured, skipping migration")
 
 		return nil
 	}
 
-	// Use the DDL-capable connection (dsn_migration), falling back to dsn.
 	return storage.Migrate(cmd.Context(), cfg.Storage.MigrationDSN(), logger)
 }
 
@@ -155,7 +149,6 @@ func autosnapshotExec(cmd *cobra.Command, _ []string) error {
 func dashaExec(cmd *cobra.Command, _ []string) error {
 	container := deps.NewContainer()
 
-	// _ = container.Config()
 	logger := container.Logger()
 
 	_ = zap.ReplaceGlobals(logger)

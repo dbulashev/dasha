@@ -2,7 +2,6 @@ package http
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -87,7 +86,7 @@ func (s *Handlers) PutAutosnapshotConfig(
 		return serverhttp.PutAutosnapshotConfig400Response{}, nil
 	}
 
-	if err := validateAutosnapshotConfig(cfg); err != nil {
+	if err := cfg.Validate(); err != nil {
 		return serverhttp.PutAutosnapshotConfig400Response{}, nil
 	}
 
@@ -141,7 +140,12 @@ func (s *Handlers) PutAutosnapshotCluster(
 		return serverhttp.PutAutosnapshotCluster400Response{}, nil
 	}
 
-	if err := validateClusterOverrides(req.Body.Overrides); err != nil {
+	cfg, err := s.storage.GetAutosnapshotConfig(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("PutAutosnapshotCluster | config: %w", err)
+	}
+
+	if err := cfg.ValidateOverride(req.Body.Overrides); err != nil {
 		return serverhttp.PutAutosnapshotCluster400Response{}, nil
 	}
 
@@ -334,191 +338,6 @@ func parseOptionalDuration(s string) (time.Duration, error) {
 	}
 
 	return time.ParseDuration(s)
-}
-
-func validateAutosnapshotConfig(cfg autosnapshot.Config) error {
-	if cfg.PollInterval < 5*time.Second {
-		return errors.New("poll_interval must be >= 5s")
-	}
-
-	if cfg.MaxSnapshotFrequency < cfg.PollInterval {
-		return errors.New("max_snapshot_frequency must be >= poll_interval")
-	}
-
-	if cfg.RetentionBytes < 0 {
-		return errors.New("retention_bytes must be >= 0")
-	}
-
-	if cfg.RetentionMinDays < 0 {
-		return errors.New("retention_min_days must be >= 0")
-	}
-
-	if cfg.MinBaselineActive < 0 {
-		return errors.New("min_baseline_active must be >= 0")
-	}
-
-	if cfg.LockProbeCount < 1 || cfg.LockProbeCount > 20 {
-		return errors.New("lock_probe_count must be between 1 and 20")
-	}
-
-	if cfg.LockProbeInterval < 100*time.Millisecond || cfg.LockProbeInterval > 5*time.Second {
-		return errors.New("lock_probe_interval must be between 100ms and 5s")
-	}
-
-	spike := cfg.Defaults.ActivitySpike
-	if spike.WindowSize <= 0 {
-		return errors.New("window_size must be > 0")
-	}
-
-	if spike.ActiveThresholdPct <= 0 || spike.ActiveThresholdPct > 10000 {
-		return errors.New("active_threshold_pct must be in (0, 10000]")
-	}
-
-	if spike.SpikeDuration <= 0 {
-		return errors.New("spike_duration must be > 0")
-	}
-
-	if spike.RecoveryDuration < 0 {
-		return errors.New("recovery_duration must be >= 0 (0 disables)")
-	}
-
-	if spike.DeferredInterval < 0 {
-		return errors.New("deferred_interval must be >= 0 (0 disables)")
-	}
-
-	if spike.SpikeDuration > 2*spike.WindowSize {
-		return errors.New("spike_duration must be <= 2 * window_size")
-	}
-
-	switch cfg.Defaults.RoleChange.Direction {
-	case autosnapshot.DirectionMasterToReplica,
-		autosnapshot.DirectionReplicaToMaster,
-		autosnapshot.DirectionBoth:
-	default:
-		return fmt.Errorf("invalid direction: %q", cfg.Defaults.RoleChange.Direction)
-	}
-
-	return nil
-}
-
-// validateClusterOverrides rejects malformed overrides before storing — EffectiveFor
-// silently ignores bad values, so without this an admin could "save" inert garbage.
-func validateClusterOverrides(overrides map[string]any) error {
-	if raw, ok := overrides["activity_spike"]; ok {
-		spike, ok := raw.(map[string]any)
-		if !ok {
-			return errors.New("activity_spike must be an object")
-		}
-
-		if v, ok := spike["enabled"]; ok {
-			if _, ok := v.(bool); !ok {
-				return errors.New("activity_spike.enabled must be a boolean")
-			}
-		}
-
-		if err := validatePosDurationField(spike, "window_size"); err != nil {
-			return err
-		}
-
-		if err := validatePosDurationField(spike, "spike_duration"); err != nil {
-			return err
-		}
-
-		if err := validateNonNegDurationField(spike, "recovery_duration"); err != nil {
-			return err
-		}
-
-		if err := validateNonNegDurationField(spike, "deferred_interval"); err != nil {
-			return err
-		}
-
-		if v, ok := spike["active_threshold_pct"]; ok {
-			n, ok := v.(float64)
-			if !ok {
-				return errors.New("active_threshold_pct must be a number")
-			}
-
-			if n != float64(int(n)) || n <= 0 || n > 10000 {
-				return errors.New("active_threshold_pct must be an integer in (0, 10000]")
-			}
-		}
-	}
-
-	if raw, ok := overrides["role_change"]; ok {
-		role, ok := raw.(map[string]any)
-		if !ok {
-			return errors.New("role_change must be an object")
-		}
-
-		if v, ok := role["enabled"]; ok {
-			if _, ok := v.(bool); !ok {
-				return errors.New("role_change.enabled must be a boolean")
-			}
-		}
-
-		if v, ok := role["direction"]; ok {
-			s, ok := v.(string)
-			if !ok {
-				return errors.New("direction must be a string")
-			}
-
-			switch autosnapshot.Direction(s) {
-			case autosnapshot.DirectionMasterToReplica,
-				autosnapshot.DirectionReplicaToMaster,
-				autosnapshot.DirectionBoth:
-			default:
-				return fmt.Errorf("invalid direction: %q", s)
-			}
-		}
-	}
-
-	return nil
-}
-
-func validatePosDurationField(m map[string]any, key string) error {
-	v, ok := m[key]
-	if !ok {
-		return nil
-	}
-
-	s, ok := v.(string)
-	if !ok {
-		return fmt.Errorf("%s must be a duration string", key)
-	}
-
-	d, err := time.ParseDuration(s)
-	if err != nil {
-		return fmt.Errorf("%s: %w", key, err)
-	}
-
-	if d <= 0 {
-		return fmt.Errorf("%s must be > 0", key)
-	}
-
-	return nil
-}
-
-func validateNonNegDurationField(m map[string]any, key string) error {
-	v, ok := m[key]
-	if !ok {
-		return nil
-	}
-
-	s, ok := v.(string)
-	if !ok {
-		return fmt.Errorf("%s must be a duration string", key)
-	}
-
-	d, err := time.ParseDuration(s)
-	if err != nil {
-		return fmt.Errorf("%s: %w", key, err)
-	}
-
-	if d < 0 {
-		return fmt.Errorf("%s must be >= 0", key)
-	}
-
-	return nil
 }
 
 func triggerEventToAPI(e autosnapshot.TriggerEvent) serverhttp.TriggerEvent {
