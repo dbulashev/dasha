@@ -90,6 +90,20 @@ func (s *Handlers) PutAutosnapshotConfig(
 		return serverhttp.PutAutosnapshotConfig400Response{}, nil
 	}
 
+	// Reject the change if the new defaults would invalidate a stored override:
+	// EffectiveFor is lenient at read time, so an invalid merge would otherwise be
+	// used silently by the daemon.
+	overrides, err := s.storage.ListClusterOverrides(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("PutAutosnapshotConfig | overrides: %w", err)
+	}
+
+	for _, ov := range overrides {
+		if err := cfg.ValidateEffective(ov); err != nil {
+			return serverhttp.PutAutosnapshotConfig400Response{}, nil
+		}
+	}
+
 	user := userNameFromContext(ctx)
 
 	if err := s.storage.SetAutosnapshotConfig(ctx, cfg, user); err != nil {

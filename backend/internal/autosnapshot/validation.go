@@ -39,11 +39,25 @@ func (c Config) ValidateOverride(raw map[string]any) error {
 	merged := c.Defaults
 	in.applyTo(&merged)
 
-	if err := validate.Struct(merged); err != nil {
+	return validateMergedDefaults(merged)
+}
+
+// ValidateEffective re-checks an already-stored override against these defaults:
+// it merges leniently (the raw was validated when written) and verifies the
+// effective result still holds. Used when defaults change, so a tighter default
+// can't silently invalidate a persisted override.
+func (c Config) ValidateEffective(raw map[string]any) error {
+	return validateMergedDefaults(c.EffectiveFor(raw))
+}
+
+// validateMergedDefaults checks a fully-merged TriggerDefaults: field bounds via
+// tags plus the cross-field rule.
+func validateMergedDefaults(td TriggerDefaults) error {
+	if err := validate.Struct(td); err != nil {
 		return fmt.Errorf("invalid override | %w", err)
 	}
 
-	return validateSpikeCross(merged.ActivitySpike)
+	return validateSpikeCross(td.ActivitySpike)
 }
 
 func validateSpikeCross(s ActivitySpikeTrigger) error {
@@ -59,6 +73,10 @@ func validateSpikeCross(s ActivitySpikeTrigger) error {
 func parseOverrideStrict(raw map[string]any) (OverrideInput, error) {
 	var in OverrideInput
 
+	if err := rejectNullFields(raw, ""); err != nil {
+		return in, err
+	}
+
 	b, err := json.Marshal(raw)
 	if err != nil {
 		return in, fmt.Errorf("marshal override | %w", err)
@@ -72,4 +90,31 @@ func parseOverrideStrict(raw map[string]any) (OverrideInput, error) {
 	}
 
 	return in, nil
+}
+
+// rejectNullFields fails on any explicit JSON null in the override payload. A
+// null decodes into a nil pointer exactly like an absent field, so without this
+// an admin could "set" a field to null and have it stored as a silent no-op.
+func rejectNullFields(v any, path string) error {
+	switch t := v.(type) {
+	case nil:
+		if path == "" {
+			path = "override"
+		}
+
+		return fmt.Errorf("override field %q must not be null", path)
+	case map[string]any:
+		for k, child := range t {
+			name := k
+			if path != "" {
+				name = path + "." + k
+			}
+
+			if err := rejectNullFields(child, name); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
