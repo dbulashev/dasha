@@ -1,6 +1,8 @@
 package autosnapshot
 
 import (
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -16,20 +18,20 @@ const (
 
 type ActivitySpikeTrigger struct {
 	Enabled            bool          `json:"enabled"`
-	WindowSize         time.Duration `json:"window_size"`
-	ActiveThresholdPct int           `json:"active_threshold_pct"`
-	SpikeDuration      time.Duration `json:"spike_duration"`
+	WindowSize         time.Duration `json:"window_size"          validate:"gt=0"`
+	ActiveThresholdPct int           `json:"active_threshold_pct" validate:"gt=0,lte=10000"`
+	SpikeDuration      time.Duration `json:"spike_duration"       validate:"gt=0"`
 	// RecoveryDuration: after a spike, take a snapshot once activity stays below
 	// the threshold for this long (captures the spike's aftermath). 0 = disabled.
-	RecoveryDuration time.Duration `json:"recovery_duration"`
+	RecoveryDuration time.Duration `json:"recovery_duration" validate:"gte=0"`
 	// DeferredInterval: after a spike snapshot, enqueue a follow-up snapshot this
 	// long later (persisted queue, survives restarts). 0 = disabled.
-	DeferredInterval time.Duration `json:"deferred_interval"`
+	DeferredInterval time.Duration `json:"deferred_interval" validate:"gte=0"`
 }
 
 type RoleChangeTrigger struct {
 	Enabled   bool      `json:"enabled"`
-	Direction Direction `json:"direction"`
+	Direction Direction `json:"direction" validate:"oneof=master_to_replica replica_to_master both"`
 }
 
 type TriggerDefaults struct {
@@ -39,15 +41,15 @@ type TriggerDefaults struct {
 
 type Config struct {
 	Enabled              bool
-	PollInterval         time.Duration
-	MaxSnapshotFrequency time.Duration
-	RetentionBytes       int64
-	RetentionMinDays     int
-	MinBaselineActive    int
+	PollInterval         time.Duration `validate:"gte=5s"`
+	MaxSnapshotFrequency time.Duration `validate:"gtefield=PollInterval"`
+	RetentionBytes       int64         `validate:"gte=0"`
+	RetentionMinDays     int           `validate:"gte=0"`
+	MinBaselineActive    int           `validate:"gte=0"`
 	CaptureLocks         bool
-	LockProbeCount       int
-	LockProbeInterval    time.Duration
-	ResetQueryStats      bool // reset pg_stat_statements after each auto-snapshot
+	LockProbeCount       int           `validate:"gte=1,lte=20"`
+	LockProbeInterval    time.Duration `validate:"gte=100ms,lte=5s"`
+	ResetQueryStats      bool          // reset pg_stat_statements after each auto-snapshot
 	Defaults             TriggerDefaults
 	UpdatedAt            time.Time
 	UpdatedBy            *string
@@ -62,51 +64,108 @@ type ClusterOverride struct {
 	UpdatedBy   *string
 }
 
-// EffectiveFor returns defaults deep-merged with per-cluster overrides.
+// Duration wraps time.Duration so override JSON (stored as jsonb) carries Go
+// duration strings ("30s") instead of raw nanoseconds, which encoding/json
+// cannot decode back into a time.Duration.
+type Duration time.Duration
+
+func (d *Duration) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return fmt.Errorf("duration must be a string | %w", err)
+	}
+
+	parsed, err := time.ParseDuration(s)
+	if err != nil {
+		return fmt.Errorf("invalid duration %q | %w", s, err)
+	}
+
+	*d = Duration(parsed)
+
+	return nil
+}
+
+func (d Duration) MarshalJSON() ([]byte, error) {
+	return json.Marshal(time.Duration(d).String()) //nolint:wrapcheck
+}
+
+// OverrideInput is the typed, partial per-cluster override. Pointer fields
+// distinguish "absent" (inherit the default) from "set to zero"; durations
+// arrive as strings via Duration. It drives both merge and validation.
+type OverrideInput struct {
+	ActivitySpike *ActivitySpikeOverride `json:"activity_spike,omitempty"`
+	RoleChange    *RoleChangeOverride    `json:"role_change,omitempty"`
+}
+
+type ActivitySpikeOverride struct {
+	Enabled            *bool     `json:"enabled,omitempty"`
+	WindowSize         *Duration `json:"window_size,omitempty"`
+	ActiveThresholdPct *int      `json:"active_threshold_pct,omitempty"`
+	SpikeDuration      *Duration `json:"spike_duration,omitempty"`
+	RecoveryDuration   *Duration `json:"recovery_duration,omitempty"`
+	DeferredInterval   *Duration `json:"deferred_interval,omitempty"`
+}
+
+type RoleChangeOverride struct {
+	Enabled   *bool      `json:"enabled,omitempty"`
+	Direction *Direction `json:"direction,omitempty"`
+}
+
+// applyTo overwrites only the fields the override sets, leaving the rest at the
+// inherited default — the deep-merge semantics.
+func (in OverrideInput) applyTo(d *TriggerDefaults) {
+	if s := in.ActivitySpike; s != nil {
+		if s.Enabled != nil {
+			d.ActivitySpike.Enabled = *s.Enabled
+		}
+		if s.WindowSize != nil {
+			d.ActivitySpike.WindowSize = time.Duration(*s.WindowSize)
+		}
+		if s.ActiveThresholdPct != nil {
+			d.ActivitySpike.ActiveThresholdPct = *s.ActiveThresholdPct
+		}
+		if s.SpikeDuration != nil {
+			d.ActivitySpike.SpikeDuration = time.Duration(*s.SpikeDuration)
+		}
+		if s.RecoveryDuration != nil {
+			d.ActivitySpike.RecoveryDuration = time.Duration(*s.RecoveryDuration)
+		}
+		if s.DeferredInterval != nil {
+			d.ActivitySpike.DeferredInterval = time.Duration(*s.DeferredInterval)
+		}
+	}
+
+	if r := in.RoleChange; r != nil {
+		if r.Enabled != nil {
+			d.RoleChange.Enabled = *r.Enabled
+		}
+		if r.Direction != nil {
+			d.RoleChange.Direction = *r.Direction
+		}
+	}
+}
+
+// EffectiveFor returns defaults deep-merged with per-cluster overrides. It is
+// lenient: malformed stored overrides are ignored (write-time validation guards
+// the data), so a read never fails.
 func (c Config) EffectiveFor(override map[string]any) TriggerDefaults {
 	res := c.Defaults
 
-	if override == nil {
+	if len(override) == 0 {
 		return res
 	}
 
-	if spike, ok := override["activity_spike"].(map[string]any); ok {
-		if v, ok := spike["enabled"].(bool); ok {
-			res.ActivitySpike.Enabled = v
-		}
-		if v, ok := spike["window_size"].(string); ok {
-			if d, err := time.ParseDuration(v); err == nil {
-				res.ActivitySpike.WindowSize = d
-			}
-		}
-		if v, ok := spike["active_threshold_pct"].(float64); ok {
-			res.ActivitySpike.ActiveThresholdPct = int(v)
-		}
-		if v, ok := spike["spike_duration"].(string); ok {
-			if d, err := time.ParseDuration(v); err == nil {
-				res.ActivitySpike.SpikeDuration = d
-			}
-		}
-		if v, ok := spike["recovery_duration"].(string); ok {
-			if d, err := time.ParseDuration(v); err == nil {
-				res.ActivitySpike.RecoveryDuration = d
-			}
-		}
-		if v, ok := spike["deferred_interval"].(string); ok {
-			if d, err := time.ParseDuration(v); err == nil {
-				res.ActivitySpike.DeferredInterval = d
-			}
-		}
+	raw, err := json.Marshal(override)
+	if err != nil {
+		return res
 	}
 
-	if role, ok := override["role_change"].(map[string]any); ok {
-		if v, ok := role["enabled"].(bool); ok {
-			res.RoleChange.Enabled = v
-		}
-		if v, ok := role["direction"].(string); ok {
-			res.RoleChange.Direction = Direction(v)
-		}
+	var in OverrideInput
+	if err := json.Unmarshal(raw, &in); err != nil {
+		return res
 	}
+
+	in.applyTo(&res)
 
 	return res
 }
