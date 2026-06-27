@@ -146,6 +146,16 @@ func TestConfigValidateOverride(t *testing.T) {
 			override: map[string]any{"activity_spike": map[string]any{"bogus": 1}},
 			wantErr:  true,
 		},
+		{
+			name:     "null field rejected",
+			override: map[string]any{"activity_spike": map[string]any{"window_size": nil}},
+			wantErr:  true,
+		},
+		{
+			name:     "null block rejected",
+			override: map[string]any{"role_change": nil},
+			wantErr:  true,
+		},
 	}
 
 	for _, tc := range tests {
@@ -156,5 +166,24 @@ func TestConfigValidateOverride(t *testing.T) {
 				t.Fatalf("err = %v, wantErr = %v", err, tc.wantErr)
 			}
 		})
+	}
+}
+
+func TestConfigValidateEffective(t *testing.T) {
+	t.Parallel()
+
+	// Valid under a 30s default window (50s <= 2*30s), invalid once it tightens.
+	override := map[string]any{"activity_spike": map[string]any{"spike_duration": "50s"}}
+
+	wide := validConfig()
+	if err := wide.ValidateEffective(override); err != nil {
+		t.Fatalf("override should hold under wide defaults: %v", err)
+	}
+
+	tight := validConfig()
+	tight.Defaults.ActivitySpike.WindowSize = 20 * time.Second // 2*20s = 40s < 50s
+
+	if err := tight.ValidateEffective(override); err == nil {
+		t.Fatal("override should be rejected once the default window is tightened")
 	}
 }
