@@ -216,8 +216,45 @@ func (d *Daemon) tick(ctx context.Context, cfg Config) {
 
 	for _, cl := range cls {
 		effective := cfg.EffectiveFor(overrides[string(cl.Name)])
-		d.processCluster(ctx, cfg, effective, cl)
+		d.processClusterSafe(ctx, cfg, effective, cl)
 	}
+}
+
+// processClusterSafe bounds one cluster's sweep with a deadline and recovers
+// panics, so one bad cluster can't hang or crash the whole daemon loop.
+func (d *Daemon) processClusterSafe(ctx context.Context, cfg Config, effective TriggerDefaults, cl config.Cluster) {
+	defer func() {
+		if r := recover(); r != nil {
+			d.logger.Error("autosnapshot: recovered panic processing cluster",
+				zap.String("cluster", string(cl.Name)),
+				zap.Any("panic", r),
+				zap.Stack("stack"))
+		}
+	}()
+
+	cctx, cancel := context.WithTimeout(ctx, clusterTickTimeout(cfg, len(cl.Hosts)))
+	defer cancel()
+
+	d.processCluster(cctx, cfg, effective, cl)
+}
+
+// Per-host slack on top of any lock-probe sleeps; see clusterTickTimeout.
+const clusterTickBudgetPerHost = 30 * time.Second
+
+// clusterTickTimeout is deliberately generous — it must exceed legitimate work
+// (mainly the lock-probe sleeps, which scale with host count) so it only trips
+// on a real hang, never on a slow-but-healthy cluster.
+func clusterTickTimeout(cfg Config, hosts int) time.Duration {
+	if hosts < 1 {
+		hosts = 1
+	}
+
+	per := clusterTickBudgetPerHost
+	if cfg.CaptureLocks {
+		per += time.Duration(cfg.LockProbeCount) * cfg.LockProbeInterval
+	}
+
+	return time.Duration(hosts) * per
 }
 
 // processPending takes any deferred snapshots whose due time has passed.
@@ -247,7 +284,27 @@ func (d *Daemon) processPending(ctx context.Context, cfg Config) {
 			continue // cluster removed since enqueue
 		}
 
-		trigCtx := map[string]any{"trigger": "deferred", "host": p.Instance}
-		_ = d.takeSnapshot(ctx, cfg, cl, p.Instance, p.Database, TriggerDeferred, p.Reason, trigCtx, nil)
+		d.takePendingSafe(ctx, cfg, cl, p)
 	}
+}
+
+// takePendingSafe runs one deferred snapshot under the same per-host deadline and
+// panic recovery as the live sweep. Deferred snapshots never capture locks, so the
+// base per-host budget applies.
+func (d *Daemon) takePendingSafe(ctx context.Context, cfg Config, cl config.Cluster, p PendingSnapshot) {
+	defer func() {
+		if r := recover(); r != nil {
+			d.logger.Error("autosnapshot: recovered panic taking deferred snapshot",
+				zap.String("cluster", p.ClusterName),
+				zap.String("instance", p.Instance),
+				zap.Any("panic", r),
+				zap.Stack("stack"))
+		}
+	}()
+
+	cctx, cancel := context.WithTimeout(ctx, clusterTickBudgetPerHost)
+	defer cancel()
+
+	trigCtx := map[string]any{"trigger": "deferred", "host": p.Instance}
+	_ = d.takeSnapshot(cctx, cfg, cl, p.Instance, p.Database, TriggerDeferred, p.Reason, trigCtx, nil)
 }
