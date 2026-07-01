@@ -8813,6 +8813,90 @@ export const usePutAutosnapshotConfig = <TError = void, TContext = unknown>(opti
 > => {
   return useMutation(getPutAutosnapshotConfigMutationOptions(options))
 }
+/**
+ * Per-cluster overrides and effective config for every cluster in one call (avoids one request per cluster on the list view).
+ */
+export type listAutosnapshotClustersResponse200 = {
+  data: AutoSnapshotClusterOverride[]
+  status: 200
+}
+
+export type listAutosnapshotClustersResponse501 = {
+  data: void
+  status: 501
+}
+
+export type listAutosnapshotClustersResponseSuccess = listAutosnapshotClustersResponse200 & {
+  headers: Headers
+}
+export type listAutosnapshotClustersResponseError = listAutosnapshotClustersResponse501 & {
+  headers: Headers
+}
+
+export type listAutosnapshotClustersResponse =
+  | listAutosnapshotClustersResponseSuccess
+  | listAutosnapshotClustersResponseError
+
+export const getListAutosnapshotClustersUrl = () => {
+  return `/api/autosnapshot/clusters`
+}
+
+export const listAutosnapshotClusters = async (
+  options?: RequestInit,
+): Promise<listAutosnapshotClustersResponse> => {
+  return customFetch<listAutosnapshotClustersResponse>(getListAutosnapshotClustersUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getListAutosnapshotClustersQueryKey = () => {
+  return ['api', 'autosnapshot', 'clusters'] as const
+}
+
+export const getListAutosnapshotClustersQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAutosnapshotClusters>>,
+  TError = void,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof listAutosnapshotClusters>>, TError, TData>
+  request?: SecondParameter<typeof customFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getListAutosnapshotClustersQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listAutosnapshotClusters>>> = ({
+    signal,
+  }) => listAutosnapshotClusters({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAutosnapshotClusters>>,
+    TError,
+    TData
+  >
+}
+
+export type ListAutosnapshotClustersQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAutosnapshotClusters>>
+>
+export type ListAutosnapshotClustersQueryError = void
+
+export function useListAutosnapshotClusters<
+  TData = Awaited<ReturnType<typeof listAutosnapshotClusters>>,
+  TError = void,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof listAutosnapshotClusters>>, TError, TData>
+  request?: SecondParameter<typeof customFetch>
+}): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAutosnapshotClustersQueryOptions(options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
 export type getAutosnapshotClusterResponse200 = {
   data: AutoSnapshotClusterOverride
   status: 200
