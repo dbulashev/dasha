@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { getAutosnapshotCluster } from '@/api/gen/default/default'
+import { getAutosnapshotCluster, listAutosnapshotClusters } from '@/api/gen/default/default'
 import type { AutoSnapshotClusterOverride } from '@/api/models'
 import { useClustersStore } from '@/stores/clusters'
 import { useDebouncedRef } from '@/composables/useDebouncedRef'
@@ -21,6 +21,7 @@ type ClusterRow = {
 
 const items = ref<ClusterRow[]>([])
 const loading = ref(false)
+const loadError = ref<string | null>(null)
 const editCluster = ref<string | null>(null)
 const dialogOpen = ref(false)
 const search = ref<string | null>('')
@@ -71,18 +72,15 @@ async function fetchOne(name: string): Promise<ClusterRow> {
 }
 
 async function loadAll() {
-  const clusters = clustersStore.clusterList ?? []
-  const names = clusters
-    .map((c) => c.name ?? '')
-    .filter((n): n is string => !!n)
-  if (!names.length) {
-    items.value = []
-    return
-  }
   loading.value = true
+  loadError.value = null
   try {
-    const results = await Promise.all(names.map((n) => fetchOne(n)))
-    items.value = results
+    const res = await listAutosnapshotClusters()
+    const body = assertOk<AutoSnapshotClusterOverride[]>(res)
+    items.value = body.map((b) => rowFromOverride(b.ClusterName ?? '', b))
+  } catch (e) {
+    loadError.value = String(e)
+    items.value = []
   } finally {
     loading.value = false
   }
@@ -115,7 +113,15 @@ watch(
 <template>
   <div>
     <v-alert
-      v-if="!loading && items.length === 0"
+      v-if="loadError"
+      type="error"
+      class="mb-4"
+    >
+      {{ loadError }}
+    </v-alert>
+
+    <v-alert
+      v-if="!loading && !loadError && items.length === 0"
       type="info"
       class="mb-4"
     >

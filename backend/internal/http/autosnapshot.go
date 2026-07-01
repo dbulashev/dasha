@@ -141,6 +141,46 @@ func (s *Handlers) GetAutosnapshotCluster(
 	}, nil
 }
 
+// ListAutosnapshotClusters returns overrides + effective config for every cluster
+// in one call, so the cluster list view doesn't fan out a request per cluster.
+func (s *Handlers) ListAutosnapshotClusters(
+	ctx context.Context,
+	_ serverhttp.ListAutosnapshotClustersRequestObject,
+) (serverhttp.ListAutosnapshotClustersResponseObject, error) {
+	if s.storage == nil {
+		return serverhttp.ListAutosnapshotClusters501Response{}, nil
+	}
+
+	cfg, err := s.storage.GetAutosnapshotConfig(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("ListAutosnapshotClusters | config: %w", err)
+	}
+
+	overrides, err := s.storage.ListClusterOverrides(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("ListAutosnapshotClusters | overrides: %w", err)
+	}
+
+	clusters, err := s.repo.Clusters(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("ListAutosnapshotClusters | clusters: %w", err)
+	}
+
+	out := make(serverhttp.ListAutosnapshotClusters200JSONResponse, 0, len(clusters))
+	for _, cl := range clusters {
+		name := cl.Name.String()
+		ov := overrides[name]
+
+		out = append(out, serverhttp.AutoSnapshotClusterOverride{
+			ClusterName: name,
+			Overrides:   ov,
+			Effective:   triggerDefaultsToAPI(cfg.EffectiveFor(ov)),
+		})
+	}
+
+	return out, nil
+}
+
 // PutAutosnapshotCluster upserts per-cluster overrides (empty Overrides map deletes the row).
 func (s *Handlers) PutAutosnapshotCluster(
 	ctx context.Context,

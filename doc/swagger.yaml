@@ -1878,6 +1878,21 @@ paths:
           description: Validation error
         '501':
           description: Storage not configured
+  /api/autosnapshot/clusters:
+    get:
+      operationId: listAutosnapshotClusters
+      description: Per-cluster overrides and effective config for every cluster in one call (avoids one request per cluster on the list view).
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AutoSnapshotClusterOverride'
+        '501':
+          description: Storage not configured
   /api/autosnapshot/clusters/{name}:
     get:
       operationId: getAutosnapshotCluster
