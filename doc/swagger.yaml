@@ -1626,6 +1626,9 @@ paths:
             type: array
             items:
               type: string
+          style: form
+          explode: false
+          description: Comma-separated list of usernames to exclude (applies to live B only)
       responses:
         '200':
           description: Success

@@ -14,5 +14,8 @@ export type GetQueriesCompareParams = {
   database: DatabaseParameter
   snapshot_a: string
   snapshot_b?: string
+  /**
+   * Comma-separated list of usernames to exclude (applies to live B only)
+   */
   exclude_users?: string[]
 }

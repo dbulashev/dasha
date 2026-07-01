@@ -300,6 +300,10 @@ func (s *Handlers) GetQueriesCompare(
 		if err != nil {
 			return nil, fmt.Errorf("GetQueriesCompare | live report: %w", err)
 		}
+
+		// The live SQL already excludes these users from B; snapshot A was captured
+		// unfiltered, so drop its solely-excluded queries too or they'd survive the join.
+		reportsA = excludeReportsByUser(reportsA, excludeUsers)
 	}
 
 	joined := mapstruct.SliceFullJoin(
@@ -348,6 +352,48 @@ func (s *Handlers) GetQueriesCompare(
 	}
 
 	return serverhttp.GetQueriesCompare200JSONResponse(items), nil
+}
+
+// excludeReportsByUser drops reports run solely by the excluded users. Snapshot
+// stats are pre-aggregated, so a query shared with a non-excluded user can't be
+// trimmed per user and is kept as-is (matching the live side, which retains it).
+func excludeReportsByUser(reports []dto.QueryReport, exclude []string) []dto.QueryReport {
+	if len(exclude) == 0 {
+		return reports
+	}
+
+	excluded := make(map[string]struct{}, len(exclude))
+	for _, u := range exclude {
+		excluded[u] = struct{}{}
+	}
+
+	out := make([]dto.QueryReport, 0, len(reports))
+
+	for _, r := range reports {
+		if onlyExcludedUsers(r.Usernames, excluded) {
+			continue
+		}
+
+		out = append(out, r)
+	}
+
+	return out
+}
+
+// onlyExcludedUsers is true when every user that ran the query is excluded;
+// unknown attribution (no usernames) is kept.
+func onlyExcludedUsers(usernames []string, excluded map[string]struct{}) bool {
+	if len(usernames) == 0 {
+		return false
+	}
+
+	for _, u := range usernames {
+		if _, ok := excluded[u]; !ok {
+			return false
+		}
+	}
+
+	return true
 }
 
 func (s *Handlers) GetQueryStatsStatus(

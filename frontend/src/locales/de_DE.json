@@ -1200,7 +1200,9 @@
       "latencyAxis": "ms",
       "range": {
         "24h": "24h",
+        "2d": "2T",
         "7d": "7T",
+        "14d": "14T",
         "30d": "30T"
       },
       "unavailable": "Trend nicht verfügbar: Metrics-Datasource nicht konfiguriert oder Ziel nicht zugeordnet.",
