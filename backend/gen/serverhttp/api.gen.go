@@ -1517,12 +1517,14 @@ type GetQueriesBlockedParams struct {
 
 // GetQueriesCompareParams defines parameters for GetQueriesCompare.
 type GetQueriesCompareParams struct {
-	ClusterName  ClusterName         `form:"cluster_name" json:"cluster_name"`
-	Instance     Instance            `form:"instance" json:"instance"`
-	Database     Database            `form:"database" json:"database"`
-	SnapshotA    openapi_types.UUID  `form:"snapshot_a" json:"snapshot_a"`
-	SnapshotB    *openapi_types.UUID `form:"snapshot_b,omitempty" json:"snapshot_b,omitempty"`
-	ExcludeUsers *[]string           `form:"exclude_users,omitempty" json:"exclude_users,omitempty"`
+	ClusterName ClusterName         `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance            `form:"instance" json:"instance"`
+	Database    Database            `form:"database" json:"database"`
+	SnapshotA   openapi_types.UUID  `form:"snapshot_a" json:"snapshot_a"`
+	SnapshotB   *openapi_types.UUID `form:"snapshot_b,omitempty" json:"snapshot_b,omitempty"`
+
+	// ExcludeUsers Comma-separated list of usernames to exclude (applies to live B only)
+	ExcludeUsers *[]string `form:"exclude_users,omitempty" json:"exclude_users,omitempty"`
 }
 
 // GetQueryStatsStatusParams defines parameters for GetQueryStatsStatus.
@@ -4132,7 +4134,7 @@ func (w *ServerInterfaceWrapper) GetQueriesCompare(ctx echo.Context) error {
 
 	// ------------- Optional query parameter "exclude_users" -------------
 
-	err = runtime.BindQueryParameter("form", true, false, "exclude_users", ctx.QueryParams(), &params.ExcludeUsers)
+	err = runtime.BindQueryParameter("form", false, false, "exclude_users", ctx.QueryParams(), &params.ExcludeUsers)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter exclude_users: %s", err))
 	}
@@ -10337,26 +10339,27 @@ var swaggerSpec = []string{
 	"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",
-	"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",
+	"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",
+	"/55qeV/aUQEA",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file
