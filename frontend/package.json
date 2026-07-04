@@ -55,7 +55,7 @@
     "vite": "^7.1.11",
     "vite-plugin-vue-devtools": "^8.1.2",
     "vitest": "^4.1.9",
-    "vue-tsc": "^3.3.0"
+    "vue-tsc": "^3.3.6"
   },
     "overrides": {
     "esbuild": "0.28.1"
