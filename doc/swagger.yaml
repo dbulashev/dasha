@@ -207,10 +207,22 @@ paths:
       operationId: getHealthScoreXidWraparoundDatabases
       description: >-
         Inline detail for the xid_wraparound_risk recommendation: per-database
-        transaction-ID age, top 10 by age. Instance-wide.
+        transaction-ID age, ordered by age descending (paged). Instance-wide.
       parameters:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 15
+          required: false
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+          required: false
       responses:
         '200':
           description: Success
@@ -232,6 +244,18 @@ paths:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
         - $ref: '#/components/parameters/Database'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 15
+          required: false
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+          required: false
       responses:
         '200':
           description: Success
@@ -253,6 +277,18 @@ paths:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
         - $ref: '#/components/parameters/Database'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 15
+          required: false
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+          required: false
       responses:
         '200':
           description: Success
@@ -274,6 +310,18 @@ paths:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
         - $ref: '#/components/parameters/Database'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 15
+          required: false
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+          required: false
       responses:
         '200':
           description: Success
@@ -294,6 +342,18 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 15
+          required: false
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+          required: false
       responses:
         '200':
           description: Success
@@ -318,6 +378,63 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthScoreDatabases'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/common/health-score/datasource/status:
+    get:
+      operationId: getHealthScoreDatasourceStatus
+      description: >-
+        Metrics datasource label-matching diagnostics: for each role
+        (core / pooler / host) reports the chosen provider, the rendered series
+        selector and how many series matched (exactly one expected). Returns
+        enabled=false when the metrics-backed mode is off.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthScoreDatasourceStatus'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/common/health-score/history:
+    get:
+      operationId: getHealthScoreHistory
+      description: >-
+        Metrics-backed score trend for [from, to]: per-timestamp overall score,
+        per-category scores and latency, with a seasonal (hour-of-week) baseline
+        and detected dips. Requires the metrics datasource (404 otherwise).
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: step_seconds
+          in: query
+          required: false
+          schema:
+            type: integer
+          description: Sampling step in seconds (default 300).
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthScoreHistory'
         '404':
           $ref: '#/components/responses/NotFound'
   /api/common/health-score/weights:
@@ -856,6 +973,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TableDescribeBloat'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /api/tables/describe-vacuum-stats:
     get:
@@ -930,6 +1049,8 @@ paths:
                 properties:
                   Available:
                     type: boolean
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /api/tables/describe-partitions:
     get:
@@ -969,6 +1090,8 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/TableDescribePartition'
+        '404':
+          $ref: '#/components/responses/NotFound'
 
   /api/tables/schemas:
     get:
@@ -1416,6 +1539,12 @@ paths:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
         - $ref: '#/components/parameters/Database'
+        - name: include_locks
+          in: query
+          required: false
+          description: Also capture a lock snapshot (probes blocked sessions)
+          schema:
+            type: boolean
       responses:
         '201':
           description: Snapshot created
@@ -1450,6 +1579,27 @@ paths:
           $ref: '#/components/responses/NotFound'
         '501':
           description: Storage not configured
+  /api/queries/snapshot/{id}/locks:
+    get:
+      operationId: getSnapshotLocks
+      parameters:
+        - in: path
+          name: id
+          schema:
+            type: string
+            format: uuid
+          required: true
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LockSnapshot'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: Storage not configured
   /api/queries/compare:
     get:
       operationId: getQueriesCompare
@@ -1476,6 +1626,9 @@ paths:
             type: array
             items:
               type: string
+          style: form
+          explode: false
+          description: Comma-separated list of usernames to exclude (applies to live B only)
       responses:
         '200':
           description: Success
@@ -1769,13 +1922,180 @@ paths:
               schema:
                 $ref: '#/components/schemas/LogSearchResult'
         '400':
-          description: unsupported cluster or invalid parameters
+          description: invalid parameters
         '404':
           $ref: '#/components/responses/NotFound'
+        '501':
+          description: logs not supported for this cluster
         '502':
           description: upstream Yandex API error
         '504':
           description: upstream timeout
+  /api/autosnapshot/status:
+    get:
+      operationId: getAutosnapshotStatus
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutoSnapshotStatus'
+  /api/autosnapshot/config:
+    get:
+      operationId: getAutosnapshotConfig
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutoSnapshotConfig'
+        '501':
+          description: Storage not configured
+    put:
+      operationId: putAutosnapshotConfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutoSnapshotConfig'
+      responses:
+        '204':
+          description: Updated
+        '400':
+          description: Validation error
+        '501':
+          description: Storage not configured
+  /api/autosnapshot/clusters:
+    get:
+      operationId: listAutosnapshotClusters
+      description: Per-cluster overrides and effective config for every cluster in one call (avoids one request per cluster on the list view).
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AutoSnapshotClusterOverride'
+        '501':
+          description: Storage not configured
+  /api/autosnapshot/clusters/{name}:
+    get:
+      operationId: getAutosnapshotCluster
+      parameters:
+        - in: path
+          name: name
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutoSnapshotClusterOverride'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: Storage not configured
+    put:
+      operationId: putAutosnapshotCluster
+      parameters:
+        - in: path
+          name: name
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutoSnapshotClusterOverrideInput'
+      responses:
+        '204':
+          description: Updated
+        '400':
+          description: Validation error
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: Storage not configured
+  /api/autosnapshot/trigger-events:
+    get:
+      operationId: getAutosnapshotTriggerEvents
+      parameters:
+        - in: query
+          name: cluster_name
+          schema:
+            type: string
+          required: false
+        - in: query
+          name: outcome
+          schema:
+            type: string
+          required: false
+        - in: query
+          name: trigger_type
+          schema:
+            type: string
+          required: false
+        - in: query
+          name: from
+          schema:
+            type: string
+            format: date-time
+          required: false
+        - in: query
+          name: to
+          schema:
+            type: string
+            format: date-time
+          required: false
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+          required: false
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+          required: false
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TriggerEvent'
+        '501':
+          description: Storage not configured
+
+  /api/autosnapshot/summary:
+    get:
+      operationId: getAutosnapshotSummary
+      description: Per-cluster snapshot/error counts (all retained history) for the summary tab.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ClusterSnapshotSummary'
+        '501':
+          description: Storage not configured
 
 components:
   securitySchemes:
@@ -1839,6 +2159,9 @@ components:
         source:
           type: string
           description: cluster origin, e.g. "static" or "yandex-mdb"
+        supports_logs:
+          type: boolean
+          description: true when cluster logs can be searched via GET /api/logs
         instances:
           type: array
           items:
@@ -3690,6 +4013,16 @@ components:
             $ref: '#/components/schemas/HealthScoreCategory'
         has_replication:
           type: boolean
+        source:
+          type: string
+          description: 'Score source: "snapshot" (SQL) or "metrics" (datasource).'
+        metrics_degraded:
+          type: boolean
+          description: >-
+            True when source is "metrics" but no datasource series matched any
+            selector for the target — the score is built from absent signals and
+            may be understated. Check selector label matching at
+            GET /api/common/health-score/datasource/status.
         in_recovery:
           type: boolean
           description: >-
@@ -3876,6 +4209,129 @@ components:
           type: string
           nullable: true
 
+    HealthScoreDatasourceStatus:
+      type: object
+      required:
+        - enabled
+        - target
+        - roles
+      properties:
+        enabled:
+          type: boolean
+        target:
+          type: string
+        roles:
+          type: array
+          items:
+            $ref: '#/components/schemas/HealthScoreDatasourceRole'
+
+    HealthScoreDatasourceRole:
+      type: object
+      required:
+        - role
+        - provider
+        - metric
+        - selector
+        - matched
+      properties:
+        role:
+          type: string
+        provider:
+          type: string
+        metric:
+          type: string
+        selector:
+          type: string
+        matched:
+          description: Number of matching series (exactly 1 means OK).
+          type: integer
+        error:
+          type: string
+        sample_labels:
+          type: object
+          additionalProperties:
+            type: string
+
+    HealthScoreHistory:
+      type: object
+      required:
+        - points
+        - baseline
+        - dips
+        - baseline_available
+      properties:
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/HealthScoreHistoryPoint'
+        baseline:
+          type: array
+          items:
+            $ref: '#/components/schemas/HealthScoreHistoryBaseline'
+        dips:
+          type: array
+          items:
+            $ref: '#/components/schemas/HealthScoreHistoryDip'
+        baseline_available:
+          type: boolean
+
+    HealthScoreHistoryPoint:
+      type: object
+      required:
+        - time
+        - score
+        - latency_ms
+        - categories
+      properties:
+        time:
+          type: string
+          format: date-time
+        score:
+          type: number
+          format: double
+        latency_ms:
+          type: number
+          format: double
+        categories:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+
+    HealthScoreHistoryBaseline:
+      type: object
+      required:
+        - time
+        - value
+      properties:
+        time:
+          type: string
+          format: date-time
+        value:
+          type: number
+          format: double
+
+    HealthScoreHistoryDip:
+      type: object
+      required:
+        - time
+        - value
+        - baseline
+        - drop
+      properties:
+        time:
+          type: string
+          format: date-time
+        value:
+          type: number
+          format: double
+        baseline:
+          type: number
+          format: double
+        drop:
+          type: number
+          format: double
+
     HealthScoreWeights:
       type: object
       required:
@@ -3999,6 +4455,12 @@ components:
           type: string
           format: date-time
           nullable: true
+        HasLocks:
+          type: boolean
+          description: True when a lock snapshot was captured alongside this snapshot
+        Reason:
+          type: string
+          description: 'Why the snapshot was created: "manual" or "auto:<trigger_type>"'
 
     SnapshotCreated:
       type: object
@@ -4012,6 +4474,261 @@ components:
         CreatedAt:
           type: string
           format: date-time
+
+    ActivitySpikeTrigger:
+      type: object
+      required:
+        - Enabled
+        - WindowSize
+        - ActiveThresholdPct
+        - SpikeDuration
+        - RecoveryDuration
+        - DeferredInterval
+      properties:
+        Enabled:
+          type: boolean
+        WindowSize:
+          type: string
+          description: Go duration string (e.g. "5m")
+        ActiveThresholdPct:
+          type: integer
+        SpikeDuration:
+          type: string
+          description: Go duration string (e.g. "5m")
+        RecoveryDuration:
+          type: string
+          description: Snapshot the aftermath once activity stays below threshold this long; "0s" disables
+        DeferredInterval:
+          type: string
+          description: Scheduled follow-up snapshot this long after a spike (persisted queue); "0s" disables
+
+    RoleChangeTrigger:
+      type: object
+      required:
+        - Enabled
+        - Direction
+      properties:
+        Enabled:
+          type: boolean
+        Direction:
+          type: string
+          enum: [master_to_replica, replica_to_master, both]
+
+    AutoSnapshotTriggerDefaults:
+      type: object
+      required:
+        - ActivitySpike
+        - RoleChange
+      properties:
+        ActivitySpike:
+          $ref: '#/components/schemas/ActivitySpikeTrigger'
+        RoleChange:
+          $ref: '#/components/schemas/RoleChangeTrigger'
+
+    LockBackgroundPeak:
+      type: object
+      required:
+        - blocked_count
+        - at
+      properties:
+        blocked_count:
+          type: integer
+        at:
+          type: string
+          format: date-time
+
+    LockSnapshot:
+      type: object
+      description: Lock-contention graph captured alongside an auto-snapshot.
+      required:
+        - captured
+        - blocked_count
+      properties:
+        captured:
+          type: boolean
+        probes:
+          type: integer
+        probe_interval:
+          type: string
+          description: Go duration string between probes
+        harshest_at:
+          type: string
+          format: date-time
+          nullable: true
+        blocked_count:
+          type: integer
+          description: Distinct blocked sessions in the harshest probe
+        max_wait_ms:
+          type: number
+          format: double
+        background_peak:
+          $ref: '#/components/schemas/LockBackgroundPeak'
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/QueryBlocked'
+        error:
+          type: string
+
+    AutoSnapshotConfig:
+      type: object
+      required:
+        - Enabled
+        - PollInterval
+        - MaxSnapshotFrequency
+        - RetentionBytes
+        - RetentionMinDays
+        - MinBaselineActive
+        - CaptureLocks
+        - LockProbeCount
+        - LockProbeInterval
+        - ResetQueryStats
+        - Defaults
+      properties:
+        Enabled:
+          type: boolean
+        PollInterval:
+          type: string
+          description: Go duration string (e.g. "30s")
+        MaxSnapshotFrequency:
+          type: string
+          description: Go duration string (e.g. "1h")
+        RetentionBytes:
+          type: integer
+          format: int64
+          description: Total storage size target in bytes, 0 to disable
+        RetentionMinDays:
+          type: integer
+        MinBaselineActive:
+          type: integer
+        CaptureLocks:
+          type: boolean
+        LockProbeCount:
+          type: integer
+        LockProbeInterval:
+          type: string
+          description: Go duration string between lock probes (e.g. "500ms")
+        ResetQueryStats:
+          type: boolean
+          description: Reset pg_stat_statements after each auto-snapshot (independent of the manual UI reset flag)
+        Defaults:
+          $ref: '#/components/schemas/AutoSnapshotTriggerDefaults'
+
+    AutoSnapshotClusterOverride:
+      type: object
+      required:
+        - ClusterName
+        - Overrides
+        - Effective
+      properties:
+        ClusterName:
+          type: string
+        Overrides:
+          type: object
+          description: Partial overrides (activity_spike / role_change subfields)
+          additionalProperties: true
+        Effective:
+          $ref: '#/components/schemas/AutoSnapshotTriggerDefaults'
+
+    AutoSnapshotClusterOverrideInput:
+      type: object
+      required:
+        - Overrides
+      properties:
+        Overrides:
+          type: object
+          description: Partial overrides (activity_spike / role_change subfields)
+          additionalProperties: true
+
+    AutoSnapshotLeaderInfo:
+      type: object
+      required:
+        - IsAlive
+      properties:
+        InstanceId:
+          type: string
+          nullable: true
+        LastHeartbeat:
+          type: string
+          format: date-time
+          nullable: true
+        IsAlive:
+          type: boolean
+
+    AutoSnapshotStatus:
+      type: object
+      required:
+        - Available
+        - Enabled
+      properties:
+        Available:
+          type: boolean
+        Enabled:
+          type: boolean
+        Leader:
+          $ref: '#/components/schemas/AutoSnapshotLeaderInfo'
+
+    ClusterSnapshotSummary:
+      type: object
+      required:
+        - ClusterName
+        - Snapshots
+        - ActivitySpike
+        - RoleChange
+        - Errors
+      properties:
+        ClusterName:
+          type: string
+        Snapshots:
+          type: integer
+          description: Total created snapshots (outcome = snapshot_created)
+        ActivitySpike:
+          type: integer
+          description: Created snapshots via the activity_spike trigger
+        RoleChange:
+          type: integer
+          description: Created snapshots via the role_change trigger
+        Errors:
+          type: integer
+          description: Failed attempts (outcome = error)
+
+    TriggerEvent:
+      type: object
+      required:
+        - Id
+        - CreatedAt
+        - ClusterName
+        - Instance
+        - TriggerType
+        - Outcome
+      properties:
+        Id:
+          type: string
+          format: uuid
+        CreatedAt:
+          type: string
+          format: date-time
+        ClusterName:
+          type: string
+        Instance:
+          type: string
+        Database:
+          type: string
+          nullable: true
+        TriggerType:
+          type: string
+        Outcome:
+          type: string
+        SnapshotId:
+          type: string
+          format: uuid
+          nullable: true
+        TriggerContext:
+          type: object
+          additionalProperties: true
+        ErrorMessage:
+          type: string
+          nullable: true
 
     VacuumStats:
       type: object

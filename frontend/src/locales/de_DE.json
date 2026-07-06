@@ -91,6 +91,147 @@
     "stats": "Gesamt: {total} | Gemeinsam: {both} | Nur in A: {onlyA} | Nur in B: {onlyB}",
     "ageUnknown": "Alter unbekannt"
   },
+  "autosnapshot": {
+    "menu": "Auto-Snapshots",
+    "tabs": {
+      "settings": "Einstellungen",
+      "clusters": "Cluster",
+      "history": "Verlauf",
+      "summary": "Übersicht"
+    },
+    "summary": {
+      "title": "Snapshots pro Cluster",
+      "cluster": "Cluster",
+      "snapshots": "Snapshots",
+      "activitySpike": "Lastspitzen",
+      "roleChange": "Rollenwechsel",
+      "errors": "Fehler",
+      "total": "Snapshots gesamt",
+      "empty": "Noch keine Auto-Snapshot-Ereignisse"
+    },
+    "globalSection": "Globale Einstellungen",
+    "resetQueryStats": "pgss nach Snapshot zurücksetzen",
+    "resetQueryStatsHint": "Nach jedem Auto-Snapshot pg_stat_statements zurücksetzen, damit der nächste Snapshot das Delta enthält. Die Reset-Funktion kann über pgss_reset_function in dasha.yaml überschrieben werden, falls die Rolle kein Recht auf pg_stat_statements_reset() hat.",
+    "activitySpike": "Aktivitäts-Spike-Trigger",
+    "roleChange": "Rollenwechsel-Trigger",
+    "enabled": "Aktiviert",
+    "pollInterval": "Polling-Intervall",
+    "maxFrequency": "Max. Snapshot-Frequenz",
+    "minBaseline": "Min. Baseline aktiver Verbindungen",
+    "retentionBytes": "Aufbewahrungslimit, Bytes",
+    "retentionBytesHint": "0 — kein Limit",
+    "retentionGiB": "Aufbewahrungslimit, GiB",
+    "invalidDuration": "Ungültiges Format (z. B. 30s, 5m, 1h)",
+    "mustBePositive": "Muss ≥ 0 sein",
+    "locks": {
+      "title": "Sperren",
+      "hint": "Sperrgraph beim Auslösen des Aktivitäts-Spikes erfassen",
+      "capture": "Sperren erfassen",
+      "probeCount": "Anzahl Proben",
+      "probeInterval": "Proben-Intervall",
+      "section": "Sperren zum Snapshot-Zeitpunkt",
+      "blocked": "Blockiert",
+      "maxWait": "Max. Wartezeit",
+      "peakWas": "Spitze war {count} um {at}",
+      "none": "Keine Sperren erfasst",
+      "open": "Sperren anzeigen",
+      "withLocks": "Mit Sperren",
+      "blockedPid": "Blockierte PID",
+      "blockedQuery": "Blockierte Abfrage",
+      "wait": "Wartezeit",
+      "blockingPid": "Blockierende PID",
+      "blockingQuery": "Blockierende Abfrage",
+      "probeCountRange": "Muss zwischen 1 und 20 liegen",
+      "probeIntervalRange": "Muss zwischen 100ms und 5s liegen"
+    },
+    "status": {
+      "enabled": "Aktiviert",
+      "disabled": "Deaktiviert",
+      "daemonActive": "Daemon aktiv",
+      "daemonDown": "Daemon nicht aktiv",
+      "lastHeartbeat": "Letztes Signal",
+      "lastEvent": "Letztes Ereignis",
+      "noEvents": "Noch keine Ereignisse"
+    },
+    "retentionMinDays": "Min. Aufbewahrungstage",
+    "windowSize": "Fenstergröße",
+    "thresholdPct": "Schwellenwert, %",
+    "spikeDuration": "Spike-Dauer",
+    "recoveryDuration": "Snapshot bei Rückgang",
+    "recoveryDurationHint": "Nach einem Spike einen Snapshot erstellen, wenn die Aktivität so lange unter dem Schwellwert bleibt (erfasst die Nachwirkungen). 0s = aus.",
+    "deferredInterval": "Verzögerter Snapshot",
+    "deferredIntervalHint": "Nach dem Spike-Snapshot einen weiteren Snapshot nach diesem Intervall einreihen (Queue übersteht Neustarts). 0s = aus.",
+    "save": "Speichern",
+    "saved": "Einstellungen gespeichert",
+    "overridden": "Überschrieben",
+    "direction": {
+      "label": "Richtung",
+      "both": "Beide Richtungen",
+      "masterToReplica": "Master → Replica",
+      "replicaToMaster": "Replica → Master"
+    },
+    "filter": {
+      "cluster": "Cluster",
+      "outcome": "Ergebnis",
+      "triggerType": "Trigger-Typ",
+      "from": "Ab Datum",
+      "to": "Bis Datum"
+    },
+    "history": {
+      "when": "Zeit",
+      "cluster": "Cluster",
+      "instance": "Host",
+      "trigger": "Trigger",
+      "outcome": "Ergebnis",
+      "noContext": "—",
+      "openSnapshot": "Snapshot öffnen"
+    },
+    "clusters": {
+      "name": "Cluster",
+      "status": "Status",
+      "triggers": "Trigger",
+      "actions": "Aktionen",
+      "hasOverride": "Override vorhanden",
+      "usesDefaults": "Verwendet Defaults",
+      "editTitle": "Cluster-Einstellungen {name}",
+      "edit": "Bearbeiten",
+      "close": "Schließen",
+      "loadError": "Cluster-Einstellungen konnten nicht geladen werden",
+      "saved": "Override gespeichert",
+      "noClusters": "Keine Cluster verfügbar",
+      "useDefault": "Standard",
+      "resetToDefault": "Auf Standard zurücksetzen",
+      "filterCluster": "Cluster suchen",
+      "thresholdRange": "Muss eine Ganzzahl in (0, 10000] sein"
+    },
+    "outcome": {
+      "snapshot_created": "Snapshot erstellt",
+      "skipped_debounce": "Übersprungen (Debounce)",
+      "skipped_below_baseline": "Übersprungen (unter Baseline)",
+      "skipped_wrong_direction": "Übersprungen (falsche Richtung)",
+      "skipped_storage_unavailable": "Übersprungen (Speicher nicht verfügbar)",
+      "error": "Fehler"
+    },
+    "context": {
+      "baseline": "Baseline",
+      "peak_value": "Spitze",
+      "threshold_pct": "Schwelle",
+      "duration": "Spike-Dauer",
+      "window_size": "Fenster",
+      "current": "Aktueller Wert",
+      "min_baseline_active": "Min. Baseline",
+      "from_role": "Von Rolle",
+      "to_role": "Zu Rolle",
+      "allowed": "Erlaubte Richtung"
+    },
+    "trigger": {
+      "activity_spike": "Aktivitäts-Spike",
+      "role_change": "Rollenwechsel",
+      "activity_drop": "Aktivitäts-Rückgang",
+      "deferred": "Verzögert",
+      "manual": "Manuell"
+    }
+  },
   "cpuTimeWarning": "Abfragen mit negativer CPU-Zeit gefunden (total_plan_time + total_exec_time − blk_read_time − blk_write_time < 0). Wenn pg_stat_statements.track_planning deaktiviert ist, ist plan_time = 0 und der negative Wert weist auf potenziell hohe Planungszeit hin. Aktivieren Sie track_planning für genaue Daten.",
   "header": {
     "lockedItem": "Gesperrtes Objekt",
@@ -167,7 +308,7 @@
     "parentSchema": "Eltern-Schema",
     "parent": "Elterntabelle",
     "childsCount": "Anzahl Partitionen",
-    "childsSize": "Partitionsgröße",
+    "childsSize": "Größe aller Partitionen",
     "childsAvgSize": "Durchschnittliche Partitionsgröße"
   },
   "noData": "Keine Daten",
@@ -380,7 +521,7 @@
     "loadMore": "Mehr laden",
     "noResults": "Keine Protokolle für den gewählten Zeitraum gefunden",
     "selectCluster": "Wählen Sie einen Cluster, um Protokolle anzuzeigen",
-    "notYandex": "Die Protokollanzeige ist nur für in Yandex Cloud erkannte Cluster (yandex-mdb) verfügbar",
+    "notSupported": "Die Protokollsuche ist für diesen Cluster nicht verfügbar",
     "partial": "Es werden nicht alle Einträge angezeigt: Scan-Limit erreicht ({scanned}). Bitte Filter verfeinern oder Zeitraum einschränken.",
     "range": {
       "1h": "Letzte Stunde",
@@ -403,7 +544,8 @@
       "badRequest": "Ungültige Log-Suchparameter",
       "notFound": "Cluster nicht gefunden",
       "upstream": "Fehler beim Zugriff auf die Yandex Cloud API",
-      "timeout": "Zeitüberschreitung bei der Antwort von Yandex Cloud"
+      "timeout": "Zeitüberschreitung bei der Antwort von Yandex Cloud",
+      "unsupported": "Die Protokollsuche ist für diesen Cluster nicht verfügbar"
     }
   },
   "Replication": "Replikation",
@@ -626,6 +768,7 @@
     "title": "Health Score",
     "tooltip": "Gesamtbewertung der PostgreSQL-Instanz (0–100). Berücksichtigt Verbindungen, Performance, Speicherung, Replikation und Wartung.",
     "openDetailsPage": "Details",
+    "metricsDegraded": "Metrik-Modus (Datasource) aktiv, Ziel zugeordnet, aber keine Metrik-Serie passte auf die Selektoren — der Score basiert auf fehlenden Signalen und ist möglicherweise zu niedrig. Prüfe das Label-Matching: GET /api/common/health-score/datasource/status.",
     "excellent": "Ausgezeichnet",
     "warning": "Achtung",
     "problems": "Probleme",
@@ -653,7 +796,8 @@
       "max_lag_bytes": "Max. Lag (Bytes)",
       "disconnected_replicas": "Getrennte Replikate",
       "max_xid_age": "Max. XID-Alter",
-      "max_vacuum_age_hours": "Max. VACUUM-Alter (h)",
+      "vacuum_backlog_tables": "Tabellen in VACUUM-Warteschlange",
+      "max_overdue_vacuum_age_hours": "Max. überfälliges VACUUM-Alter (h)",
       "tables_never_vacuumed": "Tabellen ohne VACUUM",
       "horizon_lag_xids": "Horizont-Rückstand (XID)",
       "requested_checkpoint_ratio": "Anteil außerplanmäßiger Checkpoints",
@@ -680,7 +824,12 @@
       "wal_level_minimal_with_replicas": "wal_level",
       "wal_level_logical_without_slots": "wal_level",
       "walMinimalReplicas": "minimal + Replicas (Replikation funktioniert nicht)",
-      "walLogicalNoSlots": "logical ohne aktive Slots"
+      "walLogicalNoSlots": "logical ohne aktive Slots",
+      "host_load_per_vcpu": "load / vCPU",
+      "pooler_saturation": "Pooler-Sättigung",
+      "latency_regression": "Latenz-Regression (×)",
+      "seq_scan_regression": "Seq-Scan-Regression (×)",
+      "disk_used_ratio": "Plattennutzung"
     },
     "page": {
       "title": "Health Score",
@@ -736,7 +885,8 @@
         "replication_lag_bytes": "pg_current_wal_lsn() - replay_lsn — WAL-Rückstand zum Anwenden.",
         "disconnected_replicas": "Replicas aus dasha.yaml, die nicht in pg_stat_replication erscheinen.",
         "xid_wraparound_risk": "max(age(datfrozenxid)) — Transaktionen bis zum Wraparound. 200M — Anti-Wraparound-Autovacuum, 2B — Read-Only.",
-        "stale_vacuum": "Tage seit dem letzten last_(auto)vacuum — Hinweis auf festhängendes Autovacuum.",
+        "vacuum_backlog": "Tabellen über ihrer Autovacuum-Schwelle (Dead-Tupel oder Inserts), inkl. reloptions — Länge der VACUUM-Warteschlange.",
+        "stale_vacuum": "Tage seit dem letzten last_(auto)vacuum unter den überfälligen Tabellen (über ihrer Autovacuum-Schwelle) — Hinweis auf festhängendes Autovacuum.",
         "tables_never_vacuumed": "Tabellen mit last_vacuum IS NULL AND last_autovacuum IS NULL.",
         "autovacuum_disabled": "Globales autovacuum=off — Bloat und XID-Alter wachsen unkontrolliert.",
         "track_counts_disabled": "track_counts=off — Autovacuum hat keine Statistik für Entscheidungen.",
@@ -751,10 +901,26 @@
         "longest_lock_wait_seconds": "EXTRACT(EPOCH FROM now() - state_change) des längsten Lock-Wait.",
         "ungranted_locks": "Zeilen in pg_locks mit granted=false — Warteschlange hinter dem Halter.",
         "deadlocks_rate": "Kumulativer deadlocks-Zähler seit pg_stat_database_reset — ohne per-Tag-Normalisierung nur „>0“ aussagekräftig.",
-        "lock_pool_saturation": "count(*) aus pg_locks / (max_connections × max_locks_per_transaction)."
+        "lock_pool_saturation": "count(*) aus pg_locks / (max_connections × max_locks_per_transaction).",
+        "checksum_failures": "Jede Rate > 0 bedeutet Datenkorruption; senkt den Score zusätzlich in den roten Bereich.",
+        "host_cpu_saturation": "load_avg_15 / n_vcpu. >1 heißt, die CPU-Warteschlange übersteigt die Kerne.",
+        "pooler_saturation": "server_conns / pool_size des Poolers; nahe 1.0 warten Clients.",
+        "sequence_exhaustion": "Schlechteste Sequence-Nutzung; ≥0.95 senkt den Score (Schreibvorgänge stoppen bei Überlauf).",
+        "latency_regression": "Aktuelle Latenz / saisonale Baseline (Stunde×Wochentag); workload-unabhängig.",
+        "seq_scan_regression": "Aktuelle Seq-Scan-Tupelrate / saisonale Baseline; Anstieg = Indizes ungenutzt oder veraltete Statistik (ANALYZE).",
+        "host_disk_space": "Belegung der vollsten Host-Dateisystems (pgSCV/YC); ≥90% senkt den Gesamt-Score in den roten Bereich."
       },
       "drilldownTitle": "Drill down (Detailansicht pro Datenbank)",
       "drilldown": "In der Tabelle „Datenbanken“ werden pro DB dieselben Metriken erfasst wie auf Instanzebene: Cache-Hit-Ratio, dead tuples, VACUUM-Alter. Klicke auf eine Zeile — die gewählte Datenbank wird zum Filter: die Regel-Engine wertet im DB-Scope aus, instance-only-Kategorien (Connections / Replication / Horizon / WAL / Locks) werden dabei ausgeblendet.",
+      "trendTitle": "Trend und saisonale Norm",
+      "trendIntro": "Wenn eine Metrics-Datasource konfiguriert ist, erscheint unter dem Gauge ein Trend: Score + saisonale Norm + Latenz. Die saisonale Norm ist der erwartete Wert einer Metrik für einen bestimmten Punkt im Wochenzyklus (die Last ist zyklisch: Werktage ≠ Wochenende, Tag ≠ Nacht), nicht ein globaler Durchschnitt. Sie wird so gebildet:",
+      "trendBucketing": "Bucketing nach „Wochenstunde“: Jeder Verlaufspunkt fällt in einen von 168 Buckets (7 Tage × 24 Stunden), hour_of_week = weekday×24 + hour.",
+      "trendMedian": "Median pro Bucket über ein längeres Fenster (Standard 28 Tage) — robust gegen Ausreißer: ein einmaliges nächtliches VACUUM oder ein Deploy verschiebt die Norm nicht.",
+      "trendUsage": "Der aktuelle Wert wird mit seiner eigenen Norm für diese Wochenstunde verglichen, nicht mit einem globalen Durchschnitt:",
+      "trendDips": "Einbrüche (Dips): Der Score ist mehr als die Schwelle unter die Norm dieser Wochenstunde gefallen → roter Punkt im Trend. Ein regelmäßiger nächtlicher Batch gilt nicht als Einbruch — seine Norm ist ebenfalls niedrig, kein Fehlalarm.",
+      "trendLatency": "Latenzregression → performance: aktuelle Latenz / saisonale Norm. Funktioniert bei jeder Last, weil die Abfrage mit sich selbst verglichen wird, nicht mit einem absoluten Schwellenwert von 50/200/1000 ms.",
+      "trendExample": "Beispiel: 50 ms am Montag 14:00 (Norm 45 ms) ist fast normal; dieselben 50 ms am Montag 03:00 (Norm 12 ms) sind ~4× der Norm — eine echte Anomalie. Ein Wert, zwei Urteile.",
+      "trendDegrade": "Saisonale Norm und Einbrüche erscheinen, sobald genug Verlauf vorhanden ist; bis dahin degradiert der Trend sanft — ohne Norm-Linie und Einbruch-Markierungen.",
       "penaltyPoints": {
         "connection_ratio": "0.60 → 0.80 → 0.95+",
         "idle_in_tx": "+5 pro Stk., max 30",
@@ -767,7 +933,8 @@
         "max_lag_bytes": ">16 MiB → max",
         "disconnected_replicas": "+25 pro Replica",
         "max_xid_age": "200 M → 1.6 B → 2.1 B",
-        "max_vacuum_age_hours": ">168 → >504 → >1440 h",
+        "vacuum_backlog_tables": ">5 → +1.5 pro Stk., max 15",
+        "max_overdue_vacuum_age_hours": ">168 → >504 → >1440 h",
         "tables_never_vacuumed": "+5 pro Stk., max 20",
         "horizon_lag_xids": "1 M → 10 M → 100 M",
         "requested_checkpoint_ratio": "≥5 % → ≥10 % → ≥20 %",
@@ -795,6 +962,7 @@
         "replication_lag_bytes": "≥16 MiB / ≥256 MiB / ≥1 GiB",
         "disconnected_replicas": "≥1 / ≥2 / ≥3",
         "xid_wraparound_risk": "≥150 M / ≥200 M / ≥1.6 B",
+        "vacuum_backlog": "≥6 / ≥15 / ≥30 Tabellen",
         "stale_vacuum": "≥7 / ≥21 / ≥60 Tage",
         "tables_never_vacuumed": "≥1 / ≥2 / ≥5",
         "autovacuum_disabled": "HIGH",
@@ -810,8 +978,15 @@
         "longest_lock_wait_seconds": "≥10 / ≥30 / ≥60 s",
         "ungranted_locks": "≥2 / ≥5 / ≥15",
         "deadlocks_rate": "LOW bei >0",
-        "lock_pool_saturation": "≥0.4 / ≥0.6 / ≥0.8"
-      }
+        "lock_pool_saturation": "≥0.4 / ≥0.6 / ≥0.8",
+        "checksum_failures": "HIGH bei >0",
+        "host_cpu_saturation": ">1 / >2 / >4 (load/vCPU)",
+        "pooler_saturation": "≥0.5 / ≥0.6 / ≥0.8",
+        "sequence_exhaustion": "≥0.75 / ≥0.85 / ≥0.95",
+        "latency_regression": "×1.5 / ×3 / ×6 vs. Baseline",
+        "seq_scan_regression": "×1.5 / ×3 / ×6 vs. Baseline",
+        "host_disk_space": "≥70 / ≥80 / ≥90 %"
+}
     },
     "databases": {
       "title": "Datenbanken",
@@ -962,10 +1137,15 @@
         "detail": "Auf modernen Betriebssystemen ist der Overhead minimal. Aktivieren für detaillierte I/O-Engpassanalyse.",
         "sql": "ALTER SYSTEM SET track_io_timing = on;\nSELECT pg_reload_conf();"
       },
+      "vacuum_backlog": {
+        "title": "VACUUM-Warteschlange wächst",
+        "short": "Tabellen, die auf Autovacuum warten: {metric_value}.",
+        "detail": "Anzahl der Tabellen über ihrer Autovacuum-Schwelle (Dead-Tupel oder Inserts, inkl. reloptions). Eine tiefe Warteschlange bedeutet, dass Autovacuum nicht hinterherkommt: autovacuum_max_workers erhöhen, autovacuum_vacuum_cost_limit anheben oder autovacuum_vacuum_cost_delay senken."
+      },
       "stale_vacuum": {
         "title": "VACUUM lief lange nicht",
-        "short": "Max. VACUUM-Alter: {metric_value} h.",
-        "detail": "Wenn Autovacuum nicht hinterherkommt, autovacuum_vacuum_scale_factor verschärfen."
+        "short": "Max. überfälliges VACUUM-Alter: {metric_value} h.",
+        "detail": "Alter der ältesten Tabelle, die bereits über ihrer Autovacuum-Schwelle liegt, aber lange nicht vakuumiert wurde. Wenn Autovacuum nicht hinterherkommt, autovacuum_vacuum_scale_factor für große Tabellen verschärfen."
       },
       "tables_never_vacuumed": {
         "title": "Tabellen ohne VACUUM",
@@ -1022,7 +1202,54 @@
         "title": "wal_level=logical ohne aktive Publikationen",
         "short": "wal_level=logical, aber keine aktiven logischen Slots.",
         "detail": "Der logische WAL-Level verursacht Overhead (mehr Daten im Journal, langsameres VACUUM). Wenn logische Replikation nicht genutzt wird — auf replica zurückstellen."
+      },
+      "checksum_failures": {
+        "title": "Prüfsummenfehler bei Datenseiten",
+        "short": "PostgreSQL hat Datenkorruption erkannt (checksum failures). Kritisch — Disk und Backups prüfen."
+      },
+      "host_cpu_saturation": {
+        "title": "Host-CPU-Sättigung",
+        "short": "15-Min-Load-Average über der Kernzahl (load/vCPU) — CPU-Warteschlange und höhere Latenz."
+      },
+      "pooler_saturation": {
+        "title": "Pooler-Sättigung",
+        "short": "Serverseitige Pooler-Verbindungen nahe der Pool-Kapazität — Clients warten in der Warteschlange."
+      },
+      "sequence_exhaustion": {
+        "title": "Sequence-Erschöpfung (ID-Überlauf)",
+        "short": "Eine Sequenz nähert sich dem Typ-Limit (z. B. int4-PK). Überlauf stoppt Schreibvorgänge — Migration auf bigint planen."
+      },
+      "latency_regression": {
+        "title": "Latenz-Regression bei Abfragen",
+        "short": "Die Abfrage-Latenz liegt über ihrer saisonalen Norm — Top-Abfragen und Last prüfen."
+      },
+      "seq_scan_regression": {
+        "title": "Anstieg von Sequential Scans bei großen Tabellen",
+        "short": "Die per Seq-Scan gelesene Tupelmenge liegt über ihrer saisonalen Norm — Indizes werden nicht mehr genutzt oder die Statistik ist veraltet.",
+        "detail": "Die Seq-Scan-Dynamik (Tupel/s) wird mit ihrer saisonalen Norm (Stunde×Wochentag) verglichen, sodass normale analytische Scans nicht als Norm gelten. Ein Anstieg bedeutet meist, dass der Planer den Index verlässt (veraltete Statistik → ANALYZE) oder ein Index fehlt/ungültig ist. Prüfen: ANALYZE auf heißen Tabellen; „Index-Nutzung“ und den Plan der Top-Abfragen ansehen (Seq Scan auf großen Tabellen); bei Bedarf Index hinzufügen/neu aufbauen."
+      },
+      "host_disk_space": {
+        "title": "Wenig freier Speicher auf dem Host",
+        "short": "Plattennutzung: {metric_pct}% (LOW ≥70%, MED ≥80%, HIGH ≥90%). Ab ≥90% wird der Gesamt-Score in den roten Bereich gesenkt.",
+        "detail": "Belegungsanteil des vollsten Host-Dateisystems (aus pgSCV-/Yandex-Cloud-Metriken). Ein volles Daten-Volume stoppt Schreibvorgänge und droht mit Absturz/Korruption — daher wirkt ≥90% als kritischer Floor auf jeder Rolle (Primary und Replica). Maßnahmen: Speicher freigeben (WAL, Logs, temporäre Dateien, alte Backups), Volume vergrößern, Tabellen-/Index-Bloat und WAL-Stau (inaktive Replikations-Slots) prüfen."
       }
+    },
+    "trend": {
+      "title": "Health-Score-Trend",
+      "baselineHelp": "Saisonale Norm — der Median des Scores über „Wochenstunde“-Buckets (Stunde × Wochentag) über ein längeres Verlaufsfenster (berücksichtigt die tägliche und wöchentliche Zyklik der Last). Der aktuelle Score wird mit der Norm genau dieser Wochenstunde verglichen; ein Abfall darunter über die Schwelle wird als roter Punkt markiert (Einbruch).",
+      "score": "Score",
+      "baseline": "Saisonale Norm",
+      "latency": "Latenz",
+      "latencyAxis": "ms",
+      "range": {
+        "24h": "24h",
+        "2d": "2T",
+        "7d": "7T",
+        "14d": "14T",
+        "30d": "30T"
+      },
+      "unavailable": "Trend nicht verfügbar: Metrics-Datasource nicht konfiguriert oder Ziel nicht zugeordnet.",
+      "noData": "Keine Daten für den Zeitraum."
     }
   }
 }

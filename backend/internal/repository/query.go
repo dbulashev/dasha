@@ -606,10 +606,66 @@ func (p *PgxPool) ResetQueryStats(ctx context.Context, clusterName, instanceName
 	queryCtx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	_, err = pool.Exec(queryCtx, "SELECT pg_stat_statements_reset()")
+	fn := p.pgssResetFunction()
+
+	_, err = pool.Exec(queryCtx, "SELECT "+fn+"()")
 	if err != nil {
-		return fmt.Errorf("pg_stat_statements_reset | %w", err)
+		return fmt.Errorf("%s | %w", fn, err)
 	}
 
 	return nil
+}
+
+// GetActiveConnectionCount returns the number of backends in state='active'
+// on the given instance (excluding the caller's own backend).
+func (p *PgxPool) GetActiveConnectionCount(ctx context.Context, clusterName, instanceName string) (int, error) {
+	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, "")
+	if err != nil {
+		return 0, fmt.Errorf("GetActiveConnectionCount | %w", err)
+	}
+
+	queryCtx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	var n int
+
+	err = pool.QueryRow(queryCtx,
+		`SELECT count(*) FROM pg_stat_activity WHERE state = 'active' AND pid <> pg_backend_pid()`,
+	).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("active count | %w", err)
+	}
+
+	return n, nil
+}
+
+// GetBlockedSessionCount returns how many backends are currently blocked on a
+// lock — a cheap, instance-wide probe used for background lock-spike tracking.
+func (p *PgxPool) GetBlockedSessionCount(ctx context.Context, clusterName, instanceName, databaseName string) (int, error) {
+	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
+	if err != nil {
+		return 0, fmt.Errorf("GetBlockedSessionCount | %w", err)
+	}
+
+	queryCtx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	return p.getBlockedSessionCount(queryCtx, pool)
+}
+
+func (p *PgxPool) getBlockedSessionCount(ctx context.Context, pool *pgxpool.Pool) (int, error) {
+	var n int
+
+	// Scope to the connected database so the cheap background count matches the
+	// detailed capture (blocked.tmpl.sql filters datname = current_database()).
+	err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM pg_stat_activity a
+		 WHERE a.datname = current_database()
+		   AND cardinality(pg_blocking_pids(a.pid)) > 0`,
+	).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("blocked count | %w", err)
+	}
+
+	return n, nil
 }

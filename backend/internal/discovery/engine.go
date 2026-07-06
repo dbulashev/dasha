@@ -16,7 +16,7 @@ import (
 
 const (
 	defaultRefreshInterval = 5 // minutes
-	discoveryTypeYandexMDB = "yandex-mdb"
+	discoveryTypeYandexMDB = config.SourceYandexMDB
 )
 
 // Engine runs periodic discovery and updates the Clusters provider.
@@ -203,6 +203,7 @@ func (e *Engine) discover(
 			ProviderID: yc.ID,
 			Labels: map[string]string{
 				"folder_id": folderID,
+				"folder":    folderName,
 			},
 		})
 	}

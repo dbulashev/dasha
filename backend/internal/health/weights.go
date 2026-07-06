@@ -88,23 +88,23 @@ func (w Weights) Normalize() Weights {
 }
 
 // byCategory returns the weight for a category name; zero if unknown.
-func (w Weights) byCategory(name string) float64 {
+func (w Weights) byCategory(name Category) float64 {
 	switch name {
-	case "connections":
+	case CategoryConnections:
 		return w.Connections
-	case "performance":
+	case CategoryPerformance:
 		return w.Performance
-	case "storage":
+	case CategoryStorage:
 		return w.Storage
-	case "replication":
+	case CategoryReplication:
 		return w.Replication
-	case "maintenance":
+	case CategoryMaintenance:
 		return w.Maintenance
-	case "horizon":
+	case CategoryHorizon:
 		return w.Horizon
-	case "wal_checkpoint":
+	case CategoryWalCheckpoint:
 		return w.WalCheckpoint
-	case "locks":
+	case CategoryLocks:
 		return w.Locks
 	default:
 		return 0

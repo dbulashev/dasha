@@ -60,26 +60,76 @@ replication_metrics AS (
         COUNT(*) FILTER (WHERE state != 'streaming')::int AS disconnected_replicas
     FROM pg_stat_replication
 ),
+-- Per-table autovacuum/analyze eligibility, mirroring PostgreSQL's own trigger
+-- formula (cf. describe_vacuum_stats): a table is "due" when its change counter
+-- exceeds threshold + scale_factor * reltuples. Per-table reloptions override the
+-- global GUCs (COALESCE), so custom per-table autovacuum settings are respected.
+table_autovac AS (
+    SELECT
+        s.n_dead_tup,
+        s.n_live_tup,
+        s.n_ins_since_vacuum,
+        s.n_mod_since_analyze,
+        s.last_vacuum,
+        s.last_autovacuum,
+        GREATEST(s.last_analyze, s.last_autoanalyze) AS last_any_analyze,
+        GREATEST(c.reltuples, 0)::bigint AS reltuples,
+        EXTRACT(EPOCH FROM (now() - GREATEST(s.last_vacuum, s.last_autovacuum))) / 3600.0 AS vacuum_age_hours,
+        COALESCE(ro.vac_base, g.vac_base) + COALESCE(ro.vac_sf, g.vac_sf) * GREATEST(c.reltuples, 0) AS vacuum_threshold,
+        COALESCE(ro.ins_base, g.ins_base) + COALESCE(ro.ins_sf, g.ins_sf) * GREATEST(c.reltuples, 0) AS insert_threshold,
+        COALESCE(ro.ana_base, g.ana_base) + COALESCE(ro.ana_sf, g.ana_sf) * GREATEST(c.reltuples, 0) AS analyze_threshold
+    FROM pg_stat_user_tables s
+    JOIN pg_class c ON c.oid = s.relid
+    CROSS JOIN (
+        SELECT
+            (SELECT setting::bigint FROM pg_settings WHERE name = 'autovacuum_vacuum_threshold')          AS vac_base,
+            (SELECT setting::float  FROM pg_settings WHERE name = 'autovacuum_vacuum_scale_factor')        AS vac_sf,
+            (SELECT setting::bigint FROM pg_settings WHERE name = 'autovacuum_vacuum_insert_threshold')    AS ins_base,
+            (SELECT setting::float  FROM pg_settings WHERE name = 'autovacuum_vacuum_insert_scale_factor') AS ins_sf,
+            (SELECT setting::bigint FROM pg_settings WHERE name = 'autovacuum_analyze_threshold')          AS ana_base,
+            (SELECT setting::float  FROM pg_settings WHERE name = 'autovacuum_analyze_scale_factor')       AS ana_sf
+    ) g
+    -- Per-table reloptions overrides, pivoted in one pass: a single
+    -- pg_options_to_table() call per table instead of one per option.
+    LEFT JOIN LATERAL (
+        SELECT
+            (max(option_value) FILTER (WHERE option_name = 'autovacuum_vacuum_threshold'))::bigint         AS vac_base,
+            (max(option_value) FILTER (WHERE option_name = 'autovacuum_vacuum_scale_factor'))::float        AS vac_sf,
+            (max(option_value) FILTER (WHERE option_name = 'autovacuum_vacuum_insert_threshold'))::bigint   AS ins_base,
+            (max(option_value) FILTER (WHERE option_name = 'autovacuum_vacuum_insert_scale_factor'))::float AS ins_sf,
+            (max(option_value) FILTER (WHERE option_name = 'autovacuum_analyze_threshold'))::bigint         AS ana_base,
+            (max(option_value) FILTER (WHERE option_name = 'autovacuum_analyze_scale_factor'))::float       AS ana_sf
+        FROM pg_options_to_table(c.reloptions)
+    ) ro ON true
+),
 maintenance_metrics AS (
-    -- max_xid_age is a per-DB scalar from pg_database; it must NOT be
-    -- cross-joined with pg_stat_user_tables — an empty
-    -- pg_stat_user_tables would zero out the cross-join and silently hide
-    -- a dangerous XID age. The rest of the row aggregates user tables.
+    -- max_xid_age is a per-DB scalar from pg_database; kept as its own subquery so
+    -- an empty pg_stat_user_tables cannot zero out a dangerous XID age. The vacuum
+    -- queue is derived from table_autovac (PG's own thresholds), so large static
+    -- tables/partitions never inflate it.
     SELECT
         (
             SELECT COALESCE(age(datfrozenxid), 0)::bigint
             FROM pg_database
             WHERE datname = current_database()
         ) AS max_xid_age,
-        COALESCE(MAX(
-            EXTRACT(EPOCH FROM (now() - GREATEST(last_vacuum, last_autovacuum))) / 3600.0
-        ) FILTER (WHERE n_live_tup + n_dead_tup > 10000), 0)::float8 AS max_vacuum_age_hours,
-        COUNT(*) FILTER (
+        -- vacuum queue depth: tables eligible for autovacuum right now, by the
+        -- dead-tuple trigger OR the insert-only trigger (append-only tables).
+        (
+            SELECT COUNT(*) FROM table_autovac
+            WHERE n_dead_tup > vacuum_threshold OR n_ins_since_vacuum > insert_threshold
+        )::int AS vacuum_backlog_tables,
+        -- oldest vacuum among queued tables: high only when autovacuum is genuinely
+        -- behind (eligible but unvacuumed for a long time).
+        (
+            SELECT COALESCE(MAX(vacuum_age_hours), 0) FROM table_autovac
+            WHERE n_dead_tup > vacuum_threshold OR n_ins_since_vacuum > insert_threshold
+        )::float8 AS max_overdue_vacuum_age_hours,
+        (
+            SELECT COUNT(*) FROM table_autovac
             WHERE n_live_tup + n_dead_tup > 10000
-            AND last_vacuum IS NULL
-            AND last_autovacuum IS NULL
+              AND last_vacuum IS NULL AND last_autovacuum IS NULL
         )::int AS tables_never_vacuumed
-    FROM pg_stat_user_tables
 ),
 -- Horizon: oldest backend_xmin in the cluster pins the MVCC horizon for
 -- VACUUM in every database, so this scan is cluster-wide — no datname
@@ -169,25 +219,16 @@ hot_update_metrics AS (
     FROM pg_stat_user_tables
     WHERE n_tup_upd > 1000
 ),
--- Tables with stale planner stats: significantly modified since last analyze
--- AND last analyze was over 24h ago. Threshold = 0.5 × autovacuum_analyze
--- formula so we catch tables that are well past «should have been analyzed».
+-- Tables with stale planner stats: modified well past their (reloption-aware)
+-- auto-analyze threshold AND not analyzed in 24h. Reuses table_autovac so the
+-- threshold honours per-table reloptions, consistent with the vacuum queue. The
+-- 0.5x keeps the early-warning character (halfway to «should have been analyzed»).
 stale_stats_metric AS (
     SELECT COUNT(*)::int AS stale_planner_stats_tables
-    FROM pg_stat_user_tables st
-    JOIN pg_class c ON c.oid = st.relid
-    CROSS JOIN (
-        SELECT
-            (SELECT setting::int   FROM pg_settings WHERE name = 'autovacuum_analyze_threshold')    AS thr,
-            (SELECT setting::float FROM pg_settings WHERE name = 'autovacuum_analyze_scale_factor') AS sf
-    ) p
-    WHERE GREATEST(c.reltuples, 0) > 0
-      AND st.n_mod_since_analyze >
-          0.5 * (p.thr + p.sf * GREATEST(c.reltuples, 0))
-      AND GREATEST(
-              COALESCE(st.last_analyze,     '-infinity'::timestamptz),
-              COALESCE(st.last_autoanalyze, '-infinity'::timestamptz)
-          ) < now() - interval '24 hours'
+    FROM table_autovac
+    WHERE reltuples > 0
+      AND n_mod_since_analyze > 0.5 * analyze_threshold
+      AND COALESCE(last_any_analyze, '-infinity'::timestamptz) < now() - interval '24 hours'
 ),
 wal_level_metric AS (
     SELECT setting AS wal_level
@@ -223,7 +264,8 @@ SELECT
     r.disconnected_replicas,
     -- maintenance
     m.max_xid_age,
-    m.max_vacuum_age_hours,
+    m.vacuum_backlog_tables,
+    m.max_overdue_vacuum_age_hours,
     m.tables_never_vacuumed,
     g.autovacuum_enabled,
     g.track_counts_enabled,

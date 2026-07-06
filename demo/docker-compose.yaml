@@ -263,12 +263,70 @@ services:
     networks:
       - dasha-demo
 
+  # One-shot: enables auto-snapshots with demo-friendly timings after
+  # the backend has migrated storage and seeded default config.
+  autosnapshot-seed:
+    image: postgres:18-alpine
+    entrypoint:
+      - sh
+      - -c
+      - |
+        until pg_isready -h storage-db -U dasha -d dasha_storage; do sleep 2; done
+        until psql -h storage-db -U dasha -d dasha_storage -tAc \
+          "SELECT 1 FROM autosnapshot_config_global WHERE id = 1" | grep -q 1; do
+          echo "waiting for backend to run migrations..."
+          sleep 3
+        done
+        psql -h storage-db -U dasha -d dasha_storage -f /autosnapshot-seed.sql
+        echo "autosnapshot config seeded"
+    environment:
+      PGPASSWORD: dasha
+    volumes:
+      - ./sql/autosnapshot-seed.sql:/autosnapshot-seed.sql:ro
+    depends_on:
+      storage-db:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    networks:
+      - dasha-demo
+    restart: on-failure
+
+  # Auto-snapshot daemon — same image, "autosnapshot" subcommand.
+  # Uses sh to run migrations first in case daemon starts before backend.
+  autosnapshot:
+    build:
+      context: ..
+      dockerfile: demo/Dockerfile.backend
+    command: ["sh", "-c", "dasha migrate && dasha autosnapshot"]
+    volumes:
+      - ./dasha-demo.yaml:/etc/dasha/dasha.yaml:ro
+    depends_on:
+      storage-db:
+        condition: service_healthy
+      autosnapshot-seed:
+        condition: service_completed_successfully
+      pg18-master:
+        condition: service_healthy
+      pg17-master:
+        condition: service_healthy
+      pg18-standalone:
+        condition: service_healthy
+    networks:
+      - dasha-demo
+    restart: unless-stopped
+
   # ============================================================
   # Workload Generator
   # ============================================================
   workload-generator:
     image: postgres:18-alpine
     entrypoint: ["/workload-generator.sh"]
+    # Set SPIKE_GENERATOR=off to disable the built-in periodic activity spiker
+    # (keeps the steady baseline) for a clean controlled test via spike-test.sh:
+    #   SPIKE_GENERATOR=off docker compose -f demo/docker-compose.yaml up -d --force-recreate workload-generator
+    environment:
+      SPIKE_GENERATOR: "${SPIKE_GENERATOR:-on}"
     volumes:
       - ./scripts/workload-generator.sh:/workload-generator.sh:ro
     depends_on:

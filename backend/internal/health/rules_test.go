@@ -27,13 +27,13 @@ func TestRegistry_NoDuplicateIDs(t *testing.T) {
 
 func TestEvaluate_HealthyDatabaseTriggersNoRules(t *testing.T) {
 	m := RawMetrics{
-		TotalConnections:    5,
-		MaxConnections:      100,
-		CacheHitRatio:       99.5,
-		ReplicaCount:        1,
-		MaxReplayLagSeconds: 0.1,
-		MaxXidAge:           50_000_000,
-		MaxVacuumAgeHours:   12,
+		TotalConnections:         5,
+		MaxConnections:           100,
+		CacheHitRatio:            99.5,
+		ReplicaCount:             1,
+		MaxReplayLagSeconds:      0.1,
+		MaxXidAge:                50_000_000,
+		MaxOverdueVacuumAgeHours: 12,
 		// Healthy state for new P1 rules:
 		AutovacuumEnabled:    true,
 		TrackCountsEnabled:   true,
@@ -551,6 +551,39 @@ func TestRule_HighNewpageUpdateRatio(t *testing.T) {
 	}
 }
 
+func TestRule_VacuumBacklog(t *testing.T) {
+	r := findRule(t, "vacuum_backlog")
+
+	if hit := r.Evaluate(RawMetrics{VacuumBacklogTables: 5}); hit != nil {
+		t.Errorf("5 tables → nil, got %+v", hit)
+	}
+
+	if hit := r.Evaluate(RawMetrics{VacuumBacklogTables: 6}); hit == nil || hit.Severity != SeverityLow {
+		t.Errorf("6 tables → LOW, got %+v", hit)
+	}
+
+	if hit := r.Evaluate(RawMetrics{VacuumBacklogTables: 15}); hit == nil || hit.Severity != SeverityMedium {
+		t.Errorf("15 tables → MEDIUM, got %+v", hit)
+	}
+
+	if hit := r.Evaluate(RawMetrics{VacuumBacklogTables: 30}); hit == nil || hit.Severity != SeverityHigh {
+		t.Errorf("30 tables → HIGH, got %+v", hit)
+	}
+}
+
+func TestStaleVacuumUsesOverdueAge(t *testing.T) {
+	r := findRule(t, "stale_vacuum")
+
+	// Below 7 days overdue → no hit; well past 60 days → HIGH.
+	if hit := r.Evaluate(RawMetrics{MaxOverdueVacuumAgeHours: 100}); hit != nil {
+		t.Errorf("100h → nil, got %+v", hit)
+	}
+
+	if hit := r.Evaluate(RawMetrics{MaxOverdueVacuumAgeHours: 2000}); hit == nil || hit.Severity != SeverityHigh {
+		t.Errorf("2000h → HIGH, got %+v", hit)
+	}
+}
+
 func TestRule_StalePlannerStats(t *testing.T) {
 	r := findRule(t, "stale_planner_stats")
 
@@ -617,4 +650,34 @@ func findRule(t *testing.T, id string) Rule {
 	t.Fatalf("rule %q not found in Registry", id)
 
 	return Rule{}
+}
+
+func TestRules_MetricsBackedConditionsFire(t *testing.T) {
+	cases := []struct {
+		name string
+		m    RawMetrics
+		rule string
+	}{
+		{"checksum", RawMetrics{ChecksumFailuresRate: 1}, "checksum_failures"},
+		{"host cpu", RawMetrics{NumVCPU: 2, LoadAvg15: 8}, "host_cpu_saturation"},
+		{"pooler", RawMetrics{PoolerPoolSize: 10, PoolerServerConns: 9}, "pooler_saturation"},
+		{"sequence", RawMetrics{SequenceExhaustionMax: 0.9}, "sequence_exhaustion"},
+		{"latency", RawMetrics{LatencyRegressionRatio: 4}, "latency_regression"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			found := false
+
+			for _, r := range Evaluate(tc.m, false) {
+				if r.RuleID == tc.rule {
+					found = true
+				}
+			}
+
+			if !found {
+				t.Errorf("expected rule %q to fire for its metrics-backed condition", tc.rule)
+			}
+		})
+	}
 }

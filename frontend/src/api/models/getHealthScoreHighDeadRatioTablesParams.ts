@@ -12,4 +12,6 @@ export type GetHealthScoreHighDeadRatioTablesParams = {
   cluster_name: ClusterNameParameter
   instance: InstanceParameter
   database: DatabaseParameter
+  limit?: number
+  offset?: number
 }

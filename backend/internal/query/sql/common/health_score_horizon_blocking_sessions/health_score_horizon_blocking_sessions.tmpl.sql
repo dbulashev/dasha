@@ -13,4 +13,4 @@ SELECT
 FROM pg_stat_activity
 WHERE backend_xmin IS NOT NULL
 ORDER BY backend_xmin
-LIMIT 10
+LIMIT $1 OFFSET $2

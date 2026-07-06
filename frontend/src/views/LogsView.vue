@@ -7,15 +7,15 @@ import LogSearchSection from '@/components/logs/LogSearchSection.vue'
 const { t } = useI18n()
 const { clusterName, currentCluster } = useClusterInfo()
 
-const isYandex = computed(() => currentCluster.value?.source === 'yandex-mdb')
+const supportsLogs = computed(() => !!currentCluster.value?.supports_logs)
 </script>
 
 <template>
   <v-alert v-if="!clusterName" type="info" variant="tonal">
     {{ t('logs.selectCluster') }}
   </v-alert>
-  <v-alert v-else-if="!isYandex" type="info" variant="tonal">
-    {{ t('logs.notYandex') }}
+  <v-alert v-else-if="!supportsLogs" type="info" variant="tonal">
+    {{ t('logs.notSupported') }}
   </v-alert>
   <LogSearchSection v-else :key="clusterName" />
 </template>

@@ -41,6 +41,8 @@ function mapError(err: unknown): string {
         return t('logs.error.badRequest')
       case 404:
         return t('logs.error.notFound')
+      case 501:
+        return t('logs.error.unsupported')
       case 502:
         return t('logs.error.upstream')
       case 504:
@@ -89,7 +91,12 @@ async function runSearch(filters: LogFilters, append: boolean) {
   } catch (err) {
     errorMsg.value = mapError(err)
     if (!append) {
-      items.value = []
+      // A fresh search failed: drop the previous search's result state so
+      // stale "no results" / "scan limit" alerts don't render next to the error.
+      searched.value = false
+      dedup.value = false
+      partial.value = false
+      scanned.value = 0
     }
   } finally {
     loading.value = false

@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -51,7 +52,9 @@ func New(
 	e.Debug = true
 
 	e.HTTPErrorHandler = func(err error, c echo.Context) {
-		if !c.Response().Committed {
+		// A cancelled request context means the client disconnected — nobody
+		// will receive the response, so don't log it as a server error.
+		if !c.Response().Committed && !errors.Is(err, context.Canceled) {
 			var he *echo.HTTPError
 			if errors.As(err, &he) {
 				if he.Code >= http.StatusInternalServerError {

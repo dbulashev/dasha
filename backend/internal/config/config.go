@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
+
+	"github.com/dbulashev/dasha/internal/metrics"
 )
 
 var (
@@ -29,12 +32,12 @@ type AuthToken struct {
 }
 
 type OIDCConfig struct {
-	IssuerURL           string   `mapstructure:"issuer_url"`
-	ClientID            string   `mapstructure:"client_id"`
-	ClientSecret        string   `mapstructure:"client_secret"`
-	ClientSecretFromEnv string   `mapstructure:"client_secret_from_env"`
-	Scopes              []string `mapstructure:"scopes"`
-	RedirectURL         string   `mapstructure:"redirect_url"`
+	IssuerURL           string            `mapstructure:"issuer_url"`
+	ClientID            string            `mapstructure:"client_id"`
+	ClientSecret        string            `mapstructure:"client_secret"`
+	ClientSecretFromEnv string            `mapstructure:"client_secret_from_env"`
+	Scopes              []string          `mapstructure:"scopes"`
+	RedirectURL         string            `mapstructure:"redirect_url"`
 	RoleClaim           string            `mapstructure:"role_claim"`   // default: "realm_access.roles"
 	RoleMapping         map[string]string `mapstructure:"role_mapping"` // e.g. {"dba_team": "admin", "dev_team": "viewer"}
 }
@@ -112,6 +115,16 @@ type Cluster struct {
 	Labels     map[string]string `mapstructure:"labels"`
 }
 
+// SourceYandexMDB marks clusters discovered from Yandex Managed Databases.
+const SourceYandexMDB = "yandex-mdb"
+
+// SupportsLogs reports whether cluster logs can be searched via the provider
+// API. Single source of truth for the capability — exposed to the frontend as
+// Cluster.supports_logs and checked by the logs service.
+func (c Cluster) SupportsLogs() bool {
+	return c.Source == SourceYandexMDB && c.ProviderID != "" && c.Labels["folder_id"] != ""
+}
+
 // DiscoveryClusterFilter defines regex matching rules for discovered clusters.
 type DiscoveryClusterFilter struct {
 	Name        string  `mapstructure:"name"`
@@ -170,13 +183,40 @@ func (c LogSearchConfig) WithDefaults() LogSearchConfig {
 
 // StorageConfig holds optional snapshot storage database settings.
 type StorageConfig struct {
+	// DSN is the service connection: regular reads/writes (DML). In hardened
+	// installs this role has no DDL privileges.
 	DSN        string `mapstructure:"dsn"`
 	DSNFromEnv string `mapstructure:"dsn_from_env"`
+
+	// DSNMigration is a privileged connection allowed to run DDL — migrations
+	// (CREATE/ALTER tables) and daily partition creation. Falls back to DSN when
+	// empty, so single-role installs keep working unchanged.
+	DSNMigration        string `mapstructure:"dsn_migration"`
+	DSNMigrationFromEnv string `mapstructure:"dsn_migration_from_env"`
+
+	// LeaderElection enables advisory-lock leader election for the autosnapshot
+	// daemon, making it safe to run multiple replicas (one becomes leader).
+	// Disabled by default: a session-level advisory lock requires a dedicated,
+	// long-lived connection, which is incompatible with transaction-pooling
+	// proxies (e.g. PgBouncer in transaction mode). Enable only when the daemon
+	// reaches the storage DB via a direct/session-pooled connection and you run
+	// more than one replica.
+	LeaderElection bool `mapstructure:"leader_election"`
 }
 
 // Enabled returns true if the storage DSN is configured.
 func (s *StorageConfig) Enabled() bool {
 	return s.DSN != ""
+}
+
+// MigrationDSN returns the DDL-capable connection string, falling back to the
+// service DSN when no dedicated migration role is configured.
+func (s *StorageConfig) MigrationDSN() string {
+	if s.DSNMigration != "" {
+		return s.DSNMigration
+	}
+
+	return s.DSN
 }
 
 // Config is the top-level application configuration.
@@ -199,6 +239,61 @@ type Config struct {
 
 	// LogSearch holds global limits for Yandex Cloud log search.
 	LogSearch LogSearchConfig `mapstructure:"log_search"`
+
+	// PgssResetFunction is an optional custom function (schema-qualified, no args)
+	// to call instead of pg_stat_statements_reset(). Useful when the connecting
+	// role lacks EXECUTE on pg_stat_statements_reset but a DBA exposes a SECURITY
+	// DEFINER wrapper (e.g. "monitoring.reset_pgss"). Empty = pg_stat_statements_reset.
+	PgssResetFunction string `mapstructure:"pgss_reset_function"`
+
+	// DBPool tunes the connection pools to monitored clusters (one pool per
+	// host/database). The storage pool is tuned via storage.dsn query params
+	// (pool_max_conns, pool_max_conn_idle_time, ...) instead.
+	DBPool PoolConfig `mapstructure:"db_pool"`
+
+	// AutosnapshotDBPool overrides DBPool for the `dasha autosnapshot` daemon —
+	// e.g. a short max_conn_idle_time so the daemon frees connections between
+	// polls when the monitoring role has a tight connection budget. Per-field:
+	// unset (zero) fields inherit DBPool.
+	AutosnapshotDBPool PoolConfig `mapstructure:"autosnapshot_db_pool"`
+
+	// HealthScore groups Health Score settings (metrics-backed mode).
+	HealthScore HealthScoreConfig `mapstructure:"health_score"`
+}
+
+// PoolConfig tunes a pgx connection pool. Zero MaxConns/MaxConnIdleTime fall back
+// to Dasha's pooler-friendly defaults (4 / 2m) rather than pgx's (max(4,NumCPU) /
+// 30m), since Dasha opens one pool per (host,database) behind a per-user pooler.
+// Zero MaxConnLifetime keeps the pgx default (1h).
+type PoolConfig struct {
+	MaxConns        int32         `mapstructure:"max_conns"`
+	MaxConnIdleTime time.Duration `mapstructure:"max_conn_idle_time"`
+	MaxConnLifetime time.Duration `mapstructure:"max_conn_lifetime"`
+}
+
+// EffectiveAutosnapshotPool returns DBPool with any non-zero AutosnapshotDBPool
+// fields applied on top (per-field override).
+func (c Config) EffectiveAutosnapshotPool() PoolConfig {
+	p := c.DBPool
+
+	if c.AutosnapshotDBPool.MaxConns != 0 {
+		p.MaxConns = c.AutosnapshotDBPool.MaxConns
+	}
+
+	if c.AutosnapshotDBPool.MaxConnIdleTime != 0 {
+		p.MaxConnIdleTime = c.AutosnapshotDBPool.MaxConnIdleTime
+	}
+
+	if c.AutosnapshotDBPool.MaxConnLifetime != 0 {
+		p.MaxConnLifetime = c.AutosnapshotDBPool.MaxConnLifetime
+	}
+
+	return p
+}
+
+// HealthScoreConfig groups Health Score settings.
+type HealthScoreConfig struct {
+	Metrics metrics.Config `mapstructure:"metrics"`
 }
 
 // Clusters is the interface for obtaining the current list of clusters.

@@ -64,9 +64,10 @@ type HealthScoreDatabaseMetrics struct {
 	TablesHighBloat int
 
 	// Maintenance
-	MaxXidAge           int64
-	MaxVacuumAgeHours   float64
-	TablesNeverVacuumed int
+	MaxXidAge                int64
+	VacuumBacklogTables      int
+	MaxOverdueVacuumAgeHours float64
+	TablesNeverVacuumed      int
 }
 
 type HealthScoreMetrics struct {
@@ -98,13 +99,14 @@ type HealthScoreMetrics struct {
 	DisconnectedReplicas int
 
 	// Maintenance
-	MaxXidAge               int64
-	MaxVacuumAgeHours       float64
-	TablesNeverVacuumed     int
-	AutovacuumEnabled       bool
-	TrackCountsEnabled      bool
-	TablesWithAutovacuumOff int
-	MaxRelfrozenxidAge      int64
+	MaxXidAge                int64
+	VacuumBacklogTables      int
+	MaxOverdueVacuumAgeHours float64
+	TablesNeverVacuumed      int
+	AutovacuumEnabled        bool
+	TrackCountsEnabled       bool
+	TablesWithAutovacuumOff  int
+	MaxRelfrozenxidAge       int64
 
 	// Horizon
 	HorizonLagXids int64

@@ -12,4 +12,4 @@ WHERE c.relkind IN ('r', 'm', 't')
   AND c.reloptions IS NOT NULL
   AND 'autovacuum_enabled=false' = ANY (c.reloptions)
 ORDER BY n.nspname, c.relname
-LIMIT 50
+LIMIT $1 OFFSET $2

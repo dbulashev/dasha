@@ -12,6 +12,7 @@ import (
 
 	"github.com/gorilla/securecookie"
 	"github.com/labstack/echo/v4"
+	"go.uber.org/zap"
 	"golang.org/x/oauth2"
 
 	"github.com/dbulashev/dasha/internal/config"
@@ -49,9 +50,10 @@ func (j jsonSerializer) Deserialize(src []byte, dst any) error {
 type SessionManager struct {
 	sc     *securecookie.SecureCookie
 	maxAge int
+	logger *zap.Logger
 }
 
-func NewSessionManager(cfg config.AuthConfig) *SessionManager {
+func NewSessionManager(cfg config.AuthConfig, logger *zap.Logger) *SessionManager {
 	maxAge := cfg.CookieMaxAge
 	if maxAge == 0 {
 		maxAge = defaultMaxAge
@@ -74,7 +76,7 @@ func NewSessionManager(cfg config.AuthConfig) *SessionManager {
 	sc.MaxLength(0) // disable internal limit; we handle size check in SetSession
 	sc.SetSerializer(jsonSerializer{})
 
-	return &SessionManager{sc: sc, maxAge: maxAge}
+	return &SessionManager{sc: sc, maxAge: maxAge, logger: logger}
 }
 
 const maxCookieSize = 4000 // browsers silently drop cookies > 4096 bytes
@@ -145,10 +147,24 @@ func (sm *SessionManager) ValidateAndRefresh(c echo.Context, provider *OIDCProvi
 
 	if time.Now().Unix() > session.ExpiresAt && session.RefreshToken != "" {
 		tokenSource := provider.TokenSource(c.Request().Context(), session.RefreshToken)
+		if tokenSource == nil {
+			sm.logger.Warn("session token refresh skipped: OIDC provider not ready; logging user out",
+				zap.String("user", session.UserName))
+			sm.ClearSession(c)
+
+			return nil, fmt.Errorf("OIDC provider not ready for token refresh") //nolint:goerr113
+		}
 
 		newToken, err := tokenSource.Token()
 		if err != nil {
+			// Likely culprits: IdP briefly unreachable at expiry time, or a refresh
+			// token already consumed by a concurrent request under Keycloak refresh-
+			// token rotation. The error text tells them apart (network/timeout vs
+			// invalid_grant).
+			sm.logger.Warn("session token refresh failed; logging user out",
+				zap.String("user", session.UserName), zap.Error(err))
 			sm.ClearSession(c)
+
 			return nil, fmt.Errorf("token refresh failed | %w", err)
 		}
 
@@ -233,7 +249,7 @@ func (sm *SessionManager) ExchangeCode(c echo.Context, provider *OIDCProvider) (
 		return nil, fmt.Errorf("missing authorization code") //nolint:goerr113
 	}
 
-	token, err := provider.OAuth2Cfg.Exchange(c.Request().Context(), code)
+	token, err := provider.Exchange(c.Request().Context(), code)
 	if err != nil {
 		return nil, fmt.Errorf("token exchange | %w", err)
 	}

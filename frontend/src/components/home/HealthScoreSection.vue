@@ -79,6 +79,15 @@ const ROLLBACK_THRESHOLD = 0.05
     <v-card-text>
       <v-skeleton-loader v-if="loading" type="heading, text@3" />
       <template v-else-if="data">
+        <v-alert
+          v-if="data.metrics_degraded"
+          type="warning"
+          variant="tonal"
+          density="compact"
+          class="mb-4"
+          icon="mdi-alert"
+          :text="t('healthScore.metricsDegraded')"
+        />
         <div class="d-flex align-center ga-6 mb-4">
           <HealthScoreGauge :score="data.score" :size="100" />
           <div class="flex-grow-1">

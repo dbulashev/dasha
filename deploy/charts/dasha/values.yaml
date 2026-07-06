@@ -22,6 +22,19 @@ config:
   #   max_page_size: 1000     # upper bound for page_size
   #   timeout_seconds: 30     # upstream read timeout
 
+  # -- Connection pools to monitored clusters (one pool per host+database).
+  # Defaults: max_conns 4, max_conn_idle_time 2m. Behind a per-user connection
+  # pooler (Odyssey/PgBouncer) keep (hosts × databases) × max_conns + the
+  # autosnapshot pool under the user's pool_size limit; a short idle time returns
+  # connections to the pooler between refreshes. Example tightening below the
+  # defaults to fit a small per-user pool_size:
+  # db_pool:
+  #   max_conns: 2
+  #   max_conn_idle_time: 30s
+  # autosnapshot_db_pool:   # the daemon connects as the same user; per-field override of db_pool
+  #   max_conns: 2
+  #   max_conn_idle_time: 15s
+
   # -- Authentication & authorization
   # auth:
   #   mode: none  # none | token | oidc
@@ -74,6 +87,110 @@ config:
   #      clusters:
   #        - name: ".*"
 
+  # -- Snapshot storage (optional): a PostgreSQL DB for pgss snapshots and Health
+  # Score weight overrides. The DB connection can be split into two roles:
+  #   dsn           — service role used for all reads/writes (DML); in a hardened
+  #                   setup this role has NO privilege to create/alter tables.
+  #   dsn_migration — privileged role that runs DDL: migrations and daily
+  #                   partition creation. Falls back to dsn when unset.
+  # Provide both as *_from_env so credentials come from a Secret, not the ConfigMap.
+  # storage:
+  #   dsn_from_env: DASHA_STORAGE_DSN                      # service role (DML)
+  #   dsn_migration_from_env: DASHA_STORAGE_DSN_MIGRATION  # DDL role (optional)
+  # Run `dasha migrate` (e.g. a Job / initContainer using the migration role) to
+  # create the tables and partitions up front; the long-running service then
+  # only needs the DML role. Partition creation at snapshot-write time also uses
+  # dsn_migration (falling back to dsn).
+
+  # -- Metrics-backed Health Score (optional)
+  # Computes the score, recommendations and a history trend from a
+  # Prometheus/VictoriaMetrics-compatible datasource instead of the point-in-time
+  # SQL snapshot; falls back to the snapshot when the datasource is unavailable or
+  # a target is unmatched. Durations are Go strings (e.g. 10s, 672h).
+  # Validate label matching at: GET /api/common/health-score/datasource/status
+  # health_score:
+  #   metrics:
+  #     enabled: true
+  #     datasource:
+  #       url: "http://victoria-metrics.monitoring.svc:8428"  # VictoriaMetrics / Prometheus base URL
+  #       # timeout: 10s
+  #       # query_cache_ttl: 30s
+  #       # auth:                            # datasource credentials — treat as secret
+  #       #   type: bearer                    # none | bearer | basic
+  #       #   token_from_env: DASHA_METRICS_DATASOURCE_TOKEN        # bearer: env-injected token
+  #       #   # username: monitoring          # basic auth:
+  #       #   # password_from_env: DASHA_METRICS_DATASOURCE_PASSWORD
+  #       #   # token / password               # inline alternative (avoid — lands in the ConfigMap)
+  #       # Provide the env vars via secrets.existingSecret or secrets.externalSecret.data below.
+  #
+  #     # Which provider feeds each role: core = PG internals, pooler, host.
+  #     providers_default:
+  #       core: pgscv         # pgscv (self-managed and YC MDB via remote scrape)
+  #       pooler: yc_native   # yc_native (YC pooler) | pgbouncer (self-managed via pgSCV)
+  #       host: yc_native     # yc_native (YC host)   | pgscv_system (self-managed system collector)
+  #
+  #     # Label-selector templates per provider — Go templates over a target's
+  #     # vars: {{.Env}} (discovery label, e.g. folder), {{.Cluster}}/{{.Service}}
+  #     # (cluster name — most YC MDB + pgscv schemes key by name), {{.ServiceID}}
+  #     # (MDB cluster UUID, for schemes keyed by id), {{.Host}} (FQDN), {{.Container}}
+  #     # (short host). The defaults below already use the name, so a YC MDB + pgscv
+  #     # setup typically needs NO selectors override; set them only to match a
+  #     # different label scheme (e.g. resource_id="{{.ServiceID}}" if you key by UUID).
+  #     # selectors:
+  #     #   pgscv:            'cluster="{{.Env}}",service_id="{{.Service}}",container="{{.Container}}"'
+  #     #   yc_native_host:   'cluster="{{.Env}}",resource_id="{{.Service}}"'
+  #     #   yc_native_pooler: 'cluster="{{.Env}}",subcluster_name="{{.Service}}"'
+  #     #   pgbouncer:        'cluster="{{.Env}}",service_id="{{.Service}}",container="{{.Container}}"'
+  #     #   pgscv_system:     'cluster="{{.Env}}",service_id="{{.Service}}",container="{{.Container}}"'
+  #
+  #     # Map each Dasha (cluster, instance) onto the datasource label values.
+  #     targets:
+  #       - cluster: my-cluster        # Dasha cluster name
+  #         instance: pg-host          # Dasha instance (host)
+  #         env: prod                  # -> cluster label
+  #         service: my-cluster        # -> service_id / resource_id / subcluster_name
+  #         host: pg-host.example.com  # -> host label (full FQDN, join key)
+  #         container: pg-host         # -> container label (pgSCV short FQDN)
+  #         # providers:               # optional per-target provider override
+  #         #   core: pgscv
+  #
+  #     # Service discovery: clusters found via `discovery:` (e.g. Yandex MDB) are
+  #     # auto-mapped from their discovery metadata, so you can OMIT them from
+  #     # targets[] above. Host FQDN -> {{.Host}}, cluster name -> {{.Cluster}}/{{.Service}},
+  #     # cloud resource id (MDB cluster id) -> {{.ServiceID}}, folder label -> {{.Env}},
+  #     # short host -> {{.Container}}; providers come from providers_default (e.g. core: pgscv, pooler/host:
+  #     # yc_native). A static targets[] entry always overrides the derived one.
+  #     # auto_map_discovered: true       # set false to require explicit targets[]
+  #     # discovery_env_label: folder_id  # discovery label feeding {{.Env}}.
+  #     #   Built-in labels per discovered cluster: folder_id (cloud folder UUID)
+  #     #   and folder (the `discovery:` map key, e.g. dev/uat/prod). Set this to
+  #     #   `folder` when your metrics carry cluster="<env>" matching that key.
+  #
+  #     # Tuning (optional; sensible defaults shown):
+  #     # baseline: { window: 672h, min_history: 336h }  # seasonal baseline window / min history
+  #     # dips:     { score_points: 10, latency_factor: 2.0 }
+  #     # floor:    { wraparound_left: 200000000 }        # xacts-left below this -> critical
+  #
+  #     # Role connection saturation (yc_native pooler provider): scores the worst
+  #     # per-role sessions/conn_limit ratio. Drop service roles so a busy exporter
+  #     # or migrator does not inflate the score. role_label is the series label
+  #     # carrying the role name; exclude_roles replaces the default and is matched
+  #     # against it with a negative regex.
+  #     # role_label: query_type
+  #     # exclude_roles: [postgres_exporter, migrator]
+  #
+  #   ## Self-managed example (VictoriaMetrics + pgSCV + pgbouncer):
+  #   # metrics:
+  #   #   enabled: true
+  #   #   datasource: { url: "http://victoria-metrics:8428" }
+  #   #   providers_default: { core: pgscv, pooler: pgbouncer, host: pgscv_system }
+  #   #   selectors:
+  #   #     pgscv:        'host="{{.Host}}",job="pgscv"'
+  #   #     pgbouncer:    'service_id="pgbouncer:6432",job="pgscv"'
+  #   #     pgscv_system: 'service_id="system:0",job="pgscv"'
+  #   #   targets:
+  #   #     - { cluster: my-cluster, instance: pg-host, env: prod, service: pg-host, host: pg-host, container: pg-host }
+
 # -- Secrets for environment variables (passwords, etc.)
 # Option A: provide existing Secret name containing all password env vars
 # Option B: create ExternalSecret via ESO
@@ -108,6 +225,20 @@ secrets:
     #    remoteRef:
     #      key: dasha/auth
     #      property: cookie_secret
+    #  # Health Score metrics datasource auth (token_from_env / password_from_env)
+    #  - secretKey: DASHA_METRICS_DATASOURCE_TOKEN
+    #    remoteRef:
+    #      key: dasha/metrics
+    #      property: datasource_token
+    #  # Snapshot storage DSNs (service role for DML, migration role for DDL)
+    #  - secretKey: DASHA_STORAGE_DSN
+    #    remoteRef:
+    #      key: dasha/storage
+    #      property: dsn_service
+    #  - secretKey: DASHA_STORAGE_DSN_MIGRATION
+    #    remoteRef:
+    #      key: dasha/storage
+    #      property: dsn_migration
 
 # -- Cloud SA keys for service discovery (one per folder/provider)
 # Each entry creates a volume mount with authorized_key.json
@@ -159,6 +290,20 @@ backend:
   #  - name: certs
   #    mountPath: /etc/ssl/pg
   #    readOnly: true
+
+# -- Auto-snapshot daemon ("dasha autosnapshot")
+# Separate Deployment running the same image with a different entrypoint.
+# Runs a single instance by default. For HA (replicaCount>=2) you MUST enable
+# advisory-lock leader election by setting `storage.leader_election: true` in the
+# config, otherwise every replica runs independently and takes duplicate snapshots.
+# Leader election is off by default (incompatible with transaction-pooling proxies).
+autosnapshot:
+  enabled: false
+  replicaCount: 1
+  resources: {}
+  terminationGracePeriodSeconds: 30
+  extraVolumes: []
+  extraVolumeMounts: []
 
 service:
   type: ClusterIP

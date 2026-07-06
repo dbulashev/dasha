@@ -20,7 +20,12 @@ import type { MaybeRef } from 'vue'
 
 import type {
   AuthInfo,
+  AutoSnapshotClusterOverride,
+  AutoSnapshotClusterOverrideInput,
+  AutoSnapshotConfig,
+  AutoSnapshotStatus,
   Cluster,
+  ClusterSnapshotSummary,
   CommonSummary,
   ConnectionSource,
   ConnectionStatActivity,
@@ -31,6 +36,7 @@ import type {
   FkTypeMismatch,
   FksPossibleNulls,
   FksPossibleSimilar,
+  GetAutosnapshotTriggerEventsParams,
   GetAutovacuumSettingsParams,
   GetCommonSummaryParams,
   GetConnectionSourcesParams,
@@ -44,7 +50,9 @@ import type {
   GetFksPossibleNullsParams,
   GetFksPossibleSimilarParams,
   GetHealthScoreDatabasesParams,
+  GetHealthScoreDatasourceStatusParams,
   GetHealthScoreHighDeadRatioTablesParams,
+  GetHealthScoreHistoryParams,
   GetHealthScoreHorizonBlockingSessionsParams,
   GetHealthScoreLowHotUpdateTablesParams,
   GetHealthScoreParams,
@@ -107,7 +115,9 @@ import type {
   GetTablesTopKBySizeParams,
   HealthScore,
   HealthScoreDatabases,
+  HealthScoreDatasourceStatus,
   HealthScoreHighDeadRatioTable,
+  HealthScoreHistory,
   HealthScoreHorizonBlockingSession,
   HealthScoreLowHotUpdateTable,
   HealthScoreRecommendations,
@@ -129,6 +139,7 @@ import type {
   IndexUsage,
   InstanceInfo,
   InvalidConstraint,
+  LockSnapshot,
   LogSearchResult,
   MaintenanceAutovacuumFreezeMaxAge,
   MaintenanceInfo,
@@ -168,6 +179,7 @@ import type {
   TableHitRate,
   TablePartition,
   TableTopKBySize,
+  TriggerEvent,
   VacuumStats,
   WaitEvent,
 } from '../../models'
@@ -1117,7 +1129,7 @@ export function useGetHealthScoreRecommendations<
 }
 
 /**
- * Inline detail for the xid_wraparound_risk recommendation: per-database transaction-ID age, top 10 by age. Instance-wide.
+ * Inline detail for the xid_wraparound_risk recommendation: per-database transaction-ID age, ordered by age descending (paged). Instance-wide.
  */
 export type getHealthScoreXidWraparoundDatabasesResponse200 = {
   data: HealthScoreXidWraparoundDatabase[]
@@ -1847,6 +1859,237 @@ export function useGetHealthScoreDatabases<
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetHealthScoreDatabasesQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Metrics datasource label-matching diagnostics: for each role (core / pooler / host) reports the chosen provider, the rendered series selector and how many series matched (exactly one expected). Returns enabled=false when the metrics-backed mode is off.
+ */
+export type getHealthScoreDatasourceStatusResponse200 = {
+  data: HealthScoreDatasourceStatus
+  status: 200
+}
+
+export type getHealthScoreDatasourceStatusResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getHealthScoreDatasourceStatusResponseSuccess =
+  getHealthScoreDatasourceStatusResponse200 & {
+    headers: Headers
+  }
+export type getHealthScoreDatasourceStatusResponseError =
+  getHealthScoreDatasourceStatusResponse404 & {
+    headers: Headers
+  }
+
+export type getHealthScoreDatasourceStatusResponse =
+  | getHealthScoreDatasourceStatusResponseSuccess
+  | getHealthScoreDatasourceStatusResponseError
+
+export const getGetHealthScoreDatasourceStatusUrl = (
+  params: GetHealthScoreDatasourceStatusParams,
+) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/common/health-score/datasource/status?${stringifiedParams}`
+    : `/api/common/health-score/datasource/status`
+}
+
+export const getHealthScoreDatasourceStatus = async (
+  params: GetHealthScoreDatasourceStatusParams,
+  options?: RequestInit,
+): Promise<getHealthScoreDatasourceStatusResponse> => {
+  return customFetch<getHealthScoreDatasourceStatusResponse>(
+    getGetHealthScoreDatasourceStatusUrl(params),
+    {
+      ...options,
+      method: 'GET',
+    },
+  )
+}
+
+export const getGetHealthScoreDatasourceStatusQueryKey = (
+  params?: MaybeRef<GetHealthScoreDatasourceStatusParams>,
+) => {
+  return [
+    'api',
+    'common',
+    'health-score',
+    'datasource',
+    'status',
+    ...(params ? [params] : []),
+  ] as const
+}
+
+export const getGetHealthScoreDatasourceStatusQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHealthScoreDatasourceStatus>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreDatasourceStatusParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreDatasourceStatus>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetHealthScoreDatasourceStatusQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHealthScoreDatasourceStatus>>> = ({
+    signal,
+  }) => getHealthScoreDatasourceStatus(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHealthScoreDatasourceStatus>>,
+    TError,
+    TData
+  >
+}
+
+export type GetHealthScoreDatasourceStatusQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHealthScoreDatasourceStatus>>
+>
+export type GetHealthScoreDatasourceStatusQueryError = NotFoundResponse
+
+export function useGetHealthScoreDatasourceStatus<
+  TData = Awaited<ReturnType<typeof getHealthScoreDatasourceStatus>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreDatasourceStatusParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getHealthScoreDatasourceStatus>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHealthScoreDatasourceStatusQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Metrics-backed score trend for [from, to]: per-timestamp overall score, per-category scores and latency, with a seasonal (hour-of-week) baseline and detected dips. Requires the metrics datasource (404 otherwise).
+ */
+export type getHealthScoreHistoryResponse200 = {
+  data: HealthScoreHistory
+  status: 200
+}
+
+export type getHealthScoreHistoryResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getHealthScoreHistoryResponseSuccess = getHealthScoreHistoryResponse200 & {
+  headers: Headers
+}
+export type getHealthScoreHistoryResponseError = getHealthScoreHistoryResponse404 & {
+  headers: Headers
+}
+
+export type getHealthScoreHistoryResponse =
+  | getHealthScoreHistoryResponseSuccess
+  | getHealthScoreHistoryResponseError
+
+export const getGetHealthScoreHistoryUrl = (params: GetHealthScoreHistoryParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/common/health-score/history?${stringifiedParams}`
+    : `/api/common/health-score/history`
+}
+
+export const getHealthScoreHistory = async (
+  params: GetHealthScoreHistoryParams,
+  options?: RequestInit,
+): Promise<getHealthScoreHistoryResponse> => {
+  return customFetch<getHealthScoreHistoryResponse>(getGetHealthScoreHistoryUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetHealthScoreHistoryQueryKey = (
+  params?: MaybeRef<GetHealthScoreHistoryParams>,
+) => {
+  return ['api', 'common', 'health-score', 'history', ...(params ? [params] : [])] as const
+}
+
+export const getGetHealthScoreHistoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHealthScoreHistory>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreHistoryParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getHealthScoreHistory>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetHealthScoreHistoryQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHealthScoreHistory>>> = ({ signal }) =>
+    getHealthScoreHistory(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHealthScoreHistory>>,
+    TError,
+    TData
+  >
+}
+
+export type GetHealthScoreHistoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHealthScoreHistory>>
+>
+export type GetHealthScoreHistoryQueryError = NotFoundResponse
+
+export function useGetHealthScoreHistory<
+  TData = Awaited<ReturnType<typeof getHealthScoreHistory>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetHealthScoreHistoryParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getHealthScoreHistory>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHealthScoreHistoryQueryOptions(params, options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
 
@@ -4328,10 +4571,21 @@ export type getTablesDescribeBloatResponse200 = {
   status: 200
 }
 
+export type getTablesDescribeBloatResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
 export type getTablesDescribeBloatResponseSuccess = getTablesDescribeBloatResponse200 & {
   headers: Headers
 }
-export type getTablesDescribeBloatResponse = getTablesDescribeBloatResponseSuccess
+export type getTablesDescribeBloatResponseError = getTablesDescribeBloatResponse404 & {
+  headers: Headers
+}
+
+export type getTablesDescribeBloatResponse =
+  | getTablesDescribeBloatResponseSuccess
+  | getTablesDescribeBloatResponseError
 
 export const getGetTablesDescribeBloatUrl = (params: GetTablesDescribeBloatParams) => {
   const normalizedParams = new URLSearchParams()
@@ -4367,7 +4621,7 @@ export const getGetTablesDescribeBloatQueryKey = (
 
 export const getGetTablesDescribeBloatQueryOptions = <
   TData = Awaited<ReturnType<typeof getTablesDescribeBloat>>,
-  TError = unknown,
+  TError = NotFoundResponse,
 >(
   params: MaybeRef<GetTablesDescribeBloatParams>,
   options?: {
@@ -4392,11 +4646,11 @@ export const getGetTablesDescribeBloatQueryOptions = <
 export type GetTablesDescribeBloatQueryResult = NonNullable<
   Awaited<ReturnType<typeof getTablesDescribeBloat>>
 >
-export type GetTablesDescribeBloatQueryError = unknown
+export type GetTablesDescribeBloatQueryError = NotFoundResponse
 
 export function useGetTablesDescribeBloat<
   TData = Awaited<ReturnType<typeof getTablesDescribeBloat>>,
-  TError = unknown,
+  TError = NotFoundResponse,
 >(
   params: MaybeRef<GetTablesDescribeBloatParams>,
   options?: {
@@ -4630,10 +4884,21 @@ export type getPgstattupleAvailableResponse200 = {
   status: 200
 }
 
+export type getPgstattupleAvailableResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
 export type getPgstattupleAvailableResponseSuccess = getPgstattupleAvailableResponse200 & {
   headers: Headers
 }
-export type getPgstattupleAvailableResponse = getPgstattupleAvailableResponseSuccess
+export type getPgstattupleAvailableResponseError = getPgstattupleAvailableResponse404 & {
+  headers: Headers
+}
+
+export type getPgstattupleAvailableResponse =
+  | getPgstattupleAvailableResponseSuccess
+  | getPgstattupleAvailableResponseError
 
 export const getGetPgstattupleAvailableUrl = (params: GetPgstattupleAvailableParams) => {
   const normalizedParams = new URLSearchParams()
@@ -4669,7 +4934,7 @@ export const getGetPgstattupleAvailableQueryKey = (
 
 export const getGetPgstattupleAvailableQueryOptions = <
   TData = Awaited<ReturnType<typeof getPgstattupleAvailable>>,
-  TError = unknown,
+  TError = NotFoundResponse,
 >(
   params: MaybeRef<GetPgstattupleAvailableParams>,
   options?: {
@@ -4695,11 +4960,11 @@ export const getGetPgstattupleAvailableQueryOptions = <
 export type GetPgstattupleAvailableQueryResult = NonNullable<
   Awaited<ReturnType<typeof getPgstattupleAvailable>>
 >
-export type GetPgstattupleAvailableQueryError = unknown
+export type GetPgstattupleAvailableQueryError = NotFoundResponse
 
 export function useGetPgstattupleAvailable<
   TData = Awaited<ReturnType<typeof getPgstattupleAvailable>>,
-  TError = unknown,
+  TError = NotFoundResponse,
 >(
   params: MaybeRef<GetPgstattupleAvailableParams>,
   options?: {
@@ -4721,10 +4986,21 @@ export type getTablesDescribePartitionsResponse200 = {
   status: 200
 }
 
+export type getTablesDescribePartitionsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
 export type getTablesDescribePartitionsResponseSuccess = getTablesDescribePartitionsResponse200 & {
   headers: Headers
 }
-export type getTablesDescribePartitionsResponse = getTablesDescribePartitionsResponseSuccess
+export type getTablesDescribePartitionsResponseError = getTablesDescribePartitionsResponse404 & {
+  headers: Headers
+}
+
+export type getTablesDescribePartitionsResponse =
+  | getTablesDescribePartitionsResponseSuccess
+  | getTablesDescribePartitionsResponseError
 
 export const getGetTablesDescribePartitionsUrl = (params: GetTablesDescribePartitionsParams) => {
   const normalizedParams = new URLSearchParams()
@@ -4763,7 +5039,7 @@ export const getGetTablesDescribePartitionsQueryKey = (
 
 export const getGetTablesDescribePartitionsQueryOptions = <
   TData = Awaited<ReturnType<typeof getTablesDescribePartitions>>,
-  TError = unknown,
+  TError = NotFoundResponse,
 >(
   params: MaybeRef<GetTablesDescribePartitionsParams>,
   options?: {
@@ -4789,11 +5065,11 @@ export const getGetTablesDescribePartitionsQueryOptions = <
 export type GetTablesDescribePartitionsQueryResult = NonNullable<
   Awaited<ReturnType<typeof getTablesDescribePartitions>>
 >
-export type GetTablesDescribePartitionsQueryError = unknown
+export type GetTablesDescribePartitionsQueryError = NotFoundResponse
 
 export function useGetTablesDescribePartitions<
   TData = Awaited<ReturnType<typeof getTablesDescribePartitions>>,
-  TError = unknown,
+  TError = NotFoundResponse,
 >(
   params: MaybeRef<GetTablesDescribePartitionsParams>,
   options?: {
@@ -6999,6 +7275,100 @@ export function useGetSnapshot<
   return query
 }
 
+export type getSnapshotLocksResponse200 = {
+  data: LockSnapshot
+  status: 200
+}
+
+export type getSnapshotLocksResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getSnapshotLocksResponse501 = {
+  data: void
+  status: 501
+}
+
+export type getSnapshotLocksResponseSuccess = getSnapshotLocksResponse200 & {
+  headers: Headers
+}
+export type getSnapshotLocksResponseError = (
+  | getSnapshotLocksResponse404
+  | getSnapshotLocksResponse501
+) & {
+  headers: Headers
+}
+
+export type getSnapshotLocksResponse =
+  | getSnapshotLocksResponseSuccess
+  | getSnapshotLocksResponseError
+
+export const getGetSnapshotLocksUrl = (id: string) => {
+  return `/api/queries/snapshot/${id}/locks`
+}
+
+export const getSnapshotLocks = async (
+  id: string,
+  options?: RequestInit,
+): Promise<getSnapshotLocksResponse> => {
+  return customFetch<getSnapshotLocksResponse>(getGetSnapshotLocksUrl(id), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetSnapshotLocksQueryKey = (id: MaybeRef<string>) => {
+  return ['api', 'queries', 'snapshot', id, 'locks'] as const
+}
+
+export const getGetSnapshotLocksQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSnapshotLocks>>,
+  TError = NotFoundResponse | void,
+>(
+  id: MaybeRef<string>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getSnapshotLocks>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetSnapshotLocksQueryKey(id)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSnapshotLocks>>> = ({ signal }) =>
+    getSnapshotLocks(unref(id), { signal, ...requestOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: computed(() => !!unref(id)),
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getSnapshotLocks>>, TError, TData>
+}
+
+export type GetSnapshotLocksQueryResult = NonNullable<Awaited<ReturnType<typeof getSnapshotLocks>>>
+export type GetSnapshotLocksQueryError = NotFoundResponse | void
+
+export function useGetSnapshotLocks<
+  TData = Awaited<ReturnType<typeof getSnapshotLocks>>,
+  TError = NotFoundResponse | void,
+>(
+  id: MaybeRef<string>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getSnapshotLocks>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSnapshotLocksQueryOptions(id, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
 export type getQueriesCompareResponse200 = {
   data: QueryCompareItem[]
   status: 200
@@ -8211,6 +8581,11 @@ export type getLogsResponse404 = {
   status: 404
 }
 
+export type getLogsResponse501 = {
+  data: void
+  status: 501
+}
+
 export type getLogsResponse502 = {
   data: void
   status: 502
@@ -8227,6 +8602,7 @@ export type getLogsResponseSuccess = getLogsResponse200 & {
 export type getLogsResponseError = (
   | getLogsResponse400
   | getLogsResponse404
+  | getLogsResponse501
   | getLogsResponse502
   | getLogsResponse504
 ) & {
@@ -8310,6 +8686,740 @@ export function useGetLogs<
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetLogsQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+export type getAutosnapshotStatusResponse200 = {
+  data: AutoSnapshotStatus
+  status: 200
+}
+
+export type getAutosnapshotStatusResponseSuccess = getAutosnapshotStatusResponse200 & {
+  headers: Headers
+}
+export type getAutosnapshotStatusResponse = getAutosnapshotStatusResponseSuccess
+
+export const getGetAutosnapshotStatusUrl = () => {
+  return `/api/autosnapshot/status`
+}
+
+export const getAutosnapshotStatus = async (
+  options?: RequestInit,
+): Promise<getAutosnapshotStatusResponse> => {
+  return customFetch<getAutosnapshotStatusResponse>(getGetAutosnapshotStatusUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetAutosnapshotStatusQueryKey = () => {
+  return ['api', 'autosnapshot', 'status'] as const
+}
+
+export const getGetAutosnapshotStatusQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAutosnapshotStatus>>,
+  TError = unknown,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotStatus>>, TError, TData>
+  request?: SecondParameter<typeof customFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetAutosnapshotStatusQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAutosnapshotStatus>>> = ({ signal }) =>
+    getAutosnapshotStatus({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAutosnapshotStatus>>,
+    TError,
+    TData
+  >
+}
+
+export type GetAutosnapshotStatusQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAutosnapshotStatus>>
+>
+export type GetAutosnapshotStatusQueryError = unknown
+
+export function useGetAutosnapshotStatus<
+  TData = Awaited<ReturnType<typeof getAutosnapshotStatus>>,
+  TError = unknown,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotStatus>>, TError, TData>
+  request?: SecondParameter<typeof customFetch>
+}): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAutosnapshotStatusQueryOptions(options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+export type getAutosnapshotConfigResponse200 = {
+  data: AutoSnapshotConfig
+  status: 200
+}
+
+export type getAutosnapshotConfigResponse501 = {
+  data: void
+  status: 501
+}
+
+export type getAutosnapshotConfigResponseSuccess = getAutosnapshotConfigResponse200 & {
+  headers: Headers
+}
+export type getAutosnapshotConfigResponseError = getAutosnapshotConfigResponse501 & {
+  headers: Headers
+}
+
+export type getAutosnapshotConfigResponse =
+  | getAutosnapshotConfigResponseSuccess
+  | getAutosnapshotConfigResponseError
+
+export const getGetAutosnapshotConfigUrl = () => {
+  return `/api/autosnapshot/config`
+}
+
+export const getAutosnapshotConfig = async (
+  options?: RequestInit,
+): Promise<getAutosnapshotConfigResponse> => {
+  return customFetch<getAutosnapshotConfigResponse>(getGetAutosnapshotConfigUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetAutosnapshotConfigQueryKey = () => {
+  return ['api', 'autosnapshot', 'config'] as const
+}
+
+export const getGetAutosnapshotConfigQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAutosnapshotConfig>>,
+  TError = void,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotConfig>>, TError, TData>
+  request?: SecondParameter<typeof customFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetAutosnapshotConfigQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAutosnapshotConfig>>> = ({ signal }) =>
+    getAutosnapshotConfig({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAutosnapshotConfig>>,
+    TError,
+    TData
+  >
+}
+
+export type GetAutosnapshotConfigQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAutosnapshotConfig>>
+>
+export type GetAutosnapshotConfigQueryError = void
+
+export function useGetAutosnapshotConfig<
+  TData = Awaited<ReturnType<typeof getAutosnapshotConfig>>,
+  TError = void,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotConfig>>, TError, TData>
+  request?: SecondParameter<typeof customFetch>
+}): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAutosnapshotConfigQueryOptions(options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+export type putAutosnapshotConfigResponse204 = {
+  data: void
+  status: 204
+}
+
+export type putAutosnapshotConfigResponse400 = {
+  data: void
+  status: 400
+}
+
+export type putAutosnapshotConfigResponse501 = {
+  data: void
+  status: 501
+}
+
+export type putAutosnapshotConfigResponseSuccess = putAutosnapshotConfigResponse204 & {
+  headers: Headers
+}
+export type putAutosnapshotConfigResponseError = (
+  | putAutosnapshotConfigResponse400
+  | putAutosnapshotConfigResponse501
+) & {
+  headers: Headers
+}
+
+export type putAutosnapshotConfigResponse =
+  | putAutosnapshotConfigResponseSuccess
+  | putAutosnapshotConfigResponseError
+
+export const getPutAutosnapshotConfigUrl = () => {
+  return `/api/autosnapshot/config`
+}
+
+export const putAutosnapshotConfig = async (
+  autoSnapshotConfig: AutoSnapshotConfig,
+  options?: RequestInit,
+): Promise<putAutosnapshotConfigResponse> => {
+  return customFetch<putAutosnapshotConfigResponse>(getPutAutosnapshotConfigUrl(), {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(autoSnapshotConfig),
+  })
+}
+
+export const getPutAutosnapshotConfigMutationOptions = <
+  TError = void,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putAutosnapshotConfig>>,
+    TError,
+    { data: AutoSnapshotConfig },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putAutosnapshotConfig>>,
+  TError,
+  { data: AutoSnapshotConfig },
+  TContext
+> => {
+  const mutationKey = ['putAutosnapshotConfig']
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putAutosnapshotConfig>>,
+    { data: AutoSnapshotConfig }
+  > = (props) => {
+    const { data } = props ?? {}
+
+    return putAutosnapshotConfig(data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type PutAutosnapshotConfigMutationResult = NonNullable<
+  Awaited<ReturnType<typeof putAutosnapshotConfig>>
+>
+export type PutAutosnapshotConfigMutationBody = AutoSnapshotConfig
+export type PutAutosnapshotConfigMutationError = void
+
+export const usePutAutosnapshotConfig = <TError = void, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putAutosnapshotConfig>>,
+    TError,
+    { data: AutoSnapshotConfig },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationReturnType<
+  Awaited<ReturnType<typeof putAutosnapshotConfig>>,
+  TError,
+  { data: AutoSnapshotConfig },
+  TContext
+> => {
+  return useMutation(getPutAutosnapshotConfigMutationOptions(options))
+}
+/**
+ * Per-cluster overrides and effective config for every cluster in one call (avoids one request per cluster on the list view).
+ */
+export type listAutosnapshotClustersResponse200 = {
+  data: AutoSnapshotClusterOverride[]
+  status: 200
+}
+
+export type listAutosnapshotClustersResponse501 = {
+  data: void
+  status: 501
+}
+
+export type listAutosnapshotClustersResponseSuccess = listAutosnapshotClustersResponse200 & {
+  headers: Headers
+}
+export type listAutosnapshotClustersResponseError = listAutosnapshotClustersResponse501 & {
+  headers: Headers
+}
+
+export type listAutosnapshotClustersResponse =
+  | listAutosnapshotClustersResponseSuccess
+  | listAutosnapshotClustersResponseError
+
+export const getListAutosnapshotClustersUrl = () => {
+  return `/api/autosnapshot/clusters`
+}
+
+export const listAutosnapshotClusters = async (
+  options?: RequestInit,
+): Promise<listAutosnapshotClustersResponse> => {
+  return customFetch<listAutosnapshotClustersResponse>(getListAutosnapshotClustersUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getListAutosnapshotClustersQueryKey = () => {
+  return ['api', 'autosnapshot', 'clusters'] as const
+}
+
+export const getListAutosnapshotClustersQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAutosnapshotClusters>>,
+  TError = void,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof listAutosnapshotClusters>>, TError, TData>
+  request?: SecondParameter<typeof customFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getListAutosnapshotClustersQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listAutosnapshotClusters>>> = ({
+    signal,
+  }) => listAutosnapshotClusters({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAutosnapshotClusters>>,
+    TError,
+    TData
+  >
+}
+
+export type ListAutosnapshotClustersQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAutosnapshotClusters>>
+>
+export type ListAutosnapshotClustersQueryError = void
+
+export function useListAutosnapshotClusters<
+  TData = Awaited<ReturnType<typeof listAutosnapshotClusters>>,
+  TError = void,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof listAutosnapshotClusters>>, TError, TData>
+  request?: SecondParameter<typeof customFetch>
+}): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAutosnapshotClustersQueryOptions(options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+export type getAutosnapshotClusterResponse200 = {
+  data: AutoSnapshotClusterOverride
+  status: 200
+}
+
+export type getAutosnapshotClusterResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getAutosnapshotClusterResponse501 = {
+  data: void
+  status: 501
+}
+
+export type getAutosnapshotClusterResponseSuccess = getAutosnapshotClusterResponse200 & {
+  headers: Headers
+}
+export type getAutosnapshotClusterResponseError = (
+  | getAutosnapshotClusterResponse404
+  | getAutosnapshotClusterResponse501
+) & {
+  headers: Headers
+}
+
+export type getAutosnapshotClusterResponse =
+  | getAutosnapshotClusterResponseSuccess
+  | getAutosnapshotClusterResponseError
+
+export const getGetAutosnapshotClusterUrl = (name: string) => {
+  return `/api/autosnapshot/clusters/${name}`
+}
+
+export const getAutosnapshotCluster = async (
+  name: string,
+  options?: RequestInit,
+): Promise<getAutosnapshotClusterResponse> => {
+  return customFetch<getAutosnapshotClusterResponse>(getGetAutosnapshotClusterUrl(name), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetAutosnapshotClusterQueryKey = (name: MaybeRef<string>) => {
+  return ['api', 'autosnapshot', 'clusters', name] as const
+}
+
+export const getGetAutosnapshotClusterQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAutosnapshotCluster>>,
+  TError = NotFoundResponse | void,
+>(
+  name: MaybeRef<string>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotCluster>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetAutosnapshotClusterQueryKey(name)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAutosnapshotCluster>>> = ({ signal }) =>
+    getAutosnapshotCluster(unref(name), { signal, ...requestOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: computed(() => !!unref(name)),
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotCluster>>, TError, TData>
+}
+
+export type GetAutosnapshotClusterQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAutosnapshotCluster>>
+>
+export type GetAutosnapshotClusterQueryError = NotFoundResponse | void
+
+export function useGetAutosnapshotCluster<
+  TData = Awaited<ReturnType<typeof getAutosnapshotCluster>>,
+  TError = NotFoundResponse | void,
+>(
+  name: MaybeRef<string>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotCluster>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAutosnapshotClusterQueryOptions(name, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+export type putAutosnapshotClusterResponse204 = {
+  data: void
+  status: 204
+}
+
+export type putAutosnapshotClusterResponse400 = {
+  data: void
+  status: 400
+}
+
+export type putAutosnapshotClusterResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type putAutosnapshotClusterResponse501 = {
+  data: void
+  status: 501
+}
+
+export type putAutosnapshotClusterResponseSuccess = putAutosnapshotClusterResponse204 & {
+  headers: Headers
+}
+export type putAutosnapshotClusterResponseError = (
+  | putAutosnapshotClusterResponse400
+  | putAutosnapshotClusterResponse404
+  | putAutosnapshotClusterResponse501
+) & {
+  headers: Headers
+}
+
+export type putAutosnapshotClusterResponse =
+  | putAutosnapshotClusterResponseSuccess
+  | putAutosnapshotClusterResponseError
+
+export const getPutAutosnapshotClusterUrl = (name: string) => {
+  return `/api/autosnapshot/clusters/${name}`
+}
+
+export const putAutosnapshotCluster = async (
+  name: string,
+  autoSnapshotClusterOverrideInput: AutoSnapshotClusterOverrideInput,
+  options?: RequestInit,
+): Promise<putAutosnapshotClusterResponse> => {
+  return customFetch<putAutosnapshotClusterResponse>(getPutAutosnapshotClusterUrl(name), {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(autoSnapshotClusterOverrideInput),
+  })
+}
+
+export const getPutAutosnapshotClusterMutationOptions = <
+  TError = void | NotFoundResponse,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putAutosnapshotCluster>>,
+    TError,
+    { name: string; data: AutoSnapshotClusterOverrideInput },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putAutosnapshotCluster>>,
+  TError,
+  { name: string; data: AutoSnapshotClusterOverrideInput },
+  TContext
+> => {
+  const mutationKey = ['putAutosnapshotCluster']
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putAutosnapshotCluster>>,
+    { name: string; data: AutoSnapshotClusterOverrideInput }
+  > = (props) => {
+    const { name, data } = props ?? {}
+
+    return putAutosnapshotCluster(name, data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type PutAutosnapshotClusterMutationResult = NonNullable<
+  Awaited<ReturnType<typeof putAutosnapshotCluster>>
+>
+export type PutAutosnapshotClusterMutationBody = AutoSnapshotClusterOverrideInput
+export type PutAutosnapshotClusterMutationError = void | NotFoundResponse
+
+export const usePutAutosnapshotCluster = <
+  TError = void | NotFoundResponse,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putAutosnapshotCluster>>,
+    TError,
+    { name: string; data: AutoSnapshotClusterOverrideInput },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationReturnType<
+  Awaited<ReturnType<typeof putAutosnapshotCluster>>,
+  TError,
+  { name: string; data: AutoSnapshotClusterOverrideInput },
+  TContext
+> => {
+  return useMutation(getPutAutosnapshotClusterMutationOptions(options))
+}
+export type getAutosnapshotTriggerEventsResponse200 = {
+  data: TriggerEvent[]
+  status: 200
+}
+
+export type getAutosnapshotTriggerEventsResponse501 = {
+  data: void
+  status: 501
+}
+
+export type getAutosnapshotTriggerEventsResponseSuccess =
+  getAutosnapshotTriggerEventsResponse200 & {
+    headers: Headers
+  }
+export type getAutosnapshotTriggerEventsResponseError = getAutosnapshotTriggerEventsResponse501 & {
+  headers: Headers
+}
+
+export type getAutosnapshotTriggerEventsResponse =
+  | getAutosnapshotTriggerEventsResponseSuccess
+  | getAutosnapshotTriggerEventsResponseError
+
+export const getGetAutosnapshotTriggerEventsUrl = (params?: GetAutosnapshotTriggerEventsParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/autosnapshot/trigger-events?${stringifiedParams}`
+    : `/api/autosnapshot/trigger-events`
+}
+
+export const getAutosnapshotTriggerEvents = async (
+  params?: GetAutosnapshotTriggerEventsParams,
+  options?: RequestInit,
+): Promise<getAutosnapshotTriggerEventsResponse> => {
+  return customFetch<getAutosnapshotTriggerEventsResponse>(
+    getGetAutosnapshotTriggerEventsUrl(params),
+    {
+      ...options,
+      method: 'GET',
+    },
+  )
+}
+
+export const getGetAutosnapshotTriggerEventsQueryKey = (
+  params?: MaybeRef<GetAutosnapshotTriggerEventsParams>,
+) => {
+  return ['api', 'autosnapshot', 'trigger-events', ...(params ? [params] : [])] as const
+}
+
+export const getGetAutosnapshotTriggerEventsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAutosnapshotTriggerEvents>>,
+  TError = void,
+>(
+  params?: MaybeRef<GetAutosnapshotTriggerEventsParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotTriggerEvents>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetAutosnapshotTriggerEventsQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAutosnapshotTriggerEvents>>> = ({
+    signal,
+  }) => getAutosnapshotTriggerEvents(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAutosnapshotTriggerEvents>>,
+    TError,
+    TData
+  >
+}
+
+export type GetAutosnapshotTriggerEventsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAutosnapshotTriggerEvents>>
+>
+export type GetAutosnapshotTriggerEventsQueryError = void
+
+export function useGetAutosnapshotTriggerEvents<
+  TData = Awaited<ReturnType<typeof getAutosnapshotTriggerEvents>>,
+  TError = void,
+>(
+  params?: MaybeRef<GetAutosnapshotTriggerEventsParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotTriggerEvents>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAutosnapshotTriggerEventsQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Per-cluster snapshot/error counts (all retained history) for the summary tab.
+ */
+export type getAutosnapshotSummaryResponse200 = {
+  data: ClusterSnapshotSummary[]
+  status: 200
+}
+
+export type getAutosnapshotSummaryResponse501 = {
+  data: void
+  status: 501
+}
+
+export type getAutosnapshotSummaryResponseSuccess = getAutosnapshotSummaryResponse200 & {
+  headers: Headers
+}
+export type getAutosnapshotSummaryResponseError = getAutosnapshotSummaryResponse501 & {
+  headers: Headers
+}
+
+export type getAutosnapshotSummaryResponse =
+  | getAutosnapshotSummaryResponseSuccess
+  | getAutosnapshotSummaryResponseError
+
+export const getGetAutosnapshotSummaryUrl = () => {
+  return `/api/autosnapshot/summary`
+}
+
+export const getAutosnapshotSummary = async (
+  options?: RequestInit,
+): Promise<getAutosnapshotSummaryResponse> => {
+  return customFetch<getAutosnapshotSummaryResponse>(getGetAutosnapshotSummaryUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetAutosnapshotSummaryQueryKey = () => {
+  return ['api', 'autosnapshot', 'summary'] as const
+}
+
+export const getGetAutosnapshotSummaryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAutosnapshotSummary>>,
+  TError = void,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotSummary>>, TError, TData>
+  request?: SecondParameter<typeof customFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetAutosnapshotSummaryQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAutosnapshotSummary>>> = ({ signal }) =>
+    getAutosnapshotSummary({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAutosnapshotSummary>>,
+    TError,
+    TData
+  >
+}
+
+export type GetAutosnapshotSummaryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAutosnapshotSummary>>
+>
+export type GetAutosnapshotSummaryQueryError = void
+
+export function useGetAutosnapshotSummary<
+  TData = Awaited<ReturnType<typeof getAutosnapshotSummary>>,
+  TError = void,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getAutosnapshotSummary>>, TError, TData>
+  request?: SecondParameter<typeof customFetch>
+}): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAutosnapshotSummaryQueryOptions(options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
 

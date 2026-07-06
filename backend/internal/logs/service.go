@@ -19,8 +19,6 @@ import (
 	"github.com/dbulashev/dasha/internal/pkg/sanitize"
 )
 
-const sourceYandexMDB = "yandex-mdb"
-
 const defaultPageSize = 100
 
 // Sentinel errors classified into HTTP status codes by the handler.
@@ -123,26 +121,23 @@ func (s *service) Search(ctx context.Context, q SearchQuery) (SearchResult, erro
 		return SearchResult{}, ErrNotFound
 	}
 
-	if cluster.Source != sourceYandexMDB || cluster.ProviderID == "" {
-		return SearchResult{}, fmt.Errorf("%w: cluster is not a Yandex MDB cluster", ErrUnsupported)
+	if !cluster.SupportsLogs() {
+		return SearchResult{}, fmt.Errorf("%w: cluster has no log source", ErrUnsupported)
 	}
 
-	folderID := cluster.Labels["folder_id"]
-	if folderID == "" {
-		return SearchResult{}, fmt.Errorf("%w: missing folder_id", ErrUnsupported)
-	}
-
-	sdk, ok := s.registry.Get(folderID)
+	sdk, ok := s.registry.Get(cluster.Labels["folder_id"])
 	if !ok {
 		return SearchResult{}, fmt.Errorf("%w: no SDK for folder", ErrUnsupported)
 	}
 
-	severities, err := s.validate(cluster, q)
+	fd := fieldsFor(q.ServiceType)
+
+	severities, err := s.validate(cluster, fd, q)
 	if err != nil {
 		return SearchResult{}, err
 	}
 
-	filter := buildFilter(q.ServiceType, severities, q.Host)
+	filter := buildFilter(fd, severities, q.Host)
 
 	params := yandex.StreamLogsParams{ //nolint:exhaustruct
 		ClusterID:   cluster.ProviderID,
@@ -156,14 +151,11 @@ func (s *service) Search(ctx context.Context, q SearchQuery) (SearchResult, erro
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(s.cfg.TimeoutSeconds)*time.Second)
 	defer cancel()
 
-	pf := promotedFor(q.ServiceType)
-	mask := maskFor(q.ServiceType)
-
 	if q.Dedup {
-		return s.searchDedup(ctx, sdk, params, q, pf, mask)
+		return s.searchDedup(ctx, sdk, params, q, fd)
 	}
 
-	return s.searchPage(ctx, sdk, params, q, pf, mask)
+	return s.searchPage(ctx, sdk, params, q, fd)
 }
 
 func (s *service) findCluster(ctx context.Context, name string) (config.Cluster, bool) {
@@ -185,12 +177,16 @@ func (s *service) findCluster(ctx context.Context, name string) (config.Cluster,
 
 // validate checks time range, severities and host; returns the severities in
 // the casing the Yandex API expects.
-func (s *service) validate(cluster config.Cluster, q SearchQuery) ([]string, error) {
+func (s *service) validate(cluster config.Cluster, fd serviceFields, q SearchQuery) ([]string, error) {
 	if !q.From.Before(q.To) {
 		return nil, fmt.Errorf("%w: 'from' must be before 'to'", ErrInvalid)
 	}
 
-	allow := severityAllowlist(q.ServiceType)
+	// A resume cursor would make dedup counts cover an arbitrary partial
+	// window and silently under-count.
+	if q.Dedup && q.PageToken != "" {
+		return nil, fmt.Errorf("%w: page_token cannot be combined with dedup", ErrInvalid)
+	}
 
 	severities := make([]string, 0, len(q.Severities))
 
@@ -199,8 +195,8 @@ func (s *service) validate(cluster config.Cluster, q SearchQuery) ([]string, err
 			continue
 		}
 
-		v := normalizeSeverityCase(q.ServiceType, raw)
-		if _, ok := allow[v]; !ok {
+		v := fd.normalizeSeverity(raw)
+		if _, ok := fd.severityAllow[v]; !ok {
 			return nil, fmt.Errorf("%w: unknown severity %q", ErrInvalid, raw)
 		}
 
@@ -226,7 +222,7 @@ func hostInCluster(cluster config.Cluster, host string) bool {
 
 // buildFilter assembles the native StreamLogs filter from allowlisted values
 // only (severity enum + validated host), so the expression is injection-safe.
-func buildFilter(st yandex.ServiceType, severities []string, host string) string {
+func buildFilter(fd serviceFields, severities []string, host string) string {
 	var parts []string
 
 	if len(severities) > 0 {
@@ -235,7 +231,7 @@ func buildFilter(st yandex.ServiceType, severities []string, host string) string
 			quoted[i] = `"` + sev + `"`
 		}
 
-		parts = append(parts, fmt.Sprintf("%s IN (%s)", severityFilterField(st), strings.Join(quoted, ", ")))
+		parts = append(parts, fmt.Sprintf("%s IN (%s)", fd.severityFilterField, strings.Join(quoted, ", ")))
 	}
 
 	if host != "" {
@@ -246,13 +242,15 @@ func buildFilter(st yandex.ServiceType, severities []string, host string) string
 }
 
 // searchPage collects up to PageSize matching records (cursor-based pagination).
+// Once the page is full it keeps scanning (without consuming) until the next
+// match or EOF, so NextPageToken is emitted only when more matches actually
+// exist — never a token that leads to an empty page.
 func (s *service) searchPage(
 	ctx context.Context,
 	sdk *yandex.SDK,
 	params yandex.StreamLogsParams,
 	q SearchQuery,
-	pf promotedFields,
-	mask []string,
+	fd serviceFields,
 ) (SearchResult, error) {
 	pageSize := q.PageSize
 	if pageSize <= 0 {
@@ -267,26 +265,29 @@ func (s *service) searchPage(
 		items     = make([]Entry, 0, pageSize)
 		scanned   int
 		lastToken string
-		stopped   bool
+		hasMore   bool
 		capped    bool
 	)
 
 	err := sdk.StreamLogs(ctx, params, func(rec yandex.LogRecord) bool {
-		scanned++
-		lastToken = rec.Token
+		e, ok := s.toEntry(rec, q, fd)
 
-		if e, ok := s.toEntry(rec, q, pf, mask); ok {
-			items = append(items, e)
-		}
-
-		if len(items) >= pageSize {
-			stopped = true
+		if ok && len(items) >= pageSize {
+			// Lookahead match: do not consume it — the resume token must point
+			// at the record before it so the next page returns this match.
+			hasMore = true
 
 			return false
 		}
 
+		scanned++
+		lastToken = rec.Token
+
+		if ok {
+			items = append(items, e)
+		}
+
 		if scanned >= s.cfg.MaxScan {
-			stopped = true
 			capped = true
 
 			return false
@@ -295,11 +296,26 @@ func (s *service) searchPage(
 		return true
 	})
 	if err != nil {
-		return SearchResult{}, s.classify(ctx, err)
+		cErr := s.classify(ctx, err)
+		if errors.Is(cErr, ErrTimeout) && len(items) > 0 {
+			// Surface what was collected before the timeout as a partial page
+			// instead of discarding it.
+			return SearchResult{
+				Items:         items,
+				NextPageToken: lastToken,
+				Dedup:         false,
+				Partial:       true,
+				Scanned:       scanned,
+			}, nil
+		}
+
+		return SearchResult{}, cErr
 	}
 
+	// On a capped scan the token lets the client continue scanning even though
+	// no further match has been seen yet.
 	next := ""
-	if stopped {
+	if hasMore || capped {
 		next = lastToken
 	}
 
@@ -318,8 +334,7 @@ func (s *service) searchDedup(
 	sdk *yandex.SDK,
 	params yandex.StreamLogsParams,
 	q SearchQuery,
-	pf promotedFields,
-	mask []string,
+	fd serviceFields,
 ) (SearchResult, error) {
 	var (
 		groups  = make(map[string]*Entry)
@@ -330,7 +345,7 @@ func (s *service) searchDedup(
 	err := sdk.StreamLogs(ctx, params, func(rec yandex.LogRecord) bool {
 		scanned++
 
-		if e, ok := s.toEntry(rec, q, pf, mask); ok {
+		if e, ok := s.toEntry(rec, q, fd); ok {
 			key := normalize(e.Text)
 
 			if g, exists := groups[key]; exists {
@@ -367,7 +382,14 @@ func (s *service) searchDedup(
 		return true
 	})
 	if err != nil {
-		return SearchResult{}, s.classify(ctx, err)
+		cErr := s.classify(ctx, err)
+		if !errors.Is(cErr, ErrTimeout) || len(groups) == 0 {
+			return SearchResult{}, cErr
+		}
+
+		// Surface the groups collected before the timeout as a partial result
+		// instead of discarding them.
+		capped = true
 	}
 
 	items := make([]Entry, 0, len(groups))
@@ -394,56 +416,60 @@ func (s *service) searchDedup(
 
 // toEntry maps a raw record to an Entry, applying Dasha-side filters and masking.
 // It returns ok=false when the record fails the message/database/user filters.
+// Filters run against the raw values first so the map copy and masking are only
+// paid for records that will actually be returned.
 func (s *service) toEntry(
 	rec yandex.LogRecord,
 	q SearchQuery,
-	pf promotedFields,
-	mask []string,
+	fd serviceFields,
 ) (Entry, bool) {
+	pf := fd.promoted
+
+	if q.Message != "" && !containsFold(rec.Fields[pf.text], q.Message) {
+		return Entry{}, false //nolint:exhaustruct
+	}
+
+	if q.Database != "" && !containsFold(rec.Fields[pf.database], q.Database) {
+		return Entry{}, false //nolint:exhaustruct
+	}
+
+	if q.User != "" && !containsFold(rec.Fields[pf.user], q.User) {
+		return Entry{}, false //nolint:exhaustruct
+	}
+
 	masked := make(map[string]string, len(rec.Fields))
 	for k, v := range rec.Fields {
 		masked[k] = v
 	}
 
-	for _, mk := range mask {
+	for _, mk := range fd.mask {
 		if v, ok := masked[mk]; ok {
 			masked[mk] = sanitize.SQL(v)
 		}
-	}
-
-	text := masked[pf.text]
-	database := masked[pf.database]
-	user := masked[pf.user]
-
-	if q.Message != "" && !containsFold(text, q.Message) {
-		return Entry{}, false //nolint:exhaustruct
-	}
-
-	if q.Database != "" && !containsFold(database, q.Database) {
-		return Entry{}, false //nolint:exhaustruct
-	}
-
-	if q.User != "" && !containsFold(user, q.User) {
-		return Entry{}, false //nolint:exhaustruct
 	}
 
 	return Entry{ //nolint:exhaustruct
 		Timestamp: rec.Timestamp,
 		Severity:  masked[pf.severity],
 		Hostname:  masked[pf.host],
-		Text:      text,
-		Database:  database,
-		User:      user,
+		Text:      masked[pf.text],
+		Database:  masked[pf.database],
+		User:      masked[pf.user],
 		Fields:    masked,
 	}, true
 }
 
 // classify converts a low-level stream error into a sentinel error. A cancelled
-// context due to the configured timeout maps to ErrTimeout; everything else to
-// ErrUpstream (message sanitized of any embedded credentials).
+// context due to the configured timeout maps to ErrTimeout, a client disconnect
+// to context.Canceled; everything else to ErrUpstream (message sanitized of any
+// embedded credentials).
 func (s *service) classify(ctx context.Context, err error) error {
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return ErrTimeout
+	}
+
+	if errors.Is(ctx.Err(), context.Canceled) || errors.Is(err, context.Canceled) {
+		return context.Canceled
 	}
 
 	return fmt.Errorf("%w: %s", ErrUpstream, sanitize.SQL(err.Error()))

@@ -1,17 +1,72 @@
 # Changelog
 
-## v1.2.0
+## v1.4.0
 
 ### Features
 - **Yandex Cloud log search (new top-level page `/logs`):** for clusters discovered via Yandex MDB service discovery, search and view PostgreSQL server logs and connection pooler (Odyssey) logs through the Yandex MDB API.
   - New endpoint `GET /api/logs` (`getLogs`). The backend reads `StreamClusterLogs` as a bounded historical read (`from`/`to` set), so it can fetch past windows rather than only tailing live.
   - **Native server-side filters** for `severity` and `host` (the only fields the Yandex API filters on); `message` substring, `database` and `user` are filtered Dasha-side over the stream. The native filter expression is built only from an allowlist (severity enum + validated cluster hosts), so it is injection-safe. Severity casing follows the service: PostgreSQL `UPPER` (`error_severity`), pooler `lower` (`level`).
   - **Optional deduplication** groups near-identical messages by normalized text with `count` + `first_seen` / `last_seen` and a representative (most severe) severity.
-  - **Cursor pagination** (`next_page_token`) for non-deduped results with a "load more" button; a `partial` banner is shown when the scan limit (`max_scan`) is reached.
+  - **Cursor pagination** (`next_page_token`) for non-deduped results with a "load more" button. The token is emitted only when a further match actually exists (the stream is read ahead past a full page), so "load more" never returns an empty page; a `partial` banner is shown when the scan limit (`max_scan`) is reached. `page_token` cannot be combined with `dedup` (`400`), since a resume cursor would silently under-count dedup groups.
+  - **Partial results on timeout:** when the upstream read exceeds `timeout_seconds`, entries (or dedup groups) collected so far are returned as a partial page with the `partial` flag instead of a bare `504`.
   - Sensitive text is masked through `sanitize.SQL()` per service type before leaving the backend; service-account keys never leave the backend (reused from discovery via an internal SDK registry).
-  - Access is `viewer+` (covered by the existing `GET /api/*` policy). The `Logs` menu item appears only when at least one `yandex-mdb` cluster is present.
+  - Access is `viewer+` (covered by the existing `GET /api/*` policy). Clusters advertise the capability via a new `supports_logs` field on `Cluster` API objects (alongside `source`); the `Logs` menu item appears only when at least one such cluster is present, and `GET /api/logs` returns `501` for clusters without log search support.
   - New global config `log_search` (`max_scan` default 5000, `max_page_size` default 1000, `timeout_seconds` default 30).
-  - `Cluster` API objects now expose `source` (`static` | `yandex-mdb`).
+
+## v1.3.0
+
+### Features
+- **Metrics-backed Health Score (optional):** when a Prometheus/VictoriaMetrics datasource is configured (`health_score.metrics` in `dasha.yaml`), the score, recommendations and a new trend are computed from time-series metrics (pgSCV + Yandex MDB + pgbouncer + host) instead of point-in-time SQL. The SQL snapshot stays the zero-config fallback; the `source` field on `GET /api/common/health-score` reports `"snapshot"` or `"metrics"`.
+  - **Provider adapters + per-deployment label matching:** `pgscv` (PG internals, incl. YC MDB via remote scrape), `yc_native` (managed host/pooler), `pgbouncer`, `pgscv_system` (self-managed host). Selector templates are configurable; `GET /api/common/health-score/datasource/status` validates that each role matches exactly one series.
+  - **Score trend** (`GET /api/common/health-score/history`): per-timestamp overall score, per-category scores and latency over a range, with a **seasonal (hour-of-week) baseline** and detected **dips**. New `HealthScoreTrend` chart on `/health-score` (24h / 7d / 30d).
+  - **Richer signals** unavailable to the SQL snapshot: host CPU saturation (`load / vCPU`) and pooler saturation → `connections`; windowed query **latency** with **regression vs the seasonal baseline** → `performance`; data-page **checksum failures** and **sequence / ID-space exhaustion** → critical floor + rules.
+  - **Sequential-scan regression** → `performance`: the rate of tuples read by seq scans, compared to its own seasonal (hour-of-week) baseline — a rise flags indexes going unused or stale planner stats (ANALYZE), without false-firing on normal analytical scans.
+  - **Host disk space** → `storage`: used/total of the fullest host filesystem (from pgSCV `node_filesystem_*` and Yandex Cloud `disk_used_bytes`/`disk_total_bytes`), with LOW/MED/HIGH at ≥70/80/90% and a **role-agnostic critical floor at ≥90%** (a full data volume stops writes).
+  - **Floor extensions:** checksum failures (role-agnostic) and near-overflow sequence exhaustion clamp the score into the red, alongside the existing wraparound / autovacuum-off floor.
+  - **Catalog/GUC overlay keeps score↔rules parity in metrics mode:** facts a time-series datasource cannot express — per-table `autovacuum_enabled=false`, never-vacuumed tables, `relfrozenxid` age, planner-stat drift, `wal_level`, the `autovacuum`/`track_counts` GUCs, the MVCC horizon, lock-pool sizing and in-recovery — are overlaid from the SQL snapshot onto the metrics signals. So catalog-only rules (e.g. `tables_with_autovacuum_off`) keep firing **and** the score keeps penalising them even when a datasource is attached, instead of silently disappearing. Best-effort: a snapshot read failure leaves the metrics-only score intact. (The history **trend** stays time-series-only.)
+  - **Auto-mapping of service-discovered clusters:** clusters from `discovery:` (e.g. Yandex MDB) are mapped to datasource labels from their discovery metadata — host FQDN → `{{.Host}}`, cloud resource id (MDB cluster id) → `{{.Service}}`, `folder_id` label → `{{.Env}}`, short host → `{{.Container}}`; providers from `providers_default` — so they need no hand-written `targets:` entry. A static `targets:` entry always overrides; `auto_map_discovered` (default on) and `discovery_env_label` knobs.
+  - **Datasource auth from environment:** `datasource.auth` supports `token_from_env` (bearer) and `username` + `password_from_env` (basic), resolved like the other `*_from_env` secrets so credentials are injected from a Secret instead of stored inline; `auth.type` is validated (`none|bearer|basic`).
+- **Vacuum maintenance reworked as an autovacuum-trigger queue (fewer false positives):** the `maintenance` category now derives its vacuum signals from PostgreSQL's own autovacuum trigger instead of a raw "time since last vacuum". A table counts as *due* when `n_dead_tup` exceeds `autovacuum_vacuum_threshold + autovacuum_vacuum_scale_factor·reltuples`, or `n_ins_since_vacuum` exceeds the insert threshold — honouring per-table `reloptions` overrides (reusing the `describe_vacuum_stats` formula). Large static / read-mostly tables and partitions that autovacuum correctly never touches no longer inflate the score.
+  - New `vacuum_backlog` rule + `vacuum_backlog_tables` penalty — the queue depth (tables eligible for autovacuum right now, dead-tuple **or** insert trigger). Thresholds ≥6 / ≥15 / ≥30.
+  - `max_vacuum_age_hours` → `max_overdue_vacuum_age_hours`: oldest vacuum **among the backlog tables only**, so static tables can no longer drive the "stale vacuum" signal.
+  - `stale_planner_stats` (auto-analyze) now reads the same reloption-aware threshold, consistent with the vacuum queue.
+  - The vacuum queue is **SQL-snapshot only** (`reltuples` / `n_ins_since_vacuum` / autovacuum GUCs are not faithfully expressible as time-series); in metrics mode it is overlaid from the snapshot, so both vacuum rules keep contributing to the score and recommendations.
+
+### UX
+- **Health Score is admin-only for now** while the scoring model is still being calibrated and validated across many clusters: the menu item and the Home-page gauge are hidden from regular viewers, and a direct visit to `/health-score` redirects non-admins to `/main` (router guard). No-RBAC modes (`none`/`token`) keep full access.
+- **Paginated recommendation detail tables:** the five inline detail tables (dead-ratio tables, autovacuum-off tables, low-HOT tables, xid-wraparound databases, horizon-blocking sessions) are now paged via `limit`/`offset` with the shared `PaginationControls`, instead of a hard server-side cap, so long lists are fully browsable (sensible row-size thresholds kept).
+- **Reduced numeric precision** in recommendation texts and category tooltips — metric values are rounded for display (e.g. `90.22492448754167%` → `90.22%`) via a shared `fmtNum` helper.
+
+### Internal
+- New `internal/metrics` package: datasource client, label matcher (with discovery-driven auto-mapping), MetricsQL query catalog, signal collector, seasonal baseline, dip detection, history service.
+- Demo lab extended with a VictoriaMetrics + pgSCV + pgbouncer stack (`demo/docker-compose.metrics.yaml`).
+- Helm chart `values.yaml`: documented `health_score.metrics` block — datasource (incl. auth via `*_from_env` / ExternalSecret), providers, selector templates, targets, discovery auto-mapping and tuning.
+
+## v1.2.1
+
+### New Features
+- **Auto-snapshots of pg_stat_statements**: separate `dasha autosnapshot` daemon creates pgss snapshots automatically on configurable triggers
+  - **Trigger: activity spike** — sliding-window moving average of `count(state='active')` from `pg_stat_activity`; fires when current value exceeds baseline by a configurable percent (default +50%) for a sustained duration (default 5 min)
+  - **Trigger: role change** — detects master↔replica transitions via `pg_is_in_recovery()`, with configurable direction (`both` / `master_to_replica` / `replica_to_master`)
+  - **Trigger: activity drop** (`recovery_duration`) — after a spike, snapshots the aftermath once activity stays below the threshold long enough; paired with reset this gives two clean pgss windows per incident (the buildup and the spike's actual execution). `0s` disables
+  - **Deferred follow-up** (`deferred_interval`) — after a spike snapshot, schedules a follow-up snapshot in a persisted queue (`autosnapshot_pending`, survives daemon restarts) — a safety net/fixed-offset capture for spikes that never resolve. **Auto-cancelled when the spike resolves** (the drop snapshot already captured the incident, so the deferred would only snapshot the quiet aftermath). `0s` disables. Both are per-cluster overridable
+  - **Global knobs** (stored in storage DB, editable via UI): `poll_interval`, `max_snapshot_frequency` (debounce), `min_baseline_active` (skip when load is low), `retention_bytes`, `retention_min_days`, `reset_query_stats` (reset `pg_stat_statements` after each auto-snapshot — independent of the manual UI reset flag)
+  - **Custom pgss reset function** (`pgss_reset_function` in `dasha.yaml`): call a schema-qualified wrapper instead of `pg_stat_statements_reset()` when the monitoring role lacks `EXECUTE` (mirrors `pg_stats_view`); applies to both auto and manual resets
+  - **Per-cluster overrides**: deep-merged on top of global defaults; clusters can toggle triggers, tune thresholds or disable auto-snapshots individually
+  - **Leader election** (opt-in, `storage.leader_election`, off by default): `pg_try_advisory_lock` on the storage DB lets the daemon run in multiple replicas for HA; disabled by default because a session-level advisory lock needs a dedicated connection and is incompatible with transaction-pooling proxies (PgBouncer transaction mode)
+  - **Retention by total size**: drops oldest day-triples (snapshots + query_texts + trigger_events partitions) once total exceeds `retention_bytes`; respects `retention_min_days` floor
+  - **History tab**: filter by cluster / outcome / trigger_type, paginated; persists snapshot creations and errors only — transient skips (debounce, below-baseline, wrong-direction) are logged at debug level and not written to history to avoid noise
+  - **UI**: new "Auto-snapshots" menu item (`mdi-camera-timer`) with Settings + History tabs; admin-only editing, viewers see read-only state; menu hidden for non-admin when feature is disabled
+  - **API**: `GET/PUT /api/autosnapshot/config`, `GET/PUT /api/autosnapshot/clusters/{name}`, `GET /api/autosnapshot/status`, `GET /api/autosnapshot/trigger-events`
+  - **CLI**: `dasha autosnapshot` (separate command, not started by `dasha serve`)
+  - **Deploy**: Helm chart `autosnapshot` subchart (disabled by default, toggle `autosnapshot.enabled: true`); docker-compose adds `autosnapshot` service alongside `backend` and `frontend`
+- **DB connection-pool tuning** (`dasha.yaml`): the pools to monitored clusters are now configurable — `db_pool` (`max_conns`, `max_conn_idle_time`, `max_conn_lifetime`; 0 = pgx default) for `dasha serve`, and `autosnapshot_db_pool` (per-field override) for the `dasha autosnapshot` daemon. Lets the daemon free monitoring-user connections quickly (e.g. `max_conn_idle_time: 5s`) under a tight connection budget. The storage pool stays tunable via `storage.dsn` query params (`pool_max_conns`, `pool_max_conn_idle_time`, ...)
+- **Lock snapshots on triggers**: an activity-spike snapshot can additionally capture the lock-contention graph alongside `pg_stat_statements`
+  - **Hybrid timing**: cheap blocked-session counting runs in the background during the spike and records a `background_peak`; at trigger time a short burst of N detailed probes (default 5 × 500 ms) captures the full `pg_blocking_pids` graph
+  - **Harshest probe wins**: the probe with the most distinct blocked sessions is kept (tie-break by longest wait); up to 100 rows are stored, sorted by wait descending
+  - **Storage**: new `snapshots.locks_data jsonb` column; `GET /api/queries/snapshot/{id}/locks` serves it; the snapshot list now carries `has_locks`
+  - **Knobs** (global + per-cluster): `capture_locks` (default on), `lock_probe_count` (1–20), `lock_probe_interval` (100 ms–5 s)
+  - **Manual capture**: a "with locks" option on the manual snapshot button; the captured lock graph is viewable from the Query Stats snapshot view
 
 ## v1.1.0
 

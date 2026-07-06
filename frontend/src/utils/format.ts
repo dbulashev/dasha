@@ -64,6 +64,18 @@ export function fmtInt(v: number | null | undefined): string {
   return v.toLocaleString()
 }
 
+/**
+ * Format an ISO timestamp with the browser locale. Returns `empty` for
+ * missing/unparsable values and for pre-2000 dates (epoch-zero placeholders
+ * PostgreSQL reports as "never").
+ */
+export function fmtDateTime(iso: string | null | undefined, empty = '—'): string {
+  if (!iso) return empty
+  const d = new Date(iso)
+  if (isNaN(d.getTime()) || d.getFullYear() < 2000) return empty
+  return d.toLocaleString()
+}
+
 export function fmtAge(createdAt: string | null | undefined, statsReset: string | null | undefined, unknownLabel = '?'): string {
   if (!createdAt || !statsReset) return unknownLabel
   const diff = new Date(createdAt).getTime() - new Date(statsReset).getTime()
@@ -81,6 +93,18 @@ export function fmtAge(createdAt: string | null | undefined, statsReset: string 
   if (min > 0) parts.push(`${min}m`)
   if (sec > 0 || parts.length === 0) parts.push(`${sec}s`)
   return parts.join(' ')
+}
+
+/**
+ * Round a number to at most `decimals` places, dropping trailing zeros
+ * (5 → 5, 90.22492448754167 → 90.22, 4.571607 → 4.57). Non-finite numbers and
+ * non-number values pass through unchanged, so it is safe to map over a mixed
+ * context object of strings/booleans/numbers (e.g. a recommendation's context).
+ */
+export function fmtNum(value: unknown, decimals = 2): unknown {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return value
+  if (Number.isInteger(value)) return value
+  return Number(value.toFixed(decimals))
 }
 
 export function fmtRowCount(n: number): string {

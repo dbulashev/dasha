@@ -9,4 +9,4 @@ SELECT
 FROM pg_stat_user_tables
 WHERE n_tup_upd > 1000
 ORDER BY hot_ratio NULLS FIRST, n_tup_upd DESC
-LIMIT 20
+LIMIT $1 OFFSET $2

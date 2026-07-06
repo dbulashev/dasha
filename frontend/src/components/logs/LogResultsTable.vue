@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { LogEntry } from '@/api/models'
+import { fmtDateTime } from '@/utils/format'
 import { severityColor } from './types'
 
 const props = defineProps<{
@@ -43,12 +44,6 @@ const headers = computed(() => {
     { title: t('logs.col.text'), key: 'text' },
   ]
 })
-
-function fmtTime(ts: string | undefined): string {
-  if (!ts) return '—'
-  const d = new Date(ts)
-  return isNaN(d.getTime()) ? ts : d.toLocaleString()
-}
 
 function escapeHtml(s: string): string {
   return s
@@ -112,13 +107,14 @@ function fieldRows(item: LogEntry): Array<[string, string]> {
         :loading="props.loading"
         show-expand
         item-value="__index"
-        :items-per-page="-1"
+        :items-per-page="50"
+        :hide-default-footer="rows.length <= 50"
       >
         <template #item.timestamp="{ item }">
-          <span class="text-no-wrap">{{ fmtTime(item.timestamp) }}</span>
+          <span class="text-no-wrap">{{ fmtDateTime(item.timestamp) }}</span>
         </template>
         <template #item.last_seen="{ item }">
-          <span class="text-no-wrap">{{ fmtTime(item.last_seen) }}</span>
+          <span class="text-no-wrap">{{ fmtDateTime(item.last_seen) }}</span>
         </template>
         <template #item.count="{ item }">
           <v-chip size="small" variant="tonal" color="primary">{{ item.count }}</v-chip>

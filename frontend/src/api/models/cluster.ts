@@ -10,6 +10,8 @@ export interface Cluster {
   name?: string
   /** cluster origin, e.g. "static" or "yandex-mdb" */
   source?: string
+  /** true when cluster logs can be searched via GET /api/logs */
+  supports_logs?: boolean
   instances?: ClusterInstance[]
   databases?: string[]
 }

@@ -1,0 +1,10 @@
+# VictoriaMetrics promscrape config for the demo: scrape the pgSCV exporter.
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+
+scrape_configs:
+  - job_name: pgscv
+    static_configs:
+      - targets:
+          - "pgscv:9890"

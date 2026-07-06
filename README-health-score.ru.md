@@ -37,7 +37,7 @@ score = 100 − Σ (penalty_i × weight_i)
 | `performance`   | 0.15   | Cache hit ratio, `track_io_timing`                                   |
 | `storage`       | 0.10   | Доля dead-кортежей, bloat, эффективность HOT-обновлений             |
 | `replication`   | 0.15   | Лаг репликации (время и байты), отключённые реплики                 |
-| `maintenance`   | 0.15   | Возраст XID, давность вакуума, GUC autovacuum/track_counts, ANALYZE |
+| `maintenance`   | 0.15   | Возраст XID, очередь и давность вакуума, GUC autovacuum/track_counts, ANALYZE |
 | `horizon`       | 0.10   | Лаг горизонта MVCC (старейший снепшот, блокирующий VACUUM)          |
 | `wal_checkpoint`| 0.10   | Соотношение requested/timed чекпоинтов, рассогласование `wal_level` |
 | `locks`         | 0.10   | Lock-waiters, ungranted locks, deadlocks, насыщение lock pool       |
@@ -63,7 +63,8 @@ score = 100 − Σ (penalty_i × weight_i)
 | replication    | `max_lag_bytes`                        | >16 МиБ — растёт до максимума                 |
 | replication    | `disconnected_replicas`                | каждое отключение даёт 25 баллов              |
 | maintenance    | `max(xid_age, relfrozenxid_age)`       | 200 М → 1.6 Б → 2.1 Б (нарастает до 100)      |
-| maintenance    | `max_vacuum_age_hours`                 | >168 ч → >504 ч → >1440 ч (7/21/60 дней)      |
+| maintenance    | `vacuum_backlog_tables`                | >5 таблиц → +1.5 балла за шт., потолок 15     |
+| maintenance    | `max_overdue_vacuum_age_hours`         | >168 ч → >504 ч → >1440 ч (7/21/60 дней)      |
 | maintenance    | `tables_never_vacuumed`                | по 5 баллов за таблицу, потолок 20            |
 | maintenance    | `tables_with_autovacuum_off`           | по 3 балла за таблицу, потолок 15             |
 | maintenance    | `stale_planner_stats_tables`           | по 2 балла за таблицу, потолок 15             |
@@ -107,13 +108,14 @@ score = 100 − Σ (penalty_i × weight_i)
 
 ### Maintenance
 - `xid_wraparound_risk` — `max(age(datfrozenxid))` по `pg_database`. Число транзакций до wraparound-аварии. Откалибровано по `autovacuum_freeze_max_age=200 М` (на этой границе должен включаться anti-wraparound autovacuum) и жёсткому пределу 2 Б. Пороги ≥150 М / ≥200 М / ≥1.6 Б.
-- `stale_vacuum` — дней с последнего `last_vacuum`/`last_autovacuum` по user-таблицам. Сигнал застрявшего autovacuum. Пороги ≥7 / ≥21 / ≥60 дней.
+- `stale_vacuum` — возраст самого старого `last_vacuum`/`last_autovacuum`, в днях, **среди таблиц из очереди** (превысивших свой порог autovacuum). Статичные / преимущественно читаемые таблицы в очередь не попадают и больше не дают ложных срабатываний. Сигнал застрявшего autovacuum. Пороги ≥7 / ≥21 / ≥60 дней.
+- `vacuum_backlog` — таблицы, уже превысившие порог срабатывания autovacuum: `n_dead_tup` выше `autovacuum_vacuum_threshold + autovacuum_vacuum_scale_factor·reltuples`, либо `n_ins_since_vacuum` выше insert-порога. Потабличные `reloptions` переопределяют глобальные GUC (формула самого PostgreSQL). Длина очереди на vacuum — глубокая очередь означает, что autovacuum не успевает. Пороги ≥6 / ≥15 / ≥30 таблиц.
 - `tables_never_vacuumed` — таблицы, у которых одновременно `last_vacuum IS NULL` и `last_autovacuum IS NULL`. Пороги ≥1 / ≥2 / ≥5.
 - `autovacuum_disabled` — глобальный GUC `autovacuum=off`. Bloat и возраст XID растут бесконтрольно. HIGH.
 - `track_counts_disabled` — глобальный GUC `track_counts=off`. У autovacuum нет статистики, фактически он не работает. HIGH.
 - `tables_with_autovacuum_off` — таблицы с `autovacuum_enabled=false` в `pg_class.reloptions`. Пороги ≥1 / ≥5 / ≥20.
 - `relfrozenxid_age_outlier` — худший `age(relfrozenxid)` по таблицам из `pg_class`. Потабличная версия `xid_wraparound_risk`. Пороги ≥200 М / ≥500 М / ≥1 Б.
-- `stale_planner_stats` — таблицы, у которых `n_mod_since_analyze` велик относительно `n_live_tup` (статистика планировщика устарела). Пороги ≥3 / ≥10 / ≥30 таблиц.
+- `stale_planner_stats` — таблицы, у которых `n_mod_since_analyze` превышает половину их (с учётом reloptions) порога auto-analyze и которые не анализировались более 24 ч (статистика планировщика устарела). Пороги ≥3 / ≥10 / ≥30 таблиц.
 
 ### Horizon
 - `horizon_lag_xids` — `txid_current() - min(backend_xmin)` по `pg_stat_activity`. Сколько транзакций VACUUM не может убрать, потому что их ещё видит какая-то сессия (длинная транзакция, заброшенный replication-слот, prepared tx). Пороги ≥1 М / ≥10 М / ≥100 М.
@@ -133,5 +135,76 @@ score = 100 − Σ (penalty_i × weight_i)
 ## Drill down (детализация по базам)
 
 В таблице «Базы данных» по каждой БД собраны те же метрики, что и для инстанса: cache hit ratio, dead tuples, давность вакуума. Движок правил пересчитывается в database-scope, скрывая instance-only категории. В UI таблица сортируется по размеру или score, выбранную базу можно закрепить как контекст рекомендаций.
+
+## Metrics-backed режим (история, baseline, богатые сигналы)
+
+По умолчанию score — это **точечный SQL-snapshot**. Если настроен Prometheus/VictoriaMetrics-совместимый datasource (`health_score.metrics` в `dasha.yaml`), Dasha считает **score**, **рекомендации** и **тренд** из time-series метрик. Откат на snapshot распространяется **только на score и рекомендации**: если datasource недоступен или цель не сопоставлена, они возвращаются к точечному SQL-snapshot, а поле `source` в `GET /api/common/health-score` показывает, каким путём получено число. У эндпоинта **тренда/истории** (`GET /api/common/health-score/history`) **отката на snapshot нет** — он отдаётся только из time-series и возвращает **404**, когда metrics-режим выключен, недоступен или цель не сопоставлена.
+
+Каталожные и GUC-факты, которые time-series выразить не может — потабличный `autovacuum_enabled=false`, ни разу не вакуумленные таблицы, возраст `relfrozenxid`, дрейф статистики планировщика, `wal_level`, GUC `autovacuum`/`track_counts`, горизонт MVCC и размер lock-pool — **накладываются из SQL-снимка** на метрик-сигналы. Поэтому каждое правило продолжает влиять и на score, и на рекомендации даже в metrics-режиме (инвариант score↔rules сохраняется), а каталожные находки вроде потабличной рекомендации `tables_with_autovacuum_off` не исчезают молча при подключении datasource. Оверлей обязателен для паритета: если SQL-снимок прочитать не удалось, Dasha откатывается на чистый snapshot-score, а не отдаёт metrics-only число с обнулёнными каталожными фактами (которые иначе читались бы как, например, «autovacuum off»). (Исторический **тренд** остаётся чисто time-series — каталожные факты это значения «сейчас», поэтому gauge может быть чуть ниже последней точки тренда на величину каталожного штрафа.)
+
+### Провайдеры и матчинг лейблов
+
+Score потребляет **нормализованный набор сигналов**; адаптеры провайдеров переводят метрики и лейблы каждого источника:
+
+| Роль | Self-managed | Managed (Yandex MDB) |
+|------|--------------|----------------------|
+| Внутренности PG (`core`) | pgSCV | pgSCV (удалённый скрейп) |
+| Пуллер | pgbouncer (через pgSCV) | YC pooler |
+| Хост | pgSCV system collector | YC host-метрики |
+
+Схемы лейблов различаются по провайдеру/окружению, поэтому **шаблоны селекторов конфигурируемы** per-target (`selectors:` + `targets:`). `GET /api/common/health-score/datasource/status?cluster_name=…&instance=…` показывает по каждой роли провайдера, отрендеренный селектор и число сматченных рядов (ровно один = ок) — для валидации матчинга.
+
+**Дискаверенные кластеры** (из `discovery:`, напр. Yandex MDB) авто-маппятся из метаданных discovery — их не нужно перечислять в `targets:`: FQDN хоста → `{{.Host}}`, cloud resource id (id кластера MDB) → `{{.Service}}`, лейбл `folder_id` → `{{.Env}}`, короткий хост → `{{.Container}}`; провайдеры берутся из `providers_default` (напр. `core: pgscv`, `pooler/host: yc_native`). Кастомизируются только шаблоны селекторов. Статический `targets:` всегда перекрывает выведенный маппинг; `auto_map_discovered: false` отключает авто-маппинг, `discovery_env_label` меняет, из какого лейбла брать `{{.Env}}`.
+
+### Тренд, сезонная норма (baseline) и просадки
+
+`GET /api/common/health-score/history?cluster_name=…&instance=…&from=…&to=…&step_seconds=…` отдаёт по времени общий балл, баллы категорий и латентность на `[from, to]`. График `HealthScoreTrend` на `/health-score` рисует score + сезонную норму + латентность с отметками просадок.
+
+#### Что такое «сезонная норма»
+
+Нагрузка на БД почти всегда **циклична**: будни ≠ выходные, день ≠ ночь, понедельник 09:00 ≠ воскресенье 03:00. Плоское среднее или фиксированный порог это игнорируют — либо шумят на ночном batch'е, либо пропускают реальное замедление в пик. Сезонная норма — это **ожидаемое значение метрики для конкретного момента недельного цикла**, а не общее среднее. Строится так:
+
+1. **Бакетирование по «часу недели».** Каждая точка истории попадает в один из **168 бакетов** (7 дней × 24 часа): `hour_of_week = weekday*24 + hour` (UTC). Понедельник 09:00 → бакет 33, воскресенье 00:00 → бакет 0.
+2. **Медиана на бакет** за длинное окно (дефолт 28 дней). Берём именно медиану, а не среднее — она устойчива к выбросам: разовый ночной `VACUUM` или деплой не сдвигают норму.
+
+Получается «профиль недели»: нормальный балл (и латентность) для каждого часа каждого дня недели.
+
+#### Как используется
+
+Текущее значение сравнивается с **его собственной нормой для этого часа недели**, а не с глобальным средним:
+
+- **Просадки (dips):** «сейчас вторник 14:00, score 70, а обычные вторники 14:00 = 92 → просадка 22 пункта» → отметка на тренде. Регулярный ночной batch, роняющий score, просадкой *не* считается (его норма тоже низкая) — ложной тревоги нет.
+- **Регрессия латентности** → `performance`: `текущая латентность / сезонная норма` отвечает на вопрос «медленнее ли запрос, чем обычно *в это время недели*». Работает на любом воркладе, потому что сравнивает с собой, а не с абсолютным порогом `50/200/1000 мс`.
+
+Пример: 50 мс в понедельник 14:00 (норма 45 мс) — чуть выше обычного; те же 50 мс в понедельник 03:00 (норма 12 мс) — ~4× нормы, реальная аномалия. Одно значение — два вердикта.
+
+Сезонная норма и просадки появляются по мере накопления истории; пока её мало, график деградирует мягко (нет линии нормы, нет отметок просадок). Источник: `BuildBaseline` / `Baseline.Value` в `backend/internal/metrics/baseline.go`.
+
+### Богатые сигналы (vs SQL-snapshot)
+
+- **Сатурация CPU хоста** (`load_avg_15 / vCPU`) и **сатурация пуллера** (`server_conns / pool_size`) → `connections` — точнее, чем `total / max_connections` на пулящихся сетапах.
+- **Регрессия латентности** → `performance`: оконная средняя латентность из `pg_stat_statements` относительно своего сезонного baseline (×1.5 / ×3 / ×6), чтобы `performance` двигался по реальной латентности, а не только по cache-hit. Латентность собирается всегда; штраф требует baseline.
+- **Checksum-ошибки** (повреждение страниц) и **исчерпание sequence/ID-пространства** у предела → критический floor + HIGH-правила.
+- **Регрессия sequential scans** → `performance`: темп чтения строк seq-scan'ами относительно своей сезонной нормы (×1.5 / ×3 / ×6) — рост сигналит, что индексы перестали использоваться или протухла статистика (`ANALYZE` / ревизия индексов), без ложных срабатываний на штатных аналитических сканах. Собирается всегда; штраф требует baseline.
+- **Свободное место на диске хоста** → `storage`: занято/всего на самой заполненной ФС (pgSCV `node_filesystem_*`, Yandex Cloud `disk_used_bytes`/`disk_total_bytes`). Пороги LOW/MED/HIGH на ≥70/80/90% и **роль-агностичный критический floor на ≥90%** — полный data-том останавливает запись, поэтому зажимает score в красную зону и на мастере, и на реплике.
+
+### Конфигурация
+
+```yaml
+health_score:
+  metrics:
+    enabled: true
+    datasource:
+      url: "http://victoria-metrics:8428"
+      # auth (как секрет): type none|bearer|basic, креды через env
+      auth: { type: bearer, token_from_env: DASHA_METRICS_DATASOURCE_TOKEN }
+    providers_default: { core: pgscv, pooler: pgbouncer, host: pgscv_system }
+    selectors: { … }   # шаблоны лейблов на провайдера (дефолты в комплекте)
+    targets:           # проекция каждой Dasha-цели (cluster, instance) на лейблы datasource
+      - { cluster: …, instance: …, env: …, service: …, host: …, container: … }
+```
+
+Auth datasource поддерживает `token_from_env` (bearer) и `username` + `password_from_env` (basic) — резолвятся из окружения как остальные `*_from_env`-секреты, поэтому креды инжектятся из Secret, а не лежат инлайн. `type: none` (по умолчанию) кредов не требует.
+
 
 

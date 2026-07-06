@@ -7,9 +7,7 @@ import (
 )
 
 // promotedFields maps abstract roles to the concrete message-map keys that
-// carry them for a given service type. Yandex does not publish a column list;
-// these were confirmed empirically (postgresql: 26 csvlog columns + hostname;
-// pooler/Odyssey: 9 columns). See plans/yandex-log-search-design.md §3.3.1.
+// carry them for a given service type.
 type promotedFields struct {
 	severity string
 	text     string
@@ -18,68 +16,64 @@ type promotedFields struct {
 	user     string
 }
 
-func promotedFor(st yandex.ServiceType) promotedFields {
-	if st == yandex.ServicePooler {
-		return promotedFields{
-			severity: "level",
-			text:     "text",
-			host:     "hostname",
-			database: "db",
-			user:     "user",
-		}
-	}
+// serviceFields co-locates everything Dasha knows about one service type's log
+// schema: promoted columns, keys to mask, the native-filter severity field and
+// the accepted severity values with their casing. Yandex does not publish a
+// column list; these were confirmed empirically (postgresql: 26 csvlog columns
+// + hostname; pooler/Odyssey: 9 columns). See plans/yandex-log-search-design.md §3.3.1.
+type serviceFields struct {
+	promoted promotedFields
+	// mask lists the free-text keys whose values must be passed through
+	// sanitize.SQL() before leaving the backend.
+	mask []string
+	// severityFilterField is the native-filter field name for severity.
+	severityFilterField string
+	// severityAllow is the set of accepted severity values, in the casing the
+	// Yandex API expects (postgresql UPPER, pooler lower).
+	severityAllow map[string]struct{}
+	// normalizeSeverity converts a user-supplied severity to that casing.
+	normalizeSeverity func(string) string
+}
 
-	return promotedFields{
+var postgresqlFields = serviceFields{
+	promoted: promotedFields{
 		severity: "error_severity",
 		text:     "message",
 		host:     "hostname",
 		database: "database_name",
 		user:     "user_name",
-	}
-}
-
-// maskFor lists the free-text message keys whose values must be passed through
-// sanitize.SQL() before leaving the backend, per service type.
-func maskFor(st yandex.ServiceType) []string {
-	if st == yandex.ServicePooler {
-		return []string{"text"}
-	}
-
-	return []string{"message", "query", "internal_query", "detail", "hint", "context"}
-}
-
-// severityFilterField is the native-filter field name for severity.
-func severityFilterField(st yandex.ServiceType) string {
-	if st == yandex.ServicePooler {
-		return "message.level"
-	}
-
-	return "message.error_severity"
-}
-
-// severityAllowlist is the set of accepted severity values per service type,
-// in the casing the Yandex API expects (postgresql UPPER, pooler lower).
-func severityAllowlist(st yandex.ServiceType) map[string]struct{} {
-	if st == yandex.ServicePooler {
-		return map[string]struct{}{
-			"debug": {}, "info": {}, "warning": {}, "error": {}, "fatal": {},
-		}
-	}
-
-	return map[string]struct{}{
+	},
+	mask:                []string{"message", "query", "internal_query", "detail", "hint", "context"},
+	severityFilterField: "message.error_severity",
+	severityAllow: map[string]struct{}{
 		"DEBUG": {}, "LOG": {}, "INFO": {}, "NOTICE": {},
 		"WARNING": {}, "ERROR": {}, "FATAL": {}, "PANIC": {},
-	}
+	},
+	normalizeSeverity: strings.ToUpper,
 }
 
-// normalizeSeverityCase converts a user-supplied severity to the casing the
-// service expects (postgresql UPPER, pooler lower).
-func normalizeSeverityCase(st yandex.ServiceType, s string) string {
+var poolerFields = serviceFields{
+	promoted: promotedFields{
+		severity: "level",
+		text:     "text",
+		host:     "hostname",
+		database: "db",
+		user:     "user",
+	},
+	mask:                []string{"text"},
+	severityFilterField: "message.level",
+	severityAllow: map[string]struct{}{
+		"debug": {}, "info": {}, "warning": {}, "error": {}, "fatal": {},
+	},
+	normalizeSeverity: strings.ToLower,
+}
+
+func fieldsFor(st yandex.ServiceType) serviceFields {
 	if st == yandex.ServicePooler {
-		return strings.ToLower(s)
+		return poolerFields
 	}
 
-	return strings.ToUpper(s)
+	return postgresqlFields
 }
 
 // severityRank ranks severities by importance for picking a representative one

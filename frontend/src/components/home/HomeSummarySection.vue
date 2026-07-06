@@ -24,6 +24,7 @@ import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useViewError } from '@/composables/useViewError'
 import { assertOk } from '@/utils/api'
 import { getErrorMessage } from '@/utils/error'
+import { fmtDateTime } from '@/utils/format'
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
@@ -215,16 +216,6 @@ async function loadStatsResetTime() {
   statsResetTimeLoading.value = false
 }
 
-function formatDateTime(iso: string): string {
-  try {
-    const d = new Date(iso)
-    if (isNaN(d.getTime()) || d.getFullYear() < 2000) return ''
-    return d.toLocaleString()
-  } catch {
-    return iso
-  }
-}
-
 // --- Load all ---
 async function load() {
   try {
@@ -262,14 +253,14 @@ watch([clusterName, hostName, databaseName], () => load(), { immediate: true })
         <v-icon start icon="mdi-database" />
         {{ databaseSize.SizePretty }}
       </v-chip>
-      <v-chip v-if="statsResetTime && formatDateTime(statsResetTime)" variant="tonal" size="default" prepend-icon="mdi-clock-outline">
-        {{ t('home.statsResetAt') }}: {{ formatDateTime(statsResetTime) }}
+      <v-chip v-if="statsResetTime && fmtDateTime(statsResetTime, '')" variant="tonal" size="default" prepend-icon="mdi-clock-outline">
+        {{ t('home.statsResetAt') }}: {{ fmtDateTime(statsResetTime, '') }}
       </v-chip>
-      <v-chip v-if="!statsResetTimeLoading && statsResetTime && !formatDateTime(statsResetTime)" variant="tonal" size="default" prepend-icon="mdi-clock-outline">
+      <v-chip v-if="!statsResetTimeLoading && statsResetTime && !fmtDateTime(statsResetTime, '')" variant="tonal" size="default" prepend-icon="mdi-clock-outline">
         {{ t('home.statsNeverReset') }}
       </v-chip>
-      <v-chip v-if="pgssAvailable && pgssInfoSupported && pgssStatsResetTime && formatDateTime(pgssStatsResetTime)" variant="tonal" size="default" prepend-icon="mdi-clock-outline">
-        {{ t('home.pgssStatsResetAt') }}: {{ formatDateTime(pgssStatsResetTime) }}
+      <v-chip v-if="pgssAvailable && pgssInfoSupported && pgssStatsResetTime && fmtDateTime(pgssStatsResetTime, '')" variant="tonal" size="default" prepend-icon="mdi-clock-outline">
+        {{ t('home.pgssStatsResetAt') }}: {{ fmtDateTime(pgssStatsResetTime, '') }}
       </v-chip>
       <v-chip v-if="pgssAvailable && pgssInfoSupported && !statsResetTimeLoading && !pgssStatsResetTime" variant="tonal" size="default" prepend-icon="mdi-clock-outline">
         {{ t('home.pgssStatsNeverReset') }}

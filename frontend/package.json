@@ -18,7 +18,7 @@
     "format": "prettier --write src/"
   },
   "dependencies": {
-    "@fontsource/roboto": "^5.2.8",
+    "@fontsource/roboto": "^5.2.10",
     "@tanstack/vue-query": "^5.90.5",
     "chart.js": "^4.5.1",
     "highlight.js": "^11.11.1",
@@ -32,7 +32,7 @@
   },
   "devDependencies": {
     "@mdi/font": "^7.4.47",
-    "@playwright/test": "^1.56.1",
+    "@playwright/test": "^1.61.0",
     "@tsconfig/node22": "^22.0.5",
     "@types/jsdom": "^27.0.0",
     "@types/node": "^22.18.11",
@@ -46,15 +46,18 @@
     "eslint": "^10.4.1",
     "eslint-plugin-playwright": "^2.10.4",
     "eslint-plugin-vue": "~10.9.1",
-    "jiti": "^2.6.1",
+    "jiti": "^2.7.0",
     "jsdom": "^29.1.1",
     "npm-run-all2": "^8.0.4",
-    "prettier": "3.8.3",
+    "prettier": "3.8.4",
     "typescript": "~5.9.0",
     "unplugin-fonts": "^1.4.0",
     "vite": "^7.1.11",
     "vite-plugin-vue-devtools": "^8.1.2",
-    "vitest": "^4.1.6",
+    "vitest": "^4.1.9",
     "vue-tsc": "^3.3.0"
+  },
+    "overrides": {
+    "esbuild": "0.28.1"
   }
 }

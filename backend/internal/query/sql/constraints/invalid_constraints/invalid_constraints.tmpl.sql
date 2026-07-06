@@ -2,8 +2,8 @@ SELECT
     nsp.nspname AS schema,
     rel.relname AS table,
     con.conname AS name,
-    fnsp.nspname AS referenced_schema,
-    frel.relname AS referenced_table
+    COALESCE(fnsp.nspname, '') AS referenced_schema,
+    COALESCE(frel.relname, '') AS referenced_table
 FROM
     pg_catalog.pg_constraint con
         INNER JOIN

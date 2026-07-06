@@ -12,8 +12,9 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
 
 FROM alpine:3.23
 RUN apk add --no-cache ca-certificates && \
+    apk add --no-cache --upgrade libcrypto3 libssl3 && \
     addgroup -S dasha && adduser -S -G dasha -u 1000 dasha
 COPY --from=builder /dasha /usr/local/bin/dasha
 USER dasha
 EXPOSE 8000
-CMD ["dasha"]
+CMD ["sh", "-c", "dasha migrate && exec dasha"]

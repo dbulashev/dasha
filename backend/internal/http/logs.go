@@ -37,13 +37,17 @@ func (s *Handlers) GetLogs(
 		switch {
 		case errors.Is(err, logs.ErrNotFound):
 			return serverhttp.GetLogs404Response{}, nil
-		case errors.Is(err, logs.ErrUnsupported), errors.Is(err, logs.ErrInvalid):
+		case errors.Is(err, logs.ErrInvalid):
 			return serverhttp.GetLogs400Response{}, nil
+		case errors.Is(err, logs.ErrUnsupported):
+			return serverhttp.GetLogs501Response{}, nil
 		case errors.Is(err, logs.ErrTimeout):
 			return serverhttp.GetLogs504Response{}, nil
 		case errors.Is(err, logs.ErrUpstream):
 			return serverhttp.GetLogs502Response{}, nil
 		default:
+			// context.Canceled (client disconnect) lands here; the error
+			// handler skips logging it.
 			return nil, fmt.Errorf("GetLogs | %w", err)
 		}
 	}

@@ -1,0 +1,44 @@
+# pgSCV config for the metrics-backed Health Score demo.
+# Emits per-service join labels (cluster / service_id / container) via
+# target_labels so they match Dasha's selector templates (requirements
+# Appendix A). The system collector stays enabled to expose host node_* metrics.
+listen_address: 0.0.0.0:9890
+no_track_mode: false
+
+services:
+  "pg18-master:5432":
+    service_type: "postgres"
+    conninfo: "postgres://demo:demo@pg18-master:5432/demo"
+    target_labels:
+      - { name: cluster, value: "demo" }
+      - { name: service_id, value: "pg18-master" }
+      - { name: container, value: "pg18-master" }
+
+  "pg17-master:5432":
+    service_type: "postgres"
+    conninfo: "postgres://demo:demo@pg17-master:5432/demo"
+    target_labels:
+      - { name: cluster, value: "demo" }
+      - { name: service_id, value: "pg17-master" }
+      - { name: container, value: "pg17-master" }
+
+  "pg18-standalone:5432":
+    service_type: "postgres"
+    conninfo: "postgres://demo:demo@pg18-standalone:5432/demo"
+    target_labels:
+      - { name: cluster, value: "demo" }
+      - { name: service_id, value: "pg18-standalone" }
+      - { name: container, value: "pg18-standalone" }
+
+  # Self-managed pooler — exercises the pgbouncer pooler adapter.
+  "pgbouncer:6432":
+    service_type: "pgbouncer"
+    conninfo: "postgres://demo:demo@pgbouncer:6432/pgbouncer"
+    target_labels:
+      - { name: cluster, value: "demo" }
+      - { name: service_id, value: "pg18-master" }
+      - { name: container, value: "pg18-master" }
+
+# All collectors enabled. stattuple (bloat) and custom queries are heavy; disable
+# here if the lab gets slow. exhaustion/bloat signals require stattuple/schemas.
+disable_collectors: []
