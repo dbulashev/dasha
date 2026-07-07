@@ -37,7 +37,7 @@ In parallel, a **rules engine** evaluates the same metrics and emits a list of L
 | `performance`   | 0.15   | Cache hit ratio, `track_io_timing`                                |
 | `storage`       | 0.10   | Dead-tuple ratio, bloat, HOT-update efficiency                    |
 | `replication`   | 0.15   | Lag (time and bytes), disconnected standbys                       |
-| `maintenance`   | 0.15   | XID age, vacuum freshness, autovacuum/track_counts GUCs, ANALYZE  |
+| `maintenance`   | 0.15   | XID age, vacuum backlog & freshness, autovacuum/track_counts GUCs, ANALYZE  |
 | `horizon`       | 0.10   | MVCC horizon lag (oldest snapshot blocking VACUUM)                |
 | `wal_checkpoint`| 0.10   | Requested vs. timed checkpoints, `wal_level` mismatch             |
 | `locks`         | 0.10   | Lock-waiters, ungranted locks, deadlocks, lock-pool saturation    |
@@ -63,7 +63,8 @@ Penalties grow smoothly with the metric. A **breakpoint** is the metric value at
 | replication    | `max_lag_bytes`                     | >16 MiB ramps up to full                        |
 | replication    | `disconnected_replicas`             | each disconnect adds 25 pts                     |
 | maintenance    | `max(xid_age, relfrozenxid_age)`    | 200 M → 1.6 B → 2.1 B (escalates to 100)       |
-| maintenance    | `max_vacuum_age_hours`              | >168 h → >504 h → >1440 h (7/21/60 days)        |
+| maintenance    | `vacuum_backlog_tables`             | >5 tables → +1.5 pts each, capped at 15         |
+| maintenance    | `max_overdue_vacuum_age_hours`      | >168 h → >504 h → >1440 h (7/21/60 days)        |
 | maintenance    | `tables_never_vacuumed`             | each table adds 5 pts, capped at 20             |
 | maintenance    | `tables_with_autovacuum_off`        | 3 pts each, capped at 15                        |
 | maintenance    | `stale_planner_stats_tables`        | 2 pts each, capped at 15                        |
@@ -107,13 +108,14 @@ Each bullet: what's measured / how it's computed, then LOW / MEDIUM / HIGH thres
 
 ### Maintenance
 - `xid_wraparound_risk` — `max(age(datfrozenxid))` across `pg_database`. Number of transactions until wraparound forces shutdown. Calibrated against `autovacuum_freeze_max_age=200M` (autovacuum should already be in anti-wraparound mode) and the 2 B hard limit. Thresholds ≥150 M / ≥200 M / ≥1.6 B.
-- `stale_vacuum` — days since the most recent `last_vacuum`/`last_autovacuum` over user tables. Detects stalled autovacuum. Thresholds ≥7 / ≥21 / ≥60 days.
+- `stale_vacuum` — oldest `last_vacuum`/`last_autovacuum` age, in days, **among the backlog tables** (those past their autovacuum trigger). Static / read-mostly tables never enter the queue, so they no longer false-positive. Detects stalled autovacuum. Thresholds ≥7 / ≥21 / ≥60 days.
+- `vacuum_backlog` — tables currently past their autovacuum trigger: `n_dead_tup` over `autovacuum_vacuum_threshold + autovacuum_vacuum_scale_factor·reltuples`, or `n_ins_since_vacuum` over the insert threshold. Per-table `reloptions` override the global GUCs (PostgreSQL's own trigger). The vacuum-queue depth — a deep queue means autovacuum is outpaced. Thresholds ≥6 / ≥15 / ≥30 tables.
 - `tables_never_vacuumed` — tables with both `last_vacuum IS NULL` and `last_autovacuum IS NULL`. Thresholds ≥1 / ≥2 / ≥5.
 - `autovacuum_disabled` — global GUC `autovacuum=off`. Bloat and XID age grow unchecked. HIGH.
 - `track_counts_disabled` — global GUC `track_counts=off`. Autovacuum has no statistics to act on and effectively stops. HIGH.
 - `tables_with_autovacuum_off` — tables with `autovacuum_enabled=false` in `pg_class.reloptions`. Thresholds ≥1 / ≥5 / ≥20.
 - `relfrozenxid_age_outlier` — worst per-table `age(relfrozenxid)` from `pg_class`. Per-table flavour of `xid_wraparound_risk`. Thresholds ≥200 M / ≥500 M / ≥1 B.
-- `stale_planner_stats` — tables whose `n_mod_since_analyze` is large relative to `n_live_tup` (planner has outdated stats). Thresholds ≥3 / ≥10 / ≥30 tables.
+- `stale_planner_stats` — tables whose `n_mod_since_analyze` exceeds half their (reloption-aware) auto-analyze threshold and that have not been analyzed in 24 h (planner has outdated stats). Thresholds ≥3 / ≥10 / ≥30 tables.
 
 ### Horizon
 - `horizon_lag_xids` — `txid_current() - min(backend_xmin)` over `pg_stat_activity`. Number of transactions VACUUM cannot reclaim because some session still sees them (long tx, abandoned replication slot, prepared tx). Thresholds ≥1 M / ≥10 M / ≥100 M.
@@ -136,9 +138,9 @@ The "Databases" table collects the same metrics on a per-DB basis as it does for
 
 ## Metrics-backed mode (history, baseline, richer signals)
 
-By default the score is a **point-in-time SQL snapshot**. When a Prometheus/VictoriaMetrics-compatible datasource is configured (`health_score.metrics` in `dasha.yaml`), Dasha computes the score, recommendations and a **trend** from time-series metrics instead — and falls back to the snapshot when the datasource is unavailable or a target is not mapped. The `source` field on `GET /api/common/health-score` reports which path produced the number.
+By default the score is a **point-in-time SQL snapshot**. When a Prometheus/VictoriaMetrics-compatible datasource is configured (`health_score.metrics` in `dasha.yaml`), Dasha computes the **score**, **recommendations** and a **trend** from time-series metrics instead. The fallback is scoped to the **score and recommendations only**: if the datasource is unavailable or a target is not mapped, those revert to the point-in-time SQL snapshot, and the `source` field on `GET /api/common/health-score` reports which path produced the number. The **trend/history** endpoint (`GET /api/common/health-score/history`) has **no snapshot fallback** — it is time-series-only and returns **404** when metrics mode is disabled, unavailable, or the target mapping is missing.
 
-Catalog and GUC facts that a time-series datasource cannot express — per-table `autovacuum_enabled=false`, never-vacuumed tables, `relfrozenxid` age, planner-stat drift, `wal_level`, the `autovacuum`/`track_counts` GUCs, the MVCC horizon and lock-pool sizing — are **overlaid from the SQL snapshot** onto the metrics signals. So every rule keeps contributing to **both** the score and its recommendations even in metrics mode (score↔rules parity holds), and catalog-only findings such as the per-table `tables_with_autovacuum_off` recommendation do not silently disappear when a datasource is attached. The overlay is best-effort: a snapshot read failure leaves the metrics-only score intact. (The historical **trend** stays time-series-only — catalog facts are "now" values, so the gauge may sit slightly below the latest trend point by the catalog penalty.)
+Catalog and GUC facts that a time-series datasource cannot express — per-table `autovacuum_enabled=false`, never-vacuumed tables, `relfrozenxid` age, planner-stat drift, `wal_level`, the `autovacuum`/`track_counts` GUCs, the MVCC horizon and lock-pool sizing — are **overlaid from the SQL snapshot** onto the metrics signals. So every rule keeps contributing to **both** the score and its recommendations even in metrics mode (score↔rules parity holds), and catalog-only findings such as the per-table `tables_with_autovacuum_off` recommendation do not silently disappear when a datasource is attached. The overlay is required for parity: if the SQL snapshot cannot be read, Dasha falls back to the pure snapshot score rather than emit a metrics-only number with zeroed catalog facts (which would misread as, say, "autovacuum off"). (The historical **trend** stays time-series-only — catalog facts are "now" values, so the gauge may sit slightly below the latest trend point by the catalog penalty.)
 
 ### Providers and label matching
 
@@ -204,4 +206,3 @@ health_score:
 
 Datasource auth supports `token_from_env` (bearer) and `username` + `password_from_env` (basic), resolved from the environment like the other `*_from_env` secrets — so credentials are injected from a Secret rather than stored inline. `type: none` (default) needs no credentials.
 
-Design details: `plans/health-score-history-{requirements,design,workflow}.md`.

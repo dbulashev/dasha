@@ -54,14 +54,12 @@ func NewMiddlewares(ctx context.Context, cfg config.AuthConfig, resolver PATReso
 	)
 
 	if cfg.Mode == config.AuthModeOIDC {
-		var err error
-
-		oidcProvider, err = NewOIDCProvider(ctx, *cfg.OIDC, logger)
-		if err != nil {
-			logger.Warn("OIDC provider initialization failed; SSO login will show error page until config is fixed and service restarted", zap.Error(err))
+		if len(cfg.CookieSecret) < minSecretLen {
+			logger.Warn("auth.cookie_secret is unset or too short — session cookies are keyed with an ephemeral random key that changes on every restart and differs per replica; users get logged out on restarts/scale-out. Set a stable cookie_secret (>=32 chars), ideally via cookie_secret_from_env.")
 		}
 
-		sessionMgr = NewSessionManager(cfg)
+		oidcProvider = NewOIDCProvider(ctx, *cfg.OIDC, logger)
+		sessionMgr = NewSessionManager(cfg, logger)
 	}
 
 	enforcer, err := NewCasbinEnforcer()
@@ -99,6 +97,8 @@ type UserContext struct {
 
 const userContextKey = "auth_user"
 
+type ctxUserKey struct{}
+
 func GetUser(c echo.Context) *UserContext {
 	u, ok := c.Get(userContextKey).(*UserContext)
 	if !ok {
@@ -108,26 +108,24 @@ func GetUser(c echo.Context) *UserContext {
 	return u
 }
 
-func SetUser(c echo.Context, u *UserContext) {
-	c.Set(userContextKey, u)
+// UserFromContext returns the authenticated user from a stdlib context.
+// Populated by SetUser so strict-server handlers (which receive context.Context,
+// not echo.Context) can still identify the caller.
+func UserFromContext(ctx context.Context) *UserContext {
+	u, _ := ctx.Value(ctxUserKey{}).(*UserContext)
+	return u
 }
 
-type userCtxKeyType struct{}
+func SetUser(c echo.Context, u *UserContext) {
+	c.Set(userContextKey, u)
 
-// userCtxKey carries the authenticated user inside a context.Context, so strict
-// handlers (which receive context.Context, not echo.Context) can read identity.
-var userCtxKey userCtxKeyType
+	req := c.Request()
+	c.SetRequest(req.WithContext(context.WithValue(req.Context(), ctxUserKey{}, u)))
+}
 
 // WithUser returns a context carrying the authenticated user.
 func WithUser(ctx context.Context, u *UserContext) context.Context {
-	return context.WithValue(ctx, userCtxKey, u)
-}
-
-// UserFromContext returns the authenticated user, or nil when absent.
-func UserFromContext(ctx context.Context) *UserContext {
-	u, _ := ctx.Value(userCtxKey).(*UserContext)
-
-	return u
+	return context.WithValue(ctx, ctxUserKey{}, u)
 }
 
 // PATResolver resolves a presented X-API-Key to a user via a personal access

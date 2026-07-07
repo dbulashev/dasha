@@ -4,13 +4,13 @@
 // series selectors, and a catalog of MetricsQL templates per signal/provider.
 //
 // It is additive to the existing SQL snapshot path: when disabled or when a
-// target cannot be matched, callers fall back to the snapshot score. See
-// plans/health-score-history-design.md.
+// target cannot be matched, callers fall back to the snapshot score.
 package metrics
 
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -44,6 +44,17 @@ type Config struct {
 	Selectors  map[string]string `mapstructure:"selectors"` // selector-key -> Go-template
 	Targets    []TargetMapping   `mapstructure:"targets"`
 
+	// RoleLabel is the series label carrying the per-connection role/user name on
+	// YC native role metrics (postgres_role_sessions / postgres_role_conn_limit).
+	// Default "query_type". Used to drop service roles from role-connection
+	// saturation so a busy exporter/migrator does not inflate the score.
+	RoleLabel string `mapstructure:"role_label"`
+	// ExcludeRoles lists role/user names dropped from per-role connection
+	// saturation — service accounts, migrators — matched against RoleLabel with a
+	// negative regex. Setting it replaces the default ["postgres_exporter"]; list
+	// every role you want excluded (e.g. ["postgres_exporter", "migrator"]).
+	ExcludeRoles []string `mapstructure:"exclude_roles"`
+
 	// AutoMapDiscovered derives a label mapping for service-discovered clusters
 	// that are not enumerated in Targets (default true). Only non-static
 	// clusters qualify; a self-managed cluster without a target stays unmapped
@@ -67,6 +78,23 @@ func (c Config) envLabelKey() string {
 	}
 
 	return c.DiscoveryEnvLabel
+}
+
+// roleExclusion renders the label-matcher fragment dropping ExcludeRoles from
+// per-role metrics, e.g. `,query_type!~"postgres_exporter|migrator"`. The leading
+// comma lets callers append it inside an existing `{...}` selector; empty when
+// nothing is excluded.
+func (c Config) roleExclusion() string {
+	if len(c.ExcludeRoles) == 0 {
+		return ""
+	}
+
+	label := c.RoleLabel
+	if label == "" {
+		label = "query_type"
+	}
+
+	return fmt.Sprintf(`,%s!~"%s"`, label, strings.Join(c.ExcludeRoles, "|"))
 }
 
 // DatasourceConfig describes the TSDB endpoint.
@@ -134,8 +162,7 @@ const (
 	SelectorPgSCVSystem    = "pgscv_system"
 )
 
-// Default returns the built-in defaults (feature disabled). Selector templates
-// match the real label schemes captured in the requirements (Appendix A).
+// Default returns the built-in defaults (feature disabled).
 func Default() Config {
 	return Config{
 		Enabled: false,
@@ -147,8 +174,10 @@ func Default() Config {
 			Window:     28 * 24 * time.Hour,
 			MinHistory: 14 * 24 * time.Hour,
 		},
-		Dips:  DipsConfig{ScorePoints: 10, LatencyFactor: 2.0},
-		Floor: FloorConfig{WraparoundLeft: 200_000_000},
+		Dips:         DipsConfig{ScorePoints: 10, LatencyFactor: 2.0},
+		Floor:        FloorConfig{WraparoundLeft: 200_000_000},
+		RoleLabel:    "query_type",
+		ExcludeRoles: []string{"postgres_exporter"},
 		Providers: ProvidersConfig{
 			Core:   ProviderPgSCV,
 			Pooler: ProviderYCNative,
@@ -197,6 +226,15 @@ func (c Config) WithDefaults() Config {
 
 	if c.Floor.WraparoundLeft <= 0 {
 		c.Floor.WraparoundLeft = d.Floor.WraparoundLeft
+	}
+
+	if c.RoleLabel == "" {
+		c.RoleLabel = d.RoleLabel
+	}
+
+	// nil = unset (inherit default); an explicit empty list disables exclusion.
+	if c.ExcludeRoles == nil {
+		c.ExcludeRoles = d.ExcludeRoles
 	}
 
 	if c.Providers.Core == "" {
@@ -248,7 +286,16 @@ func (c Config) Validate() error {
 	}
 
 	switch c.Datasource.Auth.Type {
-	case "", "none", "bearer", "basic":
+	case "", "none":
+	case "bearer":
+		if c.Datasource.Auth.Token == "" && c.Datasource.Auth.TokenFromEnv == "" {
+			return fmt.Errorf("%w: datasource.auth.token (or token_from_env) is required for bearer auth", ErrInvalidConfig)
+		}
+	case "basic":
+		if c.Datasource.Auth.Username == "" ||
+			(c.Datasource.Auth.Password == "" && c.Datasource.Auth.PasswordFromEnv == "") {
+			return fmt.Errorf("%w: datasource.auth.username and password (or password_from_env) are required for basic auth", ErrInvalidConfig)
+		}
 	default:
 		return fmt.Errorf("%w: datasource.auth.type %q (want none|bearer|basic)", ErrInvalidConfig, c.Datasource.Auth.Type)
 	}

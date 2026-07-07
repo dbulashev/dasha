@@ -61,11 +61,36 @@ const (
 	Viewer PersonalAccessTokenCreatedRole = "viewer"
 )
 
+// Defines values for RoleChangeTriggerDirection.
+const (
+	Both            RoleChangeTriggerDirection = "both"
+	MasterToReplica RoleChangeTriggerDirection = "master_to_replica"
+	ReplicaToMaster RoleChangeTriggerDirection = "replica_to_master"
+)
+
 // Defines values for GetQueriesRunningParamsQueryFilterMode.
 const (
 	Like    GetQueriesRunningParamsQueryFilterMode = "like"
 	NotLike GetQueriesRunningParamsQueryFilterMode = "not_like"
 )
+
+// ActivitySpikeTrigger defines model for ActivitySpikeTrigger.
+type ActivitySpikeTrigger struct {
+	ActiveThresholdPct int `json:"ActiveThresholdPct"`
+
+	// DeferredInterval Scheduled follow-up snapshot this long after a spike (persisted queue); "0s" disables
+	DeferredInterval string `json:"DeferredInterval"`
+	Enabled          bool   `json:"Enabled"`
+
+	// RecoveryDuration Snapshot the aftermath once activity stays below threshold this long; "0s" disables
+	RecoveryDuration string `json:"RecoveryDuration"`
+
+	// SpikeDuration Go duration string (e.g. "5m")
+	SpikeDuration string `json:"SpikeDuration"`
+
+	// WindowSize Go duration string (e.g. "5m")
+	WindowSize string `json:"WindowSize"`
+}
 
 // AuthInfo defines model for AuthInfo.
 type AuthInfo struct {
@@ -77,6 +102,66 @@ type AuthInfo struct {
 // AuthInfoMode defines model for AuthInfo.Mode.
 type AuthInfoMode string
 
+// AutoSnapshotClusterOverride defines model for AutoSnapshotClusterOverride.
+type AutoSnapshotClusterOverride struct {
+	ClusterName string                      `json:"ClusterName"`
+	Effective   AutoSnapshotTriggerDefaults `json:"Effective"`
+
+	// Overrides Partial overrides (activity_spike / role_change subfields)
+	Overrides map[string]interface{} `json:"Overrides"`
+}
+
+// AutoSnapshotClusterOverrideInput defines model for AutoSnapshotClusterOverrideInput.
+type AutoSnapshotClusterOverrideInput struct {
+	// Overrides Partial overrides (activity_spike / role_change subfields)
+	Overrides map[string]interface{} `json:"Overrides"`
+}
+
+// AutoSnapshotConfig defines model for AutoSnapshotConfig.
+type AutoSnapshotConfig struct {
+	CaptureLocks   bool                        `json:"CaptureLocks"`
+	Defaults       AutoSnapshotTriggerDefaults `json:"Defaults"`
+	Enabled        bool                        `json:"Enabled"`
+	LockProbeCount int                         `json:"LockProbeCount"`
+
+	// LockProbeInterval Go duration string between lock probes (e.g. "500ms")
+	LockProbeInterval string `json:"LockProbeInterval"`
+
+	// MaxSnapshotFrequency Go duration string (e.g. "1h")
+	MaxSnapshotFrequency string `json:"MaxSnapshotFrequency"`
+	MinBaselineActive    int    `json:"MinBaselineActive"`
+
+	// PollInterval Go duration string (e.g. "30s")
+	PollInterval string `json:"PollInterval"`
+
+	// ResetQueryStats Reset pg_stat_statements after each auto-snapshot (independent of the manual UI reset flag)
+	ResetQueryStats bool `json:"ResetQueryStats"`
+
+	// RetentionBytes Total storage size target in bytes, 0 to disable
+	RetentionBytes   int64 `json:"RetentionBytes"`
+	RetentionMinDays int   `json:"RetentionMinDays"`
+}
+
+// AutoSnapshotLeaderInfo defines model for AutoSnapshotLeaderInfo.
+type AutoSnapshotLeaderInfo struct {
+	InstanceId    *string    `json:"InstanceId"`
+	IsAlive       bool       `json:"IsAlive"`
+	LastHeartbeat *time.Time `json:"LastHeartbeat"`
+}
+
+// AutoSnapshotStatus defines model for AutoSnapshotStatus.
+type AutoSnapshotStatus struct {
+	Available bool                    `json:"Available"`
+	Enabled   bool                    `json:"Enabled"`
+	Leader    *AutoSnapshotLeaderInfo `json:"Leader,omitempty"`
+}
+
+// AutoSnapshotTriggerDefaults defines model for AutoSnapshotTriggerDefaults.
+type AutoSnapshotTriggerDefaults struct {
+	ActivitySpike ActivitySpikeTrigger `json:"ActivitySpike"`
+	RoleChange    RoleChangeTrigger    `json:"RoleChange"`
+}
+
 // Cluster defines model for Cluster.
 type Cluster struct {
 	Databases *[]string          `json:"databases,omitempty"`
@@ -87,6 +172,22 @@ type Cluster struct {
 // ClusterInstance defines model for ClusterInstance.
 type ClusterInstance struct {
 	HostName *string `json:"host_name,omitempty"`
+}
+
+// ClusterSnapshotSummary defines model for ClusterSnapshotSummary.
+type ClusterSnapshotSummary struct {
+	// ActivitySpike Created snapshots via the activity_spike trigger
+	ActivitySpike int    `json:"ActivitySpike"`
+	ClusterName   string `json:"ClusterName"`
+
+	// Errors Failed attempts (outcome = error)
+	Errors int `json:"Errors"`
+
+	// RoleChange Created snapshots via the role_change trigger
+	RoleChange int `json:"RoleChange"`
+
+	// Snapshots Total created snapshots (outcome = snapshot_created)
+	Snapshots int `json:"Snapshots"`
 }
 
 // CommonSummary defines model for CommonSummary.
@@ -172,8 +273,11 @@ type HealthScore struct {
 	HasReplication bool                  `json:"has_replication"`
 
 	// InRecovery True when the instance is a standby (pg_is_in_recovery() = true). When true, the maintenance category is dropped from the score and its weight is redistributed across the remaining categories — same handling as the replication category on instances without replicas.
-	InRecovery bool    `json:"in_recovery"`
-	Score      float64 `json:"score"`
+	InRecovery bool `json:"in_recovery"`
+
+	// MetricsDegraded True when source is "metrics" but no datasource series matched any selector for the target — the score is built from absent signals and may be understated. Check selector label matching at GET /api/common/health-score/datasource/status.
+	MetricsDegraded *bool   `json:"metrics_degraded,omitempty"`
+	Score           float64 `json:"score"`
 
 	// Source Score source: "snapshot" (SQL) or "metrics" (datasource).
 	Source *string `json:"source,omitempty"`
@@ -462,6 +566,29 @@ type InvalidConstraint struct {
 	ReferencedTable  string `json:"ReferencedTable"`
 	Schema           string `json:"Schema"`
 	Table            string `json:"Table"`
+}
+
+// LockBackgroundPeak defines model for LockBackgroundPeak.
+type LockBackgroundPeak struct {
+	At           time.Time `json:"at"`
+	BlockedCount int       `json:"blocked_count"`
+}
+
+// LockSnapshot Lock-contention graph captured alongside an auto-snapshot.
+type LockSnapshot struct {
+	BackgroundPeak *LockBackgroundPeak `json:"background_peak,omitempty"`
+
+	// BlockedCount Distinct blocked sessions in the harshest probe
+	BlockedCount int        `json:"blocked_count"`
+	Captured     bool       `json:"captured"`
+	Error        *string    `json:"error,omitempty"`
+	HarshestAt   *time.Time `json:"harshest_at"`
+	MaxWaitMs    *float64   `json:"max_wait_ms,omitempty"`
+
+	// ProbeInterval Go duration string between probes
+	ProbeInterval *string         `json:"probe_interval,omitempty"`
+	Probes        *int            `json:"probes,omitempty"`
+	Rows          *[]QueryBlocked `json:"rows,omitempty"`
 }
 
 // MaintenanceAutovacuumFreezeMaxAge defines model for MaintenanceAutovacuumFreezeMaxAge.
@@ -826,6 +953,15 @@ type ReplicationStatus struct {
 	WriteLsn         *string  `json:"WriteLsn,omitempty"`
 }
 
+// RoleChangeTrigger defines model for RoleChangeTrigger.
+type RoleChangeTrigger struct {
+	Direction RoleChangeTriggerDirection `json:"Direction"`
+	Enabled   bool                       `json:"Enabled"`
+}
+
+// RoleChangeTriggerDirection defines model for RoleChangeTrigger.Direction.
+type RoleChangeTriggerDirection string
+
 // RowEstimate defines model for RowEstimate.
 type RowEstimate struct {
 	AvailableSpace    int              `json:"AvailableSpace"`
@@ -860,11 +996,17 @@ type SnapshotCreated struct {
 
 // SnapshotListItem defines model for SnapshotListItem.
 type SnapshotListItem struct {
-	CreatedAt      time.Time          `json:"CreatedAt"`
-	DashaVersion   string             `json:"DashaVersion"`
+	CreatedAt    time.Time `json:"CreatedAt"`
+	DashaVersion string    `json:"DashaVersion"`
+
+	// HasLocks True when a lock snapshot was captured alongside this snapshot
+	HasLocks       *bool              `json:"HasLocks,omitempty"`
 	Id             openapi_types.UUID `json:"Id"`
 	JsonVersion    int                `json:"JsonVersion"`
 	PgssStatsReset *time.Time         `json:"PgssStatsReset"`
+
+	// Reason Why the snapshot was created: "manual" or "auto:<trigger_type>"
+	Reason *string `json:"Reason,omitempty"`
 }
 
 // SnapshotStatus defines model for SnapshotStatus.
@@ -1012,6 +1154,20 @@ type ToastCandidate struct {
 	Storage    string `json:"Storage"`
 }
 
+// TriggerEvent defines model for TriggerEvent.
+type TriggerEvent struct {
+	ClusterName    string                  `json:"ClusterName"`
+	CreatedAt      time.Time               `json:"CreatedAt"`
+	Database       *string                 `json:"Database"`
+	ErrorMessage   *string                 `json:"ErrorMessage"`
+	Id             openapi_types.UUID      `json:"Id"`
+	Instance       string                  `json:"Instance"`
+	Outcome        string                  `json:"Outcome"`
+	SnapshotId     *openapi_types.UUID     `json:"SnapshotId"`
+	TriggerContext *map[string]interface{} `json:"TriggerContext,omitempty"`
+	TriggerType    string                  `json:"TriggerType"`
+}
+
 // VacuumStats defines model for VacuumStats.
 type VacuumStats struct {
 	AnalyzeThreshold   int64      `json:"AnalyzeThreshold"`
@@ -1042,6 +1198,17 @@ type Database = string
 
 // Instance defines model for Instance.
 type Instance = string
+
+// GetAutosnapshotTriggerEventsParams defines parameters for GetAutosnapshotTriggerEvents.
+type GetAutosnapshotTriggerEventsParams struct {
+	ClusterName *string    `form:"cluster_name,omitempty" json:"cluster_name,omitempty"`
+	Outcome     *string    `form:"outcome,omitempty" json:"outcome,omitempty"`
+	TriggerType *string    `form:"trigger_type,omitempty" json:"trigger_type,omitempty"`
+	From        *time.Time `form:"from,omitempty" json:"from,omitempty"`
+	To          *time.Time `form:"to,omitempty" json:"to,omitempty"`
+	Limit       *int       `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset      *int       `form:"offset,omitempty" json:"offset,omitempty"`
+}
 
 // GetDatabaseUsersParams defines parameters for GetDatabaseUsers.
 type GetDatabaseUsersParams struct {
@@ -1410,12 +1577,14 @@ type GetQueriesBlockedParams struct {
 
 // GetQueriesCompareParams defines parameters for GetQueriesCompare.
 type GetQueriesCompareParams struct {
-	ClusterName  ClusterName         `form:"cluster_name" json:"cluster_name"`
-	Instance     Instance            `form:"instance" json:"instance"`
-	Database     Database            `form:"database" json:"database"`
-	SnapshotA    openapi_types.UUID  `form:"snapshot_a" json:"snapshot_a"`
-	SnapshotB    *openapi_types.UUID `form:"snapshot_b,omitempty" json:"snapshot_b,omitempty"`
-	ExcludeUsers *[]string           `form:"exclude_users,omitempty" json:"exclude_users,omitempty"`
+	ClusterName ClusterName         `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance            `form:"instance" json:"instance"`
+	Database    Database            `form:"database" json:"database"`
+	SnapshotA   openapi_types.UUID  `form:"snapshot_a" json:"snapshot_a"`
+	SnapshotB   *openapi_types.UUID `form:"snapshot_b,omitempty" json:"snapshot_b,omitempty"`
+
+	// ExcludeUsers Comma-separated list of usernames to exclude (applies to live B only)
+	ExcludeUsers *[]string `form:"exclude_users,omitempty" json:"exclude_users,omitempty"`
 }
 
 // GetQueryStatsStatusParams defines parameters for GetQueryStatsStatus.
@@ -1475,6 +1644,9 @@ type PostSnapshotParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
 	Instance    Instance    `form:"instance" json:"instance"`
 	Database    Database    `form:"database" json:"database"`
+
+	// IncludeLocks Also capture a lock snapshot (probes blocked sessions)
+	IncludeLocks *bool `form:"include_locks,omitempty" json:"include_locks,omitempty"`
 }
 
 // GetQueriesTop10ByTimeParams defines parameters for GetQueriesTop10ByTime.
@@ -1640,6 +1812,12 @@ type GetTablesTopKBySizeParams struct {
 // CreatePersonalTokenJSONRequestBody defines body for CreatePersonalToken for application/json ContentType.
 type CreatePersonalTokenJSONRequestBody = PersonalAccessTokenCreate
 
+// PutAutosnapshotClusterJSONRequestBody defines body for PutAutosnapshotCluster for application/json ContentType.
+type PutAutosnapshotClusterJSONRequestBody = AutoSnapshotClusterOverrideInput
+
+// PutAutosnapshotConfigJSONRequestBody defines body for PutAutosnapshotConfig for application/json ContentType.
+type PutAutosnapshotConfigJSONRequestBody = AutoSnapshotConfig
+
 // PutHealthScoreWeightsJSONRequestBody defines body for PutHealthScoreWeights for application/json ContentType.
 type PutHealthScoreWeightsJSONRequestBody = HealthScoreWeightsUpdate
 
@@ -1729,6 +1907,34 @@ type ClientInterface interface {
 
 	// RevokePersonalToken request
 	RevokePersonalToken(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListAutosnapshotClusters request
+	ListAutosnapshotClusters(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAutosnapshotCluster request
+	GetAutosnapshotCluster(ctx context.Context, name string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutAutosnapshotClusterWithBody request with any body
+	PutAutosnapshotClusterWithBody(ctx context.Context, name string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PutAutosnapshotCluster(ctx context.Context, name string, body PutAutosnapshotClusterJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAutosnapshotConfig request
+	GetAutosnapshotConfig(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutAutosnapshotConfigWithBody request with any body
+	PutAutosnapshotConfigWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	PutAutosnapshotConfig(ctx context.Context, body PutAutosnapshotConfigJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAutosnapshotStatus request
+	GetAutosnapshotStatus(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAutosnapshotSummary request
+	GetAutosnapshotSummary(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetAutosnapshotTriggerEvents request
+	GetAutosnapshotTriggerEvents(ctx context.Context, params *GetAutosnapshotTriggerEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetClusters request
 	GetClusters(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -1903,6 +2109,9 @@ type ClientInterface interface {
 	// GetSnapshot request
 	GetSnapshot(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetSnapshotLocks request
+	GetSnapshotLocks(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetSnapshots request
 	GetSnapshots(ctx context.Context, params *GetSnapshotsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -2026,6 +2235,126 @@ func (c *Client) CreatePersonalToken(ctx context.Context, body CreatePersonalTok
 
 func (c *Client) RevokePersonalToken(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewRevokePersonalTokenRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListAutosnapshotClusters(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListAutosnapshotClustersRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetAutosnapshotCluster(ctx context.Context, name string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAutosnapshotClusterRequest(c.Server, name)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutAutosnapshotClusterWithBody(ctx context.Context, name string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutAutosnapshotClusterRequestWithBody(c.Server, name, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutAutosnapshotCluster(ctx context.Context, name string, body PutAutosnapshotClusterJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutAutosnapshotClusterRequest(c.Server, name, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetAutosnapshotConfig(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAutosnapshotConfigRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutAutosnapshotConfigWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutAutosnapshotConfigRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutAutosnapshotConfig(ctx context.Context, body PutAutosnapshotConfigJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutAutosnapshotConfigRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetAutosnapshotStatus(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAutosnapshotStatusRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetAutosnapshotSummary(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAutosnapshotSummaryRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetAutosnapshotTriggerEvents(ctx context.Context, params *GetAutosnapshotTriggerEventsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetAutosnapshotTriggerEventsRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -2732,6 +3061,18 @@ func (c *Client) GetSnapshot(ctx context.Context, id openapi_types.UUID, reqEdit
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetSnapshotLocks(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetSnapshotLocksRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetSnapshots(ctx context.Context, params *GetSnapshotsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetSnapshotsRequest(c.Server, params)
 	if err != nil {
@@ -3141,6 +3482,380 @@ func NewRevokePersonalTokenRequest(server string, id string) (*http.Request, err
 	}
 
 	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListAutosnapshotClustersRequest generates requests for ListAutosnapshotClusters
+func NewListAutosnapshotClustersRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/autosnapshot/clusters")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetAutosnapshotClusterRequest generates requests for GetAutosnapshotCluster
+func NewGetAutosnapshotClusterRequest(server string, name string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "name", runtime.ParamLocationPath, name)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/autosnapshot/clusters/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPutAutosnapshotClusterRequest calls the generic PutAutosnapshotCluster builder with application/json body
+func NewPutAutosnapshotClusterRequest(server string, name string, body PutAutosnapshotClusterJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutAutosnapshotClusterRequestWithBody(server, name, "application/json", bodyReader)
+}
+
+// NewPutAutosnapshotClusterRequestWithBody generates requests for PutAutosnapshotCluster with any type of body
+func NewPutAutosnapshotClusterRequestWithBody(server string, name string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "name", runtime.ParamLocationPath, name)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/autosnapshot/clusters/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetAutosnapshotConfigRequest generates requests for GetAutosnapshotConfig
+func NewGetAutosnapshotConfigRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/autosnapshot/config")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPutAutosnapshotConfigRequest calls the generic PutAutosnapshotConfig builder with application/json body
+func NewPutAutosnapshotConfigRequest(server string, body PutAutosnapshotConfigJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewPutAutosnapshotConfigRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewPutAutosnapshotConfigRequestWithBody generates requests for PutAutosnapshotConfig with any type of body
+func NewPutAutosnapshotConfigRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/autosnapshot/config")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewGetAutosnapshotStatusRequest generates requests for GetAutosnapshotStatus
+func NewGetAutosnapshotStatusRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/autosnapshot/status")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetAutosnapshotSummaryRequest generates requests for GetAutosnapshotSummary
+func NewGetAutosnapshotSummaryRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/autosnapshot/summary")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetAutosnapshotTriggerEventsRequest generates requests for GetAutosnapshotTriggerEvents
+func NewGetAutosnapshotTriggerEventsRequest(server string, params *GetAutosnapshotTriggerEventsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/autosnapshot/trigger-events")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.ClusterName != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, *params.ClusterName); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Outcome != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "outcome", runtime.ParamLocationQuery, *params.Outcome); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.TriggerType != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "trigger_type", runtime.ParamLocationQuery, *params.TriggerType); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.From != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "from", runtime.ParamLocationQuery, *params.From); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.To != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "to", runtime.ParamLocationQuery, *params.To); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -6946,7 +7661,7 @@ func NewGetQueriesCompareRequest(server string, params *GetQueriesCompareParams)
 
 		if params.ExcludeUsers != nil {
 
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "exclude_users", runtime.ParamLocationQuery, *params.ExcludeUsers); err != nil {
+			if queryFrag, err := runtime.StyleParamWithLocation("form", false, "exclude_users", runtime.ParamLocationQuery, *params.ExcludeUsers); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -7349,6 +8064,40 @@ func NewGetSnapshotRequest(server string, id openapi_types.UUID) (*http.Request,
 	return req, nil
 }
 
+// NewGetSnapshotLocksRequest generates requests for GetSnapshotLocks
+func NewGetSnapshotLocksRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/queries/snapshot/%s/locks", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetSnapshotsRequest generates requests for GetSnapshots
 func NewGetSnapshotsRequest(server string, params *GetSnapshotsParams) (*http.Request, error) {
 	var err error
@@ -7474,6 +8223,22 @@ func NewPostSnapshotRequest(server string, params *PostSnapshotParams) (*http.Re
 					queryValues.Add(k, v2)
 				}
 			}
+		}
+
+		if params.IncludeLocks != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "include_locks", runtime.ParamLocationQuery, *params.IncludeLocks); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
 		}
 
 		queryURL.RawQuery = queryValues.Encode()
@@ -9188,6 +9953,34 @@ type ClientWithResponsesInterface interface {
 	// RevokePersonalTokenWithResponse request
 	RevokePersonalTokenWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*RevokePersonalTokenResponse, error)
 
+	// ListAutosnapshotClustersWithResponse request
+	ListAutosnapshotClustersWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListAutosnapshotClustersResponse, error)
+
+	// GetAutosnapshotClusterWithResponse request
+	GetAutosnapshotClusterWithResponse(ctx context.Context, name string, reqEditors ...RequestEditorFn) (*GetAutosnapshotClusterResponse, error)
+
+	// PutAutosnapshotClusterWithBodyWithResponse request with any body
+	PutAutosnapshotClusterWithBodyWithResponse(ctx context.Context, name string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutAutosnapshotClusterResponse, error)
+
+	PutAutosnapshotClusterWithResponse(ctx context.Context, name string, body PutAutosnapshotClusterJSONRequestBody, reqEditors ...RequestEditorFn) (*PutAutosnapshotClusterResponse, error)
+
+	// GetAutosnapshotConfigWithResponse request
+	GetAutosnapshotConfigWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAutosnapshotConfigResponse, error)
+
+	// PutAutosnapshotConfigWithBodyWithResponse request with any body
+	PutAutosnapshotConfigWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutAutosnapshotConfigResponse, error)
+
+	PutAutosnapshotConfigWithResponse(ctx context.Context, body PutAutosnapshotConfigJSONRequestBody, reqEditors ...RequestEditorFn) (*PutAutosnapshotConfigResponse, error)
+
+	// GetAutosnapshotStatusWithResponse request
+	GetAutosnapshotStatusWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAutosnapshotStatusResponse, error)
+
+	// GetAutosnapshotSummaryWithResponse request
+	GetAutosnapshotSummaryWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAutosnapshotSummaryResponse, error)
+
+	// GetAutosnapshotTriggerEventsWithResponse request
+	GetAutosnapshotTriggerEventsWithResponse(ctx context.Context, params *GetAutosnapshotTriggerEventsParams, reqEditors ...RequestEditorFn) (*GetAutosnapshotTriggerEventsResponse, error)
+
 	// GetClustersWithResponse request
 	GetClustersWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetClustersResponse, error)
 
@@ -9361,6 +10154,9 @@ type ClientWithResponsesInterface interface {
 	// GetSnapshotWithResponse request
 	GetSnapshotWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetSnapshotResponse, error)
 
+	// GetSnapshotLocksWithResponse request
+	GetSnapshotLocksWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetSnapshotLocksResponse, error)
+
 	// GetSnapshotsWithResponse request
 	GetSnapshotsWithResponse(ctx context.Context, params *GetSnapshotsParams, reqEditors ...RequestEditorFn) (*GetSnapshotsResponse, error)
 
@@ -9515,6 +10311,180 @@ func (r RevokePersonalTokenResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r RevokePersonalTokenResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListAutosnapshotClustersResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]AutoSnapshotClusterOverride
+}
+
+// Status returns HTTPResponse.Status
+func (r ListAutosnapshotClustersResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListAutosnapshotClustersResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetAutosnapshotClusterResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *AutoSnapshotClusterOverride
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAutosnapshotClusterResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAutosnapshotClusterResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PutAutosnapshotClusterResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r PutAutosnapshotClusterResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutAutosnapshotClusterResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetAutosnapshotConfigResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *AutoSnapshotConfig
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAutosnapshotConfigResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAutosnapshotConfigResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type PutAutosnapshotConfigResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r PutAutosnapshotConfigResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutAutosnapshotConfigResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetAutosnapshotStatusResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *AutoSnapshotStatus
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAutosnapshotStatusResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAutosnapshotStatusResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetAutosnapshotSummaryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]ClusterSnapshotSummary
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAutosnapshotSummaryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAutosnapshotSummaryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetAutosnapshotTriggerEventsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]TriggerEvent
+}
+
+// Status returns HTTPResponse.Status
+func (r GetAutosnapshotTriggerEventsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetAutosnapshotTriggerEventsResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -10774,6 +11744,28 @@ func (r GetSnapshotResponse) StatusCode() int {
 	return 0
 }
 
+type GetSnapshotLocksResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *LockSnapshot
+}
+
+// Status returns HTTPResponse.Status
+func (r GetSnapshotLocksResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetSnapshotLocksResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetSnapshotsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -11348,6 +12340,94 @@ func (c *ClientWithResponses) RevokePersonalTokenWithResponse(ctx context.Contex
 	return ParseRevokePersonalTokenResponse(rsp)
 }
 
+// ListAutosnapshotClustersWithResponse request returning *ListAutosnapshotClustersResponse
+func (c *ClientWithResponses) ListAutosnapshotClustersWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListAutosnapshotClustersResponse, error) {
+	rsp, err := c.ListAutosnapshotClusters(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListAutosnapshotClustersResponse(rsp)
+}
+
+// GetAutosnapshotClusterWithResponse request returning *GetAutosnapshotClusterResponse
+func (c *ClientWithResponses) GetAutosnapshotClusterWithResponse(ctx context.Context, name string, reqEditors ...RequestEditorFn) (*GetAutosnapshotClusterResponse, error) {
+	rsp, err := c.GetAutosnapshotCluster(ctx, name, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAutosnapshotClusterResponse(rsp)
+}
+
+// PutAutosnapshotClusterWithBodyWithResponse request with arbitrary body returning *PutAutosnapshotClusterResponse
+func (c *ClientWithResponses) PutAutosnapshotClusterWithBodyWithResponse(ctx context.Context, name string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutAutosnapshotClusterResponse, error) {
+	rsp, err := c.PutAutosnapshotClusterWithBody(ctx, name, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutAutosnapshotClusterResponse(rsp)
+}
+
+func (c *ClientWithResponses) PutAutosnapshotClusterWithResponse(ctx context.Context, name string, body PutAutosnapshotClusterJSONRequestBody, reqEditors ...RequestEditorFn) (*PutAutosnapshotClusterResponse, error) {
+	rsp, err := c.PutAutosnapshotCluster(ctx, name, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutAutosnapshotClusterResponse(rsp)
+}
+
+// GetAutosnapshotConfigWithResponse request returning *GetAutosnapshotConfigResponse
+func (c *ClientWithResponses) GetAutosnapshotConfigWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAutosnapshotConfigResponse, error) {
+	rsp, err := c.GetAutosnapshotConfig(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAutosnapshotConfigResponse(rsp)
+}
+
+// PutAutosnapshotConfigWithBodyWithResponse request with arbitrary body returning *PutAutosnapshotConfigResponse
+func (c *ClientWithResponses) PutAutosnapshotConfigWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutAutosnapshotConfigResponse, error) {
+	rsp, err := c.PutAutosnapshotConfigWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutAutosnapshotConfigResponse(rsp)
+}
+
+func (c *ClientWithResponses) PutAutosnapshotConfigWithResponse(ctx context.Context, body PutAutosnapshotConfigJSONRequestBody, reqEditors ...RequestEditorFn) (*PutAutosnapshotConfigResponse, error) {
+	rsp, err := c.PutAutosnapshotConfig(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutAutosnapshotConfigResponse(rsp)
+}
+
+// GetAutosnapshotStatusWithResponse request returning *GetAutosnapshotStatusResponse
+func (c *ClientWithResponses) GetAutosnapshotStatusWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAutosnapshotStatusResponse, error) {
+	rsp, err := c.GetAutosnapshotStatus(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAutosnapshotStatusResponse(rsp)
+}
+
+// GetAutosnapshotSummaryWithResponse request returning *GetAutosnapshotSummaryResponse
+func (c *ClientWithResponses) GetAutosnapshotSummaryWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAutosnapshotSummaryResponse, error) {
+	rsp, err := c.GetAutosnapshotSummary(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAutosnapshotSummaryResponse(rsp)
+}
+
+// GetAutosnapshotTriggerEventsWithResponse request returning *GetAutosnapshotTriggerEventsResponse
+func (c *ClientWithResponses) GetAutosnapshotTriggerEventsWithResponse(ctx context.Context, params *GetAutosnapshotTriggerEventsParams, reqEditors ...RequestEditorFn) (*GetAutosnapshotTriggerEventsResponse, error) {
+	rsp, err := c.GetAutosnapshotTriggerEvents(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetAutosnapshotTriggerEventsResponse(rsp)
+}
+
 // GetClustersWithResponse request returning *GetClustersResponse
 func (c *ClientWithResponses) GetClustersWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetClustersResponse, error) {
 	rsp, err := c.GetClusters(ctx, reqEditors...)
@@ -11869,6 +12949,15 @@ func (c *ClientWithResponses) GetSnapshotWithResponse(ctx context.Context, id op
 	return ParseGetSnapshotResponse(rsp)
 }
 
+// GetSnapshotLocksWithResponse request returning *GetSnapshotLocksResponse
+func (c *ClientWithResponses) GetSnapshotLocksWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetSnapshotLocksResponse, error) {
+	rsp, err := c.GetSnapshotLocks(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetSnapshotLocksResponse(rsp)
+}
+
 // GetSnapshotsWithResponse request returning *GetSnapshotsResponse
 func (c *ClientWithResponses) GetSnapshotsWithResponse(ctx context.Context, params *GetSnapshotsParams, reqEditors ...RequestEditorFn) (*GetSnapshotsResponse, error) {
 	rsp, err := c.GetSnapshots(ctx, params, reqEditors...)
@@ -12174,6 +13263,194 @@ func ParseRevokePersonalTokenResponse(rsp *http.Response) (*RevokePersonalTokenR
 	response := &RevokePersonalTokenResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseListAutosnapshotClustersResponse parses an HTTP response from a ListAutosnapshotClustersWithResponse call
+func ParseListAutosnapshotClustersResponse(rsp *http.Response) (*ListAutosnapshotClustersResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListAutosnapshotClustersResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []AutoSnapshotClusterOverride
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAutosnapshotClusterResponse parses an HTTP response from a GetAutosnapshotClusterWithResponse call
+func ParseGetAutosnapshotClusterResponse(rsp *http.Response) (*GetAutosnapshotClusterResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAutosnapshotClusterResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AutoSnapshotClusterOverride
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePutAutosnapshotClusterResponse parses an HTTP response from a PutAutosnapshotClusterWithResponse call
+func ParsePutAutosnapshotClusterResponse(rsp *http.Response) (*PutAutosnapshotClusterResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutAutosnapshotClusterResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetAutosnapshotConfigResponse parses an HTTP response from a GetAutosnapshotConfigWithResponse call
+func ParseGetAutosnapshotConfigResponse(rsp *http.Response) (*GetAutosnapshotConfigResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAutosnapshotConfigResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AutoSnapshotConfig
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePutAutosnapshotConfigResponse parses an HTTP response from a PutAutosnapshotConfigWithResponse call
+func ParsePutAutosnapshotConfigResponse(rsp *http.Response) (*PutAutosnapshotConfigResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutAutosnapshotConfigResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetAutosnapshotStatusResponse parses an HTTP response from a GetAutosnapshotStatusWithResponse call
+func ParseGetAutosnapshotStatusResponse(rsp *http.Response) (*GetAutosnapshotStatusResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAutosnapshotStatusResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest AutoSnapshotStatus
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAutosnapshotSummaryResponse parses an HTTP response from a GetAutosnapshotSummaryWithResponse call
+func ParseGetAutosnapshotSummaryResponse(rsp *http.Response) (*GetAutosnapshotSummaryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAutosnapshotSummaryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []ClusterSnapshotSummary
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetAutosnapshotTriggerEventsResponse parses an HTTP response from a GetAutosnapshotTriggerEventsWithResponse call
+func ParseGetAutosnapshotTriggerEventsResponse(rsp *http.Response) (*GetAutosnapshotTriggerEventsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetAutosnapshotTriggerEventsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []TriggerEvent
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
 	}
 
 	return response, nil
@@ -13641,6 +14918,32 @@ func ParseGetSnapshotResponse(rsp *http.Response) (*GetSnapshotResponse, error) 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest []QueryReport
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetSnapshotLocksResponse parses an HTTP response from a GetSnapshotLocksWithResponse call
+func ParseGetSnapshotLocksResponse(rsp *http.Response) (*GetSnapshotLocksResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetSnapshotLocksResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest LockSnapshot
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

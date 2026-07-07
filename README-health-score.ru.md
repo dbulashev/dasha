@@ -37,7 +37,7 @@ score = 100 − Σ (penalty_i × weight_i)
 | `performance`   | 0.15   | Cache hit ratio, `track_io_timing`                                   |
 | `storage`       | 0.10   | Доля dead-кортежей, bloat, эффективность HOT-обновлений             |
 | `replication`   | 0.15   | Лаг репликации (время и байты), отключённые реплики                 |
-| `maintenance`   | 0.15   | Возраст XID, давность вакуума, GUC autovacuum/track_counts, ANALYZE |
+| `maintenance`   | 0.15   | Возраст XID, очередь и давность вакуума, GUC autovacuum/track_counts, ANALYZE |
 | `horizon`       | 0.10   | Лаг горизонта MVCC (старейший снепшот, блокирующий VACUUM)          |
 | `wal_checkpoint`| 0.10   | Соотношение requested/timed чекпоинтов, рассогласование `wal_level` |
 | `locks`         | 0.10   | Lock-waiters, ungranted locks, deadlocks, насыщение lock pool       |
@@ -63,7 +63,8 @@ score = 100 − Σ (penalty_i × weight_i)
 | replication    | `max_lag_bytes`                        | >16 МиБ — растёт до максимума                 |
 | replication    | `disconnected_replicas`                | каждое отключение даёт 25 баллов              |
 | maintenance    | `max(xid_age, relfrozenxid_age)`       | 200 М → 1.6 Б → 2.1 Б (нарастает до 100)      |
-| maintenance    | `max_vacuum_age_hours`                 | >168 ч → >504 ч → >1440 ч (7/21/60 дней)      |
+| maintenance    | `vacuum_backlog_tables`                | >5 таблиц → +1.5 балла за шт., потолок 15     |
+| maintenance    | `max_overdue_vacuum_age_hours`         | >168 ч → >504 ч → >1440 ч (7/21/60 дней)      |
 | maintenance    | `tables_never_vacuumed`                | по 5 баллов за таблицу, потолок 20            |
 | maintenance    | `tables_with_autovacuum_off`           | по 3 балла за таблицу, потолок 15             |
 | maintenance    | `stale_planner_stats_tables`           | по 2 балла за таблицу, потолок 15             |
@@ -107,13 +108,14 @@ score = 100 − Σ (penalty_i × weight_i)
 
 ### Maintenance
 - `xid_wraparound_risk` — `max(age(datfrozenxid))` по `pg_database`. Число транзакций до wraparound-аварии. Откалибровано по `autovacuum_freeze_max_age=200 М` (на этой границе должен включаться anti-wraparound autovacuum) и жёсткому пределу 2 Б. Пороги ≥150 М / ≥200 М / ≥1.6 Б.
-- `stale_vacuum` — дней с последнего `last_vacuum`/`last_autovacuum` по user-таблицам. Сигнал застрявшего autovacuum. Пороги ≥7 / ≥21 / ≥60 дней.
+- `stale_vacuum` — возраст самого старого `last_vacuum`/`last_autovacuum`, в днях, **среди таблиц из очереди** (превысивших свой порог autovacuum). Статичные / преимущественно читаемые таблицы в очередь не попадают и больше не дают ложных срабатываний. Сигнал застрявшего autovacuum. Пороги ≥7 / ≥21 / ≥60 дней.
+- `vacuum_backlog` — таблицы, уже превысившие порог срабатывания autovacuum: `n_dead_tup` выше `autovacuum_vacuum_threshold + autovacuum_vacuum_scale_factor·reltuples`, либо `n_ins_since_vacuum` выше insert-порога. Потабличные `reloptions` переопределяют глобальные GUC (формула самого PostgreSQL). Длина очереди на vacuum — глубокая очередь означает, что autovacuum не успевает. Пороги ≥6 / ≥15 / ≥30 таблиц.
 - `tables_never_vacuumed` — таблицы, у которых одновременно `last_vacuum IS NULL` и `last_autovacuum IS NULL`. Пороги ≥1 / ≥2 / ≥5.
 - `autovacuum_disabled` — глобальный GUC `autovacuum=off`. Bloat и возраст XID растут бесконтрольно. HIGH.
 - `track_counts_disabled` — глобальный GUC `track_counts=off`. У autovacuum нет статистики, фактически он не работает. HIGH.
 - `tables_with_autovacuum_off` — таблицы с `autovacuum_enabled=false` в `pg_class.reloptions`. Пороги ≥1 / ≥5 / ≥20.
 - `relfrozenxid_age_outlier` — худший `age(relfrozenxid)` по таблицам из `pg_class`. Потабличная версия `xid_wraparound_risk`. Пороги ≥200 М / ≥500 М / ≥1 Б.
-- `stale_planner_stats` — таблицы, у которых `n_mod_since_analyze` велик относительно `n_live_tup` (статистика планировщика устарела). Пороги ≥3 / ≥10 / ≥30 таблиц.
+- `stale_planner_stats` — таблицы, у которых `n_mod_since_analyze` превышает половину их (с учётом reloptions) порога auto-analyze и которые не анализировались более 24 ч (статистика планировщика устарела). Пороги ≥3 / ≥10 / ≥30 таблиц.
 
 ### Horizon
 - `horizon_lag_xids` — `txid_current() - min(backend_xmin)` по `pg_stat_activity`. Сколько транзакций VACUUM не может убрать, потому что их ещё видит какая-то сессия (длинная транзакция, заброшенный replication-слот, prepared tx). Пороги ≥1 М / ≥10 М / ≥100 М.
@@ -136,9 +138,9 @@ score = 100 − Σ (penalty_i × weight_i)
 
 ## Metrics-backed режим (история, baseline, богатые сигналы)
 
-По умолчанию score — это **точечный SQL-snapshot**. Если настроен Prometheus/VictoriaMetrics-совместимый datasource (`health_score.metrics` в `dasha.yaml`), Dasha считает score, рекомендации и **тренд** из time-series метрик — и откатывается на snapshot, когда datasource недоступен или цель не сопоставлена. Поле `source` в `GET /api/common/health-score` показывает, каким путём получено число.
+По умолчанию score — это **точечный SQL-snapshot**. Если настроен Prometheus/VictoriaMetrics-совместимый datasource (`health_score.metrics` в `dasha.yaml`), Dasha считает **score**, **рекомендации** и **тренд** из time-series метрик. Откат на snapshot распространяется **только на score и рекомендации**: если datasource недоступен или цель не сопоставлена, они возвращаются к точечному SQL-snapshot, а поле `source` в `GET /api/common/health-score` показывает, каким путём получено число. У эндпоинта **тренда/истории** (`GET /api/common/health-score/history`) **отката на snapshot нет** — он отдаётся только из time-series и возвращает **404**, когда metrics-режим выключен, недоступен или цель не сопоставлена.
 
-Каталожные и GUC-факты, которые time-series выразить не может — потабличный `autovacuum_enabled=false`, ни разу не вакуумленные таблицы, возраст `relfrozenxid`, дрейф статистики планировщика, `wal_level`, GUC `autovacuum`/`track_counts`, горизонт MVCC и размер lock-pool — **накладываются из SQL-снимка** на метрик-сигналы. Поэтому каждое правило продолжает влиять и на score, и на рекомендации даже в metrics-режиме (инвариант score↔rules сохраняется), а каталожные находки вроде потабличной рекомендации `tables_with_autovacuum_off` не исчезают молча при подключении datasource. Оверлей best-effort: сбой чтения снимка оставляет metrics-only score нетронутым. (Исторический **тренд** остаётся чисто time-series — каталожные факты это значения «сейчас», поэтому gauge может быть чуть ниже последней точки тренда на величину каталожного штрафа.)
+Каталожные и GUC-факты, которые time-series выразить не может — потабличный `autovacuum_enabled=false`, ни разу не вакуумленные таблицы, возраст `relfrozenxid`, дрейф статистики планировщика, `wal_level`, GUC `autovacuum`/`track_counts`, горизонт MVCC и размер lock-pool — **накладываются из SQL-снимка** на метрик-сигналы. Поэтому каждое правило продолжает влиять и на score, и на рекомендации даже в metrics-режиме (инвариант score↔rules сохраняется), а каталожные находки вроде потабличной рекомендации `tables_with_autovacuum_off` не исчезают молча при подключении datasource. Оверлей обязателен для паритета: если SQL-снимок прочитать не удалось, Dasha откатывается на чистый snapshot-score, а не отдаёт metrics-only число с обнулёнными каталожными фактами (которые иначе читались бы как, например, «autovacuum off»). (Исторический **тренд** остаётся чисто time-series — каталожные факты это значения «сейчас», поэтому gauge может быть чуть ниже последней точки тренда на величину каталожного штрафа.)
 
 ### Провайдеры и матчинг лейблов
 
@@ -204,6 +206,5 @@ health_score:
 
 Auth datasource поддерживает `token_from_env` (bearer) и `username` + `password_from_env` (basic) — резолвятся из окружения как остальные `*_from_env`-секреты, поэтому креды инжектятся из Secret, а не лежат инлайн. `type: none` (по умолчанию) кредов не требует.
 
-Детали дизайна: `plans/health-score-history-{requirements,design,workflow}.md`.
 
 

@@ -33,13 +33,14 @@ type RawMetrics struct {
 	DisconnectedReplicas int
 
 	// Maintenance
-	MaxXidAge               int64
-	MaxVacuumAgeHours       float64
-	TablesNeverVacuumed     int
-	AutovacuumEnabled       bool
-	TrackCountsEnabled      bool
-	TablesWithAutovacuumOff int
-	MaxRelfrozenxidAge      int64
+	MaxXidAge                int64
+	VacuumBacklogTables      int     // tables currently eligible for autovacuum (queue depth)
+	MaxOverdueVacuumAgeHours float64 // oldest vacuum among queued tables
+	TablesNeverVacuumed      int
+	AutovacuumEnabled        bool
+	TrackCountsEnabled       bool
+	TablesWithAutovacuumOff  int
+	MaxRelfrozenxidAge       int64
 
 	// Horizon
 	HorizonLagXids int64
@@ -78,7 +79,7 @@ type RawMetrics struct {
 
 // CategoryResult holds the penalty calculation result for one category.
 type CategoryResult struct {
-	Name    string             `json:"name"`
+	Name    Category           `json:"name"`
 	Score   float64            `json:"score"`
 	Weight  float64            `json:"weight"`
 	Penalty float64            `json:"penalty"`
@@ -93,7 +94,7 @@ type Result struct {
 	InRecovery     bool             `json:"in_recovery"`
 }
 
-// Default category weights, sum to 1.00. Rationale: see plans/health-score-v3-design.md §1.2.
+// Default category weights, sum to 1.00.
 const (
 	weightConnections   = 0.15
 	weightPerformance   = 0.15
@@ -186,13 +187,13 @@ func CalculateWithWeights(m RawMetrics, w Weights) Result {
 		categories[i].Weight = w.byCategory(categories[i].Name)
 	}
 
-	var dropped []string
+	var dropped []Category
 	if !hasReplication {
-		dropped = append(dropped, "replication")
+		dropped = append(dropped, CategoryReplication)
 	}
 
 	if m.InRecovery {
-		dropped = append(dropped, "maintenance")
+		dropped = append(dropped, CategoryMaintenance)
 	}
 
 	if len(dropped) > 0 {
@@ -292,24 +293,54 @@ func applyInstanceAdjustments(categories []CategoryResult, m RawMetrics) {
 	// HIGH rules that drive criticalCeiling. Saturate the category so the
 	// breakdown turns red to match the floored aggregate.
 	if !m.AutovacuumEnabled {
-		addPenalty(categories, "maintenance", 100)
+		addPenalty(categories, CategoryMaintenance, 100)
 	}
 
 	if !m.TrackCountsEnabled {
-		addPenalty(categories, "maintenance", 100)
+		addPenalty(categories, CategoryMaintenance, 100)
 	}
 
 	// Surface the GUC state in the maintenance tooltip, so a saturated (red) bar
 	// reads as "autovacuum off" rather than the benign vacuum/xid numbers next to it.
-	setDetail(categories, "maintenance", "autovacuum_enabled", b2f(m.AutovacuumEnabled))
-	setDetail(categories, "maintenance", "track_counts_enabled", b2f(m.TrackCountsEnabled))
+	setDetail(categories, CategoryMaintenance, "autovacuum_enabled", b2f(m.AutovacuumEnabled))
+	setDetail(categories, CategoryMaintenance, "track_counts_enabled", b2f(m.TrackCountsEnabled))
 
 	// Performance: track_io_timing off (LOW) — recommended on, negligible cost.
 	if !m.TrackIoTimingEnabled {
-		addPenalty(categories, "performance", 5)
+		addPenalty(categories, CategoryPerformance, 5)
 	}
 
-	setDetail(categories, "performance", "track_io_timing_enabled", b2f(m.TrackIoTimingEnabled))
+	setDetail(categories, CategoryPerformance, "track_io_timing_enabled", b2f(m.TrackIoTimingEnabled))
+
+	// Performance: query-latency regression vs the seasonal baseline (metrics-only;
+	// 0 = absent ⇒ neutral, e.g. on the SQL snapshot or before enough history).
+	switch {
+	case m.LatencyRegressionRatio >= 6:
+		addPenalty(categories, CategoryPerformance, 50)
+	case m.LatencyRegressionRatio >= 3:
+		addPenalty(categories, CategoryPerformance, 30)
+	case m.LatencyRegressionRatio >= 1.5:
+		addPenalty(categories, CategoryPerformance, 10)
+	}
+
+	if m.LatencyRegressionRatio > 0 {
+		setDetail(categories, CategoryPerformance, "latency_regression", math.Round(m.LatencyRegressionRatio*100)/100)
+	}
+
+	// Performance: sequential-scan regression vs the seasonal baseline — indexes
+	// going unused or stale planner stats (ANALYZE). Same shape as latency.
+	switch {
+	case m.SeqScanRegressionRatio >= 6:
+		addPenalty(categories, CategoryPerformance, 40)
+	case m.SeqScanRegressionRatio >= 3:
+		addPenalty(categories, CategoryPerformance, 25)
+	case m.SeqScanRegressionRatio >= 1.5:
+		addPenalty(categories, CategoryPerformance, 10)
+	}
+
+	if m.SeqScanRegressionRatio > 0 {
+		setDetail(categories, CategoryPerformance, "seq_scan_regression", math.Round(m.SeqScanRegressionRatio*100)/100)
+	}
 
 	// Performance: query-latency regression vs the seasonal baseline (metrics-only;
 	// 0 = absent ⇒ neutral, e.g. on the SQL snapshot or before enough history).
@@ -345,14 +376,29 @@ func applyInstanceAdjustments(categories []CategoryResult, m RawMetrics) {
 	// 1.0 when there are too few updates to judge, so quiet databases score 0.
 	switch {
 	case m.HotUpdateRatio < 0.50:
-		addPenalty(categories, "storage", 30)
+		addPenalty(categories, CategoryStorage, 30)
 	case m.HotUpdateRatio < 0.65:
-		addPenalty(categories, "storage", 15)
+		addPenalty(categories, CategoryStorage, 15)
 	case m.HotUpdateRatio < 0.80:
-		addPenalty(categories, "storage", 5)
+		addPenalty(categories, CategoryStorage, 5)
 	}
 
-	setDetail(categories, "storage", "hot_update_ratio", m.HotUpdateRatio)
+	setDetail(categories, CategoryStorage, "hot_update_ratio", m.HotUpdateRatio)
+
+	// Storage: host disk usage (used/total). Free space running low hurts well
+	// before it is critical (the floor handles >=90%). Metrics-only ⇒ neutral at 0.
+	switch {
+	case m.DiskUsedRatio >= diskUsedCritical:
+		addPenalty(categories, CategoryStorage, 80)
+	case m.DiskUsedRatio >= 0.80:
+		addPenalty(categories, CategoryStorage, 30)
+	case m.DiskUsedRatio >= 0.70:
+		addPenalty(categories, CategoryStorage, 10)
+	}
+
+	if m.DiskUsedRatio > 0 {
+		setDetail(categories, CategoryStorage, "disk_used_ratio", math.Round(m.DiskUsedRatio*1000)/1000)
+	}
 
 	// Storage: host disk usage (used/total). Free space running low hurts well
 	// before it is critical (the floor handles >=90%). Metrics-only ⇒ neutral at 0.
@@ -374,13 +420,46 @@ func applyInstanceAdjustments(categories []CategoryResult, m RawMetrics) {
 	// (value 1) and let the frontend render it to text — this keeps a penalised
 	// wal_checkpoint bar self-explanatory in the tooltip without a schema change.
 	if m.WalLevel == "minimal" && m.ReplicaCount > 0 {
-		addPenalty(categories, "wal_checkpoint", 80) // HIGH: replicas can't stream
-		setDetail(categories, "wal_checkpoint", "wal_level_minimal_with_replicas", 1)
+		addPenalty(categories, CategoryWalCheckpoint, 80) // HIGH: replicas can't stream
+		setDetail(categories, CategoryWalCheckpoint, "wal_level_minimal_with_replicas", 1)
 	}
 
 	if m.WalLevel == "logical" && m.LogicalSlotsActive == 0 {
-		addPenalty(categories, "wal_checkpoint", 5) // LOW: wasted WAL overhead
-		setDetail(categories, "wal_checkpoint", "wal_level_logical_without_slots", 1)
+		addPenalty(categories, CategoryWalCheckpoint, 5) // LOW: wasted WAL overhead
+		setDetail(categories, CategoryWalCheckpoint, "wal_level_logical_without_slots", 1)
+	}
+
+	// Connections: host CPU saturation (load / vCPU) and pooler saturation —
+	// metrics-only signals (zero/absent under the SQL snapshot ⇒ neutral there).
+	// Better signals of real pressure than total/max_connections on pooled setups.
+	if m.NumVCPU > 0 {
+		sat := m.LoadAvg15 / m.NumVCPU
+
+		switch {
+		case sat >= 4:
+			addPenalty(categories, CategoryConnections, 60)
+		case sat >= 2:
+			addPenalty(categories, CategoryConnections, 30)
+		case sat >= 1:
+			addPenalty(categories, CategoryConnections, 10)
+		}
+
+		setDetail(categories, CategoryConnections, "host_load_per_vcpu", math.Round(sat*100)/100)
+	}
+
+	if m.PoolerPoolSize > 0 {
+		sat := m.PoolerServerConns / m.PoolerPoolSize
+
+		switch {
+		case sat >= 0.8:
+			addPenalty(categories, CategoryConnections, 30)
+		case sat >= 0.6:
+			addPenalty(categories, CategoryConnections, 15)
+		case sat >= 0.5:
+			addPenalty(categories, CategoryConnections, 5)
+		}
+
+		setDetail(categories, CategoryConnections, "pooler_saturation", math.Round(sat*1000)/1000)
 	}
 
 	// Connections: host CPU saturation (load / vCPU) and pooler saturation —
@@ -426,7 +505,7 @@ func applyInstanceAdjustments(categories []CategoryResult, m RawMetrics) {
 // addPenalty adds delta to the named category's penalty, capping at 100.
 // Rounding is deferred to a single pass at the end of applyInstanceAdjustments
 // so repeated additions cannot accumulate per-call rounding error.
-func addPenalty(categories []CategoryResult, name string, delta float64) {
+func addPenalty(categories []CategoryResult, name Category, delta float64) {
 	for i := range categories {
 		if categories[i].Name == name {
 			categories[i].Penalty = math.Min(categories[i].Penalty+delta, 100)
@@ -445,7 +524,7 @@ func b2f(b bool) float64 {
 }
 
 // setDetail records an extra metric in the named category's Details tooltip.
-func setDetail(categories []CategoryResult, name, key string, value float64) {
+func setDetail(categories []CategoryResult, name Category, key string, value float64) {
 	for i := range categories {
 		if categories[i].Name == name {
 			if categories[i].Details == nil {
@@ -463,8 +542,8 @@ func setDetail(categories []CategoryResult, name, key string, value float64) {
 // appear in `drop`, and adds their combined weight to the remaining categories
 // proportionally to their current weight. No-op when the dropped set is empty
 // or when there is nothing left to receive the redistributed weight.
-func redistributeWeights(categories []CategoryResult, drop []string) {
-	dropped := make(map[string]bool, len(drop))
+func redistributeWeights(categories []CategoryResult, drop []Category) {
+	dropped := make(map[Category]bool, len(drop))
 	for _, n := range drop {
 		dropped[n] = true
 	}
@@ -507,7 +586,7 @@ func redistributeWeights(categories []CategoryResult, drop []string) {
 
 func penaltyConnections(m RawMetrics) CategoryResult {
 	if m.MaxConnections == 0 {
-		return CategoryResult{Name: "connections", Weight: weightConnections, Details: map[string]float64{}}
+		return CategoryResult{Name: CategoryConnections, Weight: weightConnections, Details: map[string]float64{}}
 	}
 
 	ratio := float64(m.TotalConnections) / float64(m.MaxConnections)
@@ -535,7 +614,7 @@ func penaltyConnections(m RawMetrics) CategoryResult {
 	penalty = math.Min(penalty, 100)
 
 	return CategoryResult{
-		Name:    "connections",
+		Name:    CategoryConnections,
 		Weight:  weightConnections,
 		Penalty: math.Round(penalty*10) / 10,
 		Details: map[string]float64{
@@ -566,7 +645,7 @@ func penaltyPerformance(m RawMetrics) CategoryResult {
 	penalty = math.Min(penalty, 100)
 
 	return CategoryResult{
-		Name:    "performance",
+		Name:    CategoryPerformance,
 		Weight:  weightPerformance,
 		Penalty: math.Round(penalty*10) / 10,
 		Details: map[string]float64{
@@ -612,7 +691,7 @@ func penaltyStorage(m RawMetrics) CategoryResult {
 	penalty = math.Min(penalty, 100)
 
 	return CategoryResult{
-		Name:    "storage",
+		Name:    CategoryStorage,
 		Weight:  weightStorage,
 		Penalty: math.Round(penalty*10) / 10,
 		Details: map[string]float64{
@@ -627,7 +706,7 @@ func penaltyStorage(m RawMetrics) CategoryResult {
 func penaltyReplication(m RawMetrics) CategoryResult {
 	if m.ReplicaCount == 0 {
 		return CategoryResult{
-			Name:    "replication",
+			Name:    CategoryReplication,
 			Weight:  weightReplication,
 			Penalty: 0,
 			Details: map[string]float64{
@@ -659,7 +738,7 @@ func penaltyReplication(m RawMetrics) CategoryResult {
 	penalty = math.Min(penalty, 100)
 
 	return CategoryResult{
-		Name:    "replication",
+		Name:    CategoryReplication,
 		Weight:  weightReplication,
 		Penalty: math.Round(penalty*10) / 10,
 		Details: map[string]float64{
@@ -691,16 +770,24 @@ func penaltyMaintenance(m RawMetrics) CategoryResult {
 		penalty = float64(xidAge-xidFreezeMaxAge) / float64(xidFailsafeAge-xidFreezeMaxAge) * 80
 	}
 
-	// Aligned with stale_vacuum thresholds (7/21/60 days = 168/504/1440 h).
-	// Middle-tier addition capped at 30 so the function stays monotonic at
-	// the 1440 h boundary — without the cap, 1440 h = 15 + 19.5 = 34.5 would
-	// dip back to 30 right after the boundary.
-	if m.MaxVacuumAgeHours > 1440 { // 60 days
+	// Oldest vacuum among tables actually due for it (the queue). Aligned with
+	// stale_vacuum thresholds (7/21/60 days = 168/504/1440 h). Middle-tier
+	// addition capped at 30 so the function stays monotonic at the 1440 h
+	// boundary — without the cap, 1440 h = 15 + 19.5 = 34.5 would dip back to 30
+	// right after the boundary.
+	if m.MaxOverdueVacuumAgeHours > 1440 { // 60 days
 		penalty += 30
-	} else if m.MaxVacuumAgeHours > 504 { // 21 days
-		penalty += math.Min(15+(m.MaxVacuumAgeHours-504)/24*0.5, 30)
-	} else if m.MaxVacuumAgeHours > 168 { // 7 days
-		penalty += (m.MaxVacuumAgeHours - 168) / 24 * 1
+	} else if m.MaxOverdueVacuumAgeHours > 504 { // 21 days
+		penalty += math.Min(15+(m.MaxOverdueVacuumAgeHours-504)/24*0.5, 30)
+	} else if m.MaxOverdueVacuumAgeHours > 168 { // 7 days
+		penalty += (m.MaxOverdueVacuumAgeHours - 168) / 24 * 1
+	}
+
+	// Vacuum queue depth: a few tables in flight is normal (autovacuum picks them
+	// up within a naptime cycle), so tolerate a handful, then a gentle per-table
+	// penalty for a backlog autovacuum is not draining.
+	if m.VacuumBacklogTables > 5 {
+		penalty += math.Min(float64(m.VacuumBacklogTables-5)*1.5, 15)
 	}
 
 	if m.TablesNeverVacuumed > 0 {
@@ -722,16 +809,17 @@ func penaltyMaintenance(m RawMetrics) CategoryResult {
 	penalty = math.Min(penalty, 100)
 
 	return CategoryResult{
-		Name:    "maintenance",
+		Name:    CategoryMaintenance,
 		Weight:  weightMaintenance,
 		Penalty: math.Round(penalty*10) / 10,
 		Details: map[string]float64{
-			"max_xid_age":                float64(m.MaxXidAge),
-			"max_relfrozenxid_age":       float64(m.MaxRelfrozenxidAge),
-			"max_vacuum_age_hours":       m.MaxVacuumAgeHours,
-			"tables_never_vacuumed":      float64(m.TablesNeverVacuumed),
-			"tables_with_autovacuum_off": float64(m.TablesWithAutovacuumOff),
-			"stale_planner_stats_tables": float64(m.StalePlannerStatsTables),
+			"max_xid_age":                  float64(m.MaxXidAge),
+			"max_relfrozenxid_age":         float64(m.MaxRelfrozenxidAge),
+			"vacuum_backlog_tables":        float64(m.VacuumBacklogTables),
+			"max_overdue_vacuum_age_hours": m.MaxOverdueVacuumAgeHours,
+			"tables_never_vacuumed":        float64(m.TablesNeverVacuumed),
+			"tables_with_autovacuum_off":   float64(m.TablesWithAutovacuumOff),
+			"stale_planner_stats_tables":   float64(m.StalePlannerStatsTables),
 		},
 	}
 }
@@ -754,7 +842,7 @@ func penaltyHorizon(m RawMetrics) CategoryResult {
 	penalty = math.Min(penalty, 100)
 
 	return CategoryResult{
-		Name:    "horizon",
+		Name:    CategoryHorizon,
 		Weight:  weightHorizon,
 		Penalty: math.Round(penalty*10) / 10,
 		Details: map[string]float64{
@@ -787,7 +875,7 @@ func penaltyWalCheckpoint(m RawMetrics) CategoryResult {
 	penalty = math.Min(penalty, 100)
 
 	return CategoryResult{
-		Name:    "wal_checkpoint",
+		Name:    CategoryWalCheckpoint,
 		Weight:  weightWalCheckpoint,
 		Penalty: math.Round(penalty*10) / 10,
 		Details: map[string]float64{
@@ -869,7 +957,7 @@ func penaltyLocks(m RawMetrics) CategoryResult {
 	penalty = math.Min(penalty, 100)
 
 	return CategoryResult{
-		Name:    "locks",
+		Name:    CategoryLocks,
 		Weight:  weightLocks,
 		Penalty: math.Round(penalty*10) / 10,
 		Details: map[string]float64{

@@ -25,7 +25,7 @@ services:
     restart: unless-stopped
 
   pgbouncer:
-    image: edoburu/pgbouncer:latest
+    image: edoburu/pgbouncer:v1.25.1-p0
     container_name: dasha-pgbouncer
     environment:
       LISTEN_PORT: "6432" # edoburu defaults to 5432; pgSCV expects pgbouncer on 6432
@@ -44,12 +44,8 @@ services:
     restart: unless-stopped
 
   pgscv:
-    # Built from pgSCV sources (cherts/pgscv publishes no arm64 image). Uses the
-    # upstream repo as build context so it works on any arch (native Go build).
-    # Alternatives: local sources -> `context: ../../pgscv`; published amd64
-    # image -> `image: cherts/pgscv:latest` + `platform: linux/amd64` (emulated).
     build:
-      context: https://github.com/CHERTS/pgscv.git
+      context: https://github.com/CHERTS/pgscv.git#v0.15.2
     image: dasha/pgscv:local
     container_name: dasha-pgscv
     privileged: true # system collector needs host visibility

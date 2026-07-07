@@ -122,7 +122,15 @@ function inlineFetcher(
     case 'horizon_lag_xids':
       return getHealthScoreHorizonBlockingSessions({ cluster_name: cluster, instance: host, limit, offset })
     default:
-      return Promise.resolve({ data: [], status: 200 })
+      // The hasInline guard means this rule is listed in RULES_WITH_INLINE_DETAILS
+      // but has no fetcher case here — contract drift. Fail loudly instead of
+      // silently rendering an empty list.
+      return Promise.reject(
+        new Error(
+          `No inline-detail fetcher for rule "${props.rec.rule_id}" ` +
+            `(cluster=${cluster}, instance=${host}, database=${db || '-'})`,
+        ),
+      )
   }
 }
 

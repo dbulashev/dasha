@@ -65,8 +65,9 @@ func NewContainer() *Container {
 	do.Provide(i, func(i *do.Injector) (*metrics.Service, error) {
 		cfg := do.MustInvoke[*config.Config](i)
 		clusters := do.MustInvoke[config.Clusters](i)
+		logger := do.MustInvoke[*zap.Logger](i)
 
-		return metrics.NewService(cfg.HealthScore.Metrics, clusterMetaProvider{clusters: clusters})
+		return metrics.NewService(cfg.HealthScore.Metrics, clusterMetaProvider{clusters: clusters}, logger)
 	})
 
 	return &Container{i: i}
@@ -368,7 +369,7 @@ func provideClusters(cfg config.Config) config.Clusters {
 }
 
 func provideRepository(cfg config.Config, clusters config.Clusters, logger *zap.Logger) repository.Repository {
-	return repository.NewRepositoryPgxPool(clusters, cfg.PgStatsView, logger)
+	return repository.NewRepositoryPgxPool(clusters, cfg.PgStatsView, cfg.PgssResetFunction, cfg.DBPool, logger)
 }
 
 func provideDiscovery(cfg *config.Config, clusters config.Clusters, logger *zap.Logger) *discovery.Engine {

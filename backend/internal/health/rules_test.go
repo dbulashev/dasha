@@ -27,13 +27,13 @@ func TestRegistry_NoDuplicateIDs(t *testing.T) {
 
 func TestEvaluate_HealthyDatabaseTriggersNoRules(t *testing.T) {
 	m := RawMetrics{
-		TotalConnections:    5,
-		MaxConnections:      100,
-		CacheHitRatio:       99.5,
-		ReplicaCount:        1,
-		MaxReplayLagSeconds: 0.1,
-		MaxXidAge:           50_000_000,
-		MaxVacuumAgeHours:   12,
+		TotalConnections:         5,
+		MaxConnections:           100,
+		CacheHitRatio:            99.5,
+		ReplicaCount:             1,
+		MaxReplayLagSeconds:      0.1,
+		MaxXidAge:                50_000_000,
+		MaxOverdueVacuumAgeHours: 12,
 		// Healthy state for new P1 rules:
 		AutovacuumEnabled:    true,
 		TrackCountsEnabled:   true,
@@ -548,6 +548,39 @@ func TestRule_HighNewpageUpdateRatio(t *testing.T) {
 
 	if hit := r.Evaluate(RawMetrics{NewpageUpdateRatio: 0.30}); hit == nil || hit.Severity != SeverityHigh {
 		t.Errorf("0.30 → HIGH, got %+v", hit)
+	}
+}
+
+func TestRule_VacuumBacklog(t *testing.T) {
+	r := findRule(t, "vacuum_backlog")
+
+	if hit := r.Evaluate(RawMetrics{VacuumBacklogTables: 5}); hit != nil {
+		t.Errorf("5 tables → nil, got %+v", hit)
+	}
+
+	if hit := r.Evaluate(RawMetrics{VacuumBacklogTables: 6}); hit == nil || hit.Severity != SeverityLow {
+		t.Errorf("6 tables → LOW, got %+v", hit)
+	}
+
+	if hit := r.Evaluate(RawMetrics{VacuumBacklogTables: 15}); hit == nil || hit.Severity != SeverityMedium {
+		t.Errorf("15 tables → MEDIUM, got %+v", hit)
+	}
+
+	if hit := r.Evaluate(RawMetrics{VacuumBacklogTables: 30}); hit == nil || hit.Severity != SeverityHigh {
+		t.Errorf("30 tables → HIGH, got %+v", hit)
+	}
+}
+
+func TestStaleVacuumUsesOverdueAge(t *testing.T) {
+	r := findRule(t, "stale_vacuum")
+
+	// Below 7 days overdue → no hit; well past 60 days → HIGH.
+	if hit := r.Evaluate(RawMetrics{MaxOverdueVacuumAgeHours: 100}); hit != nil {
+		t.Errorf("100h → nil, got %+v", hit)
+	}
+
+	if hit := r.Evaluate(RawMetrics{MaxOverdueVacuumAgeHours: 2000}); hit == nil || hit.Severity != SeverityHigh {
+		t.Errorf("2000h → HIGH, got %+v", hit)
 	}
 }
 

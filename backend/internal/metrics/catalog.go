@@ -3,9 +3,8 @@ package metrics
 import "fmt"
 
 // QueryCatalog maps (provider, signal) to a MetricsQL template. Templates use
-// fmt indexed verbs: %[1]s = inner label selector, %[2]s = rate window. Seed set
-// derived from the real dashboards (requirements Appendix A); extended in later
-// phases as signals come online.
+// fmt indexed verbs: %[1]s = inner label selector, %[2]s = rate window,
+// %[3]s = optional role-exclusion fragment (leading comma, empty when unused).
 type QueryCatalog struct {
 	templates map[catalogKey]string
 }
@@ -34,16 +33,33 @@ func NewQueryCatalog() *QueryCatalog {
 		// performance — buffer cache hit ratio (%)
 		{ProviderPgSCV, SigCacheHitRatio}: `100 * sum(rate(postgres_database_blocks_total{%[1]s,access="hit"}[%[2]s])) / ` +
 			`clamp_min(sum(rate(postgres_database_blocks_total{%[1]s}[%[2]s])), 1)`,
-		// storage — worst per-table dead-tuple ratio (%)
-		{ProviderPgSCV, SigMaxDeadRatio}: `100 * max(postgres_table_tuples_dead_total{%[1]s} / ` +
-			`clamp_min(postgres_table_tuples_dead_total{%[1]s} + postgres_table_tuples_live_total{%[1]s}, 1))`,
-		// maintenance — worst time since last vacuum (hours)
-		{ProviderPgSCV, SigMaxVacuumAgeH}: `max(postgres_table_since_last_vacuum_seconds_total{%[1]s}) / 3600`,
+		// storage — worst per-table dead-tuple ratio (%). Ignore tables with <=10000
+		// tuples (the `and ... > 10000`) so a near-empty table (e.g. 0 live + a few
+		// dead = 100%) cannot dominate — matches the SQL snapshot's `n_live + n_dead
+		// > 10000` cut and the high-dead-ratio drill-down filter.
+		{ProviderPgSCV, SigMaxDeadRatio}: `100 * max((postgres_table_tuples_dead_total{%[1]s} / ` +
+			`clamp_min(postgres_table_tuples_dead_total{%[1]s} + postgres_table_tuples_live_total{%[1]s}, 1)) ` +
+			`and (postgres_table_tuples_dead_total{%[1]s} + postgres_table_tuples_live_total{%[1]s} > 10000))`,
+		// NB: the vacuum queue (backlog / overdue age) is deliberately absent here.
+		// It needs reltuples, n_ins_since_vacuum, per-table reloptions and the
+		// autovacuum_*_threshold/scale_factor GUCs to mirror PostgreSQL's own
+		// trigger — none of which the metrics providers expose faithfully. So
+		// maintenance vacuum signals come from the SQL snapshot only (the dual-path
+		// overlay fills them per-signal), avoiding a lossy PromQL approximation.
 		// storage — average dead-tuple ratio + HOT-update ratio
-		{ProviderPgSCV, SigAvgDeadRatio}: `100 * avg(postgres_table_tuples_dead_total{%[1]s} / ` +
-			`clamp_min(postgres_table_tuples_dead_total{%[1]s} + postgres_table_tuples_live_total{%[1]s}, 1))`,
-		{ProviderPgSCV, SigHotUpdateRatio}: `sum(rate(postgres_table_tuples_hot_updated_total{%[1]s}[%[2]s])) / ` +
-			`clamp_min(sum(rate(postgres_table_tuples_updated_total{%[1]s}[%[2]s])), 1)`,
+		{ProviderPgSCV, SigAvgDeadRatio}: `100 * avg((postgres_table_tuples_dead_total{%[1]s} / ` +
+			`clamp_min(postgres_table_tuples_dead_total{%[1]s} + postgres_table_tuples_live_total{%[1]s}, 1)) ` +
+			`and (postgres_table_tuples_dead_total{%[1]s} + postgres_table_tuples_live_total{%[1]s} > 10000))`,
+		// HOT-update ratio. Reports the real ratio only under meaningful update
+		// activity (>0.1 upd/s); under that it falls back to 1.0 (healthy) so a quiet
+		// instance is not flagged as "low HOT" — mirrors the SQL snapshot's
+		// COALESCE(..., 1.0) over tables with >1000 updates. The fallback is gated on
+		// the updated-metric existing (>= bool 0), so a fully unmatched target keeps
+		// this signal absent and still trips the metrics-degraded guard.
+		{ProviderPgSCV, SigHotUpdateRatio}: `(sum(rate(postgres_table_tuples_hot_updated_total{%[1]s}[%[2]s])) / ` +
+			`sum(rate(postgres_table_tuples_updated_total{%[1]s}[%[2]s])) ` +
+			`and sum(rate(postgres_table_tuples_updated_total{%[1]s}[%[2]s])) > 0.1) ` +
+			`or (sum(rate(postgres_table_tuples_updated_total{%[1]s}[%[2]s])) >= bool 0)`,
 		// performance — sequential-scan activity: tuples read by seq scans per second
 		// (large tables dominate, so this weights "big-table seq scans" naturally).
 		// Baselined seasonally; a regression flags missing index usage / stale stats.
@@ -100,8 +116,14 @@ func NewQueryCatalog() *QueryCatalog {
 		{ProviderPgBouncer, SigPoolerClients}:  `sum(pgbouncer_client_connections_in_flight{%[1]s})`,
 		{ProviderPgBouncer, SigPoolerServers}:  `sum(pgbouncer_pool_connections_in_flight{%[1]s})`,
 		{ProviderPgBouncer, SigPoolerPoolSize}: `sum(pgbouncer_service_database_pool_size{%[1]s})`,
-		// pooler saturation — YC native
-		{ProviderYCNative, SigPoolerServers}: `sum(pooler_pgbouncer_tcp_connections{%[1]s})`,
+		// connection saturation — YC native exposes per-role session and conn_limit
+		// gauges (RoleLabel = role). The worst role's sessions/conn_limit ratio is
+		// computed in PromQL with service roles dropped via %[3]s; conn_limit>0 skips
+		// roles left at the PG default -1 (unlimited). pool_size is a presence
+		// sentinel (1 when any bounded role exists), so the generic servers/pool_size
+		// saturation rule consumes the ready-made ratio unchanged.
+		{ProviderYCNative, SigPoolerServers}:  `max(postgres_role_sessions{%[1]s%[3]s} / (postgres_role_conn_limit{%[1]s%[3]s} > 0))`,
+		{ProviderYCNative, SigPoolerPoolSize}: `clamp_max(count(postgres_role_conn_limit{%[1]s%[3]s} > 0), 1)`,
 	}
 
 	return &QueryCatalog{templates: t}
@@ -109,13 +131,13 @@ func NewQueryCatalog() *QueryCatalog {
 
 // Expr renders the expression for (provider, signal). Returns ("", false) when
 // the pair is not catalogued.
-func (c *QueryCatalog) Expr(p Provider, s SignalKind, selector, window string) (string, bool) {
+func (c *QueryCatalog) Expr(p Provider, s SignalKind, selector, window, exclude string) (string, bool) {
 	tpl, ok := c.templates[catalogKey{p, s}]
 	if !ok {
 		return "", false
 	}
 
-	return fmt.Sprintf(tpl, selector, window), true
+	return fmt.Sprintf(tpl, selector, window, exclude), true
 }
 
 // Supports reports whether the catalog can build a query for (provider, signal).

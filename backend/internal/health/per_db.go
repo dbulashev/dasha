@@ -15,9 +15,10 @@ type PerDBMetrics struct {
 	AvgDeadRatio    float64
 	TablesHighBloat int
 
-	MaxXidAge           int64
-	MaxVacuumAgeHours   float64
-	TablesNeverVacuumed int
+	MaxXidAge                int64
+	VacuumBacklogTables      int
+	MaxOverdueVacuumAgeHours float64
+	TablesNeverVacuumed      int
 }
 
 // DatabaseScore is the computed score for a single database.
@@ -30,7 +31,7 @@ type DatabaseScore struct {
 
 // PerDBApplicableCategories lists categories computed at the per-database level.
 // Connections and Replication are excluded.
-var PerDBApplicableCategories = []string{"performance", "storage", "maintenance"}
+var PerDBApplicableCategories = []Category{CategoryPerformance, CategoryStorage, CategoryMaintenance}
 
 // ComputePerDB calculates per-database scores for the supplied metrics.
 // Weights are restricted to applicable categories and renormalized so that
@@ -48,13 +49,14 @@ func ComputePerDB(metrics []PerDBMetrics, w Weights, inRecovery bool) []Database
 
 	for _, m := range metrics {
 		raw := RawMetrics{
-			CacheHitRatio:       m.CacheHitRatio,
-			MaxDeadRatio:        m.MaxDeadRatio,
-			AvgDeadRatio:        m.AvgDeadRatio,
-			TablesHighBloat:     m.TablesHighBloat,
-			MaxXidAge:           m.MaxXidAge,
-			MaxVacuumAgeHours:   m.MaxVacuumAgeHours,
-			TablesNeverVacuumed: m.TablesNeverVacuumed,
+			CacheHitRatio:            m.CacheHitRatio,
+			MaxDeadRatio:             m.MaxDeadRatio,
+			AvgDeadRatio:             m.AvgDeadRatio,
+			TablesHighBloat:          m.TablesHighBloat,
+			MaxXidAge:                m.MaxXidAge,
+			VacuumBacklogTables:      m.VacuumBacklogTables,
+			MaxOverdueVacuumAgeHours: m.MaxOverdueVacuumAgeHours,
+			TablesNeverVacuumed:      m.TablesNeverVacuumed,
 		}
 
 		cats := []CategoryResult{
@@ -67,7 +69,7 @@ func ComputePerDB(metrics []PerDBMetrics, w Weights, inRecovery bool) []Database
 			// Zero maintenance penalty so the standby never gets dinged
 			// for primary-side work it cannot perform.
 			for i := range cats {
-				if cats[i].Name == "maintenance" {
+				if cats[i].Name == CategoryMaintenance {
 					cats[i].Penalty = 0
 				}
 			}
@@ -119,7 +121,7 @@ func PerDBCategoryRollup(scores []DatabaseScore) map[string]float64 {
 		size     int64
 	}
 
-	by := make(map[string]*acc, len(PerDBApplicableCategories))
+	by := make(map[Category]*acc, len(PerDBApplicableCategories))
 
 	for _, ds := range scores {
 		size := ds.SizeBytes
@@ -150,7 +152,7 @@ func PerDBCategoryRollup(scores []DatabaseScore) map[string]float64 {
 			continue
 		}
 
-		out[name] = math.Round(a.weighted/float64(a.size)*10) / 10
+		out[string(name)] = math.Round(a.weighted/float64(a.size)*10) / 10
 	}
 
 	return out

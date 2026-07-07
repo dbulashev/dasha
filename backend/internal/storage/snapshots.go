@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/dbulashev/dasha/internal/autosnapshot"
 	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/pkg/sanitize"
 	"github.com/dbulashev/dasha/internal/version"
@@ -20,19 +21,39 @@ const currentJSONVersion = 1
 
 // SnapshotListItem is a summary row returned by List.
 type SnapshotListItem struct {
-	ID              uuid.UUID
-	CreatedAt       time.Time
-	DashaVersion    string
-	JsonVersion     int
+	ID             uuid.UUID
+	CreatedAt      time.Time
+	DashaVersion   string
+	JsonVersion    int
 	PgssStatsReset *time.Time
+	HasLocks       bool
+	Reason         string // "manual" or "auto:<trigger_type>"
+}
+
+// SnapshotOpts is re-exported from autosnapshot to keep storage callers working.
+type SnapshotOpts = autosnapshot.SnapshotOpts
+
+// jsonbArg renders a marshaled JSON payload for a jsonb column as a string rather
+// than []byte. Under pgx's simple query protocol — used when the storage pool
+// reaches the DB through a transaction pooler (e.g. Odyssey) via
+// default_query_exec_mode=simple — a []byte is interpolated as a bytea literal
+// (\x...), which jsonb rejects; a string is interpolated as a text literal that
+// coerces to jsonb. Nil maps to SQL NULL.
+func jsonbArg(b []byte) any {
+	if b == nil {
+		return nil
+	}
+
+	return string(b)
 }
 
 // CreateSnapshot stores a pgss snapshot and returns its id and timestamp.
+// Reason defaults to "manual" when empty.
 func (s *Storage) CreateSnapshot(
 	ctx context.Context,
 	clusterName, instance, database string,
 	reports []dto.QueryReport,
-	pgssStatsReset *time.Time,
+	opts SnapshotOpts,
 ) (uuid.UUID, time.Time, error) {
 	now := time.Now().UTC()
 
@@ -50,7 +71,6 @@ func (s *Storage) CreateSnapshot(
 	dayStart := now.Truncate(24 * time.Hour)
 	dayEnd := dayStart.Add(24 * time.Hour)
 
-	// Build JSON: replace Query with query_hash, store texts separately.
 	type reportJSON struct {
 		dto.QueryReport
 		QueryHash string `json:"QueryHash"`
@@ -87,13 +107,34 @@ func (s *Storage) CreateSnapshot(
 		return uuid.Nil, time.Time{}, fmt.Errorf("storage: marshal report: %w", err)
 	}
 
+	reason := opts.Reason
+	if reason == "" {
+		reason = "manual"
+	}
+
+	var triggerCtx []byte
+	if opts.TriggerContext != nil {
+		triggerCtx, err = json.Marshal(opts.TriggerContext)
+		if err != nil {
+			return uuid.Nil, time.Time{}, fmt.Errorf("storage: marshal trigger context: %w", err)
+		}
+	}
+
+	var locksData []byte
+	if opts.LocksData != nil {
+		locksData, err = json.Marshal(opts.LocksData)
+		if err != nil {
+			return uuid.Nil, time.Time{}, fmt.Errorf("storage: marshal locks data: %w", err)
+		}
+	}
+
 	var id uuid.UUID
 
 	err = tx.QueryRow(ctx, `
-		INSERT INTO snapshots (cluster_name, instance, database, dasha_version, json_version, report_data, created_at, pgss_stats_reset)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO snapshots (cluster_name, instance, database, dasha_version, json_version, report_data, created_at, pgss_stats_reset, reason, trigger_context, locks_data)
+		VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10::jsonb, $11::jsonb)
 		RETURNING id`,
-		clusterName, instance, database, version.GetBuildNumber(), currentJSONVersion, data, now, pgssStatsReset,
+		clusterName, instance, database, version.GetBuildNumber(), currentJSONVersion, jsonbArg(data), now, opts.PgssStatsReset, reason, jsonbArg(triggerCtx), jsonbArg(locksData),
 	).Scan(&id)
 	if err != nil {
 		return uuid.Nil, time.Time{}, fmt.Errorf("storage: insert snapshot: %w", err)
@@ -112,7 +153,7 @@ func (s *Storage) ListSnapshots(
 	clusterName, instance, database string,
 ) ([]SnapshotListItem, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, created_at, dasha_version, json_version, pgss_stats_reset
+		SELECT id, created_at, dasha_version, json_version, pgss_stats_reset, locks_data IS NOT NULL, reason
 		FROM snapshots
 		WHERE cluster_name = $1 AND instance = $2 AND database = $3
 		ORDER BY created_at DESC
@@ -128,7 +169,7 @@ func (s *Storage) ListSnapshots(
 
 	for rows.Next() {
 		var item SnapshotListItem
-		if err := rows.Scan(&item.ID, &item.CreatedAt, &item.DashaVersion, &item.JsonVersion, &item.PgssStatsReset); err != nil {
+		if err := rows.Scan(&item.ID, &item.CreatedAt, &item.DashaVersion, &item.JsonVersion, &item.PgssStatsReset, &item.HasLocks, &item.Reason); err != nil {
 			return nil, fmt.Errorf("storage: scan snapshot: %w", err)
 		}
 
@@ -191,6 +232,29 @@ func (s *Storage) GetSnapshot(ctx context.Context, id uuid.UUID) ([]dto.QueryRep
 	}
 
 	return reports, nil
+}
+
+// GetSnapshotLocks returns the raw locks_data jsonb for a snapshot. found is
+// false when the snapshot is missing or carries no lock capture.
+func (s *Storage) GetSnapshotLocks(ctx context.Context, id uuid.UUID) ([]byte, bool, error) {
+	var data []byte
+
+	err := s.pool.QueryRow(ctx,
+		`SELECT locks_data FROM snapshots WHERE id = $1`, id,
+	).Scan(&data)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, false, nil
+	}
+
+	if err != nil {
+		return nil, false, fmt.Errorf("storage: get snapshot locks: %w", err)
+	}
+
+	if data == nil {
+		return nil, false, nil
+	}
+
+	return data, true, nil
 }
 
 // resolveQueryTexts fetches query texts from the same daily partition as the snapshot.

@@ -24,18 +24,25 @@ const { t } = useI18n()
 // range -> [span seconds, step seconds]
 const RANGES: Record<string, [number, number]> = {
   '24h': [24 * 3600, 300],
+  '2d': [2 * 24 * 3600, 600],
   '7d': [7 * 24 * 3600, 1800],
+  '14d': [14 * 24 * 3600, 3600],
   '30d': [30 * 24 * 3600, 3600],
 }
 
-const selectedRange = ref<'24h' | '7d' | '30d'>('24h')
+const selectedRange = ref<'24h' | '2d' | '7d' | '14d' | '30d'>('24h')
 const loading = ref(false)
 const unavailable = ref(false)
 const history = ref<HealthScoreHistory | null>(null)
 
+// Monotonic nonce: rapid watch triggers (e.g. range switches) can race, so each
+// call captures an id and only the latest response is allowed to mutate state.
+let requestId = 0
+
 async function load() {
   if (!clusterName.value || !hostName.value) return
 
+  const id = ++requestId
   loading.value = true
   unavailable.value = false
 
@@ -49,14 +56,17 @@ async function load() {
       to: new Date(now).toISOString(),
       step_seconds: step,
     })
+    if (id !== requestId) return
     history.value = assertOk<HealthScoreHistory>(res)
   } catch {
     // 404 / error: metrics datasource not configured or target unmapped — the
     // trend is supplementary, so degrade gracefully instead of erroring the view.
+    if (id !== requestId) return
     history.value = null
     unavailable.value = true
   } finally {
-    loading.value = false
+    // Only the latest in-flight request clears the spinner.
+    if (id === requestId) loading.value = false
   }
 }
 
@@ -143,7 +153,9 @@ const chartOptions = computed(() => ({
       <v-spacer />
       <v-btn-toggle v-model="selectedRange" density="compact" variant="outlined" mandatory>
         <v-btn value="24h" size="small">{{ t('healthScore.trend.range.24h') }}</v-btn>
+        <v-btn value="2d" size="small">{{ t('healthScore.trend.range.2d') }}</v-btn>
         <v-btn value="7d" size="small">{{ t('healthScore.trend.range.7d') }}</v-btn>
+        <v-btn value="14d" size="small">{{ t('healthScore.trend.range.14d') }}</v-btn>
         <v-btn value="30d" size="small">{{ t('healthScore.trend.range.30d') }}</v-btn>
       </v-btn-toggle>
     </v-card-title>

@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strconv"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 // Range is an inclusive time window with a step for range queries.
@@ -48,19 +50,27 @@ type VMClient struct {
 	baseURL string
 	auth    AuthConfig
 	http    *http.Client
+	logger  *zap.Logger
 }
 
-// NewVMClient builds a client for the configured datasource.
-func NewVMClient(cfg DatasourceConfig) *VMClient {
+// NewVMClient builds a client for the configured datasource. A nil logger is
+// replaced with a no-op; with debug logging on, every query (and its matched
+// series count) is logged so wrong selectors are obvious.
+func NewVMClient(cfg DatasourceConfig, logger *zap.Logger) *VMClient {
 	timeout := cfg.Timeout
 	if timeout <= 0 {
 		timeout = 10 * time.Second
+	}
+
+	if logger == nil {
+		logger = zap.NewNop()
 	}
 
 	return &VMClient{
 		baseURL: cfg.URL,
 		auth:    cfg.Auth,
 		http:    &http.Client{Timeout: timeout},
+		logger:  logger,
 	}
 }
 
@@ -114,6 +124,8 @@ func (c *VMClient) QueryInstant(ctx context.Context, expr string, at time.Time) 
 		out = append(out, Sample{Labels: it.Metric, Value: v, Time: t})
 	}
 
+	c.logger.Debug("vmselect instant query", zap.String("query", expr), zap.Int("series", len(out)))
+
 	return out, nil
 }
 
@@ -162,6 +174,8 @@ func (c *VMClient) QueryRange(ctx context.Context, expr string, r Range) ([]Seri
 
 		out = append(out, Series{Labels: it.Metric, Points: pts})
 	}
+
+	c.logger.Debug("vmselect range query", zap.String("query", expr), zap.Int("series", len(out)))
 
 	return out, nil
 }

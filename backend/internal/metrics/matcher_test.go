@@ -15,7 +15,7 @@ func testConfig() Config {
 	c.Targets = []TargetMapping{
 		{
 			Cluster: "prod-mdb", Instance: "rc1a-abc.mdb.yandexcloud.net",
-			Env: "dev", Service: "pharma_stocks",
+			Env: "dev", Service: "my_cluster",
 			Host: "rc1a-abc.mdb.yandexcloud.net", Container: "rc1a-abc",
 		},
 	}
@@ -39,10 +39,10 @@ func TestMatcher_ResolveAndSelectors(t *testing.T) {
 		role     Role
 		contains []string
 	}{
-		{ProviderPgSCV, RoleCore, []string{`cluster="dev"`, `service_id="pharma_stocks"`, `container="rc1a-abc"`}},
-		{ProviderYCNative, RoleHost, []string{`cluster="dev"`, `resource_id="pharma_stocks"`}},
-		{ProviderYCNative, RolePooler, []string{`cluster="dev"`, `subcluster_name="pharma_stocks"`}},
-		{ProviderPgBouncer, RolePooler, []string{`service_id="pharma_stocks"`, `container="rc1a-abc"`}},
+		{ProviderPgSCV, RoleCore, []string{`cluster="dev"`, `service_id="my_cluster"`, `container="rc1a-abc"`}},
+		{ProviderYCNative, RoleHost, []string{`cluster="dev"`, `resource_id="my_cluster"`}},
+		{ProviderYCNative, RolePooler, []string{`cluster="dev"`, `subcluster_name="my_cluster"`}},
+		{ProviderPgBouncer, RolePooler, []string{`service_id="my_cluster"`, `container="rc1a-abc"`}},
 	}
 
 	for _, tc := range cases {
@@ -149,7 +149,7 @@ func TestMatcher_ValidateAgainstRealDatasource(t *testing.T) {
 		t.Fatalf("NewMatcher: %v", err)
 	}
 
-	diag, err := m.Validate(context.Background(), NewVMClient(cfg.Datasource), "real", "real")
+	diag, err := m.Validate(context.Background(), NewVMClient(cfg.Datasource, nil), "real", "real")
 	if err != nil {
 		t.Fatalf("Validate: %v", err)
 	}
@@ -200,8 +200,12 @@ func TestMatcher_AutoMapDiscovered(t *testing.T) {
 		t.Fatalf("Resolve discovered: %v", err)
 	}
 
-	if rt.Service != "mdbcluster123" {
-		t.Errorf("Service = %q, want mdbcluster123 (ProviderID)", rt.Service)
+	if rt.Service != "folderA_prod" {
+		t.Errorf("Service = %q, want folderA_prod (cluster name)", rt.Service)
+	}
+
+	if rt.ServiceID != "mdbcluster123" {
+		t.Errorf("ServiceID = %q, want mdbcluster123 (ProviderID)", rt.ServiceID)
 	}
 
 	if rt.Host != "rc1a-abc.mdb.yandexcloud.net" {

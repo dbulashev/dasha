@@ -9,7 +9,7 @@ func TestCalculateWithWeights_InvalidFallsBackToDefaults(t *testing.T) {
 	m := RawMetrics{
 		TotalConnections: 5, MaxConnections: 100, CacheHitRatio: 99.5,
 		ReplicaCount: 1, MaxReplayLagSeconds: 0.1,
-		MaxXidAge: 50_000_000, MaxVacuumAgeHours: 12,
+		MaxXidAge: 50_000_000, MaxOverdueVacuumAgeHours: 12,
 		AutovacuumEnabled: true, TrackCountsEnabled: true, TrackIoTimingEnabled: true,
 		TimedCheckpoints: 5,
 	}
@@ -53,7 +53,7 @@ func TestCalculate_HealthyDatabase(t *testing.T) {
 		MaxLagBytes:               1024,
 		DisconnectedReplicas:      0,
 		MaxXidAge:                 100_000_000,
-		MaxVacuumAgeHours:         12,
+		MaxOverdueVacuumAgeHours:  12,
 		TablesNeverVacuumed:       0,
 		AutovacuumEnabled:         true,
 		TrackCountsEnabled:        true,
@@ -94,7 +94,7 @@ func TestCalculate_CriticalDatabase(t *testing.T) {
 		MaxLagBytes:               500 * 1024 * 1024,
 		DisconnectedReplicas:      1,
 		MaxXidAge:                 1_900_000_000, // near wraparound
-		MaxVacuumAgeHours:         2000,          // >60 days → upper tier
+		MaxOverdueVacuumAgeHours:  2000,          // >60 days → upper tier
 		TablesNeverVacuumed:       5,
 		HorizonLagXids:            100_000_000, // HIGH tier
 		TimedCheckpoints:          50,
@@ -238,7 +238,7 @@ func TestPenaltyReplication_DisconnectedReplica(t *testing.T) {
 }
 
 func TestPenaltyMaintenance_Healthy(t *testing.T) {
-	m := RawMetrics{MaxXidAge: 100_000_000, MaxVacuumAgeHours: 12}
+	m := RawMetrics{MaxXidAge: 100_000_000, MaxOverdueVacuumAgeHours: 12}
 	r := penaltyMaintenance(m)
 	if r.Penalty != 0 {
 		t.Errorf("expected 0 penalty for healthy maintenance, got %v", r.Penalty)
@@ -280,7 +280,7 @@ func TestCriticalCeiling_FloorsCatastrophicConditions(t *testing.T) {
 	healthy := RawMetrics{
 		TotalConnections: 10, MaxConnections: 100, CacheHitRatio: 99.5,
 		ReplicaCount: 1, MaxReplayLagSeconds: 0.1,
-		MaxXidAge: 50_000_000, MaxVacuumAgeHours: 12,
+		MaxXidAge: 50_000_000, MaxOverdueVacuumAgeHours: 12,
 		AutovacuumEnabled: true, TrackCountsEnabled: true,
 		TrackIoTimingEnabled: true, HotUpdateRatio: 0.95,
 	}
@@ -325,7 +325,7 @@ func TestInstanceAdjustments_CoverRuleConditions(t *testing.T) {
 	base := RawMetrics{
 		TotalConnections: 10, MaxConnections: 100, CacheHitRatio: 99.5,
 		ReplicaCount: 1, MaxReplayLagSeconds: 0.1,
-		MaxXidAge: 50_000_000, MaxVacuumAgeHours: 12,
+		MaxXidAge: 50_000_000, MaxOverdueVacuumAgeHours: 12,
 		AutovacuumEnabled: true, TrackCountsEnabled: true,
 		TrackIoTimingEnabled: true, HotUpdateRatio: 0.95,
 		WalLevel: "replica",
@@ -333,7 +333,7 @@ func TestInstanceAdjustments_CoverRuleConditions(t *testing.T) {
 
 	catScore := func(r Result, name string) float64 {
 		for _, c := range r.Categories {
-			if c.Name == name {
+			if string(c.Name) == name {
 				return c.Score
 			}
 		}
@@ -354,6 +354,7 @@ func TestInstanceAdjustments_CoverRuleConditions(t *testing.T) {
 		{"low hot-update ratio", "storage", func(m *RawMetrics) { m.HotUpdateRatio = 0.3 }},
 		{"newpage update ratio", "storage", func(m *RawMetrics) { m.NewpageUpdateRatio = 0.25 }},
 		{"tables with autovacuum off", "maintenance", func(m *RawMetrics) { m.TablesWithAutovacuumOff = 3 }},
+		{"vacuum backlog", "maintenance", func(m *RawMetrics) { m.VacuumBacklogTables = 12 }},
 		{"stale planner stats", "maintenance", func(m *RawMetrics) { m.StalePlannerStatsTables = 8 }},
 		{"relfrozenxid outlier", "maintenance", func(m *RawMetrics) { m.MaxRelfrozenxidAge = 1_000_000_000 }},
 		{"wal_level minimal with replicas", "wal_checkpoint", func(m *RawMetrics) { m.WalLevel = "minimal" }},
@@ -421,7 +422,7 @@ func TestPenaltyMaintenance_StaleVacuum(t *testing.T) {
 	// strong signal — read-mostly tables legitimately go weeks without vacuum.
 	// 30 days lands in the second tier (21–60d) and still triggers a meaningful
 	// penalty.
-	m := RawMetrics{MaxVacuumAgeHours: 720} // 30 days
+	m := RawMetrics{MaxOverdueVacuumAgeHours: 720} // 30 days
 	r := penaltyMaintenance(m)
 	if r.Penalty < 10 {
 		t.Errorf("expected penalty >= 10 for 30-day vacuum age, got %v", r.Penalty)
@@ -447,10 +448,10 @@ func TestCalculate_InRecovery_DropsMaintenance(t *testing.T) {
 		CacheHitRatio:    99.5,
 		ReplicaCount:     1, // replication is active (cascading standby chain ignored)
 		// Catastrophic maintenance metrics that MUST be ignored on a standby:
-		MaxXidAge:          1_900_000_000,
-		MaxVacuumAgeHours:  10_000,
-		AutovacuumEnabled:  false,
-		TrackCountsEnabled: false,
+		MaxXidAge:                1_900_000_000,
+		MaxOverdueVacuumAgeHours: 10_000,
+		AutovacuumEnabled:        false,
+		TrackCountsEnabled:       false,
 		// Non-maintenance signals stay healthy so only the maintenance drop is exercised.
 		TrackIoTimingEnabled: true,
 		HotUpdateRatio:       0.95,
@@ -526,11 +527,11 @@ func TestCalculate_InRecovery_NoReplicas_DropsBoth(t *testing.T) {
 func TestEvaluate_InRecovery_HidesMaintenanceRules(t *testing.T) {
 	// Catastrophic maintenance metrics must not surface on a standby.
 	m := RawMetrics{
-		InRecovery:         true,
-		MaxXidAge:          1_900_000_000,
-		MaxVacuumAgeHours:  10_000,
-		AutovacuumEnabled:  false,
-		TrackCountsEnabled: false,
+		InRecovery:               true,
+		MaxXidAge:                1_900_000_000,
+		MaxOverdueVacuumAgeHours: 10_000,
+		AutovacuumEnabled:        false,
+		TrackCountsEnabled:       false,
 	}
 
 	for _, r := range Evaluate(m, false) {
@@ -553,7 +554,7 @@ func TestRedistributeWeights(t *testing.T) {
 		{Name: "locks", Weight: 0.10},
 	}
 
-	redistributeWeights(categories, []string{"replication"})
+	redistributeWeights(categories, []Category{"replication"})
 
 	var total float64
 	for _, c := range categories {
@@ -600,7 +601,7 @@ func TestRedistributeWeights_OtherSumZero(t *testing.T) {
 		{Name: "locks", Weight: 0},
 	}
 
-	redistributeWeights(categories, []string{"replication"})
+	redistributeWeights(categories, []Category{"replication"})
 
 	var total float64
 

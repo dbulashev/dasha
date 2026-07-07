@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -111,6 +112,8 @@ type Repository interface {
 	GetQueriesTop10Chart(ctx context.Context, clusterName, instanceName string) ([]dto.QueryTop10ChartItem, error)
 	GetQueryStatsStatus(ctx context.Context, clusterName, instanceName, databaseName string) (dto.QueryStatsStatus, error)
 	ResetQueryStats(ctx context.Context, clusterName, instanceName, databaseName string) error
+	GetActiveConnectionCount(ctx context.Context, clusterName, instanceName string) (int, error)
+	GetBlockedSessionCount(ctx context.Context, clusterName, instanceName, databaseName string) (int, error)
 	GetProgressAnalyze(ctx context.Context, clusterName, instanceName string) ([]dto.ProgressAnalyze, error)
 	GetProgressBaseBackup(ctx context.Context, clusterName, instanceName string) ([]dto.ProgressBaseBackup, error)
 	GetProgressCluster(ctx context.Context, clusterName, instanceName string) ([]dto.ProgressCluster, error)
@@ -135,6 +138,8 @@ type Repository interface {
 
 const defaultPgStatsView = "pg_catalog.pg_stats"
 
+const defaultPgssResetFunc = "pg_stat_statements_reset"
+
 // validPgIdentifier matches schema-qualified or plain SQL identifiers (no injection risk).
 var validPgIdentifier = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)?$`)
 
@@ -153,10 +158,38 @@ type PgxPool struct {
 	logger              *zap.Logger
 	pgStatsViewConfig   string   // configured pg_stats_view from global config
 	resolvedPgStatsView sync.Map // *pgxpool.Pool → string (resolved view name)
+	pgssResetFuncConfig string   // configured pgss_reset_function from global config
+	poolConfig          config.PoolConfig
 }
 
-func NewRepositoryPgxPool(clusters config.Clusters, pgStatsView string, logger *zap.Logger) Repository {
-	return &PgxPool{clusters: clusters, pools: PgxPools{}, mu: sync.RWMutex{}, logger: logger, pgStatsViewConfig: pgStatsView}
+func NewRepositoryPgxPool(clusters config.Clusters, pgStatsView, pgssResetFunc string, poolCfg config.PoolConfig, logger *zap.Logger) Repository {
+	return &PgxPool{
+		clusters:            clusters,
+		pools:               PgxPools{},
+		mu:                  sync.RWMutex{},
+		logger:              logger,
+		pgStatsViewConfig:   pgStatsView,
+		pgssResetFuncConfig: pgssResetFunc,
+		poolConfig:          poolCfg,
+	}
+}
+
+// pgssResetFunction returns the configured pgss reset function, or the default
+// when unset/invalid. Validated against validPgIdentifier (no injection risk).
+func (p *PgxPool) pgssResetFunction() string {
+	f := strings.TrimSpace(p.pgssResetFuncConfig)
+	if f == "" {
+		return defaultPgssResetFunc
+	}
+
+	if !validPgIdentifier.MatchString(f) {
+		p.logger.Warn("invalid pgss_reset_function, using default",
+			zap.String("configured", f), zap.String("default", defaultPgssResetFunc))
+
+		return defaultPgssResetFunc
+	}
+
+	return f
 }
 
 func (p *PgxPool) Clusters(ctx context.Context) ([]dto.ClusterInfo, error) {
@@ -366,6 +399,17 @@ func (p *PgxPool) ensurePool(ctx context.Context) error {
 	return nil
 }
 
+// Dasha opens one pool per (host, database) and connects as a single monitoring
+// role, so pgx's default of MaxConns = max(4, NumCPU) multiplies badly behind a
+// per-user connection pooler (e.g. Odyssey/PgBouncer pool_size). Default to a
+// small pool with a short idle time so the footprint stays low and idle
+// connections are returned to the pooler between dashboard refreshes;
+// db_pool / autosnapshot_db_pool override per field.
+const (
+	defaultPoolMaxConns        = 4
+	defaultPoolMaxConnIdleTime = 2 * time.Minute
+)
+
 func (p *PgxPool) getPool(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 	databaseConfig, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
@@ -374,6 +418,22 @@ func (p *PgxPool) getPool(ctx context.Context, dsn string) (*pgxpool.Pool, error
 
 	databaseConfig.ConnConfig.ConnectTimeout = poolConnectTimeout
 	databaseConfig.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+
+	// Conservative defaults (above), overridden per field by db_pool /
+	// autosnapshot_db_pool when set (> 0).
+	databaseConfig.MaxConns = defaultPoolMaxConns
+	if p.poolConfig.MaxConns > 0 {
+		databaseConfig.MaxConns = p.poolConfig.MaxConns
+	}
+
+	databaseConfig.MaxConnIdleTime = defaultPoolMaxConnIdleTime
+	if p.poolConfig.MaxConnIdleTime > 0 {
+		databaseConfig.MaxConnIdleTime = p.poolConfig.MaxConnIdleTime
+	}
+
+	if p.poolConfig.MaxConnLifetime > 0 {
+		databaseConfig.MaxConnLifetime = p.poolConfig.MaxConnLifetime
+	}
 
 	if databaseConfig.ConnConfig.RuntimeParams == nil {
 		databaseConfig.ConnConfig.RuntimeParams = make(map[string]string)
