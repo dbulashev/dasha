@@ -78,7 +78,7 @@ const ROLLBACK_THRESHOLD = 0.05
     </v-card-title>
     <v-card-text>
       <v-skeleton-loader v-if="loading" type="heading, text@3" />
-      <template v-else-if="data">
+      <template v-else-if="data && Array.isArray(data.categories)">
         <v-alert
           v-if="data.metrics_degraded"
           type="warning"

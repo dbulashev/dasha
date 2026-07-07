@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getLogs } from '@/api/gen/default/default'
 import type { GetLogsParams, LogEntry, LogSearchResult } from '@/api/models'
@@ -33,6 +33,16 @@ const hosts = computed(() =>
 const hasMore = computed(() => !dedup.value && !!nextToken.value)
 
 const activeMessage = computed(() => lastFilters.value?.message ?? '')
+
+// Dedup groups keep their count-ranked order; chronological results are sorted
+// by timestamp per the selected order (newest or oldest first).
+const displayItems = computed(() => {
+  if (dedup.value) return items.value
+  const dir = lastFilters.value?.order === 'asc' ? 1 : -1
+  return [...items.value].sort(
+    (a, b) => dir * ((a.timestamp ?? '') < (b.timestamp ?? '') ? -1 : (a.timestamp ?? '') > (b.timestamp ?? '') ? 1 : 0),
+  )
+})
 
 function mapError(err: unknown): string {
   if (err instanceof ApiError) {
@@ -113,6 +123,21 @@ function onSearch(filters: LogFilters) {
 function onLoadMore() {
   if (lastFilters.value) runSearch(lastFilters.value, true)
 }
+
+// Back-to-top button: after paging through many rows with "load more" the page
+// gets long, so offer a quick jump back to the filters.
+const showScrollTop = ref(false)
+
+function onScroll() {
+  showScrollTop.value = window.scrollY > 600
+}
+
+function scrollToTop() {
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+onMounted(() => window.addEventListener('scroll', onScroll, { passive: true }))
+onUnmounted(() => window.removeEventListener('scroll', onScroll))
 </script>
 
 <template>
@@ -130,7 +155,7 @@ function onLoadMore() {
   </v-alert>
 
   <LogResultsTable
-    :items="items"
+    :items="displayItems"
     :loading="loading"
     :dedup="dedup"
     :partial="partial"
@@ -140,4 +165,25 @@ function onLoadMore() {
     :searched="searched"
     @load-more="onLoadMore"
   />
+
+  <v-fade-transition>
+    <v-btn
+      v-show="showScrollTop && items.length > 0"
+      icon="mdi-chevron-up"
+      color="primary"
+      elevation="6"
+      class="log-scroll-top"
+      :title="t('logs.scrollTop')"
+      @click="scrollToTop"
+    />
+  </v-fade-transition>
 </template>
+
+<style scoped>
+.log-scroll-top {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 1000;
+}
+</style>

@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { GetLogsServiceType } from '@/api/models'
-import { severityOptions, type LogFilters } from './types'
+import { severityOptions, type LogFilters, type LogOrder } from './types'
 
 const props = defineProps<{
   hosts: string[]
@@ -24,6 +24,7 @@ const database = ref<string>('')
 const user = ref<string>('')
 const dedup = ref<boolean>(false)
 const pageSize = ref<number>(100)
+const order = ref<LogOrder>('desc')
 
 // Custom range bounds (datetime-local strings).
 const customFrom = ref<string>('')
@@ -45,6 +46,11 @@ const rangeItems = computed(() => [
 const severityItems = computed(() => severityOptions(serviceType.value))
 
 const pageSizeItems = [50, 100, 250, 500, 1000]
+
+const orderItems = computed(() => [
+  { value: 'desc', title: t('logs.orderDesc') },
+  { value: 'asc', title: t('logs.orderAsc') },
+])
 
 // Reset severities that are not valid for the newly selected service type.
 watch(serviceType, () => {
@@ -89,6 +95,7 @@ function onSubmit() {
     user: (user.value ?? '').trim(),
     dedup: dedup.value,
     pageSize: pageSize.value,
+    order: order.value,
   }
 
   emit('search', filters)
@@ -214,7 +221,17 @@ function onSubmit() {
             hide-details
           />
         </v-col>
-        <v-col cols="12" sm="4" md="3">
+        <v-col cols="12" sm="4" md="2">
+          <v-select
+            v-model="order"
+            :items="orderItems"
+            :label="t('logs.order')"
+            :disabled="dedup"
+            density="compact"
+            hide-details
+          />
+        </v-col>
+        <v-col cols="12" sm="4" md="2">
           <v-switch
             v-model="dedup"
             :label="t('logs.dedup')"

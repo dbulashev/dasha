@@ -13,7 +13,11 @@ export interface LogFilters {
   user: string
   dedup: boolean
   pageSize: number
+  // Display order of chronological (non-dedup) results: 'desc' = newest first.
+  order: LogOrder
 }
+
+export type LogOrder = 'asc' | 'desc'
 
 // Severity options per service type — postgresql uses UPPER case, the pooler
 // (Odyssey) uses lower case, matching what the Yandex API expects.

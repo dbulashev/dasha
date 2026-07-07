@@ -35,12 +35,12 @@ const headers = computed(() => {
       { title: t('logs.col.text'), key: 'text' },
     ]
   }
+  // Database and user live in the expanded row (fields), so the message column
+  // gets the remaining width instead of being squeezed into a narrow last cell.
   return [
     { title: t('logs.col.time'), key: 'timestamp', width: 190 },
     { title: t('logs.col.severity'), key: 'severity', width: 120 },
     { title: t('logs.col.host'), key: 'hostname', width: 200 },
-    { title: t('logs.col.database'), key: 'database', width: 130 },
-    { title: t('logs.col.user'), key: 'user', width: 130 },
     { title: t('logs.col.text'), key: 'text' },
   ]
 })
@@ -107,8 +107,8 @@ function fieldRows(item: LogEntry): Array<[string, string]> {
         :loading="props.loading"
         show-expand
         item-value="__index"
-        :items-per-page="50"
-        :hide-default-footer="rows.length <= 50"
+        :items-per-page="-1"
+        hide-default-footer
       >
         <template #item.timestamp="{ item }">
           <span class="text-no-wrap">{{ fmtDateTime(item.timestamp) }}</span>

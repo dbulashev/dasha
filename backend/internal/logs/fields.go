@@ -1,6 +1,7 @@
 package logs
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/dbulashev/dasha/internal/discovery/yandex"
@@ -104,10 +105,26 @@ func severityRank(s string) int {
 	}
 }
 
-// normalize collapses whitespace runs and trims, for grouping near-identical
-// messages during deduplication.
+// Variable parts of a log line that must be masked so structurally identical
+// messages group together during deduplication. Order matters: quoted literals
+// and hex are masked before bare numbers.
+var (
+	reQuoted = regexp.MustCompile(`'[^']*'|"[^"]*"`)
+	reHex    = regexp.MustCompile(`\b0x[0-9a-fA-F]+\b`)
+	reNumber = regexp.MustCompile(`\d+(?:\.\d+)?`)
+)
+
+// normalize collapses whitespace and masks variable tokens (quoted literals,
+// hex and numbers) so structurally identical messages group into one entry —
+// e.g. "login time: 656 microseconds" and "login time: 698 microseconds", or
+// "connection from 10.0.0.1:5432", collapse to a single template.
 func normalize(s string) string {
-	return strings.Join(strings.Fields(s), " ")
+	s = strings.Join(strings.Fields(s), " ")
+	s = reQuoted.ReplaceAllString(s, "?")
+	s = reHex.ReplaceAllString(s, "?")
+	s = reNumber.ReplaceAllString(s, "?")
+
+	return s
 }
 
 func containsFold(haystack, needle string) bool {
