@@ -549,7 +549,8 @@
       "notFound": "Cluster nicht gefunden",
       "upstream": "Fehler beim Zugriff auf die Yandex Cloud API",
       "timeout": "Zeitüberschreitung bei der Antwort von Yandex Cloud",
-      "unsupported": "Die Protokollsuche ist für diesen Cluster nicht verfügbar"
+      "unsupported": "Die Protokollsuche ist für diesen Cluster nicht verfügbar",
+      "network": "Keine Antwort vom Server (Netzwerkfehler oder Verbindungsabbruch). Möglicherweise antwortet Yandex Cloud zu langsam — bitte erneut versuchen oder den Zeitraum eingrenzen."
     }
   },
   "Replication": "Replikation",

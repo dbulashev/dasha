@@ -31,16 +31,15 @@ const headers = computed(() => {
     return [
       { title: t('logs.col.count'), key: 'count', width: 90 },
       { title: t('logs.col.lastSeen'), key: 'last_seen', width: 190 },
-      { title: t('logs.col.severity'), key: 'severity', width: 120 },
+      { title: t('logs.col.severity'), key: 'severity', width: 96 },
       { title: t('logs.col.text'), key: 'text' },
     ]
   }
-  // Database and user live in the expanded row (fields), so the message column
-  // gets the remaining width instead of being squeezed into a narrow last cell.
+  // Host, database and user live in the expanded row (fields), so the message
+  // column gets the remaining width instead of being squeezed into a narrow cell.
   return [
-    { title: t('logs.col.time'), key: 'timestamp', width: 190 },
-    { title: t('logs.col.severity'), key: 'severity', width: 120 },
-    { title: t('logs.col.host'), key: 'hostname', width: 200 },
+    { title: t('logs.col.time'), key: 'timestamp', width: 180 },
+    { title: t('logs.col.severity'), key: 'severity', width: 96 },
     { title: t('logs.col.text'), key: 'text' },
   ]
 })
@@ -58,15 +57,21 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-// highlightText escapes the text first, then wraps case-insensitive matches of
-// the search term in <mark>. Safe to render via v-html because the input is
-// already HTML-escaped.
+// Main-row message is truncated; the full text stays in the expanded row.
+const MAX_TEXT_LEN = 140
+
+// highlightText truncates to MAX_TEXT_LEN (appending an ellipsis when longer),
+// escapes the text, then wraps case-insensitive matches of the search term in
+// <mark>. Safe to render via v-html because the input is already HTML-escaped.
 function highlightText(text: string | undefined): string {
-  const safe = escapeHtml(text ?? '')
+  const raw = text ?? ''
+  const truncated = raw.length > MAX_TEXT_LEN
+  const safe = escapeHtml(truncated ? raw.slice(0, MAX_TEXT_LEN) : raw)
   const needle = props.message.trim()
-  if (!needle) return safe
-  const re = new RegExp(escapeRegExp(escapeHtml(needle)), 'gi')
-  return safe.replace(re, (m) => `<mark>${m}</mark>`)
+  const html = needle
+    ? safe.replace(new RegExp(escapeRegExp(escapeHtml(needle)), 'gi'), (m) => `<mark>${m}</mark>`)
+    : safe
+  return truncated ? html + '…' : html
 }
 
 // Fields shown in the expanded row, excluding empties, sorted by key.
@@ -105,6 +110,7 @@ function fieldRows(item: LogEntry): Array<[string, string]> {
         :headers="headers"
         :items="rows"
         :loading="props.loading"
+        loading-text=""
         show-expand
         item-value="__index"
         :items-per-page="-1"
@@ -120,7 +126,7 @@ function fieldRows(item: LogEntry): Array<[string, string]> {
           <v-chip size="small" variant="tonal" color="primary">{{ item.count }}</v-chip>
         </template>
         <template #item.severity="{ item }">
-          <v-chip size="small" :color="severityColor(item.severity)" variant="tonal">
+          <v-chip size="x-small" label :color="severityColor(item.severity)" variant="tonal">
             {{ item.severity }}
           </v-chip>
         </template>

@@ -59,7 +59,15 @@ function mapError(err: unknown): string {
         return t('logs.error.timeout')
     }
   }
-  return getErrorMessage(err)
+  // A bare fetch rejection (not an ApiError) means no HTTP response arrived —
+  // the connection dropped or the request outran the browser/proxy while the
+  // backend was still waiting on Yandex Cloud. Give a clearer hint than the raw
+  // "Failed to fetch".
+  const msg = getErrorMessage(err)
+  if (/failed to fetch|networkerror|load failed|network request failed/i.test(msg)) {
+    return t('logs.error.network')
+  }
+  return msg
 }
 
 async function runSearch(filters: LogFilters, append: boolean) {
