@@ -50,8 +50,14 @@ func NewDashaClient(cfg Config) (*DashaClient, error) {
 
 // withToken returns a shallow copy bound to a specific token, sharing the
 // underlying HTTP client. Used in HTTP mode to give each request its own
-// identity (per-user passthrough) without rebuilding the API client.
+// identity (per-user passthrough) without rebuilding the API client. An empty
+// token keeps the configured default (the DASHA_MCP_TOKEN fallback) rather than
+// clearing it, so header-less clients fall back to that identity as documented.
 func (d *DashaClient) withToken(token string) *DashaClient {
+	if token == "" {
+		return d
+	}
+
 	c := *d
 	c.token = token
 

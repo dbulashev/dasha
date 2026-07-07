@@ -2114,7 +2114,9 @@ components:
           description: Token role; must not exceed the caller's role. Defaults to viewer.
         expires_in_days:
           type: integer
-          description: Optional lifetime in days; omitted or 0 means no expiry.
+          minimum: 0
+          maximum: 3650
+          description: Optional lifetime in days (max 3650 = 10 years); omitted or 0 means no expiry.
     PersonalAccessToken:
       type: object
       required:
@@ -2186,6 +2188,9 @@ components:
           type: string
         enable_query_stats_reset:
           type: boolean
+        pat_enabled:
+          type: boolean
+          description: True when personal access tokens can be minted (snapshot storage is configured).
     User:
       type: object
       properties:

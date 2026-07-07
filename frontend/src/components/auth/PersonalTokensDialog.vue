@@ -14,6 +14,9 @@ import type {
 } from '@/api/models'
 import { useAuthStore } from '@/stores/auth'
 import { assertOk } from '@/utils/api'
+import { getErrorMessage } from '@/utils/error'
+import { copyToClipboard } from '@/utils/sql'
+import { fmtDateTime } from '@/utils/format'
 
 const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits<{ 'update:modelValue': [boolean] }>()
@@ -48,7 +51,7 @@ async function load() {
   try {
     tokens.value = assertOk<PersonalAccessToken[]>(await listPersonalTokens()) ?? []
   } catch (e) {
-    error.value = e instanceof Error ? e.message : String(e)
+    error.value = getErrorMessage(e)
   } finally {
     loading.value = false
   }
@@ -73,7 +76,7 @@ async function create() {
     role.value = 'viewer'
     await load()
   } catch (e) {
-    error.value = e instanceof Error ? e.message : String(e)
+    error.value = getErrorMessage(e)
   } finally {
     creating.value = false
   }
@@ -85,23 +88,17 @@ async function revoke(id: string) {
     assertOk(await revokePersonalToken(id))
     await load()
   } catch (e) {
-    error.value = e instanceof Error ? e.message : String(e)
+    error.value = getErrorMessage(e)
   }
 }
 
-async function copySecret() {
+function copySecret() {
   if (!createdSecret.value) return
-  try {
-    await navigator.clipboard.writeText(createdSecret.value)
-    copied.value = true
-    setTimeout(() => (copied.value = false), 1500)
-  } catch {
-    // Clipboard unavailable; ignore.
-  }
-}
-
-function fmtDate(s?: string | null): string {
-  return s ? new Date(s).toLocaleString() : '—'
+  // copyToClipboard has an execCommand fallback for insecure (http://) contexts
+  // where navigator.clipboard is undefined — losing a one-time secret otherwise.
+  copyToClipboard(createdSecret.value)
+  copied.value = true
+  setTimeout(() => (copied.value = false), 1500)
 }
 
 // Reset transient state and (re)load whenever the dialog opens.
@@ -229,8 +226,8 @@ watch(open, (v) => {
               <td>
                 <v-chip size="x-small" variant="tonal">{{ tok.role }}</v-chip>
               </td>
-              <td class="text-caption">{{ fmtDate(tok.last_used_at) }}</td>
-              <td class="text-caption">{{ fmtDate(tok.expires_at) }}</td>
+              <td class="text-caption">{{ fmtDateTime(tok.last_used_at) }}</td>
+              <td class="text-caption">{{ fmtDateTime(tok.expires_at) }}</td>
               <td class="text-right">
                 <v-btn
                   size="x-small"

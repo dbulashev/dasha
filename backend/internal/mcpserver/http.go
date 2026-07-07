@@ -1,21 +1,19 @@
 package mcpserver
 
 import (
+	"container/list"
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// maxCachedServers bounds the per-token server cache so a flood of distinct
-// tokens cannot grow it without limit (a token is accepted into the cache only
-// when Dasha would later authorize it, but the cache is populated before that
-// check). Beyond the cap, requests are served by an uncached server — correct,
-// just not memoized.
+// maxCachedServers bounds the per-token server cache. It is an LRU, so a flood of
+// distinct tokens evicts cold entries (including revoked ones) instead of either
+// growing without limit or degrading to a per-request rebuild once full.
 const maxCachedServers = 1024
 
 // HTTPHandler returns a streamable-HTTP MCP handler with per-user passthrough:
@@ -27,41 +25,80 @@ const maxCachedServers = 1024
 // One MCP server is built and cached per distinct token (tools/prompts and their
 // schemas are derived once per identity, not per request). The cache is keyed by
 // a hash of the token so raw secrets are not retained as map keys, and bounded
-// so it cannot grow without limit.
+// (LRU) so it cannot grow without limit.
 func HTTPHandler(base *DashaClient, version string) http.Handler {
-	var (
-		servers sync.Map // tokenCacheKey -> *mcp.Server
-		cached  atomic.Int64
-	)
-
 	// One schema cache shared across all per-token servers: the tool input
 	// schemas are identical for every identity, so derive them once by reflection
 	// rather than per token.
 	schemas := mcp.NewSchemaCache()
+	cache := newServerCache(maxCachedServers)
 
 	return mcp.NewStreamableHTTPHandler(func(req *http.Request) *mcp.Server {
 		token := tokenFromRequest(req)
-		key := tokenCacheKey(token)
 
-		if s, ok := servers.Load(key); ok {
-			return s.(*mcp.Server)
-		}
-
-		s := newServer(base.withToken(token), version, schemas)
-
-		// Soft-bound the cache: past the cap, serve an uncached server rather
-		// than letting distinct tokens grow memory without limit.
-		if cached.Load() >= maxCachedServers {
-			return s
-		}
-
-		actual, loaded := servers.LoadOrStore(key, s)
-		if !loaded {
-			cached.Add(1)
-		}
-
-		return actual.(*mcp.Server)
+		return cache.get(tokenCacheKey(token), func() *mcp.Server {
+			return newServer(base.withToken(token), version, schemas)
+		})
 	}, &mcp.StreamableHTTPOptions{Stateless: true}) //nolint:exhaustruct
+}
+
+// serverCache is a bounded LRU of per-token MCP servers.
+type serverCache struct {
+	mu    sync.Mutex
+	ll    *list.List // front = most recently used
+	items map[string]*list.Element
+	cap   int
+}
+
+type serverCacheItem struct {
+	key    string
+	server *mcp.Server
+}
+
+func newServerCache(capacity int) *serverCache {
+	return &serverCache{
+		ll:    list.New(),
+		items: make(map[string]*list.Element, capacity),
+		cap:   capacity,
+	}
+}
+
+// get returns the cached server for key, building and inserting one via build on
+// a miss (evicting the least-recently-used entry when over capacity). build runs
+// outside the lock so concurrent misses for distinct tokens don't serialize.
+func (c *serverCache) get(key string, build func() *mcp.Server) *mcp.Server {
+	c.mu.Lock()
+	if el, ok := c.items[key]; ok {
+		c.ll.MoveToFront(el)
+		srv := el.Value.(*serverCacheItem).server
+		c.mu.Unlock()
+
+		return srv
+	}
+	c.mu.Unlock()
+
+	srv := build()
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Another goroutine may have inserted this key while we were building.
+	if el, ok := c.items[key]; ok {
+		c.ll.MoveToFront(el)
+
+		return el.Value.(*serverCacheItem).server
+	}
+
+	c.items[key] = c.ll.PushFront(&serverCacheItem{key: key, server: srv})
+
+	if c.ll.Len() > c.cap {
+		if oldest := c.ll.Back(); oldest != nil {
+			c.ll.Remove(oldest)
+			delete(c.items, oldest.Value.(*serverCacheItem).key)
+		}
+	}
+
+	return srv
 }
 
 // tokenFromRequest extracts the caller's Dasha token from a bearer Authorization

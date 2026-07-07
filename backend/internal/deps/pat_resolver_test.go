@@ -176,6 +176,48 @@ func TestResolveToken_TouchThrottleReleases(t *testing.T) {
 	}
 }
 
+func TestResolveToken_NegativeResultCached(t *testing.T) {
+	t.Parallel()
+
+	store := &fakePATStore{found: false}
+	// Long negative window via touch interval is irrelevant; patNegativeTTL gates it.
+	r := newResolver(store, time.Minute, time.Minute)
+
+	secret, _, _, _ := pat.Generate()
+
+	for range 5 {
+		if _, ok := r.ResolveToken(context.Background(), secret); ok {
+			t.Fatalf("expected reject for unknown token")
+		}
+	}
+
+	if resolve, _ := store.counts(); resolve != 1 {
+		t.Errorf("resolveCalls = %d, want 1 (negative result cached, no DB flood)", resolve)
+	}
+}
+
+func TestResolveToken_CacheCappedAtTokenExpiry(t *testing.T) {
+	t.Parallel()
+
+	soon := time.Now().Add(20 * time.Millisecond)
+	store := &fakePATStore{
+		found:    true,
+		identity: &storage.APITokenIdentity{Subject: "a@b", Role: "viewer", ExpiresAt: &soon},
+	}
+	// TTL is long, but the token expires in 20ms — the cache must not outlive it.
+	r := newResolver(store, time.Hour, time.Hour)
+
+	secret, _, _, _ := pat.Generate()
+
+	r.ResolveToken(context.Background(), secret)
+	time.Sleep(40 * time.Millisecond) // token (and thus the cache entry) has expired
+	r.ResolveToken(context.Background(), secret)
+
+	if resolve, _ := store.counts(); resolve != 2 {
+		t.Errorf("resolveCalls = %d, want 2 (cache expiry capped at token expiry)", resolve)
+	}
+}
+
 func TestNewPATResolver_NilWithoutStorage(t *testing.T) {
 	t.Parallel()
 

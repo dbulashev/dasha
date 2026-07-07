@@ -11,6 +11,10 @@ export interface PersonalAccessTokenCreate {
   name: string
   /** Token role; must not exceed the caller's role. Defaults to viewer. */
   role?: PersonalAccessTokenCreateRole
-  /** Optional lifetime in days; omitted or 0 means no expiry. */
+  /**
+   * Optional lifetime in days (max 3650 = 10 years); omitted or 0 means no expiry.
+   * @minimum 0
+   * @maximum 3650
+   */
   expires_in_days?: number
 }

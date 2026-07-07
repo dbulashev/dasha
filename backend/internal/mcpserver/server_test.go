@@ -115,6 +115,48 @@ func TestSection(t *testing.T) {
 	}
 }
 
+func TestSectionsResult_AllFailedIsError(t *testing.T) {
+	t.Parallel()
+
+	// Every sub-request errored (e.g. permission denied on all) -> must be IsError
+	// so the model does not read an all-errors payload as a successful result.
+	allFailed := map[string]any{}
+	section(allFailed, "status", nil, errors.New("access denied"))
+	section(allFailed, "slots", nil, errors.New("access denied"))
+
+	res, _, err := sectionsResult(allFailed)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	if !res.IsError {
+		t.Errorf("IsError = false, want true when every section failed")
+	}
+}
+
+func TestSectionsResult_PartialSuccessNotError(t *testing.T) {
+	t.Parallel()
+
+	// At least one section succeeded -> a normal (non-error) result the model
+	// can use, with the per-part error preserved inside.
+	out := map[string]any{}
+	section(out, "status", "ok", nil)
+	section(out, "slots", nil, errors.New("denied"))
+
+	res, _, err := sectionsResult(out)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	if res.IsError {
+		t.Errorf("IsError = true, want false when a section succeeded")
+	}
+
+	if body := textOf(t, res); !strings.Contains(body, "slots_error") {
+		t.Errorf("result must retain the per-part error, got %s", body)
+	}
+}
+
 func TestTrendWindow(t *testing.T) {
 	t.Parallel()
 

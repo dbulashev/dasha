@@ -144,13 +144,20 @@ func (c *Container) AuthMiddlewares(ctx context.Context, resolver auth.PATResolv
 // carries a PAT) off the database, while a short TTL bounds how long a revoked
 // token can keep working: revocation only knows the token id, not the secret's
 // hash, so it cannot invalidate the cache directly — the TTL is the staleness
-// window instead. last_used is updated at most once per touch interval per token.
+// window instead. Negative results are cached briefly so a flood of unknown
+// tokens cannot hammer the database before the rate limiter runs. last_used is
+// updated at most once per touch interval per token.
 const (
 	patCacheTTL      = 30 * time.Second
+	patNegativeTTL   = 10 * time.Second
 	patTouchInterval = 5 * time.Minute
+	patMaxCacheSize  = 4096
 )
 
-// patEntry is a cached resolution of a presented secret's hash.
+// patEntry is a cached resolution of a presented secret's hash. A nil user marks
+// a negative result (unknown/expired/revoked token). touchedAt survives across
+// re-resolutions so the last_used throttle holds even though the cache TTL is
+// shorter than the touch interval.
 type patEntry struct {
 	user      *auth.UserContext
 	expiresAt time.Time
@@ -187,18 +194,22 @@ func (r *patResolver) ResolveToken(ctx context.Context, presented string) (*auth
 	hash := pat.Hash(presented)
 	key := string(hash)
 
-	if user, ok := r.fromCache(ctx, key, hash); ok {
-		return user, true
+	if user, ok, cached := r.fromCache(ctx, key, hash); cached {
+		return user, ok
 	}
 
 	idn, ok, err := r.storage.ResolveAPIToken(ctx, hash)
 	if err != nil {
+		// Do not cache backend errors: a transient failure must not lock out a
+		// valid token for the negative-TTL window.
 		r.logger.Warn("personal access token resolve failed", zap.Error(err))
 
 		return nil, false
 	}
 
 	if !ok {
+		r.storeNegative(key)
+
 		return nil, false
 	}
 
@@ -207,48 +218,102 @@ func (r *patResolver) ResolveToken(ctx context.Context, presented string) (*auth
 		Role:       idn.Role,
 		AuthMethod: auth.MethodPAT,
 	}
-	r.store(key, user)
-	r.touch(ctx, hash) // record first use of this resolution window
+
+	if r.storePositive(key, user, idn.ExpiresAt) {
+		r.touch(ctx, hash) // first use in this touch window
+	}
 
 	return user, true
 }
 
-// fromCache returns a live cached identity, dropping expired entries and
-// throttling the last_used update to once per touch interval.
-func (r *patResolver) fromCache(ctx context.Context, key string, hash []byte) (*auth.UserContext, bool) {
+// fromCache returns a cached decision when one is live. cached=false means the
+// caller must hit the DB. For a live positive entry it also throttles the
+// last_used update to once per touch interval.
+func (r *patResolver) fromCache(ctx context.Context, key string, hash []byte) (user *auth.UserContext, ok, cached bool) {
 	now := time.Now()
 
 	r.mu.Lock()
-	entry, ok := r.cache[key]
-	if !ok || now.After(entry.expiresAt) {
-		if ok {
-			delete(r.cache, key)
-		}
+	entry, present := r.cache[key]
+	if !present || now.After(entry.expiresAt) {
 		r.mu.Unlock()
 
-		return nil, false
+		return nil, false, false
+	}
+
+	if entry.user == nil { // live negative result
+		r.mu.Unlock()
+
+		return nil, false, true
 	}
 
 	needTouch := now.Sub(entry.touchedAt) >= r.touchEvery
 	if needTouch {
 		entry.touchedAt = now
 	}
-	user := entry.user
+	user = entry.user
 	r.mu.Unlock()
 
 	if needTouch {
 		r.touch(ctx, hash)
 	}
 
-	return user, true
+	return user, true, true
 }
 
-func (r *patResolver) store(key string, user *auth.UserContext) {
+// storePositive caches a resolved identity, capping the cache lifetime at the
+// token's own expiry so a short-lived token cannot authenticate past it. It
+// preserves a prior touchedAt (surviving TTL eviction) so the last_used throttle
+// is not defeated by the cache TTL being shorter than the touch interval. It
+// returns true when the caller should record a last_used touch now.
+func (r *patResolver) storePositive(key string, user *auth.UserContext, tokenExpiry *time.Time) (touch bool) {
+	now := time.Now()
+
+	expiresAt := now.Add(r.ttl)
+	if tokenExpiry != nil && tokenExpiry.Before(expiresAt) {
+		expiresAt = *tokenExpiry
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	touchedAt := now
+	touch = true
+
+	if prev, ok := r.cache[key]; ok && prev.user != nil && now.Sub(prev.touchedAt) < r.touchEvery {
+		touchedAt = prev.touchedAt // still within the throttle window
+		touch = false
+	}
+
+	r.evictIfFull(now)
+	r.cache[key] = &patEntry{user: user, expiresAt: expiresAt, touchedAt: touchedAt}
+
+	return touch
+}
+
+// storeNegative caches an unknown/expired/revoked token so a flood of bad tokens
+// is rejected from memory instead of hitting the DB on every request.
+func (r *patResolver) storeNegative(key string) {
 	now := time.Now()
 
 	r.mu.Lock()
-	r.cache[key] = &patEntry{user: user, expiresAt: now.Add(r.ttl), touchedAt: now}
-	r.mu.Unlock()
+	defer r.mu.Unlock()
+
+	r.evictIfFull(now)
+	r.cache[key] = &patEntry{user: nil, expiresAt: now.Add(patNegativeTTL), touchedAt: time.Time{}}
+}
+
+// evictIfFull drops expired entries once the cache reaches its cap, bounding
+// memory without a background sweeper. Caller must hold r.mu.
+func (r *patResolver) evictIfFull(now time.Time) {
+	if len(r.cache) < patMaxCacheSize {
+		return
+	}
+
+	for k, e := range r.cache {
+		if now.After(e.expiresAt) {
+			delete(r.cache, k)
+		}
+	}
 }
 
 // touch records last_used best-effort; failures must not block authentication.

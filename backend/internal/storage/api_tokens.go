@@ -20,10 +20,12 @@ type APIToken struct {
 	ExpiresAt  *time.Time
 }
 
-// APITokenIdentity is the (subject, role) a presented token resolves to.
+// APITokenIdentity is the (subject, role) a presented token resolves to, plus
+// its expiry (nil = never) so the caller can bound how long it caches the result.
 type APITokenIdentity struct {
-	Subject string
-	Role    string
+	Subject   string
+	Role      string
+	ExpiresAt *time.Time
 }
 
 // CreateAPIToken inserts a token (storing only its hash) and returns the new id.
@@ -54,13 +56,13 @@ func (s *Storage) ResolveAPIToken(ctx context.Context, hash []byte) (*APITokenId
 	var idn APITokenIdentity
 
 	err := s.pool.QueryRow(ctx, `
-		SELECT subject, role
+		SELECT subject, role, expires_at
 		FROM api_tokens
 		WHERE token_hash = $1
 		  AND revoked_at IS NULL
 		  AND (expires_at IS NULL OR expires_at > now())`,
 		hash,
-	).Scan(&idn.Subject, &idn.Role)
+	).Scan(&idn.Subject, &idn.Role, &idn.ExpiresAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, false, nil
 	}

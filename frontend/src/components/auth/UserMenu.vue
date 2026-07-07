@@ -32,6 +32,7 @@ const tokensOpen = ref(false)
           <v-divider />
           <v-card-actions class="d-flex flex-column ga-1 pa-2">
             <v-btn
+              v-if="authStore.patEnabled"
               block
               variant="text"
               prepend-icon="mdi-key-chain-variant"

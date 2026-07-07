@@ -10,6 +10,10 @@ import (
 	"github.com/dbulashev/dasha/internal/pkg/pat"
 )
 
+// maxExpiresInDays caps a token lifetime at 10 years, matching the swagger max,
+// so the day→duration conversion cannot overflow int64.
+const maxExpiresInDays = 3650
+
 // patSubject is the stable owner key for a user's personal access tokens:
 // the email when present (OIDC), else the identity name.
 func patSubject(u *auth.UserContext) string {
@@ -89,6 +93,12 @@ func (s *Handlers) CreatePersonalToken(
 
 	if !patRoleAllowed(user.Role, role) {
 		return serverhttp.CreatePersonalToken403Response{}, nil
+	}
+
+	// Bound the lifetime so the day→duration multiplication cannot overflow int64
+	// (which would wrap to a past/garbage expiry). 10 years mirrors the swagger max.
+	if req.Body.ExpiresInDays != nil && (*req.Body.ExpiresInDays < 0 || *req.Body.ExpiresInDays > maxExpiresInDays) {
+		return serverhttp.CreatePersonalToken400Response{}, nil
 	}
 
 	if s.storage == nil {

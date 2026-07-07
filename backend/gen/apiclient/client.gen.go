@@ -97,6 +97,9 @@ type AuthInfo struct {
 	EnableQueryStatsReset *bool        `json:"enable_query_stats_reset,omitempty"`
 	Mode                  AuthInfoMode `json:"mode"`
 	OidcLoginUrl          *string      `json:"oidc_login_url,omitempty"`
+
+	// PatEnabled True when personal access tokens can be minted (snapshot storage is configured).
+	PatEnabled *bool `json:"pat_enabled,omitempty"`
 }
 
 // AuthInfoMode defines model for AuthInfo.Mode.
@@ -639,7 +642,7 @@ type PersonalAccessTokenRole string
 
 // PersonalAccessTokenCreate defines model for PersonalAccessTokenCreate.
 type PersonalAccessTokenCreate struct {
-	// ExpiresInDays Optional lifetime in days; omitted or 0 means no expiry.
+	// ExpiresInDays Optional lifetime in days (max 3650 = 10 years); omitted or 0 means no expiry.
 	ExpiresInDays *int `json:"expires_in_days,omitempty"`
 
 	// Name Human-readable label for the token.

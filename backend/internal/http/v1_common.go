@@ -23,9 +23,13 @@ func (s *Handlers) GetAuthInfo(
 	}
 
 	enableReset := s.cfg.EnableQueryStatsReset
+	// PATs require snapshot storage (tokens are stored there); without it the
+	// resolver is nil and minting fails, so tell the frontend not to offer them.
+	patEnabled := s.storage != nil
 	resp := serverhttp.GetAuthInfo200JSONResponse{
 		Mode:                  mode,
 		EnableQueryStatsReset: &enableReset,
+		PatEnabled:            &patEnabled,
 	}
 
 	if s.cfg.Auth.Mode == config.AuthModeOIDC {

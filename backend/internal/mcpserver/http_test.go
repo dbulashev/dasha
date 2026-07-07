@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func TestTokenFromRequest(t *testing.T) {
@@ -58,5 +60,44 @@ func TestTokenCacheKey(t *testing.T) {
 
 	if tokenCacheKey("a") == tokenCacheKey("b") {
 		t.Errorf("distinct tokens must not collide")
+	}
+}
+
+func TestServerCache_LRUEvictionAndReuse(t *testing.T) {
+	t.Parallel()
+
+	client, err := NewDashaClient(Config{DashaURL: "http://localhost"}) //nolint:exhaustruct
+	if err != nil {
+		t.Fatalf("NewDashaClient: %v", err)
+	}
+
+	cache := newServerCache(2)
+
+	var builds int
+	build := func() *mcp.Server {
+		builds++
+
+		return newServer(client, "test", nil)
+	}
+
+	cache.get("a", build)
+	cache.get("a", build) // cached, no rebuild
+	if builds != 1 {
+		t.Fatalf("builds after a,a = %d, want 1 (second is cached)", builds)
+	}
+
+	cache.get("b", build) // builds=2
+	cache.get("c", build) // builds=3, evicts LRU "a"
+	if builds != 3 {
+		t.Fatalf("builds after b,c = %d, want 3", builds)
+	}
+
+	cache.get("a", build) // "a" was evicted -> rebuild (builds=4)
+	if builds != 4 {
+		t.Errorf("builds after re-get evicted a = %d, want 4 (LRU eviction)", builds)
+	}
+
+	if cache.ll.Len() != 2 {
+		t.Errorf("cache size = %d, want 2 (bounded)", cache.ll.Len())
 	}
 }

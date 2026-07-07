@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"golang.org/x/sync/errgroup"
 )
 
 // serverInstructions primes the model on how to drive the read-only Dasha tools
@@ -264,7 +266,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 		cf, err := c.ReplicationConfig(ctx, a.Cluster, a.Instance)
 		section(out, "config", cf, err)
 
-		return jsonResult(out, nil)
+		return sectionsResult(out)
 	})
 
 	addTool(s, &mcp.Tool{
@@ -325,7 +327,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 		fz, err := c.AutovacuumFreezeMaxAge(ctx, a.Cluster, a.Instance)
 		section(out, "autovacuum_freeze_max_age", fz, err)
 
-		return jsonResult(out, nil)
+		return sectionsResult(out)
 	})
 
 	addTool(s, &mcp.Tool{
@@ -349,7 +351,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 		act, err := c.ConnectionStatActivity(ctx, a.Cluster, a.Instance, limit)
 		section(out, "activity", act, err)
 
-		return jsonResult(out, nil)
+		return sectionsResult(out)
 	})
 
 	addTool(s, &mcp.Tool{
@@ -384,7 +386,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 		vs, err := c.TableDescribeVacuumStats(ctx, a.Cluster, a.Instance, a.Database, schema, a.Table)
 		section(out, "vacuum_stats", vs, err)
 
-		return jsonResult(out, nil)
+		return sectionsResult(out)
 	})
 
 	addTool(s, &mcp.Tool{
@@ -398,6 +400,10 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 
 // defaultFleetLimit caps how many worst instances fleet_health returns by default.
 const defaultFleetLimit = 5
+
+// fleetHealthConcurrency bounds the parallel per-instance health-score fetches so
+// a large fleet is scored quickly without flooding Dasha with requests at once.
+const fleetHealthConcurrency = 12
 
 // fleetEntry is one instance's health in the fleet ranking.
 type fleetEntry struct {
@@ -421,7 +427,9 @@ func fleetHealth(ctx context.Context, c *DashaClient, limit int) (any, error) {
 		return nil, err
 	}
 
-	var rows []fleetEntry
+	// Collect every target first, then score them concurrently: a large fleet
+	// otherwise serializes one HTTP round-trip per instance.
+	rows := make([]fleetEntry, 0)
 
 	for _, cl := range clusters {
 		name := derefStr(cl.Name)
@@ -430,21 +438,31 @@ func fleetHealth(ctx context.Context, c *DashaClient, limit int) (any, error) {
 		}
 
 		for _, inst := range *cl.Instances {
-			host := derefStr(inst.HostName)
-			entry := fleetEntry{Cluster: name, Instance: host}
-
-			hs, herr := c.HealthScore(ctx, name, host)
-			if herr != nil {
-				entry.Error = herr.Error()
-			} else {
-				entry.Score = hs.Score
-				entry.Source = derefStr(hs.Source)
-				entry.InRecovery = hs.InRecovery
-			}
-
-			rows = append(rows, entry)
+			rows = append(rows, fleetEntry{Cluster: name, Instance: derefStr(inst.HostName)}) //nolint:exhaustruct
 		}
 	}
+
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(fleetHealthConcurrency)
+
+	for i := range rows {
+		g.Go(func() error {
+			hs, herr := c.HealthScore(gctx, rows[i].Cluster, rows[i].Instance)
+			if herr != nil {
+				rows[i].Error = herr.Error()
+
+				return nil // tolerate per-instance failures
+			}
+
+			rows[i].Score = hs.Score
+			rows[i].Source = derefStr(hs.Source)
+			rows[i].InRecovery = hs.InRecovery
+
+			return nil
+		})
+	}
+
+	_ = g.Wait() // no goroutine returns a non-nil error; failures are per-row
 
 	// Scored instances first (ascending), unreadable ones last.
 	slices.SortStableFunc(rows, func(a, b fleetEntry) int {
@@ -578,6 +596,31 @@ func section(out map[string]any, key string, v any, err error) {
 	} else {
 		out[key] = v
 	}
+}
+
+// sectionsResult renders a composite result, but marks it IsError when EVERY
+// section failed (e.g. a permission error on every sub-request) so the model
+// does not treat an all-errors payload as usable data.
+func sectionsResult(out map[string]any) (*mcp.CallToolResult, any, error) {
+	allFailed := len(out) > 0
+	for k := range out {
+		if !strings.HasSuffix(k, "_error") {
+			allFailed = false
+
+			break
+		}
+	}
+
+	if allFailed {
+		b, err := json.Marshal(out)
+		if err != nil {
+			return errResult(fmt.Sprintf("mcp: encode result: %v", err)), nil, nil
+		}
+
+		return errResult(string(b)), nil, nil
+	}
+
+	return jsonResult(out, nil)
 }
 
 // reqArg ("required") and optArg helpers read prompt arguments.
