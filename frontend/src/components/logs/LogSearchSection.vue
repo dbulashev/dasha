@@ -54,6 +54,9 @@ function mapError(err: unknown): string {
 
 async function runSearch(filters: LogFilters, append: boolean) {
   if (!clusterName.value) return
+  // Buttons are disabled via :loading, but guard against overlapping calls
+  // (e.g. Enter in a filter field) racing to overwrite items/nextToken.
+  if (loading.value) return
 
   loading.value = true
   errorMsg.value = ''

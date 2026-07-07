@@ -235,7 +235,7 @@ func buildFilter(fd serviceFields, severities []string, host string) string {
 	}
 
 	if host != "" {
-		parts = append(parts, fmt.Sprintf(`message.hostname = "%s"`, host))
+		parts = append(parts, fmt.Sprintf(`%s = "%s"`, fd.hostFilterField, host))
 	}
 
 	return strings.Join(parts, " AND ")

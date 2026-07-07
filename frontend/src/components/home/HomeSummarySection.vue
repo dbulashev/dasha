@@ -183,6 +183,14 @@ const statsResetTime = ref<string | null>(null)
 const pgssStatsResetTime = ref<string | null>(null)
 const statsResetTimeLoading = ref(false)
 
+// Empty while the fetch is in flight so stale values never flash on host/cluster change.
+const formattedStatsResetTime = computed(() =>
+  statsResetTimeLoading.value ? '' : fmtDateTime(statsResetTime.value, ''),
+)
+const formattedPgssStatsResetTime = computed(() =>
+  statsResetTimeLoading.value ? '' : fmtDateTime(pgssStatsResetTime.value, ''),
+)
+
 async function loadStatsResetTime() {
   if (!clusterName.value || !hostName.value || !databaseName.value) return
   statsResetTimeLoading.value = true
@@ -253,14 +261,14 @@ watch([clusterName, hostName, databaseName], () => load(), { immediate: true })
         <v-icon start icon="mdi-database" />
         {{ databaseSize.SizePretty }}
       </v-chip>
-      <v-chip v-if="statsResetTime && fmtDateTime(statsResetTime, '')" variant="tonal" size="default" prepend-icon="mdi-clock-outline">
-        {{ t('home.statsResetAt') }}: {{ fmtDateTime(statsResetTime, '') }}
+      <v-chip v-if="formattedStatsResetTime" variant="tonal" size="default" prepend-icon="mdi-clock-outline">
+        {{ t('home.statsResetAt') }}: {{ formattedStatsResetTime }}
       </v-chip>
-      <v-chip v-if="!statsResetTimeLoading && statsResetTime && !fmtDateTime(statsResetTime, '')" variant="tonal" size="default" prepend-icon="mdi-clock-outline">
+      <v-chip v-if="!statsResetTimeLoading && statsResetTime && !formattedStatsResetTime" variant="tonal" size="default" prepend-icon="mdi-clock-outline">
         {{ t('home.statsNeverReset') }}
       </v-chip>
-      <v-chip v-if="pgssAvailable && pgssInfoSupported && pgssStatsResetTime && fmtDateTime(pgssStatsResetTime, '')" variant="tonal" size="default" prepend-icon="mdi-clock-outline">
-        {{ t('home.pgssStatsResetAt') }}: {{ fmtDateTime(pgssStatsResetTime, '') }}
+      <v-chip v-if="pgssAvailable && pgssInfoSupported && formattedPgssStatsResetTime" variant="tonal" size="default" prepend-icon="mdi-clock-outline">
+        {{ t('home.pgssStatsResetAt') }}: {{ formattedPgssStatsResetTime }}
       </v-chip>
       <v-chip v-if="pgssAvailable && pgssInfoSupported && !statsResetTimeLoading && !pgssStatsResetTime" variant="tonal" size="default" prepend-icon="mdi-clock-outline">
         {{ t('home.pgssStatsNeverReset') }}

@@ -26,8 +26,9 @@ type serviceFields struct {
 	// mask lists the free-text keys whose values must be passed through
 	// sanitize.SQL() before leaving the backend.
 	mask []string
-	// severityFilterField is the native-filter field name for severity.
+	// severityFilterField / hostFilterField are the native-filter field names.
 	severityFilterField string
+	hostFilterField     string
 	// severityAllow is the set of accepted severity values, in the casing the
 	// Yandex API expects (postgresql UPPER, pooler lower).
 	severityAllow map[string]struct{}
@@ -45,6 +46,7 @@ var postgresqlFields = serviceFields{
 	},
 	mask:                []string{"message", "query", "internal_query", "detail", "hint", "context"},
 	severityFilterField: "message.error_severity",
+	hostFilterField:     "message.hostname",
 	severityAllow: map[string]struct{}{
 		"DEBUG": {}, "LOG": {}, "INFO": {}, "NOTICE": {},
 		"WARNING": {}, "ERROR": {}, "FATAL": {}, "PANIC": {},
@@ -62,6 +64,7 @@ var poolerFields = serviceFields{
 	},
 	mask:                []string{"text"},
 	severityFilterField: "message.level",
+	hostFilterField:     "message.hostname",
 	severityAllow: map[string]struct{}{
 		"debug": {}, "info": {}, "warning": {}, "error": {}, "fatal": {},
 	},

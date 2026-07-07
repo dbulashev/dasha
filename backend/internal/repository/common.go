@@ -209,6 +209,9 @@ func (p *PgxPool) Clusters(ctx context.Context) ([]dto.ClusterInfo, error) {
 			sources[c.Name] = c.Source
 			supportsLogs[c.Name] = c.SupportsLogs()
 		}
+	} else {
+		p.logger.Warn("clusters metadata lookup failed; source/supports_logs will be empty",
+			zap.Error(cfgErr))
 	}
 
 	p.mu.RLock()
