@@ -14,6 +14,7 @@ import { useAutosnapshotStatusStore } from '@/stores/autosnapshotStatus'
 import { useViewError } from '@/composables/useViewError'
 import { usePaginatedApiLoader } from '@/composables/useApiLoader'
 import { assertOk } from '@/utils/api'
+import { fmtDateTime } from '@/utils/format'
 import { getErrorMessage } from '@/utils/error'
 import { outcomeI18nKey, triggerI18nKey } from '@/utils/autosnapshot'
 import AutoSnapshotClustersTab from '@/components/autosnapshot/AutoSnapshotClustersTab.vue'
@@ -187,10 +188,6 @@ function outcomeColor(o: string): string {
   if (o === 'snapshot_created') return 'success'
   if (o === 'error') return 'error'
   return 'warning'
-}
-
-function fmtDateTime(s?: string | null): string {
-  return s ? new Date(s).toLocaleString() : '—'
 }
 
 // Deep link to the snapshot in Query Report (host/db restore the context).

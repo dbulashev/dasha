@@ -5,6 +5,7 @@
   "Home": "Startseite",
   "Connections": "Verbindungen",
   "Settings": "Einstellungen",
+  "Logs": "Protokolle",
   "Queries": "Abfragen",
   "Active Queries": "Aktive Abfragen",
   "Query Stats": "Abfragestatistik",
@@ -504,6 +505,58 @@
     "statsSince": "Statistik seit",
     "waitEvents": "Aktuelle Wartezeiten",
     "noWaitEvents": "Keine aktiven Wartezeiten"
+  },
+  "logs": {
+    "timeRange": "Zeitraum",
+    "from": "Von",
+    "to": "Bis",
+    "severity": "Schweregrad",
+    "host": "Host",
+    "database": "Datenbank",
+    "user": "Benutzer",
+    "message": "Textsuche",
+    "pageSize": "Seitengröße",
+    "dedup": "Deduplizierung",
+    "order": "Reihenfolge",
+    "orderDesc": "Neueste zuerst",
+    "orderAsc": "Älteste zuerst",
+    "search": "Suchen",
+    "loadMore": "Mehr laden",
+    "scrollTop": "Nach oben",
+    "noResults": "Keine Protokolle für den gewählten Zeitraum gefunden",
+    "selectCluster": "Wählen Sie einen Cluster, um Protokolle anzuzeigen",
+    "notSupported": "Die Protokollsuche ist für diesen Cluster nicht verfügbar",
+    "partial": "Es werden nicht alle Einträge angezeigt: Scan-Limit erreicht ({scanned}). Bitte Filter verfeinern oder Zeitraum einschränken.",
+    "range": {
+      "1h": "Letzte Stunde",
+      "6h": "Letzte 6 Stunden",
+      "24h": "Letzte 24 Stunden",
+      "7d": "Letzte 7 Tage",
+      "custom": "Benutzerdefiniert"
+    },
+    "col": {
+      "time": "Zeit",
+      "severity": "Schweregrad",
+      "host": "Host",
+      "database": "DB",
+      "user": "Benutzer",
+      "text": "Nachricht",
+      "count": "Anzahl",
+      "lastSeen": "Zuletzt gesehen"
+    },
+    "chart": {
+      "title": "Log-Häufigkeit nach Severity",
+      "coverage": "nach geladenen Einträgen: {count} · {from} — {to}"
+    },
+    "error": {
+      "badRequest": "Ungültige Log-Suchparameter",
+      "notFound": "Cluster nicht gefunden",
+      "rateLimited": "Zu viele Log-Anfragen — bitte kurz warten und erneut versuchen",
+      "upstream": "Fehler beim Zugriff auf die Yandex Cloud API",
+      "timeout": "Zeitüberschreitung bei der Antwort von Yandex Cloud",
+      "unsupported": "Die Protokollsuche ist für diesen Cluster nicht verfügbar",
+      "network": "Keine Antwort vom Server (Netzwerkfehler oder Verbindungsabbruch). Möglicherweise antwortet Yandex Cloud zu langsam — bitte erneut versuchen oder den Zeitraum eingrenzen."
+    }
   },
   "Replication": "Replikation",
   "replication": {

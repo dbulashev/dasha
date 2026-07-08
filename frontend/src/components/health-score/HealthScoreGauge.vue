@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 const props = withDefaults(
@@ -12,6 +13,10 @@ const props = withDefaults(
 )
 
 const { t } = useI18n()
+
+// Coerce to a finite number so a malformed response never feeds NaN into the
+// SVG transform (which throws an "Invalid keyframe value" warning).
+const safeScore = computed(() => (Number.isFinite(props.score) ? props.score : 0))
 
 // The red band (< 40) is what the backend's critical floor targets
 // (health.criticalScoreCeiling = 30); keep these thresholds in sync with it.
@@ -32,14 +37,14 @@ function scoreLabel(score: number): string {
 
 <template>
   <v-progress-circular
-    :model-value="props.score"
-    :color="scoreColor(props.score)"
+    :model-value="safeScore"
+    :color="scoreColor(safeScore)"
     :size="props.size"
     :width="props.width"
   >
     <div class="text-center">
-      <div class="text-h5 font-weight-bold">{{ Math.round(props.score) }}</div>
-      <div v-if="props.showLabel" class="text-caption">{{ scoreLabel(props.score) }}</div>
+      <div class="text-h5 font-weight-bold">{{ Math.round(safeScore) }}</div>
+      <div v-if="props.showLabel" class="text-caption">{{ scoreLabel(safeScore) }}</div>
     </div>
   </v-progress-circular>
 </template>

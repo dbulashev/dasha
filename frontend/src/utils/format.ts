@@ -64,6 +64,18 @@ export function fmtInt(v: number | null | undefined): string {
   return v.toLocaleString()
 }
 
+/**
+ * Format an ISO timestamp with the browser locale. Returns `empty` for
+ * missing/unparsable values and for pre-2000 dates (epoch-zero placeholders
+ * PostgreSQL reports as "never").
+ */
+export function fmtDateTime(iso: string | null | undefined, empty = '—'): string {
+  if (!iso) return empty
+  const d = new Date(iso)
+  if (isNaN(d.getTime()) || d.getFullYear() < 2000) return empty
+  return d.toLocaleString()
+}
+
 export function fmtAge(createdAt: string | null | undefined, statsReset: string | null | undefined, unknownLabel = '?'): string {
   if (!createdAt || !statsReset) return unknownLabel
   const diff = new Date(createdAt).getTime() - new Date(statsReset).getTime()

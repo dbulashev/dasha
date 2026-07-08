@@ -9,6 +9,7 @@ import { usePaginatedApiLoader } from '@/composables/useApiLoader'
 import { useDebouncedRef } from '@/composables/useDebouncedRef'
 import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
 import PaginationControls from '@/components/PaginationControls.vue'
+import { fmtDateTime } from '@/utils/format'
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
@@ -27,17 +28,6 @@ const headers = computed(() => [
 
 const tableName = ref('')
 const debouncedTableName = useDebouncedRef(tableName, 500)
-
-function formatDateTime(iso: string | null): string {
-  if (!iso) return '—'
-  try {
-    const d = new Date(iso)
-    if (isNaN(d.getTime()) || d.getFullYear() < 2000) return '—'
-    return d.toLocaleString()
-  } catch {
-    return iso
-  }
-}
 
 const { items, loading, page, hasMore, load } = usePaginatedApiLoader<MaintenanceInfo>(
   (limit, offset) => getMaintenanceInfo({
@@ -78,10 +68,10 @@ const { items, loading, page, hasMore, load } = usePaginatedApiLoader<Maintenanc
     </v-card-title>
     <v-card-text>
       <v-data-table :headers="headers" :items="items" :loading="loading">
-        <template #item.LastVacuum="{ value }">{{ formatDateTime(value) }}</template>
-        <template #item.LastAutovacuum="{ value }">{{ formatDateTime(value) }}</template>
-        <template #item.LastAnalyze="{ value }">{{ formatDateTime(value) }}</template>
-        <template #item.LastAutoanalyze="{ value }">{{ formatDateTime(value) }}</template>
+        <template #item.LastVacuum="{ value }">{{ fmtDateTime(value) }}</template>
+        <template #item.LastAutovacuum="{ value }">{{ fmtDateTime(value) }}</template>
+        <template #item.LastAnalyze="{ value }">{{ fmtDateTime(value) }}</template>
+        <template #item.LastAutoanalyze="{ value }">{{ fmtDateTime(value) }}</template>
       </v-data-table>
       <PaginationControls :page="page" :has-more="hasMore" @update:page="load" />
     </v-card-text>

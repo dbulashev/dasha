@@ -7,7 +7,9 @@ type Instance struct {
 }
 
 type ClusterInfo struct {
-	Name      config.ClusterName
-	Instances []Instance
-	Databases []string
+	Name         config.ClusterName
+	Source       string
+	SupportsLogs bool
+	Instances    []Instance
+	Databases    []string
 }

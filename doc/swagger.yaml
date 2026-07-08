@@ -1844,6 +1844,93 @@ paths:
                   $ref: '#/components/schemas/SettingsNotification'
         '404':
           $ref: '#/components/responses/NotFound'
+  /api/logs:
+    get:
+      operationId: getLogs
+      description: Search Yandex Cloud cluster logs (PostgreSQL/pooler) via the MDB API.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - in: query
+          name: service_type
+          required: true
+          schema:
+            type: string
+            enum: [postgresql, pooler]
+        - in: query
+          name: from
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: to
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: severity
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+        - in: query
+          name: host
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: message
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: database
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: user
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: dedup
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - in: query
+          name: page_size
+          required: false
+          schema:
+            type: integer
+            default: 100
+        - in: query
+          name: page_token
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogSearchResult'
+        '400':
+          description: invalid parameters
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: logs not supported for this cluster
+        '502':
+          description: upstream Yandex API error
+        '504':
+          description: upstream timeout
   /api/autosnapshot/status:
     get:
       operationId: getAutosnapshotStatus
@@ -2069,6 +2156,12 @@ components:
       properties:
         name:
           type: string
+        source:
+          type: string
+          description: cluster origin, e.g. "static" or "yandex-mdb"
+        supports_logs:
+          type: boolean
+          description: true when cluster logs can be searched via GET /api/logs
         instances:
           type: array
           items:
@@ -2077,6 +2170,62 @@ components:
           type: array
           items:
             type: string
+    LogEntry:
+      type: object
+      required:
+        - timestamp
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        severity:
+          type: string
+        hostname:
+          type: string
+        text:
+          type: string
+          description: primary message field, masked
+        database:
+          type: string
+        user:
+          type: string
+        fields:
+          type: object
+          additionalProperties:
+            type: string
+          description: full masked message map (for detail expand)
+        count:
+          type: integer
+          description: dedup only - number of matched records in the group
+        first_seen:
+          type: string
+          format: date-time
+          description: dedup only
+        last_seen:
+          type: string
+          format: date-time
+          description: dedup only
+    LogSearchResult:
+      type: object
+      required:
+        - items
+        - dedup
+        - partial
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogEntry'
+        next_page_token:
+          type: string
+          description: present only when not deduped and more records are available
+        dedup:
+          type: boolean
+        partial:
+          type: boolean
+          description: max_scan reached - results/counts are incomplete
+        scanned:
+          type: integer
     ClusterInstance:
       type: object
       properties:

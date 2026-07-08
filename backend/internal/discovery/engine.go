@@ -16,21 +16,30 @@ import (
 
 const (
 	defaultRefreshInterval = 5 // minutes
-	discoveryTypeYandexMDB = "yandex-mdb"
+	discoveryTypeYandexMDB = config.SourceYandexMDB
 )
 
 // Engine runs periodic discovery and updates the Clusters provider.
 type Engine struct {
 	cfg      map[string]config.DiscoveryEntry
 	clusters config.Clusters
+	registry *yandex.Registry
 	logger   *zap.Logger
 }
 
 // NewEngine creates a discovery engine from the config's discovery section.
-func NewEngine(cfg map[string]config.DiscoveryEntry, clusters config.Clusters, logger *zap.Logger) *Engine {
+// The registry is populated with each folder's SDK so that other components
+// (e.g. the logs service) can reuse the same credentials.
+func NewEngine(
+	cfg map[string]config.DiscoveryEntry,
+	clusters config.Clusters,
+	registry *yandex.Registry,
+	logger *zap.Logger,
+) *Engine {
 	return &Engine{
 		cfg:      cfg,
 		clusters: clusters,
+		registry: registry,
 		logger:   logger,
 	}
 }
@@ -77,6 +86,10 @@ func (e *Engine) startYandexMDB(ctx context.Context, folderName string, cfg conf
 	sdk, err := yandex.NewSDK(cfg.AuthorizedKey)
 	if err != nil {
 		return fmt.Errorf("init yandex sdk for folder %q: %w", folderName, err)
+	}
+
+	if e.registry != nil {
+		e.registry.Register(cfg.FolderID, sdk)
 	}
 
 	filters := make([]filter.Filter, 0, len(cfg.Clusters))

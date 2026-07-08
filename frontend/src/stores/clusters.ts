@@ -13,6 +13,13 @@ export const useClustersStore = defineStore('clusters', {
     isCacheValid(): boolean {
       return this.cachedAt !== null && Date.now() - this.cachedAt < CACHE_TTL_MS
     },
+    // Clusters whose logs are searchable — the backend owns the capability rule.
+    logSearchClusters(): Cluster[] {
+      return this.clusterList?.filter(c => c.supports_logs) ?? []
+    },
+    hasLogSearchClusters(): boolean {
+      return this.logSearchClusters.length > 0
+    },
   },
   actions: {
     setClusters(data: Cluster[]) {
