@@ -544,9 +544,14 @@
       "count": "Anzahl",
       "lastSeen": "Zuletzt gesehen"
     },
+    "chart": {
+      "title": "Log-Häufigkeit nach Severity",
+      "coverage": "nach geladenen Einträgen: {count} · {from} — {to}"
+    },
     "error": {
       "badRequest": "Ungültige Log-Suchparameter",
       "notFound": "Cluster nicht gefunden",
+      "rateLimited": "Zu viele Log-Anfragen — bitte kurz warten und erneut versuchen",
       "upstream": "Fehler beim Zugriff auf die Yandex Cloud API",
       "timeout": "Zeitüberschreitung bei der Antwort von Yandex Cloud",
       "unsupported": "Die Protokollsuche ist für diesen Cluster nicht verfügbar",

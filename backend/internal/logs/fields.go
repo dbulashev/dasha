@@ -19,9 +19,7 @@ type promotedFields struct {
 
 // serviceFields co-locates everything Dasha knows about one service type's log
 // schema: promoted columns, keys to mask, the native-filter severity field and
-// the accepted severity values with their casing. Yandex does not publish a
-// column list; these were confirmed empirically (postgresql: 26 csvlog columns
-// + hostname; pooler/Odyssey: 9 columns). See plans/yandex-log-search-design.md §3.3.1.
+// the accepted severity values with their casing.
 type serviceFields struct {
 	promoted promotedFields
 	// mask lists the free-text keys whose values must be passed through

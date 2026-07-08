@@ -12,6 +12,8 @@
   - Sensitive text is masked through `sanitize.SQL()` per service type before leaving the backend; service-account keys never leave the backend (reused from discovery via an internal SDK registry).
   - Access is `viewer+` (covered by the existing `GET /api/*` policy). Clusters advertise the capability via a new `supports_logs` field on `Cluster` API objects (alongside `source`); the `Logs` menu item appears only when at least one such cluster is present, and `GET /api/logs` returns `501` for clusters without log search support.
   - New global config `log_search` (`max_scan` default 5000, `max_page_size` default 1000, `timeout_seconds` default 30).
+  - **Log frequency histogram on `/logs`:** a stacked bar chart (time × severity) over the loaded results, computed client-side — no extra Yandex API calls. Buckets cover the time span the loaded records actually span (caption states the coverage); severity colors are CVD-validated for both light and dark themes. Chronological mode only (dedup groups carry no per-record timestamps).
+  - **Per-user rate limiting for `GET /api/logs`:** separate from the global auth rate limit, configurable via `log_search.rate_limit` / `log_search.admin_rate_limit` (defaults: 1 req/30s with burst 10; admins 1 req/5s with burst 20; `requests_per_second: 0` disables). Exceeding the limit returns `429`, shown on the `/logs` page with a dedicated message. Every search is also logged at info level with the user name.
 
 ## v1.3.0
 

@@ -155,6 +155,12 @@ type LogSearchConfig struct {
 	MaxScan        int `mapstructure:"max_scan"`        // max records scanned per search; default 5000
 	MaxPageSize    int `mapstructure:"max_page_size"`   // upper bound for page_size; default 1000
 	TimeoutSeconds int `mapstructure:"timeout_seconds"` // upstream read timeout; default 30
+
+	// RateLimit / AdminRateLimit throttle GET /api/logs per user (per IP when
+	// anonymous). Unset = built-in defaults; requests_per_second <= 0 disables
+	// the corresponding limit.
+	RateLimit      *RateLimitConfig `mapstructure:"rate_limit"`
+	AdminRateLimit *RateLimitConfig `mapstructure:"admin_rate_limit"`
 }
 
 // Defaults for LogSearchConfig when values are unset (<= 0).
@@ -162,6 +168,13 @@ const (
 	DefaultLogSearchMaxScan        = 5000
 	DefaultLogSearchMaxPageSize    = 1000
 	DefaultLogSearchTimeoutSeconds = 30
+)
+
+// Default log search rate limits: non-admins 1 req/30s with burst 10, admins
+// 1 req/5s with burst 20.
+var (
+	DefaultLogSearchRateLimit      = RateLimitConfig{RequestsPerSecond: 1.0 / 30, Burst: 10}
+	DefaultLogSearchAdminRateLimit = RateLimitConfig{RequestsPerSecond: 1.0 / 5, Burst: 20}
 )
 
 // WithDefaults returns a copy with unset (<=0) fields filled from defaults.
@@ -176,6 +189,16 @@ func (c LogSearchConfig) WithDefaults() LogSearchConfig {
 
 	if c.TimeoutSeconds <= 0 {
 		c.TimeoutSeconds = DefaultLogSearchTimeoutSeconds
+	}
+
+	if c.RateLimit == nil {
+		rl := DefaultLogSearchRateLimit
+		c.RateLimit = &rl
+	}
+
+	if c.AdminRateLimit == nil {
+		rl := DefaultLogSearchAdminRateLimit
+		c.AdminRateLimit = &rl
 	}
 
 	return c

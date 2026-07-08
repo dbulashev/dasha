@@ -22,14 +22,14 @@ func (s *Handlers) GetLogs(
 		ServiceType: logs.ParseServiceType(string(p.ServiceType)),
 		From:        p.From,
 		To:          p.To,
-		Severities:  derefSlice(p.Severity),
-		Host:        derefStr(p.Host),
-		Message:     derefStr(p.Message),
-		Database:    derefStr(p.Database),
-		User:        derefStr(p.User),
-		Dedup:       derefBool(p.Dedup),
-		PageSize:    derefInt(p.PageSize),
-		PageToken:   derefStr(p.PageToken),
+		Severities:  deref(p.Severity),
+		Host:        deref(p.Host),
+		Message:     deref(p.Message),
+		Database:    deref(p.Database),
+		User:        deref(p.User),
+		Dedup:       deref(p.Dedup),
+		PageSize:    deref(p.PageSize),
+		PageToken:   deref(p.PageToken),
 	}
 
 	res, err := s.logs.Search(ctx, q)
@@ -97,33 +97,11 @@ func mapLogEntry(e logs.Entry, dedup bool) serverhttp.LogEntry {
 	return entry
 }
 
-func derefStr(p *string) string {
+func deref[T any](p *T) T {
 	if p == nil {
-		return ""
-	}
+		var zero T
 
-	return *p
-}
-
-func derefBool(p *bool) bool {
-	if p == nil {
-		return false
-	}
-
-	return *p
-}
-
-func derefInt(p *int) int {
-	if p == nil {
-		return 0
-	}
-
-	return *p
-}
-
-func derefSlice(p *[]string) []string {
-	if p == nil {
-		return nil
+		return zero
 	}
 
 	return *p

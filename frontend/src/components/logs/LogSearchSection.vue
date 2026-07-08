@@ -7,6 +7,7 @@ import { ApiError, assertOk } from '@/utils/api'
 import { getErrorMessage } from '@/utils/error'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import LogFilterBar from './LogFilterBar.vue'
+import LogHistogramChart from './LogHistogramChart.vue'
 import LogResultsTable from './LogResultsTable.vue'
 import type { LogFilters } from './types'
 
@@ -51,6 +52,8 @@ function mapError(err: unknown): string {
         return t('logs.error.badRequest')
       case 404:
         return t('logs.error.notFound')
+      case 429:
+        return t('logs.error.rateLimited')
       case 501:
         return t('logs.error.unsupported')
       case 502:
@@ -161,6 +164,10 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
   >
     {{ errorMsg }}
   </v-alert>
+
+  <!-- Dedup groups carry no per-record timestamps, so a frequency chart is only
+       meaningful for chronological results. -->
+  <LogHistogramChart v-if="searched && !dedup && items.length" :items="items" />
 
   <LogResultsTable
     :items="displayItems"

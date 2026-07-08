@@ -233,6 +233,7 @@ func provideConfig() (*config.Config, error) {
 	}
 
 	c.HealthScore.Metrics = c.HealthScore.Metrics.WithDefaults()
+	c.LogSearch = c.LogSearch.WithDefaults()
 
 	if err := c.HealthScore.Metrics.Validate(); err != nil {
 		return nil, fmt.Errorf("provideConfig | health_score.metrics: %w", err)

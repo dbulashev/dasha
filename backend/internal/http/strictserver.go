@@ -40,6 +40,7 @@ func New(
 	middlewares []serverhttp.StrictMiddlewareFunc,
 	requireHTTPSMW echo.MiddlewareFunc,
 	rateLimitMW echo.MiddlewareFunc,
+	logsRateLimitMW echo.MiddlewareFunc,
 	authMW echo.MiddlewareFunc,
 	casbinMW echo.MiddlewareFunc,
 	logger *zap.Logger,
@@ -87,6 +88,7 @@ func New(
 	e.Use(requireHTTPSMW)
 	e.Use(skipPublic(authMW))
 	e.Use(rateLimitMW)
+	e.Use(logsRateLimitMW)
 	e.Use(skipPublic(casbinMW))
 
 	serverhttp.RegisterHandlers(e, ssi)

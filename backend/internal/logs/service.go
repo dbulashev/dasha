@@ -14,6 +14,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/dbulashev/dasha/internal/auth"
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/discovery/yandex"
 	"github.com/dbulashev/dasha/internal/pkg/sanitize"
@@ -46,6 +47,15 @@ func ParseServiceType(s string) yandex.ServiceType {
 	}
 
 	return yandex.ServicePostgreSQL
+}
+
+// serviceTypeName is the reverse of ParseServiceType, for logging.
+func serviceTypeName(st yandex.ServiceType) string {
+	if st == yandex.ServicePooler {
+		return ServiceTypePooler
+	}
+
+	return "postgresql"
 }
 
 // SearchQuery is a normalized log search request.
@@ -136,6 +146,17 @@ func (s *service) Search(ctx context.Context, q SearchQuery) (SearchResult, erro
 	if err != nil {
 		return SearchResult{}, err
 	}
+
+	user := ""
+	if u := auth.UserFromContext(ctx); u != nil {
+		user = u.Name
+	}
+
+	s.logger.Info("log search",
+		zap.String("user", user),
+		zap.String("cluster", q.Cluster),
+		zap.String("service", serviceTypeName(q.ServiceType)),
+	)
 
 	filter := buildFilter(fd, severities, q.Host)
 
@@ -416,8 +437,8 @@ func (s *service) searchDedup(
 
 // toEntry maps a raw record to an Entry, applying Dasha-side filters and masking.
 // It returns ok=false when the record fails the message/database/user filters.
-// Filters run against the raw values first so the map copy and masking are only
-// paid for records that will actually be returned.
+// Filters run against the raw values first so the map copy and masking happen
+// only for records that will actually be returned.
 func (s *service) toEntry(
 	rec yandex.LogRecord,
 	q SearchQuery,

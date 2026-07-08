@@ -122,6 +122,84 @@ func NewRateLimiter(cfg config.AuthConfig, logger *zap.Logger) *RateLimiter {
 	return &RateLimiter{Middleware: mw, store: store}
 }
 
+// PathRateLimiter throttles a single route with separate limits for admins and
+// everyone else, keyed like the global rate limiter (user name, else client IP).
+type PathRateLimiter struct {
+	Middleware echo.MiddlewareFunc
+	stores     []*rateLimiterStore
+}
+
+func (p *PathRateLimiter) Stop() {
+	for _, s := range p.stores {
+		s.Stop()
+	}
+}
+
+// NewPathRateLimiter builds a middleware limiting requests to path. Must run
+// after the auth middleware so the admin role is visible. A nil config or
+// requests_per_second <= 0 disables the corresponding limit.
+func NewPathRateLimiter(
+	path string,
+	userCfg, adminCfg *config.RateLimitConfig,
+	logger *zap.Logger,
+) *PathRateLimiter {
+	userStore := newStoreFor(userCfg)
+	adminStore := newStoreFor(adminCfg)
+
+	p := &PathRateLimiter{}
+	for _, s := range []*rateLimiterStore{userStore, adminStore} {
+		if s != nil {
+			p.stores = append(p.stores, s)
+		}
+	}
+
+	p.Middleware = func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			if c.Path() != path {
+				return next(c)
+			}
+
+			store := userStore
+			if u := GetUser(c); u != nil && u.Role == "admin" {
+				store = adminStore
+			}
+
+			if store == nil {
+				return next(c)
+			}
+
+			key := rateLimitKey(c)
+			if !store.get(key).Allow() {
+				logger.Debug("rate limit exceeded",
+					zap.String("path", path),
+					zap.String("key", key),
+				)
+
+				return errRateLimitExceed
+			}
+
+			return next(c)
+		}
+	}
+
+	return p
+}
+
+// newStoreFor builds a limiter store from cfg; nil when the limit is disabled.
+// Burst is clamped to >= 1: a zero-burst token bucket would reject everything.
+func newStoreFor(cfg *config.RateLimitConfig) *rateLimiterStore {
+	if cfg == nil || cfg.RequestsPerSecond <= 0 {
+		return nil
+	}
+
+	burst := cfg.Burst
+	if burst < 1 {
+		burst = 1
+	}
+
+	return newRateLimiterStore(cfg.RequestsPerSecond, burst)
+}
+
 func rateLimitKey(c echo.Context) string {
 	if user := GetUser(c); user != nil {
 		return "user:" + user.Name

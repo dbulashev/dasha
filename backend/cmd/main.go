@@ -190,8 +190,13 @@ func dashaExec(cmd *cobra.Command, _ []string) error {
 		defer st.Close()
 	}
 
+	logSearch := container.Config().LogSearch
+	logsRL := auth.NewPathRateLimiter("/api/logs", logSearch.RateLimit, logSearch.AdminRateLimit, logger)
+
+	defer logsRL.Stop()
+
 	d := http.NewDashaHandlers(container.Config(), container.Repository(), st, container.Metrics(), container.Logs())
-	svc := http.New(d, mw, authMW.RequireHTTPS, authMW.RateLimit, authMW.Auth, authMW.Casbin, logger)
+	svc := http.New(d, mw, authMW.RequireHTTPS, authMW.RateLimit, logsRL.Middleware, authMW.Auth, authMW.Casbin, logger)
 
 	if container.Config().Auth.Mode == config.AuthModeOIDC {
 		auth.RegisterBFFRoutes(svc.Echo, authMW.OIDCProvider, authMW.SessionManager, logger)
