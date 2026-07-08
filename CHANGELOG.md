@@ -15,6 +15,12 @@
   - **Log frequency histogram on `/logs`:** a stacked bar chart (time × severity) over the loaded results, computed client-side — no extra Yandex API calls. Buckets cover the time span the loaded records actually span (caption states the coverage); severity colors are CVD-validated for both light and dark themes. Chronological mode only (dedup groups carry no per-record timestamps).
   - **Per-user rate limiting for `GET /api/logs`:** separate from the global auth rate limit, configurable via `log_search.rate_limit` / `log_search.admin_rate_limit` (defaults: 1 req/30s with burst 10; admins 1 req/5s with burst 20; `requests_per_second: 0` disables). Exceeding the limit returns `429`, shown on the `/logs` page with a dedicated message. Every search is also logged at info level with the user name.
 
+### Dependencies
+Dependabot bumps since v1.3.0 — routine minor/patch freshness updates unless noted:
+- **Backend (Go):** echo 4.15.2→4.15.4, go-oidc/v3 3.18.0→3.19.0, oapi-codegen/runtime 1.4.1→1.4.2, validator/v10 10.20.0→10.30.3, yandex-cloud/go-genproto 0.84.0→0.92.0 (current YC API definitions, used by the log search), testcontainers-go 0.42.0→0.43.0 (tests only).
+- **Frontend:** vuetify 3.12.9, vue-i18n 11.4.6, @fontsource/roboto 5.2.10; dev tooling: vue-tsc 3.3.6, vitest 4.1.9, eslint 10.6.0, prettier 3.8.4, @playwright/test 1.61.0, @types/jsdom 28.0.3, jiti 2.7.0.
+- **Infra:** alpine base image 3.23→3.24 — the security-relevant bump (current CVE fixes in OS packages, keeps the Trivy image gate green); actions/checkout 6→7.
+
 ## v1.3.0
 
 ### Features
