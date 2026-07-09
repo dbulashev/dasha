@@ -515,12 +515,36 @@
     "database": "Datenbank",
     "user": "Benutzer",
     "message": "Textsuche",
+    "exclude": "Ausschließen (grep -v)",
+    "copyRange": "Zeitbereich kopieren (Grafana-Format)",
+    "pasteRange": "Zeitbereich einfügen (Grafana-Format)",
+    "preset": {
+      "label": "Voreinstellung",
+      "autovacuum": "Autovacuum",
+      "deadlock": "Deadlocks",
+      "checkpoint": "Checkpoints",
+      "tempFiles": "Temporäre Dateien",
+      "canceled": "Abgebrochene Abfragen",
+      "connections": "Verbindungsfehler (FATAL)",
+      "slow": "Langsame Abfragen (duration)",
+      "errors": "Fehler (ERROR+)"
+    },
+    "copy": {
+      "title": "Kopieren",
+      "all": "Alles",
+      "query": "Nur query",
+      "message": "Nur Meldung",
+      "exclude": "Zu Ausschlüssen hinzufügen"
+    },
+    "drill": "Klicken, um zu filtern",
+    "moreFilters": "Weitere Filter",
     "pageSize": "Seitengröße",
     "dedup": "Deduplizierung",
     "order": "Reihenfolge",
     "orderDesc": "Neueste zuerst",
     "orderAsc": "Älteste zuerst",
     "search": "Suchen",
+    "clear": "Filter zurücksetzen",
     "loadMore": "Mehr laden",
     "scrollTop": "Nach oben",
     "noResults": "Keine Protokolle für den gewählten Zeitraum gefunden",
@@ -528,11 +552,11 @@
     "notSupported": "Die Protokollsuche ist für diesen Cluster nicht verfügbar",
     "partial": "Es werden nicht alle Einträge angezeigt: Scan-Limit erreicht ({scanned}). Bitte Filter verfeinern oder Zeitraum einschränken.",
     "range": {
-      "1h": "Letzte Stunde",
-      "6h": "Letzte 6 Stunden",
-      "24h": "Letzte 24 Stunden",
-      "7d": "Letzte 7 Tage",
-      "custom": "Benutzerdefiniert"
+      "1h": "1 Std",
+      "6h": "6 Std",
+      "24h": "24 Std",
+      "7d": "7 Tage",
+      "custom": "Benutzerdef."
     },
     "col": {
       "time": "Zeit",
@@ -546,12 +570,13 @@
     },
     "chart": {
       "title": "Log-Häufigkeit nach Severity",
-      "coverage": "nach geladenen Einträgen: {count} · {from} — {to}"
+      "coverage": "nach geladenen Einträgen: {count} · {from} — {to}",
+      "zoomHint": "Bereich aufziehen oder Balken anklicken, um den Zeitraum in den Filtern zu setzen"
     },
     "error": {
       "badRequest": "Ungültige Log-Suchparameter",
       "notFound": "Cluster nicht gefunden",
-      "rateLimited": "Zu viele Log-Anfragen — bitte kurz warten und erneut versuchen",
+      "rateLimited": "Zu viele Log-Anfragen — erneut versuchen in {seconds} s",
       "upstream": "Fehler beim Zugriff auf die Yandex Cloud API",
       "timeout": "Zeitüberschreitung bei der Antwort von Yandex Cloud",
       "unsupported": "Die Protokollsuche ist für diesen Cluster nicht verfügbar",
@@ -1047,6 +1072,7 @@
     "recommendations": {
       "title": "Empfehlungen",
       "openRelated": "Öffnen",
+      "searchLogs": "In Logs suchen",
       "showHowTo": "Was tun",
       "hideHowTo": "Einklappen",
       "copy": "Kopieren",
@@ -1241,7 +1267,7 @@
       "host_disk_space": {
         "title": "Wenig freier Speicher auf dem Host",
         "short": "Plattennutzung: {metric_pct}% (LOW ≥70%, MED ≥80%, HIGH ≥90%). Ab ≥90% wird der Gesamt-Score in den roten Bereich gesenkt.",
-        "detail": "Belegungsanteil des vollsten Host-Dateisystems (aus pgSCV-/Yandex-Cloud-Metriken). Ein volles Daten-Volume stoppt Schreibvorgänge und droht mit Absturz/Korruption — daher wirkt ≥90% als kritischer Floor auf jeder Rolle (Primary und Replica). Maßnahmen: Speicher freigeben (WAL, Logs, temporäre Dateien, alte Backups), Volume vergrößern, Tabellen-/Index-Bloat und WAL-Stau (inaktive Replikations-Slots) prüfen."
+        "detail": "Zeigt, wie voll das am stärksten belegte Host-Dateisystem ist (aus pgSCV-/Yandex-Cloud-Metriken).\nLäuft das Daten-Volume voll, kann PostgreSQL nicht mehr schreiben — der Cluster stoppt abrupt, Datenkorruption ist möglich. Deshalb gilt eine Belegung ≥90% auf jeder Rolle (Primary wie Replica) als kritisch: der Gesamt-Score wird in den roten Bereich gezwungen.\nWas tun:\n• Platz freigeben — alte WAL und Logs, temporäre Dateien, veraltete Backups;\n• das Volume vergrößern;\n• Tabellen-/Index-Bloat prüfen;\n• sicherstellen, dass sich WAL nicht wegen inaktiver Replikations-Slots ansammelt."
       }
     },
     "trend": {

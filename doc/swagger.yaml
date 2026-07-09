@@ -1884,9 +1884,24 @@ paths:
             type: string
         - in: query
           name: message
+          description: Substrings that must all be present in the message (case-insensitive, AND).
           required: false
+          style: form
+          explode: true
           schema:
-            type: string
+            type: array
+            items:
+              type: string
+        - in: query
+          name: exclude
+          description: Drop records whose message contains any of these substrings (case-insensitive), like grep -v. Entries containing the "<*>" placeholder are matched against the record's masked template instead (excludes a whole dedup group shape).
+          required: false
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
         - in: query
           name: database
           required: false

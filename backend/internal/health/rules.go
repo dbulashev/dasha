@@ -624,9 +624,10 @@ var Registry = []Rule{
 	},
 	{
 		// wal_level=logical without any active logical slot is wasted overhead.
+		// Skipped on managed platforms where wal_level is not user-configurable.
 		ID: "wal_level_logical_without_publications", Category: CategoryWalCheckpoint, RelatedRoute: "/replication",
 		Evaluate: func(m RawMetrics) *Hit {
-			if m.WalLevel != "logical" || m.LogicalSlotsActive > 0 {
+			if m.WalLevel != "logical" || m.LogicalSlotsActive > 0 || m.WalLevelManaged {
 				return nil
 			}
 

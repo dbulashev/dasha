@@ -2,15 +2,21 @@
 import { computed } from 'vue'
 import { Bar } from 'vue-chartjs'
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Tooltip, Legend } from 'chart.js'
+import zoomPlugin from 'chartjs-plugin-zoom'
 import { useI18n } from 'vue-i18n'
 import { useThemeStore } from '@/stores/theme'
 import type { LogEntry } from '@/api/models'
 import { fmtDateTime } from '@/utils/format'
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend)
+ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend, zoomPlugin)
 
 const props = defineProps<{
   items: LogEntry[]
+}>()
+
+const emit = defineEmits<{
+  // Click on a bucket narrows the search period to that bucket.
+  zoom: [fromIso: string, toIso: string]
 }>()
 
 const { t } = useI18n()
@@ -84,17 +90,25 @@ function bucketLabel(ms: number, spanMs: number): string {
     : d.toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
 }
 
-// Loaded records bucketed over the time span they actually cover (not the
-// requested from..to), stacked by severity.
-const chartData = computed(() => {
+// Bucket geometry, shared by the chart data and the click-to-zoom handler.
+const bucketMeta = computed(() => {
   const pts = parsed.value
   if (!pts.length) return null
-
   const min = Math.min(...pts.map(p => p.timeMs))
   const max = Math.max(...pts.map(p => p.timeMs))
   const span = max - min
   const width = Math.max(1000, Math.ceil((span + 1) / MAX_BUCKETS))
   const buckets = Math.max(1, Math.ceil((span + 1) / width))
+  return { min, max, span, width, buckets }
+})
+
+// Loaded records bucketed over the time span they actually cover (not the
+// requested from..to), stacked by severity.
+const chartData = computed(() => {
+  const meta = bucketMeta.value
+  if (!meta) return null
+  const pts = parsed.value
+  const { min, span, width, buckets } = meta
 
   const counts = new Map<string, number[]>()
   for (const { key } of presentSeverities.value) counts.set(key, new Array(buckets).fill(0))
@@ -116,10 +130,59 @@ const chartData = computed(() => {
   }
 })
 
+// Drag-select fires both onZoomComplete and (on mouseup) a chart click; the
+// timestamp guard keeps the trailing click from re-zooming to a single bucket.
+let lastDragZoomAt = 0
+
+function onBarClick(_evt: unknown, elements: Array<{ index: number }>) {
+  const meta = bucketMeta.value
+  if (!meta || !elements.length) return
+  if (Date.now() - lastDragZoomAt < 500) return
+  const start = meta.min + elements[0].index * meta.width
+  emit('zoom', new Date(start).toISOString(), new Date(start + meta.width).toISOString())
+}
+
+// The x axis is a category scale, so after a drag-zoom scale min/max are
+// bucket indices; map them back to time and hand the range to the filters.
+// Emit comes before resetZoom so a reset quirk can't swallow the selection.
+function onDragZoom(ctx: { chart: { scales: { x: { min: unknown; max: unknown } }; resetZoom?: (mode?: string) => void } }) {
+  const meta = bucketMeta.value
+  if (!meta) return
+
+  // Attached to both onZoom and onZoomComplete (plugin versions differ in
+  // which one fires for drag); the window also swallows the event that
+  // resetZoom below emits with the restored full scale.
+  if (Date.now() - lastDragZoomAt < 300) return
+
+  const lo = Number(ctx.chart.scales?.x?.min)
+  const hi = Number(ctx.chart.scales?.x?.max)
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return
+
+  const loIdx = Math.max(0, Math.floor(lo))
+  const hiIdx = Math.min(meta.buckets - 1, Math.ceil(hi))
+  if (hiIdx < loIdx) return
+
+  lastDragZoomAt = Date.now()
+  emit(
+    'zoom',
+    new Date(meta.min + loIdx * meta.width).toISOString(),
+    new Date(meta.min + (hiIdx + 1) * meta.width).toISOString(),
+  )
+
+  // The chart itself stays unzoomed — the range now lives in the filters and
+  // the next search redraws it over the narrowed period.
+  try {
+    ctx.chart.resetZoom?.('none')
+  } catch {
+    // Best-effort: a zoomed chart is cosmetic, the filters already got the range.
+  }
+}
+
 const chartOptions = computed(() => ({
   responsive: true,
   maintainAspectRatio: false,
   interaction: { mode: 'index' as const, intersect: false },
+  onClick: onBarClick,
   plugins: {
     legend: {
       display: presentSeverities.value.length > 1,
@@ -127,6 +190,18 @@ const chartOptions = computed(() => ({
     },
     tooltip: {
       filter: (item: { raw: unknown }) => item.raw !== 0,
+    },
+    zoom: {
+      zoom: {
+        // Drag-select only: wheel/pinch zoom would hijack page scrolling.
+        drag: { enabled: true, backgroundColor: 'rgba(128, 160, 255, 0.2)' },
+        wheel: { enabled: false },
+        pinch: { enabled: false },
+        mode: 'x' as const,
+        onZoom: onDragZoom,
+        onZoomComplete: onDragZoom,
+      },
+      pan: { enabled: false },
     },
   },
   scales: {
@@ -140,7 +215,8 @@ const coverage = computed(() => {
   if (!pts.length) return ''
   const min = new Date(Math.min(...pts.map(p => p.timeMs))).toISOString()
   const max = new Date(Math.max(...pts.map(p => p.timeMs))).toISOString()
-  return t('logs.chart.coverage', { count: pts.length, from: fmtDateTime(min), to: fmtDateTime(max) })
+  const base = t('logs.chart.coverage', { count: pts.length, from: fmtDateTime(min), to: fmtDateTime(max) })
+  return `${base} · ${t('logs.chart.zoomHint')}`
 })
 </script>
 
