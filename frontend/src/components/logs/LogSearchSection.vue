@@ -14,6 +14,10 @@ import type { LogFilters } from './types'
 const { t } = useI18n()
 const { clusterName, currentCluster } = useClusterInfo()
 
+// Drill-down targets (row values, histogram buckets) call back into the
+// filter bar, which owns the form state and re-submits the search.
+const filterBar = ref<InstanceType<typeof LogFilterBar> | null>(null)
+
 const items = ref<LogEntry[]>([])
 const loading = ref(false)
 const dedup = ref(false)
@@ -33,7 +37,7 @@ const hosts = computed(() =>
 
 const hasMore = computed(() => !dedup.value && !!nextToken.value)
 
-const activeMessage = computed(() => lastFilters.value?.message ?? '')
+const activeIncludes = computed(() => lastFilters.value?.includes ?? [])
 
 // Dedup groups keep their count-ranked order; chronological results are sorted
 // by timestamp per the selected order (newest or oldest first).
@@ -45,6 +49,21 @@ const displayItems = computed(() => {
   )
 })
 
+// 429 shows its own alert with a countdown matching the limiter's refill
+// period (1 token / 30s by default) instead of a static error message.
+const RATE_LIMIT_WAIT_SECONDS = 30
+const rateLimitSeconds = ref(0)
+let rateLimitTimer: ReturnType<typeof setInterval> | undefined
+
+function startRateLimitCountdown() {
+  rateLimitSeconds.value = RATE_LIMIT_WAIT_SECONDS
+  clearInterval(rateLimitTimer)
+  rateLimitTimer = setInterval(() => {
+    rateLimitSeconds.value--
+    if (rateLimitSeconds.value <= 0) clearInterval(rateLimitTimer)
+  }, 1000)
+}
+
 function mapError(err: unknown): string {
   if (err instanceof ApiError) {
     switch (err.status) {
@@ -52,8 +71,6 @@ function mapError(err: unknown): string {
         return t('logs.error.badRequest')
       case 404:
         return t('logs.error.notFound')
-      case 429:
-        return t('logs.error.rateLimited')
       case 501:
         return t('logs.error.unsupported')
       case 502:
@@ -81,6 +98,8 @@ async function runSearch(filters: LogFilters, append: boolean) {
 
   loading.value = true
   errorMsg.value = ''
+  rateLimitSeconds.value = 0
+  clearInterval(rateLimitTimer)
 
   if (!append) {
     items.value = []
@@ -95,7 +114,8 @@ async function runSearch(filters: LogFilters, append: boolean) {
       to: filters.to,
       severity: filters.severities.length ? filters.severities : undefined,
       host: filters.host || undefined,
-      message: filters.message || undefined,
+      message: filters.includes.length ? filters.includes : undefined,
+      exclude: filters.excludes.length ? filters.excludes : undefined,
       database: filters.database || undefined,
       user: filters.user || undefined,
       dedup: filters.dedup,
@@ -113,7 +133,11 @@ async function runSearch(filters: LogFilters, append: boolean) {
     lastFilters.value = filters
     searched.value = true
   } catch (err) {
-    errorMsg.value = mapError(err)
+    if (err instanceof ApiError && err.status === 429) {
+      startRateLimitCountdown()
+    } else {
+      errorMsg.value = mapError(err)
+    }
     if (!append) {
       // A fresh search failed: drop the previous search's result state so
       // stale "no results" / "scan limit" alerts don't render next to the error.
@@ -135,6 +159,18 @@ function onLoadMore() {
   if (lastFilters.value) runSearch(lastFilters.value, true)
 }
 
+function onDrill(field: 'severity' | 'user' | 'database' | 'host', value: string) {
+  filterBar.value?.applyDrill(field, value)
+}
+
+function onExclude(text: string) {
+  filterBar.value?.addExclude(text)
+}
+
+function onZoom(fromIso: string, toIso: string) {
+  filterBar.value?.applyAbsoluteRange(fromIso, toIso)
+}
+
 // Back-to-top button: after paging through many rows with "load more" the page
 // gets long, so offer a quick jump back to the filters.
 const showScrollTop = ref(false)
@@ -148,11 +184,25 @@ function scrollToTop() {
 }
 
 onMounted(() => window.addEventListener('scroll', onScroll, { passive: true }))
-onUnmounted(() => window.removeEventListener('scroll', onScroll))
+onUnmounted(() => {
+  window.removeEventListener('scroll', onScroll)
+  clearInterval(rateLimitTimer)
+})
 </script>
 
 <template>
-  <LogFilterBar :hosts="hosts" :loading="loading" @search="onSearch" />
+  <LogFilterBar ref="filterBar" :hosts="hosts" :loading="loading" @search="onSearch" />
+
+  <v-alert
+    v-if="rateLimitSeconds > 0"
+    type="warning"
+    variant="tonal"
+    class="mb-4"
+    closable
+    @click:close="rateLimitSeconds = 0"
+  >
+    {{ t('logs.error.rateLimited', { seconds: rateLimitSeconds }) }}
+  </v-alert>
 
   <v-alert
     v-if="errorMsg"
@@ -167,7 +217,7 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
 
   <!-- Dedup groups carry no per-record timestamps, so a frequency chart is only
        meaningful for chronological results. -->
-  <LogHistogramChart v-if="searched && !dedup && items.length" :items="items" />
+  <LogHistogramChart v-if="searched && !dedup && items.length" :items="items" @zoom="onZoom" />
 
   <LogResultsTable
     :items="displayItems"
@@ -176,9 +226,11 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll))
     :partial="partial"
     :scanned="scanned"
     :has-more="hasMore"
-    :message="activeMessage"
+    :messages="activeIncludes"
     :searched="searched"
     @load-more="onLoadMore"
+    @filter="onDrill"
+    @exclude="onExclude"
   />
 
   <v-fade-transition>

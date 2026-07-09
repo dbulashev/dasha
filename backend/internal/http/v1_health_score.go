@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/dbulashev/dasha/gen/serverhttp"
+	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/health"
 	"github.com/dbulashev/dasha/internal/repository"
@@ -30,7 +31,10 @@ func (s *Handlers) GetHealthScore(
 	// target is mapped; otherwise fall back to the SQL snapshot (graceful). The
 	// metrics raw is overlaid with catalog/GUC facts so the score stays in
 	// lockstep with its recommendations (score<->rules parity).
+	walManaged := s.walLevelManaged(ctx, req.Params.ClusterName)
+
 	if raw, matched, ok := s.metricsRawWithCatalog(ctx, req.Params.ClusterName, req.Params.Instance); ok {
+		raw.WalLevelManaged = walManaged
 		result = health.CalculateWithWeights(raw, weights)
 		source = "metrics"
 		// Resolved but no series matched any selector — the metrics score is built
@@ -49,7 +53,9 @@ func (s *Handlers) GetHealthScore(
 			return nil, fmt.Errorf("GetHealthScore | %w", err)
 		}
 
-		result = health.CalculateWithWeights(rawFromSnapshot(m), weights)
+		raw := rawFromSnapshot(m)
+		raw.WalLevelManaged = walManaged
+		result = health.CalculateWithWeights(raw, weights)
 	}
 
 	categories := make([]serverhttp.HealthScoreCategory, 0, len(result.Categories))
@@ -73,6 +79,23 @@ func (s *Handlers) GetHealthScore(
 		Source:          &src,
 		MetricsDegraded: &metricsDegraded,
 	}, nil
+}
+
+// walLevelManaged reports whether the cluster's provider fixes wal_level
+// (Yandex MDB forces logical), so the wasted-overhead rule must not fire.
+func (s *Handlers) walLevelManaged(ctx context.Context, clusterName string) bool {
+	clusters, err := s.repo.Clusters(ctx)
+	if err != nil {
+		return false
+	}
+
+	for _, c := range clusters {
+		if c.Name.String() == clusterName {
+			return c.Source == config.SourceYandexMDB
+		}
+	}
+
+	return false
 }
 
 // rawFromSnapshot maps the SQL snapshot onto the score engine's input. Shared by
@@ -231,6 +254,8 @@ func (s *Handlers) GetHealthScoreRecommendations(
 
 		raw = rawFromSnapshot(m)
 	}
+
+	raw.WalLevelManaged = s.walLevelManaged(ctx, req.Params.ClusterName)
 
 	recs := health.Evaluate(raw, database != "")
 

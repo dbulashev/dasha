@@ -35,6 +35,12 @@ func TestNormalize_MasksVariableParts(t *testing.T) {
 			same: true,
 		},
 		{
+			name: "restartpoint complete with differing LSNs",
+			a:    "restartpoint complete: wrote 18738 buffers (3.6%); 0 WAL file(s) added, 457 removed, 74 recycled; write=431.759 s, sync=0.006 s, total=432.048 s; lsn=2E/28E36B88, redo lsn=2D/159A2E80",
+			b:    "restartpoint complete: wrote 350 buffers (0.1%); 0 WAL file(s) added, 16 removed, 0 recycled; write=109.165 s, sync=0.004 s, total=109.182 s; lsn=3A/9F00D428, redo lsn=3A/7C41B198",
+			same: true,
+		},
+		{
 			name: "structurally different stay distinct",
 			a:    "login time: 656 microseconds",
 			b:    "could not receive data from client",

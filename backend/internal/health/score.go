@@ -63,6 +63,10 @@ type RawMetrics struct {
 	StalePlannerStatsTables int
 	WalLevel                string
 	LogicalSlotsActive      int
+	// WalLevelManaged marks providers where wal_level is fixed by the platform
+	// (e.g. Yandex MDB forces logical) — the wasted-overhead rule would only
+	// nag about a setting the user cannot change.
+	WalLevelManaged bool
 
 	// Metrics-backed only (host/pooler saturation, data integrity). The SQL
 	// snapshot leaves these zero, which reads as "absent" and stays neutral.
@@ -379,7 +383,7 @@ func applyInstanceAdjustments(categories []CategoryResult, m RawMetrics) {
 		setDetail(categories, CategoryWalCheckpoint, "wal_level_minimal_with_replicas", 1)
 	}
 
-	if m.WalLevel == "logical" && m.LogicalSlotsActive == 0 {
+	if m.WalLevel == "logical" && m.LogicalSlotsActive == 0 && !m.WalLevelManaged {
 		addPenalty(categories, CategoryWalCheckpoint, 5) // LOW: wasted WAL overhead
 		setDetail(categories, CategoryWalCheckpoint, "wal_level_logical_without_slots", 1)
 	}

@@ -14,7 +14,14 @@ export type GetLogsParams = {
   to: string
   severity?: string[]
   host?: string
-  message?: string
+  /**
+   * Substrings that must all be present in the message (case-insensitive, AND).
+   */
+  message?: string[]
+  /**
+   * Drop records whose message contains any of these substrings (case-insensitive), like grep -v.
+   */
+  exclude?: string[]
   database?: string
   user?: string
   dedup?: boolean

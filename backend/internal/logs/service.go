@@ -65,7 +65,8 @@ type SearchQuery struct {
 	From, To    time.Time
 	Severities  []string // native filter (allowlist)
 	Host        string   // native filter (validated against cluster hosts)
-	Message     string   // Dasha-side substring (case-insensitive)
+	Include     []string // Dasha-side substrings on message, all must match (AND)
+	Exclude     []string // Dasha-side negative substrings on message (grep -v)
 	Database    string   // Dasha-side substring (case-insensitive)
 	User        string   // Dasha-side substring (case-insensitive)
 	Dedup       bool
@@ -378,7 +379,6 @@ func (s *service) searchDedup(
 
 				if e.Timestamp.After(g.LastSeen) {
 					g.LastSeen = e.Timestamp
-					g.Text = e.Text
 					g.Fields = e.Fields
 				}
 
@@ -389,6 +389,9 @@ func (s *service) searchDedup(
 				e.Count = 1
 				e.FirstSeen = e.Timestamp
 				e.LastSeen = e.Timestamp
+				// The row shows the shared template (concrete values of one member
+				// would mislead); the latest record's real values stay in Fields.
+				e.Text = displayTemplate(e.Text)
 				cp := e
 				groups[key] = &cp
 			}
@@ -446,8 +449,36 @@ func (s *service) toEntry(
 ) (Entry, bool) {
 	pf := fd.promoted
 
-	if q.Message != "" && !containsFold(rec.Fields[pf.text], q.Message) {
-		return Entry{}, false //nolint:exhaustruct
+	for _, inc := range q.Include {
+		if inc != "" && !containsFold(rec.Fields[pf.text], inc) {
+			return Entry{}, false //nolint:exhaustruct
+		}
+	}
+
+	// Excludes containing the display placeholder come from a dedup group row;
+	// they only match the record's own masked template, never its raw text.
+	templated := ""
+
+	for _, ex := range q.Exclude {
+		if ex == "" {
+			continue
+		}
+
+		if strings.Contains(ex, displayPlaceholder) {
+			if templated == "" {
+				templated = displayTemplate(rec.Fields[pf.text])
+			}
+
+			if containsFold(templated, ex) {
+				return Entry{}, false //nolint:exhaustruct
+			}
+
+			continue
+		}
+
+		if containsFold(rec.Fields[pf.text], ex) {
+			return Entry{}, false //nolint:exhaustruct
+		}
 	}
 
 	if q.Database != "" && !containsFold(rec.Fields[pf.database], q.Database) {

@@ -21,6 +21,7 @@
     "@fontsource/roboto": "^5.2.10",
     "@tanstack/vue-query": "^5.90.5",
     "chart.js": "^4.5.1",
+    "chartjs-plugin-zoom": "^2.2.0",
     "highlight.js": "^11.11.1",
     "pinia": "^3.0.4",
     "pinia-plugin-persistedstate": "^4.7.1",
@@ -57,7 +58,7 @@
     "vitest": "^4.1.9",
     "vue-tsc": "^3.3.6"
   },
-    "overrides": {
+  "overrides": {
     "esbuild": "0.28.1"
   }
 }
