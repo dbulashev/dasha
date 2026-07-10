@@ -342,36 +342,6 @@ func applyInstanceAdjustments(categories []CategoryResult, m RawMetrics) {
 		setDetail(categories, CategoryPerformance, "seq_scan_regression", math.Round(m.SeqScanRegressionRatio*100)/100)
 	}
 
-	// Performance: query-latency regression vs the seasonal baseline (metrics-only;
-	// 0 = absent ⇒ neutral, e.g. on the SQL snapshot or before enough history).
-	switch {
-	case m.LatencyRegressionRatio > 6:
-		addPenalty(categories, "performance", 50)
-	case m.LatencyRegressionRatio > 3:
-		addPenalty(categories, "performance", 30)
-	case m.LatencyRegressionRatio > 1.5:
-		addPenalty(categories, "performance", 10)
-	}
-
-	if m.LatencyRegressionRatio > 0 {
-		setDetail(categories, "performance", "latency_regression", math.Round(m.LatencyRegressionRatio*100)/100)
-	}
-
-	// Performance: sequential-scan regression vs the seasonal baseline — indexes
-	// going unused or stale planner stats (ANALYZE). Same shape as latency.
-	switch {
-	case m.SeqScanRegressionRatio > 6:
-		addPenalty(categories, "performance", 40)
-	case m.SeqScanRegressionRatio > 3:
-		addPenalty(categories, "performance", 25)
-	case m.SeqScanRegressionRatio > 1.5:
-		addPenalty(categories, "performance", 10)
-	}
-
-	if m.SeqScanRegressionRatio > 0 {
-		setDetail(categories, "performance", "seq_scan_regression", math.Round(m.SeqScanRegressionRatio*100)/100)
-	}
-
 	// Storage: low HOT-update ratio (inverted — lower is worse). The SQL returns
 	// 1.0 when there are too few updates to judge, so quiet databases score 0.
 	switch {
