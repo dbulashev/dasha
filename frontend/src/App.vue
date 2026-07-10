@@ -98,7 +98,10 @@ const fkAnalysisLink = computed(() => withQuery("fk-analysis"));
 const maintenanceLink = computed(() => withQuery("maintenance"));
 const replicationLink = computed(() => withQuery("replication"));
 const settingsLink = computed(() => withQuery("settings"));
+const logsLink = computed(() => withQuery("logs"));
 const autoSnapshotLink = computed(() => withQuery("auto-snapshot"));
+
+const hasLogSearchClusters = computed(() => clusterStore.hasLogSearchClusters);
 
 // Track whether the currently selected host is a standby. When true the
 // Maintenance menu item is hidden and any visit to /maintenance redirects to
@@ -218,6 +221,7 @@ watch(() => route.path, () => {
           <v-list-item :title="t('Replication')" prepend-icon="mdi-database-sync-outline" link :to="replicationLink"></v-list-item>
           <v-list-item v-if="!isReplica" :title="t('Maintenance')" prepend-icon="mdi-wrench-outline" link :to="maintenanceLink"></v-list-item>
           <v-list-item :title="t('Settings')" prepend-icon="mdi-database-settings-outline" link :to="settingsLink"></v-list-item>
+          <v-list-item v-if="hasLogSearchClusters" :title="t('Logs')" prepend-icon="mdi-text-box-search-outline" link :to="logsLink"></v-list-item>
           <v-list-item v-if="autosnapshotVisible" :title="t('autosnapshot.menu')" prepend-icon="mdi-camera-timer" link :to="autoSnapshotLink"></v-list-item>
         </v-list>
       </v-navigation-drawer>

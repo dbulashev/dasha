@@ -11,7 +11,7 @@ const props = defineProps<{
 const { t } = useI18n()
 
 const visibleCategories = computed(() =>
-  props.categories.filter((c) => c.weight > 0),
+  (props.categories ?? []).filter((c) => c.weight > 0),
 )
 
 // The red band (< 40) is what the backend's critical floor targets

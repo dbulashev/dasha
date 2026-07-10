@@ -68,6 +68,12 @@ const (
 	ReplicaToMaster RoleChangeTriggerDirection = "replica_to_master"
 )
 
+// Defines values for GetLogsParamsServiceType.
+const (
+	Pooler     GetLogsParamsServiceType = "pooler"
+	Postgresql GetLogsParamsServiceType = "postgresql"
+)
+
 // Defines values for GetQueriesRunningParamsQueryFilterMode.
 const (
 	Like    GetQueriesRunningParamsQueryFilterMode = "like"
@@ -170,6 +176,12 @@ type Cluster struct {
 	Databases *[]string          `json:"databases,omitempty"`
 	Instances *[]ClusterInstance `json:"instances,omitempty"`
 	Name      *string            `json:"name,omitempty"`
+
+	// Source cluster origin, e.g. "static" or "yandex-mdb"
+	Source *string `json:"source,omitempty"`
+
+	// SupportsLogs true when cluster logs can be searched via GET /api/logs
+	SupportsLogs *bool `json:"supports_logs,omitempty"`
 }
 
 // ClusterInstance defines model for ClusterInstance.
@@ -592,6 +604,42 @@ type LockSnapshot struct {
 	ProbeInterval *string         `json:"probe_interval,omitempty"`
 	Probes        *int            `json:"probes,omitempty"`
 	Rows          *[]QueryBlocked `json:"rows,omitempty"`
+}
+
+// LogEntry defines model for LogEntry.
+type LogEntry struct {
+	// Count dedup only - number of matched records in the group
+	Count    *int    `json:"count,omitempty"`
+	Database *string `json:"database,omitempty"`
+
+	// Fields full masked message map (for detail expand)
+	Fields *map[string]string `json:"fields,omitempty"`
+
+	// FirstSeen dedup only
+	FirstSeen *time.Time `json:"first_seen,omitempty"`
+	Hostname  *string    `json:"hostname,omitempty"`
+
+	// LastSeen dedup only
+	LastSeen *time.Time `json:"last_seen,omitempty"`
+	Severity *string    `json:"severity,omitempty"`
+
+	// Text primary message field, masked
+	Text      *string   `json:"text,omitempty"`
+	Timestamp time.Time `json:"timestamp"`
+	User      *string   `json:"user,omitempty"`
+}
+
+// LogSearchResult defines model for LogSearchResult.
+type LogSearchResult struct {
+	Dedup bool       `json:"dedup"`
+	Items []LogEntry `json:"items"`
+
+	// NextPageToken present only when not deduped and more records are available
+	NextPageToken *string `json:"next_page_token,omitempty"`
+
+	// Partial max_scan reached - results/counts are incomplete
+	Partial bool `json:"partial"`
+	Scanned *int `json:"scanned,omitempty"`
 }
 
 // MaintenanceAutovacuumFreezeMaxAge defines model for MaintenanceAutovacuumFreezeMaxAge.
@@ -1509,6 +1557,30 @@ type GetIndexesUsageParams struct {
 	Offset      *int        `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
+// GetLogsParams defines parameters for GetLogs.
+type GetLogsParams struct {
+	ClusterName ClusterName              `form:"cluster_name" json:"cluster_name"`
+	ServiceType GetLogsParamsServiceType `form:"service_type" json:"service_type"`
+	From        time.Time                `form:"from" json:"from"`
+	To          time.Time                `form:"to" json:"to"`
+	Severity    *[]string                `form:"severity,omitempty" json:"severity,omitempty"`
+	Host        *string                  `form:"host,omitempty" json:"host,omitempty"`
+
+	// Message Substrings that must all be present in the message (case-insensitive, AND).
+	Message *[]string `form:"message,omitempty" json:"message,omitempty"`
+
+	// Exclude Drop records whose message contains any of these substrings (case-insensitive), like grep -v. Entries containing the "<*>" placeholder are matched against the record's masked template instead (excludes a whole dedup group shape).
+	Exclude   *[]string `form:"exclude,omitempty" json:"exclude,omitempty"`
+	Database  *string   `form:"database,omitempty" json:"database,omitempty"`
+	User      *string   `form:"user,omitempty" json:"user,omitempty"`
+	Dedup     *bool     `form:"dedup,omitempty" json:"dedup,omitempty"`
+	PageSize  *int      `form:"page_size,omitempty" json:"page_size,omitempty"`
+	PageToken *string   `form:"page_token,omitempty" json:"page_token,omitempty"`
+}
+
+// GetLogsParamsServiceType defines parameters for GetLogs.
+type GetLogsParamsServiceType string
+
 // GetMaintenanceAutovacuumFreezeMaxAgeParams defines parameters for GetMaintenanceAutovacuumFreezeMaxAge.
 type GetMaintenanceAutovacuumFreezeMaxAgeParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
@@ -2063,6 +2135,9 @@ type ClientInterface interface {
 
 	// GetIndexesUsage request
 	GetIndexesUsage(ctx context.Context, params *GetIndexesUsageParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetLogs request
+	GetLogs(ctx context.Context, params *GetLogsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetMaintenanceAutovacuumFreezeMaxAge request
 	GetMaintenanceAutovacuumFreezeMaxAge(ctx context.Context, params *GetMaintenanceAutovacuumFreezeMaxAgeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -2862,6 +2937,18 @@ func (c *Client) GetIndexesUnused(ctx context.Context, params *GetIndexesUnusedP
 
 func (c *Client) GetIndexesUsage(ctx context.Context, params *GetIndexesUsageParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetIndexesUsageRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetLogs(ctx context.Context, params *GetLogsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetLogsRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -6910,6 +6997,231 @@ func NewGetIndexesUsageRequest(server string, params *GetIndexesUsageParams) (*h
 	return req, nil
 }
 
+// NewGetLogsRequest generates requests for GetLogs
+func NewGetLogsRequest(server string, params *GetLogsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/logs")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, params.ClusterName); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "service_type", runtime.ParamLocationQuery, params.ServiceType); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "from", runtime.ParamLocationQuery, params.From); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "to", runtime.ParamLocationQuery, params.To); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.Severity != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "severity", runtime.ParamLocationQuery, *params.Severity); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Host != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "host", runtime.ParamLocationQuery, *params.Host); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Message != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "message", runtime.ParamLocationQuery, *params.Message); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Exclude != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "exclude", runtime.ParamLocationQuery, *params.Exclude); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Database != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "database", runtime.ParamLocationQuery, *params.Database); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.User != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "user", runtime.ParamLocationQuery, *params.User); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Dedup != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "dedup", runtime.ParamLocationQuery, *params.Dedup); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.PageSize != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "page_size", runtime.ParamLocationQuery, *params.PageSize); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.PageToken != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "page_token", runtime.ParamLocationQuery, *params.PageToken); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetMaintenanceAutovacuumFreezeMaxAgeRequest generates requests for GetMaintenanceAutovacuumFreezeMaxAge
 func NewGetMaintenanceAutovacuumFreezeMaxAgeRequest(server string, params *GetMaintenanceAutovacuumFreezeMaxAgeParams) (*http.Request, error) {
 	var err error
@@ -10109,6 +10421,9 @@ type ClientWithResponsesInterface interface {
 	// GetIndexesUsageWithResponse request
 	GetIndexesUsageWithResponse(ctx context.Context, params *GetIndexesUsageParams, reqEditors ...RequestEditorFn) (*GetIndexesUsageResponse, error)
 
+	// GetLogsWithResponse request
+	GetLogsWithResponse(ctx context.Context, params *GetLogsParams, reqEditors ...RequestEditorFn) (*GetLogsResponse, error)
+
 	// GetMaintenanceAutovacuumFreezeMaxAgeWithResponse request
 	GetMaintenanceAutovacuumFreezeMaxAgeWithResponse(ctx context.Context, params *GetMaintenanceAutovacuumFreezeMaxAgeParams, reqEditors ...RequestEditorFn) (*GetMaintenanceAutovacuumFreezeMaxAgeResponse, error)
 
@@ -11390,6 +11705,28 @@ func (r GetIndexesUsageResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetIndexesUsageResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetLogsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *LogSearchResult
+}
+
+// Status returns HTTPResponse.Status
+func (r GetLogsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetLogsResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -12806,6 +13143,15 @@ func (c *ClientWithResponses) GetIndexesUsageWithResponse(ctx context.Context, p
 		return nil, err
 	}
 	return ParseGetIndexesUsageResponse(rsp)
+}
+
+// GetLogsWithResponse request returning *GetLogsResponse
+func (c *ClientWithResponses) GetLogsWithResponse(ctx context.Context, params *GetLogsParams, reqEditors ...RequestEditorFn) (*GetLogsResponse, error) {
+	rsp, err := c.GetLogs(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetLogsResponse(rsp)
 }
 
 // GetMaintenanceAutovacuumFreezeMaxAgeWithResponse request returning *GetMaintenanceAutovacuumFreezeMaxAgeResponse
@@ -14515,6 +14861,32 @@ func ParseGetIndexesUsageResponse(rsp *http.Response) (*GetIndexesUsageResponse,
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest []IndexUsage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetLogsResponse parses an HTTP response from a GetLogsWithResponse call
+func ParseGetLogsResponse(rsp *http.Response) (*GetLogsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetLogsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest LogSearchResult
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

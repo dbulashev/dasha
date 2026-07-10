@@ -101,6 +101,11 @@ const router = createRouter({
       component: () => import('../views/SettingsView.vue'),
     },
     {
+      path: '/logs/:clustername?',
+      name: 'logs',
+      component: () => import('../views/LogsView.vue'),
+    },
+    {
       path: '/auto-snapshot/:clustername?',
       name: 'auto-snapshot',
       component: () => import('../views/AutoSnapshotView.vue'),

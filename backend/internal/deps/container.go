@@ -15,6 +15,8 @@ import (
 	"github.com/dbulashev/dasha/internal/auth"
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/discovery"
+	"github.com/dbulashev/dasha/internal/discovery/yandex"
+	"github.com/dbulashev/dasha/internal/logs"
 	"github.com/dbulashev/dasha/internal/metrics"
 	"github.com/dbulashev/dasha/internal/pkg/pat"
 	"github.com/dbulashev/dasha/internal/repository"
@@ -54,12 +56,26 @@ func NewContainer() *Container {
 		return provideRepository(*cfg, clusters, logger), nil
 	})
 
+	do.Provide(i, func(_ *do.Injector) (*yandex.Registry, error) {
+		return yandex.NewRegistry(), nil
+	})
+
 	do.Provide(i, func(i *do.Injector) (*discovery.Engine, error) {
 		cfg := do.MustInvoke[*config.Config](i)
 		clusters := do.MustInvoke[config.Clusters](i)
+		registry := do.MustInvoke[*yandex.Registry](i)
 		logger := do.MustInvoke[*zap.Logger](i)
 
-		return provideDiscovery(cfg, clusters, logger), nil
+		return provideDiscovery(cfg, clusters, registry, logger), nil
+	})
+
+	do.Provide(i, func(i *do.Injector) (logs.Service, error) {
+		cfg := do.MustInvoke[*config.Config](i)
+		clusters := do.MustInvoke[config.Clusters](i)
+		registry := do.MustInvoke[*yandex.Registry](i)
+		logger := do.MustInvoke[*zap.Logger](i)
+
+		return logs.NewService(clusters, registry, cfg.LogSearch, logger), nil
 	})
 
 	do.Provide(i, func(i *do.Injector) (*metrics.Service, error) {
@@ -125,6 +141,10 @@ func (c *Container) Repository() repository.Repository {
 
 func (c *Container) Discovery() *discovery.Engine {
 	return do.MustInvoke[*discovery.Engine](c.i)
+}
+
+func (c *Container) Logs() logs.Service {
+	return do.MustInvoke[logs.Service](c.i)
 }
 
 // Metrics returns the metrics-backed Health Score service, or nil when the
@@ -417,6 +437,7 @@ func provideConfig() (*config.Config, error) {
 	}
 
 	c.HealthScore.Metrics = c.HealthScore.Metrics.WithDefaults()
+	c.LogSearch = c.LogSearch.WithDefaults()
 
 	if err := c.HealthScore.Metrics.Validate(); err != nil {
 		return nil, fmt.Errorf("provideConfig | health_score.metrics: %w", err)
@@ -437,10 +458,15 @@ func provideRepository(cfg config.Config, clusters config.Clusters, logger *zap.
 	return repository.NewRepositoryPgxPool(clusters, cfg.PgStatsView, cfg.PgssResetFunction, cfg.DBPool, logger)
 }
 
-func provideDiscovery(cfg *config.Config, clusters config.Clusters, logger *zap.Logger) *discovery.Engine {
+func provideDiscovery(
+	cfg *config.Config,
+	clusters config.Clusters,
+	registry *yandex.Registry,
+	logger *zap.Logger,
+) *discovery.Engine {
 	if len(cfg.Discovery) == 0 {
 		return nil
 	}
 
-	return discovery.NewEngine(cfg.Discovery, clusters, logger)
+	return discovery.NewEngine(cfg.Discovery, clusters, registry, logger)
 }

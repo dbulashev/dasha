@@ -115,6 +115,16 @@ type Cluster struct {
 	Labels     map[string]string `mapstructure:"labels"`
 }
 
+// SourceYandexMDB marks clusters discovered from Yandex Managed Databases.
+const SourceYandexMDB = "yandex-mdb"
+
+// SupportsLogs reports whether cluster logs can be searched via the provider
+// API. Single source of truth for the capability — exposed to the frontend as
+// Cluster.supports_logs and checked by the logs service.
+func (c Cluster) SupportsLogs() bool {
+	return c.Source == SourceYandexMDB && c.ProviderID != "" && c.Labels["folder_id"] != ""
+}
+
 // DiscoveryClusterFilter defines regex matching rules for discovered clusters.
 type DiscoveryClusterFilter struct {
 	Name        string  `mapstructure:"name"`
@@ -138,6 +148,60 @@ type YandexMDBConfig struct {
 type DiscoveryEntry struct {
 	Type   string          `mapstructure:"type"`
 	Config YandexMDBConfig `mapstructure:"config"`
+}
+
+// LogSearchConfig holds global limits for Yandex Cloud log search.
+type LogSearchConfig struct {
+	MaxScan        int `mapstructure:"max_scan"`        // max records scanned per search; default 5000
+	MaxPageSize    int `mapstructure:"max_page_size"`   // upper bound for page_size; default 1000
+	TimeoutSeconds int `mapstructure:"timeout_seconds"` // upstream read timeout; default 30
+
+	// RateLimit / AdminRateLimit throttle GET /api/logs per user (per IP when
+	// anonymous). Unset = built-in defaults; requests_per_second <= 0 disables
+	// the corresponding limit.
+	RateLimit      *RateLimitConfig `mapstructure:"rate_limit"`
+	AdminRateLimit *RateLimitConfig `mapstructure:"admin_rate_limit"`
+}
+
+// Defaults for LogSearchConfig when values are unset (<= 0).
+const (
+	DefaultLogSearchMaxScan        = 5000
+	DefaultLogSearchMaxPageSize    = 1000
+	DefaultLogSearchTimeoutSeconds = 30
+)
+
+// Default log search rate limits: non-admins 1 req/30s with burst 10, admins
+// 1 req/5s with burst 20.
+var (
+	DefaultLogSearchRateLimit      = RateLimitConfig{RequestsPerSecond: 1.0 / 30, Burst: 10}
+	DefaultLogSearchAdminRateLimit = RateLimitConfig{RequestsPerSecond: 1.0 / 5, Burst: 20}
+)
+
+// WithDefaults returns a copy with unset (<=0) fields filled from defaults.
+func (c LogSearchConfig) WithDefaults() LogSearchConfig {
+	if c.MaxScan <= 0 {
+		c.MaxScan = DefaultLogSearchMaxScan
+	}
+
+	if c.MaxPageSize <= 0 {
+		c.MaxPageSize = DefaultLogSearchMaxPageSize
+	}
+
+	if c.TimeoutSeconds <= 0 {
+		c.TimeoutSeconds = DefaultLogSearchTimeoutSeconds
+	}
+
+	if c.RateLimit == nil {
+		rl := DefaultLogSearchRateLimit
+		c.RateLimit = &rl
+	}
+
+	if c.AdminRateLimit == nil {
+		rl := DefaultLogSearchAdminRateLimit
+		c.AdminRateLimit = &rl
+	}
+
+	return c
 }
 
 // StorageConfig holds optional snapshot storage database settings.
@@ -195,6 +259,9 @@ type Config struct {
 	// EnableQueryStatsReset allows resetting pg_stat_statements statistics via the UI.
 	// Disabled by default for safety.
 	EnableQueryStatsReset bool `mapstructure:"enable_query_stats_reset"`
+
+	// LogSearch holds global limits for Yandex Cloud log search.
+	LogSearch LogSearchConfig `mapstructure:"log_search"`
 
 	// PgssResetFunction is an optional custom function (schema-qualified, no args)
 	// to call instead of pg_stat_statements_reset(). Useful when the connecting

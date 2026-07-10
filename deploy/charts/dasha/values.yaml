@@ -19,6 +19,18 @@ config:
   # pg_stats_view: monitoring.pg_stats  # custom view when user lacks pg_catalog.pg_stats access
   # enable_query_stats_reset: false  # allow resetting pg_stat_statements via UI
 
+  # -- Yandex Cloud log search limits (page /logs), applies to yandex-mdb clusters
+  # log_search:
+  #   max_scan: 5000          # max records scanned per search
+  #   max_page_size: 1000     # upper bound for page_size
+  #   timeout_seconds: 30     # upstream read timeout
+  #   rate_limit:             # per user (per IP when anonymous); rps <= 0 disables
+  #     requests_per_second: 0.0333  # 1 request per 30s
+  #     burst: 10
+  #   admin_rate_limit:       # separate limit for the admin role
+  #     requests_per_second: 0.2     # 1 request per 5s
+  #     burst: 20
+
   # -- Connection pools to monitored clusters (one pool per host+database).
   # Defaults: max_conns 4, max_conn_idle_time 2m. Behind a per-user connection
   # pooler (Odyssey/PgBouncer) keep (hosts × databases) × max_conns + the

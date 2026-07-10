@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 import { getSnapshotLocks } from '@/api/gen/default/default'
 import type { LockSnapshot, QueryBlocked } from '@/api/models'
 import { assertOk } from '@/utils/api'
+import { fmtDateTime } from '@/utils/format'
 import LockTree from '@/components/locks/LockTree.vue'
 
 const props = defineProps<{ modelValue: boolean; snapshotId: string | null }>()
@@ -51,9 +52,6 @@ function fmtMsLocal(ms?: number | null): string {
   return ms >= 1000 ? (ms / 1000).toFixed(1) + ' s' : Math.round(ms) + ' ms'
 }
 
-function fmtDate(s?: string | null): string {
-  return s ? new Date(s).toLocaleString() : ''
-}
 </script>
 
 <template>
@@ -83,7 +81,7 @@ function fmtDate(s?: string | null): string {
               v-if="data.background_peak && data.background_peak.blocked_count > data.blocked_count"
               class="text-caption text-medium-emphasis"
             >
-              {{ t('autosnapshot.locks.peakWas', { count: data.background_peak.blocked_count, at: fmtDate(data.background_peak.at) }) }}
+              {{ t('autosnapshot.locks.peakWas', { count: data.background_peak.blocked_count, at: fmtDateTime(data.background_peak.at, '') }) }}
             </span>
           </div>
 

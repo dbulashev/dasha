@@ -29,7 +29,7 @@ const props = defineProps<{
 
 const { t, te } = useI18n()
 const route = useRoute()
-const { clusterName, hostName, databaseName } = useClusterInfo()
+const { clusterName, hostName, databaseName, currentCluster } = useClusterInfo()
 
 const effectiveDatabase = computed(() => props.database || databaseName.value || '')
 
@@ -58,6 +58,14 @@ const relatedLink = computed(() => {
     path: `${path}/${cluster}`,
     query,
   }
+})
+
+// Deadlocks leave a trace in the server log ("deadlock detected" + the two
+// queries involved) — when the cluster's logs are searchable, offer a jump to
+// /logs with the deadlock preset applied.
+const logsLink = computed(() => {
+  if (props.rec.rule_id !== 'deadlocks_rate' || !currentCluster.value?.supports_logs) return null
+  return { path: `/logs/${clusterName.value}`, query: { preset: 'deadlock' } }
 })
 
 const i18nBase = computed(() => `healthScore.recommendations.${props.rec.rule_id}`)
@@ -215,6 +223,15 @@ async function copySql() {
         </v-chip>
         <span class="text-body-1 font-weight-medium">{{ title }}</span>
         <v-spacer />
+        <v-btn
+          v-if="logsLink"
+          variant="text"
+          size="small"
+          :to="logsLink"
+          append-icon="mdi-text-search"
+        >
+          {{ t('healthScore.recommendations.searchLogs') }}
+        </v-btn>
         <v-btn
           v-if="relatedLink && !hasInline"
           variant="text"

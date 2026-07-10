@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -54,6 +55,7 @@ func New(
 	middlewares []serverhttp.StrictMiddlewareFunc,
 	requireHTTPSMW echo.MiddlewareFunc,
 	rateLimitMW echo.MiddlewareFunc,
+	logsRateLimitMW echo.MiddlewareFunc,
 	authMW echo.MiddlewareFunc,
 	casbinMW echo.MiddlewareFunc,
 	logger *zap.Logger,
@@ -67,7 +69,9 @@ func New(
 	e.Debug = true
 
 	e.HTTPErrorHandler = func(err error, c echo.Context) {
-		if !c.Response().Committed {
+		// A cancelled request context means the client disconnected — nobody
+		// will receive the response, so don't log it as a server error.
+		if !c.Response().Committed && !errors.Is(err, context.Canceled) {
 			var he *echo.HTTPError
 			if errors.As(err, &he) {
 				if he.Code >= http.StatusInternalServerError {
@@ -100,6 +104,7 @@ func New(
 	e.Use(requireHTTPSMW)
 	e.Use(skipPublic(authMW))
 	e.Use(rateLimitMW)
+	e.Use(logsRateLimitMW)
 	e.Use(skipPublic(casbinMW))
 
 	serverhttp.RegisterHandlers(e, ssi)

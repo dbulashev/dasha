@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26.5-alpine AS builder
 ARG TARGETOS TARGETARCH
 ARG BUILD_NUMBER=dev
 ARG BUILD_DATE=unknown
@@ -10,7 +10,7 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build \
     -ldflags="-s -w -X github.com/dbulashev/dasha/internal/version.buildNumber=$BUILD_NUMBER -X github.com/dbulashev/dasha/internal/version.buildDate=$BUILD_DATE" \
     -o /dasha ./cmd/main.go
 
-FROM alpine:3.23
+FROM alpine:3.24
 RUN apk add --no-cache ca-certificates && \
     apk add --no-cache --upgrade libcrypto3 libssl3 && \
     addgroup -S dasha && adduser -S -G dasha -u 1000 dasha
