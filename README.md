@@ -54,6 +54,7 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 **Connections & Locks**
 - Connection states and sources breakdown
 - Active session details (`pg_stat_activity`)
+- Wait events grouped by type/event
 - Lock tree visualization
 
 **Progress Tracking**
@@ -66,6 +67,19 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 - Checkpoint ratio analysis (`checkpoint_req` vs `checkpoint_timed`)
 - Autovacuum and autoanalyze configuration review
 
+**Health Score**
+- Composite 0–100 instance score across eight categories (connections, performance, storage, replication, maintenance, horizon, WAL/checkpoint, locks) with continuous penalty functions — top-level `/health-score` page plus a Home-page gauge
+- Parallel rules engine producing prioritized recommendations (severity, metric values, per-database drill-down) that stay in lockstep with the score
+- Optional **metrics-backed mode**: with a Prometheus/VictoriaMetrics datasource configured (`health_score.metrics`), the score, recommendations and a trend with seasonal baseline and dip detection are computed from time series (pgSCV, Yandex MDB, pgbouncer, host metrics) instead of point-in-time SQL; the SQL snapshot stays the zero-config fallback
+- Scoring model details: [README-health-score.md](README-health-score.md)
+
+**Log Search (Yandex Cloud)**
+- Search PostgreSQL server and connection-pooler (Odyssey) logs of Yandex-MDB-discovered clusters through the MDB API — top-level `/logs` page, no agents or log shipping required
+- Native severity/host filters plus Dasha-side message substrings (AND), `grep -v`-style excludes and database/user filters; cursor pagination and partial results on timeout
+- Optional deduplication groups near-identical messages by masked template (`<*>` placeholders) with count and first/last seen
+- Frequency histogram (time × severity) with click/drag zoom, one-click presets (deadlocks, autovacuum, checkpoints, …), shareable URL filters, Grafana time-range clipboard interop
+- Per-user rate limiting protects the Yandex Cloud API quota (`log_search.rate_limit`, separate admin limit)
+
 **Authentication & Authorization**
 - Three modes: `none` (open), `token` (static API keys), `oidc` (OpenID Connect)
 - OIDC: BFF pattern with encrypted session cookies (Keycloak, Google, any OIDC provider)
@@ -75,12 +89,14 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 - Secure session management: HttpOnly/Secure/SameSite cookies, AES-256 encryption, HMAC-SHA256 signing
 - CSRF protection via OAuth2 state parameter with constant-time validation
 - Token revocation on logout (RFC 7009, when supported by provider)
+- Personal access tokens (PAT): user-minted API tokens for scripts and the MCP connector — hashed at rest, least-privilege, one-time secret reveal, revoke and optional expiry
 
 **Infrastructure**
 - Multi-cluster support with per-cluster host/database selection
 - Yandex Managed Service for PostgreSQL service discovery
 - Primary / replica role display
 - Optional snapshot storage database (daily-partitioned tables, `dasha migrate` CLI)
+- [MCP connector](#mcp-connector-dasha-mcp) (`dasha-mcp`): read-only MCP server exposing fleet diagnostics to AI assistants (22 tools, 5 prompts)
 - Internationalization (Russian, German)
 
 ## Architecture
@@ -154,6 +170,23 @@ discovery:
         - name: "prod-.*"       # regex filter
           exclude_name: "test"
           exclude_db: "system_db"
+```
+
+#### Log Search (optional)
+
+For clusters discovered via Yandex MDB, the `/logs` page works out of the box (it reuses the discovery service-account key). The global `log_search` block only tunes the limits:
+
+```yaml
+log_search:
+  max_scan: 5000          # max records scanned per search
+  max_page_size: 1000     # upper bound for page_size
+  timeout_seconds: 30     # upstream read timeout
+  rate_limit:             # per user (per IP when anonymous); rps <= 0 disables
+    requests_per_second: 0.0333   # 1 request per 30s
+    burst: 10
+  admin_rate_limit:
+    requests_per_second: 0.2      # 1 request per 5s
+    burst: 20
 ```
 
 #### Authentication (optional)
@@ -296,7 +329,7 @@ The demo includes:
 
 `dasha-mcp` is a separate, **read-only** [MCP](https://modelcontextprotocol.io) server over the Dasha API. It lets AI assistants query the fleet's PostgreSQL diagnostics as tools/prompts, forwarding each caller's token to Dasha so its RBAC is preserved. Any MCP-compatible client works — Claude Desktop, Claude Code, Cursor, Continue, **opencode**, etc.
 
-- **Tools (21):** `list_clusters`, `fleet_health`, `get_instance_info`, `get_health_score`, `get_health_recommendations`, `health_trend`, `health_databases`, `top_queries` (by time/WAL), `query_report`, `list_snapshots`, `query_compare`, `running_queries`, `blocked_queries`, `list_indexes` (missing/unused/usage), `top_tables`, `describe_table`, `get_replication`, `settings_analyze`, `wait_events`, `connections`, `vacuum_danger`. All are annotated **read-only** and closed-world so compatible clients can surface (and auto-approve) them as safe. The server also ships usage **instructions** that prime the model on which tool/prompt to reach for.
+- **Tools (22):** `list_clusters`, `fleet_health`, `get_instance_info`, `get_health_score`, `get_health_recommendations`, `health_trend`, `health_databases`, `top_queries` (by time/WAL), `query_report`, `list_snapshots`, `query_compare`, `running_queries`, `blocked_queries`, `list_indexes` (missing/unused/usage), `top_tables`, `describe_table`, `get_replication`, `settings_analyze`, `wait_events`, `connections`, `vacuum_danger`, `search_logs` (Yandex Cloud PostgreSQL/pooler logs; Yandex-MDB-discovered clusters only, rate-limited per user). All are annotated **read-only** and closed-world so compatible clients can surface (and auto-approve) them as safe. The server also ships usage **instructions** that prime the model on which tool/prompt to reach for.
 - **Prompts (5):** `diagnose_cluster`, `explain_health_score`, `find_index_opportunities`, `investigate_slow_queries`, `fleet_overview`.
 
 **Prerequisite:** a Dasha API token — a [personal access token](#personal-access-tokens-optional) (`dasha_pat_…`) or a static config token. It determines the role (`viewer` is enough).
@@ -401,25 +434,32 @@ This creates `{release}-mcp` Deployment + `ClusterIP` Service on port `8765`. To
 ├── doc/swagger.yaml              # OpenAPI 3.0 spec (source of truth)
 ├── backend/
 │   ├── cmd/main.go               # Entry point (Cobra CLI + Echo server)
+│   ├── cmd/dasha-mcp/            # MCP server entry point (stdio / HTTP)
 │   ├── gen/serverhttp/           # Generated server stubs (oapi-codegen)
+│   ├── gen/apiclient/            # Generated API client (oapi-codegen, used by dasha-mcp)
 │   ├── internal/
 │   │   ├── auth/                 # Authentication, RBAC (Casbin), rate limiting
+│   │   ├── autosnapshot/         # Auto-snapshot daemon (triggers, retention, leader election)
 │   │   ├── config/               # Configuration types
 │   │   ├── deps/                 # DI container (samber/do)
 │   │   ├── discovery/            # Service discovery (Yandex MDB)
 │   │   ├── dto/                  # Response data structures
 │   │   ├── enums/                # Query enum (auto-generated)
-│   │   ├── http/                 # Handlers (v1.go, strictserver.go)
+│   │   ├── health/               # Health Score engine (penalties, rules)
+│   │   ├── http/                 # Handlers (v1_*.go, strictserver.go)
+│   │   ├── logs/                 # Yandex Cloud log search (filters, dedup, pagination)
+│   │   ├── mcpserver/            # MCP connector (tools, prompts, transports)
+│   │   ├── metrics/              # Metrics-backed Health Score (PromQL datasource)
 │   │   ├── query/sql/            # SQL templates with PG version overrides
 │   │   ├── repository/           # Data access (pgx pools)
-│   │   ├── storage/              # Snapshot storage (migrations, CRUD)
+│   │   ├── storage/              # Snapshot storage (migrations, CRUD, PAT)
 │   │   └── testinfra/            # Test containers setup
 │   └── dasha.yaml                # Example config
 ├── frontend/
 │   ├── src/
 │   │   ├── api/gen/              # Generated API client (orval)
 │   │   ├── api/models/           # Generated TypeScript types
-│   │   ├── views/                # Page components (10 views)
+│   │   ├── views/                # Page components (20 views)
 │   │   ├── components/           # Section components by domain
 │   │   ├── stores/               # Pinia stores (clusters, hosts, theme, auth)
 │   │   ├── composables/          # Vue composables
@@ -496,6 +536,7 @@ Multi-architecture images (`linux/amd64`, `linux/arm64`) are published to Docker
 |-------|-------------|
 | `dbulashev/dasha-backend` | Go API server |
 | `dbulashev/dasha-frontend` | Nginx + Vue SPA, proxies `/api/` to backend |
+| `dbulashev/dasha-mcp` | MCP connector for AI assistants (stdio / HTTP) |
 
 The frontend accepts `BACKEND_URL` environment variable (default: `backend:8000`).
 
@@ -657,9 +698,10 @@ ingress:
 
 ## CI/CD
 
-- **CI** runs on every push/PR to `main`: Go lint (revive + gosec), frontend lint (ESLint), unit tests, integration tests (PG 14–18 matrix), build check
-- **Release** is triggered by a `v*` tag: verifies CI passed, builds multi-arch Docker images with provenance/SBOM attestation, scans with Trivy, pushes Helm chart to GHCR
-- **Dependabot** keeps GitHub Actions up to date
+- **CI** runs on every push/PR to `main`: Go lint (revive + gosec), frontend lint (ESLint), unit tests, integration tests (PG 14–18 matrix), `govulncheck` + `npm audit` vulnerability gates, Trivy filesystem/IaC scan, Helm lint, build check
+- **CodeQL** (Go + TypeScript, `security-extended`) on push, PR and a weekly schedule
+- **Release** is triggered by a `v*` tag: verifies CI passed, builds multi-arch Docker images (backend, frontend, MCP) with provenance/SBOM attestation, gates them on a Trivy image scan, pushes Helm chart to GHCR
+- **Dependabot** keeps Go modules, npm packages, Docker base images and GitHub Actions up to date
 
 ## Changelog
 

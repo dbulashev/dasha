@@ -2,9 +2,11 @@ package mcpserver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
+	"unicode/utf8"
 
 	"github.com/dbulashev/dasha/gen/apiclient"
 	"github.com/google/uuid"
@@ -514,10 +516,98 @@ func (d *DashaClient) TableDescribeVacuumStats(ctx context.Context, cluster, ins
 	return pick(r.JSON200, r.HTTPResponse, "describe_table")
 }
 
+// SearchLogs searches PostgreSQL / connection-pooler logs of a Yandex-MDB
+// cluster over a bounded time window. Dasha proxies every call to the Yandex
+// Cloud logs API and rate-limits the route per user, so each non-200 is mapped
+// to guidance the model can act on (wait on 429, narrow on 504) instead of a
+// bare status code.
+func (d *DashaClient) SearchLogs(ctx context.Context, params *apiclient.GetLogsParams) (any, error) {
+	r, err := d.api.GetLogsWithResponse(ctx, params, d.editor(ctx))
+	if err != nil {
+		return nil, wrapErr("search_logs", err)
+	}
+
+	if r.JSON200 == nil && r.HTTPResponse != nil {
+		switch r.HTTPResponse.StatusCode {
+		case http.StatusTooManyRequests:
+			return nil, errors.New("dasha: log search is rate-limited per user to protect the Yandex Cloud API " +
+				"(default ~1 request per 30s with a small burst) — wait at least 30 seconds, then retry with " +
+				"every needed filter combined into that one call")
+		case http.StatusNotImplemented:
+			return nil, errors.New("dasha: this cluster does not support log search (501) — only clusters " +
+				"discovered via Yandex MDB do; check supports_logs in list_clusters")
+		case http.StatusBadRequest:
+			return nil, errors.New("dasha: invalid log search parameters (400) — e.g. page_token combined " +
+				"with dedup, or an unknown severity value")
+		case http.StatusBadGateway:
+			return nil, errors.New("dasha: the Yandex Cloud logs API failed upstream (502) — retry later")
+		case http.StatusGatewayTimeout:
+			return nil, errors.New("dasha: log search timed out before collecting anything (504) — narrow " +
+				"the time window or add severity/message filters")
+		}
+	}
+
+	if r.JSON200 == nil {
+		return nil, statusError("search_logs", r.HTTPResponse)
+	}
+
+	truncateLogEntries(r.JSON200)
+
+	return r.JSON200, nil
+}
+
+// maxLogFieldBytes caps any single log field (message text, query, …) in a
+// search_logs result: one multi-megabyte statement would otherwise flood the
+// model's context — or trip the whole-result size cap — while its head is
+// enough to identify the query.
+const maxLogFieldBytes = 2000
+
+// truncateLogEntries clips oversized field values in place, appending a marker
+// with the original length so the model knows content was cut.
+func truncateLogEntries(res *apiclient.LogSearchResult) {
+	for i := range res.Items {
+		e := &res.Items[i]
+		if e.Text != nil {
+			*e.Text = clip(*e.Text)
+		}
+
+		if e.Fields != nil {
+			for k, v := range *e.Fields {
+				(*e.Fields)[k] = clip(v)
+			}
+		}
+	}
+}
+
+// clip cuts s at maxLogFieldBytes on a rune boundary.
+func clip(s string) string {
+	if len(s) <= maxLogFieldBytes {
+		return s
+	}
+
+	cut := maxLogFieldBytes
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+
+	return s[:cut] + fmt.Sprintf("… [truncated, %d bytes total]", len(s))
+}
+
 // optStrings returns a pointer to the slice for optional query params, or nil
 // when empty so the parameter is omitted entirely.
 func optStrings(v []string) *[]string {
 	if len(v) == 0 {
+		return nil
+	}
+
+	return &v
+}
+
+// opt returns a pointer to v for optional query params, or nil when v is the
+// zero value so the parameter is omitted entirely.
+func opt[T comparable](v T) *T {
+	var zero T
+	if v == zero {
 		return nil
 	}
 
@@ -550,6 +640,8 @@ func statusError(op string, resp *http.Response) error {
 		return fmt.Errorf("dasha: access denied (%d) — the token's role is insufficient for %s", code, op)
 	case http.StatusNotFound:
 		return fmt.Errorf("dasha: not found (404) — unknown cluster/instance/database")
+	case http.StatusTooManyRequests:
+		return fmt.Errorf("dasha: rate limited (429) on %s — pause before retrying instead of calling again immediately", op)
 	default:
 		return fmt.Errorf("dasha: %s returned status %d", op, code)
 	}

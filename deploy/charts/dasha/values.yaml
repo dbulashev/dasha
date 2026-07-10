@@ -18,6 +18,7 @@ config:
   debug: false
   # pg_stats_view: monitoring.pg_stats  # custom view when user lacks pg_catalog.pg_stats access
   # enable_query_stats_reset: false  # allow resetting pg_stat_statements via UI
+  # pgss_reset_function: monitoring.reset_pgss  # SECURITY DEFINER wrapper when the role lacks EXECUTE on pg_stat_statements_reset()
 
   # -- Yandex Cloud log search limits (page /logs), applies to yandex-mdb clusters
   # log_search:
@@ -106,6 +107,7 @@ config:
   # storage:
   #   dsn_from_env: DASHA_STORAGE_DSN                      # service role (DML)
   #   dsn_migration_from_env: DASHA_STORAGE_DSN_MIGRATION  # DDL role (optional)
+  #   leader_election: true  # advisory-lock leader election for autosnapshot.replicaCount > 1; needs a direct/session-pooled connection (see the autosnapshot section)
   # Run `dasha migrate` (e.g. a Job / initContainer using the migration role) to
   # create the tables and partitions up front; the long-running service then
   # only needs the DML role. Partition creation at snapshot-write time also uses

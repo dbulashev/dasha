@@ -5,7 +5,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
+	"github.com/dbulashev/dasha/gen/apiclient"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -181,6 +183,141 @@ func TestTrendWindow(t *testing.T) {
 				t.Errorf("trendWindow(%q) = (%v, %d), want (%v, %d)", tt.rng, span, step, tt.wantSpan, tt.wantStep)
 			}
 		})
+	}
+}
+
+func TestLogsParams_Defaults(t *testing.T) {
+	t.Parallel()
+
+	p, errMsg := logsParams(searchLogsArgs{Cluster: "prod"}) //nolint:exhaustruct
+	if errMsg != "" {
+		t.Fatalf("logsParams(defaults) error = %q, want none", errMsg)
+	}
+
+	if p.ClusterName != "prod" || p.ServiceType != "postgresql" {
+		t.Errorf("target = (%v, %v), want (prod, postgresql)", p.ClusterName, p.ServiceType)
+	}
+
+	if p.Dedup == nil || !*p.Dedup {
+		t.Errorf("dedup must default to true")
+	}
+
+	if p.PageSize == nil || *p.PageSize != logsDefaultPageSize {
+		t.Errorf("page_size must default to %d", logsDefaultPageSize)
+	}
+
+	if got := p.To.Sub(p.From); got != logsDefaultSince {
+		t.Errorf("window = %v, want %v", got, logsDefaultSince)
+	}
+
+	if p.Severity != nil || p.Host != nil || p.PageToken != nil {
+		t.Errorf("unset optional params must be omitted (nil)")
+	}
+}
+
+func TestLogsParams_Errors(t *testing.T) {
+	t.Parallel()
+
+	boolPtr := func(v bool) *bool { return &v }
+
+	tests := []struct {
+		name string
+		args searchLogsArgs
+	}{
+		{"bad service type", searchLogsArgs{Cluster: "c", ServiceType: "syslog"}},                                 //nolint:exhaustruct
+		{"bad since", searchLogsArgs{Cluster: "c", Since: "yesterday"}},                                           //nolint:exhaustruct
+		{"negative since", searchLogsArgs{Cluster: "c", Since: "-5m"}},                                            //nolint:exhaustruct
+		{"from without to", searchLogsArgs{Cluster: "c", From: "2026-07-10T12:00:00Z"}},                           //nolint:exhaustruct
+		{"bad from", searchLogsArgs{Cluster: "c", From: "10.07.2026", To: "2026-07-10T13:00:00Z"}},                //nolint:exhaustruct
+		{"from after to", searchLogsArgs{Cluster: "c", From: "2026-07-10T13:00:00Z", To: "2026-07-10T12:00:00Z"}}, //nolint:exhaustruct
+		{"page_token with dedup", searchLogsArgs{Cluster: "c", PageToken: "tok", Dedup: boolPtr(true)}},           //nolint:exhaustruct
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if _, errMsg := logsParams(tt.args); errMsg == "" {
+				t.Errorf("logsParams(%s) must return a validation error", tt.name)
+			}
+		})
+	}
+}
+
+func TestLogsParams_PageTokenImpliesRaw(t *testing.T) {
+	t.Parallel()
+
+	p, errMsg := logsParams(searchLogsArgs{Cluster: "c", PageToken: "tok"}) //nolint:exhaustruct
+	if errMsg != "" {
+		t.Fatalf("logsParams(page_token) error = %q, want none", errMsg)
+	}
+
+	if p.Dedup == nil || *p.Dedup {
+		t.Errorf("a page_token continuation must force dedup=false")
+	}
+
+	if p.PageToken == nil || *p.PageToken != "tok" {
+		t.Errorf("page_token must pass through")
+	}
+}
+
+func TestLogsParams_ExplicitWindow(t *testing.T) {
+	t.Parallel()
+
+	p, errMsg := logsParams(searchLogsArgs{ //nolint:exhaustruct
+		Cluster: "c", From: "2026-07-10T12:00:00Z", To: "2026-07-10T13:00:00Z", Since: "24h",
+	})
+	if errMsg != "" {
+		t.Fatalf("logsParams(from/to) error = %q, want none", errMsg)
+	}
+
+	// Explicit from/to wins over since.
+	if got := p.To.Sub(p.From); got != time.Hour {
+		t.Errorf("window = %v, want 1h (from/to must override since)", got)
+	}
+}
+
+func TestClip(t *testing.T) {
+	t.Parallel()
+
+	if got := clip("short"); got != "short" {
+		t.Errorf("clip(short) = %q, must be unchanged", got)
+	}
+
+	long := strings.Repeat("я", maxLogFieldBytes) // 2-byte runes force a boundary adjustment
+	got := clip(long)
+
+	if !strings.Contains(got, "[truncated,") {
+		t.Errorf("clip(long) must carry the truncation marker, got tail %q", got[len(got)-40:])
+	}
+
+	if !utf8.ValidString(got) {
+		t.Errorf("clip must cut on a rune boundary")
+	}
+}
+
+func TestTruncateLogEntries(t *testing.T) {
+	t.Parallel()
+
+	long := strings.Repeat("x", maxLogFieldBytes+1)
+	text := long
+	fields := map[string]string{"query": long, "message": "ok"}
+	res := &apiclient.LogSearchResult{ //nolint:exhaustruct
+		Items: []apiclient.LogEntry{{Text: &text, Fields: &fields}}, //nolint:exhaustruct
+	}
+
+	truncateLogEntries(res)
+
+	if !strings.Contains(*res.Items[0].Text, "[truncated,") {
+		t.Errorf("text must be clipped")
+	}
+
+	if !strings.Contains((*res.Items[0].Fields)["query"], "[truncated,") {
+		t.Errorf("fields values must be clipped")
+	}
+
+	if (*res.Items[0].Fields)["message"] != "ok" {
+		t.Errorf("short field values must be unchanged")
 	}
 }
 

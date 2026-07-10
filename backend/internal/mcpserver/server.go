@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dbulashev/dasha/gen/apiclient"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"golang.org/x/sync/errgroup"
 )
@@ -27,6 +28,7 @@ Investigating:
 - Typical chain: get_health_score -> get_health_recommendations -> (top_queries, blocked_queries, list_indexes, describe_table) to drill into the worst findings.
 - health_trend needs metrics-backed mode (a configured datasource); it returns an error otherwise.
 - query_compare needs snapshot IDs from list_snapshots.
+- search_logs works only on clusters with supports_logs=true (see list_clusters) and is rate-limited per user because every call reaches the Yandex Cloud API: combine all filters into one call, keep dedup on, and after a 429 wait ~30 seconds instead of retrying immediately.
 
 If a result is refused as too large, narrow it (one database, a smaller range, or a more specific tool).`
 
@@ -128,6 +130,23 @@ type connectionsArgs struct {
 
 type fleetHealthArgs struct {
 	Limit int `json:"limit,omitempty" jsonschema:"How many worst-scoring instances to return (default 5)"`
+}
+
+type searchLogsArgs struct {
+	Cluster     string   `json:"cluster" jsonschema:"Dasha cluster name; must have supports_logs=true in list_clusters"`
+	ServiceType string   `json:"service_type,omitempty" jsonschema:"Log source: 'postgresql' (default) or 'pooler' (Odyssey connection pooler)"`
+	Since       string   `json:"since,omitempty" jsonschema:"Look-back window ending now, e.g. '15m', '1h', '24h' (default '1h'); ignored when from/to are set"`
+	From        string   `json:"from,omitempty" jsonschema:"Window start, RFC3339 (e.g. 2026-07-10T12:00:00Z); set together with to"`
+	To          string   `json:"to,omitempty" jsonschema:"Window end, RFC3339; set together with from"`
+	Severity    []string `json:"severity,omitempty" jsonschema:"Severities to include: PostgreSQL uses upper-case (ERROR, FATAL, PANIC, WARNING, LOG), the pooler lower-case (error, warn)"`
+	Host        string   `json:"host,omitempty" jsonschema:"Optional: restrict to one cluster host"`
+	Message     []string `json:"message,omitempty" jsonschema:"Substrings that must all be present in the message (AND, case-insensitive)"`
+	Exclude     []string `json:"exclude,omitempty" jsonschema:"Drop records whose message contains any of these substrings (grep -v)"`
+	Database    string   `json:"database,omitempty" jsonschema:"Optional: restrict to one database"`
+	User        string   `json:"user,omitempty" jsonschema:"Optional: restrict to one user"`
+	Dedup       *bool    `json:"dedup,omitempty" jsonschema:"Group near-identical messages with count/first_seen/last_seen (default true — much smaller results); set false for raw records with pagination"`
+	PageSize    int      `json:"page_size,omitempty" jsonschema:"Max raw records per page when dedup=false (default 100)"`
+	PageToken   string   `json:"page_token,omitempty" jsonschema:"Cursor from a previous dedup=false result to fetch the next page"`
 }
 
 func registerTools(s *mcp.Server, c *DashaClient) {
@@ -396,6 +415,22 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a fleetHealthArgs) (*mcp.CallToolResult, any, error) {
 		return jsonResult(fleetHealth(ctx, c, a.Limit))
 	})
+
+	addTool(s, &mcp.Tool{
+		Name: "search_logs",
+		Description: "Search PostgreSQL server or connection-pooler (Odyssey) logs of a Yandex-MDB-discovered " +
+			"cluster (supports_logs=true in list_clusters). Every call reaches the Yandex Cloud API and is " +
+			"rate-limited per user (default ~1 request per 30s with a small burst) — make each call count: " +
+			"keep the default dedup=true overview, a narrow window (since='1h') and severity/message filters, " +
+			"and refine with one follow-up call instead of paging raw records. After a 429 wait ~30 seconds.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, a searchLogsArgs) (*mcp.CallToolResult, any, error) {
+		params, errMsg := logsParams(a)
+		if errMsg != "" {
+			return errResult(errMsg), nil, nil
+		}
+
+		return jsonResult(c.SearchLogs(ctx, params))
+	})
 }
 
 // defaultFleetLimit caps how many worst instances fleet_health returns by default.
@@ -586,6 +621,87 @@ func trendWindow(rng string) (span time.Duration, step int) {
 	default:
 		return 0, 0
 	}
+}
+
+// logsDefaultSince is the default look-back window for search_logs; a short
+// window keeps the upstream Yandex API scan (and the result) small.
+const logsDefaultSince = time.Hour
+
+// logsDefaultPageSize caps raw (dedup=false) records per page, keeping one
+// page readable and cheap to fetch.
+const logsDefaultPageSize = 100
+
+// logsParams validates search_logs arguments locally and maps them onto the
+// API params. Local validation matters more than usual here: the endpoint is
+// rate-limited per user (it fronts the Yandex Cloud API), so a request that
+// would just 400 upstream must not burn a rate-limit slot.
+func logsParams(a searchLogsArgs) (*apiclient.GetLogsParams, string) {
+	serviceType := apiclient.GetLogsParamsServiceType(cmp.Or(a.ServiceType, string(apiclient.Postgresql)))
+	if serviceType != apiclient.Postgresql && serviceType != apiclient.Pooler {
+		return nil, "service_type must be 'postgresql' or 'pooler'"
+	}
+
+	to := time.Now()
+	from := to.Add(-logsDefaultSince)
+
+	switch {
+	case a.From != "" || a.To != "":
+		if a.From == "" || a.To == "" {
+			return nil, "from and to must be set together (RFC3339)"
+		}
+
+		var err error
+		if from, err = time.Parse(time.RFC3339, a.From); err != nil {
+			return nil, "from must be RFC3339 (e.g. 2026-07-10T12:00:00Z)"
+		}
+
+		if to, err = time.Parse(time.RFC3339, a.To); err != nil {
+			return nil, "to must be RFC3339 (e.g. 2026-07-10T13:00:00Z)"
+		}
+
+		if !from.Before(to) {
+			return nil, "from must be before to"
+		}
+	case a.Since != "":
+		d, err := time.ParseDuration(a.Since)
+		if err != nil || d <= 0 {
+			return nil, "since must be a positive duration like '15m', '1h' or '24h'"
+		}
+
+		from = to.Add(-d)
+	}
+
+	// Dedup defaults to on: grouped results are far smaller and usually enough.
+	// Raw pagination is opt-in and mutually exclusive with dedup upstream.
+	dedup := a.Dedup == nil || *a.Dedup
+	if a.PageToken != "" {
+		if dedup && a.Dedup != nil {
+			return nil, "page_token cannot be combined with dedup=true"
+		}
+
+		dedup = false
+	}
+
+	pageSize := a.PageSize
+	if pageSize <= 0 {
+		pageSize = logsDefaultPageSize
+	}
+
+	return &apiclient.GetLogsParams{
+		ClusterName: a.Cluster,
+		ServiceType: serviceType,
+		From:        from,
+		To:          to,
+		Severity:    optStrings(a.Severity),
+		Host:        opt(a.Host),
+		Message:     optStrings(a.Message),
+		Exclude:     optStrings(a.Exclude),
+		Database:    opt(a.Database),
+		User:        opt(a.User),
+		Dedup:       &dedup,
+		PageSize:    &pageSize,
+		PageToken:   opt(a.PageToken),
+	}, ""
 }
 
 // section folds one part of a composite result in, recording a per-part error
