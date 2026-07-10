@@ -6,7 +6,11 @@
 // the generated Dasha API client, never on the backend's internal packages.
 package mcpserver
 
-import "time"
+import (
+	"time"
+
+	"go.uber.org/zap"
+)
 
 // Config configures the dasha-mcp server.
 type Config struct {
@@ -24,6 +28,10 @@ type Config struct {
 	// Lang selects the language of the knowledge-base resources ("en" or "ru").
 	// Tool schemas and results stay English regardless.
 	Lang string
+
+	// Logger receives per-call observability (method, tool, duration, error);
+	// arguments and tokens are never logged. Nil disables logging.
+	Logger *zap.Logger
 }
 
 // withDefaults fills unset fields with safe defaults.
@@ -34,6 +42,10 @@ func (c Config) withDefaults() Config {
 
 	if c.Lang == "" {
 		c.Lang = kbDefaultLang
+	}
+
+	if c.Logger == nil {
+		c.Logger = zap.NewNop()
 	}
 
 	return c

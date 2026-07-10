@@ -11,6 +11,7 @@ import (
 
 	"github.com/dbulashev/dasha/gen/apiclient"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -47,7 +48,50 @@ func newServer(client *DashaClient, version, lang string, cache *mcp.SchemaCache
 	registerPrompts(s, t)
 	registerResources(s, lang)
 
+	if client.logger != nil {
+		s.AddReceivingMiddleware(loggingMiddleware(client.logger))
+	}
+
 	return s
+}
+
+// loggingMiddleware logs every incoming MCP call — method, target (tool,
+// prompt or resource), duration, outcome. Arguments are never logged: they may
+// embed user-written filters or query text, and tokens must stay out of logs.
+func loggingMiddleware(logger *zap.Logger) mcp.Middleware {
+	return func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			start := time.Now()
+			res, err := next(ctx, method, req)
+
+			fields := []zap.Field{
+				zap.String("method", method),
+				zap.Duration("duration", time.Since(start)),
+			}
+
+			switch p := req.GetParams().(type) {
+			case *mcp.CallToolParamsRaw:
+				fields = append(fields, zap.String("tool", p.Name))
+			case *mcp.GetPromptParams:
+				fields = append(fields, zap.String("prompt", p.Name))
+			case *mcp.ReadResourceParams:
+				fields = append(fields, zap.String("resource", p.URI))
+			}
+
+			switch {
+			case err != nil:
+				logger.Warn("mcp call failed", append(fields, zap.Error(err))...)
+			default:
+				if r, ok := res.(*mcp.CallToolResult); ok && r.IsError {
+					fields = append(fields, zap.Bool("is_error", true))
+				}
+
+				logger.Info("mcp call", fields...)
+			}
+
+			return res, err
+		}
+	}
 }
 
 // noArgs is the empty argument set for tools that take no parameters.

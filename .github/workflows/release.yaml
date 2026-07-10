@@ -121,6 +121,9 @@ jobs:
           labels: ${{ steps.meta-mcp.outputs.labels }}
           provenance: true
           sbom: true
+          build-args: |
+            BUILD_NUMBER=${{ github.ref_name }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 

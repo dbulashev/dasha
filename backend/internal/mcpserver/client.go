@@ -10,6 +10,7 @@ import (
 
 	"github.com/dbulashev/dasha/gen/apiclient"
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 )
 
 // tokenKey carries the per-request Dasha API token so the HTTP transport can pass
@@ -32,8 +33,9 @@ func tokenFromContext(ctx context.Context) string {
 // DashaClient is a thin, identity-passthrough wrapper over the generated Dasha
 // API client: every call forwards the caller's token as the X-API-Key header.
 type DashaClient struct {
-	api   *apiclient.ClientWithResponses
-	token string // default token (stdio single-identity); a per-request ctx token wins
+	api    *apiclient.ClientWithResponses
+	token  string // default token (stdio single-identity); a per-request ctx token wins
+	logger *zap.Logger
 }
 
 // NewDashaClient builds a client against the configured Dasha API.
@@ -47,7 +49,7 @@ func NewDashaClient(cfg Config) (*DashaClient, error) {
 		return nil, fmt.Errorf("mcp: build dasha client: %w", err)
 	}
 
-	return &DashaClient{api: api, token: cfg.Token}, nil
+	return &DashaClient{api: api, token: cfg.Token, logger: cfg.Logger}, nil
 }
 
 // withToken returns a shallow copy bound to a specific token, sharing the
