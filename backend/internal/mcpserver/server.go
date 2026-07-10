@@ -14,46 +14,38 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// serverInstructions primes the model on how to drive the read-only Dasha tools
-// — sent to the client at initialization so it picks targets and tools correctly
-// without trial and error.
-const serverInstructions = `Dasha exposes read-only PostgreSQL fleet diagnostics. All tools are safe to call.
-
-Getting oriented:
-- Call list_clusters first to get cluster and instance (host) names, or fleet_health for a worst-first overview of the whole fleet.
-- Most tools require cluster + instance; query/index/table/lock tools also require database.
-
-Investigating:
-- For a guided workflow prefer the prompts: diagnose_cluster, explain_health_score, investigate_slow_queries, find_index_opportunities, fleet_overview.
-- Typical chain: get_health_score -> get_health_recommendations -> (top_queries, blocked_queries, list_indexes, describe_table) to drill into the worst findings.
-- health_trend needs metrics-backed mode (a configured datasource); it returns an error otherwise.
-- query_compare needs snapshot IDs from list_snapshots.
-- search_logs works only on clusters with supports_logs=true (see list_clusters) and is rate-limited per user because every call reaches the Yandex Cloud API: combine all filters into one call, keep dedup on, and after a 429 wait ~30 seconds instead of retrying immediately.
-
-If a result is refused as too large, narrow it (one database, a smaller range, or a more specific tool).`
-
 // NewMCPServer builds the MCP server with the read-only Dasha tools registered.
 // Output type 'any' is used for every tool so the handler fully controls the
 // (compact) text content; the input schema is still auto-derived from the typed
-// args via json/jsonschema struct tags.
-func NewMCPServer(client *DashaClient, version string) *mcp.Server {
-	return newServer(client, version, nil)
+// args via json/jsonschema struct tags. lang selects the knowledge-base
+// language ("en"/"ru"; unknown values fall back to "en").
+func NewMCPServer(client *DashaClient, version, lang string) *mcp.Server {
+	return newServer(client, version, lang, nil)
 }
 
 // newServer builds the server with shared options. cache is nil for stdio (one
 // server for the process) or a shared *mcp.SchemaCache for HTTP (a server per
-// token), where it avoids re-deriving every tool's schema by reflection.
-func newServer(client *DashaClient, version string, cache *mcp.SchemaCache) *mcp.Server {
+// token), where it avoids re-deriving every tool's schema by reflection. The
+// instructions, prompt playbooks and knowledge-base resources come in lang
+// ("en"/"ru"; unknown falls back to "en").
+func newServer(client *DashaClient, version, lang string, cache *mcp.SchemaCache) *mcp.Server {
+	if !validLang(lang) {
+		lang = kbDefaultLang
+	}
+
+	t := textsFor(lang)
+
 	s := mcp.NewServer(&mcp.Implementation{ //nolint:exhaustruct
 		Name:    "dasha-mcp",
 		Title:   "Dasha PostgreSQL diagnostics",
 		Version: version,
 	}, &mcp.ServerOptions{ //nolint:exhaustruct
-		Instructions: serverInstructions,
+		Instructions: t.instructions,
 		SchemaCache:  cache,
 	})
 	registerTools(s, client)
-	registerPrompts(s)
+	registerPrompts(s, t)
+	registerResources(s, lang)
 
 	return s
 }
@@ -737,112 +729,4 @@ func sectionsResult(out map[string]any) (*mcp.CallToolResult, any, error) {
 	}
 
 	return jsonResult(out, nil)
-}
-
-// reqArg ("required") and optArg helpers read prompt arguments.
-func arg(req *mcp.GetPromptRequest, key string) string {
-	if req.Params == nil {
-		return ""
-	}
-
-	return req.Params.Arguments[key]
-}
-
-func target(req *mcp.GetPromptRequest) (cluster, instance string) {
-	return arg(req, "cluster"), arg(req, "instance")
-}
-
-func dbSuffix(db string) string {
-	if db != "" {
-		return " (database " + db + ")"
-	}
-
-	return ""
-}
-
-// userPrompt wraps an instruction as a single user message — a conversation seed
-// that tells the model which tools to call and in what order.
-func userPrompt(desc, text string) (*mcp.GetPromptResult, error) {
-	return &mcp.GetPromptResult{
-		Description: desc,
-		Messages: []*mcp.PromptMessage{
-			{Role: "user", Content: &mcp.TextContent{Text: text}},
-		},
-	}, nil
-}
-
-func clusterInstanceArgs() []*mcp.PromptArgument {
-	return []*mcp.PromptArgument{
-		{Name: "cluster", Description: "Dasha cluster name", Required: true},
-		{Name: "instance", Description: "Dasha instance / host name", Required: true},
-	}
-}
-
-func registerPrompts(s *mcp.Server) {
-	s.AddPrompt(&mcp.Prompt{
-		Name:        "diagnose_cluster",
-		Description: "Diagnose why a PostgreSQL instance is unhealthy and propose fixes.",
-		Arguments:   clusterInstanceArgs(),
-	}, func(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
-		cluster, instance := target(req)
-
-		return userPrompt("Cluster diagnosis", fmt.Sprintf(
-			"Diagnose the health of cluster %q instance %q. Steps: (1) call get_health_score; "+
-				"(2) call get_health_recommendations; (3) if performance or locks look bad, also call "+
-				"top_queries (by=time) and blocked_queries. Then summarise the root cause(s) and concrete "+
-				"fixes, prioritising HIGH-severity findings.", cluster, instance))
-	})
-
-	s.AddPrompt(&mcp.Prompt{
-		Name:        "explain_health_score",
-		Description: "Explain an instance's health score and its recommendations.",
-		Arguments: append(clusterInstanceArgs(),
-			&mcp.PromptArgument{Name: "database", Description: "Optional: per-database scope"}),
-	}, func(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
-		cluster, instance := target(req)
-
-		return userPrompt("Health score explanation", fmt.Sprintf(
-			"Explain the health score of cluster %q instance %q%s. Call get_health_score and "+
-				"get_health_recommendations, then explain the overall number, which categories drag it "+
-				"down, any critical-floor conditions, and what each recommendation means.",
-			cluster, instance, dbSuffix(arg(req, "database"))))
-	})
-
-	s.AddPrompt(&mcp.Prompt{
-		Name:        "find_index_opportunities",
-		Description: "Find missing/unused indexes in a database and tie them to slow queries.",
-		Arguments: append(clusterInstanceArgs(),
-			&mcp.PromptArgument{Name: "database", Description: "Database to inspect", Required: true}),
-	}, func(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
-		cluster, instance := target(req)
-
-		return userPrompt("Index opportunities", fmt.Sprintf(
-			"Find indexing opportunities in database %q of cluster %q instance %q. Call list_indexes with "+
-				"kind=missing and kind=unused, and top_queries (by=time). Recommend indexes to add and "+
-				"unused indexes to drop, tying them to the slow queries.",
-			arg(req, "database"), cluster, instance))
-	})
-
-	s.AddPrompt(&mcp.Prompt{
-		Name:        "investigate_slow_queries",
-		Description: "Investigate slow / stuck / blocked queries on an instance.",
-		Arguments: append(clusterInstanceArgs(),
-			&mcp.PromptArgument{Name: "database", Description: "Database for running/blocked queries", Required: true}),
-	}, func(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
-		cluster, instance := target(req)
-
-		return userPrompt("Slow query investigation", fmt.Sprintf(
-			"Investigate slow queries on cluster %q instance %q (database %q). Call top_queries (by=time), "+
-				"running_queries, and blocked_queries. Identify the heaviest statements, anything stuck or "+
-				"blocked, and suggest next steps.", cluster, instance, arg(req, "database")))
-	})
-
-	s.AddPrompt(&mcp.Prompt{
-		Name:        "fleet_overview",
-		Description: "Summarise health across the whole fleet and surface the worst instances.",
-	}, func(_ context.Context, _ *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
-		return userPrompt("Fleet overview",
-			"Give a fleet health overview. Call list_clusters, then get_health_score for each cluster's "+
-				"hosts, and report the worst-scoring clusters/instances with their main issues.")
-	})
 }

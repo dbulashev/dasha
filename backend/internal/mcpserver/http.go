@@ -26,7 +26,7 @@ const maxCachedServers = 1024
 // schemas are derived once per identity, not per request). The cache is keyed by
 // a hash of the token so raw secrets are not retained as map keys, and bounded
 // (LRU) so it cannot grow without limit.
-func HTTPHandler(base *DashaClient, version string) http.Handler {
+func HTTPHandler(base *DashaClient, version, lang string) http.Handler {
 	// One schema cache shared across all per-token servers: the tool input
 	// schemas are identical for every identity, so derive them once by reflection
 	// rather than per token.
@@ -37,7 +37,7 @@ func HTTPHandler(base *DashaClient, version string) http.Handler {
 		token := tokenFromRequest(req)
 
 		return cache.get(tokenCacheKey(token), func() *mcp.Server {
-			return newServer(base.withToken(token), version, schemas)
+			return newServer(base.withToken(token), version, lang, schemas)
 		})
 	}, &mcp.StreamableHTTPOptions{Stateless: true}) //nolint:exhaustruct
 }

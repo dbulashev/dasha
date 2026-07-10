@@ -20,12 +20,20 @@ type Config struct {
 
 	// Timeout bounds each outbound Dasha API call.
 	Timeout time.Duration
+
+	// Lang selects the language of the knowledge-base resources ("en" or "ru").
+	// Tool schemas and results stay English regardless.
+	Lang string
 }
 
 // withDefaults fills unset fields with safe defaults.
 func (c Config) withDefaults() Config {
 	if c.Timeout <= 0 {
 		c.Timeout = 15 * time.Second
+	}
+
+	if c.Lang == "" {
+		c.Lang = kbDefaultLang
 	}
 
 	return c

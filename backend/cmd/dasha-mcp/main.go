@@ -30,12 +30,27 @@ func main() {
 	dashaURL := flag.String("dasha-url", "http://localhost:8000", "Dasha API base URL")
 	httpAddr := flag.String("http", "", "listen address for HTTP/SSE transport (e.g. :8765); empty = stdio")
 	timeout := flag.Duration("timeout", 15*time.Second, "per-request timeout for Dasha API calls")
+	langFlag := flag.String("lang", "", "knowledge-base language: en|ru (default: $DASHA_MCP_LANG or en)")
 	flag.Parse()
+
+	lang := *langFlag
+	if lang == "" {
+		lang = os.Getenv("DASHA_MCP_LANG")
+	}
+
+	if lang == "" {
+		lang = "en"
+	}
+
+	if lang != "en" && lang != "ru" {
+		log.Fatalf("dasha-mcp: unsupported lang %q (want en or ru)", lang)
+	}
 
 	client, err := mcpserver.NewDashaClient(mcpserver.Config{
 		DashaURL: *dashaURL,
 		Token:    os.Getenv("DASHA_MCP_TOKEN"),
 		Timeout:  *timeout,
+		Lang:     lang,
 	})
 	if err != nil {
 		log.Fatalf("dasha-mcp: %v", err)
@@ -48,7 +63,7 @@ func main() {
 
 		srv := &http.Server{ //nolint:exhaustruct
 			Addr:              *httpAddr,
-			Handler:           mcpserver.HTTPHandler(client, version()),
+			Handler:           mcpserver.HTTPHandler(client, version(), lang),
 			ReadHeaderTimeout: 10 * time.Second,
 		}
 
@@ -60,7 +75,7 @@ func main() {
 	}
 
 	// stdio: single identity from DASHA_MCP_TOKEN.
-	server := mcpserver.NewMCPServer(client, version())
+	server := mcpserver.NewMCPServer(client, version(), lang)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()

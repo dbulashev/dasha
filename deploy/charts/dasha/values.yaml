@@ -328,6 +328,9 @@ mcp:
   dashaUrl: ""
   # -- Per-request timeout for outbound Dasha API calls (Go duration).
   timeout: 30s
+  # -- Language of the knowledge-base resources, playbook prompts and
+  # instructions: en | ru. Empty = en. Tool names/schemas/results stay English.
+  lang: ""
   # -- Optional shared fallback token (DASHA_MCP_TOKEN) for clients that cannot
   # send per-request auth headers. Leave unset to keep strict per-user passthrough.
   token:

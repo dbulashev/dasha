@@ -60,6 +60,10 @@ spec:
             - {{ include "dasha.mcpDashaURL" . | quote }}
             - --timeout
             - {{ .Values.mcp.timeout | quote }}
+            {{- with .Values.mcp.lang }}
+            - --lang
+            - {{ . | quote }}
+            {{- end }}
           {{- if .Values.mcp.token.existingSecret }}
           env:
             # Optional shared fallback token. HTTP mode normally relies on per-user
