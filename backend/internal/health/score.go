@@ -374,21 +374,6 @@ func applyInstanceAdjustments(categories []CategoryResult, m RawMetrics) {
 		setDetail(categories, CategoryStorage, "disk_used_ratio", math.Round(m.DiskUsedRatio*1000)/1000)
 	}
 
-	// Storage: host disk usage (used/total). Free space running low hurts well
-	// before it is critical (the floor handles >=90%). Metrics-only ⇒ neutral at 0.
-	switch {
-	case m.DiskUsedRatio >= diskUsedCritical:
-		addPenalty(categories, "storage", 80)
-	case m.DiskUsedRatio >= 0.80:
-		addPenalty(categories, "storage", 30)
-	case m.DiskUsedRatio >= 0.70:
-		addPenalty(categories, "storage", 10)
-	}
-
-	if m.DiskUsedRatio > 0 {
-		setDetail(categories, "storage", "disk_used_ratio", math.Round(m.DiskUsedRatio*1000)/1000)
-	}
-
 	// WAL & checkpoint: wal_level misconfiguration. wal_level is a string and the
 	// Details map is float64-only, so we flag the offending condition by presence
 	// (value 1) and let the frontend render it to text — this keeps a penalised
@@ -434,39 +419,6 @@ func applyInstanceAdjustments(categories []CategoryResult, m RawMetrics) {
 		}
 
 		setDetail(categories, CategoryConnections, "pooler_saturation", math.Round(sat*1000)/1000)
-	}
-
-	// Connections: host CPU saturation (load / vCPU) and pooler saturation —
-	// metrics-only signals (zero/absent under the SQL snapshot ⇒ neutral there).
-	// Better signals of real pressure than total/max_connections on pooled setups.
-	if m.NumVCPU > 0 {
-		sat := m.LoadAvg15 / m.NumVCPU
-
-		switch {
-		case sat > 4:
-			addPenalty(categories, "connections", 60)
-		case sat > 2:
-			addPenalty(categories, "connections", 30)
-		case sat > 1:
-			addPenalty(categories, "connections", 10)
-		}
-
-		setDetail(categories, "connections", "host_load_per_vcpu", math.Round(sat*100)/100)
-	}
-
-	if m.PoolerPoolSize > 0 {
-		sat := m.PoolerServerConns / m.PoolerPoolSize
-
-		switch {
-		case sat > 0.8:
-			addPenalty(categories, "connections", 30)
-		case sat > 0.6:
-			addPenalty(categories, "connections", 15)
-		case sat > 0.5:
-			addPenalty(categories, "connections", 5)
-		}
-
-		setDetail(categories, "connections", "pooler_saturation", math.Round(sat*1000)/1000)
 	}
 
 	// Round once, after every addition, to keep penalties at one decimal place

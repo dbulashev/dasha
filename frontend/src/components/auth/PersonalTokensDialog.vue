@@ -59,6 +59,10 @@ async function load() {
 
 async function create() {
   if (!name.value.trim()) return
+  if (expiresInDays.value != null && expiresInDays.value < 0) {
+    error.value = t('pat.expiresNegative')
+    return
+  }
   creating.value = true
   error.value = null
   try {

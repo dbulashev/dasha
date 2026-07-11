@@ -40,6 +40,9 @@ func Generate() (secret string, hash []byte, display string, err error) {
 }
 
 // Hash returns the SHA-256 of a presented secret, for storage and lookup.
+// A fast hash is deliberate: the secret is 256 bits of crypto/rand entropy
+// (never a user-chosen password), so slow KDFs like bcrypt would add cost
+// per auth without adding brute-force resistance.
 func Hash(secret string) []byte {
 	h := sha256.Sum256([]byte(secret))
 

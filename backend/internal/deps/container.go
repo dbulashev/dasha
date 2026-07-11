@@ -323,15 +323,30 @@ func (r *patResolver) storeNegative(key string) {
 }
 
 // evictIfFull drops expired entries once the cache reaches its cap, bounding
-// memory without a background sweeper. Caller must hold r.mu.
+// memory without a background sweeper. When nothing has expired yet, one
+// arbitrary entry is dropped instead (map order ≈ random eviction), so the
+// insertion following this call can never grow the cache past its cap.
+// Caller must hold r.mu.
 func (r *patResolver) evictIfFull(now time.Time) {
 	if len(r.cache) < patMaxCacheSize {
 		return
 	}
 
+	removed := false
+
 	for k, e := range r.cache {
 		if now.After(e.expiresAt) {
 			delete(r.cache, k)
+
+			removed = true
+		}
+	}
+
+	if !removed {
+		for k := range r.cache {
+			delete(r.cache, k)
+
+			break
 		}
 	}
 }

@@ -71,6 +71,7 @@
     "name": "Name",
     "role": "Rolle",
     "expiresInDays": "Gültigkeit (Tage)",
+    "expiresNegative": "Die Gültigkeitsdauer darf nicht negativ sein",
     "never": "unbegrenzt",
     "create": "Erstellen",
     "revoke": "Widerrufen",
@@ -1040,7 +1041,7 @@
         "latency_regression": "×1.5 / ×3 / ×6 vs. Baseline",
         "seq_scan_regression": "×1.5 / ×3 / ×6 vs. Baseline",
         "host_disk_space": "≥70 / ≥80 / ≥90 %"
-}
+      }
     },
     "databases": {
       "title": "Datenbanken",

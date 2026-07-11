@@ -160,6 +160,7 @@ CREATE TABLE IF NOT EXISTS api_tokens (
     revoked_at   timestamptz
 )`
 
+	// #nosec G101 -- SQL DDL statement (the const name merely contains "Tokens"), not a credential
 	createAPITokensSubjectIdxSQL = `
 CREATE INDEX IF NOT EXISTS idx_api_tokens_subject ON api_tokens (subject)`
 )

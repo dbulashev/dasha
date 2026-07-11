@@ -9,12 +9,18 @@ const { t } = useI18n()
 const authStore = useAuthStore()
 
 const tokensOpen = ref(false)
+const menuOpen = ref(false)
+
+function openTokens() {
+  menuOpen.value = false
+  tokensOpen.value = true
+}
 </script>
 
 <template>
   <template v-if="authStore.mode === AuthInfoMode.oidc">
     <template v-if="authStore.user">
-      <v-menu location="bottom end" :close-on-content-click="false">
+      <v-menu v-model="menuOpen" location="bottom end" :close-on-content-click="false">
         <template #activator="{ props }">
           <v-btn v-bind="props" icon variant="text" class="ml-1">
             <v-icon>mdi-account-circle</v-icon>
@@ -36,7 +42,7 @@ const tokensOpen = ref(false)
               block
               variant="text"
               prepend-icon="mdi-key-chain-variant"
-              @click="tokensOpen = true"
+              @click="openTokens"
             >
               {{ t('pat.menuItem') }}
             </v-btn>
