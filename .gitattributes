@@ -1,8 +1,10 @@
 * text=auto eol=lf
 
-# Generated code: hide content from `git diff` (-diff → "Bin") and collapse in
-# GitHub PR review (linguist-generated). Keep paths specific — src/api/customFetch.ts
-# is hand-written.
-/backend/gen/** -diff linguist-generated=true
-/frontend/src/api/gen/** -diff linguist-generated=true
-/frontend/src/api/models/** -diff linguist-generated=true
+# Generated code: treat as binary (`binary` = -diff -merge -text) so GitHub renders
+# it as "Binary file not shown" and excludes it from the PR's +/- line count, and
+# collapse in review + drop from language stats (linguist-generated). `-diff` alone
+# still counts on GitHub; only the binary/-text treatment removes it. Keep paths
+# specific — src/api/customFetch.ts is hand-written.
+/backend/gen/** binary linguist-generated=true
+/frontend/src/api/gen/** binary linguist-generated=true
+/frontend/src/api/models/** binary linguist-generated=true

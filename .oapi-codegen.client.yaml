@@ -1,0 +1,5 @@
+package: apiclient
+generate:
+  client: true
+  models: true
+output: backend/gen/apiclient/client.gen.go

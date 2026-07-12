@@ -17,6 +17,61 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthInfo'
+  /api/auth/tokens:
+    get:
+      operationId: listPersonalTokens
+      description: >-
+        List the authenticated caller's own personal access tokens. Secret
+        values are never returned; only a short prefix for identification.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PersonalAccessToken'
+    post:
+      operationId: createPersonalToken
+      description: >-
+        Mint a personal access token for the authenticated caller. The full
+        secret is returned ONCE in this response and is never retrievable again.
+        The requested role cannot exceed the caller's role and defaults to
+        viewer. Minting is allowed only from an interactive session, not from a
+        personal access token (anti-chaining).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PersonalAccessTokenCreate'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalAccessTokenCreated'
+        '400':
+          description: Invalid request
+        '403':
+          description: Requested role exceeds the caller's role, or minting is not allowed for this auth method
+  /api/auth/tokens/{id}:
+    delete:
+      operationId: revokePersonalToken
+      description: Revoke one of the authenticated caller's own personal access tokens.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Revoked
+        '404':
+          $ref: '#/components/responses/NotFound'
   /api/clusters:
     get:
       operationId: getClusters
@@ -2147,6 +2202,82 @@ components:
       required: true
 
   schemas:
+    PersonalAccessTokenCreate:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: Human-readable label for the token.
+        role:
+          type: string
+          enum: [viewer, admin]
+          description: Token role; must not exceed the caller's role. Defaults to viewer.
+        expires_in_days:
+          type: integer
+          minimum: 0
+          maximum: 3650
+          description: Optional lifetime in days (max 3650 = 10 years); omitted or 0 means no expiry.
+    PersonalAccessToken:
+      type: object
+      required:
+        - id
+        - name
+        - prefix
+        - role
+        - created_at
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        prefix:
+          type: string
+          description: Token prefix shown for identification (not the secret).
+        role:
+          type: string
+          enum: [viewer, admin]
+        created_at:
+          type: string
+          format: date-time
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+    PersonalAccessTokenCreated:
+      type: object
+      required:
+        - id
+        - name
+        - prefix
+        - role
+        - token
+        - created_at
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        prefix:
+          type: string
+        role:
+          type: string
+          enum: [viewer, admin]
+        token:
+          type: string
+          description: The full secret. Returned only once, at creation.
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
     AuthInfo:
       type: object
       required:
@@ -2159,6 +2290,9 @@ components:
           type: string
         enable_query_stats_reset:
           type: boolean
+        pat_enabled:
+          type: boolean
+          description: True when personal access tokens can be minted (snapshot storage is configured).
     User:
       type: object
       properties:

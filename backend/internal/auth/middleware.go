@@ -16,16 +16,43 @@ func NewAuthMiddleware(
 	cfg config.AuthConfig,
 	provider *OIDCProvider,
 	sm *SessionManager,
+	resolver PATResolver,
 	logger *zap.Logger,
 ) echo.MiddlewareFunc {
 	switch cfg.Mode {
 	case config.AuthModeToken:
-		return tokenMiddleware(cfg.Tokens, logger)
+		return tokenMiddleware(cfg.Tokens, resolver, logger)
 	case config.AuthModeOIDC:
-		return oidcMiddleware(cfg.Tokens, provider, sm, logger)
+		return oidcMiddleware(cfg.Tokens, provider, sm, resolver, logger)
 	default:
 		return noopMiddleware()
 	}
+}
+
+// resolveAPIKey authenticates the X-API-Key header: static config tokens first
+// (constant-time), then a personal access token via the resolver. Returns nil
+// when the header is absent or matches nothing.
+func resolveAPIKey(c echo.Context, tokens []config.AuthToken, resolver PATResolver, logger *zap.Logger) *UserContext {
+	apiKey := c.Request().Header.Get("X-API-Key")
+	if apiKey == "" {
+		return nil
+	}
+
+	if user := validateToken(tokens, apiKey); user != nil {
+		logger.Debug("authenticated via API key", zap.String("token_name", user.Name))
+
+		return user
+	}
+
+	if resolver != nil {
+		if user, ok := resolver.ResolveToken(c.Request().Context(), apiKey); ok {
+			logger.Debug("authenticated via personal access token", zap.String("subject", user.Name))
+
+			return user
+		}
+	}
+
+	return nil
 }
 
 func noopMiddleware() echo.MiddlewareFunc {
@@ -50,20 +77,14 @@ func requireHTTPSMiddleware(enabled bool) echo.MiddlewareFunc {
 	}
 }
 
-func tokenMiddleware(tokens []config.AuthToken, logger *zap.Logger) echo.MiddlewareFunc {
+func tokenMiddleware(tokens []config.AuthToken, resolver PATResolver, logger *zap.Logger) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			apiKey := c.Request().Header.Get("X-API-Key")
-			if apiKey == "" {
-				return errUnauthorized
-			}
-
-			user := validateToken(tokens, apiKey)
+			user := resolveAPIKey(c, tokens, resolver, logger)
 			if user == nil {
 				return errUnauthorized
 			}
 
-			logger.Debug("authenticated via API key", zap.String("token_name", user.Name))
 			SetUser(c, user)
 
 			return next(c)
@@ -75,17 +96,17 @@ func oidcMiddleware(
 	tokens []config.AuthToken,
 	provider *OIDCProvider,
 	sm *SessionManager,
+	resolver PATResolver,
 	logger *zap.Logger,
 ) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			if apiKey := c.Request().Header.Get("X-API-Key"); apiKey != "" {
-				user := validateToken(tokens, apiKey)
+			if c.Request().Header.Get("X-API-Key") != "" {
+				user := resolveAPIKey(c, tokens, resolver, logger)
 				if user == nil {
 					return errUnauthorized
 				}
 
-				logger.Debug("authenticated via API key", zap.String("token_name", user.Name))
 				SetUser(c, user)
 
 				return next(c)

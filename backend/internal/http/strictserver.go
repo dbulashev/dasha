@@ -45,6 +45,9 @@ func New(
 	casbinMW echo.MiddlewareFunc,
 	logger *zap.Logger,
 ) *API {
+	// The auth middleware already bridges the user into the request's
+	// context.Context (auth.SetUser), so strict handlers read identity via
+	// auth.UserFromContext without an extra strict middleware here.
 	ssi := serverhttp.NewStrictHandler(si, middlewares)
 
 	e := echo.New()

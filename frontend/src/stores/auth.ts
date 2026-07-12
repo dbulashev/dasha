@@ -17,6 +17,7 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref<UserInfo | null>(null)
   const initialized = ref(false)
   const enableQueryStatsReset = ref(false)
+  const patEnabled = ref(false)
 
   const isAuthenticated = computed(() => mode.value === AuthInfoMode.none || user.value !== null)
   const requiresLogin = computed(() => mode.value !== AuthInfoMode.none && !user.value)
@@ -42,6 +43,7 @@ export const useAuthStore = defineStore('auth', () => {
       mode.value = res.data.mode
       oidcLoginUrl.value = res.data.oidc_login_url ?? null
       enableQueryStatsReset.value = res.data.enable_query_stats_reset ?? false
+      patEnabled.value = res.data.pat_enabled ?? false
     } catch {
       mode.value = AuthInfoMode.none
     }
@@ -96,5 +98,5 @@ export const useAuthStore = defineStore('auth', () => {
     window.location.href = '/'
   }
 
-  return { mode, oidcLoginUrl, user, initialized, isAuthenticated, requiresLogin, isAdmin, enableQueryStatsReset, init, doLoginRedirect, consumeReturnUrl, logout }
+  return { mode, oidcLoginUrl, user, initialized, isAuthenticated, requiresLogin, isAdmin, enableQueryStatsReset, patEnabled, init, doLoginRedirect, consumeReturnUrl, logout }
 })

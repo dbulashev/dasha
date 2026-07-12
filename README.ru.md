@@ -52,6 +52,7 @@
 **Соединения и блокировки**
 - Разбивка по состояниям и источникам соединений
 - Детали активных сессий (`pg_stat_activity`)
+- Wait events с группировкой по типу/событию
 - Визуализация дерева блокировок
 
 **Отслеживание прогресса**
@@ -64,6 +65,19 @@
 - Анализ соотношения чекпоинтов (`checkpoint_req` vs `checkpoint_timed`)
 - Обзор конфигурации автовакуума и автоанализа
 
+**Health Score**
+- Композитная оценка инстанса 0–100 по восьми категориям (соединения, производительность, хранилище, репликация, обслуживание, горизонт, WAL/чекпоинты, блокировки) с непрерывными штрафными функциями — отдельная страница `/health-score` плюс индикатор на главной
+- Параллельный движок правил с приоритизированными рекомендациями (severity, значения метрик, drill-down по базам), согласованными с оценкой
+- Опциональный **режим на метриках**: при настроенном источнике Prometheus/VictoriaMetrics (`health_score.metrics`) оценка, рекомендации и тренд с сезонным базлайном и детекцией провалов считаются по временным рядам (pgSCV, Yandex MDB, pgbouncer, метрики хоста) вместо точечного SQL; SQL-снимок остаётся fallback'ом без настройки
+- Детали модели скоринга: [README-health-score.ru.md](README-health-score.ru.md)
+
+**Поиск по логам (Yandex Cloud)**
+- Поиск по логам PostgreSQL и пулера соединений (Odyssey) кластеров из Yandex MDB discovery через MDB API — отдельная страница `/logs`, без агентов и пересылки логов
+- Нативные фильтры severity/host плюс фильтрация на стороне Dasha: подстроки сообщения (AND), исключения в стиле `grep -v`, фильтры по базе/пользователю; курсорная пагинация и частичные результаты при таймауте
+- Опциональная дедупликация группирует почти одинаковые сообщения по маскированному шаблону (плейсхолдеры `<*>`) с количеством и first/last seen
+- Гистограмма частоты (время × severity) с зумом по клику/выделению, пресеты в один клик (дедлоки, автовакуум, чекпоинты, …), фильтры в URL для шаринга, обмен периодом с Grafana через буфер обмена
+- Per-user rate limiting защищает квоту Yandex Cloud API (`log_search.rate_limit`, отдельный лимит для админов)
+
 **Аутентификация и авторизация**
 - Три режима: `none` (открытый), `token` (статические API-ключи), `oidc` (OpenID Connect)
 - OIDC: BFF-паттерн с зашифрованными session cookies (Keycloak, Google, любой OIDC-провайдер)
@@ -73,12 +87,14 @@
 - Безопасное управление сессиями: HttpOnly/Secure/SameSite cookies, шифрование AES-256, подпись HMAC-SHA256
 - CSRF-защита через OAuth2 state с constant-time валидацией
 - Отзыв refresh token при logout (RFC 7009, при поддержке провайдером)
+- Персональные токены (PAT): API-токены, выпускаемые самим пользователем для скриптов и MCP-коннектора — хранятся хэшированными, least-privilege, одноразовый показ секрета, отзыв и опциональный срок действия
 
 **Инфраструктура**
 - Поддержка множества кластеров с выбором хоста/базы для каждого
 - Сервис-дискавери Yandex Managed Service for PostgreSQL
 - Отображение роли хоста (primary / replica)
 - Опциональная БД хранилища снимков (секционированные таблицы, CLI `dasha migrate`)
+- [MCP-коннектор](#mcp-коннектор-dasha-mcp) (`dasha-mcp`): read-only MCP-сервер с диагностикой флота для AI-ассистентов (22 tools, 5 prompts)
 - Интернационализация (русский, немецкий)
 
 ## Архитектура
@@ -152,6 +168,23 @@ discovery:
         - name: "prod-.*"       # фильтр по regex
           exclude_name: "test"
           exclude_db: "system_db"
+```
+
+#### Поиск по логам (опционально)
+
+Для кластеров из Yandex MDB discovery страница `/logs` работает из коробки (переиспользуется ключ сервисного аккаунта discovery). Глобальный блок `log_search` только настраивает лимиты:
+
+```yaml
+log_search:
+  max_scan: 5000          # максимум просканированных записей за поиск
+  max_page_size: 1000     # верхняя граница page_size
+  timeout_seconds: 30     # таймаут чтения из Yandex API
+  rate_limit:             # на пользователя (на IP для анонимных); rps <= 0 отключает
+    requests_per_second: 0.0333   # 1 запрос в 30с
+    burst: 10
+  admin_rate_limit:
+    requests_per_second: 0.2      # 1 запрос в 5с
+    burst: 20
 ```
 
 #### Аутентификация (опционально)
@@ -242,6 +275,25 @@ dasha autosnapshot
 
 Ретеншен удаляет старые «тройки дней», пока общий размер превышает `retention_bytes`, уважая минимальный порог `retention_min_days`.
 
+#### Персональные API-токены (опционально)
+
+Залогиненный пользователь может выпускать **персональные API-токены (PAT)** — bearer-секреты, передаваемые в заголовке `X-API-Key`, — чтобы не-браузерные клиенты (`dasha-mcp`, скрипты) работали с его личностью и ролью (RBAC сохраняется). Требуется хранилище снимков: токены хранятся в виде хеша в `api_tokens`, поэтому сначала выполните `dasha migrate`. Режим auth — `token` или `oidc` (не `none`).
+
+- **Через UI** (OIDC): меню пользователя → *Персональные API-токены* → создать (имя, роль ≤ своей, опциональный срок). Полный секрет показывается **один раз**.
+- **Через API**: выпуск из интерактивной личности (OIDC-сессия или статический config-токен — *не* из другого PAT):
+
+  ```bash
+  curl -sX POST http://localhost:8000/api/auth/tokens \
+    -H "X-API-Key: <статический-config-токен>" \
+    -H "Content-Type: application/json" \
+    -d '{"name":"mcp","role":"viewer"}'
+  # → { "token": "dasha_pat_…", "prefix": "dasha_pat_xxxxxx", ... }   (секрет — один раз)
+
+  curl -H "X-API-Key: dasha_pat_…" http://localhost:8000/api/clusters   # использование
+  ```
+
+Список своих токенов — `GET /api/auth/tokens` (без секретов); отзыв — `DELETE /api/auth/tokens/{id}` (немедленно). Запрашиваемая роль не выше своей (по умолчанию `viewer`); `expires_in_days` опционально (0 / нет = бессрочно).
+
 ### Локальный запуск
 
 ```bash
@@ -271,6 +323,109 @@ make demo-lab-down     # Остановить и очистить
 - **БД хранилища**: хранилище снимков с автоматической миграцией при запуске
 - **Генератор нагрузки**: непрерывная фоновая нагрузка для реалистичных данных
 
+## MCP-коннектор (dasha-mcp)
+
+`dasha-mcp` — отдельный **read-only** [MCP](https://modelcontextprotocol.io)-сервер поверх Dasha API. Позволяет AI-ассистентам запрашивать диагностику флота PostgreSQL как tools/prompts, прокидывая токен каждого вызывающего в Dasha (RBAC сохраняется). Подходит любой MCP-совместимый клиент — Claude Desktop, Claude Code, Cursor, Continue, **opencode** и т.д.
+
+- **Tools (22):** `list_clusters`, `fleet_health`, `get_instance_info`, `get_health_score`, `get_health_recommendations`, `health_trend`, `health_databases`, `top_queries` (по времени/WAL), `query_report`, `list_snapshots`, `query_compare`, `running_queries`, `blocked_queries`, `list_indexes` (missing/unused/usage), `top_tables`, `describe_table`, `get_replication`, `settings_analyze`, `wait_events`, `connections`, `vacuum_danger`, `search_logs` (логи PostgreSQL/пулера из Yandex Cloud; только для кластеров из Yandex MDB discovery, с per-user rate limit). Все помечены **read-only** и closed-world, чтобы совместимые клиенты показывали (и авто-аппрувили) их как безопасные. Сервер также отдаёт **инструкции** по использованию, которые подсказывают модели, какой tool/prompt выбрать.
+- **Prompts (5):** `diagnose_cluster`, `explain_health_score`, `find_index_opportunities`, `investigate_slow_queries`, `fleet_overview` — линейные плейбуки: нумерованные шаги, один tool на шаг, с критерием трактовки на каждом (рассчитаны на модели без глубокой экспертизы PostgreSQL; сильные модели просто проходят их быстрее).
+- **Resources (3):** встроенная база знаний, которую модель читает по запросу — `dasha://kb/health-rules` (каждое правило health score с порогами LOW/MED/HIGH и первыми действиями), `dasha://kb/wait-events` (глоссарий wait events), `dasha://kb/workflow` (сценарии «жалоба → цепочка инструментов» и правила бережности к API).
+- **Язык:** `--lang en|ru` (или `DASHA_MCP_LANG`) выбирает язык базы знаний, плейбуков и инструкций; имена tools, схемы и результаты остаются английскими.
+
+**Предусловие:** токен Dasha API — [персональный токен](#персональные-api-токены-опционально) (`dasha_pat_…`) или статический config-токен. Он определяет роль (`viewer` достаточно).
+
+### Сборка
+
+```bash
+cd backend && go build -o dasha-mcp ./cmd/dasha-mcp
+# либо образ:
+docker build -f deploy/images/Dockerfile.mcp -t dasha-mcp .
+```
+
+### stdio (локально — Claude Desktop / Claude Code / opencode / Cursor)
+
+Клиент сам запускает бинарь и общается через stdin/stdout; токен — переменная окружения `DASHA_MCP_TOKEN`.
+
+**Claude Desktop** (`claude_desktop_config.json`) или **Cursor** (`.cursor/mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "dasha": {
+      "command": "/path/to/dasha-mcp",
+      "args": ["--dasha-url", "http://localhost:8000"],
+      "env": { "DASHA_MCP_TOKEN": "dasha_pat_…" }
+    }
+  }
+}
+```
+
+**Claude Code:**
+
+```bash
+claude mcp add dasha --env DASHA_MCP_TOKEN=dasha_pat_… -- /path/to/dasha-mcp --dasha-url http://localhost:8000
+```
+
+**opencode** (`opencode.json` или `~/.config/opencode/opencode.json`):
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "dasha": {
+      "type": "local",
+      "command": ["/path/to/dasha-mcp", "--dasha-url", "http://localhost:8000"],
+      "enabled": true,
+      "environment": { "DASHA_MCP_TOKEN": "dasha_pat_…" }
+    }
+  }
+}
+```
+
+### HTTP/SSE (общий / мультипользовательский)
+
+Запускается как сервис; **каждый запрос несёт свой токен** (общего серверного токена нет), поэтому RBAC сохраняется поперсонально:
+
+```bash
+dasha-mcp --http :8765 --dasha-url http://dasha-backend:8000
+# контейнер:
+docker run -p 8765:8765 dasha-mcp --http :8765 --dasha-url http://dasha-backend:8000
+```
+
+Удалённый MCP-клиент указывает `http://<host>:8765` и шлёт токен в `Authorization: Bearer dasha_pat_…` (или `X-API-Key`). Например, **opencode**:
+
+```json
+{
+  "mcp": {
+    "dasha": {
+      "type": "remote",
+      "url": "http://localhost:8765",
+      "enabled": true,
+      "headers": { "Authorization": "Bearer dasha_pat_…" }
+    }
+  }
+}
+```
+
+Сервер read-only (мутирующих эндпоинтов нет) и работает под non-root. Хардненинг: размер ответа tool ограничен (слишком большой результат отклоняется с подсказкой сузить запрос, а не режется в невалидный JSON); кэш серверов по токену хэширован и ограничен; токены не логируются. В общем HTTP-развёртывании ставьте за TLS; rate-limit обеспечивает вышестоящий per-identity лимитер Dasha (каждый PAT — отдельная личность), поэтому он действует и через passthrough.
+
+### Kubernetes (Helm)
+
+В чарте есть опциональные, выключенные по умолчанию Deployment + Service для MCP (HTTP-режим). При включении сервер автоматически подключается к in-cluster бэкенду:
+
+```yaml
+# values.yaml
+mcp:
+  enabled: true
+  port: 8765
+  # dashaUrl: ""   # пусто = in-cluster Service {release}-backend
+  # token:         # опциональный общий fallback; не задавайте для строгого per-user passthrough
+  #   existingSecret: dasha-mcp-token
+  #   secretKey: token
+```
+
+Создаются `{release}-mcp` Deployment + `ClusterIP` Service на порту `8765`. Чтобы открыть наружу — поставьте перед Service свой Ingress/Gateway (TLS терминируется там), а клиенты шлют `Authorization: Bearer dasha_pat_…` в каждом запросе.
+
 ## Разработка
 
 ### Структура проекта
@@ -279,25 +434,32 @@ make demo-lab-down     # Остановить и очистить
 ├── doc/swagger.yaml              # Спецификация OpenAPI 3.0 (источник истины)
 ├── backend/
 │   ├── cmd/main.go               # Точка входа (Cobra CLI + Echo-сервер)
+│   ├── cmd/dasha-mcp/            # Точка входа MCP-сервера (stdio / HTTP)
 │   ├── gen/serverhttp/           # Сгенерированные серверные заглушки (oapi-codegen)
+│   ├── gen/apiclient/            # Сгенерированный API-клиент (oapi-codegen, для dasha-mcp)
 │   ├── internal/
 │   │   ├── auth/                 # Аутентификация, RBAC (Casbin), rate limiting
+│   │   ├── autosnapshot/         # Демон авто-снимков (триггеры, ретеншн, выбор лидера)
 │   │   ├── config/               # Типы конфигурации
 │   │   ├── deps/                 # DI-контейнер (samber/do)
 │   │   ├── discovery/            # Сервис-дискавери (Yandex MDB)
 │   │   ├── dto/                  # Структуры данных ответов
 │   │   ├── enums/                # Перечисления запросов (автогенерация)
-│   │   ├── http/                 # Обработчики (v1.go, strictserver.go)
+│   │   ├── health/               # Движок Health Score (штрафы, правила)
+│   │   ├── http/                 # Обработчики (v1_*.go, strictserver.go)
+│   │   ├── logs/                 # Поиск по логам Yandex Cloud (фильтры, дедуп, пагинация)
+│   │   ├── mcpserver/            # MCP-коннектор (tools, prompts, транспорты)
+│   │   ├── metrics/              # Health Score на метриках (PromQL-источник)
 │   │   ├── query/sql/            # SQL-шаблоны с версионными переопределениями
 │   │   ├── repository/           # Слой доступа к данным (pgx-пулы)
-│   │   ├── storage/              # Хранилище снимков (миграции, CRUD)
+│   │   ├── storage/              # Хранилище снимков (миграции, CRUD, PAT)
 │   │   └── testinfra/            # Инфраструктура тестов (testcontainers)
 │   └── dasha.yaml                # Пример конфигурации
 ├── frontend/
 │   ├── src/
 │   │   ├── api/gen/              # Сгенерированный API-клиент (orval)
 │   │   ├── api/models/           # Сгенерированные TypeScript-типы
-│   │   ├── views/                # Компоненты страниц (10 представлений)
+│   │   ├── views/                # Компоненты страниц (20 представлений)
 │   │   ├── components/           # Компоненты секций по доменам
 │   │   ├── stores/               # Pinia-хранилища (clusters, hosts, theme, auth)
 │   │   ├── composables/          # Vue composables
@@ -374,6 +536,7 @@ docker compose up -d
 |-------|----------|
 | `dbulashev/dasha-backend` | Go API-сервер |
 | `dbulashev/dasha-frontend` | Nginx + Vue SPA, проксирует `/api/` на бэкенд |
+| `dbulashev/dasha-mcp` | MCP-коннектор для AI-ассистентов (stdio / HTTP) |
 
 Фронтенд принимает переменную окружения `BACKEND_URL` (по умолчанию: `backend:8000`).
 
@@ -535,9 +698,10 @@ ingress:
 
 ## CI/CD
 
-- **CI** запускается при каждом push/PR в `main`: линтинг Go (revive + gosec), линтинг фронтенда (ESLint), юнит-тесты, интеграционные тесты (матрица PG 14–18), проверка сборки
-- **Релиз** запускается по тегу `v*`: проверяет прохождение CI, собирает мультиархитектурные Docker-образы с attestation provenance/SBOM, сканирует Trivy, публикует Helm-чарт в GHCR
-- **Dependabot** автоматически обновляет GitHub Actions
+- **CI** запускается при каждом push/PR в `main`: линтинг Go (revive + gosec), линтинг фронтенда (ESLint), юнит-тесты, интеграционные тесты (матрица PG 14–18), проверки уязвимостей `govulncheck` + `npm audit`, Trivy-скан зависимостей/IaC, линтинг Helm, проверка сборки
+- **CodeQL** (Go + TypeScript, `security-extended`) на push, PR и еженедельно по расписанию
+- **Релиз** запускается по тегу `v*`: проверяет прохождение CI, собирает мультиархитектурные Docker-образы (backend, frontend, MCP) с attestation provenance/SBOM, гейтит их Trivy-сканом, публикует Helm-чарт в GHCR
+- **Dependabot** автоматически обновляет Go-модули, npm-пакеты, базовые Docker-образы и GitHub Actions
 
 ## История изменений
 

@@ -17,7 +17,7 @@ func TestNoopMiddleware(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	mw := NewAuthMiddleware(config.AuthConfig{Mode: config.AuthModeNone}, nil, nil, zap.NewNop())
+	mw := NewAuthMiddleware(config.AuthConfig{Mode: config.AuthModeNone}, nil, nil, nil, zap.NewNop())
 
 	called := false
 	handler := func(c echo.Context) error {
@@ -41,7 +41,7 @@ func TestNoopMiddlewareEmptyMode(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	mw := NewAuthMiddleware(config.AuthConfig{}, nil, nil, zap.NewNop())
+	mw := NewAuthMiddleware(config.AuthConfig{}, nil, nil, nil, zap.NewNop())
 
 	called := false
 	handler := func(c echo.Context) error {
@@ -72,7 +72,7 @@ func TestTokenMiddleware_ValidToken(t *testing.T) {
 			{Name: "test", Token: "test-token-123", Role: "viewer"},
 		},
 	}
-	mw := NewAuthMiddleware(cfg, nil, nil, zap.NewNop())
+	mw := NewAuthMiddleware(cfg, nil, nil, nil, zap.NewNop())
 
 	var gotUser *UserContext
 
@@ -115,7 +115,7 @@ func TestTokenMiddleware_MissingToken(t *testing.T) {
 			{Name: "test", Token: "test-token-123", Role: "viewer"},
 		},
 	}
-	mw := NewAuthMiddleware(cfg, nil, nil, zap.NewNop())
+	mw := NewAuthMiddleware(cfg, nil, nil, nil, zap.NewNop())
 
 	handler := func(c echo.Context) error {
 		return c.String(http.StatusOK, "ok")
@@ -146,7 +146,7 @@ func TestTokenMiddleware_InvalidToken(t *testing.T) {
 			{Name: "test", Token: "test-token-123", Role: "viewer"},
 		},
 	}
-	mw := NewAuthMiddleware(cfg, nil, nil, zap.NewNop())
+	mw := NewAuthMiddleware(cfg, nil, nil, nil, zap.NewNop())
 
 	handler := func(c echo.Context) error {
 		return c.String(http.StatusOK, "ok")
@@ -176,7 +176,7 @@ func TestSkipAuth(t *testing.T) {
 			{Name: "test", Token: "test-token-123", Role: "viewer"},
 		},
 	}
-	mw := SkipAuth(NewAuthMiddleware(cfg, nil, nil, zap.NewNop()), "/api/auth/info")
+	mw := SkipAuth(NewAuthMiddleware(cfg, nil, nil, nil, zap.NewNop()), "/api/auth/info")
 
 	called := false
 	handler := func(c echo.Context) error {
@@ -206,7 +206,7 @@ func TestSkipAuthPrefix(t *testing.T) {
 			{Name: "test", Token: "test-token-123", Role: "viewer"},
 		},
 	}
-	mw := SkipAuthPrefix(NewAuthMiddleware(cfg, nil, nil, zap.NewNop()), "/auth/")
+	mw := SkipAuthPrefix(NewAuthMiddleware(cfg, nil, nil, nil, zap.NewNop()), "/auth/")
 
 	called := false
 	handler := func(c echo.Context) error {

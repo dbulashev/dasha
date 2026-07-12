@@ -145,6 +145,24 @@ CREATE TABLE IF NOT EXISTS autosnapshot_pending (
     reason       text        NOT NULL,
     PRIMARY KEY (cluster_name, instance)
 )`
+
+	createAPITokensSQL = `
+CREATE TABLE IF NOT EXISTS api_tokens (
+    id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    token_hash   bytea NOT NULL UNIQUE,
+    token_prefix text  NOT NULL,
+    name         text  NOT NULL,
+    subject      text  NOT NULL,
+    role         text  NOT NULL CHECK (role IN ('viewer','admin')),
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    expires_at   timestamptz,
+    last_used_at timestamptz,
+    revoked_at   timestamptz
+)`
+
+	// #nosec G101 -- SQL DDL statement (the const name merely contains "Tokens"), not a credential
+	createAPITokensSubjectIdxSQL = `
+CREATE INDEX IF NOT EXISTS idx_api_tokens_subject ON api_tokens (subject)`
 )
 
 // partitionedTables lists the day-partitioned tables managed together —
@@ -200,6 +218,8 @@ func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
 		addAutosnapshotLockConfigSQL,
 		addAutosnapshotResetConfigSQL,
 		createAutosnapshotPendingSQL,
+		createAPITokensSQL,
+		createAPITokensSubjectIdxSQL,
 	} {
 		if _, err := s.ddlPool.Exec(ctx, ddl); err != nil {
 			return fmt.Errorf("storage: migrate: %w", err)

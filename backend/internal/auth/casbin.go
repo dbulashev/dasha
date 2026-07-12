@@ -35,6 +35,8 @@ p, admin, /api/*, POST
 p, admin, /api/*, PUT
 p, admin, /api/*, DELETE
 p, viewer, /api/*, GET
+p, viewer, /api/auth/tokens, POST
+p, viewer, /api/auth/tokens/*, DELETE
 `
 
 func NewCasbinEnforcer() (*casbin.Enforcer, error) {

@@ -146,6 +146,9 @@ import type {
   MaintenanceTransactionIdDanger,
   MaintenanceVacuumProgress,
   NotFoundResponse,
+  PersonalAccessToken,
+  PersonalAccessTokenCreate,
+  PersonalAccessTokenCreated,
   PgSetting,
   PostQueriesResetStatsParams,
   PostSnapshotParams,
@@ -257,6 +260,277 @@ export function useGetAuthInfo<
   return query
 }
 
+/**
+ * List the authenticated caller's own personal access tokens. Secret values are never returned; only a short prefix for identification.
+ */
+export type listPersonalTokensResponse200 = {
+  data: PersonalAccessToken[]
+  status: 200
+}
+
+export type listPersonalTokensResponseSuccess = listPersonalTokensResponse200 & {
+  headers: Headers
+}
+export type listPersonalTokensResponse = listPersonalTokensResponseSuccess
+
+export const getListPersonalTokensUrl = () => {
+  return `/api/auth/tokens`
+}
+
+export const listPersonalTokens = async (
+  options?: RequestInit,
+): Promise<listPersonalTokensResponse> => {
+  return customFetch<listPersonalTokensResponse>(getListPersonalTokensUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getListPersonalTokensQueryKey = () => {
+  return ['api', 'auth', 'tokens'] as const
+}
+
+export const getListPersonalTokensQueryOptions = <
+  TData = Awaited<ReturnType<typeof listPersonalTokens>>,
+  TError = unknown,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof listPersonalTokens>>, TError, TData>
+  request?: SecondParameter<typeof customFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getListPersonalTokensQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listPersonalTokens>>> = ({ signal }) =>
+    listPersonalTokens({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listPersonalTokens>>,
+    TError,
+    TData
+  >
+}
+
+export type ListPersonalTokensQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listPersonalTokens>>
+>
+export type ListPersonalTokensQueryError = unknown
+
+export function useListPersonalTokens<
+  TData = Awaited<ReturnType<typeof listPersonalTokens>>,
+  TError = unknown,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof listPersonalTokens>>, TError, TData>
+  request?: SecondParameter<typeof customFetch>
+}): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListPersonalTokensQueryOptions(options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Mint a personal access token for the authenticated caller. The full secret is returned ONCE in this response and is never retrievable again. The requested role cannot exceed the caller's role and defaults to viewer. Minting is allowed only from an interactive session, not from a personal access token (anti-chaining).
+ */
+export type createPersonalTokenResponse201 = {
+  data: PersonalAccessTokenCreated
+  status: 201
+}
+
+export type createPersonalTokenResponse400 = {
+  data: void
+  status: 400
+}
+
+export type createPersonalTokenResponse403 = {
+  data: void
+  status: 403
+}
+
+export type createPersonalTokenResponseSuccess = createPersonalTokenResponse201 & {
+  headers: Headers
+}
+export type createPersonalTokenResponseError = (
+  | createPersonalTokenResponse400
+  | createPersonalTokenResponse403
+) & {
+  headers: Headers
+}
+
+export type createPersonalTokenResponse =
+  | createPersonalTokenResponseSuccess
+  | createPersonalTokenResponseError
+
+export const getCreatePersonalTokenUrl = () => {
+  return `/api/auth/tokens`
+}
+
+export const createPersonalToken = async (
+  personalAccessTokenCreate: PersonalAccessTokenCreate,
+  options?: RequestInit,
+): Promise<createPersonalTokenResponse> => {
+  return customFetch<createPersonalTokenResponse>(getCreatePersonalTokenUrl(), {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(personalAccessTokenCreate),
+  })
+}
+
+export const getCreatePersonalTokenMutationOptions = <TError = void, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createPersonalToken>>,
+    TError,
+    { data: PersonalAccessTokenCreate },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createPersonalToken>>,
+  TError,
+  { data: PersonalAccessTokenCreate },
+  TContext
+> => {
+  const mutationKey = ['createPersonalToken']
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createPersonalToken>>,
+    { data: PersonalAccessTokenCreate }
+  > = (props) => {
+    const { data } = props ?? {}
+
+    return createPersonalToken(data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type CreatePersonalTokenMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createPersonalToken>>
+>
+export type CreatePersonalTokenMutationBody = PersonalAccessTokenCreate
+export type CreatePersonalTokenMutationError = void
+
+export const useCreatePersonalToken = <TError = void, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createPersonalToken>>,
+    TError,
+    { data: PersonalAccessTokenCreate },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationReturnType<
+  Awaited<ReturnType<typeof createPersonalToken>>,
+  TError,
+  { data: PersonalAccessTokenCreate },
+  TContext
+> => {
+  return useMutation(getCreatePersonalTokenMutationOptions(options))
+}
+/**
+ * Revoke one of the authenticated caller's own personal access tokens.
+ */
+export type revokePersonalTokenResponse204 = {
+  data: void
+  status: 204
+}
+
+export type revokePersonalTokenResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type revokePersonalTokenResponseSuccess = revokePersonalTokenResponse204 & {
+  headers: Headers
+}
+export type revokePersonalTokenResponseError = revokePersonalTokenResponse404 & {
+  headers: Headers
+}
+
+export type revokePersonalTokenResponse =
+  | revokePersonalTokenResponseSuccess
+  | revokePersonalTokenResponseError
+
+export const getRevokePersonalTokenUrl = (id: string) => {
+  return `/api/auth/tokens/${id}`
+}
+
+export const revokePersonalToken = async (
+  id: string,
+  options?: RequestInit,
+): Promise<revokePersonalTokenResponse> => {
+  return customFetch<revokePersonalTokenResponse>(getRevokePersonalTokenUrl(id), {
+    ...options,
+    method: 'DELETE',
+  })
+}
+
+export const getRevokePersonalTokenMutationOptions = <
+  TError = NotFoundResponse,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof revokePersonalToken>>,
+    TError,
+    { id: string },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof revokePersonalToken>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ['revokePersonalToken']
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof revokePersonalToken>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {}
+
+    return revokePersonalToken(id, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type RevokePersonalTokenMutationResult = NonNullable<
+  Awaited<ReturnType<typeof revokePersonalToken>>
+>
+
+export type RevokePersonalTokenMutationError = NotFoundResponse
+
+export const useRevokePersonalToken = <TError = NotFoundResponse, TContext = unknown>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof revokePersonalToken>>,
+    TError,
+    { id: string },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationReturnType<
+  Awaited<ReturnType<typeof revokePersonalToken>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getRevokePersonalTokenMutationOptions(options))
+}
 export type getClustersResponse200 = {
   data: Cluster[]
   status: 200

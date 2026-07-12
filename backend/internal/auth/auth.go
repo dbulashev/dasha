@@ -40,7 +40,7 @@ func (m *Middlewares) Stop() {
 	}
 }
 
-func NewMiddlewares(ctx context.Context, cfg config.AuthConfig, logger *zap.Logger) (*Middlewares, error) {
+func NewMiddlewares(ctx context.Context, cfg config.AuthConfig, resolver PATResolver, logger *zap.Logger) (*Middlewares, error) {
 	if cfg.Mode != config.AuthModeNone && cfg.Mode != "" && !cfg.RequireHTTPS {
 		logger.Warn(
 			"auth enabled without require_https — credentials may be transmitted in plaintext",
@@ -72,7 +72,7 @@ func NewMiddlewares(ctx context.Context, cfg config.AuthConfig, logger *zap.Logg
 	return &Middlewares{
 		RequireHTTPS:   requireHTTPSMiddleware(cfg.RequireHTTPS),
 		RateLimit:      rl.Middleware,
-		Auth:           NewAuthMiddleware(cfg, oidcProvider, sessionMgr, logger),
+		Auth:           NewAuthMiddleware(cfg, oidcProvider, sessionMgr, resolver, logger),
 		Casbin:         NewCasbinMiddleware(cfg, enforcer, logger),
 		OIDCProvider:   oidcProvider,
 		SessionManager: sessionMgr,
@@ -85,6 +85,7 @@ type Method string
 const (
 	MethodToken Method = "token"
 	MethodOIDC  Method = "oidc"
+	MethodPAT   Method = "pat" // personal access token (user-minted)
 )
 
 type UserContext struct {
@@ -120,4 +121,12 @@ func SetUser(c echo.Context, u *UserContext) {
 
 	req := c.Request()
 	c.SetRequest(req.WithContext(context.WithValue(req.Context(), ctxUserKey{}, u)))
+}
+
+// PATResolver resolves a presented X-API-Key to a user via a personal access
+// token, checked after the static config tokens. A nil resolver disables PAT
+// auth (e.g. when snapshot storage is not configured). Returns ok=false for an
+// unknown/expired/revoked token, or on a backend error (auth fails closed).
+type PATResolver interface {
+	ResolveToken(ctx context.Context, presented string) (*UserContext, bool)
 }

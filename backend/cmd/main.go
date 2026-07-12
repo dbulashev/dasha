@@ -72,6 +72,7 @@ func migrateExec(cmd *cobra.Command, _ []string) error {
 		return nil
 	}
 
+	// Use the DDL-capable connection (dsn_migration), falling back to dsn.
 	return storage.Migrate(cmd.Context(), cfg.Storage.MigrationDSN(), logger)
 }
 
@@ -174,13 +175,6 @@ func dashaExec(cmd *cobra.Command, _ []string) error {
 
 	var mw []strictecho.StrictEchoMiddlewareFunc
 
-	authMW, err := container.AuthMiddlewares(cmd.Context())
-	if err != nil {
-		serverLogger.Fatal("failed to initialize auth", zap.Error(err))
-	}
-
-	defer authMW.Stop()
-
 	st, err := storage.New(cmd.Context(), container.Config().Storage, serverLogger)
 	if err != nil {
 		serverLogger.Fatal("failed to initialize storage", zap.Error(err))
@@ -189,6 +183,16 @@ func dashaExec(cmd *cobra.Command, _ []string) error {
 	if st != nil {
 		defer st.Close()
 	}
+
+	// Personal access tokens are resolved against snapshot storage; nil disables them.
+	resolver := deps.NewPATResolver(st, serverLogger)
+
+	authMW, err := container.AuthMiddlewares(cmd.Context(), resolver)
+	if err != nil {
+		serverLogger.Fatal("failed to initialize auth", zap.Error(err))
+	}
+
+	defer authMW.Stop()
 
 	logSearch := container.Config().LogSearch
 	logsRL := auth.NewPathRateLimiter("/api/logs", logSearch.RateLimit, logSearch.AdminRateLimit, logger)

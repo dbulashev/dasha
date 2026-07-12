@@ -10,4 +10,6 @@ export interface AuthInfo {
   mode: AuthInfoMode
   oidc_login_url?: string
   enable_query_stats_reset?: boolean
+  /** True when personal access tokens can be minted (snapshot storage is configured). */
+  pat_enabled?: boolean
 }

@@ -19,7 +19,7 @@ export type GetLogsParams = {
    */
   message?: string[]
   /**
-   * Drop records whose message contains any of these substrings (case-insensitive), like grep -v.
+   * Drop records whose message contains any of these substrings (case-insensitive), like grep -v. Entries containing the "<*>" placeholder are matched against the record's masked template instead (excludes a whole dedup group shape).
    */
   exclude?: string[]
   database?: string
