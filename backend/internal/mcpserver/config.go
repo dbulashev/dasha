@@ -26,10 +26,6 @@ type Config struct {
 	// Timeout bounds each outbound Dasha API call.
 	Timeout time.Duration
 
-	// Lang selects the language of the knowledge-base resources ("en" or "ru").
-	// Tool schemas and results stay English regardless.
-	Lang string
-
 	// Logger receives per-call observability (method, tool, duration, error);
 	// arguments and tokens are never logged. Nil disables logging.
 	Logger *zap.Logger
@@ -39,10 +35,6 @@ type Config struct {
 func (c Config) withDefaults() Config {
 	if c.Timeout <= 0 {
 		c.Timeout = 15 * time.Second
-	}
-
-	if c.Lang == "" {
-		c.Lang = kbDefaultLang
 	}
 
 	if c.Logger == nil {

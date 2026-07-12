@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"syscall"
 	"time"
 
@@ -54,15 +55,14 @@ func main() {
 		lang = "en"
 	}
 
-	if lang != "en" && lang != "ru" {
-		logger.Fatal("unsupported lang (want en or ru)", zap.String("lang", lang))
+	if !slices.Contains(mcpserver.SupportedLangs(), lang) {
+		logger.Fatal("unsupported lang", zap.String("lang", lang), zap.Strings("supported", mcpserver.SupportedLangs()))
 	}
 
 	client, err := mcpserver.NewDashaClient(mcpserver.Config{
 		DashaURL: *dashaURL,
 		Token:    os.Getenv("DASHA_MCP_TOKEN"),
 		Timeout:  *timeout,
-		Lang:     lang,
 		Logger:   logger,
 	})
 	if err != nil {
@@ -129,16 +129,12 @@ func serveHTTP(ctx context.Context, addr string, client *mcpserver.DashaClient, 
 }
 
 // serverVersion resolves the advertised MCP server version: an explicit
-// DASHA_MCP_VERSION override, else the release build number stamped via
-// ldflags (same internal/version scheme as the backend), else "dev".
+// DASHA_MCP_VERSION override, else the release build number stamped via ldflags
+// (same internal/version scheme as the backend), else "dev".
 func serverVersion() string {
 	if v := os.Getenv("DASHA_MCP_VERSION"); v != "" {
 		return v
 	}
 
-	if v := version.GetBuildNumber(); v != "BUILD_NUMBER" {
-		return v
-	}
-
-	return "dev"
+	return version.Resolved()
 }

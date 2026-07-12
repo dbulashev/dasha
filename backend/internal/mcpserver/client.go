@@ -13,28 +13,11 @@ import (
 	"go.uber.org/zap"
 )
 
-// tokenKey carries the per-request Dasha API token so the HTTP transport can pass
-// each MCP client's identity through to Dasha, keeping users isolated and RBAC
-// intact. A request without a token falls back to the configured Token, if set.
-type tokenKey struct{}
-
-// WithToken returns a context carrying the Dasha API token (a static token or a
-// personal access token) used for outbound calls made within it.
-func WithToken(ctx context.Context, token string) context.Context {
-	return context.WithValue(ctx, tokenKey{}, token)
-}
-
-func tokenFromContext(ctx context.Context) string {
-	t, _ := ctx.Value(tokenKey{}).(string)
-
-	return t
-}
-
 // DashaClient is a thin, identity-passthrough wrapper over the generated Dasha
 // API client: every call forwards the caller's token as the X-API-Key header.
 type DashaClient struct {
 	api    *apiclient.ClientWithResponses
-	token  string // default token (stdio single-identity); a per-request ctx token wins
+	token  string // the identity bound to this client (stdio default, or per-request via withToken)
 	logger *zap.Logger
 }
 
@@ -68,18 +51,12 @@ func (d *DashaClient) withToken(token string) *DashaClient {
 	return &c
 }
 
-// editor injects the effective token as X-API-Key: the per-request token from
-// the context (HTTP passthrough) when present, otherwise the configured default
-// (stdio single identity).
-func (d *DashaClient) editor(ctx context.Context) apiclient.RequestEditorFn {
-	token := tokenFromContext(ctx)
-	if token == "" {
-		token = d.token
-	}
-
+// editor injects this client's token as X-API-Key: the stdio single identity, or
+// the per-request identity bound by withToken in HTTP mode.
+func (d *DashaClient) editor(_ context.Context) apiclient.RequestEditorFn {
 	return func(_ context.Context, req *http.Request) error {
-		if token != "" {
-			req.Header.Set("X-API-Key", token)
+		if d.token != "" {
+			req.Header.Set("X-API-Key", d.token)
 		}
 
 		return nil
@@ -91,7 +68,7 @@ func (d *DashaClient) editor(ctx context.Context) apiclient.RequestEditorFn {
 func (d *DashaClient) Clusters(ctx context.Context) ([]apiclient.Cluster, error) {
 	resp, err := d.api.GetClustersWithResponse(ctx, d.editor(ctx))
 	if err != nil {
-		return nil, fmt.Errorf("mcp: clusters: %w", err)
+		return nil, wrapErr("clusters", err)
 	}
 
 	if resp.JSON200 == nil {
@@ -108,7 +85,7 @@ func (d *DashaClient) HealthScore(ctx context.Context, cluster, instance string)
 		Instance:    instance,
 	}, d.editor(ctx))
 	if err != nil {
-		return nil, fmt.Errorf("mcp: health_score: %w", err)
+		return nil, wrapErr("health_score", err)
 	}
 
 	if resp.JSON200 == nil {
@@ -131,7 +108,7 @@ func (d *DashaClient) Recommendations(
 		Database:    database,
 	}, d.editor(ctx))
 	if err != nil {
-		return nil, fmt.Errorf("mcp: recommendations: %w", err)
+		return nil, wrapErr("recommendations", err)
 	}
 
 	if resp.JSON200 == nil {

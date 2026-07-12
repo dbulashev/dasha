@@ -4,6 +4,8 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"slices"
+	"sync"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -18,19 +20,34 @@ var kbFS embed.FS
 
 const kbDefaultLang = "en"
 
-// validLang reports whether the knowledge base ships in this language.
+// validLang reports whether the knowledge base ships in this language. The set of
+// supported languages is the keys of the prompt texts map, so the CLI, the server
+// and the resources cannot disagree on what is valid.
 func validLang(lang string) bool {
-	return lang == "en" || lang == "ru"
+	_, ok := texts[lang]
+
+	return ok
 }
 
-// registerResources exposes the embedded knowledge base as MCP resources. The
-// Description tells the model when to read each one — that is the only nudge a
-// weak model gets, so it names the tools whose output the resource explains.
-func registerResources(s *mcp.Server, lang string) {
-	if !validLang(lang) {
-		lang = kbDefaultLang
+// SupportedLangs lists the knowledge-base languages in stable order, derived from
+// the single source (the prompt texts map). Exported for the CLI to validate its
+// --lang flag against the same set the server uses.
+func SupportedLangs() []string {
+	langs := make([]string, 0, len(texts))
+	for l := range texts {
+		langs = append(langs, l)
 	}
 
+	slices.Sort(langs)
+
+	return langs
+}
+
+// registerResources exposes the embedded knowledge base as MCP resources. lang is
+// already normalized by newServer. The Description tells the model when to read
+// each one — that is the only nudge a weak model gets, so it names the tools whose
+// output the resource explains.
+func registerResources(s *mcp.Server, lang string) {
 	for _, r := range []struct {
 		name, title, desc string
 	}{
@@ -64,17 +81,27 @@ func registerResources(s *mcp.Server, lang string) {
 	}
 }
 
+// kbCache memoizes each embedded KB file's text by path. The files are immutable
+// compile-time assets, so a resource read after the first is a map lookup of the
+// already-allocated (immutable) string rather than an FS read + string copy.
+var kbCache sync.Map // path -> string
+
 // kbHandler serves one embedded knowledge-base file as a resource read.
 func kbHandler(uri, path string) mcp.ResourceHandler {
 	return func(_ context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
-		b, err := kbFS.ReadFile("kb/" + path)
-		if err != nil {
-			return nil, fmt.Errorf("mcp: read kb resource %s: %w", uri, err)
+		text, ok := kbCache.Load(path)
+		if !ok {
+			b, err := kbFS.ReadFile("kb/" + path)
+			if err != nil {
+				return nil, fmt.Errorf("mcp: read kb resource %s: %w", uri, err)
+			}
+
+			text, _ = kbCache.LoadOrStore(path, string(b))
 		}
 
 		return &mcp.ReadResourceResult{ //nolint:exhaustruct
 			Contents: []*mcp.ResourceContents{
-				{URI: uri, MIMEType: "text/markdown", Text: string(b)}, //nolint:exhaustruct
+				{URI: uri, MIMEType: "text/markdown", Text: text.(string)}, //nolint:exhaustruct
 			},
 		}, nil
 	}

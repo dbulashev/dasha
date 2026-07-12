@@ -48,12 +48,8 @@ func TestKBHandler_UnknownPathErrors(t *testing.T) {
 	}
 }
 
-func TestConfigLangDefault(t *testing.T) {
+func TestValidLang(t *testing.T) {
 	t.Parallel()
-
-	if got := (Config{}).withDefaults().Lang; got != "en" { //nolint:exhaustruct
-		t.Errorf("withDefaults().Lang = %q, want en", got)
-	}
 
 	for lang, want := range map[string]bool{"en": true, "ru": true, "": false, "de": false} {
 		if validLang(lang) != want {

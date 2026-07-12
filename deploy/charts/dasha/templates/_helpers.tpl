@@ -82,13 +82,14 @@ MCP connector image
 
 {{/*
 In-cluster Dasha API base URL the MCP connector calls.
-Defaults to the backend Service; override with mcp.dashaUrl.
+Defaults to the backend Service (short in-namespace name, like the frontend, so it
+works regardless of the cluster DNS domain); override with mcp.dashaUrl.
 */}}
 {{- define "dasha.mcpDashaURL" -}}
 {{- if .Values.mcp.dashaUrl -}}
 {{- .Values.mcp.dashaUrl -}}
 {{- else -}}
-{{- printf "http://%s-backend.%s.svc.cluster.local:%v" (include "dasha.fullname" .) (include "dasha.namespace" .) .Values.backend.port -}}
+{{- printf "http://%s-backend:%v" (include "dasha.fullname" .) .Values.backend.port -}}
 {{- end -}}
 {{- end -}}
 

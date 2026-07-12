@@ -123,11 +123,6 @@ func SetUser(c echo.Context, u *UserContext) {
 	c.SetRequest(req.WithContext(context.WithValue(req.Context(), ctxUserKey{}, u)))
 }
 
-// WithUser returns a context carrying the authenticated user.
-func WithUser(ctx context.Context, u *UserContext) context.Context {
-	return context.WithValue(ctx, ctxUserKey{}, u)
-}
-
 // PATResolver resolves a presented X-API-Key to a user via a personal access
 // token, checked after the static config tokens. A nil resolver disables PAT
 // auth (e.g. when snapshot storage is not configured). Returns ok=false for an
