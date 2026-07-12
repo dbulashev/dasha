@@ -19,8 +19,10 @@ const maxCachedServers = 1024
 // HTTPHandler returns a streamable-HTTP MCP handler with per-user passthrough:
 // each request's token (Authorization: Bearer … or X-API-Key) is bound to a
 // DashaClient copy, so every caller acts with their own Dasha identity and RBAC.
-// No shared server token is used. Runs stateless (one logical session per
-// request), which suits a read-only request/response tool server.
+// A request that carries no token falls back to the server's configured token
+// (DASHA_MCP_TOKEN) when one is set — leave it unset to require per-user
+// credentials. Runs stateless (one logical session per request), which suits a
+// read-only request/response tool server.
 //
 // One MCP server is built and cached per distinct token (tools/prompts and their
 // schemas are derived once per identity, not per request). The cache is keyed by
@@ -102,10 +104,12 @@ func (c *serverCache) get(key string, build func() *mcp.Server) *mcp.Server {
 }
 
 // tokenFromRequest extracts the caller's Dasha token from a bearer Authorization
-// header or the X-API-Key header.
+// header or the X-API-Key header. The auth scheme is matched case-insensitively
+// per RFC 7235, so "bearer …" is accepted as well as "Bearer …".
 func tokenFromRequest(r *http.Request) string {
-	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
-		return strings.TrimSpace(strings.TrimPrefix(h, "Bearer "))
+	const scheme = "bearer "
+	if h := r.Header.Get("Authorization"); len(h) >= len(scheme) && strings.EqualFold(h[:len(scheme)], scheme) {
+		return strings.TrimSpace(h[len(scheme):])
 	}
 
 	return r.Header.Get("X-API-Key")

@@ -9,7 +9,7 @@ metadata:
     {{- include "dasha.labels" $ | nindent 4 }}
     app.kubernetes.io/component: mcp
 spec:
-  type: {{ .Values.service.type }}
+  type: {{ .Values.mcp.service.type | default .Values.service.type }}
   ports:
     - port: {{ .Values.mcp.port }}
       targetPort: http

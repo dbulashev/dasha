@@ -14,8 +14,8 @@ import (
 )
 
 // tokenKey carries the per-request Dasha API token so the HTTP transport can pass
-// each MCP client's identity through to Dasha — there is no shared server token
-// in HTTP mode, which keeps users isolated and RBAC intact.
+// each MCP client's identity through to Dasha, keeping users isolated and RBAC
+// intact. A request without a token falls back to the configured Token, if set.
 type tokenKey struct{}
 
 // WithToken returns a context carrying the Dasha API token (a static token or a

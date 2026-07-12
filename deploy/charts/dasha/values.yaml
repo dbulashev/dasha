@@ -336,6 +336,11 @@ mcp:
   token:
     existingSecret: ""
     secretKey: token
+  # -- Service type for the MCP endpoint. Independent of the UI Service so exposing
+  # the dashboard (service.type) does not also publish the plain-HTTP MCP port.
+  # Empty = fall back to service.type.
+  service:
+    type: ClusterIP
   resources: {}
   nodeSelector: {}
   tolerations: []

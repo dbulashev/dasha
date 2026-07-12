@@ -18,8 +18,9 @@ type Config struct {
 	DashaURL string
 
 	// Token is the X-API-Key used for every call in stdio mode (a single
-	// identity). In HTTP mode each request carries its own token (passthrough),
-	// so this is ignored there.
+	// identity). In HTTP mode each request carries its own token (passthrough);
+	// this Token is used only as a fallback for requests that arrive without any
+	// auth header, so leave it unset in HTTP mode to require per-user credentials.
 	Token string
 
 	// Timeout bounds each outbound Dasha API call.

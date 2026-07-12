@@ -23,10 +23,11 @@ func (s *Handlers) GetAuthInfo(
 	}
 
 	enableReset := s.cfg.EnableQueryStatsReset
-	// PATs require snapshot storage with the api_tokens table migrated: without
-	// the table, minting 500s and PAT auth fails closed, so only advertise the
-	// feature once the migration has actually been applied.
-	patEnabled := s.storage.APITokensReady(ctx)
+	// PATs belong to an individually-identifiable OIDC principal (shared static
+	// tokens cannot mint them) and require the api_tokens table to be migrated
+	// (else minting 500s and PAT auth fails closed). Only advertise the feature
+	// when both hold, so the frontend does not offer an unusable dialog.
+	patEnabled := s.cfg.Auth.Mode == config.AuthModeOIDC && s.storage.APITokensReady(ctx)
 	resp := serverhttp.GetAuthInfo200JSONResponse{
 		Mode:                  mode,
 		EnableQueryStatsReset: &enableReset,

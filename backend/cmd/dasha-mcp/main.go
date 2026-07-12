@@ -73,8 +73,13 @@ func main() {
 	defer stop()
 
 	if *httpAddr != "" {
-		// HTTP/SSE: each request carries its own token (passthrough); no shared
-		// server token is used.
+		// HTTP/SSE: each request carries its own token (passthrough). A request
+		// without an auth header falls back to DASHA_MCP_TOKEN when set; warn so
+		// the shared-identity exposure is not a surprise.
+		if os.Getenv("DASHA_MCP_TOKEN") != "" {
+			logger.Warn("DASHA_MCP_TOKEN is set in HTTP mode: requests without an Authorization or X-API-Key header will use this shared identity; unset it to require per-user credentials")
+		}
+
 		serveHTTP(ctx, *httpAddr, client, lang, logger)
 
 		return

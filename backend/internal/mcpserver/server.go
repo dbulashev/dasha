@@ -476,14 +476,17 @@ const defaultFleetLimit = 5
 // a large fleet is scored quickly without flooding Dasha with requests at once.
 const fleetHealthConcurrency = 12
 
-// fleetEntry is one instance's health in the fleet ranking.
+// fleetEntry is one instance's health in the fleet ranking. Score is a pointer so
+// a legitimate worst-possible score of 0 is still emitted (omitempty on a value
+// float64 would drop it, hiding the most critical instance); it is nil only when
+// the score could not be read, which the Error field then explains.
 type fleetEntry struct {
-	Cluster    string  `json:"cluster"`
-	Instance   string  `json:"instance"`
-	Score      float64 `json:"score,omitempty"`
-	Source     string  `json:"source,omitempty"`
-	InRecovery bool    `json:"in_recovery,omitempty"`
-	Error      string  `json:"error,omitempty"` // set when this instance's score could not be read
+	Cluster    string   `json:"cluster"`
+	Instance   string   `json:"instance"`
+	Score      *float64 `json:"score,omitempty"`
+	Source     string   `json:"source,omitempty"`
+	InRecovery bool     `json:"in_recovery,omitempty"`
+	Error      string   `json:"error,omitempty"` // set when this instance's score could not be read
 }
 
 // fleetHealth ranks every instance by health score ascending (worst first),
@@ -525,7 +528,8 @@ func fleetHealth(ctx context.Context, c *DashaClient, limit int) (any, error) {
 				return nil // tolerate per-instance failures
 			}
 
-			rows[i].Score = hs.Score
+			score := hs.Score
+			rows[i].Score = &score
 			rows[i].Source = derefStr(hs.Source)
 			rows[i].InRecovery = hs.InRecovery
 
@@ -545,7 +549,7 @@ func fleetHealth(ctx context.Context, c *DashaClient, limit int) (any, error) {
 			return 1
 		}
 
-		return cmp.Compare(a.Score, b.Score)
+		return cmp.Compare(derefFloat(a.Score), derefFloat(b.Score))
 	})
 
 	if len(rows) > limit {
@@ -558,6 +562,14 @@ func fleetHealth(ctx context.Context, c *DashaClient, limit int) (any, error) {
 func derefStr(p *string) string {
 	if p == nil {
 		return ""
+	}
+
+	return *p
+}
+
+func derefFloat(p *float64) float64 {
+	if p == nil {
+		return 0
 	}
 
 	return *p
