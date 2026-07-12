@@ -84,7 +84,9 @@ func main() {
 	logger.Info("stdio transport", zap.String("dasha", *dashaURL), zap.String("version", serverVersion()))
 
 	server := mcpserver.NewMCPServer(client, serverVersion(), lang)
-	if err := server.Run(ctx, &mcp.StdioTransport{}); err != nil {
+	// A cancelled context (SIGINT/SIGTERM) is a clean shutdown: the SDK's Run
+	// returns ctx.Err() then, mirroring how the HTTP path treats ErrServerClosed.
+	if err := server.Run(ctx, &mcp.StdioTransport{}); err != nil && !errors.Is(err, context.Canceled) {
 		logger.Fatal("stdio transport failed", zap.Error(err))
 	}
 }

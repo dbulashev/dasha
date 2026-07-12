@@ -10,21 +10,25 @@ func TestPatSubject(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name string
-		user auth.UserContext
-		want string
+		name   string
+		user   auth.UserContext
+		want   string
+		wantOK bool
 	}{
-		{"email preferred", auth.UserContext{Email: "dba@corp", Name: "dba"}, "dba@corp"},
-		{"name fallback when no email", auth.UserContext{Name: "dba"}, "dba"},
-		{"empty when neither", auth.UserContext{}, ""},
+		{"oidc with email", auth.UserContext{AuthMethod: auth.MethodOIDC, Email: "dba@corp", Name: "dba"}, "dba@corp", true},
+		{"oidc without email rejected", auth.UserContext{AuthMethod: auth.MethodOIDC, Name: "dba"}, "", false},
+		{"static token rejected", auth.UserContext{AuthMethod: auth.MethodToken, Email: "dba@corp", Name: "dba"}, "", false},
+		{"pat rejected (anti-chaining)", auth.UserContext{AuthMethod: auth.MethodPAT, Name: "dba@corp"}, "", false},
+		{"empty rejected", auth.UserContext{}, "", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := patSubject(&tt.user); got != tt.want {
-				t.Errorf("patSubject(%+v) = %q, want %q", tt.user, got, tt.want)
+			got, ok := patSubject(&tt.user)
+			if got != tt.want || ok != tt.wantOK {
+				t.Errorf("patSubject(%+v) = (%q, %v), want (%q, %v)", tt.user, got, ok, tt.want, tt.wantOK)
 			}
 		})
 	}

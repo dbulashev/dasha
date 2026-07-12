@@ -14,14 +14,20 @@ import (
 // so the day→duration conversion cannot overflow int64.
 const maxExpiresInDays = 3650
 
-// patSubject is the stable owner key for a user's personal access tokens:
-// the email when present (OIDC), else the identity name.
-func patSubject(u *auth.UserContext) string {
-	if u.Email != "" {
-		return u.Email
+// patSubject is the stable owner key for a user's personal access tokens: the
+// OIDC email. Personal tokens belong to an individually-identifiable principal,
+// so only an OIDC session with a non-empty email qualifies; ok=false for shared
+// static config tokens (which carry no unique per-user identity and would let a
+// leaked shared token mint tokens that outlive it) and for PAT-authenticated
+// callers (anti-chaining). Returning ok=false — rather than falling back to the
+// non-unique, possibly-empty Name — prevents distinct identities from colliding
+// on one token namespace.
+func patSubject(u *auth.UserContext) (string, bool) {
+	if u == nil || u.AuthMethod != auth.MethodOIDC || u.Email == "" {
+		return "", false
 	}
 
-	return u.Name
+	return u.Email, true
 }
 
 // patRoleAllowed reports whether a caller with `caller` role may mint a token
@@ -47,7 +53,12 @@ func (s *Handlers) ListPersonalTokens(
 		return serverhttp.ListPersonalTokens200JSONResponse{}, nil
 	}
 
-	rows, err := s.storage.ListAPITokens(ctx, patSubject(user))
+	subject, ok := patSubject(user)
+	if !ok {
+		return serverhttp.ListPersonalTokens200JSONResponse{}, nil
+	}
+
+	rows, err := s.storage.ListAPITokens(ctx, subject)
 	if err != nil {
 		return nil, fmt.Errorf("ListPersonalTokens | %w", err)
 	}
@@ -77,8 +88,12 @@ func (s *Handlers) CreatePersonalToken(
 		return serverhttp.CreatePersonalToken403Response{}, nil
 	}
 
-	// Anti-chaining: a leaked PAT must not be able to mint more tokens.
-	if user.AuthMethod == auth.MethodPAT {
+	// Only an individually-identifiable OIDC principal may mint tokens. This
+	// enforces anti-chaining (a leaked PAT carries no email, so it cannot mint
+	// more) and blocks shared static config tokens from minting tokens that would
+	// survive removal of the static token from the config.
+	subject, ok := patSubject(user)
+	if !ok {
 		return serverhttp.CreatePersonalToken403Response{}, nil
 	}
 
@@ -116,7 +131,7 @@ func (s *Handlers) CreatePersonalToken(
 		return nil, fmt.Errorf("CreatePersonalToken | %w", err)
 	}
 
-	id, err := s.storage.CreateAPIToken(ctx, hash, prefix, req.Body.Name, patSubject(user), role, expiresAt)
+	id, err := s.storage.CreateAPIToken(ctx, hash, prefix, req.Body.Name, subject, role, expiresAt)
 	if err != nil {
 		return nil, fmt.Errorf("CreatePersonalToken | %w", err)
 	}
@@ -141,7 +156,12 @@ func (s *Handlers) RevokePersonalToken(
 		return serverhttp.RevokePersonalToken404Response{}, nil
 	}
 
-	ok, err := s.storage.RevokeAPIToken(ctx, patSubject(user), req.Id)
+	subject, hasSubject := patSubject(user)
+	if !hasSubject {
+		return serverhttp.RevokePersonalToken404Response{}, nil
+	}
+
+	ok, err := s.storage.RevokeAPIToken(ctx, subject, req.Id)
 	if err != nil {
 		return nil, fmt.Errorf("RevokePersonalToken | %w", err)
 	}

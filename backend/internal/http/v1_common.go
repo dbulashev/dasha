@@ -14,7 +14,7 @@ import (
 )
 
 func (s *Handlers) GetAuthInfo(
-	_ context.Context,
+	ctx context.Context,
 	_ serverhttp.GetAuthInfoRequestObject,
 ) (serverhttp.GetAuthInfoResponseObject, error) {
 	mode := serverhttp.AuthInfoMode(s.cfg.Auth.Mode)
@@ -23,9 +23,10 @@ func (s *Handlers) GetAuthInfo(
 	}
 
 	enableReset := s.cfg.EnableQueryStatsReset
-	// PATs require snapshot storage (tokens are stored there); without it the
-	// resolver is nil and minting fails, so tell the frontend not to offer them.
-	patEnabled := s.storage != nil
+	// PATs require snapshot storage with the api_tokens table migrated: without
+	// the table, minting 500s and PAT auth fails closed, so only advertise the
+	// feature once the migration has actually been applied.
+	patEnabled := s.storage.APITokensReady(ctx)
 	resp := serverhttp.GetAuthInfo200JSONResponse{
 		Mode:                  mode,
 		EnableQueryStatsReset: &enableReset,

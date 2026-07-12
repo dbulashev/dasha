@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+	"golang.org/x/time/rate"
 
 	"github.com/dbulashev/dasha/internal/auth"
 	"github.com/dbulashev/dasha/internal/pkg/pat"
@@ -57,6 +58,7 @@ func newResolver(store patStore, ttl, touchEvery time.Duration) *patResolver {
 		logger:     zap.NewNop(),
 		ttl:        ttl,
 		touchEvery: touchEvery,
+		lookups:    rate.NewLimiter(rate.Inf, 0), // no throttle in unit tests
 		cache:      make(map[string]*patEntry),
 	}
 }
