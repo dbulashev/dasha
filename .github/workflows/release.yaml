@@ -128,7 +128,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Scan backend image
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/dasha-backend:${{ steps.meta-backend.outputs.version }}
           format: table
@@ -137,7 +137,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Scan frontend image
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/dasha-frontend:${{ steps.meta-frontend.outputs.version }}
           format: table
@@ -146,7 +146,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Scan mcp image
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/dasha-mcp:${{ steps.meta-mcp.outputs.version }}
           format: table

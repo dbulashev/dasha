@@ -44,7 +44,10 @@ func Generate() (secret string, hash []byte, display string, err error) {
 // (never a user-chosen password), so slow KDFs like bcrypt would add cost
 // per auth without adding brute-force resistance.
 func Hash(secret string) []byte {
-	h := sha256.Sum256([]byte(secret))
+	// `secret` is a 256-bit crypto/rand token (see Generate), not a password; SHA-256
+	// is the correct index hash, matching how GitHub/GitLab store PATs. A slow KDF
+	// adds latency, not safety. CodeQL's password-hashing heuristic is a false positive.
+	h := sha256.Sum256([]byte(secret)) // codeql[go/weak-sensitive-data-hashing]
 
 	return h[:]
 }
