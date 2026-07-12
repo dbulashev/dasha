@@ -24,6 +24,13 @@ const (
 	AuthModeOIDC  AuthMode = "oidc"
 )
 
+// Roles known to Dasha's RBAC, shared by config validation, PAT rules and the
+// OIDC role mapping so the literals cannot drift apart.
+const (
+	RoleAdmin  = "admin"
+	RoleViewer = "viewer"
+)
+
 type AuthToken struct {
 	Name         string `mapstructure:"name"`
 	Token        string `mapstructure:"token"`
@@ -56,9 +63,21 @@ type AuthConfig struct {
 	CookieMaxAge        int              `mapstructure:"cookie_max_age"` // seconds, default: 86400
 	RequireHTTPS        bool             `mapstructure:"require_https"`
 	RateLimit           *RateLimitConfig `mapstructure:"rate_limit"`
+
+	// PATMinRole gates personal-access-token management: "admin" (default —
+	// the feature rolls out to admins first) or "viewer" (any OIDC user).
+	PATMinRole string `mapstructure:"pat_min_role"`
 }
 
 func (a *AuthConfig) Validate() error {
+	switch a.PATMinRole {
+	case "":
+		a.PATMinRole = RoleAdmin
+	case RoleViewer, RoleAdmin:
+	default:
+		return fmt.Errorf("unknown auth.pat_min_role: %q (want admin or viewer)", a.PATMinRole)
+	}
+
 	switch a.Mode {
 	case AuthModeNone, "":
 		return nil

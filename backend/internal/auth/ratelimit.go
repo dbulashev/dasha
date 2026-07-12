@@ -160,7 +160,7 @@ func NewPathRateLimiter(
 			}
 
 			store := userStore
-			if u := GetUser(c); u != nil && u.Role == "admin" {
+			if u := GetUser(c); u != nil && u.Role == config.RoleAdmin {
 				store = adminStore
 			}
 

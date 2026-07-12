@@ -582,6 +582,18 @@ func optStrings(v []string) *[]string {
 	return &v
 }
 
+// deref returns the pointed-to value, or T's zero value for nil — for optional
+// response fields.
+func deref[T any](p *T) T {
+	if p == nil {
+		var zero T
+
+		return zero
+	}
+
+	return *p
+}
+
 // opt returns a pointer to v for optional query params, or nil when v is the
 // zero value so the parameter is omitted entirely.
 func opt[T comparable](v T) *T {

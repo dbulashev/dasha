@@ -61,3 +61,31 @@ func TestPatRoleAllowed(t *testing.T) {
 		})
 	}
 }
+
+func TestPatMintAllowed(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		minRole string
+		caller  string
+		want    bool
+	}{
+		{"admin gate passes admin", "admin", "admin", true},
+		{"admin gate blocks viewer", "admin", "viewer", false},
+		{"viewer gate passes viewer", "viewer", "viewer", true},
+		{"viewer gate passes admin", "viewer", "admin", true},
+		{"unnormalized config fails closed for viewer", "", "viewer", false},
+		{"unnormalized config still passes admin", "", "admin", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := patMintAllowed(tt.minRole, tt.caller); got != tt.want {
+				t.Errorf("patMintAllowed(%q, %q) = %v, want %v", tt.minRole, tt.caller, got, tt.want)
+			}
+		})
+	}
+}

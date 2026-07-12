@@ -7,6 +7,7 @@ import (
 
 	"github.com/dbulashev/dasha/gen/serverhttp"
 	"github.com/dbulashev/dasha/internal/auth"
+	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/pkg/pat"
 )
 
@@ -30,18 +31,26 @@ func patSubject(u *auth.UserContext) (string, bool) {
 	return u.Email, true
 }
 
+// patMintAllowed reports whether the caller's role clears the configured
+// minimum (auth.pat_min_role) for managing personal tokens — the feature gate
+// while PATs mature. An empty minRole means the config was not normalized and
+// fails closed to the admin-only default.
+func patMintAllowed(minRole, callerRole string) bool {
+	return minRole == config.RoleViewer || callerRole == config.RoleAdmin
+}
+
 // patRoleAllowed reports whether a caller with `caller` role may mint a token
 // with `requested` role (least-privilege: a viewer cannot mint an admin token).
 func patRoleAllowed(caller, requested string) bool {
-	if requested != "viewer" && requested != "admin" {
+	if requested != config.RoleViewer && requested != config.RoleAdmin {
 		return false
 	}
 
-	if caller == "admin" {
+	if caller == config.RoleAdmin {
 		return true
 	}
 
-	return requested == "viewer"
+	return requested == config.RoleViewer
 }
 
 func (s *Handlers) ListPersonalTokens(
@@ -97,11 +106,15 @@ func (s *Handlers) CreatePersonalToken(
 		return serverhttp.CreatePersonalToken403Response{}, nil
 	}
 
+	if !patMintAllowed(s.cfg.Auth.PATMinRole, user.Role) {
+		return serverhttp.CreatePersonalToken403Response{}, nil
+	}
+
 	if req.Body == nil || req.Body.Name == "" {
 		return serverhttp.CreatePersonalToken400Response{}, nil
 	}
 
-	role := "viewer"
+	role := config.RoleViewer
 	if req.Body.Role != nil {
 		role = string(*req.Body.Role)
 	}
