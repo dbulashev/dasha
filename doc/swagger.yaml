@@ -2293,6 +2293,10 @@ components:
         pat_enabled:
           type: boolean
           description: True when personal access tokens can be minted (snapshot storage is configured).
+        pat_min_role:
+          type: string
+          enum: [admin, viewer]
+          description: Minimum role allowed to manage personal access tokens (auth.pat_min_role); the client combines it with the signed-in user's role.
     User:
       type: object
       properties:

@@ -123,7 +123,7 @@ If a result is refused as too large, narrow it (one database, a smaller range, o
 			"2. get_health_recommendations. Сопоставь рекомендации с худшими категориями, сначала HIGH. " +
 			"Незнакомые rule ID смотри в ресурсе dasha://kb/health-rules.\n" +
 			"3. Только если среди худших locks: blocked_queries, затем running_queries — найди корневого блокировщика " +
-			"(часто idle in transaction). Предложи pg_terminate_backend для БЛОКИРОВЩИКА, никогда для жертв.\n" +
+			"(часто idle in transaction). Предложи pg_terminate_backend для БЛОКИРОВЩИКА; жертв не завершай — блокировку это не снимет.\n" +
 			"4. Только если среди худших performance: top_queries (by=time). Мало вызовов с высоким средним временем = " +
 			"проблема плана (предложи EXPLAIN / индексы); огромное число вызовов с низким средним = проблема частоты " +
 			"(кэширование/батчинг).\n" +

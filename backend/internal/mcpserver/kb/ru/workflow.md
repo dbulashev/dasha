@@ -21,8 +21,9 @@
 1. `blocked_queries` — картина: кто кого блокирует.
 2. `running_queries` — найти корневого блокировщика (часто idle in
    transaction или очень старая транзакция).
-3. Рекомендовать завершить БЛОКИРОВЩИКА (pg_terminate_backend), никогда не
-   жертв; предложить idle_in_transaction_session_timeout / lock_timeout.
+3. Рекомендовать завершить БЛОКИРОВЩИКА (pg_terminate_backend); жертв не
+   завершать — блокировку это не снимет. Предложить
+   idle_in_transaction_session_timeout / lock_timeout.
 
 ## «Кончается место на диске»
 1. `get_health_recommendations` — правила host_disk_space / bloat.

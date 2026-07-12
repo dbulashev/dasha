@@ -276,8 +276,8 @@ func extractRoleFromClaims(claims map[string]any, claimPath string, roleMapping 
 				continue
 			}
 
-			if mapped, exists := roleMapping[s]; exists && mapped == "admin" {
-				return "admin"
+			if mapped, exists := roleMapping[s]; exists && mapped == config.RoleAdmin {
+				return config.RoleAdmin
 			}
 		}
 
@@ -288,8 +288,8 @@ func extractRoleFromClaims(claims map[string]any, claimPath string, roleMapping 
 				continue
 			}
 
-			if mapped, exists := roleMapping[s]; exists && mapped == "viewer" {
-				return "viewer"
+			if mapped, exists := roleMapping[s]; exists && mapped == config.RoleViewer {
+				return config.RoleViewer
 			}
 		}
 
@@ -298,15 +298,15 @@ func extractRoleFromClaims(claims map[string]any, claimPath string, roleMapping 
 
 	// Default behavior: look for "admin" in claim values.
 	for _, r := range roles {
-		if s, ok := r.(string); ok && s == "admin" {
-			return "admin"
+		if s, ok := r.(string); ok && s == config.RoleAdmin {
+			return config.RoleAdmin
 		}
 	}
 
 	return defaultRole
 }
 
-const defaultRole = "viewer"
+const defaultRole = config.RoleViewer
 
 func nestedValue(m map[string]any, keys []string) any {
 	var cur any = m

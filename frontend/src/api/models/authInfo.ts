@@ -5,6 +5,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { AuthInfoMode } from './authInfoMode'
+import type { AuthInfoPatMinRole } from './authInfoPatMinRole'
 
 export interface AuthInfo {
   mode: AuthInfoMode
@@ -12,4 +13,6 @@ export interface AuthInfo {
   enable_query_stats_reset?: boolean
   /** True when personal access tokens can be minted (snapshot storage is configured). */
   pat_enabled?: boolean
+  /** Minimum role allowed to manage personal access tokens (auth.pat_min_role); the client combines it with the signed-in user's role. */
+  pat_min_role?: AuthInfoPatMinRole
 }

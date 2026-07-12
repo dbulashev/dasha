@@ -99,12 +99,27 @@
 
 ## Архитектура
 
-```
-┌─────────────┐     ┌──────────────┐     ┌──────────────────┐
-│  Vue 3 SPA  │────>│  Go Backend  │────>│  PostgreSQL 14+  │
-│  (Vuetify)  │<────│  (Echo)      │<────│  Кластеры        │
-└─────────────┘     └──────────────┘     └──────────────────┘
-     :3000               :8000            несколько кластеров
+```mermaid
+flowchart LR
+    SPA["Vue 3 SPA (Vuetify)<br/>:3000"]
+    LLM["AI-ассистент<br/>(MCP-клиент)"]
+    MCP["dasha-mcp<br/>MCP-сервер :8765"]
+    BE["Go-бэкенд (Echo)<br/>:8000"]
+    AS["Демон<br/>dasha autosnapshot"]
+    PG[("Кластеры PostgreSQL<br/>14 – 18")]
+    ST[("Хранилище снимков<br/>pgss, PAT, веса HS")]
+    TS[("Prometheus /<br/>VictoriaMetrics")]
+    YC["Yandex Cloud API<br/>MDB discovery · логи"]
+
+    SPA -->|/api| BE
+    LLM -->|stdio / HTTP| MCP
+    MCP -->|REST + X-API-Key| BE
+    BE --> PG
+    BE --> ST
+    BE -.->|health score<br/>на метриках| TS
+    BE -.->|discovery,<br/>поиск по логам| YC
+    AS --> PG
+    AS --> ST
 ```
 
 **API-first**: спецификация OpenAPI 3.0 (`doc/swagger.yaml`) — единственный источник истины. Серверные заглушки и клиент фронтенда генерируются из неё.
@@ -277,7 +292,7 @@ dasha autosnapshot
 
 #### Персональные API-токены (опционально)
 
-Залогиненный пользователь может выпускать **персональные API-токены (PAT)** — bearer-секреты, передаваемые в заголовке `X-API-Key`, — чтобы не-браузерные клиенты (`dasha-mcp`, скрипты) работали с его личностью и ролью (RBAC сохраняется). Требуется хранилище снимков: токены хранятся в виде хеша в `api_tokens`, поэтому сначала выполните `dasha migrate`. Режим auth — `token` или `oidc` (не `none`).
+Залогиненный пользователь может выпускать **персональные API-токены (PAT)** — bearer-секреты, передаваемые в заголовке `X-API-Key`, — чтобы не-браузерные клиенты (`dasha-mcp`, скрипты) работали с его личностью и ролью (RBAC сохраняется). Требуется хранилище снимков: токены хранятся в виде хеша в `api_tokens`, поэтому сначала выполните `dasha migrate`. Режим auth — `token` или `oidc` (не `none`). Кто может управлять PAT, задаёт `auth.pat_min_role`: `admin` (по умолчанию, пока фича в обкатке) или `viewer` (любой залогиненный пользователь).
 
 - **Через UI** (OIDC): меню пользователя → *Персональные API-токены* → создать (имя, роль ≤ своей, опциональный срок). Полный секрет показывается **один раз**.
 - **Через API**: выпуск из интерактивной личности (OIDC-сессия или статический config-токен — *не* из другого PAT):
@@ -302,6 +317,9 @@ make run-backend
 
 # Фронтенд (dev-сервер на :5173, проксирует /api на :8000)
 make run-frontend
+
+# MCP-сервер (HTTP/SSE на :8765, к бэкенду на :8000)
+make run-mcp
 ```
 
 ### Демо-лаборатория
@@ -409,6 +427,19 @@ docker run -p 8765:8765 dasha-mcp --http :8765 --dasha-url http://dasha-backend:
 
 Сервер read-only (мутирующих эндпоинтов нет) и работает под non-root. Хардненинг: размер ответа tool ограничен (слишком большой результат отклоняется с подсказкой сузить запрос, а не режется в невалидный JSON); кэш серверов по токену хэширован и ограничен; токены не логируются. В общем HTTP-развёртывании ставьте за TLS; rate-limit обеспечивает вышестоящий per-identity лимитер Dasha (каждый PAT — отдельная личность), поэтому он действует и через passthrough.
 
+### Несколько экземпляров Dasha (окружения)
+
+Каждое окружение (dev / stage / prod) — со своей Dasha и своим `dasha-mcp`. Регистрируйте их как отдельные MCP-серверы на клиенте — имя сервера играет роль неймспейса (tools, prompts и ресурсы `dasha://kb/*` клиент различает по серверу-источнику, URI не конфликтуют):
+
+```json
+"mcpServers": {
+  "dasha-dev":  { "command": "dasha-mcp", "args": ["--dasha-url", "https://dasha.dev.example.com"],  "env": { "DASHA_MCP_TOKEN": "dasha_pat_…" } },
+  "dasha-prod": { "command": "dasha-mcp", "args": ["--dasha-url", "https://dasha.prod.example.com"], "env": { "DASHA_MCP_TOKEN": "dasha_pat_…" } }
+}
+```
+
+Персональные токены привязаны к экземпляру: PAT, выпущенный на dev, не действует на prod.
+
 ### Kubernetes (Helm)
 
 В чарте есть опциональные, выключенные по умолчанию Deployment + Service для MCP (HTTP-режим). При включении сервер автоматически подключается к in-cluster бэкенду:
@@ -419,10 +450,10 @@ mcp:
   enabled: true
   port: 8765
   # dashaUrl: ""   # пусто = in-cluster Service {release}-backend
-  # token:         # опциональный общий fallback; не задавайте для строгого per-user passthrough
-  #   existingSecret: dasha-mcp-token
-  #   secretKey: token
+  # lang: ru       # язык базы знаний / плейбуков (по умолчанию en)
 ```
+
+HTTP-режим — строгий per-user passthrough: чарт намеренно не предлагает общий fallback-токен — каждый клиент присылает собственный credential в каждом запросе, RBAC и аудит остаются per-user.
 
 Создаются `{release}-mcp` Deployment + `ClusterIP` Service на порту `8765`. Чтобы открыть наружу — поставьте перед Service свой Ingress/Gateway (TLS терминируется там), а клиенты шлют `Authorization: Bearer dasha_pat_…` в каждом запросе.
 

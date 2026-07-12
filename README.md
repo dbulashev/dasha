@@ -101,12 +101,27 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 
 ## Architecture
 
-```
-┌─────────────┐     ┌──────────────┐     ┌──────────────────┐
-│  Vue 3 SPA  │────>│  Go Backend  │────>│  PostgreSQL 14+  │
-│  (Vuetify)  │<────│  (Echo)      │<────│  Clusters        │
-└─────────────┘     └──────────────┘     └──────────────────┘
-     :3000               :8000            multiple clusters
+```mermaid
+flowchart LR
+    SPA["Vue 3 SPA (Vuetify)<br/>:3000"]
+    LLM["AI assistant<br/>(MCP client)"]
+    MCP["dasha-mcp<br/>MCP server :8765"]
+    BE["Go backend (Echo)<br/>:8000"]
+    AS["dasha autosnapshot<br/>daemon"]
+    PG[("PostgreSQL clusters<br/>14 – 18")]
+    ST[("Snapshot storage<br/>pgss, PAT, HS weights")]
+    TS[("Prometheus /<br/>VictoriaMetrics")]
+    YC["Yandex Cloud API<br/>MDB discovery · logs"]
+
+    SPA -->|/api| BE
+    LLM -->|stdio / HTTP| MCP
+    MCP -->|REST + X-API-Key| BE
+    BE --> PG
+    BE --> ST
+    BE -.->|metrics-backed<br/>health score| TS
+    BE -.->|discovery,<br/>log search| YC
+    AS --> PG
+    AS --> ST
 ```
 
 **API-first**: the OpenAPI 3.0 spec (`doc/swagger.yaml`) is the single source of truth. Backend stubs and frontend API client are generated from it.
@@ -279,7 +294,7 @@ Retention drops the oldest day-triples once total size exceeds `retention_bytes`
 
 #### Personal Access Tokens (optional)
 
-A logged-in user can mint **personal access tokens (PATs)** — bearer secrets sent as the `X-API-Key` header — so non-browser clients (the `dasha-mcp` server, scripts) act with that user's identity and role (RBAC is preserved). Requires snapshot storage: tokens are stored hashed in `api_tokens`, so run `dasha migrate` first. Auth mode must be `token` or `oidc` (not `none`).
+A logged-in user can mint **personal access tokens (PATs)** — bearer secrets sent as the `X-API-Key` header — so non-browser clients (the `dasha-mcp` server, scripts) act with that user's identity and role (RBAC is preserved). Requires snapshot storage: tokens are stored hashed in `api_tokens`, so run `dasha migrate` first. Auth mode must be `token` or `oidc` (not `none`). Who may manage PATs is gated by `auth.pat_min_role`: `admin` (default while the feature matures) or `viewer` (any signed-in user).
 
 - **From the UI** (OIDC): user menu → *Personal access tokens* → create (name, role ≤ your own, optional expiry). The full secret is shown **once**.
 - **From the API**: mint with an interactive identity (an OIDC session or a static config token — *not* from another PAT):
@@ -304,6 +319,9 @@ make run-backend
 
 # Frontend (dev server on :5173, proxies /api to :8000)
 make run-frontend
+
+# MCP server (HTTP/SSE on :8765, against the backend on :8000)
+make run-mcp
 ```
 
 ### Demo Lab
@@ -411,6 +429,19 @@ Point a remote-MCP client at `http://<host>:8765` and send the token as `Authori
 
 The server is read-only (no mutating endpoints are exposed) and runs as a non-root user. Hardening: tool results are size-capped (oversized results are refused with a hint to narrow the request, never truncated into invalid JSON); the per-token server cache is hashed and bounded; tokens are never logged. Put the HTTP transport behind TLS in shared deployments; rate limiting is enforced upstream by Dasha's per-identity limiter (each PAT is a distinct identity), so it applies through the passthrough.
 
+### Multiple Dasha instances (environments)
+
+Each environment (dev / stage / prod) runs its own Dasha and its own `dasha-mcp`. Register them as separate MCP servers on the client — the server name namespaces everything (tools, prompts and `dasha://kb/*` resources are tracked per server, so URIs never clash):
+
+```json
+"mcpServers": {
+  "dasha-dev":  { "command": "dasha-mcp", "args": ["--dasha-url", "https://dasha.dev.example.com"],  "env": { "DASHA_MCP_TOKEN": "dasha_pat_…" } },
+  "dasha-prod": { "command": "dasha-mcp", "args": ["--dasha-url", "https://dasha.prod.example.com"], "env": { "DASHA_MCP_TOKEN": "dasha_pat_…" } }
+}
+```
+
+Personal access tokens are per-instance: a PAT minted on dev is not valid on prod.
+
 ### Kubernetes (Helm)
 
 The chart ships an optional, gated MCP Deployment + Service (HTTP mode). Enable it and the server is wired to the in-cluster backend automatically:
@@ -421,10 +452,10 @@ mcp:
   enabled: true
   port: 8765
   # dashaUrl: ""   # empty = in-cluster {release}-backend Service
-  # token:         # optional shared fallback; omit for strict per-user passthrough
-  #   existingSecret: dasha-mcp-token
-  #   secretKey: token
+  # lang: ru       # knowledge-base / playbook language (default en)
 ```
+
+HTTP mode is strict per-user passthrough: the chart deliberately offers no shared fallback token — every client must send its own credential per request, keeping RBAC and audit per-user.
 
 This creates `{release}-mcp` Deployment + `ClusterIP` Service on port `8765`. To expose it outside the cluster, front the Service with your own Ingress/Gateway (terminate TLS there) and have clients send `Authorization: Bearer dasha_pat_…` per request.
 

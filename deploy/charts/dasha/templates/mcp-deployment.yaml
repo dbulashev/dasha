@@ -64,16 +64,9 @@ spec:
             - --lang
             - {{ . | quote }}
             {{- end }}
-          {{- if .Values.mcp.token.existingSecret }}
-          env:
-            # Optional shared fallback token. HTTP mode normally relies on per-user
-            # passthrough (each client sends its own PAT in the Authorization header).
-            - name: DASHA_MCP_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.mcp.token.existingSecret }}
-                  key: {{ .Values.mcp.token.secretKey }}
-          {{- end }}
+          # No DASHA_MCP_TOKEN here on purpose: HTTP mode is strict per-user
+          # passthrough — every request brings its own credential, RBAC and audit
+          # stay per-user. A shared fallback identity is not offered by the chart.
           ports:
             - name: http
               containerPort: {{ .Values.mcp.port }}

@@ -27,11 +27,19 @@ func (s *Handlers) GetAuthInfo(
 	// tokens cannot mint them) and require the api_tokens table to be migrated
 	// (else minting 500s and PAT auth fails closed). Only advertise the feature
 	// when both hold, so the frontend does not offer an unusable dialog.
+	//
+	// The auth.pat_min_role gate is NOT folded into pat_enabled: this route sits
+	// in the SkipAuth list (it must answer before login), so no caller identity
+	// exists here. The minimum role ships as its own field and the client checks
+	// it against the role it knows from /auth/me; the server-side enforcement
+	// lives in CreatePersonalToken, where the identity is guaranteed.
 	patEnabled := s.cfg.Auth.Mode == config.AuthModeOIDC && s.storage.APITokensReady(ctx)
+	patMinRole := serverhttp.AuthInfoPatMinRole(s.cfg.Auth.PATMinRole)
 	resp := serverhttp.GetAuthInfo200JSONResponse{
 		Mode:                  mode,
 		EnableQueryStatsReset: &enableReset,
 		PatEnabled:            &patEnabled,
+		PatMinRole:            &patMinRole,
 	}
 
 	if s.cfg.Auth.Mode == config.AuthModeOIDC {

@@ -450,7 +450,7 @@ func provideConfig() (*config.Config, error) {
 		}
 
 		if c.Auth.Tokens[i].Role == "" {
-			c.Auth.Tokens[i].Role = "viewer"
+			c.Auth.Tokens[i].Role = config.RoleViewer
 		}
 	}
 

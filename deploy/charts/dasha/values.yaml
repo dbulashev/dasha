@@ -48,6 +48,7 @@ config:
   # -- Authentication & authorization
   # auth:
   #   mode: none  # none | token | oidc
+  #   pat_min_role: admin  # who can manage personal access tokens: admin (default) | viewer
   #
   #   ## mode: token — static API keys
   #   # tokens:
@@ -331,11 +332,9 @@ mcp:
   # -- Language of the knowledge-base resources, playbook prompts and
   # instructions: en | ru. Empty = en. Tool names/schemas/results stay English.
   lang: ""
-  # -- Optional shared fallback token (DASHA_MCP_TOKEN) for clients that cannot
-  # send per-request auth headers. Leave unset to keep strict per-user passthrough.
-  token:
-    existingSecret: ""
-    secretKey: token
+  # NOTE: there is intentionally no shared-token option. Every request must carry
+  # its own credential (Authorization: Bearer / X-API-Key) — a shared fallback
+  # identity would collapse per-user RBAC and audit for all header-less clients.
   # -- Service type for the MCP endpoint. Independent of the UI Service so exposing
   # the dashboard (service.type) does not also publish the plain-HTTP MCP port.
   # Empty = fall back to service.type.
