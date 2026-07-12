@@ -63,6 +63,9 @@ func Execute(ctx context.Context) error {
 			"knowledge-base resources. It runs over stdio (single identity from DASHA_MCP_TOKEN)\n" +
 			"or HTTP/SSE (--http; per-user token passthrough).",
 		SilenceUsage: true,
+		// cobra.CheckErr in main is the single error printer; without this the
+		// error would be printed twice (once by Execute, once by CheckErr).
+		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return run(cmd.Context(), opts)
 		},

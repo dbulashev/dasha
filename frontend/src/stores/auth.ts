@@ -18,6 +18,7 @@ export const useAuthStore = defineStore('auth', () => {
   const initialized = ref(false)
   const enableQueryStatsReset = ref(false)
   const patEnabled = ref(false)
+  const patMinRole = ref('admin')
 
   const isAuthenticated = computed(() => mode.value === AuthInfoMode.none || user.value !== null)
   const requiresLogin = computed(() => mode.value !== AuthInfoMode.none && !user.value)
@@ -32,6 +33,15 @@ export const useAuthStore = defineStore('auth', () => {
       user.value?.role === 'admin',
   )
 
+  // Whether the signed-in user may manage personal access tokens: the feature
+  // must be available (pat_enabled) and the user's role must clear
+  // auth.pat_min_role. Combined client-side because /api/auth/info answers
+  // before login and carries no caller identity; the server enforces the same
+  // rule on token creation.
+  const canManageTokens = computed(
+    () => patEnabled.value && (patMinRole.value === 'viewer' || user.value?.role === 'admin'),
+  )
+
   async function init() {
     if (initialized.value) return
 
@@ -44,6 +54,7 @@ export const useAuthStore = defineStore('auth', () => {
       oidcLoginUrl.value = res.data.oidc_login_url ?? null
       enableQueryStatsReset.value = res.data.enable_query_stats_reset ?? false
       patEnabled.value = res.data.pat_enabled ?? false
+      patMinRole.value = res.data.pat_min_role ?? 'admin'
     } catch {
       mode.value = AuthInfoMode.none
     }
@@ -98,5 +109,5 @@ export const useAuthStore = defineStore('auth', () => {
     window.location.href = '/'
   }
 
-  return { mode, oidcLoginUrl, user, initialized, isAuthenticated, requiresLogin, isAdmin, enableQueryStatsReset, patEnabled, init, doLoginRedirect, consumeReturnUrl, logout }
+  return { mode, oidcLoginUrl, user, initialized, isAuthenticated, requiresLogin, isAdmin, enableQueryStatsReset, patEnabled, patMinRole, canManageTokens, init, doLoginRedirect, consumeReturnUrl, logout }
 })

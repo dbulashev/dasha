@@ -30,6 +30,12 @@ const (
 	Token AuthInfoMode = "token"
 )
 
+// Defines values for AuthInfoPatMinRole.
+const (
+	AuthInfoPatMinRoleAdmin  AuthInfoPatMinRole = "admin"
+	AuthInfoPatMinRoleViewer AuthInfoPatMinRole = "viewer"
+)
+
 // Defines values for HealthScoreRecommendationSeverity.
 const (
 	HIGH   HealthScoreRecommendationSeverity = "HIGH"
@@ -57,8 +63,8 @@ const (
 
 // Defines values for PersonalAccessTokenCreatedRole.
 const (
-	Admin  PersonalAccessTokenCreatedRole = "admin"
-	Viewer PersonalAccessTokenCreatedRole = "viewer"
+	PersonalAccessTokenCreatedRoleAdmin  PersonalAccessTokenCreatedRole = "admin"
+	PersonalAccessTokenCreatedRoleViewer PersonalAccessTokenCreatedRole = "viewer"
 )
 
 // Defines values for RoleChangeTriggerDirection.
@@ -106,10 +112,16 @@ type AuthInfo struct {
 
 	// PatEnabled True when personal access tokens can be minted (snapshot storage is configured).
 	PatEnabled *bool `json:"pat_enabled,omitempty"`
+
+	// PatMinRole Minimum role allowed to manage personal access tokens (auth.pat_min_role); the client combines it with the signed-in user's role.
+	PatMinRole *AuthInfoPatMinRole `json:"pat_min_role,omitempty"`
 }
 
 // AuthInfoMode defines model for AuthInfo.Mode.
 type AuthInfoMode string
+
+// AuthInfoPatMinRole Minimum role allowed to manage personal access tokens (auth.pat_min_role); the client combines it with the signed-in user's role.
+type AuthInfoPatMinRole string
 
 // AutoSnapshotClusterOverride defines model for AutoSnapshotClusterOverride.
 type AutoSnapshotClusterOverride struct {

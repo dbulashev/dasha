@@ -8,6 +8,7 @@
 export * from './activitySpikeTrigger'
 export * from './authInfo'
 export * from './authInfoMode'
+export * from './authInfoPatMinRole'
 export * from './autoSnapshotClusterOverride'
 export * from './autoSnapshotClusterOverrideInput'
 export * from './autoSnapshotClusterOverrideInputOverrides'
