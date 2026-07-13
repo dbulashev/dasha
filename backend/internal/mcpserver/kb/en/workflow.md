@@ -53,10 +53,11 @@ per-database tools also need `database`.
 
 ## Care rules (always)
 - A recommendation is not yet a target. `get_health_recommendations` returns a
-  rule_id plus a count/ratio; `health_details` turns it into objects. Pass the
-  rule_id as `detail`: tables_autovacuum_off, low_hot_update_tables,
-  high_dead_ratio_tables (these three need `database`), xid_wraparound_databases,
-  horizon_blocking_sessions (instance-wide). Never guess a table name — ask.
+  rule_id plus a count/ratio; `health_details` turns it into objects — hand that
+  rule_id straight back as `detail`. The per-table drill-downs
+  (tables_autovacuum_off, low_hot_update_tables, high_dead_ratio_tables) also need
+  `database`; the wraparound / xmin-horizon ones are instance-wide. Never guess a
+  table name — ask.
 - `search_logs` is rate-limited per user (~1 request / 30s by default):
   combine all filters into ONE call, keep dedup on, never poll; after a 429
   wait ≥30s.

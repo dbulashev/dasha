@@ -58,6 +58,37 @@ func TestKB_CoversEveryHealthRule(t *testing.T) {
 	}
 }
 
+// TestHealthDetails_RuleAliasesExist keeps the health_details drill-down table in
+// lockstep with the rules engine. Each entry advertises the rule_ids it explains,
+// and the tool accepts those as aliases; if a rule is renamed or dropped, the alias
+// would silently stop resolving and the model's "pass the rule_id back" flow would
+// break with an unknown-detail error. The duplicate check matters too: a rule
+// aliased by two details would be silently overwritten when the index is built.
+func TestHealthDetails_RuleAliasesExist(t *testing.T) {
+	t.Parallel()
+
+	known := make(map[string]bool, len(health.Registry))
+	for _, r := range health.Registry {
+		known[r.ID] = true
+	}
+
+	claimedBy := map[string]string{}
+
+	for _, d := range healthDetailList {
+		for _, rule := range d.rules {
+			if !known[rule] {
+				t.Errorf("health_details %q aliases rule %q, which is not in health.Registry — renamed or removed?", d.name, rule)
+			}
+
+			if prev, dup := claimedBy[rule]; dup {
+				t.Errorf("rule %q is aliased by both %q and %q — the lookup index would keep only one", rule, prev, d.name)
+			}
+
+			claimedBy[rule] = d.name
+		}
+	}
+}
+
 func TestKB_SizeAndLanguageParity(t *testing.T) {
 	t.Parallel()
 

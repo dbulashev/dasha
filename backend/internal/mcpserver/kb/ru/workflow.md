@@ -57,10 +57,10 @@
 
 ## Правила бережности (всегда)
 - Рекомендация — ещё не цель. `get_health_recommendations` даёт rule_id и
-  счётчик/долю; `health_details` превращает это в объекты. Передать rule_id как
-  `detail`: tables_autovacuum_off, low_hot_update_tables, high_dead_ratio_tables
-  (этим трём нужна `database`), xid_wraparound_databases,
-  horizon_blocking_sessions (по инстансу). Не угадывать имя таблицы — спросить.
+  счётчик/долю; `health_details` превращает это в объекты — верните этот rule_id
+  прямо в `detail`. Потабличным drill-down (tables_autovacuum_off,
+  low_hot_update_tables, high_dead_ratio_tables) нужна ещё `database`; wraparound
+  и горизонт xmin — по инстансу. Не угадывать имя таблицы — спросить.
 - `search_logs` лимитирован per-user (~1 запрос / 30с по умолчанию):
   собрать все фильтры в ОДИН вызов, держать dedup, не поллить; после 429
   ждать ≥30с.

@@ -3,6 +3,8 @@ package mcpserver
 import (
 	"cmp"
 	"context"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/dbulashev/dasha/gen/apiclient"
@@ -33,9 +35,99 @@ type dbArgs struct {
 type healthDetailsArgs struct {
 	Cluster  string `json:"cluster" jsonschema:"Dasha cluster name"`
 	Instance string `json:"instance" jsonschema:"Dasha instance / host name"`
-	Detail   string `json:"detail" jsonschema:"Which evidence to fetch, chosen from the rule_id that get_health_recommendations returned: 'tables_autovacuum_off' (rule tables_with_autovacuum_off), 'low_hot_update_tables' (low_hot_update_ratio, high_newpage_update_ratio), 'high_dead_ratio_tables' (high_dead_ratio), 'xid_wraparound_databases' (transaction-id wraparound), 'horizon_blocking_sessions' (xmin horizon lag)"`
-	Database string `json:"database,omitempty" jsonschema:"Database to inspect. Required for tables_autovacuum_off, low_hot_update_tables and high_dead_ratio_tables; the other two details are instance-wide and ignore it"`
+	Detail   string `json:"detail" jsonschema:"Which evidence to fetch. Pass the rule_id straight from get_health_recommendations (e.g. 'tables_with_autovacuum_off', 'low_hot_update_ratio', 'high_avg_dead_ratio') — it is accepted as-is. The canonical names also work: 'tables_autovacuum_off', 'low_hot_update_tables', 'high_dead_ratio_tables', 'xid_wraparound_databases', 'horizon_blocking_sessions'"`
+	Database string `json:"database,omitempty" jsonschema:"Database to inspect. Required for the per-table details (tables_autovacuum_off, low_hot_update_tables, high_dead_ratio_tables); the instance-wide ones ignore it"`
 	Limit    int    `json:"limit,omitempty" jsonschema:"Max rows to return (default 15)"`
+}
+
+// healthDetail is one health-score drill-down: the evidence behind one or more
+// rules. rules lists the rule_ids it explains and they are accepted as aliases for
+// name, so a caller can hand the rule_id from a recommendation straight back —
+// the canonical names deliberately differ (one drill-down can explain two rules).
+type healthDetail struct {
+	name    string
+	rules   []string
+	needsDB bool
+	fetch   func(ctx context.Context, c *DashaClient, a healthDetailsArgs) (any, error)
+}
+
+// healthDetailList is the single source of truth for the health_details tool: the
+// accepted values, which of them need a database, which rules each one explains and
+// how to fetch it. Adding a drill-down is one entry — validation, dispatch and the
+// error message all derive from here, so they cannot drift apart.
+//
+// Two nearby rules are deliberately NOT mapped: autovacuum_disabled is the
+// instance-wide setting (not a table list) and relfrozenxid_age_outlier is
+// per-relation, while the wraparound drill-down reports databases.
+var healthDetailList = []healthDetail{
+	{
+		name:    "tables_autovacuum_off",
+		rules:   []string{"tables_with_autovacuum_off"},
+		needsDB: true,
+		fetch: func(ctx context.Context, c *DashaClient, a healthDetailsArgs) (any, error) {
+			return c.HealthTablesAutovacuumOff(ctx, a.Cluster, a.Instance, a.Database, a.Limit)
+		},
+	},
+	{
+		name:    "low_hot_update_tables",
+		rules:   []string{"low_hot_update_ratio", "high_newpage_update_ratio"},
+		needsDB: true,
+		fetch: func(ctx context.Context, c *DashaClient, a healthDetailsArgs) (any, error) {
+			return c.HealthLowHotUpdateTables(ctx, a.Cluster, a.Instance, a.Database, a.Limit)
+		},
+	},
+	{
+		name:    "high_dead_ratio_tables",
+		rules:   []string{"high_avg_dead_ratio", "high_max_dead_ratio"},
+		needsDB: true,
+		fetch: func(ctx context.Context, c *DashaClient, a healthDetailsArgs) (any, error) {
+			return c.HealthHighDeadRatioTables(ctx, a.Cluster, a.Instance, a.Database, a.Limit)
+		},
+	},
+	{
+		name:    "xid_wraparound_databases",
+		rules:   []string{"xid_wraparound_risk"},
+		needsDB: false,
+		fetch: func(ctx context.Context, c *DashaClient, a healthDetailsArgs) (any, error) {
+			return c.HealthXidWraparoundDatabases(ctx, a.Cluster, a.Instance, a.Limit)
+		},
+	},
+	{
+		name:    "horizon_blocking_sessions",
+		rules:   []string{"horizon_lag_xids"},
+		needsDB: false,
+		fetch: func(ctx context.Context, c *DashaClient, a healthDetailsArgs) (any, error) {
+			return c.HealthHorizonBlockingSessions(ctx, a.Cluster, a.Instance, a.Limit)
+		},
+	},
+}
+
+// healthDetailByKey indexes healthDetailList by canonical name and by every rule_id
+// alias, so a lookup accepts either form.
+var healthDetailByKey = func() map[string]*healthDetail {
+	m := make(map[string]*healthDetail, len(healthDetailList)*2)
+
+	for i := range healthDetailList {
+		d := &healthDetailList[i]
+		m[d.name] = d
+
+		for _, rule := range d.rules {
+			m[rule] = d
+		}
+	}
+
+	return m
+}()
+
+// healthDetailNames lists the canonical values for the error message, so what the
+// tool accepts and what it advertises on a miss stay in lockstep.
+func healthDetailNames() string {
+	names := make([]string, 0, len(healthDetailList))
+	for i := range healthDetailList {
+		names = append(names, healthDetailList[i].name)
+	}
+
+	return strings.Join(names, ", ")
 }
 
 type topQueriesArgs struct {
@@ -148,32 +240,21 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 		Name: "health_details",
 		Description: "Name the objects behind a health-score finding. get_health_recommendations tells you " +
 			"WHICH rule fired and how bad it is; this tells you WHICH tables, databases or sessions caused it — " +
-			"call it whenever a recommendation needs to become an actionable target. Pick detail from the " +
-			"recommendation's rule_id: 'tables_autovacuum_off', 'low_hot_update_tables', 'high_dead_ratio_tables' " +
-			"(these three need a database), 'xid_wraparound_databases', 'horizon_blocking_sessions' (instance-wide).",
+			"call it whenever a recommendation needs to become an actionable target. Pass the recommendation's " +
+			"rule_id as detail; the per-table drill-downs (tables_autovacuum_off, low_hot_update_tables, " +
+			"high_dead_ratio_tables) also need a database, the instance-wide ones do not.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a healthDetailsArgs) (*mcp.CallToolResult, any, error) {
-		switch a.Detail {
-		case "tables_autovacuum_off", "low_hot_update_tables", "high_dead_ratio_tables":
-			if a.Database == "" {
-				return errResult("detail '" + a.Detail + "' is per-database — pass database"), nil, nil
-			}
+		d, ok := healthDetailByKey[a.Detail]
+		if !ok {
+			return errResult("unknown detail " + strconv.Quote(a.Detail) +
+				" — pass a rule_id from get_health_recommendations, or one of: " + healthDetailNames()), nil, nil
 		}
 
-		switch a.Detail {
-		case "tables_autovacuum_off":
-			return jsonResult(c.HealthTablesAutovacuumOff(ctx, a.Cluster, a.Instance, a.Database, a.Limit))
-		case "low_hot_update_tables":
-			return jsonResult(c.HealthLowHotUpdateTables(ctx, a.Cluster, a.Instance, a.Database, a.Limit))
-		case "high_dead_ratio_tables":
-			return jsonResult(c.HealthHighDeadRatioTables(ctx, a.Cluster, a.Instance, a.Database, a.Limit))
-		case "xid_wraparound_databases":
-			return jsonResult(c.HealthXidWraparoundDatabases(ctx, a.Cluster, a.Instance, a.Limit))
-		case "horizon_blocking_sessions":
-			return jsonResult(c.HealthHorizonBlockingSessions(ctx, a.Cluster, a.Instance, a.Limit))
-		default:
-			return errResult("detail must be one of: tables_autovacuum_off, low_hot_update_tables, " +
-				"high_dead_ratio_tables, xid_wraparound_databases, horizon_blocking_sessions"), nil, nil
+		if d.needsDB && a.Database == "" {
+			return errResult("detail " + strconv.Quote(d.name) + " is per-database — pass database"), nil, nil
 		}
+
+		return jsonResult(d.fetch(ctx, c, a))
 	})
 
 	addTool(s, &mcp.Tool{
