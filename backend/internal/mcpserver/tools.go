@@ -30,6 +30,14 @@ type dbArgs struct {
 	Database string `json:"database" jsonschema:"Database name to inspect"`
 }
 
+type healthDetailsArgs struct {
+	Cluster  string `json:"cluster" jsonschema:"Dasha cluster name"`
+	Instance string `json:"instance" jsonschema:"Dasha instance / host name"`
+	Detail   string `json:"detail" jsonschema:"Which evidence to fetch, chosen from the rule_id that get_health_recommendations returned: 'tables_autovacuum_off' (rule tables_with_autovacuum_off), 'low_hot_update_tables' (low_hot_update_ratio, high_newpage_update_ratio), 'high_dead_ratio_tables' (high_dead_ratio), 'xid_wraparound_databases' (transaction-id wraparound), 'horizon_blocking_sessions' (xmin horizon lag)"`
+	Database string `json:"database,omitempty" jsonschema:"Database to inspect. Required for tables_autovacuum_off, low_hot_update_tables and high_dead_ratio_tables; the other two details are instance-wide and ignore it"`
+	Limit    int    `json:"limit,omitempty" jsonschema:"Max rows to return (default 15)"`
+}
+
 type topQueriesArgs struct {
 	Cluster  string `json:"cluster" jsonschema:"Dasha cluster name"`
 	Instance string `json:"instance" jsonschema:"Dasha instance / host name"`
@@ -134,6 +142,38 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 		out, err := c.Recommendations(ctx, a.Cluster, a.Instance, db)
 
 		return jsonResult(out, err)
+	})
+
+	addTool(s, &mcp.Tool{
+		Name: "health_details",
+		Description: "Name the objects behind a health-score finding. get_health_recommendations tells you " +
+			"WHICH rule fired and how bad it is; this tells you WHICH tables, databases or sessions caused it — " +
+			"call it whenever a recommendation needs to become an actionable target. Pick detail from the " +
+			"recommendation's rule_id: 'tables_autovacuum_off', 'low_hot_update_tables', 'high_dead_ratio_tables' " +
+			"(these three need a database), 'xid_wraparound_databases', 'horizon_blocking_sessions' (instance-wide).",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, a healthDetailsArgs) (*mcp.CallToolResult, any, error) {
+		switch a.Detail {
+		case "tables_autovacuum_off", "low_hot_update_tables", "high_dead_ratio_tables":
+			if a.Database == "" {
+				return errResult("detail '" + a.Detail + "' is per-database — pass database"), nil, nil
+			}
+		}
+
+		switch a.Detail {
+		case "tables_autovacuum_off":
+			return jsonResult(c.HealthTablesAutovacuumOff(ctx, a.Cluster, a.Instance, a.Database, a.Limit))
+		case "low_hot_update_tables":
+			return jsonResult(c.HealthLowHotUpdateTables(ctx, a.Cluster, a.Instance, a.Database, a.Limit))
+		case "high_dead_ratio_tables":
+			return jsonResult(c.HealthHighDeadRatioTables(ctx, a.Cluster, a.Instance, a.Database, a.Limit))
+		case "xid_wraparound_databases":
+			return jsonResult(c.HealthXidWraparoundDatabases(ctx, a.Cluster, a.Instance, a.Limit))
+		case "horizon_blocking_sessions":
+			return jsonResult(c.HealthHorizonBlockingSessions(ctx, a.Cluster, a.Instance, a.Limit))
+		default:
+			return errResult("detail must be one of: tables_autovacuum_off, low_hot_update_tables, " +
+				"high_dead_ratio_tables, xid_wraparound_databases, horizon_blocking_sessions"), nil, nil
+		}
 	})
 
 	addTool(s, &mcp.Tool{

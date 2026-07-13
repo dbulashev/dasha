@@ -45,6 +45,7 @@ Getting oriented:
 Investigating:
 - For a guided workflow prefer the prompts: diagnose_cluster, explain_health_score, investigate_slow_queries, find_index_opportunities, fleet_overview.
 - Typical chain: get_health_score -> get_health_recommendations -> (top_queries, blocked_queries, list_indexes, describe_table) to drill into the worst findings.
+- A recommendation names the rule, not the culprit: it reports a rule_id and a count/ratio, never a table. To turn it into an actionable target call health_details with detail = that rule_id — it returns the offending tables, databases or sessions.
 - health_trend needs metrics-backed mode (a configured datasource); it returns an error otherwise.
 - query_compare needs snapshot IDs from list_snapshots.
 - search_logs works only on clusters with supports_logs=true (see list_clusters) and is rate-limited per user because every call reaches the Yandex Cloud API: combine all filters into one call, keep dedup on, and after a 429 wait ~30 seconds instead of retrying immediately.
@@ -110,6 +111,7 @@ If a result is refused as too large, narrow it (one database, a smaller range, o
 Расследование:
 - Для направляемого сценария используйте prompts: diagnose_cluster, explain_health_score, investigate_slow_queries, find_index_opportunities, fleet_overview.
 - Типовая цепочка: get_health_score -> get_health_recommendations -> (top_queries, blocked_queries, list_indexes, describe_table) по худшим находкам.
+- Рекомендация называет правило, а не виновника: она возвращает rule_id и счётчик/долю, но никогда — таблицу. Чтобы превратить её в конкретную цель, вызовите health_details с detail = этот rule_id — он вернёт сами таблицы, базы или сессии.
 - health_trend требует режима метрик (настроенный datasource), иначе вернёт ошибку.
 - query_compare требует ID снимков из list_snapshots.
 - search_logs работает только на кластерах с supports_logs=true (см. list_clusters) и лимитирован per-user, т.к. каждый вызов уходит в Yandex Cloud API: собирайте все фильтры в один вызов, держите dedup включённым, после 429 ждите ~30 секунд вместо немедленного повтора.

@@ -9,7 +9,8 @@
 1. `get_health_score` — score ≥80: смотреть в приложение, не в БД (доложить
    и остановиться). Иначе зафиксировать 2 худшие категории по штрафу.
 2. `get_health_recommendations` — сначала HIGH; незнакомые rule ID смотреть
-   в dasha://kb/health-rules.
+   в dasha://kb/health-rules. Он называет правило, а не виновника: следом
+   вызвать `health_details` (detail = этот rule_id) и получить сами таблицы.
 3. `top_queries` (by=time) — мало calls × высокий mean_time = проблема плана
    (предложить EXPLAIN, индексы); огромные calls × низкий mean_time =
    проблема частоты (кэширование/батчинг).
@@ -26,7 +27,10 @@
    idle_in_transaction_session_timeout / lock_timeout.
 
 ## «Кончается место на диске»
-1. `get_health_recommendations` — правила host_disk_space / bloat.
+1. `get_health_recommendations` — правила host_disk_space / bloat, затем
+   `health_details` (detail=high_dead_ratio_tables) — назвать распухшие таблицы;
+   если vacuum не может их очистить, detail=horizon_blocking_sessions покажет,
+   кто держит горизонт xmin.
 2. `get_replication` — неактивные слоты копят WAL (классический тихий пожиратель).
 3. `top_tables` — крупнейшие таблицы; подозрительные — `describe_table`
    (секция bloat).
@@ -52,6 +56,11 @@
 2. Для худших 1-2 инстансов — сценарий «База тормозит».
 
 ## Правила бережности (всегда)
+- Рекомендация — ещё не цель. `get_health_recommendations` даёт rule_id и
+  счётчик/долю; `health_details` превращает это в объекты. Передать rule_id как
+  `detail`: tables_autovacuum_off, low_hot_update_tables, high_dead_ratio_tables
+  (этим трём нужна `database`), xid_wraparound_databases,
+  horizon_blocking_sessions (по инстансу). Не угадывать имя таблицы — спросить.
 - `search_logs` лимитирован per-user (~1 запрос / 30с по умолчанию):
   собрать все фильтры в ОДИН вызов, держать dedup, не поллить; после 429
   ждать ≥30с.

@@ -118,6 +118,98 @@ func (d *DashaClient) Recommendations(
 	return resp.JSON200, nil
 }
 
+// Health-score drill-downs. Recommendations names the rule that fired and how bad
+// it is; these name the objects behind it, one method per rule_id, so a caller can
+// go straight from a recommendation to its evidence. A zero limit lets the API
+// apply its own default (15).
+
+// HealthTablesAutovacuumOff lists tables with autovacuum_enabled=false in their
+// reloptions — the evidence for the tables_with_autovacuum_off rule.
+func (d *DashaClient) HealthTablesAutovacuumOff(
+	ctx context.Context,
+	cluster, instance, database string,
+	limit int,
+) (any, error) {
+	r, err := d.api.GetHealthScoreTablesAutovacuumOffWithResponse(ctx, &apiclient.GetHealthScoreTablesAutovacuumOffParams{
+		ClusterName: cluster, Instance: instance, Database: database, Limit: opt(limit), Offset: nil,
+	}, d.editor(ctx))
+	if err != nil {
+		return nil, wrapErr("tables_autovacuum_off", err)
+	}
+
+	return pick(r.JSON200, r.HTTPResponse, "tables_autovacuum_off")
+}
+
+// HealthLowHotUpdateTables lists the tables whose UPDATEs least often take the HOT
+// path (every non-HOT update rewrites every index) — evidence for the
+// low_hot_update_ratio and high_newpage_update_ratio rules.
+func (d *DashaClient) HealthLowHotUpdateTables(
+	ctx context.Context,
+	cluster, instance, database string,
+	limit int,
+) (any, error) {
+	r, err := d.api.GetHealthScoreLowHotUpdateTablesWithResponse(ctx, &apiclient.GetHealthScoreLowHotUpdateTablesParams{
+		ClusterName: cluster, Instance: instance, Database: database, Limit: opt(limit), Offset: nil,
+	}, d.editor(ctx))
+	if err != nil {
+		return nil, wrapErr("low_hot_update_tables", err)
+	}
+
+	return pick(r.JSON200, r.HTTPResponse, "low_hot_update_tables")
+}
+
+// HealthHighDeadRatioTables lists the tables with the most dead tuples relative to
+// live ones — evidence for the high_dead_ratio rule.
+func (d *DashaClient) HealthHighDeadRatioTables(
+	ctx context.Context,
+	cluster, instance, database string,
+	limit int,
+) (any, error) {
+	r, err := d.api.GetHealthScoreHighDeadRatioTablesWithResponse(ctx, &apiclient.GetHealthScoreHighDeadRatioTablesParams{
+		ClusterName: cluster, Instance: instance, Database: database, Limit: opt(limit), Offset: nil,
+	}, d.editor(ctx))
+	if err != nil {
+		return nil, wrapErr("high_dead_ratio_tables", err)
+	}
+
+	return pick(r.JSON200, r.HTTPResponse, "high_dead_ratio_tables")
+}
+
+// HealthXidWraparoundDatabases lists databases by transaction-id age — evidence for
+// the transaction-id wraparound rules. Instance-wide: it takes no database.
+func (d *DashaClient) HealthXidWraparoundDatabases(
+	ctx context.Context,
+	cluster, instance string,
+	limit int,
+) (any, error) {
+	r, err := d.api.GetHealthScoreXidWraparoundDatabasesWithResponse(ctx, &apiclient.GetHealthScoreXidWraparoundDatabasesParams{
+		ClusterName: cluster, Instance: instance, Limit: opt(limit), Offset: nil,
+	}, d.editor(ctx))
+	if err != nil {
+		return nil, wrapErr("xid_wraparound_databases", err)
+	}
+
+	return pick(r.JSON200, r.HTTPResponse, "xid_wraparound_databases")
+}
+
+// HealthHorizonBlockingSessions lists the sessions holding back the xmin horizon
+// (so vacuum cannot reclaim dead tuples) — evidence for the horizon rules.
+// Instance-wide: it takes no database.
+func (d *DashaClient) HealthHorizonBlockingSessions(
+	ctx context.Context,
+	cluster, instance string,
+	limit int,
+) (any, error) {
+	r, err := d.api.GetHealthScoreHorizonBlockingSessionsWithResponse(ctx, &apiclient.GetHealthScoreHorizonBlockingSessionsParams{
+		ClusterName: cluster, Instance: instance, Limit: opt(limit), Offset: nil,
+	}, d.editor(ctx))
+	if err != nil {
+		return nil, wrapErr("horizon_blocking_sessions", err)
+	}
+
+	return pick(r.JSON200, r.HTTPResponse, "horizon_blocking_sessions")
+}
+
 // InstanceInfo returns server version and recovery state for an instance.
 func (d *DashaClient) InstanceInfo(ctx context.Context, cluster, instance string) (any, error) {
 	r, err := d.api.GetInstanceInfoWithResponse(ctx, &apiclient.GetInstanceInfoParams{

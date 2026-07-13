@@ -8,7 +8,8 @@ per-database tools also need `database`.
 1. `get_health_score` — score ≥80: look at the app, not the DB (report and stop).
    Otherwise note the 2 worst categories by penalty.
 2. `get_health_recommendations` — HIGH severity first; look up unfamiliar rule
-   IDs in dasha://kb/health-rules.
+   IDs in dasha://kb/health-rules. It names the rule, not the culprit: follow up
+   with `health_details` (detail = that rule_id) to get the actual tables.
 3. `top_queries` (by=time) — few calls × high mean_time = plan problem
    (suggest EXPLAIN, indexes); huge calls × low mean_time = frequency problem
    (suggest caching/batching).
@@ -24,7 +25,10 @@ per-database tools also need `database`.
    victims; suggest idle_in_transaction_session_timeout / lock_timeout.
 
 ## "Disk is filling up"
-1. `get_health_recommendations` — check host_disk_space / bloat rules.
+1. `get_health_recommendations` — check host_disk_space / bloat rules, then
+   `health_details` (detail=high_dead_ratio_tables) to name the bloated tables;
+   if vacuum cannot reclaim them, detail=horizon_blocking_sessions says who is
+   holding the xmin horizon.
 2. `get_replication` — inactive slots retain WAL (a classic silent eater).
 3. `top_tables` — largest tables; `describe_table` the suspects (bloat section).
 4. On Yandex MDB clusters: `search_logs` (service_type=postgresql,
@@ -48,6 +52,11 @@ per-database tools also need `database`.
 2. Run "The database is slow" flow for the worst 1-2 instances.
 
 ## Care rules (always)
+- A recommendation is not yet a target. `get_health_recommendations` returns a
+  rule_id plus a count/ratio; `health_details` turns it into objects. Pass the
+  rule_id as `detail`: tables_autovacuum_off, low_hot_update_tables,
+  high_dead_ratio_tables (these three need `database`), xid_wraparound_databases,
+  horizon_blocking_sessions (instance-wide). Never guess a table name — ask.
 - `search_logs` is rate-limited per user (~1 request / 30s by default):
   combine all filters into ONE call, keep dedup on, never poll; after a 429
   wait ≥30s.
