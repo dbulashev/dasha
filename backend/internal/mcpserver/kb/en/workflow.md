@@ -9,7 +9,8 @@ per-database tools also need `database`.
    Otherwise note the 2 worst categories by penalty.
 2. `get_health_recommendations` — HIGH severity first; look up unfamiliar rule
    IDs in dasha://kb/health-rules. It names the rule, not the culprit: follow up
-   with `health_details` (detail = that rule_id) to get the actual tables.
+   with `health_details` (detail = that rule_id) for the actual tables, then
+   `describe_table` on the worst one to confirm the mechanism before advising.
 3. `top_queries` (by=time) — few calls × high mean_time = plan problem
    (suggest EXPLAIN, indexes); huge calls × low mean_time = frequency problem
    (suggest caching/batching).
@@ -56,8 +57,12 @@ per-database tools also need `database`.
   rule_id plus a count/ratio; `health_details` turns it into objects — hand that
   rule_id straight back as `detail`. The per-table drill-downs
   (tables_autovacuum_off, low_hot_update_tables, high_dead_ratio_tables) also need
-  `database`; the wraparound / xmin-horizon ones are instance-wide. Never guess a
-  table name — ask.
+  `database`; the wraparound / xmin-horizon ones are instance-wide.
+- Naming the table is not yet the cause. Confirm the mechanism with
+  `describe_table` (fillfactor, the index list, the HOT share in StatInfo) and
+  `top_queries` for the statement itself — e.g. 0% HOT usually means the UPDATE
+  touches an *indexed* column, and only describe_table says which. Never name a
+  table, column or index that is not in a tool's output.
 - `search_logs` is rate-limited per user (~1 request / 30s by default):
   combine all filters into ONE call, keep dedup on, never poll; after a 429
   wait ≥30s.
