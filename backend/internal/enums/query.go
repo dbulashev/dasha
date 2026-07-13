@@ -47,6 +47,7 @@ package enums
 //	indexes/similar_3
 //	indexes/top_k_by_size
 //	indexes/unused
+//	indexes/unused_report
 //	indexes/usage
 //	maintenance/autovacuum_freeze_max_age
 //	maintenance/info

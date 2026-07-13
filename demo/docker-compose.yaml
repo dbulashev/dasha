@@ -263,6 +263,23 @@ services:
     networks:
       - dasha-demo
 
+  # MCP server (HTTP transport): exposes the fleet's PostgreSQL diagnostics as
+  # read-only MCP tools for AI assistants. Per-request identity passthrough — send
+  # the demo static token as `Authorization: Bearer demo-api-token-for-testing`
+  # (role viewer, sufficient for the read-only tools). Reachable at localhost:8765.
+  dasha-mcp:
+    build:
+      context: ..
+      dockerfile: deploy/images/Dockerfile.mcp
+    command: ["--http", ":8765", "--dasha-url", "http://backend:8000"]
+    ports:
+      - "8765:8765"
+    depends_on:
+      - backend
+    networks:
+      - dasha-demo
+    restart: unless-stopped
+
   # One-shot: enables auto-snapshots with demo-friendly timings after
   # the backend has migrated storage and seeded default config.
   autosnapshot-seed:

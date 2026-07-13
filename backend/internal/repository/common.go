@@ -78,6 +78,7 @@ type Repository interface {
 		offset int,
 	) ([]dto.IndexUnused, error)
 	GetIndexesUnusedAllHosts(ctx context.Context, clusterName, databaseName string, threshold, limit, offset int) ([]dto.IndexUnused, error)
+	GetIndexUnusedReport(ctx context.Context, clusterName, databaseName string) (dto.IndexClusterScans, error)
 	GetIndexesUsage(ctx context.Context, clusterName, instanceName, databaseName string, limit, offset int) ([]dto.IndexUsage, error)
 	GetInstanceInfo(ctx context.Context, clusterName, instanceName string) (dto.InstanceInfo, error)
 	GetPgSettings(ctx context.Context, clusterName, instanceName string, limit, offset int) ([]dto.PgSetting, error)

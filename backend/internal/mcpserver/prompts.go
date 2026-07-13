@@ -45,6 +45,11 @@ Getting oriented:
 Investigating:
 - For a guided workflow prefer the prompts: diagnose_cluster, explain_health_score, investigate_slow_queries, find_index_opportunities, fleet_overview.
 - Typical chain: get_health_score -> get_health_recommendations -> (top_queries, blocked_queries, list_indexes, describe_table) to drill into the worst findings.
+- A recommendation names the rule, not the culprit: it reports a rule_id and a count/ratio, never a table. To turn it into an actionable target call health_details with detail = that rule_id — it returns the offending tables, databases or sessions.
+- A named object is still not a cause. Before advising anything, confirm the mechanism with describe_table (fillfactor, the index list, the HOT share in StatInfo) and top_queries for the statement itself: 0% HOT means the UPDATE touches an indexed column, and only describe_table says WHICH one. Never name a table, column or index that is not in a tool's output, and never merely offer to check — every tool here is read-only and cheap, so just call it.
+- NEVER invent the remedy for a health rule. Every rule in dasha://kb/health-rules carries its first action — read that rule's section before you advise anything, and follow it. Inventing one gets the direction backwards: the classic error is "fillfactor 70 is low, raise it to 90", which is exactly wrong — free page space is what HOT updates need, so RAISING fillfactor destroys HOT. Likewise, tuning autovacuum_* thresholds does nothing on a table with autovacuum_enabled=false; it must be turned back on first. If a rule's section does not answer your case, say so rather than guessing.
+- Bloat remediation has a cost, and you must state it instead of hiding it. Plain VACUUM is safe (SHARE UPDATE EXCLUSIVE — it blocks neither reads nor writes, rewrites nothing, needs no extra disk) but it only makes the dead space REUSABLE: the file does not shrink. Returning space to the OS needs VACUUM FULL (ACCESS EXCLUSIVE — blocks even SELECT for the whole rewrite) or pg_repack (online, only brief locks, but an extension that may not be installed) — and BOTH need roughly twice the table+index size in free disk. Never recommend either without first quoting the table's current size from describe_table or top_tables, so the caller can weigh the cost; for a table that keeps being written, plain VACUUM plus a working autovacuum is usually the right answer and the file size stops mattering.
+- Never advise dropping an index from a scan counter, and never hedge it ("drop it if nobody queries that column") — call unused_index_report and find out. It is cluster-wide (no instance) because idx_scan is not replicated, and it weighs the counter against the statistics window behind it; only verdict='drop_candidate' justifies a DROP, on any other verdict repeat its reason. The one exception is a structurally redundant index — an exact duplicate of another, or an invalid one — which describe_table already exposes: its safety does not depend on usage.
 - health_trend needs metrics-backed mode (a configured datasource); it returns an error otherwise.
 - query_compare needs snapshot IDs from list_snapshots.
 - search_logs works only on clusters with supports_logs=true (see list_clusters) and is rate-limited per user because every call reaches the Yandex Cloud API: combine all filters into one call, keep dedup on, and after a 429 wait ~30 seconds instead of retrying immediately.
@@ -77,7 +82,9 @@ If a result is refused as too large, narrow it (one database, a smaller range, o
 
 		indexes: "Find indexing opportunities in database %q of cluster %q instance %q. Execute in order:\n" +
 			"1. list_indexes (kind=missing) — candidate new indexes.\n" +
-			"2. list_indexes (kind=unused) — drop candidates; exclude fresh indexes and unique/constraint-backing ones.\n" +
+			"2. unused_index_report (cluster-wide, takes no instance) — drop candidates WITH a verdict. Recommend a " +
+			"DROP only for verdict='drop_candidate'; on any other verdict repeat its reason instead. Do NOT judge " +
+			"from list_indexes (kind=unused): a raw scan counter sees neither the replicas nor the statistics window.\n" +
 			"3. top_queries (by=time) — tie every candidate to a heavy query it would help " +
 			"(or a write-heavy table an unused index hurts).\n" +
 			"Recommend indexes to add and unused ones to drop, each tied to specific queries. " +
@@ -110,6 +117,11 @@ If a result is refused as too large, narrow it (one database, a smaller range, o
 Расследование:
 - Для направляемого сценария используйте prompts: diagnose_cluster, explain_health_score, investigate_slow_queries, find_index_opportunities, fleet_overview.
 - Типовая цепочка: get_health_score -> get_health_recommendations -> (top_queries, blocked_queries, list_indexes, describe_table) по худшим находкам.
+- Рекомендация называет правило, а не виновника: она возвращает rule_id и счётчик/долю, но никогда — таблицу. Чтобы превратить её в конкретную цель, вызовите health_details с detail = этот rule_id — он вернёт сами таблицы, базы или сессии.
+- Названный объект — ещё не причина. Прежде чем что-либо советовать, подтвердите механизм: describe_table (fillfactor, список индексов, доля HOT в StatInfo) и top_queries — сам запрос. 0% HOT означает, что UPDATE трогает проиндексированную колонку, и только describe_table скажет, КАКУЮ именно. Не называйте таблицу, колонку или индекс, которых нет в выводе инструментов, и не предлагайте «посмотреть, если нужно» — все инструменты здесь read-only и дешёвые, просто вызовите их.
+- НИКОГДА не выдумывайте лечение для health-правила. У каждого правила в dasha://kb/health-rules прописано первое действие — прочитайте раздел этого правила, прежде чем что-либо советовать, и следуйте ему. Выдуманное лечение обычно оказывается перевёрнутым: классическая ошибка — «fillfactor 70 — это мало, поднимем до 90», хотя всё ровно наоборот: свободное место на странице — это то, что нужно HOT-обновлениям, поэтому ПОВЫШЕНИЕ fillfactor HOT убивает. Точно так же тюнинг порогов autovacuum_* ничего не даёт на таблице с autovacuum_enabled=false — сначала его надо включить обратно. Если раздел правила не покрывает ваш случай — так и скажите, а не догадывайтесь.
+- У борьбы с раздуванием есть цена, и её надо называть, а не умалчивать. Обычный VACUUM безопасен (SHARE UPDATE EXCLUSIVE — не блокирует ни чтения, ни записи, ничего не перезаписывает, места на диске не требует), но он лишь возвращает мёртвое место В ПЕРЕИСПОЛЬЗОВАНИЕ: файл не сжимается. Чтобы отдать место операционной системе, нужен VACUUM FULL (ACCESS EXCLUSIVE — на всё время перезаписи блокирует даже SELECT) или pg_repack (онлайн, короткие блокировки, но это расширение, которого может не быть) — и ОБОИМ нужно примерно вдвое больше свободного места, чем занимают таблица и её индексы. Никогда не рекомендуйте их, не приведя текущий размер таблицы из describe_table или top_tables, чтобы человек мог взвесить цену; для таблицы, в которую продолжают писать, обычно правильный ответ — обычный VACUUM плюс работающий автовакуум, и тогда размер файла перестаёт быть проблемой.
+- Никогда не советуйте удалять индекс по счётчику сканов и не хеджируйте («убрать, если поиск по колонке не критичен») — вызовите unused_index_report и выясните. Он работает по всему кластеру (instance не нужен), потому что idx_scan не реплицируется, и взвешивает счётчик по окну статистики за ним; DROP оправдан только при verdict='drop_candidate', при любом другом — повторите его reason. Единственное исключение — структурно избыточный индекс (точный дубликат другого или invalid), который и так виден в describe_table: его безопасность от сканов не зависит.
 - health_trend требует режима метрик (настроенный datasource), иначе вернёт ошибку.
 - query_compare требует ID снимков из list_snapshots.
 - search_logs работает только на кластерах с supports_logs=true (см. list_clusters) и лимитирован per-user, т.к. каждый вызов уходит в Yandex Cloud API: собирайте все фильтры в один вызов, держите dedup включённым, после 429 ждите ~30 секунд вместо немедленного повтора.
@@ -142,7 +154,9 @@ If a result is refused as too large, narrow it (one database, a smaller range, o
 
 		indexes: "Найди возможности для индексов в базе %q кластера %q, инстанс %q. Выполняй по порядку:\n" +
 			"1. list_indexes (kind=missing) — кандидаты на новые индексы.\n" +
-			"2. list_indexes (kind=unused) — кандидаты на удаление; исключи свежие индексы и уникальные/под констрейнтами.\n" +
+			"2. unused_index_report (по всему кластеру, instance не нужен) — кандидаты на удаление С вердиктом. " +
+			"Рекомендуй DROP только при verdict='drop_candidate'; при любом другом — повтори его reason. НЕ суди по " +
+			"list_indexes (kind=unused): сырой счётчик сканов не видит ни реплик, ни окна статистики.\n" +
 			"3. top_queries (by=time) — привяжи каждого кандидата к тяжёлому запросу, которому он поможет " +
 			"(или к write-нагруженной таблице, которой вредит неиспользуемый индекс).\n" +
 			"Порекомендуй индексы к добавлению и неиспользуемые к удалению, каждый с привязкой к конкретным запросам. " +

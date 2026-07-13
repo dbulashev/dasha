@@ -49,6 +49,15 @@ const (
 	Override HealthScoreWeightsSource = "override"
 )
 
+// Defines values for IndexVerdictVerdict.
+const (
+	DropCandidate    IndexVerdictVerdict = "drop_candidate"
+	InsufficientData IndexVerdictVerdict = "insufficient_data"
+	StaleEvidence    IndexVerdictVerdict = "stale_evidence"
+	Unknown          IndexVerdictVerdict = "unknown"
+	Used             IndexVerdictVerdict = "used"
+)
+
 // Defines values for PersonalAccessTokenRole.
 const (
 	PersonalAccessTokenRoleAdmin  PersonalAccessTokenRole = "admin"
@@ -505,6 +514,23 @@ type IndexHitRate struct {
 	Rate float64 `json:"Rate"`
 }
 
+// IndexHostUsage defines model for IndexHostUsage.
+type IndexHostUsage struct {
+	// InRecovery True for a standby — usage seen only here must not be dropped.
+	InRecovery bool   `json:"in_recovery"`
+	IndexScans int64  `json:"index_scans"`
+	Instance   string `json:"instance"`
+
+	// ScansPerDay index_scans normalized over window_days — the only comparable unit.
+	ScansPerDay float64 `json:"scans_per_day"`
+
+	// StatsResetKnown False when the database's statistics were never reset: window_days then falls back to postmaster uptime, which understates the true window.
+	StatsResetKnown bool `json:"stats_reset_known"`
+
+	// WindowDays Days of statistics the scan counter on this host covers.
+	WindowDays float64 `json:"window_days"`
+}
+
 // IndexInvalidOrNotReady defines model for IndexInvalidOrNotReady.
 type IndexInvalidOrNotReady struct {
 	Constraint string `json:"Constraint"`
@@ -570,6 +596,14 @@ type IndexUnused struct {
 	Table      string `json:"Table"`
 }
 
+// IndexUnusedReport defines model for IndexUnusedReport.
+type IndexUnusedReport struct {
+	Indexes []IndexVerdict `json:"indexes"`
+
+	// UnreachableHosts Hosts of the cluster that could not be read. A non-empty list forces every verdict to "unknown": scan counters are not replicated, so an index idle on the hosts that answered may be serving reads on one that did not.
+	UnreachableHosts []string `json:"unreachable_hosts"`
+}
+
 // IndexUsage defines model for IndexUsage.
 type IndexUsage struct {
 	EstimatedRows           int64    `json:"EstimatedRows"`
@@ -577,6 +611,31 @@ type IndexUsage struct {
 	Schema                  string   `json:"Schema"`
 	Table                   string   `json:"Table"`
 }
+
+// IndexVerdict defines model for IndexVerdict.
+type IndexVerdict struct {
+	// Index The index a DROP must target. For a partitioned index this is the top-level parent, never a partition's child: PostgreSQL refuses to drop a child and its HINT points at the parent, and dropping that strips the index off EVERY partition.
+	Index string `json:"index"`
+
+	// Partitioned True when this is a partitioned index: the scans of its per-partition child indexes are summed into this verdict, so one busy partition keeps the whole index alive. A cold partition showing zero scans is partition pruning working, not a dead index — which is why children are never judged on their own.
+	Partitioned bool `json:"partitioned"`
+
+	// Partitions How many per-partition child indexes were summed into this verdict.
+	Partitions  *int             `json:"partitions,omitempty"`
+	PerInstance []IndexHostUsage `json:"per_instance"`
+
+	// Reason Why this verdict, in words, quoting the observed window and scan rate.
+	Reason string `json:"reason"`
+	Schema string `json:"schema"`
+
+	// SizeBytes Largest copy across hosts — what a DROP would actually reclaim.
+	SizeBytes int64               `json:"size_bytes"`
+	Table     string              `json:"table"`
+	Verdict   IndexVerdictVerdict `json:"verdict"`
+}
+
+// IndexVerdictVerdict defines model for IndexVerdict.Verdict.
+type IndexVerdictVerdict string
 
 // InstanceInfo defines model for InstanceInfo.
 type InstanceInfo struct {
@@ -1560,6 +1619,14 @@ type GetIndexesUnusedParams struct {
 	Threshold   *int        `form:"threshold,omitempty" json:"threshold,omitempty"`
 }
 
+// GetIndexesUnusedReportParams defines parameters for GetIndexesUnusedReport.
+type GetIndexesUnusedReportParams struct {
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Database    Database    `form:"database" json:"database"`
+	Limit       *int        `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset      *int        `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
 // GetIndexesUsageParams defines parameters for GetIndexesUsage.
 type GetIndexesUsageParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
@@ -2144,6 +2211,9 @@ type ClientInterface interface {
 
 	// GetIndexesUnused request
 	GetIndexesUnused(ctx context.Context, params *GetIndexesUnusedParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetIndexesUnusedReport request
+	GetIndexesUnusedReport(ctx context.Context, params *GetIndexesUnusedReportParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetIndexesUsage request
 	GetIndexesUsage(ctx context.Context, params *GetIndexesUsageParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -2937,6 +3007,18 @@ func (c *Client) GetIndexesTopKBySize(ctx context.Context, params *GetIndexesTop
 
 func (c *Client) GetIndexesUnused(ctx context.Context, params *GetIndexesUnusedParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetIndexesUnusedRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetIndexesUnusedReport(ctx context.Context, params *GetIndexesUnusedReportParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetIndexesUnusedReportRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -6908,6 +6990,95 @@ func NewGetIndexesUnusedRequest(server string, params *GetIndexesUnusedParams) (
 	return req, nil
 }
 
+// NewGetIndexesUnusedReportRequest generates requests for GetIndexesUnusedReport
+func NewGetIndexesUnusedReportRequest(server string, params *GetIndexesUnusedReportParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/indexes/unused-report")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, params.ClusterName); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "database", runtime.ParamLocationQuery, params.Database); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetIndexesUsageRequest generates requests for GetIndexesUsage
 func NewGetIndexesUsageRequest(server string, params *GetIndexesUsageParams) (*http.Request, error) {
 	var err error
@@ -10430,6 +10601,9 @@ type ClientWithResponsesInterface interface {
 	// GetIndexesUnusedWithResponse request
 	GetIndexesUnusedWithResponse(ctx context.Context, params *GetIndexesUnusedParams, reqEditors ...RequestEditorFn) (*GetIndexesUnusedResponse, error)
 
+	// GetIndexesUnusedReportWithResponse request
+	GetIndexesUnusedReportWithResponse(ctx context.Context, params *GetIndexesUnusedReportParams, reqEditors ...RequestEditorFn) (*GetIndexesUnusedReportResponse, error)
+
 	// GetIndexesUsageWithResponse request
 	GetIndexesUsageWithResponse(ctx context.Context, params *GetIndexesUsageParams, reqEditors ...RequestEditorFn) (*GetIndexesUsageResponse, error)
 
@@ -11695,6 +11869,28 @@ func (r GetIndexesUnusedResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetIndexesUnusedResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetIndexesUnusedReportResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *IndexUnusedReport
+}
+
+// Status returns HTTPResponse.Status
+func (r GetIndexesUnusedReportResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetIndexesUnusedReportResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -13146,6 +13342,15 @@ func (c *ClientWithResponses) GetIndexesUnusedWithResponse(ctx context.Context, 
 		return nil, err
 	}
 	return ParseGetIndexesUnusedResponse(rsp)
+}
+
+// GetIndexesUnusedReportWithResponse request returning *GetIndexesUnusedReportResponse
+func (c *ClientWithResponses) GetIndexesUnusedReportWithResponse(ctx context.Context, params *GetIndexesUnusedReportParams, reqEditors ...RequestEditorFn) (*GetIndexesUnusedReportResponse, error) {
+	rsp, err := c.GetIndexesUnusedReport(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetIndexesUnusedReportResponse(rsp)
 }
 
 // GetIndexesUsageWithResponse request returning *GetIndexesUsageResponse
@@ -14847,6 +15052,32 @@ func ParseGetIndexesUnusedResponse(rsp *http.Response) (*GetIndexesUnusedRespons
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest []IndexUnused
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetIndexesUnusedReportResponse parses an HTTP response from a GetIndexesUnusedReportWithResponse call
+func ParseGetIndexesUnusedReportResponse(rsp *http.Response) (*GetIndexesUnusedReportResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetIndexesUnusedReportResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest IndexUnusedReport
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/dbulashev/dasha/gen/serverhttp"
 	"github.com/dbulashev/dasha/internal/dto"
+	"github.com/dbulashev/dasha/internal/indexadvice"
 	"github.com/dbulashev/dasha/internal/pkg/mapstruct"
+	"github.com/dbulashev/dasha/internal/pkg/shortcut"
 	"github.com/dbulashev/dasha/internal/repository"
 )
 
@@ -339,6 +342,85 @@ func (s *Handlers) GetIndexesUnused(
 				IndexScans: t.IndexScans,
 			}
 		})
+
+	return ret, nil
+}
+
+func (s *Handlers) GetIndexesUnusedReport(
+	ctx context.Context,
+	req serverhttp.GetIndexesUnusedReportRequestObject,
+) (serverhttp.GetIndexesUnusedReportResponseObject, error) {
+	limit, offset := paginationDefaults(req.Params.Limit, req.Params.Offset, defaultIndexesUnusedLimit)
+
+	scans, err := s.repo.GetIndexUnusedReport(ctx, req.Params.ClusterName, req.Params.Database)
+	if errors.Is(err, repository.ErrNotFound) {
+		return serverhttp.GetIndexesUnusedReport404Response{}, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("GetIndexesUnusedReport | %w", err)
+	}
+
+	// The verdict is cluster-wide, so it must be computed over EVERY index on EVERY
+	// host before anything is dropped: a page of raw rows cannot be judged on its own.
+	// Hence paginate the verdicts, not the input.
+	reports := indexadvice.Report(scans, indexadvice.Thresholds{}) //nolint:exhaustruct
+
+	// Biggest first — that is what a DROP reclaims, and it matches /api/indexes/unused.
+	sort.SliceStable(reports, func(i, j int) bool {
+		return reports[i].SizeBytes > reports[j].SizeBytes
+	})
+
+	page := reports
+	if offset < len(page) {
+		page = page[offset:]
+	} else {
+		page = nil
+	}
+
+	if len(page) > limit {
+		page = page[:limit]
+	}
+
+	// unreachable_hosts is a required array, and the happy path — every host answered —
+	// leaves it nil, which would serialize as null and break a typed client.
+	unreachable := scans.Unreachable
+	if unreachable == nil {
+		unreachable = []string{}
+	}
+
+	ret := serverhttp.GetIndexesUnusedReport200JSONResponse{
+		Indexes: mapstruct.SliceMap(page, func(r indexadvice.IndexReport) serverhttp.IndexVerdict {
+			// Only a partitioned index has children summed into it; leave the count
+			// absent otherwise rather than reporting a meaningless zero.
+			var partitions *int
+			if r.Partitioned {
+				partitions = shortcut.Ptr(r.Partitions)
+			}
+
+			return serverhttp.IndexVerdict{
+				Schema:      r.Schema,
+				Table:       r.Table,
+				Index:       r.Index,
+				Partitioned: r.Partitioned,
+				Partitions:  partitions,
+				SizeBytes:   r.SizeBytes,
+				Verdict:     serverhttp.IndexVerdictVerdict(r.Verdict),
+				Reason:      r.Reason,
+				PerInstance: mapstruct.SliceMap(r.PerInstance, func(h indexadvice.HostUsage) serverhttp.IndexHostUsage {
+					return serverhttp.IndexHostUsage{
+						Instance:        h.Instance,
+						InRecovery:      h.InRecovery,
+						IndexScans:      h.IndexScans,
+						WindowDays:      h.WindowDays,
+						ScansPerDay:     h.ScansPerDay,
+						StatsResetKnown: h.StatsResetKnown,
+					}
+				}),
+			}
+		}),
+		UnreachableHosts: unreachable,
+	}
 
 	return ret, nil
 }

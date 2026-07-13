@@ -1,5 +1,7 @@
 package dto
 
+import "time"
+
 type IndexBloat struct {
 	Schema     string
 	Table      string
@@ -82,6 +84,50 @@ type IndexUnused struct {
 	Index      string
 	SizeBytes  int64
 	IndexScans int64
+}
+
+// IndexScanSample is one index's scan counter on ONE host, together with the window
+// the counter was accumulated over. idx_scan is per-instance and is NOT replicated,
+// so the same index has a different sample on every host of a cluster.
+//
+// StatsReset is nil when the database's statistics were never reset; WindowDays then
+// falls back to postmaster uptime, which understates the real window (see the SQL).
+//
+// Root* names the only unit that can actually be DROPped. For a plain index that is
+// the index itself. For a partition's child index it is the top-level partitioned
+// index: PostgreSQL refuses to drop a child ("index <parent> requires it") and its
+// HINT points at the parent, which would remove the index from EVERY partition. So
+// the caller sums the children up to the root before judging anything — a cold
+// partition showing zero scans is partition pruning working, not a dead index.
+type IndexScanSample struct {
+	Schema        string
+	Table         string
+	Index         string
+	RootSchema    string
+	RootIndex     string
+	RootTable     string
+	IsPartitioned bool
+	SizeBytes     int64
+	IndexScans    int64
+	StatsReset    *time.Time
+	WindowDays    float64
+	InRecovery    bool
+}
+
+// IndexHostSample attributes an IndexScanSample to the host it came from.
+type IndexHostSample struct {
+	Instance string
+	Sample   IndexScanSample
+}
+
+// IndexClusterScans is the raw material for the unused-index report: every host's
+// samples plus the hosts that could not be reached. Unreachable hosts matter for
+// correctness, not just completeness — an index idle on the hosts we did reach may
+// be serving the whole read workload on the one we did not, so a missing host must
+// block a "drop it" verdict rather than be silently skipped.
+type IndexClusterScans struct {
+	Samples     []IndexHostSample
+	Unreachable []string
 }
 
 type IndexUsage struct {
