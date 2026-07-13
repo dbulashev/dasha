@@ -63,6 +63,20 @@ per-database tools also need `database`.
   `top_queries` for the statement itself — e.g. 0% HOT usually means the UPDATE
   touches an *indexed* column, and only describe_table says which. Never name a
   table, column or index that is not in a tool's output.
+- Bloat remediation: say what it costs. Plain `VACUUM` is safe (SHARE UPDATE
+  EXCLUSIVE — blocks neither reads nor writes, no rewrite, no extra disk) but only
+  makes the space REUSABLE; the file does not shrink. Shrinking needs `VACUUM FULL`
+  (ACCESS EXCLUSIVE — blocks even SELECT) or `pg_repack` (online, brief locks, an
+  extension that may be missing) — both need ~2x the table+index size in free disk.
+  Never suggest either without quoting the table size from `describe_table` /
+  `top_tables`. For a still-written table, plain VACUUM + a working autovacuum is
+  usually the whole answer.
+- Never advise a DROP INDEX from a scan counter, and never hedge it. Call
+  `unused_index_report` (cluster-wide, no instance): `idx_scan` is not replicated
+  and means nothing without its statistics window. Only `verdict=drop_candidate`
+  justifies a DROP; otherwise repeat the reason. Exception: a structurally
+  redundant index (exact duplicate, or invalid) — `describe_table` shows those and
+  their safety does not depend on usage.
 - `search_logs` is rate-limited per user (~1 request / 30s by default):
   combine all filters into ONE call, keep dedup on, never poll; after a 429
   wait ≥30s.

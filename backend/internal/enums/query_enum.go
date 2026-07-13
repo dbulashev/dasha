@@ -95,6 +95,8 @@ const (
 	QueryIndexesTopKBySize Query = "indexes/top_k_by_size"
 	// QueryIndexesUnused is a Query of type indexes/unused.
 	QueryIndexesUnused Query = "indexes/unused"
+	// QueryIndexesUnusedReport is a Query of type indexes/unused_report.
+	QueryIndexesUnusedReport Query = "indexes/unused_report"
 	// QueryIndexesUsage is a Query of type indexes/usage.
 	QueryIndexesUsage Query = "indexes/usage"
 	// QueryMaintenanceAutovacuumFreezeMaxAge is a Query of type maintenance/autovacuum_freeze_max_age.
@@ -220,6 +222,7 @@ var _QueryNames = []string{
 	string(QueryIndexesSimilar3),
 	string(QueryIndexesTopKBySize),
 	string(QueryIndexesUnused),
+	string(QueryIndexesUnusedReport),
 	string(QueryIndexesUsage),
 	string(QueryMaintenanceAutovacuumFreezeMaxAge),
 	string(QueryMaintenanceInfo),
@@ -313,6 +316,7 @@ func QueryValues() []Query {
 		QueryIndexesSimilar3,
 		QueryIndexesTopKBySize,
 		QueryIndexesUnused,
+		QueryIndexesUnusedReport,
 		QueryIndexesUsage,
 		QueryMaintenanceAutovacuumFreezeMaxAge,
 		QueryMaintenanceInfo,
@@ -410,6 +414,7 @@ var _QueryValue = map[string]Query{
 	"indexes/similar_3":                             QueryIndexesSimilar3,
 	"indexes/top_k_by_size":                         QueryIndexesTopKBySize,
 	"indexes/unused":                                QueryIndexesUnused,
+	"indexes/unused_report":                         QueryIndexesUnusedReport,
 	"indexes/usage":                                 QueryIndexesUsage,
 	"maintenance/autovacuum_freeze_max_age":         QueryMaintenanceAutovacuumFreezeMaxAge,
 	"maintenance/info":                              QueryMaintenanceInfo,

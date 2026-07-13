@@ -32,6 +32,13 @@ type dbArgs struct {
 	Database string `json:"database" jsonschema:"Database name to inspect"`
 }
 
+// unusedIndexReportArgs takes no instance on purpose: the verdict is cluster-wide.
+type unusedIndexReportArgs struct {
+	Cluster  string `json:"cluster" jsonschema:"Dasha cluster name"`
+	Database string `json:"database" jsonschema:"Database to inspect"`
+	Limit    int    `json:"limit,omitempty" jsonschema:"Max indexes to return, largest first (default 30)"`
+}
+
 type healthDetailsArgs struct {
 	Cluster  string `json:"cluster" jsonschema:"Dasha cluster name"`
 	Instance string `json:"instance" jsonschema:"Dasha instance / host name"`
@@ -242,7 +249,9 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			"WHICH rule fired and how bad it is; this tells you WHICH tables, databases or sessions caused it — " +
 			"call it whenever a recommendation needs to become an actionable target. Pass the recommendation's " +
 			"rule_id as detail; the per-table drill-downs (tables_autovacuum_off, low_hot_update_tables, " +
-			"high_dead_ratio_tables) also need a database, the instance-wide ones do not.",
+			"high_dead_ratio_tables) also need a database, the instance-wide ones do not. " +
+			"What it returns is a target, not yet a cause: follow up with describe_table on the named table to " +
+			"confirm the mechanism (fillfactor, which indexed column the UPDATE touches) before advising a fix.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a healthDetailsArgs) (*mcp.CallToolResult, any, error) {
 		d, ok := healthDetailByKey[a.Detail]
 		if !ok {
@@ -302,6 +311,23 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 		default:
 			return errResult("kind must be 'missing', 'unused' or 'usage'"), nil, nil
 		}
+	})
+
+	addTool(s, &mcp.Tool{
+		Name: "unused_index_report",
+		Description: "Decide whether an index is safe to DROP. Use this instead of reading raw counters from " +
+			"list_indexes(kind='unused'): a scan counter alone cannot answer the question. Cluster-wide by " +
+			"design (it takes no instance) because idx_scan is per-instance and is NOT replicated — an index " +
+			"idle on the primary may be serving every read on a replica. It also weighs the counter against the " +
+			"statistics window behind it: zero scans right after a stats reset prove nothing. Each index comes " +
+			"back with a verdict and the reasoning. ONLY 'drop_candidate' justifies recommending a DROP; on " +
+			"'used', 'stale_evidence', 'insufficient_data' or 'unknown' say what the reason says instead — " +
+			"'unknown' means a host could not be read, so the cluster-wide picture is incomplete. When " +
+			"partitioned=true the index named is the top-level parent and its per-partition children are already " +
+			"summed into the verdict: never suggest dropping a partition's child index — PostgreSQL refuses, and " +
+			"its HINT points at the parent, which would strip the index off EVERY partition.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, a unusedIndexReportArgs) (*mcp.CallToolResult, any, error) {
+		return jsonResult(c.UnusedIndexReport(ctx, a.Cluster, a.Database, a.Limit))
 	})
 
 	addTool(s, &mcp.Tool{

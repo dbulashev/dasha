@@ -71,6 +71,7 @@ import type {
   GetIndexesSimilar3Params,
   GetIndexesTopKBySizeParams,
   GetIndexesUnusedParams,
+  GetIndexesUnusedReportParams,
   GetIndexesUsageParams,
   GetInstanceInfoParams,
   GetInvalidConstraintsParams,
@@ -136,6 +137,7 @@ import type {
   IndexSimilar3,
   IndexTopKBySize,
   IndexUnused,
+  IndexUnusedReport,
   IndexUsage,
   InstanceInfo,
   InvalidConstraint,
@@ -4638,6 +4640,115 @@ export function useGetIndexesUnused<
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetIndexesUnusedQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Unlike /api/indexes/unused, which reports raw scan counters, this weighs them against the window they were accumulated over and against every host of the cluster, and returns a verdict with the reasoning. It takes no instance: idx_scan is per-instance and is not replicated, so an index idle on the primary may be serving the whole read workload on a replica, and only the cluster-wide picture can justify a DROP. A host that cannot be reached yields verdict=unknown rather than a false "unused".
+ * @summary Cluster-wide verdict on whether each index is safe to drop
+ */
+export type getIndexesUnusedReportResponse200 = {
+  data: IndexUnusedReport
+  status: 200
+}
+
+export type getIndexesUnusedReportResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getIndexesUnusedReportResponseSuccess = getIndexesUnusedReportResponse200 & {
+  headers: Headers
+}
+export type getIndexesUnusedReportResponseError = getIndexesUnusedReportResponse404 & {
+  headers: Headers
+}
+
+export type getIndexesUnusedReportResponse =
+  | getIndexesUnusedReportResponseSuccess
+  | getIndexesUnusedReportResponseError
+
+export const getGetIndexesUnusedReportUrl = (params: GetIndexesUnusedReportParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/indexes/unused-report?${stringifiedParams}`
+    : `/api/indexes/unused-report`
+}
+
+export const getIndexesUnusedReport = async (
+  params: GetIndexesUnusedReportParams,
+  options?: RequestInit,
+): Promise<getIndexesUnusedReportResponse> => {
+  return customFetch<getIndexesUnusedReportResponse>(getGetIndexesUnusedReportUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetIndexesUnusedReportQueryKey = (
+  params?: MaybeRef<GetIndexesUnusedReportParams>,
+) => {
+  return ['api', 'indexes', 'unused-report', ...(params ? [params] : [])] as const
+}
+
+export const getGetIndexesUnusedReportQueryOptions = <
+  TData = Awaited<ReturnType<typeof getIndexesUnusedReport>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetIndexesUnusedReportParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesUnusedReport>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetIndexesUnusedReportQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getIndexesUnusedReport>>> = ({ signal }) =>
+    getIndexesUnusedReport(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getIndexesUnusedReport>>,
+    TError,
+    TData
+  >
+}
+
+export type GetIndexesUnusedReportQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getIndexesUnusedReport>>
+>
+export type GetIndexesUnusedReportQueryError = NotFoundResponse
+
+/**
+ * @summary Cluster-wide verdict on whether each index is safe to drop
+ */
+
+export function useGetIndexesUnusedReport<
+  TData = Awaited<ReturnType<typeof getIndexesUnusedReport>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetIndexesUnusedReportParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesUnusedReport>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetIndexesUnusedReportQueryOptions(params, options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
 

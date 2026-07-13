@@ -288,6 +288,123 @@ func (p *PgxPool) GetIndexesUnused(
 	return ret, nil
 }
 
+// hostPool pairs a pool with the host it connects to, so a cluster-wide query can
+// attribute every row — and every failure — to a named instance.
+type hostPool struct {
+	Host string
+	Pool *pgxpool.Pool
+}
+
+func (p *PgxPool) getHostPoolsByClusterAndDatabase(
+	ctx context.Context,
+	clusterName,
+	databaseName string,
+) ([]hostPool, error) {
+	if err := p.ensurePool(ctx); err != nil {
+		return nil, fmt.Errorf("ensure pool | %w", err)
+	}
+
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	var out []hostPool
+
+	for cluster, items := range p.pools {
+		if cluster.String() != clusterName {
+			continue
+		}
+
+		for _, item := range items {
+			if databaseName != "" && item.Database.String() != databaseName {
+				continue
+			}
+
+			out = append(out, hostPool{Host: item.Host.String(), Pool: item.pool})
+		}
+	}
+
+	if len(out) == 0 {
+		return nil, fmt.Errorf("%w | %s/%s", ErrNotFound, clusterName, databaseName)
+	}
+
+	return out, nil
+}
+
+// GetIndexUnusedReport gathers, from EVERY host of the cluster, each non-unique
+// index's scan counter together with the window it was accumulated over.
+//
+// Hosts that cannot be reached are REPORTED, not skipped. idx_scan is not
+// replicated, so an index idle on the hosts we did read may be serving the whole
+// read workload on the one we did not — silently dropping a failed host would turn
+// an incomplete picture into a confident "unused", which is how a live index gets
+// dropped. The caller uses Unreachable to withhold that verdict.
+func (p *PgxPool) GetIndexUnusedReport(
+	ctx context.Context,
+	clusterName,
+	databaseName string,
+) (dto.IndexClusterScans, error) {
+	hostPools, err := p.getHostPoolsByClusterAndDatabase(ctx, clusterName, databaseName)
+	if err != nil {
+		return dto.IndexClusterScans{}, fmt.Errorf("GetIndexUnusedReport | %w", err) //nolint:exhaustruct
+	}
+
+	type hostResult struct {
+		host    string
+		samples []dto.IndexScanSample
+		err     error
+	}
+
+	resultsCh := make(chan hostResult, len(hostPools))
+
+	var wg sync.WaitGroup
+
+	for _, hp := range hostPools {
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+
+			vNum, err := p.getServerVersionNum(ctx, hp.Pool)
+			if err != nil {
+				resultsCh <- hostResult{host: hp.Host, err: err} //nolint:exhaustruct
+
+				return
+			}
+
+			samples, err := p.getIndexScanSamples(ctx, vNum, hp.Pool)
+			resultsCh <- hostResult{host: hp.Host, samples: samples, err: err}
+		}()
+	}
+
+	wg.Wait()
+	close(resultsCh)
+
+	var out dto.IndexClusterScans
+
+	for r := range resultsCh {
+		if r.err != nil {
+			p.logger.Warn("index scan samples on host",
+				zap.String("host", r.host), zap.Error(r.err))
+
+			out.Unreachable = append(out.Unreachable, r.host)
+
+			continue
+		}
+
+		for _, s := range r.samples {
+			out.Samples = append(out.Samples, dto.IndexHostSample{Instance: r.host, Sample: s})
+		}
+	}
+
+	// Deterministic output: goroutines finish in any order.
+	sort.Strings(out.Unreachable)
+	sort.SliceStable(out.Samples, func(i, j int) bool {
+		return out.Samples[i].Instance < out.Samples[j].Instance
+	})
+
+	return out, nil
+}
+
 // GetIndexesUnusedAllHosts queries all hosts in the cluster and returns indexes
 // that are unused (idx_scan <= threshold) across ALL hosts.
 func (p *PgxPool) GetIndexesUnusedAllHosts(
@@ -1000,6 +1117,53 @@ func (p *PgxPool) getIndexesUsage(ctx context.Context, serverVersion int, pool *
 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("getIndexesUsage | %w", err)
+	}
+
+	return ret, nil
+}
+
+// getIndexScanSamples returns, for one host, every non-unique index with its scan
+// counter AND the window that counter covers — the window is what makes the counter
+// interpretable (see the unused_report SQL).
+func (p *PgxPool) getIndexScanSamples(
+	ctx context.Context,
+	serverVersion int,
+	pool *pgxpool.Pool,
+) ([]dto.IndexScanSample, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	qStr, err := query.Get(serverVersion, enums.QueryIndexesUnusedReport, nil)
+	if err != nil {
+		return nil, fmt.Errorf("getIndexScanSamples | %w", err)
+	}
+
+	rows, err := pool.Query(ctx, qStr)
+	if err != nil {
+		return nil, fmt.Errorf("getIndexScanSamples | %w", err)
+	}
+	defer rows.Close()
+
+	ret := make([]dto.IndexScanSample, 0, 100) //nolint:mnd
+
+	for rows.Next() {
+		var s dto.IndexScanSample
+
+		err = rows.Scan(
+			&s.Schema, &s.Table, &s.Index,
+			&s.RootSchema, &s.RootIndex, &s.RootTable, &s.IsPartitioned,
+			&s.SizeBytes, &s.IndexScans,
+			&s.StatsReset, &s.WindowDays, &s.InRecovery,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("getIndexScanSamples scan | %w", err)
+		}
+
+		ret = append(ret, s)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getIndexScanSamples | %w", err)
 	}
 
 	return ret, nil

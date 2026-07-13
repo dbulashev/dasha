@@ -946,6 +946,43 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/indexes/unused-report:
+    get:
+      operationId: getIndexesUnusedReport
+      summary: Cluster-wide verdict on whether each index is safe to drop
+      description: >-
+        Unlike /api/indexes/unused, which reports raw scan counters, this weighs them
+        against the window they were accumulated over and against every host of the
+        cluster, and returns a verdict with the reasoning. It takes no instance:
+        idx_scan is per-instance and is not replicated, so an index idle on the
+        primary may be serving the whole read workload on a replica, and only the
+        cluster-wide picture can justify a DROP. A host that cannot be reached yields
+        verdict=unknown rather than a false "unused".
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Database'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 30
+          required: false
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+          required: false
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexUnusedReport'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /api/indexes/usage:
     get:
       operationId: getIndexesUsage
@@ -2827,6 +2864,110 @@ components:
         SizeBytes:
           type: integer
           format: int64
+
+    IndexUnusedReport:
+      type: object
+      required:
+        - indexes
+        - unreachable_hosts
+      properties:
+        indexes:
+          type: array
+          items:
+            $ref: '#/components/schemas/IndexVerdict'
+        unreachable_hosts:
+          description: >-
+            Hosts of the cluster that could not be read. A non-empty list forces every
+            verdict to "unknown": scan counters are not replicated, so an index idle on
+            the hosts that answered may be serving reads on one that did not.
+          type: array
+          items:
+            type: string
+
+    IndexVerdict:
+      type: object
+      required:
+        - schema
+        - table
+        - index
+        - partitioned
+        - size_bytes
+        - verdict
+        - reason
+        - per_instance
+      properties:
+        schema:
+          type: string
+        table:
+          type: string
+        index:
+          description: >-
+            The index a DROP must target. For a partitioned index this is the top-level
+            parent, never a partition's child: PostgreSQL refuses to drop a child and its
+            HINT points at the parent, and dropping that strips the index off EVERY
+            partition.
+          type: string
+        partitioned:
+          description: >-
+            True when this is a partitioned index: the scans of its per-partition child
+            indexes are summed into this verdict, so one busy partition keeps the whole
+            index alive. A cold partition showing zero scans is partition pruning working,
+            not a dead index — which is why children are never judged on their own.
+          type: boolean
+        partitions:
+          description: How many per-partition child indexes were summed into this verdict.
+          type: integer
+        size_bytes:
+          description: Largest copy across hosts — what a DROP would actually reclaim.
+          type: integer
+          format: int64
+        verdict:
+          type: string
+          enum:
+            - drop_candidate
+            - used
+            - stale_evidence
+            - insufficient_data
+            - unknown
+        reason:
+          description: Why this verdict, in words, quoting the observed window and scan rate.
+          type: string
+        per_instance:
+          type: array
+          items:
+            $ref: '#/components/schemas/IndexHostUsage'
+
+    IndexHostUsage:
+      type: object
+      required:
+        - instance
+        - in_recovery
+        - index_scans
+        - window_days
+        - scans_per_day
+        - stats_reset_known
+      properties:
+        instance:
+          type: string
+        in_recovery:
+          description: True for a standby — usage seen only here must not be dropped.
+          type: boolean
+        index_scans:
+          type: integer
+          format: int64
+        window_days:
+          description: Days of statistics the scan counter on this host covers.
+          type: number
+          format: double
+        scans_per_day:
+          description: index_scans normalized over window_days — the only comparable unit.
+          type: number
+          format: double
+        stats_reset_known:
+          description: >-
+            False when the database's statistics were never reset: window_days then falls
+            back to postmaster uptime, which understates the true window.
+          type: boolean
 
     IndexUnused:
       type: object

@@ -271,15 +271,35 @@ func (d *DashaClient) IndexesMissing(ctx context.Context, cluster, instance, dat
 }
 
 // IndexesUnused lists never-scanned (unused) indexes for a database.
+// AllHosts is forced on: idx_scan is per-instance and is NOT replicated, so an
+// index idle on the primary can be serving the whole read workload on a replica.
+// The cluster-wide aggregation takes max(idx_scan) across every host, so only an
+// index unused EVERYWHERE is reported — recommending a DROP from the single-host
+// view would break replica reads.
 func (d *DashaClient) IndexesUnused(ctx context.Context, cluster, instance, database string) (any, error) {
 	r, err := d.api.GetIndexesUnusedWithResponse(ctx, &apiclient.GetIndexesUnusedParams{
-		ClusterName: cluster, Instance: instance, Database: database,
+		ClusterName: cluster, Instance: instance, Database: database, AllHosts: opt(true),
 	}, d.editor(ctx))
 	if err != nil {
 		return nil, wrapErr("list_indexes", err)
 	}
 
 	return pick(r.JSON200, r.HTTPResponse, "list_indexes")
+}
+
+// UnusedIndexReport returns the cluster-wide verdict on every index: whether it can
+// be dropped, and why. Takes no instance — the whole point is that one host cannot
+// prove an index unused (idx_scan is not replicated), so the verdict weighs every
+// host of the cluster and the statistics window behind each counter.
+func (d *DashaClient) UnusedIndexReport(ctx context.Context, cluster, database string, limit int) (any, error) {
+	r, err := d.api.GetIndexesUnusedReportWithResponse(ctx, &apiclient.GetIndexesUnusedReportParams{
+		ClusterName: cluster, Database: database, Limit: opt(limit), Offset: nil,
+	}, d.editor(ctx))
+	if err != nil {
+		return nil, wrapErr("unused_index_report", err)
+	}
+
+	return pick(r.JSON200, r.HTTPResponse, "unused_index_report")
 }
 
 // IndexesUsage lists index scan statistics for a database.
