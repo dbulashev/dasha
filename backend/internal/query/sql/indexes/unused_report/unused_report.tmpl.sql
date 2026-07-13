@@ -73,8 +73,16 @@ FROM
     (SELECT stats_reset FROM pg_stat_database WHERE datname = current_database()) d
 WHERE
     NOT i.indisunique
-    AND ui.relid NOT IN (
-        SELECT relation FROM pg_locks WHERE mode = 'AccessExclusiveLock' AND granted
+    -- NOT EXISTS rather than NOT IN: pg_locks.relation is NULL for every non-relation
+    -- lock, and an object lock CAN be held in AccessExclusiveLock mode (ALTER DATABASE,
+    -- for one). A single NULL in a NOT IN list makes the predicate NULL for every
+    -- candidate row, so the whole report would silently come back EMPTY.
+    AND NOT EXISTS (
+        SELECT 1
+        FROM pg_locks l
+        WHERE l.relation = ui.relid
+          AND l.mode = 'AccessExclusiveLock'
+          AND l.granted
     )
 ORDER BY
     pg_relation_size(i.indexrelid) DESC,

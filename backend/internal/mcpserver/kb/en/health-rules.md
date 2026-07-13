@@ -79,8 +79,15 @@ and per-table VACUUM.
 
 ### low_hot_update_ratio
 Share of HOT updates. LOW <80%, MED <65%, HIGH <50%. Non-HOT updates touch
-every index (bloat). Lower fillfactor (70–90%) on hot tables whose updates
-do not change indexed columns.
+every index (bloat). Two conditions must BOTH hold for HOT, so check both with
+describe_table before advising anything:
+1. The UPDATE must not touch an indexed column. If it does, HOT is impossible
+   at any fillfactor — the only fix is dropping that index (check it first with
+   unused_index_report), not tuning storage.
+2. The page must have free space. LOWER fillfactor to 70–90 to create it —
+   lower, never higher. Free space is exactly what HOT needs, so raising
+   fillfactor toward 100 DESTROYS HOT. A hot table already at fillfactor 70
+   with a high HOT ratio is configured correctly — leave it alone.
 
 ### high_newpage_update_ratio
 PG16+: updates that had to move to a new page (broken HOT chain).
@@ -145,7 +152,14 @@ track_counts=off. Always HIGH: autovacuum is blind without usage stats — enabl
 
 ### tables_with_autovacuum_off
 Tables with reloptions autovacuum_enabled=false. Always LOW. Usually leftovers
-from old migrations — verify each is intentional.
+from old migrations — verify each is intentional. Name the tables with
+health_details (detail=tables_autovacuum_off). Fix: `ALTER TABLE t RESET
+(autovacuum_enabled)` (or `SET (autovacuum_enabled = true)`), then one plain
+`VACUUM (ANALYZE) t` to clear the backlog. Tuning autovacuum_* thresholds does
+NOTHING while autovacuum_enabled is false — the daemon never looks at the table.
+Do not touch fillfactor here: the dead tuples are an autovacuum problem, not a
+HOT problem, and a table already at fillfactor 70 with a high HOT ratio is
+correctly configured.
 
 ### stale_planner_stats
 Tables changed >50% since last ANALYZE and not analyzed for >1 day.

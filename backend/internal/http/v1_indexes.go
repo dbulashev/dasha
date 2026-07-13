@@ -382,6 +382,13 @@ func (s *Handlers) GetIndexesUnusedReport(
 		page = page[:limit]
 	}
 
+	// unreachable_hosts is a required array, and the happy path — every host answered —
+	// leaves it nil, which would serialize as null and break a typed client.
+	unreachable := scans.Unreachable
+	if unreachable == nil {
+		unreachable = []string{}
+	}
+
 	ret := serverhttp.GetIndexesUnusedReport200JSONResponse{
 		Indexes: mapstruct.SliceMap(page, func(r indexadvice.IndexReport) serverhttp.IndexVerdict {
 			// Only a partitioned index has children summed into it; leave the count
@@ -412,7 +419,7 @@ func (s *Handlers) GetIndexesUnusedReport(
 				}),
 			}
 		}),
-		UnreachableHosts: scans.Unreachable,
+		UnreachableHosts: unreachable,
 	}
 
 	return ret, nil
