@@ -90,6 +90,7 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 - CSRF protection via OAuth2 state parameter with constant-time validation
 - Token revocation on logout (RFC 7009, when supported by provider)
 - Personal access tokens (PAT): user-minted API tokens for scripts and the MCP connector — hashed at rest, least-privilege, one-time secret reveal, revoke and optional expiry
+- Token administration (admin): view and revoke **every** user's tokens, and a user directory recording first/last sign-in — both requiring an interactive OIDC admin session, so an admin-scoped PAT cannot revoke the tokens that would replace it
 
 **Infrastructure**
 - Multi-cluster support with per-cluster host/database selection
@@ -97,7 +98,12 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 - Primary / replica role display
 - Optional snapshot storage database (daily-partitioned tables, `dasha migrate` CLI)
 - [MCP connector](#mcp-connector-dasha-mcp) (`dasha-mcp`): read-only MCP server exposing fleet diagnostics to AI assistants (22 tools, 5 prompts)
-- Internationalization (Russian, German)
+
+**User Preferences** (Settings dialog — gear in the user menu)
+- Interface language: English, Russian, German — auto-detected from the browser when unset, switchable at runtime, persisted locally (untranslated keys fall back to English)
+- Theme: system (follows the OS), light or dark
+- Time zone for every displayed timestamp: local, UTC, or any of the eleven Russian zones (listed by IANA id, the same ids PostgreSQL's `timezone` GUC and the server logs use); fixed zones are labelled on the timestamp (`… GMT+3`), and chart axes follow the same setting as the tables
+- Rows per page (10–100) — this is the server-side `limit`, so it also controls how much each table requests
 
 ## Architecture
 
@@ -294,22 +300,28 @@ Retention drops the oldest day-triples once total size exceeds `retention_bytes`
 
 #### Personal Access Tokens (optional)
 
-A logged-in user can mint **personal access tokens (PATs)** — bearer secrets sent as the `X-API-Key` header — so non-browser clients (the `dasha-mcp` server, scripts) act with that user's identity and role (RBAC is preserved). Requires snapshot storage: tokens are stored hashed in `api_tokens`, so run `dasha migrate` first. Auth mode must be `token` or `oidc` (not `none`). Who may manage PATs is gated by `auth.pat_min_role`: `admin` (default while the feature matures) or `viewer` (any signed-in user).
+A logged-in user can mint **personal access tokens (PATs)** — bearer secrets sent as the `X-API-Key` header — so non-browser clients (the `dasha-mcp` server, scripts) act with that user's identity and role (RBAC is preserved). Requires snapshot storage: tokens are stored hashed in `api_tokens`, so run `dasha migrate` first.
 
-- **From the UI** (OIDC): user menu → *Personal access tokens* → create (name, role ≤ your own, optional expiry). The full secret is shown **once**.
-- **From the API**: mint with an interactive identity (an OIDC session or a static config token — *not* from another PAT):
+**Auth mode must be `oidc`.** Minting requires an individually-identifiable principal, so it is refused for a static config token (shared, carries no per-user identity — a leaked one could otherwise mint tokens that outlive its removal from the config) and for another PAT (anti-chaining). Who may mint is further gated by `auth.pat_min_role`: `admin` (default while the feature matures) or `viewer` (any signed-in user).
+
+- **Mint from the UI**: user menu → gear (*Settings*) → *My tokens* → create (name, role ≤ your own, optional expiry). The full secret is shown **once**.
+- **Use it from any client:**
 
   ```bash
-  curl -sX POST http://localhost:8000/api/auth/tokens \
-    -H "X-API-Key: <static-config-token>" \
-    -H "Content-Type: application/json" \
-    -d '{"name":"mcp","role":"viewer"}'
-  # → { "token": "dasha_pat_…", "prefix": "dasha_pat_xxxxxx", ... }   (token returned once)
-
-  curl -H "X-API-Key: dasha_pat_…" http://localhost:8000/api/clusters   # use it
+  curl -H "X-API-Key: dasha_pat_…" http://localhost:8000/api/clusters
   ```
 
-List your tokens with `GET /api/auth/tokens` (no secrets); revoke with `DELETE /api/auth/tokens/{id}` (effective immediately). The requested role cannot exceed yours (default `viewer`); `expires_in_days` is optional (0 / omitted = no expiry).
+List your tokens with `GET /api/auth/tokens` (no secrets); revoke with `DELETE /api/auth/tokens/{id}` (effective immediately). The requested role cannot exceed yours (default `viewer`); `expires_in_days` is optional (0 / omitted = no expiry). Both listings accept `?include_revoked=true` — a revoked token is kept as an audit row but can never authenticate again.
+
+**Administration (admin only).** An administrator sees and revokes every user's tokens, and browses who has access — *Settings* → *All tokens* / *Users*:
+
+```bash
+curl -H "Cookie: <oidc-session>" http://localhost:8000/api/auth/admin/tokens        # all owners' tokens
+curl -H "Cookie: <oidc-session>" -X DELETE .../api/auth/admin/tokens/{id}           # revoke any of them
+curl -H "Cookie: <oidc-session>" http://localhost:8000/api/auth/admin/users          # who signed in, and when
+```
+
+The user directory is populated by SSO sign-ins (`users` table, also created by `dasha migrate`): each principal gets a row on first login, with `last_login_at` refreshed on every login. Roles shown there come from the identity provider and are an audit trail, not an authorization source. Like minting, these endpoints require an **interactive OIDC admin session** — an admin-scoped PAT is refused, so a leaked token cannot enumerate or revoke the tokens that would replace it.
 
 ### Run Locally
 
