@@ -120,6 +120,83 @@ func TestAPIToken_CRUDAndOwnership(t *testing.T) {
 	assert.NotNil(t, toks[0].RevokedAt)
 }
 
+func TestAPIToken_IdleNotResolvedAndSwept(t *testing.T) {
+	t.Parallel()
+
+	s := newTestStorage(t)
+	ctx := t.Context()
+
+	id, err := s.CreateAPIToken(ctx, hashOf("secret-idle"), "dasha_pat_idl", "old-ci", "carol@corp", "viewer", nil)
+	require.NoError(t, err)
+
+	fresh, err := s.CreateAPIToken(ctx, hashOf("secret-fresh"), "dasha_pat_frs", "ci", "carol@corp", "viewer", nil)
+	require.NoError(t, err)
+	require.NoError(t, s.TouchAPIToken(ctx, hashOf("secret-fresh")))
+
+	// Backdate last use past the cutoff. The fixture writes the column directly:
+	// there is no API to age a token, and the point is the cutoff, not the clock.
+	_, err = s.pool.Exec(ctx,
+		`UPDATE api_tokens SET last_used_at = now() - make_interval(days => $1) WHERE id::text = $2`,
+		IdleRevokeDays+1, id)
+	require.NoError(t, err)
+
+	// Idle tokens stop authenticating immediately — before any sweep has run.
+	_, ok, err := s.ResolveAPIToken(ctx, hashOf("secret-idle"))
+	require.NoError(t, err)
+	assert.False(t, ok, "token idle past the cutoff must not resolve")
+
+	_, ok, err = s.ResolveAPIToken(ctx, hashOf("secret-fresh"))
+	require.NoError(t, err)
+	assert.True(t, ok, "recently used token must still resolve")
+
+	// The sweep then writes the revocation down, leaving the active token alone.
+	n, err := s.RevokeIdleAPITokens(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), n)
+
+	toks, err := s.ListAPITokens(ctx, "carol@corp", true)
+	require.NoError(t, err)
+	require.Len(t, toks, 2)
+
+	byID := map[string]*time.Time{}
+	for _, tok := range toks {
+		byID[tok.ID] = tok.RevokedAt
+	}
+
+	assert.NotNil(t, byID[id], "idle token is revoked")
+	assert.Nil(t, byID[fresh], "active token is untouched")
+
+	// Idempotent: a second pass finds nothing left to revoke.
+	n, err = s.RevokeIdleAPITokens(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), n)
+}
+
+func TestAPIToken_NeverUsedIdleFromCreation(t *testing.T) {
+	t.Parallel()
+
+	s := newTestStorage(t)
+	ctx := t.Context()
+
+	// last_used_at is NULL until first use, so idleness has to fall back to
+	// created_at — otherwise a token minted and forgotten would live forever.
+	id, err := s.CreateAPIToken(ctx, hashOf("secret-never"), "dasha_pat_nvr", "unused", "dave@corp", "viewer", nil)
+	require.NoError(t, err)
+
+	_, err = s.pool.Exec(ctx,
+		`UPDATE api_tokens SET created_at = now() - make_interval(days => $1) WHERE id::text = $2`,
+		IdleRevokeDays+1, id)
+	require.NoError(t, err)
+
+	_, ok, err := s.ResolveAPIToken(ctx, hashOf("secret-never"))
+	require.NoError(t, err)
+	assert.False(t, ok, "never-used token past the cutoff must not resolve")
+
+	n, err := s.RevokeIdleAPITokens(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), n)
+}
+
 func TestAPIToken_ExpiredNotResolved(t *testing.T) {
 	t.Parallel()
 

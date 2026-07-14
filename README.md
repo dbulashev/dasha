@@ -313,6 +313,13 @@ A logged-in user can mint **personal access tokens (PATs)** — bearer secrets s
 
 List your tokens with `GET /api/auth/tokens` (no secrets); revoke with `DELETE /api/auth/tokens/{id}` (effective immediately). The requested role cannot exceed yours (default `viewer`); `expires_in_days` is optional (0 / omitted = no expiry). Both listings accept `?include_revoked=true` — a revoked token is kept as an audit row but can never authenticate again.
 
+**Lifetime limits.** A token's role is frozen when it is minted: authentication reads the role stored on the token, not the identity provider, so a token keeps working after its owner is demoted or leaves the company. Two limits bound that exposure without relying on someone remembering to revoke:
+
+- **Admin tokens expire within 30 days** — including when `expires_in_days` is omitted (otherwise the cap would be bypassed by simply not asking for an expiry). An over-long request is clamped, not rejected; check `expires_at` in the response for the value applied.
+- **Any token unused for 90 days is revoked automatically.** Idleness is measured from last use, falling back to creation for a token that was never used — so a token minted and forgotten does not live forever. The cutoff takes effect the moment it is crossed (checked at authentication), and a background sweep records `revoked_at` so the token shows as revoked rather than looking live while silently failing.
+
+Neither limit replaces revocation: for a departure, revoke the tokens (*Settings* → *All tokens*), since an idle cutoff only expires what nobody is using.
+
 **Administration (admin only).** An administrator sees and revokes every user's tokens, and browses who has access — *Settings* → *All tokens* / *Users*:
 
 ```bash

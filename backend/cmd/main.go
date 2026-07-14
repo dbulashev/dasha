@@ -215,6 +215,13 @@ func dashaExec(cmd *cobra.Command, _ []string) error {
 			}
 		})
 
+	// Revokes personal access tokens nobody has used for months; exits with the
+	// server's context.
+	wg.Go(
+		func() {
+			deps.RunIdleTokenSweeper(cmd.Context(), st, serverLogger)
+		})
+
 	<-cmd.Context().Done()
 
 	err = svc.Echo.Shutdown(cmd.Context())

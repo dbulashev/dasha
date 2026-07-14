@@ -42,7 +42,8 @@ paths:
         secret is returned ONCE in this response and is never retrievable again.
         The requested role cannot exceed the caller's role and defaults to
         viewer. Minting is allowed only from an interactive session, not from a
-        personal access token (anti-chaining).
+        personal access token (anti-chaining). Admin tokens always expire within
+        30 days (see expires_in_days).
       requestBody:
         required: true
         content:
@@ -2323,7 +2324,12 @@ components:
           type: integer
           minimum: 0
           maximum: 3650
-          description: Optional lifetime in days (max 3650 = 10 years); omitted or 0 means no expiry.
+          description: >-
+            Optional lifetime in days (max 3650 = 10 years); omitted or 0 means no expiry.
+            Admin tokens are an exception: they are always capped at 30 days, and cannot be
+            issued without an expiry — a request for a longer (or absent) lifetime is clamped
+            rather than rejected, so check expires_at in the response for the value actually
+            applied.
     PersonalAccessToken:
       type: object
       required:

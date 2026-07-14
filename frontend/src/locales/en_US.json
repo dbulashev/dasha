@@ -21,7 +21,8 @@
     "copied": "Copied",
     "created": "Created",
     "showRevoked": "Show revoked",
-    "revoked": "Revoked"
+    "revoked": "Revoked",
+    "adminMaxDays": "Admin tokens expire within {days} days"
   },
   "Cancel": "Cancel",
   "Sign in with SSO": "Sign in with SSO",
