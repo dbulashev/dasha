@@ -7,6 +7,7 @@ import type { DatabaseHealth, HealthScore } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useApiLoader } from '@/composables/useApiLoader'
 import { useViewError } from '@/composables/useViewError'
+import { fmtDate } from '@/utils/format'
 import HealthScoreGauge from '@/components/health-score/HealthScoreGauge.vue'
 import HealthScoreCategories from '@/components/health-score/HealthScoreCategories.vue'
 
@@ -152,7 +153,7 @@ const ROLLBACK_THRESHOLD = 0.05
           >
             <template #activator="{ props: tp }">
               <v-chip v-bind="tp" size="x-small" variant="text" prepend-icon="mdi-clock-outline">
-                {{ t('home.statsSince') }} {{ new Date(dbHealth.StatsReset).toLocaleDateString() }}
+                {{ t('home.statsSince') }} {{ fmtDate(dbHealth.StatsReset) }}
               </v-chip>
             </template>
           </v-tooltip>

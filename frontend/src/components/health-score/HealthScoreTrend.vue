@@ -15,6 +15,7 @@ import { getHealthScoreHistory } from '@/api/gen/default/default'
 import type { HealthScoreHistory } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { assertOk } from '@/utils/api'
+import { fmtChartTime } from '@/utils/format'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend)
 
@@ -73,10 +74,7 @@ async function load() {
 watch([clusterName, hostName, selectedRange], load, { immediate: true })
 
 function fmtLabel(iso: string): string {
-  const d = new Date(iso)
-  return selectedRange.value === '24h'
-    ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    : d.toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  return fmtChartTime(iso, selectedRange.value !== '24h')
 }
 
 const chartData = computed(() => {

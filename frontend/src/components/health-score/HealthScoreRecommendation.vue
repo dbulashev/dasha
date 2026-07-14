@@ -13,9 +13,11 @@ import type { HealthScoreRecommendation } from '@/api/models/index'
 import { fmtNum } from '@/utils/format'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { usePaginatedApiLoader } from '@/composables/useApiLoader'
-import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
 import PaginationControls from '@/components/PaginationControls.vue'
 import { INLINE_SPECS, RULES_WITH_INLINE_DETAILS } from './inlineDetails'
+import { usePrefsStore } from '@/stores/prefs'
+
+const prefs = usePrefsStore()
 
 const props = defineProps<{
   rec: HealthScoreRecommendation
@@ -157,7 +159,7 @@ const {
     return inlineFetcher(limit, offset)
   },
   {
-    pageSize: DEFAULT_PAGE_SIZE,
+    pageSize: () => prefs.pageSize,
     deps: [expanded, clusterName, hostName, effectiveDatabase, () => props.rec.rule_id],
     guard: () =>
       expanded.value &&

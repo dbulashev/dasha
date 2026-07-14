@@ -6,9 +6,11 @@ import { getConnectionStatActivity } from '@/api/gen/default/default'
 import type { ConnectionStatActivity } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { usePaginatedApiLoader } from '@/composables/useApiLoader'
-import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
 import PaginationControls from '@/components/PaginationControls.vue'
 import { useDebouncedRef } from '@/composables/useDebouncedRef'
+import { usePrefsStore } from '@/stores/prefs'
+
+const prefs = usePrefsStore()
 
 const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
@@ -47,7 +49,7 @@ const { items, loading, page, hasMore, load } = usePaginatedApiLoader<Connection
     ...(filterState.value ? { state: filterState.value } : {}),
   }),
   {
-    pageSize: DEFAULT_PAGE_SIZE,
+    pageSize: () => prefs.pageSize,
     deps: [clusterName, hostName, debouncedFilterUser, filterState],
     guard: () => !!clusterName.value && !!hostName.value,
     onError,

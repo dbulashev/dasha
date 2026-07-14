@@ -42,6 +42,15 @@ export const useAuthStore = defineStore('auth', () => {
     () => patEnabled.value && (patMinRole.value === 'viewer' || user.value?.role === 'admin'),
   )
 
+  // Whether the user may administer other people's tokens and see the user list.
+  // Narrower than isAdmin: the server serves these endpoints only to an
+  // interactive OIDC admin (a static/personal token is refused), and the user
+  // list is only populated by SSO sign-ins. patEnabled also tells us the
+  // api_tokens table exists, so the endpoints will not 500.
+  const canAdminTokens = computed(
+    () => patEnabled.value && mode.value === AuthInfoMode.oidc && user.value?.role === 'admin',
+  )
+
   async function init() {
     if (initialized.value) return
 
@@ -109,5 +118,5 @@ export const useAuthStore = defineStore('auth', () => {
     window.location.href = '/'
   }
 
-  return { mode, oidcLoginUrl, user, initialized, isAuthenticated, requiresLogin, isAdmin, enableQueryStatsReset, patEnabled, patMinRole, canManageTokens, init, doLoginRedirect, consumeReturnUrl, logout }
+  return { mode, oidcLoginUrl, user, initialized, isAuthenticated, requiresLogin, isAdmin, enableQueryStatsReset, patEnabled, patMinRole, canManageTokens, canAdminTokens, init, doLoginRedirect, consumeReturnUrl, logout }
 })

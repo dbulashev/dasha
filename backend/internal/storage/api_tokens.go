@@ -10,6 +10,8 @@ import (
 )
 
 // APIToken is one personal access token as shown to its owner (never the secret).
+// RevokedAt is nil for a live token; it is only ever non-nil when the caller asked
+// for revoked tokens to be included.
 type APIToken struct {
 	ID         string
 	Prefix     string
@@ -18,6 +20,15 @@ type APIToken struct {
 	CreatedAt  time.Time
 	LastUsedAt *time.Time
 	ExpiresAt  *time.Time
+	RevokedAt  *time.Time
+}
+
+// AdminAPIToken is a token as shown to an administrator: the owner's view plus
+// the owning subject, which a user never needs (their tokens are all their own).
+type AdminAPIToken struct {
+	APIToken
+
+	Subject string
 }
 
 // APITokenIdentity is the (subject, role) a presented token resolves to, plus
@@ -86,14 +97,16 @@ func (s *Storage) TouchAPIToken(ctx context.Context, hash []byte) error {
 	return nil
 }
 
-// ListAPITokens returns the owner's active (non-revoked) tokens, newest first.
-func (s *Storage) ListAPITokens(ctx context.Context, subject string) ([]APIToken, error) {
+// ListAPITokens returns the owner's tokens, newest first. Revoked tokens are
+// excluded unless includeRevoked is set — revoked rows are kept in the table as
+// an audit trail, so they can be shown on request without ever being usable.
+func (s *Storage) ListAPITokens(ctx context.Context, subject string, includeRevoked bool) ([]APIToken, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id::text, token_prefix, name, role, created_at, last_used_at, expires_at
+		SELECT id::text, token_prefix, name, role, created_at, last_used_at, expires_at, revoked_at
 		FROM api_tokens
-		WHERE subject = $1 AND revoked_at IS NULL
+		WHERE subject = $1 AND ($2 OR revoked_at IS NULL)
 		ORDER BY created_at DESC`,
-		subject,
+		subject, includeRevoked,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("storage: list api tokens: %w", err)
@@ -104,7 +117,10 @@ func (s *Storage) ListAPITokens(ctx context.Context, subject string) ([]APIToken
 
 	for rows.Next() {
 		var t APIToken
-		if err := rows.Scan(&t.ID, &t.Prefix, &t.Name, &t.Role, &t.CreatedAt, &t.LastUsedAt, &t.ExpiresAt); err != nil {
+		if err := rows.Scan(
+			&t.ID, &t.Prefix, &t.Name, &t.Role,
+			&t.CreatedAt, &t.LastUsedAt, &t.ExpiresAt, &t.RevokedAt,
+		); err != nil {
 			return nil, fmt.Errorf("storage: scan api token: %w", err)
 		}
 
@@ -124,6 +140,55 @@ func (s *Storage) RevokeAPIToken(ctx context.Context, subject, id string) (bool,
 	)
 	if err != nil {
 		return false, fmt.Errorf("storage: revoke api token: %w", err)
+	}
+
+	return tag.RowsAffected() > 0, nil
+}
+
+// ListAllAPITokens returns every owner's tokens, newest first, for the
+// administration view. Revoked tokens are excluded unless includeRevoked is set.
+// Callers must gate this on an admin role.
+func (s *Storage) ListAllAPITokens(ctx context.Context, includeRevoked bool) ([]AdminAPIToken, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id::text, token_prefix, name, role, created_at, last_used_at, expires_at, revoked_at, subject
+		FROM api_tokens
+		WHERE $1 OR revoked_at IS NULL
+		ORDER BY created_at DESC`,
+		includeRevoked,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("storage: list all api tokens: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]AdminAPIToken, 0, 16)
+
+	for rows.Next() {
+		var t AdminAPIToken
+		if err := rows.Scan(
+			&t.ID, &t.Prefix, &t.Name, &t.Role,
+			&t.CreatedAt, &t.LastUsedAt, &t.ExpiresAt, &t.RevokedAt, &t.Subject,
+		); err != nil {
+			return nil, fmt.Errorf("storage: scan admin api token: %w", err)
+		}
+
+		out = append(out, t)
+	}
+
+	return out, rows.Err()
+}
+
+// RevokeAPITokenByID revokes a token regardless of owner. Unlike RevokeAPIToken
+// there is no subject filter, so callers must gate this on an admin role.
+// found=false when no matching active token exists.
+func (s *Storage) RevokeAPITokenByID(ctx context.Context, id string) (bool, error) {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE api_tokens SET revoked_at = now()
+		WHERE id::text = $1 AND revoked_at IS NULL`,
+		id,
+	)
+	if err != nil {
+		return false, fmt.Errorf("storage: revoke api token by id: %w", err)
 	}
 
 	return tag.RowsAffected() > 0, nil

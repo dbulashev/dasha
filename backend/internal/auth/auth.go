@@ -130,3 +130,11 @@ func SetUser(c echo.Context, u *UserContext) {
 type PATResolver interface {
 	ResolveToken(ctx context.Context, presented string) (*UserContext, bool)
 }
+
+// LoginRecorder records a successful interactive sign-in, so operators can see
+// who has access and when they last used it. A nil recorder disables the audit
+// (storage not configured). Implementations must be safe to fail: login never
+// depends on the record being written.
+type LoginRecorder interface {
+	RecordLogin(ctx context.Context, subject, name, role string) error
+}

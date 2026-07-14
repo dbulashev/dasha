@@ -7,9 +7,11 @@ import type { MaintenanceInfo } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { usePaginatedApiLoader } from '@/composables/useApiLoader'
 import { useDebouncedRef } from '@/composables/useDebouncedRef'
-import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
 import PaginationControls from '@/components/PaginationControls.vue'
 import { fmtDateTime } from '@/utils/format'
+import { usePrefsStore } from '@/stores/prefs'
+
+const prefs = usePrefsStore()
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
@@ -39,7 +41,7 @@ const { items, loading, page, hasMore, load } = usePaginatedApiLoader<Maintenanc
     table_name: debouncedTableName.value || undefined,
   }),
   {
-    pageSize: DEFAULT_PAGE_SIZE,
+    pageSize: () => prefs.pageSize,
     deps: [clusterName, hostName, databaseName, debouncedTableName],
     guard: () => !!clusterName.value && !!hostName.value && !!databaseName.value,
     onError,

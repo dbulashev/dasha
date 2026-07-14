@@ -6,7 +6,7 @@ import zoomPlugin from 'chartjs-plugin-zoom'
 import { useI18n } from 'vue-i18n'
 import { useThemeStore } from '@/stores/theme'
 import type { LogEntry } from '@/api/models'
-import { fmtDateTime } from '@/utils/format'
+import { fmtChartTime, fmtDateTime } from '@/utils/format'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend, zoomPlugin)
 
@@ -84,10 +84,7 @@ const parsed = computed(() =>
 )
 
 function bucketLabel(ms: number, spanMs: number): string {
-  const d = new Date(ms)
-  return spanMs < DAY_MS
-    ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    : d.toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  return fmtChartTime(ms, spanMs >= DAY_MS)
 }
 
 // Bucket geometry, shared by the chart data and the click-to-zoom handler.

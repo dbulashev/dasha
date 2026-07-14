@@ -1,4 +1,4 @@
-import { ref, watch, type Ref, type WatchSource } from 'vue'
+import { ref, toValue, watch, type MaybeRefOrGetter, type Ref, type WatchSource } from 'vue'
 import { assertOk } from '@/utils/api'
 import { getErrorMessage } from '@/utils/error'
 
@@ -43,7 +43,9 @@ export function useApiLoader<T = unknown[]>(
 }
 
 interface UsePaginatedApiLoaderOptions<T> {
-  pageSize: number
+  // A getter/ref so the user-configured page size takes effect immediately: the
+  // size is part of the request (limit/offset), so a change has to refetch.
+  pageSize: MaybeRefOrGetter<number>
   deps: WatchSource[]
   guard: () => boolean
   onError: (msg: string, err?: unknown) => void
@@ -72,12 +74,13 @@ export function usePaginatedApiLoader<T>(
     if (!options.guard()) return
     loading.value = true
     try {
-      const offset = (p - 1) * options.pageSize
-      const response = await fetcher(options.pageSize, offset)
+      const pageSize = toValue(options.pageSize)
+      const offset = (p - 1) * pageSize
+      const response = await fetcher(pageSize, offset)
       const data = (assertOk(response) as T[]) ?? []
       items.value = data
       page.value = p
-      hasMore.value = data.length >= options.pageSize
+      hasMore.value = data.length >= pageSize
     } catch (err) {
       options.onError(getErrorMessage(err), err)
       items.value = []
@@ -86,7 +89,8 @@ export function usePaginatedApiLoader<T>(
     }
   }
 
-  watch(options.deps, () => load(), { immediate: true })
+  // Resizing the page invalidates the current offset, so reload from page 1.
+  watch([...options.deps, () => toValue(options.pageSize)], () => load(), { immediate: true })
 
   return { items, loading, page, hasMore, load }
 }

@@ -17,4 +17,9 @@ export interface PersonalAccessToken {
   last_used_at?: string | null
   /** @nullable */
   expires_at?: string | null
+  /**
+   * When the token was revoked; null for a live token. Only ever set when include_revoked was requested.
+   * @nullable
+   */
+  revoked_at?: string | null
 }

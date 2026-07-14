@@ -7,7 +7,7 @@ import { aliases, mdi } from 'vuetify/iconsets/mdi'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
 import { md3 } from 'vuetify/blueprints'
-import { ru } from 'vuetify/locale'
+import { de, en, ru } from 'vuetify/locale'
 
 
 // detect system preference for dark mode and set defaultTheme accordingly
@@ -18,9 +18,12 @@ export default createVuetify({
   theme: {
     defaultTheme,
   },
+  // The active locale is driven by the locale store (see main.ts); Vuetify only
+  // needs every shipped language registered here.
   locale: {
-    locale: 'ru',
-    messages: { ru },
+    locale: 'en',
+    fallback: 'en',
+    messages: { ru, en, de },
   },
   defaults: {
     VDataTable: {

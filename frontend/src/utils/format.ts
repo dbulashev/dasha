@@ -1,3 +1,7 @@
+import { useLocaleStore } from '@/stores/locale'
+import { usePrefsStore } from '@/stores/prefs'
+import { isValidTimeZone, tzSuffix } from '@/constants/timezones'
+
 export function fmtLag(seconds: number | null | undefined): string {
   if (seconds == null || seconds === 0) return '0 s'
   if (seconds < 1) return `${Math.round(seconds * 1000)} ms`
@@ -65,15 +69,82 @@ export function fmtInt(v: number | null | undefined): string {
 }
 
 /**
- * Format an ISO timestamp with the browser locale. Returns `empty` for
- * missing/unparsable values and for pre-2000 dates (epoch-zero placeholders
- * PostgreSQL reports as "never").
+ * Intl settings for every rendered timestamp: the language the user picked (not
+ * the browser's, which is what a bare toLocaleString() would use) and their
+ * timezone choice. Reading the stores here — rather than passing them in — keeps
+ * the ~30 call sites unchanged, and the reactive reads still re-render templates
+ * when either setting changes.
+ */
+// The persisted zone, or 'local' when it is unset or no longer valid — never a
+// value that would make Intl throw.
+function activeZone(): string {
+  const tz = usePrefsStore().timezone
+
+  return tz !== 'local' && isValidTimeZone(tz) ? tz : 'local'
+}
+
+function dateIntl(): { locale: string; options: Intl.DateTimeFormatOptions } {
+  const locale = useLocaleStore().currentLocale().replace('_', '-') // ru_RU -> ru-RU
+  const options: Intl.DateTimeFormatOptions = {}
+  const tz = activeZone()
+
+  if (tz !== 'local') {
+    options.timeZone = tz
+  }
+
+  return { locale, options }
+}
+
+// Timestamps in a fixed zone are labelled with it, because a bare number in a
+// different zone than the reader expects is worse than no number at all. The
+// local zone needs no label: it is what an unlabelled time already means.
+function zoneSuffix(): string {
+  const tz = activeZone()
+
+  return tz === 'local' ? '' : tzSuffix(tz)
+}
+
+function parseDate(iso: string | null | undefined): Date | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  // Pre-2000 dates are epoch-zero placeholders PostgreSQL reports as "never".
+  if (isNaN(d.getTime()) || d.getFullYear() < 2000) return null
+  return d
+}
+
+/**
+ * Format an ISO timestamp in the user's language and timezone. Returns `empty`
+ * for missing/unparsable values and for epoch-zero placeholders.
  */
 export function fmtDateTime(iso: string | null | undefined, empty = '—'): string {
-  if (!iso) return empty
-  const d = new Date(iso)
-  if (isNaN(d.getTime()) || d.getFullYear() < 2000) return empty
-  return d.toLocaleString()
+  const d = parseDate(iso)
+  if (!d) return empty
+  const { locale, options } = dateIntl()
+  return d.toLocaleString(locale, options) + zoneSuffix()
+}
+
+/** Date-only variant of fmtDateTime (no clock time). */
+export function fmtDate(iso: string | null | undefined, empty = '—'): string {
+  const d = parseDate(iso)
+  if (!d) return empty
+  const { locale, options } = dateIntl()
+  return d.toLocaleDateString(locale, options) + zoneSuffix()
+}
+
+/**
+ * Compact axis label for time-series charts. `withDate` adds day/month for spans
+ * longer than a day. Follows the same timezone setting as the tables, so chart
+ * ticks and rows cannot disagree about what "10:00" means.
+ */
+export function fmtChartTime(value: string | number | Date, withDate: boolean): string {
+  const d = value instanceof Date ? value : new Date(value)
+  if (isNaN(d.getTime())) return ''
+  const { locale, options } = dateIntl()
+
+  const time: Intl.DateTimeFormatOptions = { ...options, hour: '2-digit', minute: '2-digit' }
+  if (!withDate) return d.toLocaleTimeString(locale, time)
+
+  return d.toLocaleString(locale, { ...time, month: '2-digit', day: '2-digit' })
 }
 
 export function fmtAge(createdAt: string | null | undefined, statsReset: string | null | undefined, unknownLabel = '?'): string {
