@@ -1,6 +1,4 @@
 {
-  "Switch to dark mode": "In den Dunkelmodus wechseln",
-  "Switch to light mode": "In den Hellmodus wechseln",
   "Cancel": "Abbrechen",
   "Home": "Startseite",
   "Connections": "Verbindungen",
@@ -82,7 +80,10 @@
     "secretOnceTitle": "Token jetzt kopieren",
     "secretOnce": "Der vollständige Wert wird nur einmal angezeigt und ist danach nicht mehr abrufbar.",
     "copy": "Kopieren",
-    "copied": "Kopiert"
+    "copied": "Kopiert",
+    "created": "Erstellt",
+    "showRevoked": "Widerrufene anzeigen",
+    "revoked": "Widerrufen"
   },
   "pgssNotInstalled": "Die Erweiterung pg_stat_statements ist in dieser Datenbank nicht installiert. Abfragestatistiken (Top 10, Bericht) sind nicht verfügbar.",
   "pgssNotEnabled": "Die Erweiterung pg_stat_statements ist installiert, aber nicht aktiviert. Fügen Sie sie zu shared_preload_libraries hinzu und starten Sie PostgreSQL neu.",
@@ -1306,6 +1307,47 @@
       },
       "unavailable": "Trend nicht verfügbar: Metrics-Datasource nicht konfiguriert oder Ziel nicht zugeordnet.",
       "noData": "Keine Daten für den Zeitraum."
+    }
+  },
+  "prefs": {
+    "title": "Einstellungen",
+    "tabInterface": "Oberfläche",
+    "tabTokens": "Meine Token",
+    "tabAdminTokens": "Alle Token",
+    "tabUsers": "Benutzer",
+    "language": "Sprache der Oberfläche",
+    "languageHint": "Ohne Auswahl wird die Sprache des Browsers verwendet.",
+    "theme": "Design",
+    "themeSystem": "System",
+    "themeLight": "Hell",
+    "themeDark": "Dunkel",
+    "timezone": "Zeitzone",
+    "timezoneLocal": "Lokale Zeit",
+    "pageSize": "Zeilen pro Seite",
+    "pageSizeHint": "Beeinflusst die Größe der Serveranfrage, nicht nur die Darstellung."
+  },
+  "admin": {
+    "tokens": {
+      "title": "Persönliche Token aller Benutzer",
+      "owner": "Besitzer",
+      "search": "Suche nach Name oder Besitzer",
+      "empty": "Noch keine Token.",
+      "revoke": "Widerrufen",
+      "revokeConfirm": "Token „{name}“ von {owner} widerrufen? Die Aktion kann nicht rückgängig gemacht werden.",
+      "revoked": "Token widerrufen"
+    },
+    "users": {
+      "title": "Benutzer",
+      "search": "Suche nach Benutzer",
+      "subject": "Benutzer",
+      "name": "Name",
+      "role": "Rolle",
+      "createdAt": "Erste Anmeldung",
+      "lastLogin": "Letzte Anmeldung",
+      "tokens": "Token",
+      "empty": "Bisher hat sich niemand angemeldet.",
+      "never": "nie",
+      "hint": "Die Liste wächst mit jeder SSO-Anmeldung. Rollen kommen vom Identity Provider und sind hier nicht editierbar."
     }
   }
 }

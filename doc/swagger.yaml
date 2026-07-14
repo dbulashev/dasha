@@ -23,6 +23,9 @@ paths:
       description: >-
         List the authenticated caller's own personal access tokens. Secret
         values are never returned; only a short prefix for identification.
+        Revoked tokens are omitted unless include_revoked is set.
+      parameters:
+        - $ref: '#/components/parameters/IncludeRevoked'
       responses:
         '200':
           description: Success
@@ -72,6 +75,63 @@ paths:
           description: Revoked
         '404':
           $ref: '#/components/responses/NotFound'
+  /api/auth/admin/tokens:
+    get:
+      operationId: listAllPersonalTokens
+      description: >-
+        List the personal access tokens of every owner (administrators only).
+        Secret values are never returned; only a short prefix for identification.
+        Revoked tokens are omitted unless include_revoked is set.
+      parameters:
+        - $ref: '#/components/parameters/IncludeRevoked'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminPersonalAccessToken'
+        '403':
+          description: Caller is not an administrator on an interactive session
+  /api/auth/admin/tokens/{id}:
+    delete:
+      operationId: revokeAnyPersonalToken
+      description: >-
+        Revoke any owner's personal access token (administrators only). Unlike
+        the self-service endpoint this is not restricted to the caller's own
+        tokens.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Revoked
+        '403':
+          description: Caller is not an administrator on an interactive session
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/auth/admin/users:
+    get:
+      operationId: listUsers
+      description: >-
+        List the principals that have signed in at least once, with the time of
+        their last sign-in (administrators only).
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminUser'
+        '403':
+          description: Caller is not an administrator on an interactive session
   /api/clusters:
     get:
       operationId: getClusters
@@ -2219,6 +2279,14 @@ components:
     NotFound:
       description: not found
   parameters:
+    IncludeRevoked:
+      in: query
+      name: include_revoked
+      description: Include revoked tokens in the listing. They are kept as an audit trail and can never authenticate again.
+      schema:
+        type: boolean
+        default: false
+      required: false
     ClusterName:
       in: query
       name: cluster_name
@@ -2286,6 +2354,11 @@ components:
           type: string
           format: date-time
           nullable: true
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the token was revoked; null for a live token. Only ever set when include_revoked was requested.
     PersonalAccessTokenCreated:
       type: object
       required:
@@ -2315,6 +2388,75 @@ components:
           type: string
           format: date-time
           nullable: true
+    AdminPersonalAccessToken:
+      type: object
+      description: A personal access token as shown to an administrator — the owner's view plus the owning principal.
+      required:
+        - id
+        - name
+        - owner
+        - prefix
+        - role
+        - created_at
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        owner:
+          type: string
+          description: The principal (OIDC email) that owns the token.
+        prefix:
+          type: string
+          description: Token prefix shown for identification (not the secret).
+        role:
+          type: string
+          enum: [viewer, admin]
+        created_at:
+          type: string
+          format: date-time
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the token was revoked; null for a live token. Only ever set when include_revoked was requested.
+    AdminUser:
+      type: object
+      description: A principal that has signed in at least once. Roles are shown as last seen from the identity provider; they are not editable here.
+      required:
+        - subject
+        - name
+        - role
+        - created_at
+        - tokens
+      properties:
+        subject:
+          type: string
+          description: The principal (OIDC email); the same key a token's owner field carries.
+        name:
+          type: string
+        role:
+          type: string
+          enum: [viewer, admin]
+        created_at:
+          type: string
+          format: date-time
+          description: When the principal first signed in.
+        last_login_at:
+          type: string
+          format: date-time
+          nullable: true
+        tokens:
+          type: integer
+          description: Number of the principal's personal access tokens that are not revoked.
     AuthInfo:
       type: object
       required:

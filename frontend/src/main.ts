@@ -1,12 +1,14 @@
-import { createApp } from 'vue'
+import { createApp, watch } from 'vue'
 import { createPinia } from 'pinia'
 import piniaPluginPersistedstate from 'pinia-plugin-persistedstate'
 
 import { createI18n } from 'vue-i18n'
 
 import deDE from './locales/de_DE.json'
+import enUS from './locales/en_US.json'
 import ruRU from './locales/ru_RU.json'
-import createVuetify from './plugins/vuetify'
+import vuetify from './plugins/vuetify'
+import { FALLBACK_LOCALE, useLocaleStore } from './stores/locale'
 
 const pinia = createPinia()
 
@@ -16,14 +18,22 @@ import router from './router'
 
 const app = createApp(App)
 
+pinia.use(piniaPluginPersistedstate)
+app.use(pinia)
+
+// The persisted locale store is the source of truth, so it has to be read after
+// Pinia is installed — hence the store lookup here rather than a hardcoded locale.
+const localeStore = useLocaleStore()
+
 const i18n = createI18n({
     legacy: false,
     globalInjection: true,
-    locale: 'ru_RU',
-    fallbackLocale: 'en',
+    locale: localeStore.currentLocale(),
+    fallbackLocale: FALLBACK_LOCALE,
     messages: {
         'ru_RU': ruRU,
-        'de_DE': deDE
+        'de_DE': deDE,
+        'en_US': enUS
     },
     pluralRules: {
         'ru_RU': (choice: number) => {
@@ -37,11 +47,17 @@ const i18n = createI18n({
     }
 })
 
+// Keep vue-i18n and Vuetify's own strings in step with the store.
+watch(
+    () => localeStore.locale,
+    () => {
+        i18n.global.locale.value = localeStore.currentLocale()
+        vuetify.locale.current.value = localeStore.vuetifyLocale()
+    },
+    { immediate: true },
+)
 
-pinia.use(piniaPluginPersistedstate)
-
-app.use(pinia)
-app.use(createVuetify)
+app.use(vuetify)
 
 app.use(i18n)
 app.use(router)

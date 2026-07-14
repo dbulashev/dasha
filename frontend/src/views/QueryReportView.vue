@@ -17,7 +17,7 @@ import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useViewError } from '@/composables/useViewError'
 import { useAuthStore } from '@/stores/auth'
 import { assertOk } from '@/utils/api'
-import { fmtAge } from '@/utils/format'
+import { fmtAge, fmtDateTime } from '@/utils/format'
 import { snapshotReasonI18nKey } from '@/utils/autosnapshot'
 import QueryReportSection from '@/components/queries/QueryReportSection.vue'
 import LockSnapshotDialog from '@/components/queries/LockSnapshotDialog.vue'
@@ -115,7 +115,7 @@ const snapshotSelectItems = computed(() => {
   const live = { value: null as string | null, title: t('snapshotLiveData') }
   const items = snapshotsList.value.map(s => ({
     value: s.Id,
-    title: `${new Date(s.CreatedAt).toLocaleString()} · ${t(snapshotReasonI18nKey(s.Reason), s.Reason ?? 'manual')}`,
+    title: `${fmtDateTime(s.CreatedAt)} · ${t(snapshotReasonI18nKey(s.Reason), s.Reason ?? 'manual')}`,
   }))
   return [live, ...items]
 })

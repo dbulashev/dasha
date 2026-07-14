@@ -50,7 +50,17 @@ const router = useRouter()
 import ClusterHostDbSelector from './components/ClusterHostDbSelector.vue'
 import LoginCard from './components/auth/LoginCard.vue'
 import UserMenu from './components/auth/UserMenu.vue'
+import SettingsDialog from './components/prefs/SettingsDialog.vue'
 import ErrorAlert from './components/ErrorAlert.vue'
+
+const settingsOpen = ref(false)
+
+// Settings live in the user menu, which only exists for a signed-in OIDC user.
+// Without one there is no menu, so the gear moves to the toolbar — otherwise the
+// language picker would be unreachable whenever auth is none/token.
+const settingsInToolbar = computed(
+  () => authStore.mode !== AuthInfoMode.oidc || !authStore.user,
+)
 
 function withQuery(base: string) {
   const cluster = route.params.clustername ?? '';
@@ -180,14 +190,17 @@ watch(() => route.path, () => {
         <cluster-host-db-selector class="ml-4 mr-2" />
         <template v-slot:append>
           <v-btn
-            :icon="themeStore.icon()"
-            v-tooltip="themeStore.currentTheme() === 'light' ? t('Switch to dark mode') : t('Switch to light mode')"
+            v-if="settingsInToolbar"
+            icon="mdi-cog-outline"
+            v-tooltip="t('prefs.title')"
             slim
-            @click="themeStore.toggleTheme()"
+            @click="settingsOpen = true"
           ></v-btn>
           <UserMenu />
         </template>
       </v-app-bar>
+
+      <SettingsDialog v-if="settingsInToolbar" v-model="settingsOpen" />
 
       <v-navigation-drawer v-model="drawer"
         :location="$vuetify.display.mobile ? 'bottom' : undefined"

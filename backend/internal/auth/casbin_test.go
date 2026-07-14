@@ -29,6 +29,18 @@ func TestCasbinEnforcer_Policies(t *testing.T) {
 		{"viewer", "/api/clusters", "DELETE", false},
 		{"viewer", "/api/settings/analyze", "GET", true},
 		{"unknown", "/api/clusters", "GET", false},
+
+		// A viewer may manage its own tokens but must not reach the administration
+		// endpoints, even though it holds a blanket GET on /api/*.
+		{"viewer", "/api/auth/tokens", "GET", true},
+		{"viewer", "/api/auth/tokens", "POST", true},
+		{"viewer", "/api/auth/tokens/abc", "DELETE", true},
+		{"viewer", "/api/auth/admin/tokens", "GET", false},
+		{"viewer", "/api/auth/admin/tokens/abc", "DELETE", false},
+		{"viewer", "/api/auth/admin/users", "GET", false},
+		{"admin", "/api/auth/admin/tokens", "GET", true},
+		{"admin", "/api/auth/admin/tokens/abc", "DELETE", true},
+		{"admin", "/api/auth/admin/users", "GET", true},
 	}
 
 	for _, tt := range tests {

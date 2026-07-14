@@ -6,12 +6,13 @@ import { getConnectionSources } from '@/api/gen/default/default'
 import type { ConnectionSource } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { usePaginatedApiLoader } from '@/composables/useApiLoader'
-import { LARGE_PAGE_SIZE } from '@/constants/pagination'
+import { usePrefsStore } from '@/stores/prefs'
 import PaginationControls from '@/components/PaginationControls.vue'
 
 const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
 const { onError } = useViewError()
+const prefs = usePrefsStore()
 
 const headers = computed(() => [
   { title: t('header.database'), key: 'Database' },
@@ -29,7 +30,7 @@ const { items, loading, page, hasMore, load } = usePaginatedApiLoader<Connection
     offset,
   }),
   {
-    pageSize: LARGE_PAGE_SIZE,
+    pageSize: () => prefs.largePageSize,
     deps: [clusterName, hostName],
     guard: () => !!clusterName.value && !!hostName.value,
     onError,

@@ -401,6 +401,18 @@ func NewPATResolver(st *storage.Storage, logger *zap.Logger) auth.PATResolver {
 	}
 }
 
+// NewLoginRecorder returns an auth.LoginRecorder backed by storage, or nil (the
+// sign-in audit is disabled) when storage is not configured. The explicit nil —
+// rather than passing st straight through — keeps a typed-nil *storage.Storage
+// out of the interface, where it would satisfy != nil and panic on first call.
+func NewLoginRecorder(st *storage.Storage) auth.LoginRecorder {
+	if st == nil {
+		return nil
+	}
+
+	return st
+}
+
 func provideLogger(debug bool) *zap.Logger {
 	var (
 		l   *zap.Logger

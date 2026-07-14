@@ -2,11 +2,11 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 export const useThemeStore = defineStore('theme_key', () => {
+  // 'system' follows the OS preference; the settings dialog writes this directly.
   const theme = ref<'light' | 'dark' | 'system'>('system')
-  function toggleTheme() {
-    theme.value = currentTheme() === 'dark' ? 'light' : 'dark'
-  }
 
+  // Resolves 'system' for consumers that need a concrete light/dark value
+  // (chart palettes, which cannot read a CSS variable).
   function currentTheme(): 'light' | 'dark' {
     if (theme.value === 'system') {
       const prefersDark = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
@@ -15,11 +15,7 @@ export const useThemeStore = defineStore('theme_key', () => {
     return theme.value
   }
 
-  function icon(): 'mdi-weather-sunny' | 'mdi-weather-night' {
-    return currentTheme() === 'dark' ? 'mdi-weather-sunny' : 'mdi-weather-night'
-  }
-
-  return { theme, toggleTheme, currentTheme, icon }
+  return { theme, currentTheme }
 }, {
   persist: {
     storage: localStorage,

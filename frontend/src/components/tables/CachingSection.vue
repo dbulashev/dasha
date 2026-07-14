@@ -6,9 +6,11 @@ import { getTablesCaching } from '@/api/gen/default/default'
 import type { TableCaching } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { usePaginatedApiLoader } from '@/composables/useApiLoader'
-import { DEFAULT_PAGE_SIZE } from '@/constants/pagination'
 import { fmtPct } from '@/utils/format'
 import PaginationControls from '@/components/PaginationControls.vue'
+import { usePrefsStore } from '@/stores/prefs'
+
+const prefs = usePrefsStore()
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
@@ -32,7 +34,7 @@ const { items, loading, page, hasMore, load } = usePaginatedApiLoader<TableCachi
     offset,
   }),
   {
-    pageSize: DEFAULT_PAGE_SIZE,
+    pageSize: () => prefs.pageSize,
     deps: [clusterName, hostName, databaseName],
     guard: () => !!clusterName.value && !!hostName.value && !!databaseName.value,
     onError,

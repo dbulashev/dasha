@@ -19,6 +19,8 @@ import { computed, unref } from 'vue'
 import type { MaybeRef } from 'vue'
 
 import type {
+  AdminPersonalAccessToken,
+  AdminUser,
   AuthInfo,
   AutoSnapshotClusterOverride,
   AutoSnapshotClusterOverrideInput,
@@ -141,6 +143,8 @@ import type {
   IndexUsage,
   InstanceInfo,
   InvalidConstraint,
+  ListAllPersonalTokensParams,
+  ListPersonalTokensParams,
   LockSnapshot,
   LogSearchResult,
   MaintenanceAutovacuumFreezeMaxAge,
@@ -263,7 +267,7 @@ export function useGetAuthInfo<
 }
 
 /**
- * List the authenticated caller's own personal access tokens. Secret values are never returned; only a short prefix for identification.
+ * List the authenticated caller's own personal access tokens. Secret values are never returned; only a short prefix for identification. Revoked tokens are omitted unless include_revoked is set.
  */
 export type listPersonalTokensResponse200 = {
   data: PersonalAccessToken[]
@@ -275,36 +279,50 @@ export type listPersonalTokensResponseSuccess = listPersonalTokensResponse200 & 
 }
 export type listPersonalTokensResponse = listPersonalTokensResponseSuccess
 
-export const getListPersonalTokensUrl = () => {
-  return `/api/auth/tokens`
+export const getListPersonalTokensUrl = (params?: ListPersonalTokensParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0 ? `/api/auth/tokens?${stringifiedParams}` : `/api/auth/tokens`
 }
 
 export const listPersonalTokens = async (
+  params?: ListPersonalTokensParams,
   options?: RequestInit,
 ): Promise<listPersonalTokensResponse> => {
-  return customFetch<listPersonalTokensResponse>(getListPersonalTokensUrl(), {
+  return customFetch<listPersonalTokensResponse>(getListPersonalTokensUrl(params), {
     ...options,
     method: 'GET',
   })
 }
 
-export const getListPersonalTokensQueryKey = () => {
-  return ['api', 'auth', 'tokens'] as const
+export const getListPersonalTokensQueryKey = (params?: MaybeRef<ListPersonalTokensParams>) => {
+  return ['api', 'auth', 'tokens', ...(params ? [params] : [])] as const
 }
 
 export const getListPersonalTokensQueryOptions = <
   TData = Awaited<ReturnType<typeof listPersonalTokens>>,
   TError = unknown,
->(options?: {
-  query?: UseQueryOptions<Awaited<ReturnType<typeof listPersonalTokens>>, TError, TData>
-  request?: SecondParameter<typeof customFetch>
-}) => {
+>(
+  params?: MaybeRef<ListPersonalTokensParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof listPersonalTokens>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
   const { query: queryOptions, request: requestOptions } = options ?? {}
 
-  const queryKey = getListPersonalTokensQueryKey()
+  const queryKey = getListPersonalTokensQueryKey(params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof listPersonalTokens>>> = ({ signal }) =>
-    listPersonalTokens({ signal, ...requestOptions })
+    listPersonalTokens(unref(params), { signal, ...requestOptions })
 
   return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
     Awaited<ReturnType<typeof listPersonalTokens>>,
@@ -321,11 +339,14 @@ export type ListPersonalTokensQueryError = unknown
 export function useListPersonalTokens<
   TData = Awaited<ReturnType<typeof listPersonalTokens>>,
   TError = unknown,
->(options?: {
-  query?: UseQueryOptions<Awaited<ReturnType<typeof listPersonalTokens>>, TError, TData>
-  request?: SecondParameter<typeof customFetch>
-}): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getListPersonalTokensQueryOptions(options)
+>(
+  params?: MaybeRef<ListPersonalTokensParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof listPersonalTokens>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListPersonalTokensQueryOptions(params, options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
 
@@ -533,6 +554,294 @@ export const useRevokePersonalToken = <TError = NotFoundResponse, TContext = unk
 > => {
   return useMutation(getRevokePersonalTokenMutationOptions(options))
 }
+/**
+ * List the personal access tokens of every owner (administrators only). Secret values are never returned; only a short prefix for identification. Revoked tokens are omitted unless include_revoked is set.
+ */
+export type listAllPersonalTokensResponse200 = {
+  data: AdminPersonalAccessToken[]
+  status: 200
+}
+
+export type listAllPersonalTokensResponse403 = {
+  data: void
+  status: 403
+}
+
+export type listAllPersonalTokensResponseSuccess = listAllPersonalTokensResponse200 & {
+  headers: Headers
+}
+export type listAllPersonalTokensResponseError = listAllPersonalTokensResponse403 & {
+  headers: Headers
+}
+
+export type listAllPersonalTokensResponse =
+  | listAllPersonalTokensResponseSuccess
+  | listAllPersonalTokensResponseError
+
+export const getListAllPersonalTokensUrl = (params?: ListAllPersonalTokensParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/auth/admin/tokens?${stringifiedParams}`
+    : `/api/auth/admin/tokens`
+}
+
+export const listAllPersonalTokens = async (
+  params?: ListAllPersonalTokensParams,
+  options?: RequestInit,
+): Promise<listAllPersonalTokensResponse> => {
+  return customFetch<listAllPersonalTokensResponse>(getListAllPersonalTokensUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getListAllPersonalTokensQueryKey = (
+  params?: MaybeRef<ListAllPersonalTokensParams>,
+) => {
+  return ['api', 'auth', 'admin', 'tokens', ...(params ? [params] : [])] as const
+}
+
+export const getListAllPersonalTokensQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAllPersonalTokens>>,
+  TError = void,
+>(
+  params?: MaybeRef<ListAllPersonalTokensParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof listAllPersonalTokens>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getListAllPersonalTokensQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listAllPersonalTokens>>> = ({ signal }) =>
+    listAllPersonalTokens(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAllPersonalTokens>>,
+    TError,
+    TData
+  >
+}
+
+export type ListAllPersonalTokensQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAllPersonalTokens>>
+>
+export type ListAllPersonalTokensQueryError = void
+
+export function useListAllPersonalTokens<
+  TData = Awaited<ReturnType<typeof listAllPersonalTokens>>,
+  TError = void,
+>(
+  params?: MaybeRef<ListAllPersonalTokensParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof listAllPersonalTokens>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAllPersonalTokensQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Revoke any owner's personal access token (administrators only). Unlike the self-service endpoint this is not restricted to the caller's own tokens.
+ */
+export type revokeAnyPersonalTokenResponse204 = {
+  data: void
+  status: 204
+}
+
+export type revokeAnyPersonalTokenResponse403 = {
+  data: void
+  status: 403
+}
+
+export type revokeAnyPersonalTokenResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type revokeAnyPersonalTokenResponseSuccess = revokeAnyPersonalTokenResponse204 & {
+  headers: Headers
+}
+export type revokeAnyPersonalTokenResponseError = (
+  | revokeAnyPersonalTokenResponse403
+  | revokeAnyPersonalTokenResponse404
+) & {
+  headers: Headers
+}
+
+export type revokeAnyPersonalTokenResponse =
+  | revokeAnyPersonalTokenResponseSuccess
+  | revokeAnyPersonalTokenResponseError
+
+export const getRevokeAnyPersonalTokenUrl = (id: string) => {
+  return `/api/auth/admin/tokens/${id}`
+}
+
+export const revokeAnyPersonalToken = async (
+  id: string,
+  options?: RequestInit,
+): Promise<revokeAnyPersonalTokenResponse> => {
+  return customFetch<revokeAnyPersonalTokenResponse>(getRevokeAnyPersonalTokenUrl(id), {
+    ...options,
+    method: 'DELETE',
+  })
+}
+
+export const getRevokeAnyPersonalTokenMutationOptions = <
+  TError = void | NotFoundResponse,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof revokeAnyPersonalToken>>,
+    TError,
+    { id: string },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof revokeAnyPersonalToken>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  const mutationKey = ['revokeAnyPersonalToken']
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof revokeAnyPersonalToken>>,
+    { id: string }
+  > = (props) => {
+    const { id } = props ?? {}
+
+    return revokeAnyPersonalToken(id, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type RevokeAnyPersonalTokenMutationResult = NonNullable<
+  Awaited<ReturnType<typeof revokeAnyPersonalToken>>
+>
+
+export type RevokeAnyPersonalTokenMutationError = void | NotFoundResponse
+
+export const useRevokeAnyPersonalToken = <
+  TError = void | NotFoundResponse,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof revokeAnyPersonalToken>>,
+    TError,
+    { id: string },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationReturnType<
+  Awaited<ReturnType<typeof revokeAnyPersonalToken>>,
+  TError,
+  { id: string },
+  TContext
+> => {
+  return useMutation(getRevokeAnyPersonalTokenMutationOptions(options))
+}
+/**
+ * List the principals that have signed in at least once, with the time of their last sign-in (administrators only).
+ */
+export type listUsersResponse200 = {
+  data: AdminUser[]
+  status: 200
+}
+
+export type listUsersResponse403 = {
+  data: void
+  status: 403
+}
+
+export type listUsersResponseSuccess = listUsersResponse200 & {
+  headers: Headers
+}
+export type listUsersResponseError = listUsersResponse403 & {
+  headers: Headers
+}
+
+export type listUsersResponse = listUsersResponseSuccess | listUsersResponseError
+
+export const getListUsersUrl = () => {
+  return `/api/auth/admin/users`
+}
+
+export const listUsers = async (options?: RequestInit): Promise<listUsersResponse> => {
+  return customFetch<listUsersResponse>(getListUsersUrl(), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getListUsersQueryKey = () => {
+  return ['api', 'auth', 'admin', 'users'] as const
+}
+
+export const getListUsersQueryOptions = <
+  TData = Awaited<ReturnType<typeof listUsers>>,
+  TError = void,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof listUsers>>, TError, TData>
+  request?: SecondParameter<typeof customFetch>
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getListUsersQueryKey()
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listUsers>>> = ({ signal }) =>
+    listUsers({ signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listUsers>>,
+    TError,
+    TData
+  >
+}
+
+export type ListUsersQueryResult = NonNullable<Awaited<ReturnType<typeof listUsers>>>
+export type ListUsersQueryError = void
+
+export function useListUsers<
+  TData = Awaited<ReturnType<typeof listUsers>>,
+  TError = void,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof listUsers>>, TError, TData>
+  request?: SecondParameter<typeof customFetch>
+}): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListUsersQueryOptions(options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
 export type getClustersResponse200 = {
   data: Cluster[]
   status: 200

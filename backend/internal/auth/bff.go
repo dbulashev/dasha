@@ -16,9 +16,9 @@ var oidcUnavailableTmpl = template.Must(template.New("oidc_unavailable").Parse(o
 
 const defaultOIDCUnavailableMessage = "Single Sign-On is misconfigured. Please contact your administrator."
 
-func RegisterBFFRoutes(e *echo.Echo, provider *OIDCProvider, sm *SessionManager, logger *zap.Logger) {
+func RegisterBFFRoutes(e *echo.Echo, provider *OIDCProvider, sm *SessionManager, rec LoginRecorder, logger *zap.Logger) {
 	e.GET("/auth/login", loginHandler(provider, sm, logger))
-	e.GET("/auth/callback", callbackHandler(provider, sm, logger))
+	e.GET("/auth/callback", callbackHandler(provider, sm, rec, logger))
 	e.POST("/auth/logout", logoutHandler(sm, provider, logger))
 	e.GET("/auth/me", meHandler(sm, provider))
 }
@@ -58,7 +58,7 @@ func loginHandler(provider *OIDCProvider, sm *SessionManager, logger *zap.Logger
 	}
 }
 
-func callbackHandler(provider *OIDCProvider, sm *SessionManager, logger *zap.Logger) echo.HandlerFunc {
+func callbackHandler(provider *OIDCProvider, sm *SessionManager, rec LoginRecorder, logger *zap.Logger) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		if provider == nil || !provider.Ready() {
 			logger.Warn("OIDC callback received but provider is not ready")
@@ -110,12 +110,29 @@ func callbackHandler(provider *OIDCProvider, sm *SessionManager, logger *zap.Log
 			return renderOIDCUnavailable(c, http.StatusInternalServerError, "Failed to create session after successful authentication.", true)
 		}
 
+		recordLogin(c, rec, email, name, role, logger)
+
 		logger.Info("user authenticated via OIDC",
 			zap.String("user", name),
 			zap.String("role", role),
 		)
 
 		return c.Redirect(http.StatusFound, "/")
+	}
+}
+
+// recordLogin stamps the sign-in in the user audit table. The session is already
+// established at this point, so a storage failure is logged and swallowed rather
+// than turned into a failed login. Email keys the row (it is what api_tokens.subject
+// stores); an IdP that issues no email claim gets no audit row rather than a
+// row under a non-unique key that could collide with another principal.
+func recordLogin(c echo.Context, rec LoginRecorder, email, name, role string, logger *zap.Logger) {
+	if rec == nil || email == "" {
+		return
+	}
+
+	if err := rec.RecordLogin(c.Request().Context(), email, name, role); err != nil {
+		logger.Warn("failed to record login", zap.String("user", name), zap.Error(err))
 	}
 }
 

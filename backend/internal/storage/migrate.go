@@ -163,6 +163,19 @@ CREATE TABLE IF NOT EXISTS api_tokens (
 	// #nosec G101 -- SQL DDL statement (the const name merely contains "Tokens"), not a credential
 	createAPITokensSubjectIdxSQL = `
 CREATE INDEX IF NOT EXISTS idx_api_tokens_subject ON api_tokens (subject)`
+
+	// subject is the OIDC email — the same key api_tokens.subject stores, so a
+	// user joins to the tokens they own. Rows appear on first sign-in; the table
+	// is an audit of who has access, not an authorization source (roles still
+	// come from the IdP on every login).
+	createUsersSQL = `
+CREATE TABLE IF NOT EXISTS users (
+    subject       text PRIMARY KEY,
+    name          text NOT NULL DEFAULT '',
+    role          text NOT NULL DEFAULT 'viewer',
+    created_at    timestamptz NOT NULL DEFAULT now(),
+    last_login_at timestamptz
+)`
 )
 
 // partitionedTables lists the day-partitioned tables managed together —
@@ -220,6 +233,7 @@ func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
 		createAutosnapshotPendingSQL,
 		createAPITokensSQL,
 		createAPITokensSubjectIdxSQL,
+		createUsersSQL,
 	} {
 		if _, err := s.ddlPool.Exec(ctx, ddl); err != nil {
 			return fmt.Errorf("storage: migrate: %w", err)

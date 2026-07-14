@@ -34,7 +34,8 @@ func TestMain(m *testing.M) {
 }
 
 // newTestStorage returns a Storage backed by an isolated DB with the api_tokens
-// table created. Same-package access lets the test set the unexported pools.
+// and users tables created. Same-package access lets the test set the unexported
+// pools.
 func newTestStorage(t *testing.T) *Storage {
 	t.Helper()
 
@@ -45,6 +46,8 @@ func newTestStorage(t *testing.T) *Storage {
 	require.NoError(t, err, "create api_tokens table")
 	_, err = pool.Exec(ctx, createAPITokensSubjectIdxSQL)
 	require.NoError(t, err, "create api_tokens index")
+	_, err = pool.Exec(ctx, createUsersSQL)
+	require.NoError(t, err, "create users table")
 
 	return &Storage{pool: pool, ddlPool: pool, logger: zap.NewNop()}
 }
@@ -78,14 +81,14 @@ func TestAPIToken_CRUDAndOwnership(t *testing.T) {
 	assert.False(t, ok)
 
 	// Listing returns the owner's token; last_used starts nil, then is stamped.
-	toks, err := s.ListAPITokens(ctx, "alice@corp")
+	toks, err := s.ListAPITokens(ctx, "alice@corp", false)
 	require.NoError(t, err)
 	require.Len(t, toks, 1)
 	assert.Equal(t, id, toks[0].ID)
 	assert.Nil(t, toks[0].LastUsedAt)
 
 	require.NoError(t, s.TouchAPIToken(ctx, hashOf("secret-a")))
-	toks, err = s.ListAPITokens(ctx, "alice@corp")
+	toks, err = s.ListAPITokens(ctx, "alice@corp", false)
 	require.NoError(t, err)
 	require.Len(t, toks, 1)
 	assert.NotNil(t, toks[0].LastUsedAt)
@@ -104,9 +107,17 @@ func TestAPIToken_CRUDAndOwnership(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, ok)
 
-	toks, err = s.ListAPITokens(ctx, "alice@corp")
+	toks, err = s.ListAPITokens(ctx, "alice@corp", false)
 	require.NoError(t, err)
 	assert.Empty(t, toks)
+
+	// The revoked row survives as an audit trail and comes back on request,
+	// stamped with the time it was revoked.
+	toks, err = s.ListAPITokens(ctx, "alice@corp", true)
+	require.NoError(t, err)
+	require.Len(t, toks, 1)
+	assert.Equal(t, id, toks[0].ID)
+	assert.NotNil(t, toks[0].RevokedAt)
 }
 
 func TestAPIToken_ExpiredNotResolved(t *testing.T) {

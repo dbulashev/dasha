@@ -55,7 +55,7 @@ func patRoleAllowed(caller, requested string) bool {
 
 func (s *Handlers) ListPersonalTokens(
 	ctx context.Context,
-	_ serverhttp.ListPersonalTokensRequestObject,
+	req serverhttp.ListPersonalTokensRequestObject,
 ) (serverhttp.ListPersonalTokensResponseObject, error) {
 	user := auth.UserFromContext(ctx)
 	if user == nil || s.storage == nil {
@@ -67,7 +67,7 @@ func (s *Handlers) ListPersonalTokens(
 		return serverhttp.ListPersonalTokens200JSONResponse{}, nil
 	}
 
-	rows, err := s.storage.ListAPITokens(ctx, subject)
+	rows, err := s.storage.ListAPITokens(ctx, subject, includeRevoked(req.Params.IncludeRevoked))
 	if err != nil {
 		return nil, fmt.Errorf("ListPersonalTokens | %w", err)
 	}
@@ -82,10 +82,17 @@ func (s *Handlers) ListPersonalTokens(
 			CreatedAt:  r.CreatedAt,
 			LastUsedAt: r.LastUsedAt,
 			ExpiresAt:  r.ExpiresAt,
+			RevokedAt:  r.RevokedAt,
 		})
 	}
 
 	return out, nil
+}
+
+// includeRevoked reads the optional include_revoked flag, defaulting to false so
+// an omitted parameter keeps revoked tokens out of the listing.
+func includeRevoked(v *bool) bool {
+	return v != nil && *v
 }
 
 func (s *Handlers) CreatePersonalToken(

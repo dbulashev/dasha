@@ -23,6 +23,18 @@ const (
 	BearerAuthScopes = "BearerAuth.Scopes"
 )
 
+// Defines values for AdminPersonalAccessTokenRole.
+const (
+	AdminPersonalAccessTokenRoleAdmin  AdminPersonalAccessTokenRole = "admin"
+	AdminPersonalAccessTokenRoleViewer AdminPersonalAccessTokenRole = "viewer"
+)
+
+// Defines values for AdminUserRole.
+const (
+	AdminUserRoleAdmin  AdminUserRole = "admin"
+	AdminUserRoleViewer AdminUserRole = "viewer"
+)
+
 // Defines values for AuthInfoMode.
 const (
 	None  AuthInfoMode = "none"
@@ -112,6 +124,46 @@ type ActivitySpikeTrigger struct {
 	// WindowSize Go duration string (e.g. "5m")
 	WindowSize string `json:"WindowSize"`
 }
+
+// AdminPersonalAccessToken A personal access token as shown to an administrator — the owner's view plus the owning principal.
+type AdminPersonalAccessToken struct {
+	CreatedAt  time.Time  `json:"created_at"`
+	ExpiresAt  *time.Time `json:"expires_at"`
+	Id         string     `json:"id"`
+	LastUsedAt *time.Time `json:"last_used_at"`
+	Name       string     `json:"name"`
+
+	// Owner The principal (OIDC email) that owns the token.
+	Owner string `json:"owner"`
+
+	// Prefix Token prefix shown for identification (not the secret).
+	Prefix string `json:"prefix"`
+
+	// RevokedAt When the token was revoked; null for a live token. Only ever set when include_revoked was requested.
+	RevokedAt *time.Time                   `json:"revoked_at"`
+	Role      AdminPersonalAccessTokenRole `json:"role"`
+}
+
+// AdminPersonalAccessTokenRole defines model for AdminPersonalAccessToken.Role.
+type AdminPersonalAccessTokenRole string
+
+// AdminUser A principal that has signed in at least once. Roles are shown as last seen from the identity provider; they are not editable here.
+type AdminUser struct {
+	// CreatedAt When the principal first signed in.
+	CreatedAt   time.Time     `json:"created_at"`
+	LastLoginAt *time.Time    `json:"last_login_at"`
+	Name        string        `json:"name"`
+	Role        AdminUserRole `json:"role"`
+
+	// Subject The principal (OIDC email); the same key a token's owner field carries.
+	Subject string `json:"subject"`
+
+	// Tokens Number of the principal's personal access tokens that are not revoked.
+	Tokens int `json:"tokens"`
+}
+
+// AdminUserRole defines model for AdminUser.Role.
+type AdminUserRole string
 
 // AuthInfo defines model for AuthInfo.
 type AuthInfo struct {
@@ -752,8 +804,11 @@ type PersonalAccessToken struct {
 	Name       string     `json:"name"`
 
 	// Prefix Token prefix shown for identification (not the secret).
-	Prefix string                  `json:"prefix"`
-	Role   PersonalAccessTokenRole `json:"role"`
+	Prefix string `json:"prefix"`
+
+	// RevokedAt When the token was revoked; null for a live token. Only ever set when include_revoked was requested.
+	RevokedAt *time.Time              `json:"revoked_at"`
+	Role      PersonalAccessTokenRole `json:"role"`
 }
 
 // PersonalAccessTokenRole defines model for PersonalAccessToken.Role.
@@ -1318,8 +1373,23 @@ type ClusterName = string
 // Database defines model for Database.
 type Database = string
 
+// IncludeRevoked defines model for IncludeRevoked.
+type IncludeRevoked = bool
+
 // Instance defines model for Instance.
 type Instance = string
+
+// ListAllPersonalTokensParams defines parameters for ListAllPersonalTokens.
+type ListAllPersonalTokensParams struct {
+	// IncludeRevoked Include revoked tokens in the listing. They are kept as an audit trail and can never authenticate again.
+	IncludeRevoked *IncludeRevoked `form:"include_revoked,omitempty" json:"include_revoked,omitempty"`
+}
+
+// ListPersonalTokensParams defines parameters for ListPersonalTokens.
+type ListPersonalTokensParams struct {
+	// IncludeRevoked Include revoked tokens in the listing. They are kept as an audit trail and can never authenticate again.
+	IncludeRevoked *IncludeRevoked `form:"include_revoked,omitempty" json:"include_revoked,omitempty"`
+}
 
 // GetAutosnapshotTriggerEventsParams defines parameters for GetAutosnapshotTriggerEvents.
 type GetAutosnapshotTriggerEventsParams struct {
@@ -2048,11 +2118,20 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
+	// ListAllPersonalTokens request
+	ListAllPersonalTokens(ctx context.Context, params *ListAllPersonalTokensParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RevokeAnyPersonalToken request
+	RevokeAnyPersonalToken(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// ListUsers request
+	ListUsers(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetAuthInfo request
 	GetAuthInfo(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ListPersonalTokens request
-	ListPersonalTokens(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	ListPersonalTokens(ctx context.Context, params *ListPersonalTokensParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// CreatePersonalTokenWithBody request with any body
 	CreatePersonalTokenWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -2345,6 +2424,42 @@ type ClientInterface interface {
 	GetTablesTopKBySize(ctx context.Context, params *GetTablesTopKBySizeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
+func (c *Client) ListAllPersonalTokens(ctx context.Context, params *ListAllPersonalTokensParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListAllPersonalTokensRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) RevokeAnyPersonalToken(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRevokeAnyPersonalTokenRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListUsers(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListUsersRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetAuthInfo(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetAuthInfoRequest(c.Server)
 	if err != nil {
@@ -2357,8 +2472,8 @@ func (c *Client) GetAuthInfo(ctx context.Context, reqEditors ...RequestEditorFn)
 	return c.Client.Do(req)
 }
 
-func (c *Client) ListPersonalTokens(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewListPersonalTokensRequest(c.Server)
+func (c *Client) ListPersonalTokens(ctx context.Context, params *ListPersonalTokensParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListPersonalTokensRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -3545,6 +3660,116 @@ func (c *Client) GetTablesTopKBySize(ctx context.Context, params *GetTablesTopKB
 	return c.Client.Do(req)
 }
 
+// NewListAllPersonalTokensRequest generates requests for ListAllPersonalTokens
+func NewListAllPersonalTokensRequest(server string, params *ListAllPersonalTokensParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/auth/admin/tokens")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.IncludeRevoked != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "include_revoked", runtime.ParamLocationQuery, *params.IncludeRevoked); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewRevokeAnyPersonalTokenRequest generates requests for RevokeAnyPersonalToken
+func NewRevokeAnyPersonalTokenRequest(server string, id string) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/auth/admin/tokens/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewListUsersRequest generates requests for ListUsers
+func NewListUsersRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/auth/admin/users")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetAuthInfoRequest generates requests for GetAuthInfo
 func NewGetAuthInfoRequest(server string) (*http.Request, error) {
 	var err error
@@ -3573,7 +3798,7 @@ func NewGetAuthInfoRequest(server string) (*http.Request, error) {
 }
 
 // NewListPersonalTokensRequest generates requests for ListPersonalTokens
-func NewListPersonalTokensRequest(server string) (*http.Request, error) {
+func NewListPersonalTokensRequest(server string, params *ListPersonalTokensParams) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -3589,6 +3814,28 @@ func NewListPersonalTokensRequest(server string) (*http.Request, error) {
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.IncludeRevoked != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "include_revoked", runtime.ParamLocationQuery, *params.IncludeRevoked); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -10437,11 +10684,20 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
+	// ListAllPersonalTokensWithResponse request
+	ListAllPersonalTokensWithResponse(ctx context.Context, params *ListAllPersonalTokensParams, reqEditors ...RequestEditorFn) (*ListAllPersonalTokensResponse, error)
+
+	// RevokeAnyPersonalTokenWithResponse request
+	RevokeAnyPersonalTokenWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*RevokeAnyPersonalTokenResponse, error)
+
+	// ListUsersWithResponse request
+	ListUsersWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListUsersResponse, error)
+
 	// GetAuthInfoWithResponse request
 	GetAuthInfoWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAuthInfoResponse, error)
 
 	// ListPersonalTokensWithResponse request
-	ListPersonalTokensWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListPersonalTokensResponse, error)
+	ListPersonalTokensWithResponse(ctx context.Context, params *ListPersonalTokensParams, reqEditors ...RequestEditorFn) (*ListPersonalTokensResponse, error)
 
 	// CreatePersonalTokenWithBodyWithResponse request with any body
 	CreatePersonalTokenWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreatePersonalTokenResponse, error)
@@ -10732,6 +10988,71 @@ type ClientWithResponsesInterface interface {
 
 	// GetTablesTopKBySizeWithResponse request
 	GetTablesTopKBySizeWithResponse(ctx context.Context, params *GetTablesTopKBySizeParams, reqEditors ...RequestEditorFn) (*GetTablesTopKBySizeResponse, error)
+}
+
+type ListAllPersonalTokensResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]AdminPersonalAccessToken
+}
+
+// Status returns HTTPResponse.Status
+func (r ListAllPersonalTokensResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListAllPersonalTokensResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type RevokeAnyPersonalTokenResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r RevokeAnyPersonalTokenResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RevokeAnyPersonalTokenResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListUsersResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]AdminUser
+}
+
+// Status returns HTTPResponse.Status
+func (r ListUsersResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListUsersResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
 }
 
 type GetAuthInfoResponse struct {
@@ -12844,6 +13165,33 @@ func (r GetTablesTopKBySizeResponse) StatusCode() int {
 	return 0
 }
 
+// ListAllPersonalTokensWithResponse request returning *ListAllPersonalTokensResponse
+func (c *ClientWithResponses) ListAllPersonalTokensWithResponse(ctx context.Context, params *ListAllPersonalTokensParams, reqEditors ...RequestEditorFn) (*ListAllPersonalTokensResponse, error) {
+	rsp, err := c.ListAllPersonalTokens(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListAllPersonalTokensResponse(rsp)
+}
+
+// RevokeAnyPersonalTokenWithResponse request returning *RevokeAnyPersonalTokenResponse
+func (c *ClientWithResponses) RevokeAnyPersonalTokenWithResponse(ctx context.Context, id string, reqEditors ...RequestEditorFn) (*RevokeAnyPersonalTokenResponse, error) {
+	rsp, err := c.RevokeAnyPersonalToken(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRevokeAnyPersonalTokenResponse(rsp)
+}
+
+// ListUsersWithResponse request returning *ListUsersResponse
+func (c *ClientWithResponses) ListUsersWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListUsersResponse, error) {
+	rsp, err := c.ListUsers(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListUsersResponse(rsp)
+}
+
 // GetAuthInfoWithResponse request returning *GetAuthInfoResponse
 func (c *ClientWithResponses) GetAuthInfoWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetAuthInfoResponse, error) {
 	rsp, err := c.GetAuthInfo(ctx, reqEditors...)
@@ -12854,8 +13202,8 @@ func (c *ClientWithResponses) GetAuthInfoWithResponse(ctx context.Context, reqEd
 }
 
 // ListPersonalTokensWithResponse request returning *ListPersonalTokensResponse
-func (c *ClientWithResponses) ListPersonalTokensWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*ListPersonalTokensResponse, error) {
-	rsp, err := c.ListPersonalTokens(ctx, reqEditors...)
+func (c *ClientWithResponses) ListPersonalTokensWithResponse(ctx context.Context, params *ListPersonalTokensParams, reqEditors ...RequestEditorFn) (*ListPersonalTokensResponse, error) {
+	rsp, err := c.ListPersonalTokens(ctx, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -13738,6 +14086,74 @@ func (c *ClientWithResponses) GetTablesTopKBySizeWithResponse(ctx context.Contex
 		return nil, err
 	}
 	return ParseGetTablesTopKBySizeResponse(rsp)
+}
+
+// ParseListAllPersonalTokensResponse parses an HTTP response from a ListAllPersonalTokensWithResponse call
+func ParseListAllPersonalTokensResponse(rsp *http.Response) (*ListAllPersonalTokensResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListAllPersonalTokensResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []AdminPersonalAccessToken
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRevokeAnyPersonalTokenResponse parses an HTTP response from a RevokeAnyPersonalTokenWithResponse call
+func ParseRevokeAnyPersonalTokenResponse(rsp *http.Response) (*RevokeAnyPersonalTokenResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RevokeAnyPersonalTokenResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseListUsersResponse parses an HTTP response from a ListUsersWithResponse call
+func ParseListUsersResponse(rsp *http.Response) (*ListUsersResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListUsersResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []AdminUser
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
 }
 
 // ParseGetAuthInfoResponse parses an HTTP response from a GetAuthInfoWithResponse call

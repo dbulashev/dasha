@@ -3,17 +3,17 @@ import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { AuthInfoMode } from '@/api/models'
-import PersonalTokensDialog from './PersonalTokensDialog.vue'
+import SettingsDialog from '@/components/prefs/SettingsDialog.vue'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
 
-const tokensOpen = ref(false)
+const settingsOpen = ref(false)
 const menuOpen = ref(false)
 
-function openTokens() {
+function openSettings() {
   menuOpen.value = false
-  tokensOpen.value = true
+  settingsOpen.value = true
 }
 </script>
 
@@ -37,14 +37,8 @@ function openTokens() {
           </v-card-text>
           <v-divider />
           <v-card-actions class="d-flex flex-column ga-1 pa-2">
-            <v-btn
-              v-if="authStore.canManageTokens"
-              block
-              variant="text"
-              prepend-icon="mdi-key-chain-variant"
-              @click="openTokens"
-            >
-              {{ t('pat.menuItem') }}
+            <v-btn block variant="text" prepend-icon="mdi-cog-outline" @click="openSettings">
+              {{ t('prefs.title') }}
             </v-btn>
             <v-btn block variant="text" prepend-icon="mdi-logout" @click="authStore.logout">
               {{ t('Logout') }}
@@ -53,7 +47,7 @@ function openTokens() {
         </v-card>
       </v-menu>
 
-      <PersonalTokensDialog v-model="tokensOpen" />
+      <SettingsDialog v-model="settingsOpen" />
     </template>
     <v-btn v-else icon variant="text" class="ml-1" @click="authStore.doLoginRedirect">
       <v-icon>mdi-login</v-icon>

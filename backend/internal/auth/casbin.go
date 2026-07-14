@@ -12,31 +12,37 @@ import (
 	"github.com/dbulashev/dasha/internal/config"
 )
 
+// The effect is allow-and-deny (not plain allow) so a broad grant can be carved
+// out by a narrower deny: viewer holds a blanket GET on /api/*, and the only way
+// to keep the token/user administration endpoints admin-only is to deny them
+// explicitly. A deny always beats an allow, whatever the rule order.
 const casbinModel = `
 [request_definition]
 r = sub, obj, act
 
 [policy_definition]
-p = sub, obj, act
+p = sub, obj, act, eft
 
 [role_definition]
 g = _, _
 
 [policy_effect]
-e = some(where (p.eft == allow))
+e = some(where (p.eft == allow)) && !some(where (p.eft == deny))
 
 [matchers]
 m = g(r.sub, p.sub) && keyMatch2(r.obj, p.obj) && r.act == p.act
 `
 
 const casbinPolicy = `
-p, admin, /api/*, GET
-p, admin, /api/*, POST
-p, admin, /api/*, PUT
-p, admin, /api/*, DELETE
-p, viewer, /api/*, GET
-p, viewer, /api/auth/tokens, POST
-p, viewer, /api/auth/tokens/*, DELETE
+p, admin, /api/*, GET, allow
+p, admin, /api/*, POST, allow
+p, admin, /api/*, PUT, allow
+p, admin, /api/*, DELETE, allow
+p, viewer, /api/*, GET, allow
+p, viewer, /api/auth/tokens, POST, allow
+p, viewer, /api/auth/tokens/*, DELETE, allow
+p, viewer, /api/auth/admin/*, GET, deny
+p, viewer, /api/auth/admin/*, DELETE, deny
 `
 
 func NewCasbinEnforcer() (*casbin.Enforcer, error) {
