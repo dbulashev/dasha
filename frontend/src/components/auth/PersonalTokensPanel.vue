@@ -38,6 +38,18 @@ const copied = ref(false)
 
 const canPickAdmin = computed(() => authStore.user?.role === 'admin')
 
+// The server caps admin tokens at 30 days (they keep working after the owner is
+// demoted, so they must expire on their own). Mirror the cap in the form instead
+// of letting the user type a value the server would silently clamp.
+const ADMIN_MAX_DAYS = 30
+const maxDays = computed(() => (role.value === 'admin' ? ADMIN_MAX_DAYS : 3650))
+
+watch(role, (r) => {
+  if (r === 'admin' && (expiresInDays.value == null || expiresInDays.value > ADMIN_MAX_DAYS)) {
+    expiresInDays.value = ADMIN_MAX_DAYS
+  }
+})
+
 // The global VDataTable default is itemsPerPage: -1 with the footer hidden; page
 // the list so a user with many tokens does not get an unbounded table. The
 // revoked column only earns its width when revoked tokens are actually shown.
@@ -175,10 +187,13 @@ onMounted(load)
         v-model.number="expiresInDays"
         type="number"
         min="0"
+        :max="maxDays"
         :label="t('pat.expiresInDays')"
-        :placeholder="t('pat.never')"
+        :placeholder="role === 'admin' ? String(ADMIN_MAX_DAYS) : t('pat.never')"
+        :hint="role === 'admin' ? t('pat.adminMaxDays', { days: ADMIN_MAX_DAYS }) : undefined"
+        :persistent-hint="role === 'admin'"
         density="compact"
-        hide-details
+        :hide-details="role !== 'admin'"
       />
     </v-col>
   </v-row>

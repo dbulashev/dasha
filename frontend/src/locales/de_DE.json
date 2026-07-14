@@ -83,7 +83,8 @@
     "copied": "Kopiert",
     "created": "Erstellt",
     "showRevoked": "Widerrufene anzeigen",
-    "revoked": "Widerrufen"
+    "revoked": "Widerrufen",
+    "adminMaxDays": "Admin-Token laufen nach spätestens {days} Tagen ab"
   },
   "pgssNotInstalled": "Die Erweiterung pg_stat_statements ist in dieser Datenbank nicht installiert. Abfragestatistiken (Top 10, Bericht) sind nicht verfügbar.",
   "pgssNotEnabled": "Die Erweiterung pg_stat_statements ist installiert, aber nicht aktiviert. Fügen Sie sie zu shared_preload_libraries hinzu und starten Sie PostgreSQL neu.",

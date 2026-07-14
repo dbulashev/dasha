@@ -61,8 +61,21 @@ func (s *Storage) CreateAPIToken(
 	return id, nil
 }
 
-// ResolveAPIToken returns the identity for an active (not revoked, not expired)
-// token matching the given hash. ok=false when no such active token exists.
+// IdleRevokeDays is how long a token may go unused before it is revoked: a
+// credential nobody has used for three months is far more likely forgotten than
+// needed, and a forgotten credential is exactly the one that leaks unnoticed.
+// Idleness is measured from last use, falling back to creation for a token that
+// was never used at all.
+const IdleRevokeDays = 90
+
+// ResolveAPIToken returns the identity for an active token matching the given
+// hash: not revoked, not expired, and not idle past IdleRevokeDays. ok=false when
+// no such token exists.
+//
+// The idle check is enforced here as well as by RevokeIdleAPITokens, rather than
+// relying on the sweep alone: the sweep runs periodically, so between two passes
+// an idle token would still authenticate. Checking at resolve time makes the
+// cutoff take effect the moment it is crossed.
 func (s *Storage) ResolveAPIToken(ctx context.Context, hash []byte) (*APITokenIdentity, bool, error) {
 	var idn APITokenIdentity
 
@@ -71,8 +84,9 @@ func (s *Storage) ResolveAPIToken(ctx context.Context, hash []byte) (*APITokenId
 		FROM api_tokens
 		WHERE token_hash = $1
 		  AND revoked_at IS NULL
-		  AND (expires_at IS NULL OR expires_at > now())`,
-		hash,
+		  AND (expires_at IS NULL OR expires_at > now())
+		  AND coalesce(last_used_at, created_at) > now() - make_interval(days => $2)`,
+		hash, IdleRevokeDays,
 	).Scan(&idn.Subject, &idn.Role, &idn.ExpiresAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, false, nil
@@ -176,6 +190,28 @@ func (s *Storage) ListAllAPITokens(ctx context.Context, includeRevoked bool) ([]
 	}
 
 	return out, rows.Err()
+}
+
+// RevokeIdleAPITokens revokes every token unused for longer than IdleRevokeDays
+// and returns how many were revoked. Idle tokens already fail to resolve (see
+// ResolveAPIToken); this writes the revocation down so the state is visible in
+// the token lists and carries a revoked_at for the audit trail, instead of a row
+// that looks live but silently no longer works.
+//
+// Safe to run concurrently from several replicas: the revoked_at IS NULL guard
+// makes it idempotent, so at worst two passes race and one updates nothing.
+func (s *Storage) RevokeIdleAPITokens(ctx context.Context) (int64, error) {
+	tag, err := s.pool.Exec(ctx, `
+		UPDATE api_tokens SET revoked_at = now()
+		WHERE revoked_at IS NULL
+		  AND coalesce(last_used_at, created_at) <= now() - make_interval(days => $1)`,
+		IdleRevokeDays,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("storage: revoke idle api tokens: %w", err)
+	}
+
+	return tag.RowsAffected(), nil
 }
 
 // RevokeAPITokenByID revokes a token regardless of owner. Unlike RevokeAPIToken

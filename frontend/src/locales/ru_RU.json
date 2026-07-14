@@ -21,7 +21,8 @@
         "copied": "Скопировано",
         "created": "Создан",
         "showRevoked": "Показать отозванные",
-        "revoked": "Отозван"
+        "revoked": "Отозван",
+        "adminMaxDays": "Admin-токены живут не более {days} дней"
     },
     "Cancel": "Отмена",
     "Sign in with SSO": "Войти через SSO",

@@ -15,6 +15,13 @@ import (
 // so the day→duration conversion cannot overflow int64.
 const maxExpiresInDays = 3650
 
+// maxAdminExpiresInDays caps an admin token at 30 days. An admin token carries
+// full write access, and its role is frozen at mint time — it keeps working even
+// after the owner is demoted or leaves, because resolution reads the role stored
+// on the token rather than the identity provider. A bounded lifetime is the only
+// mechanism that expires such a token without someone remembering to revoke it.
+const maxAdminExpiresInDays = 30
+
 // patSubject is the stable owner key for a user's personal access tokens: the
 // OIDC email. Personal tokens belong to an individually-identifiable principal,
 // so only an OIDC session with a non-empty email qualifies; ok=false for shared
@@ -37,6 +44,26 @@ func patSubject(u *auth.UserContext) (string, bool) {
 // fails closed to the admin-only default.
 func patMintAllowed(minRole, callerRole string) bool {
 	return minRole == config.RoleViewer || callerRole == config.RoleAdmin
+}
+
+// patExpiryDays returns the lifetime a token is actually minted with, in days;
+// 0 means no expiry. `requested` is the caller's ask (0 = never expires).
+//
+// A viewer token gets what it asked for. An admin token is clamped to
+// maxAdminExpiresInDays — including the "no expiry" case, which is the one that
+// matters: leaving 0 alone would let the cap be bypassed by simply omitting
+// expires_in_days. The response echoes the resulting expires_at, so a clamped
+// request is visible rather than silent.
+func patExpiryDays(role string, requested int) int {
+	if role != config.RoleAdmin {
+		return requested
+	}
+
+	if requested == 0 || requested > maxAdminExpiresInDays {
+		return maxAdminExpiresInDays
+	}
+
+	return requested
 }
 
 // patRoleAllowed reports whether a caller with `caller` role may mint a token
@@ -140,9 +167,14 @@ func (s *Handlers) CreatePersonalToken(
 		return nil, fmt.Errorf("CreatePersonalToken | storage is not configured")
 	}
 
+	requestedDays := 0
+	if req.Body.ExpiresInDays != nil {
+		requestedDays = *req.Body.ExpiresInDays
+	}
+
 	var expiresAt *time.Time
-	if req.Body.ExpiresInDays != nil && *req.Body.ExpiresInDays > 0 {
-		t := time.Now().UTC().Add(time.Duration(*req.Body.ExpiresInDays) * 24 * time.Hour)
+	if days := patExpiryDays(role, requestedDays); days > 0 {
+		t := time.Now().UTC().Add(time.Duration(days) * 24 * time.Hour)
 		expiresAt = &t
 	}
 

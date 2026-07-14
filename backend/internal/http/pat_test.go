@@ -62,6 +62,38 @@ func TestPatRoleAllowed(t *testing.T) {
 	}
 }
 
+func TestPatExpiryDays(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		role      string
+		requested int
+		want      int
+	}{
+		{"viewer keeps no expiry", "viewer", 0, 0},
+		{"viewer keeps a long expiry", "viewer", 3650, 3650},
+		{"viewer keeps a short expiry", "viewer", 7, 7},
+
+		// The "no expiry" case is the one that matters: an unbounded admin token
+		// would otherwise be minted by simply omitting expires_in_days.
+		{"admin no-expiry is capped", "admin", 0, maxAdminExpiresInDays},
+		{"admin over-cap is capped", "admin", 3650, maxAdminExpiresInDays},
+		{"admin at the cap is kept", "admin", 30, 30},
+		{"admin under the cap is kept", "admin", 7, 7},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := patExpiryDays(tt.role, tt.requested); got != tt.want {
+				t.Errorf("patExpiryDays(%q, %d) = %d, want %d", tt.role, tt.requested, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestPatMintAllowed(t *testing.T) {
 	t.Parallel()
 
