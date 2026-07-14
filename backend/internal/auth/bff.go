@@ -1,9 +1,11 @@
 package auth
 
 import (
+	"context"
 	_ "embed"
 	"html/template"
 	"net/http"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
@@ -15,6 +17,12 @@ var oidcUnavailableHTMLRaw string
 var oidcUnavailableTmpl = template.Must(template.New("oidc_unavailable").Parse(oidcUnavailableHTMLRaw))
 
 const defaultOIDCUnavailableMessage = "Single Sign-On is misconfigured. Please contact your administrator."
+
+// loginRecordTimeout bounds the sign-in audit write. The session is already
+// established when it runs, so a stalled storage backend (exhausted pool, hung
+// connection) must not hold up the user's redirect for an audit row we are
+// willing to lose anyway.
+const loginRecordTimeout = 2 * time.Second
 
 func RegisterBFFRoutes(e *echo.Echo, provider *OIDCProvider, sm *SessionManager, rec LoginRecorder, logger *zap.Logger) {
 	e.GET("/auth/login", loginHandler(provider, sm, logger))
@@ -110,7 +118,7 @@ func callbackHandler(provider *OIDCProvider, sm *SessionManager, rec LoginRecord
 			return renderOIDCUnavailable(c, http.StatusInternalServerError, "Failed to create session after successful authentication.", true)
 		}
 
-		recordLogin(c, rec, email, name, role, logger)
+		recordLogin(c.Request().Context(), rec, email, name, role, logger)
 
 		logger.Info("user authenticated via OIDC",
 			zap.String("user", name),
@@ -122,16 +130,20 @@ func callbackHandler(provider *OIDCProvider, sm *SessionManager, rec LoginRecord
 }
 
 // recordLogin stamps the sign-in in the user audit table. The session is already
-// established at this point, so a storage failure is logged and swallowed rather
-// than turned into a failed login. Email keys the row (it is what api_tokens.subject
-// stores); an IdP that issues no email claim gets no audit row rather than a
-// row under a non-unique key that could collide with another principal.
-func recordLogin(c echo.Context, rec LoginRecorder, email, name, role string, logger *zap.Logger) {
+// established at this point, so a storage failure — including the write running
+// past loginRecordTimeout — is logged and swallowed rather than turned into a
+// failed login. Email keys the row (it is what api_tokens.subject stores); an IdP
+// that issues no email claim gets no audit row rather than a row under a
+// non-unique key that could collide with another principal.
+func recordLogin(ctx context.Context, rec LoginRecorder, email, name, role string, logger *zap.Logger) {
 	if rec == nil || email == "" {
 		return
 	}
 
-	if err := rec.RecordLogin(c.Request().Context(), email, name, role); err != nil {
+	ctx, cancel := context.WithTimeout(ctx, loginRecordTimeout)
+	defer cancel()
+
+	if err := rec.RecordLogin(ctx, email, name, role); err != nil {
 		logger.Warn("failed to record login", zap.String("user", name), zap.Error(err))
 	}
 }
