@@ -93,6 +93,8 @@
     "cpuTimeUnavailable": "CPU time could not be computed. The query is likely running in parallel — pg_stat_statements sums I/O time across all workers, but execution time only for the leader process.",
     "sort": {
       "total_time": "Total time",
+      "mean_time": "Mean time",
+      "stddev_time": "Std deviation (σ)",
       "calls": "Calls",
       "wal": "WAL",
       "rows": "Rows",

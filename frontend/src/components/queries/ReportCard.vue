@@ -5,7 +5,7 @@ import { fmtBytes, fmtMs as fmtMsUtil, fmtPct, fmtInt } from '@/utils/format'
 import { highlightSql, copyToClipboard, truncateSql, SQL_PREVIEW_MAX } from '@/utils/sql'
 import '@/assets/sql-highlight.css'
 
-type ReportSortKey = 'total_time' | 'calls' | 'wal' | 'rows' | 'cpu_time' | 'io_time' | 'temp_blks'
+type ReportSortKey = 'total_time' | 'mean_time' | 'stddev_time' | 'calls' | 'wal' | 'rows' | 'cpu_time' | 'io_time' | 'temp_blks'
 
 const props = defineProps<{
   item: QueryReport
@@ -18,8 +18,10 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 
-const sortFieldMap: Record<ReportSortKey, { value: keyof QueryReport; pct: keyof QueryReport }> = {
+const sortFieldMap: Record<ReportSortKey, { value: keyof QueryReport; pct?: keyof QueryReport }> = {
   total_time: { value: 'TotalTimeMs', pct: 'TotalTimePct' },
+  mean_time: { value: 'MeanExecTimeMs' },
+  stddev_time: { value: 'StddevExecTimeMs' },
   calls: { value: 'Calls', pct: 'CallsPct' },
   wal: { value: 'WalBytes', pct: 'WalBytesPct' },
   rows: { value: 'Rows', pct: 'RowsPct' },
@@ -28,12 +30,13 @@ const sortFieldMap: Record<ReportSortKey, { value: keyof QueryReport; pct: keyof
   temp_blks: { value: 'TempBlks', pct: 'TempBlksPct' },
 }
 
-function isHighlightedField(fieldKey: ReportSortKey): boolean {
-  return props.sortBy === fieldKey
+function isHighlightedField(...fieldKeys: ReportSortKey[]): boolean {
+  return fieldKeys.includes(props.sortBy)
 }
 
 function isHighContribution(sortKey: ReportSortKey): boolean {
   const pctField = sortFieldMap[sortKey].pct
+  if (!pctField) return false
   const pct = props.item[pctField] as number | null | undefined
   return pct != null && pct > 5
 }
@@ -72,7 +75,7 @@ function fmtMs(ms: number | null | undefined): string {
           <div class="text-caption text-medium-emphasis">{{ t('header.cacheHitRatio') }}</div>
           <div class="text-body-2">{{ fmtPct(item.CacheHitRatio) }}</div>
         </v-col>
-        <v-col cols="6" md="3">
+        <v-col cols="6" md="3" :class="{ 'report-highlight': isHighlightedField('mean_time', 'stddev_time') }">
           <div class="text-caption text-medium-emphasis">{{ t('header.execTime') }}</div>
           <div class="text-body-2">{{ fmtMs(item.ExecTimeMs) }}</div>
           <div class="text-caption text-medium-emphasis">

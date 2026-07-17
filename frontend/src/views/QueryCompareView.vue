@@ -72,6 +72,8 @@ const hideAbsentInB = ref(false)
 
 const sortOptions = computed(() => [
   { value: 'total_time', title: t('report.sort.total_time') },
+  { value: 'mean_time', title: t('report.sort.mean_time') },
+  { value: 'stddev_time', title: t('report.sort.stddev_time') },
   { value: 'calls', title: t('report.sort.calls') },
   { value: 'wal', title: t('report.sort.wal') },
   { value: 'rows', title: t('report.sort.rows') },
