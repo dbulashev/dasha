@@ -441,7 +441,28 @@
     "usage": "Index usage",
     "menuOverview": "Overview",
     "menuUsage": "Usage",
-    "menuProblems": "Problems"
+    "menuProblems": "Problems",
+    "report": {
+      "title": "Verdicts: may this index be dropped",
+      "hint": "Unlike the raw-counter Unused indexes table, idx_scan here is weighed against the window it accumulated over (since the statistics reset) and against every host of the cluster at once: scan counters are not replicated, and an index idle on the primary may serve reads on a replica. Partitioned indexes are judged as a whole — scans summed across all partitions; only the parent index can be dropped.",
+      "verdict": "Verdict",
+      "reason": "Reasoning",
+      "verdicts": {
+        "drop_candidate": "Drop candidate",
+        "used": "Used",
+        "stale_evidence": "Stale evidence",
+        "insufficient_data": "Insufficient data",
+        "unknown": "Unknown"
+      },
+      "partitioned": "partitioned: {n} parts",
+      "unreachable": "Unreachable hosts: {hosts}. Every verdict is \"unknown\": scan counters are not replicated, and the index may be in use on a host that did not answer.",
+      "host": "Host",
+      "window": "Window",
+      "scansPerDay": "Scans/day",
+      "replica": "replica",
+      "statsResetUnknown": "The statistics reset time is unknown — the window falls back to postmaster uptime and may understate the real observation period.",
+      "days": "d"
+    }
   },
   "progress": {
     "analyze": "ANALYZE",
