@@ -50,6 +50,7 @@ package enums
 //	indexes/unused_report
 //	indexes/usage
 //	maintenance/autovacuum_freeze_max_age
+//	maintenance/autovacuum_summary
 //	maintenance/info
 //	maintenance/transaction_id_danger
 //	maintenance/vacuum_progress

@@ -103,6 +103,29 @@ func (s *Handlers) GetMaintenanceTransactionIdDanger(
 	return ret, nil
 }
 
+func (s *Handlers) GetMaintenanceAutovacuumSummary(
+	ctx context.Context,
+	req serverhttp.GetMaintenanceAutovacuumSummaryRequestObject,
+) (serverhttp.GetMaintenanceAutovacuumSummaryResponseObject, error) {
+	data, err := s.repo.GetMaintenanceAutovacuumSummary(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
+	if errors.Is(err, repository.ErrNotFound) {
+		return serverhttp.GetMaintenanceAutovacuumSummary404Response{}, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("GetMaintenanceAutovacuumSummary | %w", err)
+	}
+
+	return serverhttp.GetMaintenanceAutovacuumSummary200JSONResponse{
+		TablesDueVacuumOnly:  data.TablesDueVacuumOnly,
+		TablesDueAnalyzeOnly: data.TablesDueAnalyzeOnly,
+		TablesDueBoth:        data.TablesDueBoth,
+		TablesTotal:          data.TablesTotal,
+		RunningVacuums:       data.RunningVacuums,
+		RunningAnalyzes:      data.RunningAnalyzes,
+	}, nil
+}
+
 func (s *Handlers) GetMaintenanceVacuumProgress(
 	ctx context.Context,
 	req serverhttp.GetMaintenanceVacuumProgressRequestObject,

@@ -20,6 +20,7 @@ import { useViewError } from '@/composables/useViewError'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
 import { assertOk } from '@/utils/api'
 import { getErrorMessage } from '@/utils/error'
+import { fmtBytes } from '@/utils/format'
 import ProgressCard from '@/components/progress/ProgressCard.vue'
 import type { ProgressCardData } from '@/components/progress/ProgressCard.vue'
 
@@ -107,7 +108,20 @@ const cards = computed<ProgressCardData[]>(() => {
       metrics: [
         { label: t('progress.heapBlksScanned'), value: `${fmtNum(item.HeapBlksScanned)} / ${fmtNum(item.HeapBlksTotal)}` },
         { label: t('progress.heapBlksVacuumed'), value: `${fmtNum(item.HeapBlksVacuumed)} / ${fmtNum(item.HeapBlksTotal)}` },
-        { label: t('progress.numDeadTuples'), value: `${fmtNum(item.NumDeadTuples)} / ${fmtNum(item.MaxDeadTuples)}` },
+        // PG < 17 caps collected dead tuples by row count (MaxDeadTuples);
+        // PG 17+ caps by TID-store memory instead, shown as a separate metric.
+        {
+          label: t('progress.numDeadTuples'),
+          value: item.MaxDeadTuples != null
+            ? `${fmtNum(item.NumDeadTuples)} / ${fmtNum(item.MaxDeadTuples)}`
+            : fmtNum(item.NumDeadTuples),
+          hint: t('progress.numDeadTuplesHint'),
+        },
+        ...(item.DeadTupleBytes != null ? [{
+          label: t('progress.deadTupleBytes'),
+          value: `${fmtBytes(item.DeadTupleBytes)} / ${fmtBytes(item.MaxDeadTupleBytes)}`,
+          hint: t('progress.deadTupleBytesHint'),
+        }] : []),
         { label: t('progress.indexVacuumCount'), value: fmtNum(item.IndexVacuumCount) },
       ],
     })

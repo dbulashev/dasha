@@ -27,3 +27,12 @@ type MaintenanceVacuumProgress struct {
 	Pid   int32
 	Phase string
 }
+
+type MaintenanceAutovacuumSummary struct {
+	TablesDueVacuumOnly  int32
+	TablesDueAnalyzeOnly int32
+	TablesDueBoth        int32
+	TablesTotal          int32
+	RunningVacuums       int32
+	RunningAnalyzes      int32
+}

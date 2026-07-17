@@ -335,19 +335,22 @@ func (p *PgxPool) getProgressVacuum(ctx context.Context, serverVersion int, pool
 
 	for rows.Next() {
 		var (
-			pid                                                                                              int32
-			datname, tableName, phase                                                                        string
-			heapBlksTotal, heapBlksScanned, heapBlksVacuumed, indexVacuumCount, maxDeadTuples, numDeadTuples int64
+			pid                                                                int32
+			datname, tableName, phase                                          string
+			heapBlksTotal, heapBlksScanned, heapBlksVacuumed, indexVacuumCount int64
+			numDeadTuples                                                      int64
+			maxDeadTuples, deadTupleBytes, maxDeadTupleBytes                   pgtype.Int8
 		)
 
 		err = rows.Scan(&pid, &datname, &tableName, &phase,
 			&heapBlksTotal, &heapBlksScanned, &heapBlksVacuumed,
-			&indexVacuumCount, &maxDeadTuples, &numDeadTuples)
+			&indexVacuumCount, &maxDeadTuples, &numDeadTuples,
+			&deadTupleBytes, &maxDeadTupleBytes)
 		if err != nil {
 			return nil, fmt.Errorf("getProgressVacuum | %w", err)
 		}
 
-		ret = append(ret, dto.ProgressVacuum{
+		row := dto.ProgressVacuum{
 			Pid:              pid,
 			Datname:          datname,
 			TableName:        tableName,
@@ -356,9 +359,22 @@ func (p *PgxPool) getProgressVacuum(ctx context.Context, serverVersion int, pool
 			HeapBlksScanned:  heapBlksScanned,
 			HeapBlksVacuumed: heapBlksVacuumed,
 			IndexVacuumCount: indexVacuumCount,
-			MaxDeadTuples:    maxDeadTuples,
 			NumDeadTuples:    numDeadTuples,
-		})
+		}
+
+		if maxDeadTuples.Valid {
+			row.MaxDeadTuples = &maxDeadTuples.Int64
+		}
+
+		if deadTupleBytes.Valid {
+			row.DeadTupleBytes = &deadTupleBytes.Int64
+		}
+
+		if maxDeadTupleBytes.Valid {
+			row.MaxDeadTupleBytes = &maxDeadTupleBytes.Int64
+		}
+
+		ret = append(ret, row)
 	}
 
 	if err := rows.Err(); err != nil {

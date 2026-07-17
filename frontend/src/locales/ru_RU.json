@@ -462,7 +462,10 @@
         "heapBlksVacuumed": "Heap блоков очищено",
         "indexVacuumCount": "Проходов по индексам",
         "maxDeadTuples": "Макс. мёртвых строк",
-        "numDeadTuples": "Мёртвых строк",
+        "numDeadTuples": "Мёртвых строк собрано",
+        "numDeadTuplesHint": "Счётчик текущего цикла VACUUM: сколько указателей на мёртвые строки собрано с последнего прохода по индексам (после каждого прохода сбрасывается). Это не общее число мёртвых строк таблицы — оно есть на странице «Обслуживание» (n_dead_tup). До PG 17 второе число — вместимость буфера, рассчитанная из maintenance_work_mem.",
+        "deadTupleBytes": "Память под мёртвые строки",
+        "deadTupleBytesHint": "PG 17+: занято / лимит памяти TID-хранилища (autovacuum_work_mem или maintenance_work_mem). При достижении лимита VACUUM прерывает сканирование и делает проход по индексам.",
         "clusterIndex": "Индекс кластеризации",
         "heapTuplesScanned": "Строк просканировано",
         "heapTuplesWritten": "Строк записано",
@@ -866,7 +869,19 @@
         "autovacuumFreezeMaxAge": "Autovacuum Freeze Max Age",
         "transactionIdDanger": "Опасность исчерпания Transaction ID",
         "transactionsLeft": "Транзакций осталось",
-        "vacuumProgress": "Прогресс VACUUM"
+        "vacuumProgress": "Прогресс VACUUM",
+        "summary": {
+            "title": "Автовакуум: сводка",
+            "hint": "Таблицы, превысившие собственные пороги срабатывания автовакуума/автоанализа (формула PostgreSQL: threshold + scale_factor × строк, per-table настройки учтены; число строк берётся как меньшее из reltuples и живых строк, чтобы устаревшая статистика не прятала таблицу), и процессы обслуживания, работающие сейчас в этой базе.",
+            "due": "Требуют обслуживания",
+            "dueVacuum": "Только VACUUM",
+            "dueAnalyze": "Только ANALYZE",
+            "dueBoth": "VACUUM и ANALYZE",
+            "ok": "В пределах порогов",
+            "allOk": "Все таблицы в пределах порогов — автовакууму сейчас нечего делать.",
+            "runningVacuums": "Работает VACUUM",
+            "runningAnalyzes": "Работает ANALYZE"
+        }
     },
     "healthScore": {
         "title": "Health Score",
@@ -996,7 +1011,7 @@
                 "track_counts_disabled": "track_counts=off — у autovacuum нет статистики для принятия решений.",
                 "tables_with_autovacuum_off": "Таблицы с autovacuum_enabled=false в reloptions.",
                 "relfrozenxid_age_outlier": "Худший age(relfrozenxid) по таблицам — потабличная версия XID-риска.",
-                "stale_planner_stats": "n_mod_since_analyze велик относительно n_live_tup — статистика планировщика устарела.",
+                "stale_planner_stats": "n_mod_since_analyze превысил порог автоанализа, а ANALYZE не было >3 часов — статистика планировщика устарела.",
                 "horizon_lag_xids": "txid_current() - min(backend_xmin) — сколько строк VACUUM не может убрать.",
                 "requested_checkpoint_ratio": "checkpoints_req / total — высокая доля = max_wal_size мал или всплеск записи.",
                 "wal_level_minimal_with_replicas": "wal_level=minimal не даёт физическую репликацию — реплики молча сломаны.",
@@ -1073,7 +1088,7 @@
                 "track_counts_disabled": "HIGH",
                 "tables_with_autovacuum_off": "≥1 / ≥5 / ≥20",
                 "relfrozenxid_age_outlier": "≥200 M / ≥500 M / ≥1 B",
-                "stale_planner_stats": "≥3 / ≥10 / ≥30",
+                "stale_planner_stats": "≥3 / ≥5 / ≥10",
                 "horizon_lag_xids": "≥1 M / ≥10 M / ≥100 M",
                 "requested_checkpoint_ratio": "≥5 / ≥10 / ≥20 %",
                 "wal_level_minimal_with_replicas": "HIGH",
@@ -1296,7 +1311,7 @@
             "stale_planner_stats": {
                 "title": "Устаревшая статистика планировщика",
                 "short": "Таблиц с устаревшей статистикой: {metric_value}.",
-                "detail": "Эти таблицы заметно изменились с последнего ANALYZE (>50% от формулы автоанализа) и не анализировались более суток. Планировщик может выбирать неоптимальные планы. Запустите ANALYZE вручную или уменьшите autovacuum_analyze_scale_factor."
+                "detail": "Эти таблицы превысили свой порог автоанализа (с учётом per-table настроек) и не анализировались более 3 часов — автоанализ должен был сработать, но не сработал. Планировщик может выбирать неоптимальные планы. Запустите ANALYZE вручную и выясните, почему автоанализ не дошёл до таблицы (autovacuum_enabled=false, воркеры заняты крупными таблицами)."
             },
             "wal_level_minimal_with_replicas": {
                 "title": "wal_level=minimal при наличии реплик",

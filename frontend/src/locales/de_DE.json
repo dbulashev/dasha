@@ -380,7 +380,10 @@
     "heapBlksVacuumed": "Heap-Blöcke bereinigt",
     "indexVacuumCount": "Index-Vacuum-Durchläufe",
     "maxDeadTuples": "Max. tote Zeilen",
-    "numDeadTuples": "Tote Zeilen",
+    "numDeadTuples": "Tote Zeilen gesammelt",
+    "numDeadTuplesHint": "Zähler des laufenden VACUUM-Zyklus: seit dem letzten Index-Durchlauf gesammelte Zeiger auf tote Zeilen (wird nach jedem Durchlauf zurückgesetzt). Nicht die Gesamtzahl toter Zeilen der Tabelle — die steht auf der Wartungsseite (n_dead_tup). Vor PG 17 ist die zweite Zahl die aus maintenance_work_mem abgeleitete Pufferkapazität.",
+    "deadTupleBytes": "Speicher für tote Zeilen",
+    "deadTupleBytesHint": "PG 17+: belegt / Limit des TID-Store-Speichers (autovacuum_work_mem oder maintenance_work_mem). Bei Erreichen des Limits unterbricht VACUUM den Heap-Scan für einen Index-Durchlauf.",
     "clusterIndex": "Cluster-Index",
     "heapTuplesScanned": "Zeilen gescannt",
     "heapTuplesWritten": "Zeilen geschrieben",
@@ -821,7 +824,19 @@
     "autovacuumFreezeMaxAge": "Autovacuum Freeze Max Age",
     "transactionIdDanger": "Transaction-ID-Erschöpfungsgefahr",
     "transactionsLeft": "Transaktionen übrig",
-    "vacuumProgress": "VACUUM-Fortschritt"
+    "vacuumProgress": "VACUUM-Fortschritt",
+    "summary": {
+      "title": "Autovacuum-Übersicht",
+      "hint": "Tabellen über ihren eigenen Autovacuum-/Auto-Analyze-Schwellwerten (PostgreSQL-Formel: threshold + scale_factor × Zeilen, per-Table-Einstellungen berücksichtigt; als Zeilenzahl gilt das Minimum aus reltuples und lebenden Zeilen, damit veraltete Statistik keine Tabelle versteckt) sowie aktuell laufende Wartungsprozesse in dieser Datenbank.",
+      "due": "Wartung nötig",
+      "dueVacuum": "Nur VACUUM",
+      "dueAnalyze": "Nur ANALYZE",
+      "dueBoth": "VACUUM und ANALYZE",
+      "ok": "Innerhalb der Schwellwerte",
+      "allOk": "Alle Tabellen innerhalb der Schwellwerte — Autovacuum hat gerade nichts zu tun.",
+      "runningVacuums": "VACUUM läuft",
+      "runningAnalyzes": "ANALYZE läuft"
+    }
   },
   "healthScore": {
     "title": "Health Score",
@@ -951,7 +966,7 @@
         "track_counts_disabled": "track_counts=off — Autovacuum hat keine Statistik für Entscheidungen.",
         "tables_with_autovacuum_off": "Tabellen mit autovacuum_enabled=false in reloptions.",
         "relfrozenxid_age_outlier": "Schlechtestes age(relfrozenxid) je Tabelle — Tabellen-Variante des XID-Risikos.",
-        "stale_planner_stats": "n_mod_since_analyze groß relativ zu n_live_tup — Planner-Statistik veraltet.",
+        "stale_planner_stats": "n_mod_since_analyze über dem Auto-Analyze-Schwellwert, seit >3h kein ANALYZE — Planner-Statistik veraltet.",
         "horizon_lag_xids": "txid_current() - min(backend_xmin) — Zeilen, die VACUUM nicht entfernen kann.",
         "requested_checkpoint_ratio": "checkpoints_req / total — hoher Anteil = max_wal_size klein oder Schreibspitze.",
         "wal_level_minimal_with_replicas": "wal_level=minimal erlaubt keine physische Replikation — Replicas stumm defekt.",
@@ -1028,7 +1043,7 @@
         "track_counts_disabled": "HIGH",
         "tables_with_autovacuum_off": "≥1 / ≥5 / ≥20",
         "relfrozenxid_age_outlier": "≥200 M / ≥500 M / ≥1 B",
-        "stale_planner_stats": "≥3 / ≥10 / ≥30",
+        "stale_planner_stats": "≥3 / ≥5 / ≥10",
         "horizon_lag_xids": "≥1 M / ≥10 M / ≥100 M",
         "requested_checkpoint_ratio": "≥5 / ≥10 / ≥20 %",
         "wal_level_minimal_with_replicas": "HIGH",
@@ -1251,7 +1266,7 @@
       "stale_planner_stats": {
         "title": "Veraltete Planer-Statistik",
         "short": "Tabellen mit veralteter Statistik: {metric_value}.",
-        "detail": "Diese Tabellen haben sich seit dem letzten ANALYZE deutlich verändert (>50% der Auto-Analyze-Formel) und wurden über 24h nicht analysiert. Der Planer kann suboptimale Pläne wählen. Manueller ANALYZE oder kleinerer autovacuum_analyze_scale_factor."
+        "detail": "Diese Tabellen liegen über ihrem Auto-Analyze-Schwellwert (per-Table-Einstellungen berücksichtigt) und wurden seit über 3 Stunden nicht analysiert — Auto-Analyze hätte anspringen müssen, tat es aber nicht. Der Planer kann suboptimale Pläne wählen. Führen Sie ANALYZE manuell aus und klären Sie, warum Auto-Analyze die Tabelle nicht erreicht hat (autovacuum_enabled=false, Worker mit großen Tabellen beschäftigt)."
       },
       "wal_level_minimal_with_replicas": {
         "title": "wal_level=minimal bei vorhandenen Replikaten",

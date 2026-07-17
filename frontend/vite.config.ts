@@ -25,6 +25,15 @@ export default defineConfig({
           },
         ],
       },
+      // unplugin-fonts preloads every font file emitted into the bundle,
+      // including the eot/woff/ttf fallbacks of @mdi/font. Browsers only ever
+      // download woff2, so those preloads just warn in the console (font/eot
+      // is not even a valid preload type). Keep woff2 preloads only.
+      custom: {
+        families: [],
+        linkFilter: (tags) =>
+          tags.filter((tag) => tag.attrs?.rel !== 'preload' || tag.attrs?.type === 'font/woff2'),
+      },
     }),
   ],
   server: {

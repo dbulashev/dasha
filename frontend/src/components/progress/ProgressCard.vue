@@ -9,7 +9,7 @@ export interface ProgressCardData {
   target: string
   phase: string
   progress: number | null
-  metrics: { label: string; value: string }[]
+  metrics: { label: string; value: string; hint?: string }[]
 }
 
 defineProps<{ card: ProgressCardData }>()
@@ -48,7 +48,14 @@ const { t } = useI18n()
           cols="6"
           md="3"
         >
-          <div class="text-caption text-medium-emphasis">{{ metric.label }}</div>
+          <div class="text-caption text-medium-emphasis d-flex align-center ga-1">
+            {{ metric.label }}
+            <v-tooltip v-if="metric.hint" :text="metric.hint" location="bottom" max-width="420">
+              <template #activator="{ props }">
+                <v-icon v-bind="props" size="x-small">mdi-help-circle-outline</v-icon>
+              </template>
+            </v-tooltip>
+          </div>
           <div class="text-body-2">{{ metric.value }}</div>
         </v-col>
       </v-row>
