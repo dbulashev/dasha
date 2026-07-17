@@ -1,14 +1,16 @@
 import type { QueryReportMetrics } from '@/api/models/index'
 
-export type CompareSortKey = 'total_time' | 'calls' | 'wal' | 'rows' | 'cpu_time' | 'io_time' | 'temp_blks'
+export type CompareSortKey = 'total_time' | 'mean_time' | 'stddev_time' | 'calls' | 'wal' | 'rows' | 'cpu_time' | 'io_time' | 'temp_blks'
 
 export interface SortFieldDef {
   value: keyof QueryReportMetrics
-  pct: keyof QueryReportMetrics
+  pct?: keyof QueryReportMetrics
 }
 
 export const compareSortFieldMap: Record<CompareSortKey, SortFieldDef> = {
   total_time: { value: 'TotalTimeMs', pct: 'TotalTimePct' },
+  mean_time: { value: 'MeanExecTimeMs' },
+  stddev_time: { value: 'StddevExecTimeMs' },
   calls: { value: 'Calls', pct: 'CallsPct' },
   wal: { value: 'WalBytes', pct: 'WalBytesPct' },
   rows: { value: 'Rows', pct: 'RowsPct' },

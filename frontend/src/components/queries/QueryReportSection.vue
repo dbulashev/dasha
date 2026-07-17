@@ -20,12 +20,14 @@ const { t } = useI18n()
 const { onError } = useViewError()
 const excludeUsersStore = useExcludeUsersStore()
 
-type ReportSortKey = 'total_time' | 'calls' | 'wal' | 'rows' | 'cpu_time' | 'io_time' | 'temp_blks'
+type ReportSortKey = 'total_time' | 'mean_time' | 'stddev_time' | 'calls' | 'wal' | 'rows' | 'cpu_time' | 'io_time' | 'temp_blks'
 
 const reportSortBy = ref<ReportSortKey>('total_time')
 
 const reportSortOptions = computed(() => [
   { value: 'total_time', title: t('report.sort.total_time') },
+  { value: 'mean_time', title: t('report.sort.mean_time') },
+  { value: 'stddev_time', title: t('report.sort.stddev_time') },
   { value: 'calls', title: t('report.sort.calls') },
   { value: 'wal', title: t('report.sort.wal') },
   { value: 'rows', title: t('report.sort.rows') },
@@ -36,6 +38,8 @@ const reportSortOptions = computed(() => [
 
 const sortFieldMap: Record<ReportSortKey, keyof QueryReport> = {
   total_time: 'TotalTimeMs',
+  mean_time: 'MeanExecTimeMs',
+  stddev_time: 'StddevExecTimeMs',
   calls: 'Calls',
   wal: 'WalBytes',
   rows: 'Rows',

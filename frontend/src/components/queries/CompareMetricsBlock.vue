@@ -12,12 +12,13 @@ const props = defineProps<{
 
 const { t } = useI18n()
 
-function isHighlighted(fieldKey: CompareSortKey): boolean {
-  return props.sortBy === fieldKey
+function isHighlighted(...fieldKeys: CompareSortKey[]): boolean {
+  return fieldKeys.includes(props.sortBy)
 }
 
 function isHighContrib(sortKey: CompareSortKey): boolean {
   const pctField = compareSortFieldMap[sortKey].pct
+  if (!pctField) return false
   const pct = props.metrics[pctField] as number | null | undefined
   return pct != null && pct > 5
 }
@@ -45,7 +46,7 @@ function fmtMs(ms: number | null | undefined): string {
       <div class="text-caption text-medium-emphasis">{{ t('header.cacheHitRatio') }}</div>
       <div class="text-body-2">{{ fmtPct(metrics.CacheHitRatio) }}</div>
     </v-col>
-    <v-col cols="6">
+    <v-col cols="6" :class="{ 'report-highlight': isHighlighted('mean_time', 'stddev_time') }">
       <div class="text-caption text-medium-emphasis">{{ t('header.execTime') }}</div>
       <div class="text-body-2">{{ fmtMs(metrics.ExecTimeMs) }}</div>
       <div class="text-caption text-medium-emphasis">

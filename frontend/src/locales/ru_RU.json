@@ -93,6 +93,8 @@
         "cpuTimeUnavailable": "Время CPU посчитать не удалось. Вероятно, запрос выполняется параллельно — pg_stat_statements суммирует время IO по всем воркерам, а exec time только по leader process.",
         "sort": {
             "total_time": "Общее время",
+            "mean_time": "Среднее время",
+            "stddev_time": "Отклонение (σ)",
             "calls": "Вызовы",
             "wal": "WAL",
             "rows": "Строки",

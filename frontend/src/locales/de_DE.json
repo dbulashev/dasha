@@ -47,6 +47,8 @@
     "cpuTimeUnavailable": "CPU-Zeit konnte nicht berechnet werden. Die Abfrage wird wahrscheinlich parallel ausgeführt — pg_stat_statements summiert die IO-Zeit über alle Worker, exec_time nur für den Leader-Prozess.",
     "sort": {
       "total_time": "Gesamtzeit",
+      "mean_time": "Durchschnittszeit",
+      "stddev_time": "Standardabweichung (σ)",
       "calls": "Aufrufe",
       "wal": "WAL",
       "rows": "Zeilen",
