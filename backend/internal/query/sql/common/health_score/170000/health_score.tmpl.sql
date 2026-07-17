@@ -75,11 +75,19 @@ table_autovac AS (
         GREATEST(s.last_analyze, s.last_autoanalyze) AS last_any_analyze,
         GREATEST(c.reltuples, 0)::bigint AS reltuples,
         EXTRACT(EPOCH FROM (now() - GREATEST(s.last_vacuum, s.last_autovacuum))) / 3600.0 AS vacuum_age_hours,
-        COALESCE(ro.vac_base, g.vac_base) + COALESCE(ro.vac_sf, g.vac_sf) * GREATEST(c.reltuples, 0) AS vacuum_threshold,
-        COALESCE(ro.ins_base, g.ins_base) + COALESCE(ro.ins_sf, g.ins_sf) * GREATEST(c.reltuples, 0) AS insert_threshold,
-        COALESCE(ro.ana_base, g.ana_base) + COALESCE(ro.ana_sf, g.ana_sf) * GREATEST(c.reltuples, 0) AS analyze_threshold
+        COALESCE(ro.vac_base, g.vac_base) + COALESCE(ro.vac_sf, g.vac_sf) * est.row_estimate AS vacuum_threshold,
+        COALESCE(ro.ins_base, g.ins_base) + COALESCE(ro.ins_sf, g.ins_sf) * est.row_estimate AS insert_threshold,
+        COALESCE(ro.ana_base, g.ana_base) + COALESCE(ro.ana_sf, g.ana_sf) * est.row_estimate AS analyze_threshold
     FROM pg_stat_user_tables s
     JOIN pg_class c ON c.oid = s.relid
+    -- Row estimate for the trigger formula: autovacuum itself uses reltuples,
+    -- but that goes stale when ANALYZE never runs (e.g. autovacuum_enabled=false)
+    -- — a table can sit at 100% dead rows while the formula still counts rows
+    -- long deleted. The lower of reltuples and current live tuples lets either
+    -- estimate trip the trigger (same convention as maintenance/autovacuum_summary).
+    CROSS JOIN LATERAL (
+        SELECT LEAST(GREATEST(c.reltuples, 0), s.n_live_tup) AS row_estimate
+    ) est
     CROSS JOIN (
         SELECT
             (SELECT setting::bigint FROM pg_settings WHERE name = 'autovacuum_vacuum_threshold')          AS vac_base,
@@ -207,16 +215,20 @@ hot_update_metrics AS (
     FROM pg_stat_user_tables
     WHERE n_tup_upd > 1000
 ),
--- Tables with stale planner stats: modified well past their (reloption-aware)
--- auto-analyze threshold AND not analyzed in 24h. Reuses table_autovac so the
--- threshold honours per-table reloptions, consistent with the vacuum queue. The
--- 0.5x keeps the early-warning character (halfway to «should have been analyzed»).
+-- Tables with stale planner stats: modified past their (reloption-aware)
+-- auto-analyze threshold AND not analyzed in 3h — autoanalyze should have
+-- fired and did not. Reuses table_autovac so the threshold honours per-table
+-- reloptions, consistent with the vacuum queue. The full threshold is required:
+-- below it autoanalyze never fires by design, so a cold table with a one-off
+-- sub-threshold batch of changes would be flagged forever. The 3h window is an
+-- anti-flap guard (a healthy autovacuum picks an eligible table up within
+-- minutes; 3h absorbs workers busy on huge tables and long ANALYZE runs).
 stale_stats_metric AS (
     SELECT COUNT(*)::int AS stale_planner_stats_tables
     FROM table_autovac
     WHERE reltuples > 0
-      AND n_mod_since_analyze > 0.5 * analyze_threshold
-      AND COALESCE(last_any_analyze, '-infinity'::timestamptz) < now() - interval '24 hours'
+      AND n_mod_since_analyze > analyze_threshold
+      AND COALESCE(last_any_analyze, '-infinity'::timestamptz) < now() - interval '3 hours'
 ),
 wal_level_metric AS (
     SELECT setting AS wal_level

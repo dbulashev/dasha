@@ -62,6 +62,11 @@ type ProgressVacuum struct {
 	HeapBlksScanned  int64
 	HeapBlksVacuumed int64
 	IndexVacuumCount int64
-	MaxDeadTuples    int64
-	NumDeadTuples    int64
+	// MaxDeadTuples is NULL on PG 17+, which caps dead tuples by memory
+	// (MaxDeadTupleBytes) rather than by row count.
+	MaxDeadTuples *int64
+	NumDeadTuples int64
+	// DeadTupleBytes / MaxDeadTupleBytes are PG 17+ only (NULL before).
+	DeadTupleBytes    *int64
+	MaxDeadTupleBytes *int64
 }

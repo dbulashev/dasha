@@ -770,6 +770,27 @@ type MaintenanceAutovacuumFreezeMaxAge struct {
 	AutovacuumFreezeMaxAge int64 `json:"AutovacuumFreezeMaxAge"`
 }
 
+// MaintenanceAutovacuumSummary defines model for MaintenanceAutovacuumSummary.
+type MaintenanceAutovacuumSummary struct {
+	// RunningAnalyzes ANALYZE processes currently running in the database (pg_stat_progress_analyze).
+	RunningAnalyzes int32 `json:"RunningAnalyzes"`
+
+	// RunningVacuums VACUUM processes currently running in the database (pg_stat_progress_vacuum).
+	RunningVacuums int32 `json:"RunningVacuums"`
+
+	// TablesDueAnalyzeOnly Tables past the autoanalyze trigger only.
+	TablesDueAnalyzeOnly int32 `json:"TablesDueAnalyzeOnly"`
+
+	// TablesDueBoth Tables past both triggers.
+	TablesDueBoth int32 `json:"TablesDueBoth"`
+
+	// TablesDueVacuumOnly Tables past the autovacuum trigger (dead-tuple or insert formula) but not the autoanalyze one.
+	TablesDueVacuumOnly int32 `json:"TablesDueVacuumOnly"`
+
+	// TablesTotal Total user tables considered.
+	TablesTotal int32 `json:"TablesTotal"`
+}
+
 // MaintenanceInfo defines model for MaintenanceInfo.
 type MaintenanceInfo struct {
 	DeadRows        int64      `json:"DeadRows"`
@@ -816,7 +837,7 @@ type PersonalAccessTokenRole string
 
 // PersonalAccessTokenCreate defines model for PersonalAccessTokenCreate.
 type PersonalAccessTokenCreate struct {
-	// ExpiresInDays Optional lifetime in days (max 3650 = 10 years); omitted or 0 means no expiry.
+	// ExpiresInDays Optional lifetime in days (max 3650 = 10 years); omitted or 0 means no expiry. Admin tokens are an exception: they are always capped at 30 days, and cannot be issued without an expiry — a request for a longer (or absent) lifetime is clamped rather than rejected, so check expires_at in the response for the value actually applied.
 	ExpiresInDays *int `json:"expires_in_days,omitempty"`
 
 	// Name Human-readable label for the token.
@@ -912,16 +933,26 @@ type ProgressIndex struct {
 
 // ProgressVacuum defines model for ProgressVacuum.
 type ProgressVacuum struct {
-	Datname          string `json:"Datname"`
+	Datname string `json:"Datname"`
+
+	// DeadTupleBytes Memory currently used by the dead-tuple TID store. PG 17+ only.
+	DeadTupleBytes   *int64 `json:"DeadTupleBytes"`
 	HeapBlksScanned  int64  `json:"HeapBlksScanned"`
 	HeapBlksTotal    int64  `json:"HeapBlksTotal"`
 	HeapBlksVacuumed int64  `json:"HeapBlksVacuumed"`
 	IndexVacuumCount int64  `json:"IndexVacuumCount"`
-	MaxDeadTuples    int64  `json:"MaxDeadTuples"`
-	NumDeadTuples    int64  `json:"NumDeadTuples"`
-	Phase            string `json:"Phase"`
-	Pid              int32  `json:"Pid"`
-	TableName        string `json:"TableName"`
+
+	// MaxDeadTupleBytes Memory limit for the dead-tuple TID store. PG 17+ only.
+	MaxDeadTupleBytes *int64 `json:"MaxDeadTupleBytes"`
+
+	// MaxDeadTuples Dead-tuple buffer capacity in rows (from maintenance_work_mem). PG < 17 only; PG 17+ caps by memory instead (MaxDeadTupleBytes).
+	MaxDeadTuples *int64 `json:"MaxDeadTuples"`
+
+	// NumDeadTuples Dead item identifiers collected in the current vacuum cycle (resets after each index vacuum pass), not the table's total dead rows. PG 17+ reports num_dead_item_ids.
+	NumDeadTuples int64  `json:"NumDeadTuples"`
+	Phase         string `json:"Phase"`
+	Pid           int32  `json:"Pid"`
+	TableName     string `json:"TableName"`
 }
 
 // QueryBlocked defines model for QueryBlocked.
@@ -1736,6 +1767,13 @@ type GetMaintenanceAutovacuumFreezeMaxAgeParams struct {
 	Instance    Instance    `form:"instance" json:"instance"`
 }
 
+// GetMaintenanceAutovacuumSummaryParams defines parameters for GetMaintenanceAutovacuumSummary.
+type GetMaintenanceAutovacuumSummaryParams struct {
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance    `form:"instance" json:"instance"`
+	Database    Database    `form:"database" json:"database"`
+}
+
 // GetMaintenanceInfoParams defines parameters for GetMaintenanceInfo.
 type GetMaintenanceInfoParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
@@ -2302,6 +2340,9 @@ type ClientInterface interface {
 
 	// GetMaintenanceAutovacuumFreezeMaxAge request
 	GetMaintenanceAutovacuumFreezeMaxAge(ctx context.Context, params *GetMaintenanceAutovacuumFreezeMaxAgeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetMaintenanceAutovacuumSummary request
+	GetMaintenanceAutovacuumSummary(ctx context.Context, params *GetMaintenanceAutovacuumSummaryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetMaintenanceInfo request
 	GetMaintenanceInfo(ctx context.Context, params *GetMaintenanceInfoParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -3170,6 +3211,18 @@ func (c *Client) GetLogs(ctx context.Context, params *GetLogsParams, reqEditors 
 
 func (c *Client) GetMaintenanceAutovacuumFreezeMaxAge(ctx context.Context, params *GetMaintenanceAutovacuumFreezeMaxAgeParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetMaintenanceAutovacuumFreezeMaxAgeRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetMaintenanceAutovacuumSummary(ctx context.Context, params *GetMaintenanceAutovacuumSummaryParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetMaintenanceAutovacuumSummaryRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -7709,6 +7762,75 @@ func NewGetMaintenanceAutovacuumFreezeMaxAgeRequest(server string, params *GetMa
 	return req, nil
 }
 
+// NewGetMaintenanceAutovacuumSummaryRequest generates requests for GetMaintenanceAutovacuumSummary
+func NewGetMaintenanceAutovacuumSummaryRequest(server string, params *GetMaintenanceAutovacuumSummaryParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/maintenance/autovacuum-summary")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, params.ClusterName); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "instance", runtime.ParamLocationQuery, params.Instance); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "database", runtime.ParamLocationQuery, params.Database); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetMaintenanceInfoRequest generates requests for GetMaintenanceInfo
 func NewGetMaintenanceInfoRequest(server string, params *GetMaintenanceInfoParams) (*http.Request, error) {
 	var err error
@@ -10869,6 +10991,9 @@ type ClientWithResponsesInterface interface {
 	// GetMaintenanceAutovacuumFreezeMaxAgeWithResponse request
 	GetMaintenanceAutovacuumFreezeMaxAgeWithResponse(ctx context.Context, params *GetMaintenanceAutovacuumFreezeMaxAgeParams, reqEditors ...RequestEditorFn) (*GetMaintenanceAutovacuumFreezeMaxAgeResponse, error)
 
+	// GetMaintenanceAutovacuumSummaryWithResponse request
+	GetMaintenanceAutovacuumSummaryWithResponse(ctx context.Context, params *GetMaintenanceAutovacuumSummaryParams, reqEditors ...RequestEditorFn) (*GetMaintenanceAutovacuumSummaryResponse, error)
+
 	// GetMaintenanceInfoWithResponse request
 	GetMaintenanceInfoWithResponse(ctx context.Context, params *GetMaintenanceInfoParams, reqEditors ...RequestEditorFn) (*GetMaintenanceInfoResponse, error)
 
@@ -12278,6 +12403,28 @@ func (r GetMaintenanceAutovacuumFreezeMaxAgeResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetMaintenanceAutovacuumFreezeMaxAgeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetMaintenanceAutovacuumSummaryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *MaintenanceAutovacuumSummary
+}
+
+// Status returns HTTPResponse.Status
+func (r GetMaintenanceAutovacuumSummaryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetMaintenanceAutovacuumSummaryResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -13726,6 +13873,15 @@ func (c *ClientWithResponses) GetMaintenanceAutovacuumFreezeMaxAgeWithResponse(c
 		return nil, err
 	}
 	return ParseGetMaintenanceAutovacuumFreezeMaxAgeResponse(rsp)
+}
+
+// GetMaintenanceAutovacuumSummaryWithResponse request returning *GetMaintenanceAutovacuumSummaryResponse
+func (c *ClientWithResponses) GetMaintenanceAutovacuumSummaryWithResponse(ctx context.Context, params *GetMaintenanceAutovacuumSummaryParams, reqEditors ...RequestEditorFn) (*GetMaintenanceAutovacuumSummaryResponse, error) {
+	rsp, err := c.GetMaintenanceAutovacuumSummary(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetMaintenanceAutovacuumSummaryResponse(rsp)
 }
 
 // GetMaintenanceInfoWithResponse request returning *GetMaintenanceInfoResponse
@@ -15572,6 +15728,32 @@ func ParseGetMaintenanceAutovacuumFreezeMaxAgeResponse(rsp *http.Response) (*Get
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest []MaintenanceAutovacuumFreezeMaxAge
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetMaintenanceAutovacuumSummaryResponse parses an HTTP response from a GetMaintenanceAutovacuumSummaryWithResponse call
+func ParseGetMaintenanceAutovacuumSummaryResponse(rsp *http.Response) (*GetMaintenanceAutovacuumSummaryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetMaintenanceAutovacuumSummaryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest MaintenanceAutovacuumSummary
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

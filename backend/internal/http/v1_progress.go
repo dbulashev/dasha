@@ -161,16 +161,18 @@ func (s *Handlers) GetProgressVacuum(
 		progress,
 		func(t dto.ProgressVacuum) serverhttp.ProgressVacuum {
 			return serverhttp.ProgressVacuum{
-				Pid:              t.Pid,
-				Datname:          t.Datname,
-				TableName:        t.TableName,
-				Phase:            t.Phase,
-				HeapBlksTotal:    t.HeapBlksTotal,
-				HeapBlksScanned:  t.HeapBlksScanned,
-				HeapBlksVacuumed: t.HeapBlksVacuumed,
-				IndexVacuumCount: t.IndexVacuumCount,
-				MaxDeadTuples:    t.MaxDeadTuples,
-				NumDeadTuples:    t.NumDeadTuples,
+				Pid:               t.Pid,
+				Datname:           t.Datname,
+				TableName:         t.TableName,
+				Phase:             t.Phase,
+				HeapBlksTotal:     t.HeapBlksTotal,
+				HeapBlksScanned:   t.HeapBlksScanned,
+				HeapBlksVacuumed:  t.HeapBlksVacuumed,
+				IndexVacuumCount:  t.IndexVacuumCount,
+				MaxDeadTuples:     t.MaxDeadTuples,
+				NumDeadTuples:     t.NumDeadTuples,
+				DeadTupleBytes:    t.DeadTupleBytes,
+				MaxDeadTupleBytes: t.MaxDeadTupleBytes,
 			}
 		})
 

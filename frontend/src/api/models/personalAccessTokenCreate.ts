@@ -12,7 +12,7 @@ export interface PersonalAccessTokenCreate {
   /** Token role; must not exceed the caller's role. Defaults to viewer. */
   role?: PersonalAccessTokenCreateRole
   /**
-   * Optional lifetime in days (max 3650 = 10 years); omitted or 0 means no expiry.
+   * Optional lifetime in days (max 3650 = 10 years); omitted or 0 means no expiry. Admin tokens are an exception: they are always capped at 30 days, and cannot be issued without an expiry — a request for a longer (or absent) lifetime is clamped rather than rejected, so check expires_at in the response for the value actually applied.
    * @minimum 0
    * @maximum 3650
    */

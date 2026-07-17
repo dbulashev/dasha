@@ -462,7 +462,10 @@
     "heapBlksVacuumed": "Heap blocks vacuumed",
     "indexVacuumCount": "Index vacuum passes",
     "maxDeadTuples": "Max dead tuples",
-    "numDeadTuples": "Dead tuples",
+    "numDeadTuples": "Dead tuples collected",
+    "numDeadTuplesHint": "Counter of the current VACUUM cycle: dead-row pointers collected since the last index pass (resets after each pass). This is not the table's total dead rows — that lives on the Maintenance page (n_dead_tup). Before PG 17 the second number is the buffer capacity derived from maintenance_work_mem.",
+    "deadTupleBytes": "Dead-tuple memory",
+    "deadTupleBytesHint": "PG 17+: used / limit of the TID-store memory (autovacuum_work_mem or maintenance_work_mem). When the limit is reached, VACUUM pauses the heap scan for an index vacuum pass.",
     "clusterIndex": "Clustering index",
     "heapTuplesScanned": "Tuples scanned",
     "heapTuplesWritten": "Tuples written",
@@ -866,7 +869,19 @@
     "autovacuumFreezeMaxAge": "Autovacuum Freeze Max Age",
     "transactionIdDanger": "Transaction ID wraparound danger",
     "transactionsLeft": "Transactions left",
-    "vacuumProgress": "VACUUM progress"
+    "vacuumProgress": "VACUUM progress",
+    "summary": {
+      "title": "Autovacuum summary",
+      "hint": "Tables past their own autovacuum/autoanalyze trigger thresholds (PostgreSQL's formula: threshold + scale_factor × rows, per-table settings honoured; the row count is the lower of reltuples and live tuples, so stale statistics cannot hide a table), and maintenance processes currently running in this database.",
+      "due": "Need maintenance",
+      "dueVacuum": "VACUUM only",
+      "dueAnalyze": "ANALYZE only",
+      "dueBoth": "VACUUM and ANALYZE",
+      "ok": "Within thresholds",
+      "allOk": "All tables are within thresholds — autovacuum has nothing to do right now.",
+      "runningVacuums": "VACUUM running",
+      "runningAnalyzes": "ANALYZE running"
+    }
   },
   "healthScore": {
     "title": "Health Score",
@@ -996,7 +1011,7 @@
         "track_counts_disabled": "track_counts=off — autovacuum has no statistics to decide on.",
         "tables_with_autovacuum_off": "Tables with autovacuum_enabled=false in their reloptions.",
         "relfrozenxid_age_outlier": "The worst per-table age(relfrozenxid) — the per-table view of the XID risk.",
-        "stale_planner_stats": "n_mod_since_analyze is large relative to n_live_tup — the planner's statistics are stale.",
+        "stale_planner_stats": "n_mod_since_analyze is past the autoanalyze threshold with no ANALYZE for >3 hours — the planner's statistics are stale.",
         "horizon_lag_xids": "txid_current() - min(backend_xmin) — how many rows VACUUM cannot remove.",
         "requested_checkpoint_ratio": "checkpoints_req / total — a high share means max_wal_size is small, or there is a write spike.",
         "wal_level_minimal_with_replicas": "wal_level=minimal cannot do physical replication — the replicas are silently broken.",
@@ -1073,7 +1088,7 @@
         "track_counts_disabled": "HIGH",
         "tables_with_autovacuum_off": "≥1 / ≥5 / ≥20",
         "relfrozenxid_age_outlier": "≥200 M / ≥500 M / ≥1 B",
-        "stale_planner_stats": "≥3 / ≥10 / ≥30",
+        "stale_planner_stats": "≥3 / ≥5 / ≥10",
         "horizon_lag_xids": "≥1 M / ≥10 M / ≥100 M",
         "requested_checkpoint_ratio": "≥5 / ≥10 / ≥20 %",
         "wal_level_minimal_with_replicas": "HIGH",
@@ -1296,7 +1311,7 @@
       "stale_planner_stats": {
         "title": "Stale planner statistics",
         "short": "Tables with stale statistics: {metric_value}.",
-        "detail": "These tables have changed substantially since the last ANALYZE (>50% of the autoanalyze formula) and have not been analysed for over a day. The planner may pick poor plans. Run ANALYZE by hand, or lower autovacuum_analyze_scale_factor."
+        "detail": "These tables are past their autoanalyze threshold (per-table settings honoured) and have not been analysed for over 3 hours — autoanalyze should have fired and did not. The planner may pick poor plans. Run ANALYZE by hand and find out why autoanalyze never reached the table (autovacuum_enabled=false, workers busy on large tables)."
       },
       "wal_level_minimal_with_replicas": {
         "title": "wal_level=minimal while replicas exist",

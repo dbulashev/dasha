@@ -105,6 +105,7 @@ type Repository interface {
 		databaseName string,
 	) ([]dto.MaintenanceTransactionIdDanger, error)
 	GetMaintenanceVacuumProgress(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.MaintenanceVacuumProgress, error)
+	GetMaintenanceAutovacuumSummary(ctx context.Context, clusterName, instanceName, databaseName string) (*dto.MaintenanceAutovacuumSummary, error)
 	GetQueriesBlocked(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.QueryBlocked, error)
 	GetQueriesRunning(ctx context.Context, clusterName, instanceName, databaseName string, minDuration int, queryFilter *string, queryFilterMode string, username *string) ([]dto.QueryRunning, error)
 	GetQueriesTop10ByTime(ctx context.Context, clusterName, instanceName string) ([]dto.QueryTop10ByTime, error)

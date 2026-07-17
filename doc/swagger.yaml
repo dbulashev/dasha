@@ -1450,6 +1450,29 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/maintenance/autovacuum-summary:
+    get:
+      operationId: getMaintenanceAutovacuumSummary
+      description: >-
+        Counts of tables currently eligible for autovacuum and/or autoanalyze
+        (PostgreSQL's own trigger formula, per-table reloptions honoured; the
+        row estimate is the lower of pg_class.reltuples and live tuples so a
+        stale reltuples cannot hide a table) and the number of maintenance
+        processes running in the current database.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceAutovacuumSummary'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /api/maintenance/transaction-id-danger:
     get:
       operationId: getMaintenanceTransactionIdDanger
@@ -3232,6 +3255,41 @@ components:
         Phase:
           type: string
 
+    MaintenanceAutovacuumSummary:
+      type: object
+      required:
+        - TablesDueVacuumOnly
+        - TablesDueAnalyzeOnly
+        - TablesDueBoth
+        - TablesTotal
+        - RunningVacuums
+        - RunningAnalyzes
+      properties:
+        TablesDueVacuumOnly:
+          type: integer
+          format: int32
+          description: Tables past the autovacuum trigger (dead-tuple or insert formula) but not the autoanalyze one.
+        TablesDueAnalyzeOnly:
+          type: integer
+          format: int32
+          description: Tables past the autoanalyze trigger only.
+        TablesDueBoth:
+          type: integer
+          format: int32
+          description: Tables past both triggers.
+        TablesTotal:
+          type: integer
+          format: int32
+          description: Total user tables considered.
+        RunningVacuums:
+          type: integer
+          format: int32
+          description: VACUUM processes currently running in the database (pg_stat_progress_vacuum).
+        RunningAnalyzes:
+          type: integer
+          format: int32
+          description: ANALYZE processes currently running in the database (pg_stat_progress_analyze).
+
     QueryBlocked:
       type: object
       required:
@@ -3922,9 +3980,22 @@ components:
         MaxDeadTuples:
           type: integer
           format: int64
+          nullable: true
+          description: Dead-tuple buffer capacity in rows (from maintenance_work_mem). PG < 17 only; PG 17+ caps by memory instead (MaxDeadTupleBytes).
         NumDeadTuples:
           type: integer
           format: int64
+          description: Dead item identifiers collected in the current vacuum cycle (resets after each index vacuum pass), not the table's total dead rows. PG 17+ reports num_dead_item_ids.
+        DeadTupleBytes:
+          type: integer
+          format: int64
+          nullable: true
+          description: Memory currently used by the dead-tuple TID store. PG 17+ only.
+        MaxDeadTupleBytes:
+          type: integer
+          format: int64
+          nullable: true
+          description: Memory limit for the dead-tuple TID store. PG 17+ only.
 
     QueryStatsStatus:
       type: object

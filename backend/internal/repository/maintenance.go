@@ -111,6 +111,30 @@ func (p *PgxPool) GetMaintenanceVacuumProgress(
 	return ret, nil
 }
 
+func (p *PgxPool) GetMaintenanceAutovacuumSummary(
+	ctx context.Context,
+	clusterName,
+	instanceName,
+	databaseName string,
+) (*dto.MaintenanceAutovacuumSummary, error) {
+	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
+	if err != nil {
+		return nil, fmt.Errorf("GetMaintenanceAutovacuumSummary | %w", err)
+	}
+
+	vNum, err := p.getServerVersionNum(ctx, pool)
+	if err != nil {
+		return nil, fmt.Errorf("get server version | %w", err)
+	}
+
+	ret, err := p.getMaintenanceAutovacuumSummary(ctx, vNum, pool)
+	if err != nil {
+		return nil, fmt.Errorf("getMaintenanceAutovacuumSummary | %w", err)
+	}
+
+	return ret, nil
+}
+
 func (p *PgxPool) getMaintenanceAutovacuumFreezeMaxAge(
 	ctx context.Context,
 	serverVersion int,
@@ -306,6 +330,36 @@ func (p *PgxPool) getMaintenanceVacuumProgress(
 	}
 
 	return ret, nil
+}
+
+func (p *PgxPool) getMaintenanceAutovacuumSummary(
+	ctx context.Context,
+	serverVersion int,
+	pool *pgxpool.Pool,
+) (*dto.MaintenanceAutovacuumSummary, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	qStr, err := query.Get(serverVersion, enums.QueryMaintenanceAutovacuumSummary, nil)
+	if err != nil {
+		return nil, fmt.Errorf("getMaintenanceAutovacuumSummary | %w", err)
+	}
+
+	var ret dto.MaintenanceAutovacuumSummary
+
+	err = pool.QueryRow(ctx, qStr).Scan(
+		&ret.TablesDueVacuumOnly,
+		&ret.TablesDueAnalyzeOnly,
+		&ret.TablesDueBoth,
+		&ret.TablesTotal,
+		&ret.RunningVacuums,
+		&ret.RunningAnalyzes,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("getMaintenanceAutovacuumSummary | %w", err)
+	}
+
+	return &ret, nil
 }
 
 func convertPgTimestampToTime(ts pgtype.Timestamp) *time.Time {

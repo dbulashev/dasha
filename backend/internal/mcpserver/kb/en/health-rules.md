@@ -162,9 +162,12 @@ HOT problem, and a table already at fillfactor 70 with a high HOT ratio is
 correctly configured.
 
 ### stale_planner_stats
-Tables changed >50% since last ANALYZE and not analyzed for >1 day.
-LOW ≥3, MED ≥5, HIGH ≥10. Bad plans likely: ANALYZE them, or lower
-autovacuum_analyze_scale_factor.
+Tables past their autoanalyze threshold (per-table reloptions honoured) and not
+analyzed for >3 hours — autoanalyze should have fired and did not.
+LOW ≥3, MED ≥5, HIGH ≥10. Bad plans likely: run ANALYZE by hand and find out why
+autoanalyze never reached the table (autovacuum_enabled=false, workers busy on
+large tables). Cold tables below the threshold are not counted: autoanalyze is
+not supposed to run for them.
 
 ## horizon (weight 0.10)
 

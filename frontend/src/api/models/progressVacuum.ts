@@ -14,6 +14,21 @@ export interface ProgressVacuum {
   HeapBlksScanned: number
   HeapBlksVacuumed: number
   IndexVacuumCount: number
-  MaxDeadTuples: number
+  /**
+   * Dead-tuple buffer capacity in rows (from maintenance_work_mem). PG < 17 only; PG 17+ caps by memory instead (MaxDeadTupleBytes).
+   * @nullable
+   */
+  MaxDeadTuples: number | null
+  /** Dead item identifiers collected in the current vacuum cycle (resets after each index vacuum pass), not the table's total dead rows. PG 17+ reports num_dead_item_ids. */
   NumDeadTuples: number
+  /**
+   * Memory currently used by the dead-tuple TID store. PG 17+ only.
+   * @nullable
+   */
+  DeadTupleBytes?: number | null
+  /**
+   * Memory limit for the dead-tuple TID store. PG 17+ only.
+   * @nullable
+   */
+  MaxDeadTupleBytes?: number | null
 }

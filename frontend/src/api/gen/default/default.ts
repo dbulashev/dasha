@@ -79,6 +79,7 @@ import type {
   GetInvalidConstraintsParams,
   GetLogsParams,
   GetMaintenanceAutovacuumFreezeMaxAgeParams,
+  GetMaintenanceAutovacuumSummaryParams,
   GetMaintenanceInfoParams,
   GetMaintenanceTransactionIdDangerParams,
   GetMaintenanceVacuumProgressParams,
@@ -148,6 +149,7 @@ import type {
   LockSnapshot,
   LogSearchResult,
   MaintenanceAutovacuumFreezeMaxAge,
+  MaintenanceAutovacuumSummary,
   MaintenanceInfo,
   MaintenanceTransactionIdDanger,
   MaintenanceVacuumProgress,
@@ -356,7 +358,7 @@ export function useListPersonalTokens<
 }
 
 /**
- * Mint a personal access token for the authenticated caller. The full secret is returned ONCE in this response and is never retrievable again. The requested role cannot exceed the caller's role and defaults to viewer. Minting is allowed only from an interactive session, not from a personal access token (anti-chaining).
+ * Mint a personal access token for the authenticated caller. The full secret is returned ONCE in this response and is never retrievable again. The requested role cannot exceed the caller's role and defaults to viewer. Minting is allowed only from an interactive session, not from a personal access token (anti-chaining). Admin tokens always expire within 30 days (see expires_in_days).
  */
 export type createPersonalTokenResponse201 = {
   data: PersonalAccessTokenCreated
@@ -6573,6 +6575,126 @@ export function useGetMaintenanceInfo<
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetMaintenanceInfoQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Counts of tables currently eligible for autovacuum and/or autoanalyze (PostgreSQL's own trigger formula, per-table reloptions honoured; the row estimate is the lower of pg_class.reltuples and live tuples so a stale reltuples cannot hide a table) and the number of maintenance processes running in the current database.
+ */
+export type getMaintenanceAutovacuumSummaryResponse200 = {
+  data: MaintenanceAutovacuumSummary
+  status: 200
+}
+
+export type getMaintenanceAutovacuumSummaryResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getMaintenanceAutovacuumSummaryResponseSuccess =
+  getMaintenanceAutovacuumSummaryResponse200 & {
+    headers: Headers
+  }
+export type getMaintenanceAutovacuumSummaryResponseError =
+  getMaintenanceAutovacuumSummaryResponse404 & {
+    headers: Headers
+  }
+
+export type getMaintenanceAutovacuumSummaryResponse =
+  | getMaintenanceAutovacuumSummaryResponseSuccess
+  | getMaintenanceAutovacuumSummaryResponseError
+
+export const getGetMaintenanceAutovacuumSummaryUrl = (
+  params: GetMaintenanceAutovacuumSummaryParams,
+) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/maintenance/autovacuum-summary?${stringifiedParams}`
+    : `/api/maintenance/autovacuum-summary`
+}
+
+export const getMaintenanceAutovacuumSummary = async (
+  params: GetMaintenanceAutovacuumSummaryParams,
+  options?: RequestInit,
+): Promise<getMaintenanceAutovacuumSummaryResponse> => {
+  return customFetch<getMaintenanceAutovacuumSummaryResponse>(
+    getGetMaintenanceAutovacuumSummaryUrl(params),
+    {
+      ...options,
+      method: 'GET',
+    },
+  )
+}
+
+export const getGetMaintenanceAutovacuumSummaryQueryKey = (
+  params?: MaybeRef<GetMaintenanceAutovacuumSummaryParams>,
+) => {
+  return ['api', 'maintenance', 'autovacuum-summary', ...(params ? [params] : [])] as const
+}
+
+export const getGetMaintenanceAutovacuumSummaryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMaintenanceAutovacuumSummary>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetMaintenanceAutovacuumSummaryParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getMaintenanceAutovacuumSummary>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetMaintenanceAutovacuumSummaryQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMaintenanceAutovacuumSummary>>> = ({
+    signal,
+  }) => getMaintenanceAutovacuumSummary(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMaintenanceAutovacuumSummary>>,
+    TError,
+    TData
+  >
+}
+
+export type GetMaintenanceAutovacuumSummaryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMaintenanceAutovacuumSummary>>
+>
+export type GetMaintenanceAutovacuumSummaryQueryError = NotFoundResponse
+
+export function useGetMaintenanceAutovacuumSummary<
+  TData = Awaited<ReturnType<typeof getMaintenanceAutovacuumSummary>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetMaintenanceAutovacuumSummaryParams>,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getMaintenanceAutovacuumSummary>>,
+      TError,
+      TData
+    >
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMaintenanceAutovacuumSummaryQueryOptions(params, options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
 
