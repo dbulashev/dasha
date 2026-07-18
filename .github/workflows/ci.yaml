@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: "1.26.5"
           cache-dependency-path: backend/go.sum
@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: "1.26.5"
           cache-dependency-path: backend/go.sum
@@ -56,7 +56,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: "1.26.5"
           cache-dependency-path: backend/go.sum
@@ -107,7 +107,7 @@ jobs:
         pg-version: [14, 15, 16, 17, 18]
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: "1.26.5"
           cache-dependency-path: backend/go.sum
@@ -142,7 +142,7 @@ jobs:
     needs: [lint-backend, lint-frontend, lint-helm, test-backend-unit, test-frontend, vulncheck-backend, vulncheck-frontend, trivy-scan]
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: "1.26.5"
           cache-dependency-path: backend/go.sum
