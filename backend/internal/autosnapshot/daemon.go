@@ -11,6 +11,7 @@ import (
 
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/dto"
+	"github.com/dbulashev/dasha/internal/hotobjects"
 )
 
 // Repo is the narrow repository interface the daemon needs.
@@ -23,6 +24,8 @@ type Repo interface {
 	GetQueriesBlocked(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.QueryBlocked, error)
 	GetPgssStatsResetTime(ctx context.Context, clusterName, instanceName, databaseName string) (*dto.StatsResetTime, error)
 	ResetQueryStats(ctx context.Context, clusterName, instanceName, databaseName string) error
+	GetHotSampleTables(ctx context.Context, clusterName, instanceName, databaseName string, schema, object *string) ([]hotobjects.AnchorRow, *time.Time, bool, error)
+	GetHotSampleIndexes(ctx context.Context, clusterName, instanceName, databaseName string, schema, object *string) ([]hotobjects.AnchorRow, *time.Time, bool, error)
 }
 
 // Store is the narrow storage interface the daemon needs.
@@ -40,6 +43,12 @@ type Store interface {
 
 	ComputePartitionSizes(ctx context.Context) ([]PartitionSize, error)
 	DropDayPartitions(ctx context.Context, day time.Time) error
+
+	LastHotSnapshotAt(ctx context.Context) (map[string]time.Time, error)
+	GetHotAnchors(ctx context.Context, clusterName, instance, database string) (map[string]hotobjects.AnchorRow, error)
+	UpsertHotAnchors(ctx context.Context, clusterName, instance, database string, capturedAt time.Time, rows []hotobjects.AnchorRow) error
+	InsertHotSnapshot(ctx context.Context, snap hotobjects.Snapshot) (uuid.UUID, error)
+	DropHotPartitionsBefore(ctx context.Context, cutoff time.Time) error
 }
 
 // Daemon is the long-running auto-snapshot worker.
@@ -50,10 +59,11 @@ type Daemon struct {
 	logger         *zap.Logger
 	leaderElection bool
 
-	mu        sync.Mutex
-	hosts     map[hostKey]*hostState
-	lastAuto  map[hostKey]time.Time
-	lastRetry time.Time
+	mu               sync.Mutex
+	hosts            map[hostKey]*hostState
+	lastAuto         map[hostKey]time.Time
+	lastRetry        time.Time
+	lastHotRetention time.Time
 }
 
 type hostKey struct {
@@ -184,7 +194,12 @@ func (d *Daemon) loop(ctx context.Context) error {
 			d.processPending(ctx, cfg)
 		}
 
+		// Hot-objects snapshots are gated by their own flag: they are useful
+		// even when pgss auto-snapshots are disabled.
+		d.processHotSnapshots(ctx, cfg)
+
 		d.maybeRunRetention(ctx, cfg)
+		d.maybeRunHotRetention(ctx, cfg)
 
 		timer.Reset(interval)
 	}

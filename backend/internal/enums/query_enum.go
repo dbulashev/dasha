@@ -69,6 +69,10 @@ const (
 	QueryFksPossibleSimilar2 Query = "fks/possible_similar2"
 	// QueryFksTypeMismatch is a Query of type fks/type_mismatch.
 	QueryFksTypeMismatch Query = "fks/type_mismatch"
+	// QueryHotSampleIndexes is a Query of type hot/sample_indexes.
+	QueryHotSampleIndexes Query = "hot/sample_indexes"
+	// QueryHotSampleTables is a Query of type hot/sample_tables.
+	QueryHotSampleTables Query = "hot/sample_tables"
 	// QueryIndexesAllScans is a Query of type indexes/all_scans.
 	QueryIndexesAllScans Query = "indexes/all_scans"
 	// QueryIndexesBloat is a Query of type indexes/bloat.
@@ -211,6 +215,8 @@ var _QueryNames = []string{
 	string(QueryFksPossibleSimilar1),
 	string(QueryFksPossibleSimilar2),
 	string(QueryFksTypeMismatch),
+	string(QueryHotSampleIndexes),
+	string(QueryHotSampleTables),
 	string(QueryIndexesAllScans),
 	string(QueryIndexesBloat),
 	string(QueryIndexesBtreeOnArray),
@@ -306,6 +312,8 @@ func QueryValues() []Query {
 		QueryFksPossibleSimilar1,
 		QueryFksPossibleSimilar2,
 		QueryFksTypeMismatch,
+		QueryHotSampleIndexes,
+		QueryHotSampleTables,
 		QueryIndexesAllScans,
 		QueryIndexesBloat,
 		QueryIndexesBtreeOnArray,
@@ -405,6 +413,8 @@ var _QueryValue = map[string]Query{
 	"fks/possible_similar1":                         QueryFksPossibleSimilar1,
 	"fks/possible_similar2":                         QueryFksPossibleSimilar2,
 	"fks/type_mismatch":                             QueryFksTypeMismatch,
+	"hot/sample_indexes":                            QueryHotSampleIndexes,
+	"hot/sample_tables":                             QueryHotSampleTables,
 	"indexes/all_scans":                             QueryIndexesAllScans,
 	"indexes/bloat":                                 QueryIndexesBloat,
 	"indexes/btree_on_array":                        QueryIndexesBtreeOnArray,

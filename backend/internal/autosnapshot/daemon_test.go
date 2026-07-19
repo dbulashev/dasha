@@ -11,6 +11,7 @@ import (
 
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/dto"
+	"github.com/dbulashev/dasha/internal/hotobjects"
 )
 
 // fakeRepo scripts the two probes the tested paths touch; the rest are inert.
@@ -53,6 +54,14 @@ func (f *fakeRepo) GetPgssStatsResetTime(context.Context, string, string, string
 
 func (f *fakeRepo) ResetQueryStats(context.Context, string, string, string) error {
 	return nil
+}
+
+func (f *fakeRepo) GetHotSampleTables(context.Context, string, string, string, *string, *string) ([]hotobjects.AnchorRow, *time.Time, bool, error) {
+	return nil, nil, false, nil
+}
+
+func (f *fakeRepo) GetHotSampleIndexes(context.Context, string, string, string, *string, *string) ([]hotobjects.AnchorRow, *time.Time, bool, error) {
+	return nil, nil, false, nil
 }
 
 func newTestDaemon(repo Repo, logger *zap.Logger) *Daemon {

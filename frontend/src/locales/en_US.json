@@ -157,7 +157,7 @@
     },
     "globalSection": "Global settings",
     "resetQueryStats": "Reset pgss after a snapshot",
-    "resetQueryStatsHint": "Reset pg_stat_statements after every auto snapshot, so the next snapshot holds a delta. The reset function can be overridden via pgss_reset_function in dasha.yaml if the role lacks permission for pg_stat_statements_reset().",
+    "resetQueryStatsHint": "\"Reset pgss after a snapshot\" — pg_stat_statements is reset after every auto snapshot, so the next snapshot holds a clean delta; the reset function can be overridden via pgss_reset_function in dasha.yaml if the role lacks permission for pg_stat_statements_reset().",
     "activitySpike": "Activity spike trigger",
     "roleChange": "Role change trigger",
     "enabled": "Enabled",
@@ -169,6 +169,16 @@
     "retentionGiB": "Retention limit, GiB",
     "invalidDuration": "Invalid format (e.g. 30s, 5m, 1h)",
     "mustBePositive": "Must be ≥ 0",
+    "hot": {
+      "title": "Hot objects",
+      "hint": "Delta snapshots of table/index activity: an exact top per metric class plus a tail histogram. Collected from every cluster host on a schedule.",
+      "fieldsHint": "Schedule — 5-field cron, UTC time (own zone: CRON_TZ=Europe/Moscow 0 3 * * *; examples: 0 3 * * * — daily at 03:00, */30 * * * * — every half hour). Top size — how many objects are stored by name per metric class; the rest folds into the tail histogram.",
+      "schedule": "Schedule (cron)",
+      "scheduleRequired": "A cron expression is required",
+      "scheduleInvalid": "Not a cron expression: 5 fields expected, e.g. 0 3 * * * or */30 * * * *",
+      "topN": "Top size",
+      "retentionDays": "Retention, days"
+    },
     "locks": {
       "title": "Locks",
       "hint": "Capture the lock graph when the spike trigger fires",
@@ -196,19 +206,22 @@
       "daemonActive": "Daemon is active",
       "daemonDown": "Daemon is not running",
       "lastHeartbeat": "Last heartbeat",
-      "lastEvent": "Last event",
-      "noEvents": "No events yet"
+      "lastEvent": "Last trigger event",
+      "lastHotSnapshot": "Last hot snapshot",
+      "noEvents": "No trigger events yet"
     },
     "retentionMinDays": "Min. retention days",
     "windowSize": "Window size",
     "thresholdPct": "Threshold, %",
     "spikeDuration": "Spike duration",
     "recoveryDuration": "Snapshot on recovery",
-    "recoveryDurationHint": "After a spike, take a snapshot once activity has stayed below the threshold for this long (captures the aftermath of the spike). 0s — disabled.",
     "deferredInterval": "Deferred snapshot",
-    "deferredIntervalHint": "After a spike snapshot, queue one more snapshot to be taken after this interval (the queue survives a restart). 0s — disabled.",
+    "spikeFieldsHint": "\"Snapshot on recovery\" — after a spike, take a snapshot once activity has stayed below the threshold for the given time (captures the aftermath). \"Deferred snapshot\" — after a spike snapshot, queue one more after the given interval (the queue survives restarts). 0s in either field — disabled.",
     "save": "Save",
     "saved": "Settings saved",
+    "groupPgss": "Triggered query & lock snapshots (pg_stat_statements)",
+    "groupHot": "Object activity snapshots (hot tables & indexes)",
+    "saveInvalid": "Settings not saved: the server rejected the values — check the cron expression and numeric fields.",
     "overridden": "Overridden",
     "direction": {
       "label": "Direction",
@@ -858,6 +871,41 @@
     }
   },
   "Maintenance": "Maintenance",
+  "hot": {
+    "tablesTitle": "Hot tables",
+    "indexesTitle": "Hot indexes",
+    "hint": "Scheduled activity-counter deltas (daily by default) collected by the autosnapshot daemon from every cluster host and summed (the counters are not replicated). An exact top per metric class is stored plus a tail histogram — coverage shows how much of the total activity landed in the top. The \"Per day\" column is normalized by the snapshot's actual window. Expand a row for the per-host breakdown.",
+    "classLabel": "Class",
+    "class": {
+      "reads": "Reads",
+      "writes": "Writes",
+      "io": "Physical I/O"
+    },
+    "coverage": "Top covers {pct}%",
+    "date": "Snapshot",
+    "latestSnapshot": "Latest",
+    "ratePerDay": "Per day",
+    "host": "Host",
+    "rolePrimary": "Primary",
+    "roleReplica": "Replica",
+    "trendNew": "New in top",
+    "hostsMissing": "Hosts unreachable at capture: {hosts}. Their activity is absent from every number — the snapshot is partial.",
+    "tail": {
+      "summary": "Outside the top: {count} objects, sum {sum} (P50 {median}, P90 {p90}, max {max})",
+      "idle": "Outside the top: {count} objects, all idle over the snapshot window — the top covers the entire load.",
+      "hint": "The distribution tail — objects that did not make the stored top. They are not kept by name, only the shape: deciles of the class key over the snapshot window. Flat bars mean a cold tail and a representative top; tall right-side bars mean many warm objects just below the top — check coverage."
+    },
+    "noSnapshots": "No snapshots yet — the daemon captures on a schedule, daily by default (snapshot storage must be enabled).",
+    "describe": {
+      "title": "Hotness",
+      "hint": "Live delta since the last anchor slice: the absolute rate (class key per day) and the place in this database's activity distribution. The percentile is relative: on a quiet database \"hotter than 90% of tables\" does not mean real load — read the rate.",
+      "hotterThan": "{class}: ~{rate}/day — more active than ~{pct}% of tables",
+      "inTop": "{class}: ~{rate}/day — in the hot top",
+      "quiet": "{class}: ~{rate}/day — background activity",
+      "allQuiet": "No notable activity: ~0/day for both reads and writes, never in the hot top.",
+      "topAppearances": "Top appearances over the last {days} days: {n} (latest — {date})"
+    }
+  },
   "maintenance": {
     "info": "Table maintenance information",
     "lastVacuum": "Last VACUUM",

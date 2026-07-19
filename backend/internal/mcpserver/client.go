@@ -302,6 +302,47 @@ func (d *DashaClient) UnusedIndexReport(ctx context.Context, cluster, database s
 	return pick(r.JSON200, r.HTTPResponse, "unused_index_report")
 }
 
+// HotTables returns the stored hot-tables top for one metric class: daily
+// per-host deltas summed cluster-wide, with the tail histogram and the
+// coverage ratio that says how representative the top is.
+func (d *DashaClient) HotTables(ctx context.Context, cluster, database, class string, limit int) (any, error) {
+	params := &apiclient.GetTablesHotParams{ //nolint:exhaustruct
+		ClusterName: cluster, Database: database, Limit: opt(limit),
+	}
+
+	if class != "" {
+		c := apiclient.GetTablesHotParamsClass(class)
+		params.Class = &c
+	}
+
+	r, err := d.api.GetTablesHotWithResponse(ctx, params, d.editor(ctx))
+	if err != nil {
+		return nil, wrapErr("hot_tables", err)
+	}
+
+	return pick(r.JSON200, r.HTTPResponse, "hot_tables")
+}
+
+// HotIndexes is HotTables for indexes (classes: reads, io — PostgreSQL keeps
+// no per-index write counters).
+func (d *DashaClient) HotIndexes(ctx context.Context, cluster, database, class string, limit int) (any, error) {
+	params := &apiclient.GetIndexesHotParams{ //nolint:exhaustruct
+		ClusterName: cluster, Database: database, Limit: opt(limit),
+	}
+
+	if class != "" {
+		c := apiclient.GetIndexesHotParamsClass(class)
+		params.Class = &c
+	}
+
+	r, err := d.api.GetIndexesHotWithResponse(ctx, params, d.editor(ctx))
+	if err != nil {
+		return nil, wrapErr("hot_indexes", err)
+	}
+
+	return pick(r.JSON200, r.HTTPResponse, "hot_indexes")
+}
+
 // IndexesUsage lists index scan statistics for a database.
 func (d *DashaClient) IndexesUsage(ctx context.Context, cluster, instance, database string) (any, error) {
 	r, err := d.api.GetIndexesUsageWithResponse(ctx, &apiclient.GetIndexesUsageParams{

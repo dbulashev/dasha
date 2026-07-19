@@ -31,6 +31,7 @@ func (s *Storage) GetAutosnapshotConfig(ctx context.Context) (autosnapshot.Confi
 		       retention_bytes, retention_min_days, min_baseline_active,
 		       capture_locks, lock_probe_count, lock_probe_interval,
 		       reset_query_stats,
+		       hot_enabled, hot_schedule, hot_top_n, hot_retention_days,
 		       defaults, updated_at, updated_by
 		FROM autosnapshot_config_global WHERE id = 1`,
 	).Scan(
@@ -38,6 +39,7 @@ func (s *Storage) GetAutosnapshotConfig(ctx context.Context) (autosnapshot.Confi
 		&cfg.RetentionBytes, &cfg.RetentionMinDays, &cfg.MinBaselineActive,
 		&cfg.CaptureLocks, &cfg.LockProbeCount, &lockInterval,
 		&cfg.ResetQueryStats,
+		&cfg.HotEnabled, &cfg.HotSchedule, &cfg.HotTopN, &cfg.HotRetentionDays,
 		&defaultsJSON, &cfg.UpdatedAt, &cfg.UpdatedBy,
 	)
 	if err != nil {
@@ -129,12 +131,14 @@ func (s *Storage) SetAutosnapshotConfig(ctx context.Context, cfg autosnapshot.Co
 		    retention_bytes = $4, retention_min_days = $5, min_baseline_active = $6,
 		    capture_locks = $7, lock_probe_count = $8, lock_probe_interval = $9,
 		    reset_query_stats = $10,
-		    defaults = $11::jsonb, updated_at = now(), updated_by = $12
+		    hot_enabled = $11, hot_schedule = $12, hot_top_n = $13, hot_retention_days = $14,
+		    defaults = $15::jsonb, updated_at = now(), updated_by = $16
 		WHERE id = 1`,
 		cfg.Enabled, cfg.PollInterval, cfg.MaxSnapshotFrequency,
 		cfg.RetentionBytes, cfg.RetentionMinDays, cfg.MinBaselineActive,
 		cfg.CaptureLocks, cfg.LockProbeCount, cfg.LockProbeInterval,
 		cfg.ResetQueryStats,
+		cfg.HotEnabled, cfg.HotSchedule, cfg.HotTopN, cfg.HotRetentionDays,
 		jsonbArg(data), nullStringPtr(updatedBy),
 	)
 	if err != nil {

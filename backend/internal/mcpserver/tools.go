@@ -39,6 +39,15 @@ type unusedIndexReportArgs struct {
 	Limit    int    `json:"limit,omitempty" jsonschema:"Max indexes to return, largest first (default 30)"`
 }
 
+// hotArgs takes no instance on purpose: the stored snapshot already sums every
+// host of the cluster (activity counters are not replicated).
+type hotArgs struct {
+	Cluster  string `json:"cluster" jsonschema:"Dasha cluster name"`
+	Database string `json:"database" jsonschema:"Database to inspect"`
+	Class    string `json:"class,omitempty" jsonschema:"Metric class: 'reads' (default), 'writes' (tables only) or 'io'"`
+	Limit    int    `json:"limit,omitempty" jsonschema:"Max objects to return, hottest first (default 30)"`
+}
+
 type healthDetailsArgs struct {
 	Cluster  string `json:"cluster" jsonschema:"Dasha cluster name"`
 	Instance string `json:"instance" jsonschema:"Dasha instance / host name"`
@@ -335,6 +344,37 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 		Description: "List the largest tables in a database by total size.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a dbArgs) (*mcp.CallToolResult, any, error) {
 		return jsonResult(c.TopTables(ctx, a.Cluster, a.Instance, a.Database))
+	})
+
+	addTool(s, &mcp.Tool{
+		Name: "hot_tables",
+		Description: "Top HOT tables of a database from the daily delta snapshot: activity per class " +
+			"('reads', 'writes' or 'io') summed over every cluster host, with a per-host breakdown per entry. " +
+			"Cluster-wide by design (no instance): activity counters are not replicated. Check snapshot.coverage " +
+			"— it states what share of total activity the stored top holds; a low coverage means a fat tail of " +
+			"warm objects that the entries do not show. snapshot.hosts_missing non-empty means the snapshot is " +
+			"partial. Use rate_per_day for comparisons, not raw deltas. Requires snapshot storage (501 otherwise). " +
+			"Pairs well with maintenance metrics: a table hot on writes usually deserves per-table autovacuum tuning.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, a hotArgs) (*mcp.CallToolResult, any, error) {
+		if a.Class != "" && a.Class != "reads" && a.Class != "writes" && a.Class != "io" {
+			return errResult("class must be 'reads', 'writes' or 'io'"), nil, nil
+		}
+
+		return jsonResult(c.HotTables(ctx, a.Cluster, a.Database, a.Class, a.Limit))
+	})
+
+	addTool(s, &mcp.Tool{
+		Name: "hot_indexes",
+		Description: "Top HOT indexes of a database from the daily delta snapshot; classes 'reads' and 'io' only " +
+			"(PostgreSQL keeps no per-index write counters). Same semantics as hot_tables: cluster-wide sums, " +
+			"per-host breakdown, coverage honesty. The natural complement of unused_index_report: one names the " +
+			"indexes to drop, this names the ones doing the actual work.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, a hotArgs) (*mcp.CallToolResult, any, error) {
+		if a.Class != "" && a.Class != "reads" && a.Class != "io" {
+			return errResult("class must be 'reads' or 'io'"), nil, nil
+		}
+
+		return jsonResult(c.HotIndexes(ctx, a.Cluster, a.Database, a.Class, a.Limit))
 	})
 
 	addTool(s, &mcp.Tool{

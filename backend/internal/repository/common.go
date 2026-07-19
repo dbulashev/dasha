@@ -18,6 +18,7 @@ import (
 
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/dto"
+	"github.com/dbulashev/dasha/internal/hotobjects"
 	"github.com/dbulashev/dasha/internal/pkg/mapstruct"
 )
 
@@ -106,6 +107,8 @@ type Repository interface {
 	) ([]dto.MaintenanceTransactionIdDanger, error)
 	GetMaintenanceVacuumProgress(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.MaintenanceVacuumProgress, error)
 	GetMaintenanceAutovacuumSummary(ctx context.Context, clusterName, instanceName, databaseName string) (*dto.MaintenanceAutovacuumSummary, error)
+	GetHotSampleTables(ctx context.Context, clusterName, instanceName, databaseName string, schema, object *string) ([]hotobjects.AnchorRow, *time.Time, bool, error)
+	GetHotSampleIndexes(ctx context.Context, clusterName, instanceName, databaseName string, schema, object *string) ([]hotobjects.AnchorRow, *time.Time, bool, error)
 	GetQueriesBlocked(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.QueryBlocked, error)
 	GetQueriesRunning(ctx context.Context, clusterName, instanceName, databaseName string, minDuration int, queryFilter *string, queryFilterMode string, username *string) ([]dto.QueryRunning, error)
 	GetQueriesTop10ByTime(ctx context.Context, clusterName, instanceName string) ([]dto.QueryTop10ByTime, error)

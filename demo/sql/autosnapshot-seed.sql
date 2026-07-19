@@ -9,6 +9,11 @@ SET enabled                = true,
     poll_interval          = '5 seconds',
     max_snapshot_frequency = '60 seconds',
     min_baseline_active    = 2,
+    -- Hot-objects snapshots every 5 minutes instead of the daily default, so
+    -- the hot tables/indexes sections fill up within one demo session; top of
+    -- 7 keeps the tail histogram/coverage visible on the small demo schema.
+    hot_schedule           = '*/5 * * * *',
+    hot_top_n              = 7,
     defaults = '{
       "activity_spike": {"enabled": true, "window_size": "1m", "active_threshold_pct": 50, "spike_duration": "20s", "recovery_duration": "20s", "deferred_interval": "0s"},
       "role_change":    {"enabled": true, "direction": "both"}

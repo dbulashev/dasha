@@ -18,6 +18,7 @@ import DescribePartitionsSection from '@/components/tables/DescribePartitionsSec
 import DescribeBloatSection from '@/components/tables/DescribeBloatSection.vue'
 import DescribeVacuumStatsSection from '@/components/tables/DescribeVacuumStatsSection.vue'
 import DescribeRowEstimateSection from '@/components/tables/DescribeRowEstimateSection.vue'
+import DescribeHotnessSection from '@/components/hot/DescribeHotnessSection.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -74,6 +75,7 @@ const isPartitioned = computed(() => data.value?.TableType === 'partitioned_tabl
 
   <template v-if="data">
     <DescribeHeaderSection :data="data" />
+    <DescribeHotnessSection v-if="data.TableType === 'table'" :schema="schema" :table="table" />
     <DescribeColumnsSection :items="data.Columns" />
     <DescribeIndexesSection :items="data.Indexes" />
     <DescribeConstraintsSection :title="t('describe.checkConstraints')" :items="data.CheckConstraints" />

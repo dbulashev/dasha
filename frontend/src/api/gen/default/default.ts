@@ -62,10 +62,13 @@ import type {
   GetHealthScoreTablesAutovacuumOffParams,
   GetHealthScoreWeightsParams,
   GetHealthScoreXidWraparoundDatabasesParams,
+  GetHotObjectHistoryParams,
+  GetHotPercentileParams,
   GetIndexesBloatParams,
   GetIndexesBtreeOnArrayParams,
   GetIndexesCachingParams,
   GetIndexesHitRateParams,
+  GetIndexesHotParams,
   GetIndexesInvalidOrNotReadyParams,
   GetIndexesMissingParams,
   GetIndexesSimilar1Params,
@@ -113,6 +116,7 @@ import type {
   GetTablesDescribeRowEstimateParams,
   GetTablesDescribeVacuumStatsParams,
   GetTablesHitRateParams,
+  GetTablesHotParams,
   GetTablesPartitionsParams,
   GetTablesSchemasParams,
   GetTablesSearchParams,
@@ -129,6 +133,9 @@ import type {
   HealthScoreWeights,
   HealthScoreWeightsUpdate,
   HealthScoreXidWraparoundDatabase,
+  HotObjectHistory,
+  HotPercentile,
+  HotReport,
   IndexBloat,
   IndexBtreeOnArray,
   IndexCaching,
@@ -6575,6 +6582,446 @@ export function useGetMaintenanceInfo<
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetMaintenanceInfoQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Reads the stored hot-objects snapshot (daily per-host deltas summed cluster-wide; exact top-N per metric class plus a tail histogram — the MCV+histogram trick PostgreSQL statistics use). Takes no instance: activity counters are not replicated, so the snapshot already sums all hosts and keeps a per-host breakdown per entry. The coverage ratio states how much of the total activity the top actually covers.
+ * @summary Top hot tables from the latest (or a given day's) delta snapshot
+ */
+export type getTablesHotResponse200 = {
+  data: HotReport
+  status: 200
+}
+
+export type getTablesHotResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getTablesHotResponse501 = {
+  data: void
+  status: 501
+}
+
+export type getTablesHotResponseSuccess = getTablesHotResponse200 & {
+  headers: Headers
+}
+export type getTablesHotResponseError = (getTablesHotResponse404 | getTablesHotResponse501) & {
+  headers: Headers
+}
+
+export type getTablesHotResponse = getTablesHotResponseSuccess | getTablesHotResponseError
+
+export const getGetTablesHotUrl = (params: GetTablesHotParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0 ? `/api/tables/hot?${stringifiedParams}` : `/api/tables/hot`
+}
+
+export const getTablesHot = async (
+  params: GetTablesHotParams,
+  options?: RequestInit,
+): Promise<getTablesHotResponse> => {
+  return customFetch<getTablesHotResponse>(getGetTablesHotUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetTablesHotQueryKey = (params?: MaybeRef<GetTablesHotParams>) => {
+  return ['api', 'tables', 'hot', ...(params ? [params] : [])] as const
+}
+
+export const getGetTablesHotQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTablesHot>>,
+  TError = NotFoundResponse | void,
+>(
+  params: MaybeRef<GetTablesHotParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesHot>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetTablesHotQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getTablesHot>>> = ({ signal }) =>
+    getTablesHot(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTablesHot>>,
+    TError,
+    TData
+  >
+}
+
+export type GetTablesHotQueryResult = NonNullable<Awaited<ReturnType<typeof getTablesHot>>>
+export type GetTablesHotQueryError = NotFoundResponse | void
+
+/**
+ * @summary Top hot tables from the latest (or a given day's) delta snapshot
+ */
+
+export function useGetTablesHot<
+  TData = Awaited<ReturnType<typeof getTablesHot>>,
+  TError = NotFoundResponse | void,
+>(
+  params: MaybeRef<GetTablesHotParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getTablesHot>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetTablesHotQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Index flavour of /api/tables/hot. Indexes carry only the reads and io classes — PostgreSQL keeps no per-index write counters.
+ * @summary Top hot indexes from the latest (or a given day's) delta snapshot
+ */
+export type getIndexesHotResponse200 = {
+  data: HotReport
+  status: 200
+}
+
+export type getIndexesHotResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getIndexesHotResponse501 = {
+  data: void
+  status: 501
+}
+
+export type getIndexesHotResponseSuccess = getIndexesHotResponse200 & {
+  headers: Headers
+}
+export type getIndexesHotResponseError = (getIndexesHotResponse404 | getIndexesHotResponse501) & {
+  headers: Headers
+}
+
+export type getIndexesHotResponse = getIndexesHotResponseSuccess | getIndexesHotResponseError
+
+export const getGetIndexesHotUrl = (params: GetIndexesHotParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0 ? `/api/indexes/hot?${stringifiedParams}` : `/api/indexes/hot`
+}
+
+export const getIndexesHot = async (
+  params: GetIndexesHotParams,
+  options?: RequestInit,
+): Promise<getIndexesHotResponse> => {
+  return customFetch<getIndexesHotResponse>(getGetIndexesHotUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetIndexesHotQueryKey = (params?: MaybeRef<GetIndexesHotParams>) => {
+  return ['api', 'indexes', 'hot', ...(params ? [params] : [])] as const
+}
+
+export const getGetIndexesHotQueryOptions = <
+  TData = Awaited<ReturnType<typeof getIndexesHot>>,
+  TError = NotFoundResponse | void,
+>(
+  params: MaybeRef<GetIndexesHotParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesHot>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetIndexesHotQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getIndexesHot>>> = ({ signal }) =>
+    getIndexesHot(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getIndexesHot>>,
+    TError,
+    TData
+  >
+}
+
+export type GetIndexesHotQueryResult = NonNullable<Awaited<ReturnType<typeof getIndexesHot>>>
+export type GetIndexesHotQueryError = NotFoundResponse | void
+
+/**
+ * @summary Top hot indexes from the latest (or a given day's) delta snapshot
+ */
+
+export function useGetIndexesHot<
+  TData = Awaited<ReturnType<typeof getIndexesHot>>,
+  TError = NotFoundResponse | void,
+>(
+  params: MaybeRef<GetIndexesHotParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesHot>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetIndexesHotQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Only appearances in the stored top are known individually — the tail is kept as a histogram by design, so an object outside the top has no per-day series (use /api/hot/percentile for its current standing).
+ * @summary Days an object appeared in a stored hot top
+ */
+export type getHotObjectHistoryResponse200 = {
+  data: HotObjectHistory
+  status: 200
+}
+
+export type getHotObjectHistoryResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getHotObjectHistoryResponse501 = {
+  data: void
+  status: 501
+}
+
+export type getHotObjectHistoryResponseSuccess = getHotObjectHistoryResponse200 & {
+  headers: Headers
+}
+export type getHotObjectHistoryResponseError = (
+  | getHotObjectHistoryResponse404
+  | getHotObjectHistoryResponse501
+) & {
+  headers: Headers
+}
+
+export type getHotObjectHistoryResponse =
+  | getHotObjectHistoryResponseSuccess
+  | getHotObjectHistoryResponseError
+
+export const getGetHotObjectHistoryUrl = (params: GetHotObjectHistoryParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/hot/object-history?${stringifiedParams}`
+    : `/api/hot/object-history`
+}
+
+export const getHotObjectHistory = async (
+  params: GetHotObjectHistoryParams,
+  options?: RequestInit,
+): Promise<getHotObjectHistoryResponse> => {
+  return customFetch<getHotObjectHistoryResponse>(getGetHotObjectHistoryUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetHotObjectHistoryQueryKey = (params?: MaybeRef<GetHotObjectHistoryParams>) => {
+  return ['api', 'hot', 'object-history', ...(params ? [params] : [])] as const
+}
+
+export const getGetHotObjectHistoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHotObjectHistory>>,
+  TError = NotFoundResponse | void,
+>(
+  params: MaybeRef<GetHotObjectHistoryParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getHotObjectHistory>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetHotObjectHistoryQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHotObjectHistory>>> = ({ signal }) =>
+    getHotObjectHistory(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHotObjectHistory>>,
+    TError,
+    TData
+  >
+}
+
+export type GetHotObjectHistoryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHotObjectHistory>>
+>
+export type GetHotObjectHistoryQueryError = NotFoundResponse | void
+
+/**
+ * @summary Days an object appeared in a stored hot top
+ */
+
+export function useGetHotObjectHistory<
+  TData = Awaited<ReturnType<typeof getHotObjectHistory>>,
+  TError = NotFoundResponse | void,
+>(
+  params: MaybeRef<GetHotObjectHistoryParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getHotObjectHistory>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHotObjectHistoryQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Computes the object's live delta (current counters minus the stored anchor, summed over hosts with an intact stats epoch) and projects its per-day rate onto the latest snapshot's tail histogram. This is the only hot-objects endpoint that touches the target database.
+ * @summary Current hotness percentile of one object
+ */
+export type getHotPercentileResponse200 = {
+  data: HotPercentile
+  status: 200
+}
+
+export type getHotPercentileResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getHotPercentileResponse501 = {
+  data: void
+  status: 501
+}
+
+export type getHotPercentileResponseSuccess = getHotPercentileResponse200 & {
+  headers: Headers
+}
+export type getHotPercentileResponseError = (
+  | getHotPercentileResponse404
+  | getHotPercentileResponse501
+) & {
+  headers: Headers
+}
+
+export type getHotPercentileResponse =
+  | getHotPercentileResponseSuccess
+  | getHotPercentileResponseError
+
+export const getGetHotPercentileUrl = (params: GetHotPercentileParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/hot/percentile?${stringifiedParams}`
+    : `/api/hot/percentile`
+}
+
+export const getHotPercentile = async (
+  params: GetHotPercentileParams,
+  options?: RequestInit,
+): Promise<getHotPercentileResponse> => {
+  return customFetch<getHotPercentileResponse>(getGetHotPercentileUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetHotPercentileQueryKey = (params?: MaybeRef<GetHotPercentileParams>) => {
+  return ['api', 'hot', 'percentile', ...(params ? [params] : [])] as const
+}
+
+export const getGetHotPercentileQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHotPercentile>>,
+  TError = NotFoundResponse | void,
+>(
+  params: MaybeRef<GetHotPercentileParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getHotPercentile>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetHotPercentileQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHotPercentile>>> = ({ signal }) =>
+    getHotPercentile(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHotPercentile>>,
+    TError,
+    TData
+  >
+}
+
+export type GetHotPercentileQueryResult = NonNullable<Awaited<ReturnType<typeof getHotPercentile>>>
+export type GetHotPercentileQueryError = NotFoundResponse | void
+
+/**
+ * @summary Current hotness percentile of one object
+ */
+
+export function useGetHotPercentile<
+  TData = Awaited<ReturnType<typeof getHotPercentile>>,
+  TError = NotFoundResponse | void,
+>(
+  params: MaybeRef<GetHotPercentileParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getHotPercentile>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHotPercentileQueryOptions(params, options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
 

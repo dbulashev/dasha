@@ -48,6 +48,23 @@ func (s *Handlers) GetAutosnapshotStatus(
 		}
 	}
 
+	// Scheduled hot-objects captures are a separate mechanism from the
+	// triggered pgss events shown next to this — surface their freshness
+	// separately so new hot snapshots are not mistaken for trigger activity.
+	if last, err := s.storage.LastHotSnapshotAt(ctx); err == nil {
+		var newest time.Time
+
+		for _, t := range last {
+			if t.After(newest) {
+				newest = t
+			}
+		}
+
+		if !newest.IsZero() {
+			resp.LastHotSnapshotAt = &newest
+		}
+	}
+
 	return resp, nil
 }
 
@@ -300,6 +317,10 @@ func configToAPI(cfg autosnapshot.Config) serverhttp.AutoSnapshotConfig {
 		LockProbeCount:       cfg.LockProbeCount,
 		LockProbeInterval:    cfg.LockProbeInterval.String(),
 		ResetQueryStats:      cfg.ResetQueryStats,
+		HotEnabled:           cfg.HotEnabled,
+		HotSchedule:          cfg.HotSchedule,
+		HotTopN:              cfg.HotTopN,
+		HotRetentionDays:     cfg.HotRetentionDays,
 		Defaults:             triggerDefaultsToAPI(cfg.Defaults),
 	}
 }
@@ -357,6 +378,12 @@ func configFromAPI(api serverhttp.AutoSnapshotConfig) (autosnapshot.Config, erro
 		return autosnapshot.Config{}, fmt.Errorf("deferred_interval: %w", err)
 	}
 
+	// The struct validator cannot judge a cron expression; parse it here so an
+	// invalid schedule is a 400 instead of a daemon-side daily fallback.
+	if _, err := autosnapshot.ParseHotSchedule(api.HotSchedule); err != nil {
+		return autosnapshot.Config{}, fmt.Errorf("hot_schedule: %w", err)
+	}
+
 	return autosnapshot.Config{
 		Enabled:              api.Enabled,
 		PollInterval:         poll,
@@ -368,6 +395,10 @@ func configFromAPI(api serverhttp.AutoSnapshotConfig) (autosnapshot.Config, erro
 		LockProbeCount:       api.LockProbeCount,
 		LockProbeInterval:    lockInterval,
 		ResetQueryStats:      api.ResetQueryStats,
+		HotEnabled:           api.HotEnabled,
+		HotSchedule:          api.HotSchedule,
+		HotTopN:              api.HotTopN,
+		HotRetentionDays:     api.HotRetentionDays,
 		Defaults: autosnapshot.TriggerDefaults{
 			ActivitySpike: autosnapshot.ActivitySpikeTrigger{
 				Enabled:            api.Defaults.ActivitySpike.Enabled,

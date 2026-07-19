@@ -68,6 +68,22 @@ export function fmtInt(v: number | null | undefined): string {
   return v.toLocaleString()
 }
 
+// fmtCompact shortens large counters with k/M/B suffixes (locale-independent,
+// matching the fmtBytes style). Values below 10k stay exact — precision only
+// gets dropped where the digits stop being readable.
+export function fmtCompact(v: number | null | undefined): string {
+  if (v == null) return '—'
+  const abs = Math.abs(v)
+  if (abs >= 1e9) return trimZero((v / 1e9).toFixed(1)) + 'B'
+  if (abs >= 1e6) return trimZero((v / 1e6).toFixed(1)) + 'M'
+  if (abs >= 1e4) return trimZero((v / 1e3).toFixed(1)) + 'k'
+  return fmtInt(v)
+}
+
+function trimZero(s: string): string {
+  return s.endsWith('.0') ? s.slice(0, -2) : s
+}
+
 /**
  * Intl settings for every rendered timestamp: the language the user picked (not
  * the browser's, which is what a bare toLocaleString() would use) and their

@@ -135,7 +135,7 @@
     },
     "globalSection": "Globale Einstellungen",
     "resetQueryStats": "pgss nach Snapshot zurücksetzen",
-    "resetQueryStatsHint": "Nach jedem Auto-Snapshot pg_stat_statements zurücksetzen, damit der nächste Snapshot das Delta enthält. Die Reset-Funktion kann über pgss_reset_function in dasha.yaml überschrieben werden, falls die Rolle kein Recht auf pg_stat_statements_reset() hat.",
+    "resetQueryStatsHint": "„pgss nach Snapshot zurücksetzen“ — nach jedem Auto-Snapshot wird pg_stat_statements zurückgesetzt, damit der nächste Snapshot ein sauberes Delta enthält; die Reset-Funktion kann über pgss_reset_function in dasha.yaml überschrieben werden, falls die Rolle kein Recht auf pg_stat_statements_reset() hat.",
     "activitySpike": "Aktivitäts-Spike-Trigger",
     "roleChange": "Rollenwechsel-Trigger",
     "enabled": "Aktiviert",
@@ -147,6 +147,16 @@
     "retentionGiB": "Aufbewahrungslimit, GiB",
     "invalidDuration": "Ungültiges Format (z. B. 30s, 5m, 1h)",
     "mustBePositive": "Muss ≥ 0 sein",
+    "hot": {
+      "title": "Heiße Objekte",
+      "hint": "Delta-Snapshots der Tabellen-/Indexaktivität: ein exaktes Top pro Metrikklasse plus Rest-Histogramm. Von allen Cluster-Hosts nach Zeitplan gesammelt.",
+      "fieldsHint": "Zeitplan — 5-Feld-Cron, UTC-Zeit (eigene Zone: CRON_TZ=Europe/Moscow 0 3 * * *; Beispiele: 0 3 * * * — täglich um 03:00, */30 * * * * — alle 30 Minuten). Top-Größe — wie viele Objekte pro Metrikklasse namentlich gespeichert werden; der Rest wandert ins Histogramm.",
+      "schedule": "Zeitplan (cron)",
+      "scheduleRequired": "Cron-Ausdruck erforderlich",
+      "scheduleInvalid": "Kein Cron-Ausdruck: 5 Felder erwartet, z. B. 0 3 * * * oder */30 * * * *",
+      "topN": "Top-Größe",
+      "retentionDays": "Aufbewahrung, Tage"
+    },
     "locks": {
       "title": "Sperren",
       "hint": "Sperrgraph beim Auslösen des Aktivitäts-Spikes erfassen",
@@ -174,19 +184,22 @@
       "daemonActive": "Daemon aktiv",
       "daemonDown": "Daemon nicht aktiv",
       "lastHeartbeat": "Letztes Signal",
-      "lastEvent": "Letztes Ereignis",
-      "noEvents": "Noch keine Ereignisse"
+      "lastEvent": "Letztes Trigger-Ereignis",
+      "lastHotSnapshot": "Letzter Hot-Snapshot",
+      "noEvents": "Noch keine Trigger-Ereignisse"
     },
     "retentionMinDays": "Min. Aufbewahrungstage",
     "windowSize": "Fenstergröße",
     "thresholdPct": "Schwellenwert, %",
     "spikeDuration": "Spike-Dauer",
     "recoveryDuration": "Snapshot bei Rückgang",
-    "recoveryDurationHint": "Nach einem Spike einen Snapshot erstellen, wenn die Aktivität so lange unter dem Schwellwert bleibt (erfasst die Nachwirkungen). 0s = aus.",
     "deferredInterval": "Verzögerter Snapshot",
-    "deferredIntervalHint": "Nach dem Spike-Snapshot einen weiteren Snapshot nach diesem Intervall einreihen (Queue übersteht Neustarts). 0s = aus.",
+    "spikeFieldsHint": "„Snapshot bei Rückgang“ — nach einem Spike einen Snapshot erstellen, wenn die Aktivität die angegebene Zeit unter dem Schwellwert bleibt (erfasst die Nachwirkungen). „Verzögerter Snapshot“ — nach dem Spike-Snapshot einen weiteren nach dem angegebenen Intervall einreihen (Queue übersteht Neustarts). 0s in beiden Feldern = aus.",
     "save": "Speichern",
     "saved": "Einstellungen gespeichert",
+    "groupPgss": "Getriggerte Abfrage- und Sperren-Snapshots (pg_stat_statements)",
+    "groupHot": "Objektaktivitäts-Snapshots (heiße Tabellen & Indizes)",
+    "saveInvalid": "Einstellungen nicht gespeichert: der Server hat die Werte abgelehnt — Cron-Ausdruck und Zahlenfelder prüfen.",
     "overridden": "Überschrieben",
     "direction": {
       "label": "Richtung",
@@ -812,6 +825,41 @@
     }
   },
   "Maintenance": "Wartung",
+  "hot": {
+    "tablesTitle": "Heiße Tabellen",
+    "indexesTitle": "Heiße Indizes",
+    "hint": "Geplante Deltas der Aktivitätszähler (standardmäßig täglich), vom Autosnapshot-Daemon von allen Cluster-Hosts gesammelt und summiert (die Zähler werden nicht repliziert). Gespeichert wird ein exaktes Top pro Metrikklasse plus ein Histogramm des Rests — die Abdeckung zeigt, welcher Anteil der Gesamtaktivität im Top gelandet ist. Die Spalte „Pro Tag“ ist auf das tatsächliche Snapshot-Fenster normiert. Zeile aufklappen für die Aufschlüsselung pro Host.",
+    "classLabel": "Klasse",
+    "class": {
+      "reads": "Lesezugriffe",
+      "writes": "Schreibzugriffe",
+      "io": "Physisches I/O"
+    },
+    "coverage": "Top deckt {pct}% ab",
+    "date": "Snapshot",
+    "latestSnapshot": "Neuester",
+    "ratePerDay": "Pro Tag",
+    "host": "Host",
+    "rolePrimary": "Primary",
+    "roleReplica": "Replikat",
+    "trendNew": "Neu im Top",
+    "hostsMissing": "Hosts beim Snapshot nicht erreichbar: {hosts}. Ihre Aktivität fehlt in allen Zahlen — der Snapshot ist unvollständig.",
+    "tail": {
+      "summary": "Außerhalb des Tops: {count} Objekte, Summe {sum} (P50 {median}, P90 {p90}, max {max})",
+      "idle": "Außerhalb des Tops: {count} Objekte, alle im Snapshot-Fenster inaktiv — das Top deckt die gesamte Last ab.",
+      "hint": "Der Verteilungsrest — Objekte, die es nicht ins gespeicherte Top geschafft haben. Sie werden nicht namentlich gehalten, nur die Form: Dezile des Klassenschlüssels über das Snapshot-Fenster. Flache Balken = kalter Rest, repräsentatives Top; hohe rechte Balken = viele warme Objekte knapp unterhalb — Abdeckung prüfen."
+    },
+    "noSnapshots": "Noch keine Snapshots — der Daemon erfasst nach Zeitplan, standardmäßig täglich (Snapshot-Speicher muss aktiviert sein).",
+    "describe": {
+      "title": "Aktivität",
+      "hint": "Live-Delta seit dem letzten Anker-Abzug: absolute Rate (Klassenschlüssel pro Tag) und Platz in der Aktivitätsverteilung dieser Datenbank. Das Perzentil ist relativ: auf einer ruhigen Datenbank bedeutet „heißer als 90%“ keine echte Last — auf die Rate schauen.",
+      "hotterThan": "{class}: ~{rate}/Tag — aktiver als ~{pct}% der Tabellen",
+      "inTop": "{class}: ~{rate}/Tag — im Top der heißen",
+      "quiet": "{class}: ~{rate}/Tag — Hintergrundaktivität",
+      "allQuiet": "Keine nennenswerte Aktivität: ~0/Tag bei Lese- und Schreibzugriffen, nie im heißen Top.",
+      "topAppearances": "Top-Auftritte in den letzten {days} Tagen: {n} (zuletzt — {date})"
+    }
+  },
   "maintenance": {
     "info": "Tabellenwartungsinformationen",
     "lastVacuum": "Letztes VACUUM",

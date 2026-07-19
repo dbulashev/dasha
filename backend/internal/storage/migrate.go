@@ -176,11 +176,91 @@ CREATE TABLE IF NOT EXISTS users (
     created_at    timestamptz NOT NULL DEFAULT now(),
     last_login_at timestamptz
 )`
+
+	// hot_anchor is the only hot-objects table that gets rewritten (every row,
+	// once per day). Only non-indexed columns change on upsert, so updates are
+	// HOT-eligible; fillfactor 70 leaves page room for the HOT chains, keeping
+	// both the table and the PK index bloat-free. Do NOT index the updated
+	// columns (captured_at etc.) — that would defeat HOT.
+	createHotAnchorSQL = `
+CREATE TABLE IF NOT EXISTS hot_anchor (
+    cluster_name text NOT NULL,
+    instance     text NOT NULL,
+    database     text NOT NULL,
+    kind         char(1) NOT NULL,
+    schema_name  text NOT NULL,
+    object_name  text NOT NULL,
+    table_name   text,
+    captured_at  timestamptz NOT NULL,
+    stats_reset  timestamptz,
+    size_bytes   bigint NOT NULL,
+    counters     jsonb NOT NULL,
+    CONSTRAINT hot_anchor_pkey PRIMARY KEY (cluster_name, instance, database, kind, schema_name, object_name)
+) WITH (fillfactor = 70)`
+
+	createHotSnapshotSQL = `
+CREATE TABLE IF NOT EXISTS hot_snapshot (
+    id            uuid NOT NULL DEFAULT gen_random_uuid(),
+    cluster_name  text NOT NULL,
+    database      text NOT NULL,
+    captured_at   timestamptz NOT NULL DEFAULT now(),
+    windows       jsonb NOT NULL,
+    hosts_missing text[] NOT NULL DEFAULT '{}',
+    coverage      jsonb NOT NULL,
+    histogram     jsonb NOT NULL,
+    CONSTRAINT hot_snapshot_pkey PRIMARY KEY (id, captured_at)
+) PARTITION BY RANGE (captured_at)`
+
+	createHotSnapshotIdxSQL = `
+CREATE INDEX IF NOT EXISTS idx_hot_snapshot_lookup
+    ON hot_snapshot (cluster_name, database, captured_at DESC)`
+
+	createHotTopSQL = `
+CREATE TABLE IF NOT EXISTS hot_top (
+    snapshot_id  uuid NOT NULL,
+    captured_at  timestamptz NOT NULL,
+    cluster_name text NOT NULL,
+    database     text NOT NULL,
+    kind         char(1) NOT NULL,
+    class        text NOT NULL,
+    rank         int  NOT NULL,
+    schema_name  text NOT NULL,
+    object_name  text NOT NULL,
+    table_name   text,
+    size_bytes   bigint NOT NULL,
+    delta        jsonb NOT NULL,
+    per_host     jsonb NOT NULL,
+    CONSTRAINT hot_top_pkey PRIMARY KEY (snapshot_id, captured_at, kind, class, rank)
+) PARTITION BY RANGE (captured_at)`
+
+	createHotTopObjectIdxSQL = `
+CREATE INDEX IF NOT EXISTS idx_hot_top_object
+    ON hot_top (cluster_name, database, kind, schema_name, object_name, captured_at DESC)`
+
+	// hot_schedule is a standard 5-field cron expression: it expresses both
+	// "at a fixed time" (0 3 * * *) and "every N" (0 * * * *, */30 * * * *).
+	addAutosnapshotHotConfigSQL = `
+ALTER TABLE autosnapshot_config_global
+    ADD COLUMN IF NOT EXISTS hot_enabled        boolean NOT NULL DEFAULT true,
+    ADD COLUMN IF NOT EXISTS hot_schedule       text    NOT NULL DEFAULT '0 3 * * *',
+    ADD COLUMN IF NOT EXISTS hot_top_n          int     NOT NULL DEFAULT 100,
+    ADD COLUMN IF NOT EXISTS hot_retention_days int     NOT NULL DEFAULT 180`
+
+	// Cleans up the pre-release hot_interval column (replaced by hot_schedule
+	// before the feature ever shipped).
+	dropAutosnapshotHotIntervalSQL = `
+ALTER TABLE autosnapshot_config_global DROP COLUMN IF EXISTS hot_interval`
 )
 
 // partitionedTables lists the day-partitioned tables managed together —
 // partitions for each table are created and dropped as a group per day.
 var partitionedTables = []string{"snapshots", "query_texts", "trigger_events"}
+
+// hotPartitionedTables is a SEPARATE partition group: hot-objects history has
+// its own day-based retention (hot_retention_days) and must not be dropped by
+// the size-based pgss retention, which removes whole day-groups of
+// partitionedTables once RetentionBytes is exceeded.
+var hotPartitionedTables = []string{"hot_snapshot", "hot_top"}
 
 // Migrate creates parent tables and partitions for the next partitionDaysAhead days.
 func Migrate(ctx context.Context, cfg string, logger *zap.Logger) error {
@@ -234,6 +314,13 @@ func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
 		createAPITokensSQL,
 		createAPITokensSubjectIdxSQL,
 		createUsersSQL,
+		createHotAnchorSQL,
+		createHotSnapshotSQL,
+		createHotSnapshotIdxSQL,
+		createHotTopSQL,
+		createHotTopObjectIdxSQL,
+		addAutosnapshotHotConfigSQL,
+		dropAutosnapshotHotIntervalSQL,
 	} {
 		if _, err := s.ddlPool.Exec(ctx, ddl); err != nil {
 			return fmt.Errorf("storage: migrate: %w", err)
@@ -248,6 +335,10 @@ func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
 		day := now.AddDate(0, 0, i)
 		if err := s.ensurePartitions(ctx, day); err != nil {
 			return fmt.Errorf("storage: create partition: %w", err)
+		}
+
+		if err := s.ensureHotPartitions(ctx, day); err != nil {
+			return fmt.Errorf("storage: create hot partition: %w", err)
 		}
 	}
 
@@ -272,6 +363,27 @@ func (s *Storage) ensurePartitions(ctx context.Context, day time.Time) error {
 
 		if _, err := s.ddlPool.Exec(ctx, sql); err != nil {
 			return fmt.Errorf("partition %s_%s: %w", table, dayStr, err)
+		}
+	}
+
+	return nil
+}
+
+// ensureHotPartitions mirrors ensurePartitions for the hot-objects partition
+// group (separate retention lifecycle — see hotPartitionedTables).
+func (s *Storage) ensureHotPartitions(ctx context.Context, day time.Time) error {
+	dayStr := day.Format("20060102")
+	from := day.Format("2006-01-02")
+	to := day.AddDate(0, 0, 1).Format("2006-01-02")
+
+	for _, table := range hotPartitionedTables {
+		sql := fmt.Sprintf(
+			`CREATE TABLE IF NOT EXISTS %s_%s PARTITION OF %s FOR VALUES FROM ('%s') TO ('%s')`,
+			table, dayStr, table, from, to,
+		)
+
+		if _, err := s.ddlPool.Exec(ctx, sql); err != nil {
+			return fmt.Errorf("hot partition %s_%s: %w", table, dayStr, err)
 		}
 	}
 
