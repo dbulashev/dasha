@@ -15,6 +15,9 @@ func validConfig() Config {
 		MinBaselineActive:    0,
 		LockProbeCount:       3,
 		LockProbeInterval:    time.Second,
+		HotSchedule:          "0 3 * * *",
+		HotTopN:              100,
+		HotRetentionDays:     180,
 		Defaults:             validDefaults(),
 	}
 }
@@ -44,6 +47,9 @@ func TestConfigValidate(t *testing.T) {
 		{"negative recovery_duration", func(c *Config) { c.Defaults.ActivitySpike.RecoveryDuration = -1 }, true},
 		{"negative deferred_interval", func(c *Config) { c.Defaults.ActivitySpike.DeferredInterval = -1 }, true},
 		{"bad direction", func(c *Config) { c.Defaults.RoleChange.Direction = "sideways" }, true},
+		{"hot_top_n zero", func(c *Config) { c.HotTopN = 0 }, true},
+		{"hot_top_n too high", func(c *Config) { c.HotTopN = 1001 }, true},
+		{"hot_retention_days zero", func(c *Config) { c.HotRetentionDays = 0 }, true},
 		{
 			name:    "spike_duration at 2x window is allowed",
 			mutate:  func(c *Config) { c.Defaults.ActivitySpike.SpikeDuration = 60 * time.Second },

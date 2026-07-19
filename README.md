@@ -32,6 +32,7 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 - Invalid / not ready indexes
 - Three similarity detection algorithms
 - Unused indexes (cross-host analysis), usage statistics, cache hit rate
+- **Hot indexes**: which indexes do the actual work — scheduled activity delta snapshots (reads / physical I/O) summed across every cluster host; the natural complement of the unused-index analysis
 
 **Table Analysis**
 - Top-K by size with TOAST breakdown (main, FSM, VM layers)
@@ -39,6 +40,7 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 - Cache hit rate, partitioned table info
 - Custom storage parameters (fillfactor, autovacuum overrides)
 - Detailed table describe: columns, indexes, constraints, bloat, partitions, vacuum stats with computed thresholds, row-size / TOAST estimate
+- **Hot tables**: what is loading the database — activity delta snapshots (reads / writes / physical I/O) captured on a cron schedule from every cluster host and summed; an exact top-N per metric class plus a tail histogram with a coverage ratio (how representative the top is), per-host breakdown with primary/replica badges, and a per-table activity percentile on the describe page. Requires snapshot storage.
 
 **Foreign Key Analysis**
 - Invalid constraints
@@ -50,6 +52,7 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 - Autovacuum freeze max age, transaction ID wraparound danger
 - Vacuum progress monitoring (PG 9.6+, extended in PG 17+)
 - Per-table vacuum/analyze statistics with custom parameter awareness
+- **Autovacuum summary**: how many tables are currently past their autovacuum/autoanalyze trigger thresholds (pie chart, reloption-aware formula) plus the maintenance processes running right now
 
 **Connections & Locks**
 - Connection states and sources breakdown
