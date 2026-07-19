@@ -510,7 +510,28 @@
     "usage": "Indexnutzung",
     "menuOverview": "Übersicht",
     "menuUsage": "Nutzung",
-    "menuProblems": "Probleme"
+    "menuProblems": "Probleme",
+    "report": {
+      "title": "Urteile: darf dieser Index gelöscht werden",
+      "hint": "Anders als die Rohzähler-Tabelle „Ungenutzte Indizes“ wird idx_scan hier gegen das Beobachtungsfenster (seit dem Statistik-Reset) und gegen alle Hosts des Clusters zugleich gewogen: Scan-Zähler werden nicht repliziert, und ein auf dem Primary untätiger Index kann Lesezugriffe auf einem Replikat bedienen. Partitionierte Indizes werden als Ganzes beurteilt — Scans über alle Partitionen summiert; löschbar ist nur der Eltern-Index.",
+      "verdict": "Urteil",
+      "reason": "Begründung",
+      "verdicts": {
+        "drop_candidate": "Löschkandidat",
+        "used": "In Benutzung",
+        "stale_evidence": "Veraltete Daten",
+        "insufficient_data": "Zu wenig Daten",
+        "unknown": "Unbekannt"
+      },
+      "partitioned": "partitioniert: {n} Part.",
+      "unreachable": "Nicht erreichbare Hosts: {hosts}. Jedes Urteil ist „unbekannt“: Scan-Zähler werden nicht repliziert, und der Index kann auf einem nicht antwortenden Host in Benutzung sein.",
+      "host": "Host",
+      "window": "Fenster",
+      "scansPerDay": "Scans/Tag",
+      "replica": "Replikat",
+      "statsResetUnknown": "Der Zeitpunkt des Statistik-Resets ist unbekannt — das Fenster basiert auf der Postmaster-Laufzeit und kann den echten Beobachtungszeitraum unterschätzen.",
+      "days": "T."
+    }
   },
   "Common summary": "Allgemeine Übersicht",
   "home": {
