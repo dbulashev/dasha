@@ -10,4 +10,9 @@ export interface AutoSnapshotStatus {
   Available: boolean
   Enabled: boolean
   Leader?: AutoSnapshotLeaderInfo
+  /**
+   * Newest hot-objects (scheduled) snapshot across all clusters — distinct from the triggered pgss snapshot events.
+   * @nullable
+   */
+  LastHotSnapshotAt?: string | null
 }

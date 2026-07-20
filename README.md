@@ -32,6 +32,7 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 - Invalid / not ready indexes
 - Three similarity detection algorithms
 - Unused indexes (cross-host analysis), usage statistics, cache hit rate
+- **Hot indexes**: which indexes do the actual work — scheduled activity delta snapshots (reads / physical I/O) summed across every cluster host; the natural complement of the unused-index analysis
 
 **Table Analysis**
 - Top-K by size with TOAST breakdown (main, FSM, VM layers)
@@ -39,6 +40,7 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 - Cache hit rate, partitioned table info
 - Custom storage parameters (fillfactor, autovacuum overrides)
 - Detailed table describe: columns, indexes, constraints, bloat, partitions, vacuum stats with computed thresholds, row-size / TOAST estimate
+- **Hot tables**: what is loading the database — activity delta snapshots (reads / writes / physical I/O) captured on a cron schedule from every cluster host and summed; an exact top-N per metric class plus a tail histogram with a coverage ratio (how representative the top is), per-host breakdown with primary/replica badges, and a per-table activity percentile on the describe page. Requires snapshot storage.
 
 **Foreign Key Analysis**
 - Invalid constraints
@@ -50,6 +52,7 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 - Autovacuum freeze max age, transaction ID wraparound danger
 - Vacuum progress monitoring (PG 9.6+, extended in PG 17+)
 - Per-table vacuum/analyze statistics with custom parameter awareness
+- **Autovacuum summary**: how many tables are currently past their autovacuum/autoanalyze trigger thresholds (pie chart, reloption-aware formula) plus the maintenance processes running right now
 
 **Connections & Locks**
 - Connection states and sources breakdown
@@ -366,7 +369,7 @@ The demo includes:
 
 `dasha-mcp` is a separate, **read-only** [MCP](https://modelcontextprotocol.io) server over the Dasha API. It lets AI assistants query the fleet's PostgreSQL diagnostics as tools/prompts, forwarding each caller's token to Dasha so its RBAC is preserved. Any MCP-compatible client works — Claude Desktop, Claude Code, Cursor, Continue, **opencode**, etc.
 
-- **Tools (24):** `list_clusters`, `fleet_health`, `get_instance_info`, `get_health_score`, `get_health_recommendations`, `health_details` (turns a recommendation into a target: pass its `rule_id` as `detail` to get the offending tables, databases or sessions — the per-table drill-downs also take a `database`, the instance-wide ones do not), `health_trend`, `health_databases`, `top_queries` (by time/WAL), `query_report`, `list_snapshots`, `query_compare`, `running_queries`, `blocked_queries`, `list_indexes` (missing/unused/usage), `unused_index_report` (cluster-wide verdict on whether an index is safe to DROP: weighs the scan counter against every host of the cluster and against the statistics window behind it, because `idx_scan` is not replicated and a counter without its window means nothing), `top_tables`, `describe_table`, `get_replication`, `settings_analyze`, `wait_events`, `connections`, `vacuum_danger`, `search_logs` (Yandex Cloud PostgreSQL/pooler logs; Yandex-MDB-discovered clusters only, rate-limited per user). All are annotated **read-only** and closed-world so compatible clients can surface (and auto-approve) them as safe. The server also ships usage **instructions** that prime the model on which tool/prompt to reach for.
+- **Tools (26):** `list_clusters`, `fleet_health`, `get_instance_info`, `get_health_score`, `get_health_recommendations`, `health_details` (turns a recommendation into a target: pass its `rule_id` as `detail` to get the offending tables, databases or sessions — the per-table drill-downs also take a `database`, the instance-wide ones do not), `health_trend`, `health_databases`, `top_queries` (by time/WAL), `query_report`, `list_snapshots`, `query_compare`, `running_queries`, `blocked_queries`, `list_indexes` (missing/unused/usage), `unused_index_report` (cluster-wide verdict on whether an index is safe to DROP: weighs the scan counter against every host of the cluster and against the statistics window behind it, because `idx_scan` is not replicated and a counter without its window means nothing), `top_tables`, `hot_tables` / `hot_indexes` (top hot objects per metric class — reads/writes/io — from the daily delta snapshots, summed over every cluster host, with a coverage ratio that says how representative the top is; needs snapshot storage), `describe_table`, `get_replication`, `settings_analyze`, `wait_events`, `connections`, `vacuum_danger`, `search_logs` (Yandex Cloud PostgreSQL/pooler logs; Yandex-MDB-discovered clusters only, rate-limited per user). All are annotated **read-only** and closed-world so compatible clients can surface (and auto-approve) them as safe. The server also ships usage **instructions** that prime the model on which tool/prompt to reach for.
 - **Prompts (5):** `diagnose_cluster`, `explain_health_score`, `find_index_opportunities`, `investigate_slow_queries`, `fleet_overview` — linear playbooks: numbered steps, one tool per step, with an interpretation criterion on each (built for models without deep PostgreSQL expertise; strong models simply move faster through them).
 - **Resources (3):** an embedded knowledge base the model can read on demand — `dasha://kb/health-rules` (every health rule with LOW/MED/HIGH thresholds and first actions), `dasha://kb/wait-events` (wait event glossary), `dasha://kb/workflow` (complaint-to-tool-chain playbooks and API care rules).
 - **Language:** `--lang en|ru` (or `DASHA_MCP_LANG`) selects the language of the knowledge base, playbooks and instructions; tool names, schemas and results stay English.

@@ -22,5 +22,13 @@ export interface AutoSnapshotConfig {
   LockProbeInterval: string
   /** Reset pg_stat_statements after each auto-snapshot (independent of the manual UI reset flag) */
   ResetQueryStats: boolean
+  /** Capture hot-objects delta snapshots (tables/indexes activity tops) */
+  HotEnabled: boolean
+  /** Standard 5-field cron expression, UTC unless prefixed with CRON_TZ=<zone> (e.g. "0 3 * * *") */
+  HotSchedule: string
+  /** Exact top size stored per metric class; the tail is kept as a histogram */
+  HotTopN: number
+  /** Age-based retention of hot-objects snapshots, days */
+  HotRetentionDays: number
   Defaults: AutoSnapshotTriggerDefaults
 }

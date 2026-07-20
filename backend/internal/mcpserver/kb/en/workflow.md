@@ -77,6 +77,15 @@ per-database tools also need `database`.
   justifies a DROP; otherwise repeat the reason. Exception: a structurally
   redundant index (exact duplicate, or invalid) — `describe_table` shows those and
   their safety does not depend on usage.
+- "What is loading the database?" → `hot_tables` (class 'reads', 'writes' or
+  'io') and `hot_indexes` — daily deltas summed over every cluster host, so no
+  instance is needed. Always read `snapshot.coverage` first: it says what share
+  of total activity the stored top holds — with low coverage the tail matters
+  and the top alone must not be presented as the whole picture. A table hot on
+  writes pairs with maintenance metrics (autovacuum tuning); hot on io — with
+  cache/index questions. `hot_indexes` complements `unused_index_report`: one
+  names indexes to drop, the other the ones doing the work. Requires snapshot
+  storage; a 501 means the feature is off, not a broken instance.
 - `search_logs` is rate-limited per user (~1 request / 30s by default):
   combine all filters into ONE call, keep dedup on, never poll; after a 429
   wait ≥30s.

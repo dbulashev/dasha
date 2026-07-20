@@ -1450,6 +1450,189 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/hot/tables:
+    get:
+      operationId: getTablesHot
+      summary: Top hot tables from the latest (or a given day's) delta snapshot
+      description: >-
+        Reads the stored hot-objects snapshot (daily per-host deltas summed
+        cluster-wide; exact top-N per metric class plus a tail histogram — the
+        MCV+histogram trick PostgreSQL statistics use). Takes no instance:
+        activity counters are not replicated, so the snapshot already sums all
+        hosts and keeps a per-host breakdown per entry. The coverage ratio
+        states how much of the total activity the top actually covers.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Database'
+        - in: query
+          name: class
+          schema:
+            type: string
+            enum: [reads, writes, io]
+            default: reads
+        - in: query
+          name: at
+          schema:
+            type: string
+            format: date-time
+          description: Exact capture time of the snapshot to read (a value from snapshot.dates); defaults to the latest snapshot.
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 30
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HotReport'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: Snapshot storage not configured
+
+  /api/hot/indexes:
+    get:
+      operationId: getIndexesHot
+      summary: Top hot indexes from the latest (or a given day's) delta snapshot
+      description: >-
+        Index flavour of /api/tables/hot. Indexes carry only the reads and io
+        classes — PostgreSQL keeps no per-index write counters.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Database'
+        - in: query
+          name: class
+          schema:
+            type: string
+            enum: [reads, io]
+            default: reads
+        - in: query
+          name: at
+          schema:
+            type: string
+            format: date-time
+          description: Exact capture time of the snapshot to read (a value from snapshot.dates); defaults to the latest snapshot.
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 30
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HotReport'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: Snapshot storage not configured
+
+  /api/hot/history:
+    get:
+      operationId: getHotObjectHistory
+      summary: Days an object appeared in a stored hot top
+      description: >-
+        Only appearances in the stored top are known individually — the tail is
+        kept as a histogram by design, so an object outside the top has no
+        per-day series (use /api/hot/percentile for its current standing).
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Database'
+        - in: query
+          name: kind
+          required: true
+          schema:
+            type: string
+            enum: [table, index]
+        - in: query
+          name: schema
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: object
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: days
+          schema:
+            type: integer
+            default: 30
+          description: How many days back to look.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HotObjectHistory'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: Snapshot storage not configured
+
+  /api/hot/percentile:
+    get:
+      operationId: getHotPercentile
+      summary: Current hotness percentile of one object
+      description: >-
+        Computes the object's live delta (current counters minus the stored
+        anchor, summed over hosts with an intact stats epoch) and projects its
+        per-day rate onto the latest snapshot's tail histogram. This is the
+        only hot-objects endpoint that touches the target database.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Database'
+        - in: query
+          name: kind
+          required: true
+          schema:
+            type: string
+            enum: [table, index]
+        - in: query
+          name: schema
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: object
+          required: true
+          schema:
+            type: string
+        - in: query
+          name: class
+          schema:
+            type: string
+            enum: [reads, writes, io]
+            default: reads
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HotPercentile'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: Snapshot storage not configured
+
   /api/maintenance/autovacuum-summary:
     get:
       operationId: getMaintenanceAutovacuumSummary
@@ -3253,6 +3436,219 @@ components:
           type: integer
           format: int32
         Phase:
+          type: string
+
+    HotHostWindow:
+      type: object
+      required:
+        - from
+        - to
+        - complete
+      properties:
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        complete:
+          type: boolean
+          description: False when the host had no baseline or its stats epoch broke (stats reset) — it contributed no deltas.
+        stats_reset:
+          type: string
+          format: date-time
+          nullable: true
+
+    HotHistogram:
+      type: object
+      required:
+        - deciles
+        - count
+        - sum
+        - max
+      properties:
+        deciles:
+          type: array
+          items:
+            type: number
+            format: double
+          description: 10th..90th percentiles of the class ranking key across tail objects (outside the top).
+        count:
+          type: integer
+        sum:
+          type: integer
+          format: int64
+        max:
+          type: integer
+          format: int64
+
+    HotSnapshotMeta:
+      type: object
+      required:
+        - captured_at
+        - windows
+        - hosts_missing
+        - coverage
+        - dates
+      properties:
+        captured_at:
+          type: string
+          format: date-time
+        windows:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/HotHostWindow'
+        hosts_missing:
+          type: array
+          items:
+            type: string
+          description: Hosts that could not be sampled — the snapshot is partial, their activity is absent from every number.
+        coverage:
+          type: number
+          format: double
+          description: sum(top)/sum(all) for the requested kind+class — how representative the stored top is.
+        histogram:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/HotHistogram'
+        dates:
+          type: array
+          items:
+            type: string
+            format: date-time
+          description: Capture timestamps available for the day selector, newest first.
+
+    HotHostDelta:
+      type: object
+      required:
+        - instance
+        - complete
+        - in_recovery
+        - delta
+      properties:
+        instance:
+          type: string
+        complete:
+          type: boolean
+        in_recovery:
+          type: boolean
+          description: True for a standby — its read activity is invisible in the primary's counters.
+        delta:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+
+    HotEntry:
+      type: object
+      required:
+        - rank
+        - schema
+        - object
+        - size_bytes
+        - delta
+        - rate_per_day
+        - per_host
+      properties:
+        rank:
+          type: integer
+        prev_rank:
+          type: integer
+          nullable: true
+          description: Rank in the previous snapshot of the same kind+class; null when the object was not in that top.
+        schema:
+          type: string
+        object:
+          type: string
+        table_name:
+          type: string
+          nullable: true
+          description: For indexes — the table the index belongs to.
+        size_bytes:
+          type: integer
+          format: int64
+        delta:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+          description: Cluster-summed counter deltas over the snapshot interval.
+        rate_per_day:
+          type: number
+          format: double
+          description: Class ranking key normalized by the actual window length.
+        per_host:
+          type: array
+          items:
+            $ref: '#/components/schemas/HotHostDelta'
+
+    HotReport:
+      type: object
+      required:
+        - snapshot
+        - entries
+      properties:
+        snapshot:
+          $ref: '#/components/schemas/HotSnapshotMeta'
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/HotEntry'
+
+    HotObjectHistoryItem:
+      type: object
+      required:
+        - captured_at
+        - class
+        - rank
+        - size_bytes
+        - delta
+      properties:
+        captured_at:
+          type: string
+          format: date-time
+        class:
+          type: string
+        rank:
+          type: integer
+        size_bytes:
+          type: integer
+          format: int64
+        delta:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+
+    HotObjectHistory:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/HotObjectHistoryItem'
+
+    HotPercentile:
+      type: object
+      required:
+        - percentile
+        - rate_per_day
+        - in_top
+        - class
+      properties:
+        percentile:
+          type: number
+          format: double
+          description: Share of tail objects this object currently out-runs (0..0.9 from the histogram; combined with in_top for the exact upper range).
+        rate_per_day:
+          type: number
+          format: double
+        in_top:
+          type: boolean
+          description: Whether the object is in the latest stored top of this class.
+        class:
           type: string
 
     MaintenanceAutovacuumSummary:
@@ -5096,6 +5492,10 @@ components:
         - LockProbeCount
         - LockProbeInterval
         - ResetQueryStats
+        - HotEnabled
+        - HotSchedule
+        - HotTopN
+        - HotRetentionDays
         - Defaults
       properties:
         Enabled:
@@ -5124,6 +5524,18 @@ components:
         ResetQueryStats:
           type: boolean
           description: Reset pg_stat_statements after each auto-snapshot (independent of the manual UI reset flag)
+        HotEnabled:
+          type: boolean
+          description: Capture hot-objects delta snapshots (tables/indexes activity tops)
+        HotSchedule:
+          type: string
+          description: Standard 5-field cron expression, UTC unless prefixed with CRON_TZ=<zone> (e.g. "0 3 * * *")
+        HotTopN:
+          type: integer
+          description: Exact top size stored per metric class; the tail is kept as a histogram
+        HotRetentionDays:
+          type: integer
+          description: Age-based retention of hot-objects snapshots, days
         Defaults:
           $ref: '#/components/schemas/AutoSnapshotTriggerDefaults'
 
@@ -5180,6 +5592,11 @@ components:
           type: boolean
         Leader:
           $ref: '#/components/schemas/AutoSnapshotLeaderInfo'
+        LastHotSnapshotAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Newest hot-objects (scheduled) snapshot across all clusters — distinct from the triggered pgss snapshot events.
 
     ClusterSnapshotSummary:
       type: object

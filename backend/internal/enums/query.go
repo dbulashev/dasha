@@ -34,6 +34,8 @@ package enums
 //	fks/possible_similar1
 //	fks/possible_similar2
 //	fks/type_mismatch
+//	hot/sample_indexes
+//	hot/sample_tables
 //	indexes/all_scans
 //	indexes/bloat
 //	indexes/btree_on_array

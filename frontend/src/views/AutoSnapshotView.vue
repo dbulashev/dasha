@@ -85,6 +85,22 @@ const durationRule = (v: string) =>
   durationRe.test((v ?? '').trim()) || t('autosnapshot.invalidDuration')
 const positiveRule = (v: number) => (Number(v) >= 0 ? true : t('autosnapshot.mustBePositive'))
 
+// Structural 5-field cron check (numbers, ranges, steps, lists; optional
+// CRON_TZ=/TZ= prefix). The backend does the authoritative parse and answers
+// 400 on anything this regex is too lenient for.
+const cronTerm = String.raw`(\*(\/\d+)?|\d+(-\d+)?(\/\d+)?)`
+const cronFieldRe = new RegExp(`^${cronTerm}(,${cronTerm})*$`)
+const cronRule = (v: string) => {
+  let s = (v ?? '').trim()
+  if (!s) return t('autosnapshot.hot.scheduleRequired')
+  s = s.replace(/^(CRON_)?TZ=\S+\s+/, '')
+  const fields = s.split(/\s+/)
+  if (fields.length !== 5 || !fields.every(f => cronFieldRe.test(f))) {
+    return t('autosnapshot.hot.scheduleInvalid')
+  }
+  return true
+}
+
 // Parse a Go-duration string to milliseconds (returns null if unparseable).
 function goDurationToMs(v: string): number | null {
   const unit: Record<string, number> = {
@@ -128,7 +144,13 @@ async function saveConfig() {
   clearError()
   saveOk.value = false
   try {
-    await putAutosnapshotConfig(cfg.value)
+    // Orval's fetch resolves on HTTP errors, so the status must be checked —
+    // otherwise a 400 (rejected values) would still show "saved".
+    const res = await putAutosnapshotConfig(cfg.value)
+    if (res.status !== 204) {
+      onError(res.status === 400 ? t('autosnapshot.saveInvalid') : `HTTP ${res.status}`)
+      return
+    }
     saveOk.value = true
     statusStore.invalidateCache()
     await statusStore.ensureLoaded()
@@ -278,6 +300,10 @@ onMounted(() => {
         <span v-else class="text-caption text-medium-emphasis">
           {{ t('autosnapshot.status.noEvents') }}
         </span>
+
+        <span v-if="status?.LastHotSnapshotAt" class="text-caption text-medium-emphasis">
+          {{ t('autosnapshot.status.lastHotSnapshot') }}: {{ fmtDateTime(status.LastHotSnapshotAt) }}
+        </span>
       </v-card-text>
     </v-card>
 
@@ -308,9 +334,11 @@ onMounted(() => {
 
           <v-card class="mb-4">
             <v-card-text>
+              <div class="text-overline text-medium-emphasis mb-1">{{ t('autosnapshot.groupPgss') }}</div>
               <v-card variant="outlined" class="mb-3">
             <v-card-title class="text-subtitle-1">{{ t('autosnapshot.globalSection') }}</v-card-title>
             <v-card-text>
+              <div class="text-caption text-medium-emphasis mb-2">{{ t('autosnapshot.resetQueryStatsHint') }}</div>
               <v-row dense>
                 <v-col cols="12" sm="6" md="3">
                   <v-switch
@@ -330,7 +358,6 @@ onMounted(() => {
                     color="primary"
                     density="compact"
                     hide-details
-                    v-tooltip="t('autosnapshot.resetQueryStatsHint')"
                   />
                 </v-col>
                 <v-col cols="12" sm="6" md="3">
@@ -392,6 +419,7 @@ onMounted(() => {
           <v-card variant="outlined" class="mb-3">
             <v-card-title class="text-subtitle-1">{{ t('autosnapshot.activitySpike') }}</v-card-title>
             <v-card-text>
+              <div class="text-caption text-medium-emphasis mb-2">{{ t('autosnapshot.spikeFieldsHint') }}</div>
               <v-row dense>
                 <v-col cols="12" sm="6" md="3">
                   <v-switch
@@ -442,7 +470,6 @@ onMounted(() => {
                     :rules="[durationRule]"
                     density="compact"
                     placeholder="0s"
-                    v-tooltip="t('autosnapshot.recoveryDurationHint')"
                   />
                 </v-col>
                 <v-col cols="12" sm="6" md="3">
@@ -453,7 +480,6 @@ onMounted(() => {
                     :rules="[durationRule]"
                     density="compact"
                     placeholder="0s"
-                    v-tooltip="t('autosnapshot.deferredIntervalHint')"
                   />
                 </v-col>
               </v-row>
@@ -525,6 +551,59 @@ onMounted(() => {
                 </v-col>
               </v-row>
             </v-card-text>
+              </v-card>
+
+              <v-divider class="my-4" />
+              <div class="text-overline text-medium-emphasis mb-1">{{ t('autosnapshot.groupHot') }}</div>
+
+              <v-card variant="outlined">
+                <v-card-title class="text-subtitle-1">{{ t('autosnapshot.hot.title') }}</v-card-title>
+                <v-card-text>
+                  <div class="text-caption text-medium-emphasis mb-1">{{ t('autosnapshot.hot.hint') }}</div>
+                  <div class="text-caption text-medium-emphasis mb-2">{{ t('autosnapshot.hot.fieldsHint') }}</div>
+                  <v-row dense>
+                    <v-col cols="12" sm="6" md="3">
+                      <v-switch
+                        v-model="cfg.HotEnabled"
+                        :label="t('autosnapshot.enabled')"
+                        :disabled="!isAdmin"
+                        color="primary"
+                        density="compact"
+                        hide-details
+                      />
+                    </v-col>
+                    <v-col cols="12" sm="6" md="3">
+                      <v-text-field
+                        v-model="cfg.HotSchedule"
+                        :label="t('autosnapshot.hot.schedule')"
+                        :disabled="!isAdmin || !cfg.HotEnabled"
+                        :rules="[cronRule]"
+                        density="compact"
+                        placeholder="0 3 * * *"
+                      />
+                    </v-col>
+                    <v-col cols="12" sm="6" md="3">
+                      <v-text-field
+                        v-model.number="cfg.HotTopN"
+                        :label="t('autosnapshot.hot.topN')"
+                        :disabled="!isAdmin || !cfg.HotEnabled"
+                        :rules="[positiveRule]"
+                        type="number"
+                        density="compact"
+                      />
+                    </v-col>
+                    <v-col cols="12" sm="6" md="3">
+                      <v-text-field
+                        v-model.number="cfg.HotRetentionDays"
+                        :label="t('autosnapshot.hot.retentionDays')"
+                        :disabled="!isAdmin || !cfg.HotEnabled"
+                        :rules="[positiveRule]"
+                        type="number"
+                        density="compact"
+                      />
+                    </v-col>
+                  </v-row>
+                </v-card-text>
               </v-card>
             </v-card-text>
           </v-card>
