@@ -1,6 +1,7 @@
 package hotobjects
 
 import (
+	"math"
 	"slices"
 	"sort"
 	"time"
@@ -81,7 +82,9 @@ type BuildInput struct {
 	Anchors map[string]AnchorRow
 }
 
-// aggObject accumulates one object's cluster-wide delta.
+// aggObject accumulates one object's cluster-wide delta. Hash-partition leaves
+// are already summed into their parent by the sample query, so one sample
+// row per host maps to one aggObject.
 type aggObject struct {
 	kind      Kind
 	schema    string
@@ -92,10 +95,12 @@ type aggObject struct {
 	perHost   map[string]HostDelta
 }
 
-// BuildSnapshot turns per-host samples+anchors into a stored snapshot:
-// per-host epoch/regression checks, cluster-wide summing, per-class top-N,
-// tail histograms and coverage. hostsMissing lists hosts that could not be
-// sampled at all (they contribute nothing but mark the snapshot partial).
+// BuildSnapshot turns per-host samples+anchors into a stored snapshot: per-host
+// epoch/regression checks, cluster-wide summing, per-class top-N, tail histograms
+// and coverage. hostsMissing lists hosts that could not be sampled at all (they
+// contribute nothing but mark the snapshot partial). Hash-partition rollup is
+// already applied by the sample query, so each sample row is one rollup
+// target; PartSig guards a target whose partition set changed since its anchor.
 func BuildSnapshot(
 	clusterName, database string,
 	capturedAt time.Time,
@@ -163,6 +168,10 @@ func BuildSnapshot(
 			anchor, ok := in.Anchors[k]
 			if !ok {
 				continue // new object on this host: no baseline yet
+			}
+
+			if anchor.PartSig != row.PartSig {
+				continue // partition set changed since the anchor: summed counters not comparable
 			}
 
 			d, ok := Delta(anchor.Counters, row.Counters)
@@ -284,6 +293,7 @@ func (s *Snapshot) rankClass(kind Kind, class Class, agg map[string]*aggObject, 
 
 	hist := &Histogram{ //nolint:exhaustruct
 		Deciles: deciles(tailKeys),
+		Upper:   quantiles(tailKeys, hotUpperProbs),
 		Count:   len(tailKeys),
 		Sum:     sumTail,
 		Max:     maxTail,
@@ -309,9 +319,19 @@ func (s *Snapshot) rankClass(kind Kind, class Class, agg map[string]*aggObject, 
 	s.Coverage[class] = kr
 }
 
-// deciles returns the 10th..90th percentiles (nearest-rank) of vals; vals may
-// arrive in any order. Empty input yields an empty slice.
-func deciles(vals []float64) []float64 {
+// hotDecileProbs is the uniform density grid stored in every tail Histogram;
+// hotUpperProbs adds resolution in the upper tail, where hot objects
+// concentrate and equal-width deciles run out of detail.
+var (
+	hotDecileProbs = []float64{0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9}
+	hotUpperProbs  = []float64{0.95, 0.99}
+)
+
+// quantiles returns the nearest-rank quantiles of vals at each probability in
+// probs (each 0..1); vals may arrive in any order. Empty input yields an empty
+// slice. The -1e-9 nudge absorbs float error so an exact rank (e.g. 0.3*10)
+// isn't rounded up to the next object.
+func quantiles(vals, probs []float64) []float64 {
 	if len(vals) == 0 {
 		return []float64{}
 	}
@@ -319,12 +339,17 @@ func deciles(vals []float64) []float64 {
 	sorted := slices.Clone(vals)
 	sort.Float64s(sorted)
 
-	out := make([]float64, 0, 9)
+	n := len(sorted)
+	out := make([]float64, 0, len(probs))
 
-	for p := 1; p <= 9; p++ {
-		idx := (p*len(sorted) + 9) / 10 // ceil(p/10 * n)
-		if idx > len(sorted) {
-			idx = len(sorted)
+	for _, p := range probs {
+		idx := int(math.Ceil(p*float64(n) - 1e-9))
+		if idx < 1 {
+			idx = 1
+		}
+
+		if idx > n {
+			idx = n
 		}
 
 		out = append(out, sorted[idx-1])
@@ -333,26 +358,55 @@ func deciles(vals []float64) []float64 {
 	return out
 }
 
-// Percentile projects a value onto a stored histogram plus the top boundary:
-// the share of tail objects the value STRICTLY exceeds, 0..0.9 (values above
-// every decile cap at 0.9; callers combine with the top membership check for
-// the exact upper range). Strict comparison matters on quiet databases: a
-// mostly-idle tail has all-zero deciles, and v >= d would grant an idle
-// object (v=0) the full 0.9 — "hotter than 90% of tables" while doing nothing.
+// deciles returns the 10th..90th percentiles of vals (the tail Histogram's
+// density grid).
+func deciles(vals []float64) []float64 {
+	return quantiles(vals, hotDecileProbs)
+}
+
+// Percentile is the fraction of tail objects a value exceeds, interpolated over
+// the quantile ladder (0 → deciles → P95/P99 → Max). The dense upper grid keeps
+// the long tail's top from collapsing onto one value. v<=0 returns 0 (an idle,
+// all-zero tail must not read as hot).
 func (h *Histogram) Percentile(v float64) float64 {
 	if h == nil || len(h.Deciles) == 0 || v <= 0 {
 		return 0
 	}
 
-	p := 0.0
+	// Monotonic (probability, value) ladder: origin → deciles → upper → Max.
+	probs := make([]float64, 1, 1+len(hotDecileProbs)+len(hotUpperProbs)+1)
+	vals := make([]float64, 1, cap(probs)) // probs[0]=vals[0]=0: the origin
 
-	for i, d := range h.Deciles {
-		if v > d {
-			p = float64(i+1) / 10.0
-		}
+	probs = append(probs, hotDecileProbs...)
+	vals = append(vals, h.Deciles...)
+
+	if len(h.Upper) == len(hotUpperProbs) {
+		probs = append(probs, hotUpperProbs...)
+		vals = append(vals, h.Upper...)
 	}
 
-	return p
+	if m := float64(h.Max); m > vals[len(vals)-1] {
+		probs = append(probs, 1.0)
+		vals = append(vals, m)
+	}
+
+	// Invert the quantile function: find the first ladder value strictly above
+	// v and interpolate the probability across that segment. vals is
+	// non-decreasing, so vals[i-1] <= v holds at the break; on a flat segment
+	// (equal values — e.g. an idle tail's zero deciles) v lands at the
+	// segment's top edge, so an object at the flat value is not credited above.
+	for i := 1; i < len(vals); i++ {
+		if v >= vals[i] {
+			continue
+		}
+
+		lo, hi := vals[i-1], vals[i]
+
+		return probs[i-1] + (probs[i]-probs[i-1])*(v-lo)/(hi-lo)
+	}
+
+	// v is at or above the top of the ladder.
+	return probs[len(probs)-1]
 }
 
 // sortTop orders entries kind, class, rank for stable storage and output.

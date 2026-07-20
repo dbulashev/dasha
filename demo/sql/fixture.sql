@@ -71,6 +71,71 @@ SELECT '2025-01-01'::date + (random()*700)::int, 'data_' || i
 FROM generate_series(1, 5000) i;
 
 -- =============================================
+-- HASH-partitioned table (hot-objects rollup demo)
+-- 8 hash partitions + a partitioned secondary index. Activity spreads evenly
+-- across the leaves, so the hot-objects top must roll them up and show the
+-- parent `sensor_readings` (and one anchor row, not eight).
+-- =============================================
+CREATE TABLE sensor_readings (
+    id          bigint GENERATED ALWAYS AS IDENTITY,
+    sensor_id   integer NOT NULL,
+    reading     numeric(10,2) NOT NULL,
+    recorded_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (sensor_id, id)
+) PARTITION BY HASH (sensor_id);
+
+DO $$
+BEGIN
+    FOR r IN 0..7 LOOP
+        EXECUTE format(
+            'CREATE TABLE sensor_readings_p%1$s PARTITION OF sensor_readings FOR VALUES WITH (MODULUS 8, REMAINDER %1$s)',
+            r);
+    END LOOP;
+END $$;
+
+CREATE INDEX idx_sensor_readings_recorded ON sensor_readings (recorded_at);
+
+INSERT INTO sensor_readings (sensor_id, reading, recorded_at)
+SELECT (random()*10000)::int, (random()*100)::numeric(10,2), now() - (random() * interval '30 days')
+FROM generate_series(1, 40000);
+
+-- =============================================
+-- RANGE → HASH subpartitioned table (hot-objects recursive rollup demo)
+-- Two monthly range partitions, each split into 4 hash subpartitions. Rollup
+-- must collapse the hash subpartitions into their month but KEEP the months
+-- distinct: the top shows metrics_2026_01 / metrics_2026_02, not the *_pN leaves.
+-- =============================================
+CREATE TABLE metrics (
+    id          bigint GENERATED ALWAYS AS IDENTITY,
+    bucket      integer NOT NULL,
+    metric_date date NOT NULL,
+    value       double precision,
+    PRIMARY KEY (metric_date, bucket, id)
+) PARTITION BY RANGE (metric_date);
+
+CREATE TABLE metrics_2026_01 PARTITION OF metrics
+    FOR VALUES FROM ('2026-01-01') TO ('2026-02-01') PARTITION BY HASH (bucket);
+CREATE TABLE metrics_2026_02 PARTITION OF metrics
+    FOR VALUES FROM ('2026-02-01') TO ('2026-03-01') PARTITION BY HASH (bucket);
+
+DO $$
+DECLARE
+    m text;
+BEGIN
+    FOREACH m IN ARRAY ARRAY['metrics_2026_01', 'metrics_2026_02'] LOOP
+        FOR h IN 0..3 LOOP
+            EXECUTE format(
+                'CREATE TABLE %1$s_p%2$s PARTITION OF %1$s FOR VALUES WITH (MODULUS 4, REMAINDER %2$s)',
+                m, h);
+        END LOOP;
+    END LOOP;
+END $$;
+
+INSERT INTO metrics (bucket, metric_date, value)
+SELECT (random()*1000)::int, '2026-01-01'::date + (random()*58)::int, random()*1000
+FROM generate_series(1, 20000);
+
+-- =============================================
 -- FK type mismatch: products.category_id (int) → categories.id (bigint)
 -- =============================================
 CREATE TABLE categories (
@@ -240,5 +305,7 @@ SELECT count(*) FROM customer_profiles WHERE bio IS NOT NULL;
 SELECT * FROM customer_profiles ORDER BY random() LIMIT 5;
 SELECT count(*) FROM hot_update_demo;
 SELECT * FROM mv_order_summary LIMIT 5;
+SELECT count(*) FROM sensor_readings WHERE sensor_id < 100;
+SELECT count(*) FROM metrics WHERE metric_date >= '2026-02-01';
 
 ANALYZE;

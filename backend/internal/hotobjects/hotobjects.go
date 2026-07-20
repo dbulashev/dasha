@@ -51,7 +51,12 @@ type AnchorRow struct {
 	CapturedAt time.Time
 	StatsReset *time.Time
 	SizeBytes  int64
-	Counters   Counters
+	// PartSig fingerprints the set of leaf partitions summed into this row.
+	//  A delta is measurable only against an
+	// anchor carrying the same signature — a change means a partition was
+	// added/dropped/repartitioned and the summed counters are not comparable.
+	PartSig  string
+	Counters Counters
 }
 
 // HostWindow is one host's delta window within a snapshot.
@@ -68,11 +73,17 @@ type HostWindow struct {
 // one class: enough to compute coverage honesty and project any object's
 // live delta onto a percentile.
 type Histogram struct {
-	// Deciles are the 10th..90th percentiles of the class ranking key.
+	// Deciles are the 10th..90th percentiles of the class ranking key — the
+	// uniform density grid the UI draws as bars.
 	Deciles []float64 `json:"deciles"`
-	Count   int       `json:"count"`
-	Sum     int64     `json:"sum"`
-	Max     int64     `json:"max"`
+	// Upper are extra upper-tail quantiles (P95, P99) at hotUpperProbs. Table
+	// activity is long-tailed: almost all signal sits above P90, where equal
+	// deciles have no resolution. These points let Percentile interpolate the
+	// top of the tail instead of saturating every object above P90 at one value.
+	Upper []float64 `json:"upper"`
+	Count int       `json:"count"`
+	Sum   int64     `json:"sum"`
+	Max   int64     `json:"max"`
 }
 
 // KindHistogram splits a class histogram by object kind. Writes has no index

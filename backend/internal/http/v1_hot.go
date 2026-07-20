@@ -390,6 +390,10 @@ func (s *Handlers) hotLiveRate(
 			continue // epoch broke since the anchor; delta not measurable
 		}
 
+		if a.PartSig != rows[0].PartSig {
+			continue // partition set changed since the anchor; summed delta not comparable
+		}
+
 		d, ok := hotobjects.Delta(a.Counters, rows[0].Counters)
 		if !ok {
 			continue

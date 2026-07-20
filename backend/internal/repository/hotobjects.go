@@ -90,9 +90,9 @@ func scanHotSample(
 		)
 
 		if kind == hotobjects.KindIndex {
-			err = rows.Scan(&a.Schema, &a.Object, &tableName, &a.SizeBytes, &reset, &inRecovery, &counters)
+			err = rows.Scan(&a.Schema, &a.Object, &tableName, &a.SizeBytes, &reset, &inRecovery, &a.PartSig, &counters)
 		} else {
-			err = rows.Scan(&a.Schema, &a.Object, &a.SizeBytes, &reset, &inRecovery, &counters)
+			err = rows.Scan(&a.Schema, &a.Object, &a.SizeBytes, &reset, &inRecovery, &a.PartSig, &counters)
 		}
 
 		if err != nil {
