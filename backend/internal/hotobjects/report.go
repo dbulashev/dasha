@@ -369,7 +369,7 @@ func deciles(vals []float64) []float64 {
 // the long tail's top from collapsing onto one value. v<=0 returns 0 (an idle,
 // all-zero tail must not read as hot).
 func (h *Histogram) Percentile(v float64) float64 {
-	if h == nil || len(h.Deciles) == 0 || v <= 0 {
+	if h == nil || len(h.Deciles) != len(hotDecileProbs) || v <= 0 {
 		return 0
 	}
 
