@@ -101,6 +101,12 @@ const (
 	GetHotObjectHistoryParamsKindTable GetHotObjectHistoryParamsKind = "table"
 )
 
+// Defines values for GetIndexesHotParamsClass.
+const (
+	GetIndexesHotParamsClassIo    GetIndexesHotParamsClass = "io"
+	GetIndexesHotParamsClassReads GetIndexesHotParamsClass = "reads"
+)
+
 // Defines values for GetHotPercentileParamsKind.
 const (
 	GetHotPercentileParamsKindIndex GetHotPercentileParamsKind = "index"
@@ -114,10 +120,11 @@ const (
 	GetHotPercentileParamsClassWrites GetHotPercentileParamsClass = "writes"
 )
 
-// Defines values for GetIndexesHotParamsClass.
+// Defines values for GetTablesHotParamsClass.
 const (
-	GetIndexesHotParamsClassIo    GetIndexesHotParamsClass = "io"
-	GetIndexesHotParamsClassReads GetIndexesHotParamsClass = "reads"
+	Io     GetTablesHotParamsClass = "io"
+	Reads  GetTablesHotParamsClass = "reads"
+	Writes GetTablesHotParamsClass = "writes"
 )
 
 // Defines values for GetLogsParamsServiceType.
@@ -130,13 +137,6 @@ const (
 const (
 	Like    GetQueriesRunningParamsQueryFilterMode = "like"
 	NotLike GetQueriesRunningParamsQueryFilterMode = "not_like"
-)
-
-// Defines values for GetTablesHotParamsClass.
-const (
-	Io     GetTablesHotParamsClass = "io"
-	Reads  GetTablesHotParamsClass = "reads"
-	Writes GetTablesHotParamsClass = "writes"
 )
 
 // ActivitySpikeTrigger defines model for ActivitySpikeTrigger.
@@ -672,7 +672,7 @@ type HotSnapshotMeta struct {
 	Coverage float64 `json:"coverage"`
 
 	// Dates Capture timestamps available for the day selector, newest first.
-	Dates     *[]time.Time  `json:"dates,omitempty"`
+	Dates     []time.Time   `json:"dates"`
 	Histogram *HotHistogram `json:"histogram"`
 
 	// HostsMissing Hosts that could not be sampled — the snapshot is partial, their activity is absent from every number.
@@ -1794,6 +1794,21 @@ type GetHotObjectHistoryParams struct {
 // GetHotObjectHistoryParamsKind defines parameters for GetHotObjectHistory.
 type GetHotObjectHistoryParamsKind string
 
+// GetIndexesHotParams defines parameters for GetIndexesHot.
+type GetIndexesHotParams struct {
+	ClusterName ClusterName               `form:"cluster_name" json:"cluster_name"`
+	Database    Database                  `form:"database" json:"database"`
+	Class       *GetIndexesHotParamsClass `form:"class,omitempty" json:"class,omitempty"`
+
+	// At Exact capture time of the snapshot to read (a value from snapshot.dates); defaults to the latest snapshot.
+	At     *time.Time `form:"at,omitempty" json:"at,omitempty"`
+	Limit  *int       `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int       `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// GetIndexesHotParamsClass defines parameters for GetIndexesHot.
+type GetIndexesHotParamsClass string
+
 // GetHotPercentileParams defines parameters for GetHotPercentile.
 type GetHotPercentileParams struct {
 	ClusterName ClusterName                  `form:"cluster_name" json:"cluster_name"`
@@ -1809,6 +1824,21 @@ type GetHotPercentileParamsKind string
 
 // GetHotPercentileParamsClass defines parameters for GetHotPercentile.
 type GetHotPercentileParamsClass string
+
+// GetTablesHotParams defines parameters for GetTablesHot.
+type GetTablesHotParams struct {
+	ClusterName ClusterName              `form:"cluster_name" json:"cluster_name"`
+	Database    Database                 `form:"database" json:"database"`
+	Class       *GetTablesHotParamsClass `form:"class,omitempty" json:"class,omitempty"`
+
+	// At Exact capture time of the snapshot to read (a value from snapshot.dates); defaults to the latest snapshot.
+	At     *time.Time `form:"at,omitempty" json:"at,omitempty"`
+	Limit  *int       `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int       `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// GetTablesHotParamsClass defines parameters for GetTablesHot.
+type GetTablesHotParamsClass string
 
 // GetIndexesBloatParams defines parameters for GetIndexesBloat.
 type GetIndexesBloatParams struct {
@@ -1841,21 +1871,6 @@ type GetIndexesHitRateParams struct {
 	Instance    Instance    `form:"instance" json:"instance"`
 	Database    Database    `form:"database" json:"database"`
 }
-
-// GetIndexesHotParams defines parameters for GetIndexesHot.
-type GetIndexesHotParams struct {
-	ClusterName ClusterName               `form:"cluster_name" json:"cluster_name"`
-	Database    Database                  `form:"database" json:"database"`
-	Class       *GetIndexesHotParamsClass `form:"class,omitempty" json:"class,omitempty"`
-
-	// At Exact capture time of the snapshot to read (a value from snapshot.dates); defaults to the latest snapshot.
-	At     *time.Time `form:"at,omitempty" json:"at,omitempty"`
-	Limit  *int       `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset *int       `form:"offset,omitempty" json:"offset,omitempty"`
-}
-
-// GetIndexesHotParamsClass defines parameters for GetIndexesHot.
-type GetIndexesHotParamsClass string
 
 // GetIndexesInvalidOrNotReadyParams defines parameters for GetIndexesInvalidOrNotReady.
 type GetIndexesInvalidOrNotReadyParams struct {
@@ -2220,21 +2235,6 @@ type GetTablesHitRateParams struct {
 	Database    Database    `form:"database" json:"database"`
 }
 
-// GetTablesHotParams defines parameters for GetTablesHot.
-type GetTablesHotParams struct {
-	ClusterName ClusterName              `form:"cluster_name" json:"cluster_name"`
-	Database    Database                 `form:"database" json:"database"`
-	Class       *GetTablesHotParamsClass `form:"class,omitempty" json:"class,omitempty"`
-
-	// At Exact capture time of the snapshot to read (a value from snapshot.dates); defaults to the latest snapshot.
-	At     *time.Time `form:"at,omitempty" json:"at,omitempty"`
-	Limit  *int       `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset *int       `form:"offset,omitempty" json:"offset,omitempty"`
-}
-
-// GetTablesHotParamsClass defines parameters for GetTablesHot.
-type GetTablesHotParamsClass string
-
 // GetTablesPartitionsParams defines parameters for GetTablesPartitions.
 type GetTablesPartitionsParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
@@ -2504,8 +2504,14 @@ type ClientInterface interface {
 	// GetHotObjectHistory request
 	GetHotObjectHistory(ctx context.Context, params *GetHotObjectHistoryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetIndexesHot request
+	GetIndexesHot(ctx context.Context, params *GetIndexesHotParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetHotPercentile request
 	GetHotPercentile(ctx context.Context, params *GetHotPercentileParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetTablesHot request
+	GetTablesHot(ctx context.Context, params *GetTablesHotParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetIndexesBloat request
 	GetIndexesBloat(ctx context.Context, params *GetIndexesBloatParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -2518,9 +2524,6 @@ type ClientInterface interface {
 
 	// GetIndexesHitRate request
 	GetIndexesHitRate(ctx context.Context, params *GetIndexesHitRateParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetIndexesHot request
-	GetIndexesHot(ctx context.Context, params *GetIndexesHotParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetIndexesInvalidOrNotReady request
 	GetIndexesInvalidOrNotReady(ctx context.Context, params *GetIndexesInvalidOrNotReadyParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -2662,9 +2665,6 @@ type ClientInterface interface {
 
 	// GetTablesHitRate request
 	GetTablesHitRate(ctx context.Context, params *GetTablesHitRateParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// GetTablesHot request
-	GetTablesHot(ctx context.Context, params *GetTablesHotParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetTablesPartitions request
 	GetTablesPartitions(ctx context.Context, params *GetTablesPartitionsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -3270,8 +3270,32 @@ func (c *Client) GetHotObjectHistory(ctx context.Context, params *GetHotObjectHi
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetIndexesHot(ctx context.Context, params *GetIndexesHotParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetIndexesHotRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetHotPercentile(ctx context.Context, params *GetHotPercentileParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetHotPercentileRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetTablesHot(ctx context.Context, params *GetTablesHotParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetTablesHotRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -3320,18 +3344,6 @@ func (c *Client) GetIndexesCaching(ctx context.Context, params *GetIndexesCachin
 
 func (c *Client) GetIndexesHitRate(ctx context.Context, params *GetIndexesHitRateParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetIndexesHitRateRequest(c.Server, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetIndexesHot(ctx context.Context, params *GetIndexesHotParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetIndexesHotRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -3896,18 +3908,6 @@ func (c *Client) GetTablesDescribeVacuumStats(ctx context.Context, params *GetTa
 
 func (c *Client) GetTablesHitRate(ctx context.Context, params *GetTablesHitRateParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetTablesHitRateRequest(c.Server, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetTablesHot(ctx context.Context, params *GetTablesHotParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetTablesHotRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -6677,7 +6677,7 @@ func NewGetHotObjectHistoryRequest(server string, params *GetHotObjectHistoryPar
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/api/hot/object-history")
+	operationPath := fmt.Sprintf("/api/hot/history")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -6753,6 +6753,127 @@ func NewGetHotObjectHistoryRequest(server string, params *GetHotObjectHistoryPar
 		if params.Days != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "days", runtime.ParamLocationQuery, *params.Days); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetIndexesHotRequest generates requests for GetIndexesHot
+func NewGetIndexesHotRequest(server string, params *GetIndexesHotParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/hot/indexes")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, params.ClusterName); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "database", runtime.ParamLocationQuery, params.Database); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.Class != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "class", runtime.ParamLocationQuery, *params.Class); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.At != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "at", runtime.ParamLocationQuery, *params.At); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -6862,6 +6983,127 @@ func NewGetHotPercentileRequest(server string, params *GetHotPercentileParams) (
 		if params.Class != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "class", runtime.ParamLocationQuery, *params.Class); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetTablesHotRequest generates requests for GetTablesHot
+func NewGetTablesHotRequest(server string, params *GetTablesHotParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/hot/tables")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, params.ClusterName); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "database", runtime.ParamLocationQuery, params.Database); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.Class != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "class", runtime.ParamLocationQuery, *params.Class); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.At != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "at", runtime.ParamLocationQuery, *params.At); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -7213,127 +7455,6 @@ func NewGetIndexesHitRateRequest(server string, params *GetIndexesHitRateParams)
 					queryValues.Add(k, v2)
 				}
 			}
-		}
-
-		queryURL.RawQuery = queryValues.Encode()
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
-// NewGetIndexesHotRequest generates requests for GetIndexesHot
-func NewGetIndexesHotRequest(server string, params *GetIndexesHotParams) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/indexes/hot")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	if params != nil {
-		queryValues := queryURL.Query()
-
-		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, params.ClusterName); err != nil {
-			return nil, err
-		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-			return nil, err
-		} else {
-			for k, v := range parsed {
-				for _, v2 := range v {
-					queryValues.Add(k, v2)
-				}
-			}
-		}
-
-		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "database", runtime.ParamLocationQuery, params.Database); err != nil {
-			return nil, err
-		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-			return nil, err
-		} else {
-			for k, v := range parsed {
-				for _, v2 := range v {
-					queryValues.Add(k, v2)
-				}
-			}
-		}
-
-		if params.Class != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "class", runtime.ParamLocationQuery, *params.Class); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		if params.At != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "at", runtime.ParamLocationQuery, *params.At); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		if params.Limit != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		if params.Offset != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
 		}
 
 		queryURL.RawQuery = queryValues.Encode()
@@ -10962,127 +11083,6 @@ func NewGetTablesHitRateRequest(server string, params *GetTablesHitRateParams) (
 	return req, nil
 }
 
-// NewGetTablesHotRequest generates requests for GetTablesHot
-func NewGetTablesHotRequest(server string, params *GetTablesHotParams) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/api/tables/hot")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	if params != nil {
-		queryValues := queryURL.Query()
-
-		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, params.ClusterName); err != nil {
-			return nil, err
-		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-			return nil, err
-		} else {
-			for k, v := range parsed {
-				for _, v2 := range v {
-					queryValues.Add(k, v2)
-				}
-			}
-		}
-
-		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "database", runtime.ParamLocationQuery, params.Database); err != nil {
-			return nil, err
-		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-			return nil, err
-		} else {
-			for k, v := range parsed {
-				for _, v2 := range v {
-					queryValues.Add(k, v2)
-				}
-			}
-		}
-
-		if params.Class != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "class", runtime.ParamLocationQuery, *params.Class); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		if params.At != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "at", runtime.ParamLocationQuery, *params.At); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		if params.Limit != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		if params.Offset != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		queryURL.RawQuery = queryValues.Encode()
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
 // NewGetTablesPartitionsRequest generates requests for GetTablesPartitions
 func NewGetTablesPartitionsRequest(server string, params *GetTablesPartitionsParams) (*http.Request, error) {
 	var err error
@@ -11674,8 +11674,14 @@ type ClientWithResponsesInterface interface {
 	// GetHotObjectHistoryWithResponse request
 	GetHotObjectHistoryWithResponse(ctx context.Context, params *GetHotObjectHistoryParams, reqEditors ...RequestEditorFn) (*GetHotObjectHistoryResponse, error)
 
+	// GetIndexesHotWithResponse request
+	GetIndexesHotWithResponse(ctx context.Context, params *GetIndexesHotParams, reqEditors ...RequestEditorFn) (*GetIndexesHotResponse, error)
+
 	// GetHotPercentileWithResponse request
 	GetHotPercentileWithResponse(ctx context.Context, params *GetHotPercentileParams, reqEditors ...RequestEditorFn) (*GetHotPercentileResponse, error)
+
+	// GetTablesHotWithResponse request
+	GetTablesHotWithResponse(ctx context.Context, params *GetTablesHotParams, reqEditors ...RequestEditorFn) (*GetTablesHotResponse, error)
 
 	// GetIndexesBloatWithResponse request
 	GetIndexesBloatWithResponse(ctx context.Context, params *GetIndexesBloatParams, reqEditors ...RequestEditorFn) (*GetIndexesBloatResponse, error)
@@ -11688,9 +11694,6 @@ type ClientWithResponsesInterface interface {
 
 	// GetIndexesHitRateWithResponse request
 	GetIndexesHitRateWithResponse(ctx context.Context, params *GetIndexesHitRateParams, reqEditors ...RequestEditorFn) (*GetIndexesHitRateResponse, error)
-
-	// GetIndexesHotWithResponse request
-	GetIndexesHotWithResponse(ctx context.Context, params *GetIndexesHotParams, reqEditors ...RequestEditorFn) (*GetIndexesHotResponse, error)
 
 	// GetIndexesInvalidOrNotReadyWithResponse request
 	GetIndexesInvalidOrNotReadyWithResponse(ctx context.Context, params *GetIndexesInvalidOrNotReadyParams, reqEditors ...RequestEditorFn) (*GetIndexesInvalidOrNotReadyResponse, error)
@@ -11832,9 +11835,6 @@ type ClientWithResponsesInterface interface {
 
 	// GetTablesHitRateWithResponse request
 	GetTablesHitRateWithResponse(ctx context.Context, params *GetTablesHitRateParams, reqEditors ...RequestEditorFn) (*GetTablesHitRateResponse, error)
-
-	// GetTablesHotWithResponse request
-	GetTablesHotWithResponse(ctx context.Context, params *GetTablesHotParams, reqEditors ...RequestEditorFn) (*GetTablesHotResponse, error)
 
 	// GetTablesPartitionsWithResponse request
 	GetTablesPartitionsWithResponse(ctx context.Context, params *GetTablesPartitionsParams, reqEditors ...RequestEditorFn) (*GetTablesPartitionsResponse, error)
@@ -12838,6 +12838,28 @@ func (r GetHotObjectHistoryResponse) StatusCode() int {
 	return 0
 }
 
+type GetIndexesHotResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *HotReport
+}
+
+// Status returns HTTPResponse.Status
+func (r GetIndexesHotResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetIndexesHotResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetHotPercentileResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -12854,6 +12876,28 @@ func (r GetHotPercentileResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetHotPercentileResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetTablesHotResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *HotReport
+}
+
+// Status returns HTTPResponse.Status
+func (r GetTablesHotResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetTablesHotResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -12942,28 +12986,6 @@ func (r GetIndexesHitRateResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetIndexesHitRateResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type GetIndexesHotResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *HotReport
-}
-
-// Status returns HTTPResponse.Status
-func (r GetIndexesHotResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetIndexesHotResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -14003,28 +14025,6 @@ func (r GetTablesHitRateResponse) StatusCode() int {
 	return 0
 }
 
-type GetTablesHotResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *HotReport
-}
-
-// Status returns HTTPResponse.Status
-func (r GetTablesHotResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetTablesHotResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
 type GetTablesPartitionsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -14574,6 +14574,15 @@ func (c *ClientWithResponses) GetHotObjectHistoryWithResponse(ctx context.Contex
 	return ParseGetHotObjectHistoryResponse(rsp)
 }
 
+// GetIndexesHotWithResponse request returning *GetIndexesHotResponse
+func (c *ClientWithResponses) GetIndexesHotWithResponse(ctx context.Context, params *GetIndexesHotParams, reqEditors ...RequestEditorFn) (*GetIndexesHotResponse, error) {
+	rsp, err := c.GetIndexesHot(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetIndexesHotResponse(rsp)
+}
+
 // GetHotPercentileWithResponse request returning *GetHotPercentileResponse
 func (c *ClientWithResponses) GetHotPercentileWithResponse(ctx context.Context, params *GetHotPercentileParams, reqEditors ...RequestEditorFn) (*GetHotPercentileResponse, error) {
 	rsp, err := c.GetHotPercentile(ctx, params, reqEditors...)
@@ -14581,6 +14590,15 @@ func (c *ClientWithResponses) GetHotPercentileWithResponse(ctx context.Context, 
 		return nil, err
 	}
 	return ParseGetHotPercentileResponse(rsp)
+}
+
+// GetTablesHotWithResponse request returning *GetTablesHotResponse
+func (c *ClientWithResponses) GetTablesHotWithResponse(ctx context.Context, params *GetTablesHotParams, reqEditors ...RequestEditorFn) (*GetTablesHotResponse, error) {
+	rsp, err := c.GetTablesHot(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetTablesHotResponse(rsp)
 }
 
 // GetIndexesBloatWithResponse request returning *GetIndexesBloatResponse
@@ -14617,15 +14635,6 @@ func (c *ClientWithResponses) GetIndexesHitRateWithResponse(ctx context.Context,
 		return nil, err
 	}
 	return ParseGetIndexesHitRateResponse(rsp)
-}
-
-// GetIndexesHotWithResponse request returning *GetIndexesHotResponse
-func (c *ClientWithResponses) GetIndexesHotWithResponse(ctx context.Context, params *GetIndexesHotParams, reqEditors ...RequestEditorFn) (*GetIndexesHotResponse, error) {
-	rsp, err := c.GetIndexesHot(ctx, params, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetIndexesHotResponse(rsp)
 }
 
 // GetIndexesInvalidOrNotReadyWithResponse request returning *GetIndexesInvalidOrNotReadyResponse
@@ -15049,15 +15058,6 @@ func (c *ClientWithResponses) GetTablesHitRateWithResponse(ctx context.Context, 
 		return nil, err
 	}
 	return ParseGetTablesHitRateResponse(rsp)
-}
-
-// GetTablesHotWithResponse request returning *GetTablesHotResponse
-func (c *ClientWithResponses) GetTablesHotWithResponse(ctx context.Context, params *GetTablesHotParams, reqEditors ...RequestEditorFn) (*GetTablesHotResponse, error) {
-	rsp, err := c.GetTablesHot(ctx, params, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetTablesHotResponse(rsp)
 }
 
 // GetTablesPartitionsWithResponse request returning *GetTablesPartitionsResponse
@@ -16235,6 +16235,32 @@ func ParseGetHotObjectHistoryResponse(rsp *http.Response) (*GetHotObjectHistoryR
 	return response, nil
 }
 
+// ParseGetIndexesHotResponse parses an HTTP response from a GetIndexesHotWithResponse call
+func ParseGetIndexesHotResponse(rsp *http.Response) (*GetIndexesHotResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetIndexesHotResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest HotReport
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetHotPercentileResponse parses an HTTP response from a GetHotPercentileWithResponse call
 func ParseGetHotPercentileResponse(rsp *http.Response) (*GetHotPercentileResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -16251,6 +16277,32 @@ func ParseGetHotPercentileResponse(rsp *http.Response) (*GetHotPercentileRespons
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest HotPercentile
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetTablesHotResponse parses an HTTP response from a GetTablesHotWithResponse call
+func ParseGetTablesHotResponse(rsp *http.Response) (*GetTablesHotResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetTablesHotResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest HotReport
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -16355,32 +16407,6 @@ func ParseGetIndexesHitRateResponse(rsp *http.Response) (*GetIndexesHitRateRespo
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest []IndexHitRate
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetIndexesHotResponse parses an HTTP response from a GetIndexesHotWithResponse call
-func ParseGetIndexesHotResponse(rsp *http.Response) (*GetIndexesHotResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetIndexesHotResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest HotReport
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -17593,32 +17619,6 @@ func ParseGetTablesHitRateResponse(rsp *http.Response) (*GetTablesHitRateRespons
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest []TableHitRate
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetTablesHotResponse parses an HTTP response from a GetTablesHotWithResponse call
-func ParseGetTablesHotResponse(rsp *http.Response) (*GetTablesHotResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetTablesHotResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest HotReport
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

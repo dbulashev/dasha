@@ -871,6 +871,7 @@
       "hint": "Der Verteilungsrest — Objekte, die es nicht ins gespeicherte Top geschafft haben. Sie werden nicht namentlich gehalten, nur die Form: Dezile des Klassenschlüssels über das Snapshot-Fenster. Flache Balken = kalter Rest, repräsentatives Top; hohe rechte Balken = viele warme Objekte knapp unterhalb — Abdeckung prüfen."
     },
     "noSnapshots": "Noch keine Snapshots — der Daemon erfasst nach Zeitplan, standardmäßig täglich (Snapshot-Speicher muss aktiviert sein).",
+    "warmingUp": "Erster Snapshot erstellt — er legt nur die Basislinie an. Deltas erscheinen nach der nächsten geplanten Erfassung.",
     "describe": {
       "title": "Aktivität",
       "hint": "Live-Delta seit dem letzten Anker-Abzug: absolute Rate (Klassenschlüssel pro Tag) und Platz in der Aktivitätsverteilung dieser Datenbank. Das Perzentil ist relativ: auf einer ruhigen Datenbank bedeutet „heißer als 90%“ keine echte Last — auf die Rate schauen.",

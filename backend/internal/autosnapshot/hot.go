@@ -172,22 +172,19 @@ func (d *Daemon) takeHotSnapshot(ctx context.Context, cfg Config, cl config.Clus
 
 	snap := hotobjects.BuildSnapshot(clusterName, database, capturedAt, inputs, missing, cfg.HotTopN)
 
-	if _, err := d.store.InsertHotSnapshot(ctx, snap); err != nil {
-		// Anchors are deliberately NOT updated on failure: the next tick
-		// retries against the same baseline instead of losing the interval.
-		d.logger.Warn("hot: insert snapshot failed",
+	// The snapshot and every host's anchor advance commit together: on failure
+	// nothing is stored and the next tick retries from the same baseline, so no
+	// interval is lost or (via a stored snapshot with stale anchors) counted twice.
+	anchors := make(map[string][]hotobjects.AnchorRow, len(inputs))
+	for _, in := range inputs {
+		anchors[in.Sample.Instance] = in.Sample.Rows
+	}
+
+	if _, err := d.store.InsertHotSnapshotWithAnchors(ctx, snap, anchors); err != nil {
+		d.logger.Warn("hot: store snapshot failed",
 			zap.String("cluster", clusterName), zap.String("database", database), zap.Error(err))
 
 		return
-	}
-
-	for _, in := range inputs {
-		if err := d.store.UpsertHotAnchors(ctx, clusterName, in.Sample.Instance, database, capturedAt, in.Sample.Rows); err != nil {
-			// The host's window simply spans two intervals next time; windows
-			// are per-host, so nothing else is skewed.
-			d.logger.Warn("hot: upsert anchors failed",
-				zap.String("cluster", clusterName), zap.String("host", in.Sample.Instance), zap.Error(err))
-		}
 	}
 
 	d.logger.Info("hot: snapshot stored",

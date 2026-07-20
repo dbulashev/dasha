@@ -28,8 +28,14 @@ const hasMore = ref(true)
 // The endpoint deliberately takes no instance: idx_scan is per-instance and not
 // replicated, so only the cluster-wide picture can justify a DROP. The response
 // is an object (indexes + unreachable_hosts), hence no usePaginatedApiLoader.
+// Guards against out-of-order responses: switching cluster/db or paging fast can
+// leave an older request in flight whose late reply would clobber the newer one.
+// Only the latest generation applies state or clears loading.
+let reqId = 0
+
 async function load(p = 1) {
   if (!clusterName.value || !databaseName.value) return
+  const myId = ++reqId
   loading.value = true
   try {
     const pageSize = prefs.pageSize
@@ -40,17 +46,26 @@ async function load(p = 1) {
       offset: (p - 1) * pageSize,
     })
     const body = assertOk<IndexUnusedReport>(res)
+    if (myId !== reqId) return // superseded — leave state to the newer load
     items.value = body?.indexes ?? []
     unreachableHosts.value = body?.unreachable_hosts ?? []
     page.value = p
     hasMore.value = items.value.length >= pageSize
   } catch (err) {
+    if (myId !== reqId) return
     onError(getErrorMessage(err), err)
     items.value = []
     unreachableHosts.value = []
   } finally {
-    loading.value = false
+    if (myId === reqId) loading.value = false
   }
+}
+
+// Row key must be schema-qualified: an index name is unique only within its
+// schema, so a bare `index` key would collide and make show-expand toggle every
+// row with that name at once.
+function rowKey(item: IndexVerdict) {
+  return `${item.schema}.${item.table}.${item.index}`
 }
 
 watch([clusterName, databaseName, () => prefs.pageSize], () => load(), { immediate: true })
@@ -102,8 +117,10 @@ const fmtWindow = (days: number) => days >= 1 ? `${days.toFixed(1)} ${t('indexes
         :headers="headers"
         :items="items"
         :loading="loading"
-        item-value="index"
+        :item-value="rowKey"
         show-expand
+        items-per-page="-1"
+        hide-default-footer
       >
         <template #item.table="{ item }">
           <router-link :to="describeLink(item.schema, item.table)" class="text-decoration-none">{{ item.table }}</router-link>

@@ -16,5 +16,5 @@ export interface HotSnapshotMeta {
   coverage: number
   histogram?: HotHistogram | null
   /** Capture timestamps available for the day selector, newest first. */
-  dates?: string[]
+  dates: string[]
 }

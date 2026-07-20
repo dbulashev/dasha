@@ -174,13 +174,17 @@ func hotSnapshotMeta(
 		}
 	}
 
+	if dates == nil {
+		dates = []time.Time{}
+	}
+
 	return serverhttp.HotSnapshotMeta{
 		CapturedAt:   snap.CapturedAt,
 		Windows:      windows,
 		HostsMissing: snap.HostsMissing,
 		Coverage:     coverage,
 		Histogram:    outHist,
-		Dates:        &dates,
+		Dates:        dates,
 	}
 }
 

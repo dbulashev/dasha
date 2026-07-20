@@ -164,6 +164,38 @@ func TestHotSnapshot_InsertReadTopHistory(t *testing.T) {
 	assert.Contains(t, last, "c1/db")
 }
 
+func TestHotSnapshot_InsertWithAnchors(t *testing.T) {
+	s := newHotTestStorage(t)
+	ctx := t.Context()
+
+	now := time.Now().UTC()
+	reset := now.Add(-24 * time.Hour)
+
+	anchors := map[string][]hotobjects.AnchorRow{
+		"h1": {
+			{Instance: "h1", Kind: hotobjects.KindTable, Schema: "public", Object: "orders",
+				CapturedAt: now, StatsReset: &reset, SizeBytes: 1000,
+				Counters: hotobjects.Counters{"seq_tup_read": 500}},
+		},
+	}
+
+	// Snapshot and anchors land in one atomic call.
+	id, err := s.InsertHotSnapshotWithAnchors(ctx, testSnapshot(now), anchors)
+	require.NoError(t, err)
+
+	snap, err := s.GetHotSnapshot(ctx, "c1", "db", nil)
+	require.NoError(t, err)
+	require.NotNil(t, snap)
+	assert.Equal(t, id, snap.ID)
+
+	got, err := s.GetHotAnchors(ctx, "c1", "h1", "db")
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.EqualValues(t, 500, got[hotobjects.Key(hotobjects.KindTable, "public", "orders")].Counters["seq_tup_read"])
+	assert.Equal(t, now.UnixMicro(), got[hotobjects.Key(hotobjects.KindTable, "public", "orders")].CapturedAt.UnixMicro(),
+		"anchors carry the snapshot's captured_at")
+}
+
 func TestHotSnapshot_ByExactCapture(t *testing.T) {
 	s := newHotTestStorage(t)
 	ctx := t.Context()

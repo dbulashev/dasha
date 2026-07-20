@@ -917,6 +917,7 @@
       "hint": "The distribution tail — objects that did not make the stored top. They are not kept by name, only the shape: deciles of the class key over the snapshot window. Flat bars mean a cold tail and a representative top; tall right-side bars mean many warm objects just below the top — check coverage."
     },
     "noSnapshots": "No snapshots yet — the daemon captures on a schedule, daily by default (snapshot storage must be enabled).",
+    "warmingUp": "First snapshot taken — it only seeds the baseline. Deltas appear after the next scheduled capture.",
     "describe": {
       "title": "Hotness",
       "hint": "Live delta since the last anchor slice: the absolute rate (class key per day) and the place in this database's activity distribution. The percentile is relative: on a quiet database \"hotter than 90% of tables\" does not mean real load — read the rate.",

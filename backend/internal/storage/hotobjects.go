@@ -14,10 +14,8 @@ import (
 )
 
 // UpsertHotAnchors replaces the anchor slice of one cluster×host×database in a
-// single transaction: every current object is upserted with the same
-// captured_at, then rows that kept an older captured_at (objects that
-// disappeared from the target DB) are deleted. Only non-indexed columns are
-// updated, so the writes stay HOT-eligible (see the DDL comment).
+// single transaction. See upsertHotAnchorsTx for the mechanics; only non-indexed
+// columns are updated, so the writes stay HOT-eligible (see the DDL comment).
 func (s *Storage) UpsertHotAnchors(
 	ctx context.Context,
 	clusterName, instance, database string,
@@ -31,6 +29,28 @@ func (s *Storage) UpsertHotAnchors(
 
 	defer tx.Rollback(ctx) //nolint:errcheck
 
+	if err := upsertHotAnchorsTx(ctx, tx, clusterName, instance, database, capturedAt, rows); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("storage: hot anchors commit: %w", err)
+	}
+
+	return nil
+}
+
+// upsertHotAnchorsTx replaces one host's anchor slice inside an existing
+// transaction: every current object is upserted with the same captured_at, then
+// rows that kept an older captured_at (objects that disappeared from the target
+// DB) are deleted.
+func upsertHotAnchorsTx(
+	ctx context.Context,
+	tx pgx.Tx,
+	clusterName, instance, database string,
+	capturedAt time.Time,
+	rows []hotobjects.AnchorRow,
+) error {
 	batch := &pgx.Batch{}
 
 	for _, r := range rows {
@@ -60,16 +80,11 @@ func (s *Storage) UpsertHotAnchors(
 
 	// Anything not touched by this batch kept its old captured_at: the object
 	// is gone from the target database, so its anchor goes too.
-	_, err = tx.Exec(ctx, `
+	if _, err := tx.Exec(ctx, `
 		DELETE FROM hot_anchor
 		WHERE cluster_name = $1 AND instance = $2 AND database = $3 AND captured_at < $4`,
-		clusterName, instance, database, capturedAt)
-	if err != nil {
+		clusterName, instance, database, capturedAt); err != nil {
 		return fmt.Errorf("storage: prune hot anchors: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("storage: hot anchors commit: %w", err)
 	}
 
 	return nil
@@ -161,6 +176,69 @@ func (s *Storage) InsertHotSnapshot(ctx context.Context, snap hotobjects.Snapsho
 		return uuid.Nil, err
 	}
 
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("storage: hot snapshot begin: %w", err)
+	}
+
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	id, err := insertHotSnapshotTx(ctx, tx, snap)
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return uuid.Nil, fmt.Errorf("storage: hot snapshot commit: %w", err)
+	}
+
+	return id, nil
+}
+
+// InsertHotSnapshotWithAnchors stores one capture and advances every host's
+// anchor slice in the SAME transaction. Doing the two as separate transactions
+// (snapshot first, anchors after) would let a crash in between leave a stored
+// snapshot whose anchors never moved: the next run would then re-measure the
+// interval this snapshot already covers and double-count it. The anchors are
+// keyed by host instance → fresh cumulative rows and carry the snapshot's own
+// captured_at.
+func (s *Storage) InsertHotSnapshotWithAnchors(
+	ctx context.Context,
+	snap hotobjects.Snapshot,
+	anchors map[string][]hotobjects.AnchorRow,
+) (uuid.UUID, error) {
+	if err := s.ensureHotPartitions(ctx, snap.CapturedAt); err != nil {
+		return uuid.Nil, err
+	}
+
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("storage: hot snapshot begin: %w", err)
+	}
+
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	id, err := insertHotSnapshotTx(ctx, tx, snap)
+	if err != nil {
+		return uuid.Nil, err
+	}
+
+	for instance, rows := range anchors {
+		if err := upsertHotAnchorsTx(ctx, tx, snap.ClusterName, instance, snap.Database, snap.CapturedAt, rows); err != nil {
+			return uuid.Nil, err
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return uuid.Nil, fmt.Errorf("storage: hot snapshot commit: %w", err)
+	}
+
+	return id, nil
+}
+
+// insertHotSnapshotTx writes the meta row and the top rows inside an existing
+// transaction.
+func insertHotSnapshotTx(ctx context.Context, tx pgx.Tx, snap hotobjects.Snapshot) (uuid.UUID, error) {
 	windows, err := json.Marshal(snap.Windows)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("storage: marshal hot windows: %w", err)
@@ -175,13 +253,6 @@ func (s *Storage) InsertHotSnapshot(ctx context.Context, snap hotobjects.Snapsho
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("storage: marshal hot histogram: %w", err)
 	}
-
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return uuid.Nil, fmt.Errorf("storage: hot snapshot begin: %w", err)
-	}
-
-	defer tx.Rollback(ctx) //nolint:errcheck
 
 	hostsMissing := snap.HostsMissing
 	if hostsMissing == nil {
@@ -225,10 +296,6 @@ func (s *Storage) InsertHotSnapshot(ctx context.Context, snap hotobjects.Snapsho
 	br := tx.SendBatch(ctx, batch)
 	if err := br.Close(); err != nil {
 		return uuid.Nil, fmt.Errorf("storage: insert hot top: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return uuid.Nil, fmt.Errorf("storage: hot snapshot commit: %w", err)
 	}
 
 	return id, nil

@@ -6629,7 +6629,7 @@ export const getGetTablesHotUrl = (params: GetTablesHotParams) => {
 
   const stringifiedParams = normalizedParams.toString()
 
-  return stringifiedParams.length > 0 ? `/api/tables/hot?${stringifiedParams}` : `/api/tables/hot`
+  return stringifiedParams.length > 0 ? `/api/hot/tables?${stringifiedParams}` : `/api/hot/tables`
 }
 
 export const getTablesHot = async (
@@ -6643,7 +6643,7 @@ export const getTablesHot = async (
 }
 
 export const getGetTablesHotQueryKey = (params?: MaybeRef<GetTablesHotParams>) => {
-  return ['api', 'tables', 'hot', ...(params ? [params] : [])] as const
+  return ['api', 'hot', 'tables', ...(params ? [params] : [])] as const
 }
 
 export const getGetTablesHotQueryOptions = <
@@ -6735,7 +6735,7 @@ export const getGetIndexesHotUrl = (params: GetIndexesHotParams) => {
 
   const stringifiedParams = normalizedParams.toString()
 
-  return stringifiedParams.length > 0 ? `/api/indexes/hot?${stringifiedParams}` : `/api/indexes/hot`
+  return stringifiedParams.length > 0 ? `/api/hot/indexes?${stringifiedParams}` : `/api/hot/indexes`
 }
 
 export const getIndexesHot = async (
@@ -6749,7 +6749,7 @@ export const getIndexesHot = async (
 }
 
 export const getGetIndexesHotQueryKey = (params?: MaybeRef<GetIndexesHotParams>) => {
-  return ['api', 'indexes', 'hot', ...(params ? [params] : [])] as const
+  return ['api', 'hot', 'indexes', ...(params ? [params] : [])] as const
 }
 
 export const getGetIndexesHotQueryOptions = <
@@ -6846,9 +6846,7 @@ export const getGetHotObjectHistoryUrl = (params: GetHotObjectHistoryParams) => 
 
   const stringifiedParams = normalizedParams.toString()
 
-  return stringifiedParams.length > 0
-    ? `/api/hot/object-history?${stringifiedParams}`
-    : `/api/hot/object-history`
+  return stringifiedParams.length > 0 ? `/api/hot/history?${stringifiedParams}` : `/api/hot/history`
 }
 
 export const getHotObjectHistory = async (
@@ -6862,7 +6860,7 @@ export const getHotObjectHistory = async (
 }
 
 export const getGetHotObjectHistoryQueryKey = (params?: MaybeRef<GetHotObjectHistoryParams>) => {
-  return ['api', 'hot', 'object-history', ...(params ? [params] : [])] as const
+  return ['api', 'hot', 'history', ...(params ? [params] : [])] as const
 }
 
 export const getGetHotObjectHistoryQueryOptions = <

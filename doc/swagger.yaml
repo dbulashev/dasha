@@ -1450,7 +1450,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
-  /api/tables/hot:
+  /api/hot/tables:
     get:
       operationId: getTablesHot
       summary: Top hot tables from the latest (or a given day's) delta snapshot
@@ -1498,7 +1498,7 @@ paths:
         '501':
           description: Snapshot storage not configured
 
-  /api/indexes/hot:
+  /api/hot/indexes:
     get:
       operationId: getIndexesHot
       summary: Top hot indexes from the latest (or a given day's) delta snapshot
@@ -1542,7 +1542,7 @@ paths:
         '501':
           description: Snapshot storage not configured
 
-  /api/hot/object-history:
+  /api/hot/history:
     get:
       operationId: getHotObjectHistory
       summary: Days an object appeared in a stored hot top
@@ -3489,6 +3489,7 @@ components:
         - windows
         - hosts_missing
         - coverage
+        - dates
       properties:
         captured_at:
           type: string

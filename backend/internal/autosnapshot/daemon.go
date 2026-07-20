@@ -46,8 +46,7 @@ type Store interface {
 
 	LastHotSnapshotAt(ctx context.Context) (map[string]time.Time, error)
 	GetHotAnchors(ctx context.Context, clusterName, instance, database string) (map[string]hotobjects.AnchorRow, error)
-	UpsertHotAnchors(ctx context.Context, clusterName, instance, database string, capturedAt time.Time, rows []hotobjects.AnchorRow) error
-	InsertHotSnapshot(ctx context.Context, snap hotobjects.Snapshot) (uuid.UUID, error)
+	InsertHotSnapshotWithAnchors(ctx context.Context, snap hotobjects.Snapshot, anchors map[string][]hotobjects.AnchorRow) (uuid.UUID, error)
 	DropHotPartitionsBefore(ctx context.Context, cutoff time.Time) error
 }
 

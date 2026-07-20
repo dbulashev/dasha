@@ -116,10 +116,26 @@ const dateItems = computed(() => {
   return [latest, ...items]
 })
 
+// A snapshot with no complete host window (the very first capture, which only
+// seeds anchors, or a run where every host's stats epoch broke) carries no real
+// deltas — its coverage defaults to a meaningless 100%. Treat it as "warming up"
+// rather than showing an empty top under a bogus coverage chip.
+const measured = computed(() => {
+  const w = report.value?.snapshot.windows
+  return w ? Object.values(w).some(x => x.complete) : false
+})
+
 const coveragePct = computed(() => {
   const c = report.value?.snapshot.coverage
   return c != null ? (c * 100).toFixed(1) : null
 })
+
+// Row key must be schema-qualified: two objects can share a name across schemas
+// (public.orders / sales.orders), and a bare `object` key would collide and make
+// show-expand toggle every row with that name at once.
+function rowKey(item: HotEntry) {
+  return `${item.schema}.${item.object}`
+}
 
 // Tail histogram (objects outside the stored top): deciles of the class key.
 const tail = computed(() => report.value?.snapshot.histogram ?? null)
@@ -166,7 +182,7 @@ const title = computed(() => t(props.kind === 'table' ? 'hot.tablesTitle' : 'hot
           <v-icon v-bind="tp" size="small" color="medium-emphasis">mdi-help-circle-outline</v-icon>
         </template>
       </v-tooltip>
-      <v-chip v-if="coveragePct != null" size="small" variant="tonal">
+      <v-chip v-if="coveragePct != null && measured" size="small" variant="tonal">
         {{ t('hot.coverage', { pct: coveragePct }) }}
       </v-chip>
       <v-spacer />
@@ -200,12 +216,12 @@ const title = computed(() => t(props.kind === 'table' ? 'hot.tablesTitle' : 'hot
         {{ t('hot.hostsMissing', { hosts: report!.snapshot.hosts_missing.join(', ') }) }}
       </v-alert>
 
-      <template v-if="report">
+      <template v-if="report && measured">
         <v-data-table
           :headers="headers"
           :items="report.entries"
           :loading="loading"
-          item-value="object"
+          :item-value="rowKey"
           show-expand
           items-per-page="-1"
           hide-default-footer
@@ -316,6 +332,7 @@ const title = computed(() => t(props.kind === 'table' ? 'hot.tablesTitle' : 'hot
           </template>
         </div>
       </template>
+      <div v-else-if="report && !measured" class="text-medium-emphasis">{{ t('hot.warmingUp') }}</div>
       <div v-else-if="!loading" class="text-medium-emphasis">{{ t('hot.noSnapshots') }}</div>
       <v-progress-linear v-else indeterminate />
     </v-card-text>
