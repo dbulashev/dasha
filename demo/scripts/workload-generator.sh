@@ -136,6 +136,20 @@ SQL
     SELECT * FROM customer_profiles WHERE bio IS NOT NULL ORDER BY random() LIMIT 5;
 SQL
 
+  # 6. Hash / range→hash partition load (hot-objects rollup demo)
+  #    Reads + writes spread across every partition, so the hot-objects top must
+  #    roll the leaves up into sensor_readings and metrics_2026_0N.
+  psql -h pg18-master -U demo -d demo -c "
+    INSERT INTO sensor_readings (sensor_id, reading)
+      SELECT (random()*10000)::int, (random()*100)::numeric(10,2) FROM generate_series(1, 3000);
+    SELECT count(*), avg(reading) FROM sensor_readings WHERE sensor_id BETWEEN 1 AND 4000;
+    SELECT sensor_id, count(*) FROM sensor_readings GROUP BY sensor_id ORDER BY count(*) DESC LIMIT 10;
+    INSERT INTO metrics (bucket, metric_date, value)
+      SELECT (random()*1000)::int, '2026-01-01'::date + (random()*58)::int, random()*1000 FROM generate_series(1, 1500);
+    SELECT metric_date, count(*), avg(value) FROM metrics GROUP BY metric_date;
+    SELECT count(*) FROM metrics WHERE bucket BETWEEN 1 AND 300;
+  "
+
   echo "[$(date)] Workload cycle completed"
   sleep 15
 done

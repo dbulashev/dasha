@@ -127,7 +127,11 @@ const measured = computed(() => {
 
 const coveragePct = computed(() => {
   const c = report.value?.snapshot.coverage
-  return c != null ? (c * 100).toFixed(1) : null
+  if (c == null) return null
+  // Floor below 100 whenever a tail exists (coverage < 1): a 99.96% must not
+  // round up to a misleading "100.0%" while the tail card still lists objects.
+  // coverage === 1 only when the tail sum is 0, so 100.0% stays truthful.
+  return (c >= 1 ? 100 : Math.floor(c * 1000) / 10).toFixed(1)
 })
 
 // Row key must be schema-qualified: two objects can share a name across schemas

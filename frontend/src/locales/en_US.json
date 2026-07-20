@@ -914,7 +914,7 @@
     "tail": {
       "summary": "Outside the top: {count} objects, sum {sum} (P50 {median}, P90 {p90}, max {max})",
       "idle": "Outside the top: {count} objects, all idle over the snapshot window — the top covers the entire load.",
-      "hint": "The distribution tail — objects that did not make the stored top. They are not kept by name, only the shape: deciles of the class key over the snapshot window. Flat bars mean a cold tail and a representative top; tall right-side bars mean many warm objects just below the top — check coverage."
+      "hint": "The distribution tail — the objects that missed the stored top, kept as a shape, not by name. The numbers use the ranking metric of the class (e.g. index tuples read for Reads), totalled over the snapshot window — NOT per day like the table above: sum = the whole tail's total; P50 / P90 = the median and 90th-percentile object; max = the single busiest tail object. A flat, low tail with high coverage means the top is representative; a high P90 / max means warm objects sit just below the top."
     },
     "noSnapshots": "No snapshots yet — the daemon captures on a schedule, daily by default (snapshot storage must be enabled).",
     "warmingUp": "First snapshot taken — it only seeds the baseline. Deltas appear after the next scheduled capture.",

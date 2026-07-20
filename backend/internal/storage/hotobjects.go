@@ -61,16 +61,17 @@ func upsertHotAnchorsTx(
 
 		batch.Queue(`
 			INSERT INTO hot_anchor (cluster_name, instance, database, kind, schema_name, object_name,
-			                        table_name, captured_at, stats_reset, size_bytes, counters)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
+			                        table_name, captured_at, stats_reset, size_bytes, counters, part_sig)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12)
 			ON CONFLICT (cluster_name, instance, database, kind, schema_name, object_name)
 			DO UPDATE SET table_name = EXCLUDED.table_name,
 			              captured_at = EXCLUDED.captured_at,
 			              stats_reset = EXCLUDED.stats_reset,
 			              size_bytes = EXCLUDED.size_bytes,
-			              counters = EXCLUDED.counters`,
+			              counters = EXCLUDED.counters,
+			              part_sig = EXCLUDED.part_sig`,
 			clusterName, instance, database, string(r.Kind), r.Schema, r.Object,
-			nullIfEmpty(r.TableName), capturedAt, r.StatsReset, r.SizeBytes, jsonbArg(counters))
+			nullIfEmpty(r.TableName), capturedAt, r.StatsReset, r.SizeBytes, jsonbArg(counters), r.PartSig)
 	}
 
 	br := tx.SendBatch(ctx, batch)
@@ -97,7 +98,7 @@ func (s *Storage) GetHotAnchors(
 	clusterName, instance, database string,
 ) (map[string]hotobjects.AnchorRow, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT kind, schema_name, object_name, COALESCE(table_name, ''), captured_at, stats_reset, size_bytes, counters
+		SELECT kind, schema_name, object_name, COALESCE(table_name, ''), captured_at, stats_reset, size_bytes, part_sig, counters
 		FROM hot_anchor
 		WHERE cluster_name = $1 AND instance = $2 AND database = $3`,
 		clusterName, instance, database)
@@ -115,7 +116,7 @@ func (s *Storage) GetHotAnchors(
 			counters []byte
 		)
 
-		if err := rows.Scan(&kind, &a.Schema, &a.Object, &a.TableName, &a.CapturedAt, &a.StatsReset, &a.SizeBytes, &counters); err != nil {
+		if err := rows.Scan(&kind, &a.Schema, &a.Object, &a.TableName, &a.CapturedAt, &a.StatsReset, &a.SizeBytes, &a.PartSig, &counters); err != nil {
 			return nil, fmt.Errorf("storage: scan hot anchor: %w", err)
 		}
 
@@ -141,7 +142,7 @@ func (s *Storage) GetHotAnchorsForObject(
 	schema, object string,
 ) ([]hotobjects.AnchorRow, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT instance, COALESCE(table_name, ''), captured_at, stats_reset, size_bytes, counters
+		SELECT instance, COALESCE(table_name, ''), captured_at, stats_reset, size_bytes, part_sig, counters
 		FROM hot_anchor
 		WHERE cluster_name = $1 AND database = $2 AND kind = $3 AND schema_name = $4 AND object_name = $5`,
 		clusterName, database, string(kind), schema, object)
@@ -156,7 +157,7 @@ func (s *Storage) GetHotAnchorsForObject(
 		a := hotobjects.AnchorRow{Kind: kind, Schema: schema, Object: object} //nolint:exhaustruct
 
 		var counters []byte
-		if err := rows.Scan(&a.Instance, &a.TableName, &a.CapturedAt, &a.StatsReset, &a.SizeBytes, &counters); err != nil {
+		if err := rows.Scan(&a.Instance, &a.TableName, &a.CapturedAt, &a.StatsReset, &a.SizeBytes, &a.PartSig, &counters); err != nil {
 			return nil, fmt.Errorf("storage: scan object anchor: %w", err)
 		}
 

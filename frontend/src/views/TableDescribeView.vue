@@ -75,7 +75,7 @@ const isPartitioned = computed(() => data.value?.TableType === 'partitioned_tabl
 
   <template v-if="data">
     <DescribeHeaderSection :data="data" />
-    <DescribeHotnessSection v-if="data.TableType === 'table'" :schema="schema" :table="table" />
+    <DescribeHotnessSection v-if="data.TableType === 'table' || data.TableType === 'partitioned_table'" :schema="schema" :table="table" />
     <DescribeColumnsSection :items="data.Columns" />
     <DescribeIndexesSection :items="data.Indexes" />
     <DescribeConstraintsSection :title="t('describe.checkConstraints')" :items="data.CheckConstraints" />

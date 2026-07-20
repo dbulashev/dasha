@@ -195,8 +195,14 @@ CREATE TABLE IF NOT EXISTS hot_anchor (
     stats_reset  timestamptz,
     size_bytes   bigint NOT NULL,
     counters     jsonb NOT NULL,
+    part_sig     text NOT NULL DEFAULT '',
     CONSTRAINT hot_anchor_pkey PRIMARY KEY (cluster_name, instance, database, kind, schema_name, object_name)
 ) WITH (fillfactor = 70)`
+
+	// part_sig fingerprints the leaf-partition set summed into a rollup target;
+	// a change invalidates the interval. Non-indexed → stays HOT-eligible.
+	addHotAnchorPartSigSQL = `
+ALTER TABLE hot_anchor ADD COLUMN IF NOT EXISTS part_sig text NOT NULL DEFAULT ''`
 
 	createHotSnapshotSQL = `
 CREATE TABLE IF NOT EXISTS hot_snapshot (
@@ -315,6 +321,7 @@ func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
 		createAPITokensSubjectIdxSQL,
 		createUsersSQL,
 		createHotAnchorSQL,
+		addHotAnchorPartSigSQL,
 		createHotSnapshotSQL,
 		createHotSnapshotIdxSQL,
 		createHotTopSQL,

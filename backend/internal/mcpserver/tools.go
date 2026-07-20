@@ -353,7 +353,8 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			"Cluster-wide by design (no instance): activity counters are not replicated. Check snapshot.coverage " +
 			"— it states what share of total activity the stored top holds; a low coverage means a fat tail of " +
 			"warm objects that the entries do not show. snapshot.hosts_missing non-empty means the snapshot is " +
-			"partial. Use rate_per_day for comparisons, not raw deltas. Requires snapshot storage (501 otherwise). " +
+			"partial. Hash-partitioned tables appear as the parent (partitions summed); range/list partitions " +
+			"appear individually. Use rate_per_day for comparisons, not raw deltas. Requires snapshot storage (501 otherwise). " +
 			"Pairs well with maintenance metrics: a table hot on writes usually deserves per-table autovacuum tuning.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a hotArgs) (*mcp.CallToolResult, any, error) {
 		if a.Class != "" && a.Class != "reads" && a.Class != "writes" && a.Class != "io" {

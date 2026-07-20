@@ -16,6 +16,12 @@ func tableRow(schema, name string, size int64, c Counters) AnchorRow {
 	return AnchorRow{Kind: KindTable, Schema: schema, Object: name, SizeBytes: size, Counters: c} //nolint:exhaustruct
 }
 
+func sigRow(r AnchorRow, sig string) AnchorRow {
+	r.PartSig = sig
+
+	return r
+}
+
 func TestDelta(t *testing.T) {
 	d, ok := Delta(Counters{"a": 10, "b": 5}, Counters{"a": 15, "b": 5, "c": 3})
 	require.True(t, ok)
@@ -151,6 +157,38 @@ func topOf(s Snapshot, class Class) []TopEntry {
 	return out
 }
 
+func TestBuildSnapshot_PartSigChangeSkips(t *testing.T) {
+	reset := ts(0)
+
+	// Hash rollup is done in SQL, so BuildSnapshot sees already-summed rows. The
+	// only partition concern left here is churn: when the leaf set summed into a
+	// target changes, its part_sig changes and the interval must be skipped —
+	// even though the summed counters still look monotonic.
+	anchors := anchorsOf(ts(1), &reset,
+		sigRow(tableRow("public", "events", 100, Counters{"seq_tup_read": 100}), "sigA"),
+		sigRow(tableRow("public", "orders", 100, Counters{"seq_tup_read": 100}), "sigX"),
+	)
+
+	sample := HostSample{Instance: "h1", CapturedAt: ts(25), StatsReset: &reset, Rows: []AnchorRow{
+		sigRow(tableRow("public", "events", 100, Counters{"seq_tup_read": 500}), "sigB"), // set changed
+		sigRow(tableRow("public", "orders", 100, Counters{"seq_tup_read": 400}), "sigX"), // set stable
+	}}
+
+	snap := BuildSnapshot("c1", "db", ts(25), []BuildInput{{Sample: sample, Anchors: anchors}}, nil, 10)
+
+	byName := map[string]TopEntry{}
+	for _, e := range topOf(snap, ClassReads) {
+		byName[e.Object] = e
+	}
+
+	_, hasEvents := byName["events"]
+	assert.False(t, hasEvents, "partition set changed → events interval skipped")
+
+	orders, ok := byName["orders"]
+	require.True(t, ok, "stable partition set → orders measured")
+	assert.EqualValues(t, 300, RankKey(KindTable, ClassReads, orders.Delta))
+}
+
 func TestBuildSnapshot_ZeroActivityNeverTops(t *testing.T) {
 	reset := ts(0)
 
@@ -195,11 +233,20 @@ func TestDeciles(t *testing.T) {
 }
 
 func TestHistogramPercentile(t *testing.T) {
-	h := &Histogram{Deciles: []float64{1, 2, 3, 4, 5, 6, 7, 8, 9}, Count: 10, Sum: 55, Max: 10}
+	h := &Histogram{
+		Deciles: []float64{1, 2, 3, 4, 5, 6, 7, 8, 9},
+		Upper:   []float64{12, 20}, // P95, P99
+		Count:   100,
+		Sum:     0,
+		Max:     30,
+	}
 
-	assert.InDelta(t, 0.0, h.Percentile(0.5), 1e-9)
-	assert.InDelta(t, 0.4, h.Percentile(5), 1e-9, "strict: a tie with the P50 decile does not count")
-	assert.InDelta(t, 0.9, h.Percentile(100), 1e-9)
+	// Continuous, interpolated across the (0,0) → deciles → P95/P99 → (1.0, Max)
+	// ladder — not the old ten discrete steps.
+	assert.InDelta(t, 0.05, h.Percentile(0.5), 1e-9, "half-way into the first decile")
+	assert.InDelta(t, 0.50, h.Percentile(5), 1e-9, "on the P50 boundary")
+	assert.InDelta(t, 0.97, h.Percentile(16), 1e-9, "upper tail resolves between P95 and P99")
+	assert.InDelta(t, 1.00, h.Percentile(100), 1e-9, "above every stored quantile")
 
 	var nilH *Histogram
 

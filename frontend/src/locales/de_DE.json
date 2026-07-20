@@ -868,7 +868,7 @@
     "tail": {
       "summary": "Außerhalb des Tops: {count} Objekte, Summe {sum} (P50 {median}, P90 {p90}, max {max})",
       "idle": "Außerhalb des Tops: {count} Objekte, alle im Snapshot-Fenster inaktiv — das Top deckt die gesamte Last ab.",
-      "hint": "Der Verteilungsrest — Objekte, die es nicht ins gespeicherte Top geschafft haben. Sie werden nicht namentlich gehalten, nur die Form: Dezile des Klassenschlüssels über das Snapshot-Fenster. Flache Balken = kalter Rest, repräsentatives Top; hohe rechte Balken = viele warme Objekte knapp unterhalb — Abdeckung prüfen."
+      "hint": "Der Verteilungsrest — Objekte, die es nicht ins gespeicherte Top geschafft haben; als Form gespeichert, nicht namentlich. Die Zahlen nutzen die Ranking-Metrik der Klasse (z. B. gelesene Indextupel bei Lesezugriffen), summiert über das Snapshot-Fenster — NICHT pro Tag wie die Tabelle oben: Summe = Gesamtwert des Rests; P50 / P90 = Median- und 90-Perzentil-Objekt; max = das aktivste einzelne Objekt des Rests. Flacher, niedriger Rest bei hoher Abdeckung = repräsentatives Top; hohe P90 / max = warme Objekte knapp unter dem Top."
     },
     "noSnapshots": "Noch keine Snapshots — der Daemon erfasst nach Zeitplan, standardmäßig täglich (Snapshot-Speicher muss aktiviert sein).",
     "warmingUp": "Erster Snapshot erstellt — er legt nur die Basislinie an. Deltas erscheinen nach der nächsten geplanten Erfassung.",
