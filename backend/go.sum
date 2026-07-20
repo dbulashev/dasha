@@ -243,10 +243,10 @@ github.com/valyala/fasttemplate v1.2.2 h1:lxLXG0uE3Qnshl9QyaK6XJxMXlQZELvChBOCmQ
 github.com/valyala/fasttemplate v1.2.2/go.mod h1:KHLXt3tVN2HBp8eijSv/kGJopbvo7S+qRAEEKiv+SiQ=
 github.com/woodsbury/decimal128 v1.3.0 h1:8pffMNWIlC0O5vbyHWFZAt5yWvWcrHA+3ovIIjVWss0=
 github.com/woodsbury/decimal128 v1.3.0/go.mod h1:C5UTmyTjW3JftjUFzOVhC20BEQa2a4ZKOB5I6Zjb+ds=
-github.com/yandex-cloud/go-genproto v0.92.0 h1:UlkMhM5US8moiTBWmkUZCptVp8mplMaqBDcvRx2zn3Q=
-github.com/yandex-cloud/go-genproto v0.92.0/go.mod h1:0LDD/IZLIUIV4iPH+YcF+jysO3jkSvADFGm4dCAuwQo=
-github.com/yandex-cloud/go-sdk v0.31.0 h1:iPixKMu7t64xziWRIEW3pKkq3kGuvgNmiwH/Vl1FcqY=
-github.com/yandex-cloud/go-sdk v0.31.0/go.mod h1:C27Pqw9umTq3vi3ZM8tfmc5Rb0rt6Fxnl7nimQT1aM0=
+github.com/yandex-cloud/go-genproto v0.93.0 h1:WcjiKVvjgWgI2Fb8ONugbKuTOlncqAm2t+62p4xlzA0=
+github.com/yandex-cloud/go-genproto v0.93.0/go.mod h1:0LDD/IZLIUIV4iPH+YcF+jysO3jkSvADFGm4dCAuwQo=
+github.com/yandex-cloud/go-sdk v0.32.0 h1:+krs7xf7rPvuPcRITAnqovrKraj5S62VconSPjmAOo4=
+github.com/yandex-cloud/go-sdk v0.32.0/go.mod h1:YIEb0cQHowyOaIy7BAPUu2oejnoiu1q8z5Yk0KH+pxo=
 github.com/yosida95/uritemplate/v3 v3.0.2 h1:Ed3Oyj9yrmi9087+NczuL5BwkIc4wvTb5zIM+UJPGz4=
 github.com/yosida95/uritemplate/v3 v3.0.2/go.mod h1:ILOh0sOhIJR3+L/8afwt/kE++YT040gmv5BQTMR2HP4=
 github.com/yusufpapurcu/wmi v1.2.4 h1:zFUKzehAFReQwLys1b/iSMl+JQGSCSjtVqQn9bBrPo0=
