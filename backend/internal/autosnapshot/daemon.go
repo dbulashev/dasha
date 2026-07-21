@@ -57,6 +57,9 @@ type Daemon struct {
 	store          Store
 	logger         *zap.Logger
 	leaderElection bool
+	// clock feeds the spike state machine; nil means time.Now. Injected by tests
+	// so a multi-minute spike can be replayed without sleeping.
+	clock func() time.Time
 
 	mu               sync.Mutex
 	hosts            map[hostKey]*hostState
@@ -68,6 +71,14 @@ type Daemon struct {
 type hostKey struct {
 	Cluster  string
 	Instance string
+}
+
+func (d *Daemon) nowUTC() time.Time {
+	if d.clock == nil {
+		return time.Now().UTC()
+	}
+
+	return d.clock().UTC()
 }
 
 type hostState struct {
@@ -99,14 +110,53 @@ const (
 	spikeForming                  // a candidate is running: this probe was above the threshold, or a tolerated dip
 )
 
+// Tolerance heuristics for a forming spike. The two timing knobs are relative to
+// the operator's spike_duration so they scale with it. All three were calibrated
+// by replaying recorded connection-count series of the shape that defeated the
+// previous all-or-nothing rule: a load ramp climbing several times over its
+// baseline while dipping back under the threshold for about a minute every one
+// or two minutes.
+const (
+	// minSpikeCoverage — share of probes that must sit at/above the threshold for
+	// the candidate to count as a spike. 1.0 is the old rule that no saw-toothed
+	// load ever satisfied and 0.5 would accept load merely oscillating around the
+	// threshold; on the replayed series genuine spikes measured 0.75-0.8 while
+	// flapping stretches stayed at or below 0.5, so 0.7 separates them with margin.
+	minSpikeCoverage = 0.7
+	// dipGraceDivisor — a single dip may last spike_duration/dipGraceDivisor before
+	// the candidate is abandoned. Half means a spike can never spend more time below
+	// the threshold than above it, and at a typical 2m spike_duration over a 30s
+	// poll_interval it absorbs the two consecutive low probes a one-minute lull leaves.
+	dipGraceDivisor = 2
+	// staleCandidateFactor — a candidate that has not fired within this many
+	// spike_durations is restarted from the current probe, see advanceSpike. It
+	// trades two opposing risks. Too low and a candidate that opened on a ragged
+	// start dies before its coverage recovers — anything under 2 is unusable, since
+	// one spike_duration is spent merely reaching the fire check. Too high and the
+	// reported peak, coverage and duration describe load long past. Four leaves
+	// three spike_durations of recovery after the first, and caps the staleness of
+	// what a snapshot reports at 8 minutes under the shipped 2m default. Raise it
+	// only if minSpikeCoverage moves close to 1.0 or poll_interval grows close to
+	// spike_duration, both of which leave a candidate too few probes to recover.
+	staleCandidateFactor = 4
+)
+
 // advanceSpike folds one probe into the forming-spike state. A dip below the
-// threshold does not abort the candidate as long as it stays within dipGrace:
-// real load is saw-toothed, and dropping the candidate on the first low probe
-// makes any spike_duration spanning several polls unreachable. Coverage
+// threshold does not abort the candidate as long as it stays within the grace
+// window: real load is saw-toothed, and dropping the candidate on the first low
+// probe makes any spike_duration spanning several polls unreachable. Coverage
 // (checked at fire time) keeps flapping load from qualifying.
-func (s *hostState) advanceSpike(now time.Time, count int, threshold float64, dipGrace time.Duration) spikeStep {
+func (s *hostState) advanceSpike(now time.Time, count int, threshold float64, spikeDuration time.Duration) spikeStep {
+	// A candidate that never manages to fire — coverage stuck below the bar, or a
+	// debounce that keeps swallowing it — must not live on indefinitely: its peak,
+	// coverage and duration would describe load from hours ago by the time it does
+	// fire. Age it out so the next probe opens a candidate over fresh samples.
+	if s.aboveThresholdSince != nil && now.Sub(*s.aboveThresholdSince) > staleCandidateFactor*spikeDuration {
+		s.resetSpike()
+	}
+
 	if float64(count) < threshold {
-		if s.aboveThresholdSince == nil || s.lastAboveAt == nil || now.Sub(*s.lastAboveAt) > dipGrace {
+		if s.aboveThresholdSince == nil || s.lastAboveAt == nil || now.Sub(*s.lastAboveAt) > spikeDuration/dipGraceDivisor {
 			s.resetSpike()
 
 			return spikeAborted
@@ -135,7 +185,9 @@ func (s *hostState) advanceSpike(now time.Time, count int, threshold float64, di
 }
 
 // spikeCoverage is the share of probes that were above the threshold since the
-// candidate opened.
+// candidate opened. Probes are counted unweighted, which equals a share of
+// *time* only because the daemon polls on a fixed poll_interval; should polling
+// ever become adaptive, weigh each sample by the interval it represents.
 func (s *hostState) spikeCoverage() float64 {
 	if s.spikeTotal == 0 {
 		return 0
@@ -144,6 +196,10 @@ func (s *hostState) spikeCoverage() float64 {
 	return float64(s.spikeAbove) / float64(s.spikeTotal)
 }
 
+// resetSpike clears everything scoped to a single spike candidate. The counters,
+// the activity peak and the observed lock peak deliberately share the candidate's
+// lifetime: each describes the same incident, so carrying any of them into the
+// next candidate would misreport it. Split this helper if that ever stops holding.
 func (s *hostState) resetSpike() {
 	s.aboveThresholdSince = nil
 	s.lastAboveAt = nil

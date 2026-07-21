@@ -62,7 +62,7 @@ func (d *Daemon) tickActivitySpike(
 		return
 	}
 
-	now := time.Now().UTC()
+	now := d.nowUTC()
 	state.windowSamples = trimSamples(append(state.windowSamples, activitySample{at: now, count: count}), now.Add(-t.WindowSize))
 
 	if len(state.windowSamples) < 2 {
@@ -93,8 +93,7 @@ func (d *Daemon) tickActivitySpike(
 		return
 	}
 
-	// A dip shorter than half the required duration keeps the candidate alive.
-	switch state.advanceSpike(now, count, threshold, t.SpikeDuration/2) {
+	switch state.advanceSpike(now, count, threshold, t.SpikeDuration) {
 	case spikeAborted:
 		d.handleRecovery(ctx, cfg, t, cl, instance, database, state, now, count)
 
@@ -415,7 +414,7 @@ func (d *Daemon) debounced(key hostKey, maxFreq time.Duration) bool {
 		return false
 	}
 
-	return time.Since(last) < maxFreq
+	return d.nowUTC().Sub(last) < maxFreq
 }
 
 // belowBaselineDue reports whether enough time has passed since the last
