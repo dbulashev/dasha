@@ -11,10 +11,6 @@ import (
 	"github.com/dbulashev/dasha/internal/config"
 )
 
-// minSpikeCoverage — share of probes that must sit at/above the threshold over
-// the candidate for it to count as a spike rather than as flapping load.
-const minSpikeCoverage = 0.7
-
 func (d *Daemon) processCluster(
 	ctx context.Context,
 	cfg Config,
