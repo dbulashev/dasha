@@ -4967,7 +4967,7 @@ export function useGetIndexesUnused<
 }
 
 /**
- * Unlike /api/indexes/unused, which reports raw scan counters, this weighs them against the window they were accumulated over and against every host of the cluster, and returns a verdict with the reasoning. It takes no instance: idx_scan is per-instance and is not replicated, so an index idle on the primary may be serving the whole read workload on a replica, and only the cluster-wide picture can justify a DROP. A host that cannot be reached yields verdict=unknown rather than a false "unused".
+ * Unlike /api/indexes/unused, which reports raw scan counters, this weighs them against the window they were accumulated over and against every host of the cluster, and returns a verdict with the reasoning. It takes no instance: idx_scan is per-instance and is not replicated, so an index idle on the primary may be serving the whole read workload on a replica, and only the cluster-wide picture can justify a DROP. A host that cannot be reached yields verdict=unknown rather than a false "unused". The verdict, table and index filters are applied after every verdict has been computed, so they narrow what is returned without ever narrowing the evidence a verdict rests on.
  * @summary Cluster-wide verdict on whether each index is safe to drop
  */
 export type getIndexesUnusedReportResponse200 = {

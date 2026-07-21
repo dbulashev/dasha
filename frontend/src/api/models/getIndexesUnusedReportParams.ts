@@ -6,10 +6,23 @@
  */
 import type { ClusterNameParameter } from './clusterNameParameter'
 import type { DatabaseParameter } from './databaseParameter'
+import type { GetIndexesUnusedReportVerdict } from './getIndexesUnusedReportVerdict'
 
 export type GetIndexesUnusedReportParams = {
   cluster_name: ClusterNameParameter
   database: DatabaseParameter
+  /**
+   * Keep only indexes with this verdict.
+   */
+  verdict?: GetIndexesUnusedReportVerdict
+  /**
+   * Keep only indexes whose table name contains this substring, case-insensitively.
+   */
+  table?: string
+  /**
+   * Keep only indexes whose name contains this substring, case-insensitively. For a partitioned index this matches the parent, the only droppable unit.
+   */
+  index?: string
   limit?: number
   offset?: number
 }

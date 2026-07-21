@@ -1018,10 +1018,39 @@ paths:
         idx_scan is per-instance and is not replicated, so an index idle on the
         primary may be serving the whole read workload on a replica, and only the
         cluster-wide picture can justify a DROP. A host that cannot be reached yields
-        verdict=unknown rather than a false "unused".
+        verdict=unknown rather than a false "unused". The verdict, table and index filters
+        are applied after every verdict has been computed, so they narrow what is returned
+        without ever narrowing the evidence a verdict rests on.
       parameters:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Database'
+        - in: query
+          name: verdict
+          description: Keep only indexes with this verdict.
+          schema:
+            type: string
+            enum:
+              - drop_candidate
+              - used
+              - stale_evidence
+              - insufficient_data
+              - unknown
+          required: false
+        - in: query
+          name: table
+          description: >-
+            Keep only indexes whose table name contains this substring, case-insensitively.
+          schema:
+            type: string
+          required: false
+        - in: query
+          name: index
+          description: >-
+            Keep only indexes whose name contains this substring, case-insensitively. For a
+            partitioned index this matches the parent, the only droppable unit.
+          schema:
+            type: string
+          required: false
         - in: query
           name: limit
           schema:
@@ -3248,6 +3277,8 @@ components:
         - size_bytes
         - verdict
         - reason
+        - reason_code
+        - reason_params
         - per_instance
       properties:
         schema:
@@ -3284,12 +3315,84 @@ components:
             - insufficient_data
             - unknown
         reason:
-          description: Why this verdict, in words, quoting the observed window and scan rate.
+          description: >-
+            Why this verdict, in words, quoting the observed window and scan rate. English
+            only, and rendered from reason_code and reason_params — a UI that localizes
+            builds its own sentence from those instead.
           type: string
+        reason_code:
+          description: Machine-readable form of reason. The numbers it quotes are in reason_params.
+          type: string
+          enum:
+            - unreachable_hosts
+            - no_evidence
+            - used_on_replica_only
+            - used
+            - window_too_short
+            - few_scans
+            - never_scanned
+        reason_params:
+          $ref: '#/components/schemas/IndexVerdictReasonParams'
+        reason_notes:
+          description: >-
+            Caveats that qualify the verdict without changing it, rendered after the reason.
+            "partitioned" quotes the partitions field.
+          type: array
+          items:
+            type: string
+            enum:
+              - stats_reset_never
+              - partitioned
         per_instance:
           type: array
           items:
             $ref: '#/components/schemas/IndexHostUsage'
+
+    IndexVerdictReasonParams:
+      description: >-
+        The values a reason quotes. Which fields are set depends on reason_code — a client
+        reads only the ones its phrasing for that code needs.
+      type: object
+      properties:
+        hosts:
+          description: Hosts that could not be read — set for unreachable_hosts.
+          type: array
+          items:
+            type: string
+        used_on:
+          description: >-
+            Hosts scanning the index often enough to keep it — set for used and
+            used_on_replica_only.
+          type: array
+          items:
+            $ref: '#/components/schemas/IndexVerdictHostRate'
+        window_days:
+          description: Shortest statistics window across the hosts the verdict weighed.
+          type: number
+          format: double
+        min_window_days:
+          description: Window below which no verdict is given — set for window_too_short.
+          type: number
+          format: double
+        total_scans:
+          description: Scans summed over every host — set for few_scans.
+          type: integer
+          format: int64
+        host_count:
+          description: How many hosts reported zero scans — set for never_scanned.
+          type: integer
+
+    IndexVerdictHostRate:
+      type: object
+      required:
+        - instance
+        - scans_per_day
+      properties:
+        instance:
+          type: string
+        scans_per_day:
+          type: number
+          format: double
 
     IndexHostUsage:
       type: object

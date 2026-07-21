@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/dbulashev/dasha/gen/serverhttp"
 	"github.com/dbulashev/dasha/internal/dto"
@@ -366,6 +367,11 @@ func (s *Handlers) GetIndexesUnusedReport(
 	// Hence paginate the verdicts, not the input.
 	reports := indexadvice.Report(scans, indexadvice.Thresholds{}) //nolint:exhaustruct
 
+	// Filtering happens here, after every verdict is in: narrowing the input would
+	// narrow the evidence too, and a verdict weighed over a subset of the cluster is
+	// exactly the mistake this endpoint exists to prevent.
+	reports = filterUnusedReport(reports, req.Params.Verdict, req.Params.Table, req.Params.Index)
+
 	// Biggest first — that is what a DROP reclaims, and it matches /api/indexes/unused.
 	sort.SliceStable(reports, func(i, j int) bool {
 		return reports[i].SizeBytes > reports[j].SizeBytes
@@ -398,15 +404,27 @@ func (s *Handlers) GetIndexesUnusedReport(
 				partitions = shortcut.Ptr(r.Partitions)
 			}
 
+			// Notes are optional in the contract, so an empty list is left absent rather
+			// than serialized as null.
+			var notes *[]serverhttp.IndexVerdictReasonNotes
+			if len(r.Reason.Notes) > 0 {
+				notes = shortcut.Ptr(mapstruct.SliceMap(r.Reason.Notes, func(n indexadvice.NoteCode) serverhttp.IndexVerdictReasonNotes {
+					return serverhttp.IndexVerdictReasonNotes(n)
+				}))
+			}
+
 			return serverhttp.IndexVerdict{
-				Schema:      r.Schema,
-				Table:       r.Table,
-				Index:       r.Index,
-				Partitioned: r.Partitioned,
-				Partitions:  partitions,
-				SizeBytes:   r.SizeBytes,
-				Verdict:     serverhttp.IndexVerdictVerdict(r.Verdict),
-				Reason:      r.Reason,
+				Schema:       r.Schema,
+				Table:        r.Table,
+				Index:        r.Index,
+				Partitioned:  r.Partitioned,
+				Partitions:   partitions,
+				SizeBytes:    r.SizeBytes,
+				Verdict:      serverhttp.IndexVerdictVerdict(r.Verdict),
+				Reason:       r.ReasonText,
+				ReasonCode:   serverhttp.IndexVerdictReasonCode(r.Reason.Code),
+				ReasonNotes:  notes,
+				ReasonParams: reasonParams(r.Reason.Params),
 				PerInstance: mapstruct.SliceMap(r.PerInstance, func(h indexadvice.HostUsage) serverhttp.IndexHostUsage {
 					return serverhttp.IndexHostUsage{
 						Instance:        h.Instance,
@@ -423,6 +441,81 @@ func (s *Handlers) GetIndexesUnusedReport(
 	}
 
 	return ret, nil
+}
+
+// filterUnusedReport narrows the computed verdicts. Name matching is a case-insensitive
+// substring so a partial name typed into a search box works the way one expects.
+func filterUnusedReport(
+	reports []indexadvice.IndexReport,
+	verdict *serverhttp.GetIndexesUnusedReportParamsVerdict,
+	table, index *string,
+) []indexadvice.IndexReport {
+	if verdict == nil && emptyFilter(table) && emptyFilter(index) {
+		return reports
+	}
+
+	out := make([]indexadvice.IndexReport, 0, len(reports))
+
+	for _, r := range reports {
+		if verdict != nil && r.Verdict != indexadvice.Verdict(*verdict) {
+			continue
+		}
+
+		if !matchesFilter(r.Table, table) || !matchesFilter(r.Index, index) {
+			continue
+		}
+
+		out = append(out, r)
+	}
+
+	return out
+}
+
+func emptyFilter(f *string) bool {
+	return f == nil || strings.TrimSpace(*f) == ""
+}
+
+func matchesFilter(value string, f *string) bool {
+	if emptyFilter(f) {
+		return true
+	}
+
+	return strings.Contains(strings.ToLower(value), strings.ToLower(strings.TrimSpace(*f)))
+}
+
+// reasonParams keeps every field a pointer: which ones a reason quotes depends on its
+// code, and emitting a zero for the rest would read as a real measurement — "0 scans over
+// 0 days" on a verdict that never looked at either.
+func reasonParams(p indexadvice.ReasonParams) serverhttp.IndexVerdictReasonParams {
+	out := serverhttp.IndexVerdictReasonParams{} //nolint:exhaustruct
+
+	if len(p.Hosts) > 0 {
+		out.Hosts = shortcut.Ptr(p.Hosts)
+	}
+
+	if len(p.UsedOn) > 0 {
+		out.UsedOn = shortcut.Ptr(mapstruct.SliceMap(p.UsedOn, func(h indexadvice.HostRate) serverhttp.IndexVerdictHostRate {
+			return serverhttp.IndexVerdictHostRate{Instance: h.Instance, ScansPerDay: h.ScansPerDay}
+		}))
+	}
+
+	if p.WindowDays > 0 {
+		out.WindowDays = shortcut.Ptr(p.WindowDays)
+	}
+
+	if p.MinWindowDays > 0 {
+		out.MinWindowDays = shortcut.Ptr(p.MinWindowDays)
+	}
+
+	if p.TotalScans > 0 {
+		out.TotalScans = shortcut.Ptr(p.TotalScans)
+	}
+
+	if p.HostCount > 0 {
+		out.HostCount = shortcut.Ptr(p.HostCount)
+	}
+
+	return out
 }
 
 const defaultIndexesUsageLimit = 30

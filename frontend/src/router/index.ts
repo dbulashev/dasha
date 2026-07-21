@@ -71,6 +71,11 @@ const router = createRouter({
       component: () => import('../views/IndexesProblemsView.vue'),
     },
     {
+      path: '/indexes-analysis/:clustername?',
+      name: 'indexes-analysis',
+      component: () => import('../views/IndexesAnalysisView.vue'),
+    },
+    {
       path: '/locks/:clustername?',
       name: 'locks',
       component: () => import('../views/LocksView.vue'),

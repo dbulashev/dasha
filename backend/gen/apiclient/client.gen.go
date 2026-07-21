@@ -61,13 +61,30 @@ const (
 	Override HealthScoreWeightsSource = "override"
 )
 
+// Defines values for IndexVerdictReasonCode.
+const (
+	IndexVerdictReasonCodeFewScans          IndexVerdictReasonCode = "few_scans"
+	IndexVerdictReasonCodeNeverScanned      IndexVerdictReasonCode = "never_scanned"
+	IndexVerdictReasonCodeNoEvidence        IndexVerdictReasonCode = "no_evidence"
+	IndexVerdictReasonCodeUnreachableHosts  IndexVerdictReasonCode = "unreachable_hosts"
+	IndexVerdictReasonCodeUsed              IndexVerdictReasonCode = "used"
+	IndexVerdictReasonCodeUsedOnReplicaOnly IndexVerdictReasonCode = "used_on_replica_only"
+	IndexVerdictReasonCodeWindowTooShort    IndexVerdictReasonCode = "window_too_short"
+)
+
+// Defines values for IndexVerdictReasonNotes.
+const (
+	Partitioned     IndexVerdictReasonNotes = "partitioned"
+	StatsResetNever IndexVerdictReasonNotes = "stats_reset_never"
+)
+
 // Defines values for IndexVerdictVerdict.
 const (
-	DropCandidate    IndexVerdictVerdict = "drop_candidate"
-	InsufficientData IndexVerdictVerdict = "insufficient_data"
-	StaleEvidence    IndexVerdictVerdict = "stale_evidence"
-	Unknown          IndexVerdictVerdict = "unknown"
-	Used             IndexVerdictVerdict = "used"
+	IndexVerdictVerdictDropCandidate    IndexVerdictVerdict = "drop_candidate"
+	IndexVerdictVerdictInsufficientData IndexVerdictVerdict = "insufficient_data"
+	IndexVerdictVerdictStaleEvidence    IndexVerdictVerdict = "stale_evidence"
+	IndexVerdictVerdictUnknown          IndexVerdictVerdict = "unknown"
+	IndexVerdictVerdictUsed             IndexVerdictVerdict = "used"
 )
 
 // Defines values for PersonalAccessTokenRole.
@@ -125,6 +142,15 @@ const (
 	Io     GetTablesHotParamsClass = "io"
 	Reads  GetTablesHotParamsClass = "reads"
 	Writes GetTablesHotParamsClass = "writes"
+)
+
+// Defines values for GetIndexesUnusedReportParamsVerdict.
+const (
+	DropCandidate    GetIndexesUnusedReportParamsVerdict = "drop_candidate"
+	InsufficientData GetIndexesUnusedReportParamsVerdict = "insufficient_data"
+	StaleEvidence    GetIndexesUnusedReportParamsVerdict = "stale_evidence"
+	Unknown          GetIndexesUnusedReportParamsVerdict = "unknown"
+	Used             GetIndexesUnusedReportParamsVerdict = "used"
 )
 
 // Defines values for GetLogsParamsServiceType.
@@ -820,9 +846,18 @@ type IndexVerdict struct {
 	Partitions  *int             `json:"partitions,omitempty"`
 	PerInstance []IndexHostUsage `json:"per_instance"`
 
-	// Reason Why this verdict, in words, quoting the observed window and scan rate.
+	// Reason Why this verdict, in words, quoting the observed window and scan rate. English only, and rendered from reason_code and reason_params — a UI that localizes builds its own sentence from those instead.
 	Reason string `json:"reason"`
-	Schema string `json:"schema"`
+
+	// ReasonCode Machine-readable form of reason. The numbers it quotes are in reason_params.
+	ReasonCode IndexVerdictReasonCode `json:"reason_code"`
+
+	// ReasonNotes Caveats that qualify the verdict without changing it, rendered after the reason. "partitioned" quotes the partitions field.
+	ReasonNotes *[]IndexVerdictReasonNotes `json:"reason_notes,omitempty"`
+
+	// ReasonParams The values a reason quotes. Which fields are set depends on reason_code — a client reads only the ones its phrasing for that code needs.
+	ReasonParams IndexVerdictReasonParams `json:"reason_params"`
+	Schema       string                   `json:"schema"`
 
 	// SizeBytes Largest copy across hosts — what a DROP would actually reclaim.
 	SizeBytes int64               `json:"size_bytes"`
@@ -830,8 +865,41 @@ type IndexVerdict struct {
 	Verdict   IndexVerdictVerdict `json:"verdict"`
 }
 
+// IndexVerdictReasonCode Machine-readable form of reason. The numbers it quotes are in reason_params.
+type IndexVerdictReasonCode string
+
+// IndexVerdictReasonNotes defines model for IndexVerdict.ReasonNotes.
+type IndexVerdictReasonNotes string
+
 // IndexVerdictVerdict defines model for IndexVerdict.Verdict.
 type IndexVerdictVerdict string
+
+// IndexVerdictHostRate defines model for IndexVerdictHostRate.
+type IndexVerdictHostRate struct {
+	Instance    string  `json:"instance"`
+	ScansPerDay float64 `json:"scans_per_day"`
+}
+
+// IndexVerdictReasonParams The values a reason quotes. Which fields are set depends on reason_code — a client reads only the ones its phrasing for that code needs.
+type IndexVerdictReasonParams struct {
+	// HostCount How many hosts reported zero scans — set for never_scanned.
+	HostCount *int `json:"host_count,omitempty"`
+
+	// Hosts Hosts that could not be read — set for unreachable_hosts.
+	Hosts *[]string `json:"hosts,omitempty"`
+
+	// MinWindowDays Window below which no verdict is given — set for window_too_short.
+	MinWindowDays *float64 `json:"min_window_days,omitempty"`
+
+	// TotalScans Scans summed over every host — set for few_scans.
+	TotalScans *int64 `json:"total_scans,omitempty"`
+
+	// UsedOn Hosts scanning the index often enough to keep it — set for used and used_on_replica_only.
+	UsedOn *[]IndexVerdictHostRate `json:"used_on,omitempty"`
+
+	// WindowDays Shortest statistics window across the hosts the verdict weighed.
+	WindowDays *float64 `json:"window_days,omitempty"`
+}
 
 // InstanceInfo defines model for InstanceInfo.
 type InstanceInfo struct {
@@ -1929,9 +1997,21 @@ type GetIndexesUnusedParams struct {
 type GetIndexesUnusedReportParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
 	Database    Database    `form:"database" json:"database"`
-	Limit       *int        `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset      *int        `form:"offset,omitempty" json:"offset,omitempty"`
+
+	// Verdict Keep only indexes with this verdict.
+	Verdict *GetIndexesUnusedReportParamsVerdict `form:"verdict,omitempty" json:"verdict,omitempty"`
+
+	// Table Keep only indexes whose table name contains this substring, case-insensitively.
+	Table *string `form:"table,omitempty" json:"table,omitempty"`
+
+	// Index Keep only indexes whose name contains this substring, case-insensitively. For a partitioned index this matches the parent, the only droppable unit.
+	Index  *string `form:"index,omitempty" json:"index,omitempty"`
+	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int    `form:"offset,omitempty" json:"offset,omitempty"`
 }
+
+// GetIndexesUnusedReportParamsVerdict defines parameters for GetIndexesUnusedReport.
+type GetIndexesUnusedReportParamsVerdict string
 
 // GetIndexesUsageParams defines parameters for GetIndexesUsage.
 type GetIndexesUsageParams struct {
@@ -8059,6 +8139,54 @@ func NewGetIndexesUnusedReportRequest(server string, params *GetIndexesUnusedRep
 					queryValues.Add(k, v2)
 				}
 			}
+		}
+
+		if params.Verdict != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "verdict", runtime.ParamLocationQuery, *params.Verdict); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Table != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "table", runtime.ParamLocationQuery, *params.Table); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Index != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "index", runtime.ParamLocationQuery, *params.Index); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
 		}
 
 		if params.Limit != nil {

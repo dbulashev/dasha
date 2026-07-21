@@ -84,12 +84,14 @@ func TestDecide(t *testing.T) {
 		hosts       []HostUsage
 		unreachable []string
 		want        Verdict
+		wantCode    ReasonCode
 		reasonHas   string
 	}{
 		{
-			name:  "zero scans everywhere over a long window",
-			hosts: []HostUsage{host("primary", false, 0, 60), host("replica", true, 0, 60)},
-			want:  VerdictDropCandidate,
+			name:     "zero scans everywhere over a long window",
+			hosts:    []HostUsage{host("primary", false, 0, 60), host("replica", true, 0, 60)},
+			want:     VerdictDropCandidate,
+			wantCode: ReasonNeverScanned,
 		},
 		{
 			// The case the cluster-wide view exists for: idle on the primary, hot on a
@@ -97,25 +99,29 @@ func TestDecide(t *testing.T) {
 			name:      "used only on a replica",
 			hosts:     []HostUsage{host("primary", false, 0, 60), host("replica", true, 90000, 60)},
 			want:      VerdictUsed,
+			wantCode:  ReasonUsedOnReplicaOnly,
 			reasonHas: "replica",
 		},
 		{
-			name:  "used on the primary",
-			hosts: []HostUsage{host("primary", false, 90000, 60), host("replica", true, 0, 60)},
-			want:  VerdictUsed,
+			name:     "used on the primary",
+			hosts:    []HostUsage{host("primary", false, 90000, 60), host("replica", true, 0, 60)},
+			want:     VerdictUsed,
+			wantCode: ReasonUsed,
 		},
 		{
 			// Zero scans, but the statistics were reset an hour ago — proves nothing.
-			name:  "window too short",
-			hosts: []HostUsage{host("primary", false, 0, 0.04)},
-			want:  VerdictInsufficientData,
+			name:     "window too short",
+			hosts:    []HostUsage{host("primary", false, 0, 0.04)},
+			want:     VerdictInsufficientData,
+			wantCode: ReasonWindowTooShort,
 		},
 		{
 			// A short window on ONE host must be enough to withhold the verdict: that
 			// host's silence is not evidence.
-			name:  "one host has a short window",
-			hosts: []HostUsage{host("primary", false, 0, 400), host("replica", true, 0, 0.5)},
-			want:  VerdictInsufficientData,
+			name:     "one host has a short window",
+			hosts:    []HostUsage{host("primary", false, 0, 400), host("replica", true, 0, 0.5)},
+			want:     VerdictInsufficientData,
+			wantCode: ReasonWindowTooShort,
 		},
 		{
 			// Scanned 3 times in a year: the rate is negligible, but the counter cannot
@@ -123,6 +129,7 @@ func TestDecide(t *testing.T) {
 			name:      "a few scans over a long window",
 			hosts:     []HostUsage{host("primary", false, 3, 365)},
 			want:      VerdictStaleEvidence,
+			wantCode:  ReasonFewScans,
 			reasonHas: "pg_stat_reset",
 		},
 		{
@@ -132,6 +139,7 @@ func TestDecide(t *testing.T) {
 			hosts:       []HostUsage{host("primary", false, 0, 400)},
 			unreachable: []string{"replica"},
 			want:        VerdictUnknown,
+			wantCode:    ReasonUnreachableHosts,
 			reasonHas:   "replica",
 		},
 	}
@@ -142,11 +150,17 @@ func TestDecide(t *testing.T) {
 
 			got, reason := decide(tt.hosts, tt.unreachable, th)
 			if got != tt.want {
-				t.Errorf("decide() = %q, want %q (reason: %s)", got, tt.want, reason)
+				t.Errorf("decide() = %q, want %q (reason: %s)", got, tt.want, reason.Text())
 			}
 
-			if tt.reasonHas != "" && !strings.Contains(reason, tt.reasonHas) {
-				t.Errorf("reason %q does not mention %q", reason, tt.reasonHas)
+			if tt.wantCode != "" && reason.Code != tt.wantCode {
+				t.Errorf("decide() code = %q, want %q", reason.Code, tt.wantCode)
+			}
+
+			// The English text is rendered from the code and params a UI localizes, so
+			// checking it also checks that those carry what the sentence needs.
+			if tt.reasonHas != "" && !strings.Contains(reason.Text(), tt.reasonHas) {
+				t.Errorf("reason %q does not mention %q", reason.Text(), tt.reasonHas)
 			}
 		})
 	}
