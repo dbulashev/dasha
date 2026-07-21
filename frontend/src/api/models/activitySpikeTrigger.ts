@@ -7,10 +7,10 @@
 
 export interface ActivitySpikeTrigger {
   Enabled: boolean
-  /** Go duration string (e.g. "5m") */
+  /** Moving-average baseline window, Go duration string (e.g. "30m") */
   WindowSize: string
   ActiveThresholdPct: number
-  /** Go duration string (e.g. "5m") */
+  /** How long activity must stay above the threshold, Go duration string (e.g. "2m"). Must be <= WindowSize / 2, otherwise the spike inflates its own baseline before it can fire. Single dips shorter than half this value are tolerated, provided 70% of the probes stay above the threshold. */
   SpikeDuration: string
   /** Snapshot the aftermath once activity stays below threshold this long; "0s" disables */
   RecoveryDuration: string

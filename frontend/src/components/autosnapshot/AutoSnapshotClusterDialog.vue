@@ -75,6 +75,23 @@ type ActivitySpikeForm = {
   DeferredInterval: string | null
 }
 
+// The effective pair must keep window >= 2 * spike (backend cross-field rule):
+// a spike held for a comparable stretch inflates its own baseline and can never
+// fire. Either field may be inherited, so both fall back to the effective value.
+const spikeDurationRule = (v: string | null) => {
+  const effective = data.value?.Effective.ActivitySpike
+  const spike = goDurationToMs(String(isEmpty(v) ? (effective?.SpikeDuration ?? '') : v))
+  const windowSize = goDurationToMs(
+    String(
+      isEmpty(form.activitySpike.WindowSize)
+        ? (effective?.WindowSize ?? '')
+        : form.activitySpike.WindowSize,
+    ),
+  )
+  if (spike === null || windowSize === null) return true
+  return 2 * spike <= windowSize || t('autosnapshot.spikeDurationTooLong')
+}
+
 // Allows empty (use default) or a valid duration >= 0 (incl. "0s" to disable).
 const durationGteZeroRule = (v: string | null) => {
   if (isEmpty(v)) return true
@@ -359,7 +376,7 @@ onMounted(loadOverride)
                 :label="t('autosnapshot.spikeDuration')"
                 :placeholder="data.Effective.ActivitySpike.SpikeDuration"
                 :disabled="!isAdmin"
-                :rules="[durationRule]"
+                :rules="[durationRule, spikeDurationRule]"
                 density="compact"
                 persistent-placeholder
                 clearable

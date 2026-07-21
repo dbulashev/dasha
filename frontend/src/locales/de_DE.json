@@ -147,6 +147,7 @@
     "retentionGiB": "Aufbewahrungslimit, GiB",
     "invalidDuration": "Ungültiges Format (z. B. 30s, 5m, 1h)",
     "mustBePositive": "Muss ≥ 0 sein",
+    "spikeDurationTooLong": "Das Fenster muss mindestens doppelt so lang sein wie die Spike-Dauer",
     "hot": {
       "title": "Heiße Objekte",
       "hint": "Delta-Snapshots der Tabellen-/Indexaktivität: ein exaktes Top pro Metrikklasse plus Rest-Histogramm. Von allen Cluster-Hosts nach Zeitplan gesammelt.",
@@ -254,6 +255,7 @@
       "peak_value": "Spitze",
       "threshold_pct": "Schwelle",
       "duration": "Spike-Dauer",
+      "coverage": "Abdeckung",
       "window_size": "Fenster",
       "current": "Aktueller Wert",
       "min_baseline_active": "Min. Baseline",
