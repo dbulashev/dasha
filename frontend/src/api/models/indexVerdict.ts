@@ -5,6 +5,9 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { IndexHostUsage } from './indexHostUsage'
+import type { IndexVerdictReasonCode } from './indexVerdictReasonCode'
+import type { IndexVerdictReasonNotesItem } from './indexVerdictReasonNotesItem'
+import type { IndexVerdictReasonParams } from './indexVerdictReasonParams'
 import type { IndexVerdictVerdict } from './indexVerdictVerdict'
 
 export interface IndexVerdict {
@@ -19,7 +22,12 @@ export interface IndexVerdict {
   /** Largest copy across hosts — what a DROP would actually reclaim. */
   size_bytes: number
   verdict: IndexVerdictVerdict
-  /** Why this verdict, in words, quoting the observed window and scan rate. */
+  /** Why this verdict, in words, quoting the observed window and scan rate. English only, and rendered from reason_code and reason_params — a UI that localizes builds its own sentence from those instead. */
   reason: string
+  /** Machine-readable form of reason. The numbers it quotes are in reason_params. */
+  reason_code: IndexVerdictReasonCode
+  reason_params: IndexVerdictReasonParams
+  /** Caveats that qualify the verdict without changing it, rendered after the reason. "partitioned" quotes the partitions field. */
+  reason_notes?: IndexVerdictReasonNotesItem[]
   per_instance: IndexHostUsage[]
 }

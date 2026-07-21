@@ -102,6 +102,7 @@ const tableDescribeLink = computed(() => {
 const indexesLink = computed(() => withQuery("indexes"));
 const indexesUsageLink = computed(() => withQuery("indexes-usage"));
 const indexesProblemsLink = computed(() => withQuery("indexes-problems"));
+const indexesAnalysisLink = computed(() => withQuery("indexes-analysis"));
 const locksLink = computed(() => withQuery("locks"));
 const progressLink = computed(() => withQuery("progress"));
 const fkAnalysisLink = computed(() => withQuery("fk-analysis"));
@@ -227,6 +228,7 @@ watch(() => route.path, () => {
             <v-list-item :title="t('indexes.menuOverview')" link :to="indexesLink"></v-list-item>
             <v-list-item :title="t('indexes.menuUsage')" link :to="indexesUsageLink"></v-list-item>
             <v-list-item :title="t('indexes.menuProblems')" link :to="indexesProblemsLink"></v-list-item>
+            <v-list-item :title="t('indexes.menuAnalysis')" link :to="indexesAnalysisLink"></v-list-item>
           </v-list-group>
           <v-list-item :title="t('Locks')" prepend-icon="mdi-lock-outline" link :to="locksLink"></v-list-item>
           <v-list-item :title="t('Operation progress')" prepend-icon="mdi-progress-question" link :to="progressLink"></v-list-item>

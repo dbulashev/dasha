@@ -65,6 +65,156 @@ func (t Thresholds) withDefaults() Thresholds {
 	return t
 }
 
+// ReasonCode is the machine-readable form of a verdict's explanation. A UI renders its
+// own localized sentence from the code plus ReasonParams; the English prose stays in
+// IndexReport.ReasonText for API and MCP clients.
+type ReasonCode string
+
+const (
+	// ReasonUnreachableHosts: a host did not answer, so the cluster-wide picture is incomplete.
+	ReasonUnreachableHosts ReasonCode = "unreachable_hosts"
+	// ReasonNoEvidence: no host reported the index at all.
+	ReasonNoEvidence ReasonCode = "no_evidence"
+	// ReasonUsedOnReplicaOnly: idle on the primary, scanned on a standby.
+	ReasonUsedOnReplicaOnly ReasonCode = "used_on_replica_only"
+	// ReasonUsed: scanned often enough on at least one host.
+	ReasonUsed ReasonCode = "used"
+	// ReasonWindowTooShort: the statistics window is below the minimum.
+	ReasonWindowTooShort ReasonCode = "window_too_short"
+	// ReasonFewScans: scanned, but too rarely to tell recent use from historical.
+	ReasonFewScans ReasonCode = "few_scans"
+	// ReasonNeverScanned: zero scans everywhere over an adequate window.
+	ReasonNeverScanned ReasonCode = "never_scanned"
+)
+
+// NoteCode is a caveat that qualifies a reason without changing it.
+type NoteCode string
+
+const (
+	// NoteStatsResetNever: the window is a lower bound from postmaster uptime.
+	NoteStatsResetNever NoteCode = "stats_reset_never"
+	// NotePartitioned: the verdict covers a parent index and all its children.
+	NotePartitioned NoteCode = "partitioned"
+)
+
+// HostRate names a host and the scan rate that keeps the index alive there.
+type HostRate struct {
+	Instance    string  `json:"instance"`
+	ScansPerDay float64 `json:"scans_per_day"`
+}
+
+// ReasonParams carries the numbers a reason quotes. Which fields are set depends on
+// the code — a renderer reads only the ones its phrasing for that code needs.
+type ReasonParams struct {
+	Hosts         []string   `json:"hosts,omitempty"`
+	UsedOn        []HostRate `json:"used_on,omitempty"`
+	WindowDays    float64    `json:"window_days,omitempty"`
+	MinWindowDays float64    `json:"min_window_days,omitempty"`
+	TotalScans    int64      `json:"total_scans,omitempty"`
+	HostCount     int        `json:"host_count,omitempty"`
+	// Partitions is internal to the partitioned note: callers already have the count
+	// on IndexReport itself.
+	Partitions int `json:"-"`
+}
+
+// Reason is the explanation behind a verdict. Text renders it in English from the very
+// same Code and Params a UI localizes, so the two can never describe different things.
+type Reason struct {
+	Code   ReasonCode   `json:"code"`
+	Notes  []NoteCode   `json:"notes,omitempty"`
+	Params ReasonParams `json:"params"`
+}
+
+func (r Reason) Text() string {
+	parts := make([]string, 0, 1+len(r.Notes))
+	parts = append(parts, r.baseText())
+
+	for _, n := range r.Notes {
+		parts = append(parts, r.noteText(n))
+	}
+
+	return strings.Join(parts, " ")
+}
+
+func (r Reason) baseText() string {
+	p := r.Params
+
+	switch r.Code {
+	case ReasonUnreachableHosts:
+		return fmt.Sprintf(
+			"cannot judge: %s unreachable. idx_scan is per-instance and is not replicated, "+
+				"so an index idle on the hosts we did read may be serving reads on the one we did not.",
+			strings.Join(p.Hosts, ", "))
+
+	case ReasonNoEvidence:
+		return "no host reported this index."
+
+	case ReasonUsedOnReplicaOnly:
+		return fmt.Sprintf(
+			"keep: idle on the primary but used on %s. Replica scan counters are not "+
+				"replicated back — dropping it would break replica reads.",
+			hostRates(p.UsedOn))
+
+	case ReasonUsed:
+		return "keep: used on " + hostRates(p.UsedOn) + "."
+
+	case ReasonWindowTooShort:
+		return fmt.Sprintf(
+			"the shortest statistics window is %.1f day(s), below the %.0f-day minimum — "+
+				"wait until it covers a full business cycle (a monthly report can be the only user of an index).",
+			p.WindowDays, p.MinWindowDays)
+
+	case ReasonFewScans:
+		return fmt.Sprintf(
+			"%d scan(s) over %.0f day(s) — too few to call it used, but they may be recent: "+
+				"the counter cannot say WHEN. Run pg_stat_reset() and re-check after a full business cycle.",
+			p.TotalScans, p.WindowDays)
+
+	case ReasonNeverScanned:
+		return fmt.Sprintf("zero scans on all %d host(s) over %.0f day(s).", p.HostCount, p.WindowDays)
+
+	default:
+		return unknownCode("reason", string(r.Code))
+	}
+}
+
+func (r Reason) noteText(n NoteCode) string {
+	switch n {
+	case NoteStatsResetNever:
+		return "Note: pg_stat_reset() was never called, so this window is only a lower bound taken " +
+			"from postmaster uptime — the counters may span much longer (they survive a clean restart), or the " +
+			"statistics may have been lost on a crash. Call pg_stat_reset() to establish a window you can trust."
+
+	case NotePartitioned:
+		return fmt.Sprintf(
+			"This is a partitioned index: the scans of its %d per-partition child indexes are summed here, "+
+				"and a DROP must target this parent — PostgreSQL refuses to drop a child and points here instead, "+
+				"which removes the index from EVERY partition. A cold partition with zero scans is partition "+
+				"pruning working, not a dead index.",
+			r.Params.Partitions)
+
+	default:
+		return unknownCode("note", string(n))
+	}
+}
+
+// unknownCode is what a code with no prose renders as. Deliberately loud and quoted
+// rather than "": a new code that nobody wrote a sentence for must be visible in the
+// API response and the UI, not silently shorten the explanation. It does not panic —
+// a missing sentence on one index is not worth failing the whole cluster's report.
+func unknownCode(kind, code string) string {
+	return fmt.Sprintf("(unknown %s code %q — this is a bug in dasha, please report it)", kind, code)
+}
+
+func hostRates(hs []HostRate) string {
+	out := make([]string, 0, len(hs))
+	for _, h := range hs {
+		out = append(out, fmt.Sprintf("%s (%.1f scans/day)", h.Instance, h.ScansPerDay))
+	}
+
+	return strings.Join(out, ", ")
+}
+
 // HostUsage is one host's evidence for one index.
 type HostUsage struct {
 	Instance    string  `json:"instance"`
@@ -86,11 +236,13 @@ type IndexReport struct {
 	Index  string `json:"index"`
 	// Partitioned marks a partitioned index: Index names the parent (the only thing
 	// that can be dropped) and Partitions counts the children summed into it.
-	Partitioned bool        `json:"partitioned"`
-	Partitions  int         `json:"partitions,omitempty"`
-	SizeBytes   int64       `json:"size_bytes"`
-	Verdict     Verdict     `json:"verdict"`
-	Reason      string      `json:"reason"`
+	Partitioned bool    `json:"partitioned"`
+	Partitions  int     `json:"partitions,omitempty"`
+	SizeBytes   int64   `json:"size_bytes"`
+	Verdict     Verdict `json:"verdict"`
+	// Reason is the localizable form; ReasonText is the same explanation in English.
+	Reason      Reason      `json:"reason"`
+	ReasonText  string      `json:"reason_text"`
 	PerInstance []HostUsage `json:"per_instance"`
 }
 
@@ -209,28 +361,28 @@ func Report(scans dto.IndexClusterScans, th Thresholds) []IndexReport {
 
 		verdict, reason := decide(hosts, scans.Unreachable, th)
 
-		rep := IndexReport{ //nolint:exhaustruct
+		// The child count is quoted by the partitioned note, so it has to be in place
+		// before Text() renders it.
+		partitions := 0
+
+		if r.partitioned {
+			partitions = len(r.children)
+			reason.Params.Partitions = partitions
+			reason.Notes = append(reason.Notes, NotePartitioned)
+		}
+
+		out = append(out, IndexReport{
 			Schema:      r.schema,
 			Table:       r.table,
 			Index:       r.index,
 			Partitioned: r.partitioned,
+			Partitions:  partitions,
 			SizeBytes:   size,
 			Verdict:     verdict,
 			Reason:      reason,
+			ReasonText:  reason.Text(),
 			PerInstance: hosts,
-		}
-
-		if r.partitioned {
-			rep.Partitions = len(r.children)
-			rep.Reason += fmt.Sprintf(
-				". This is a partitioned index: the scans of its %d per-partition child indexes are summed here, "+
-					"and a DROP must target this parent — PostgreSQL refuses to drop a child and points here instead, "+
-					"which removes the index from EVERY partition. A cold partition with zero scans is partition "+
-					"pruning working, not a dead index",
-				rep.Partitions)
-		}
-
-		out = append(out, rep)
+		})
 	}
 
 	return out
@@ -238,20 +390,17 @@ func Report(scans dto.IndexClusterScans, th Thresholds) []IndexReport {
 
 // decide is the rule itself, kept separate from the grouping so it can be tested
 // against a handful of hand-written host samples.
-func decide(hosts []HostUsage, unreachable []string, th Thresholds) (Verdict, string) {
+func decide(hosts []HostUsage, unreachable []string, th Thresholds) (Verdict, Reason) {
 	if len(unreachable) > 0 {
-		return VerdictUnknown, fmt.Sprintf(
-			"cannot judge: %s unreachable. idx_scan is per-instance and is not replicated, "+
-				"so an index idle on the hosts we did read may be serving reads on the one we did not",
-			strings.Join(unreachable, ", "))
+		return VerdictUnknown, reasonOf(ReasonUnreachableHosts, ReasonParams{Hosts: unreachable}) //nolint:exhaustruct
 	}
 
 	if len(hosts) == 0 {
-		return VerdictUnknown, "no host reported this index"
+		return VerdictUnknown, reasonOf(ReasonNoEvidence, ReasonParams{}) //nolint:exhaustruct
 	}
 
 	var (
-		usedOn      []string
+		usedOn      []HostRate
 		usedOnPrim  bool
 		totalScans  int64
 		windowGuess bool // some host's window is only a lower bound (stats_reset is NULL)
@@ -267,7 +416,7 @@ func decide(hosts []HostUsage, unreachable []string, th Thresholds) (Verdict, st
 		}
 
 		if h.ScansPerDay > th.UsedScansPerDay {
-			usedOn = append(usedOn, fmt.Sprintf("%s (%.1f scans/day)", h.Instance, h.ScansPerDay))
+			usedOn = append(usedOn, HostRate{Instance: h.Instance, ScansPerDay: h.ScansPerDay})
 
 			if !h.InRecovery {
 				usedOnPrim = true
@@ -279,38 +428,40 @@ func decide(hosts []HostUsage, unreachable []string, th Thresholds) (Verdict, st
 	// most databases never do — so this is the COMMON case, not an edge one. The window
 	// then falls back to postmaster uptime, which is only a LOWER bound: the counters
 	// survive a clean restart, so the real window may be far longer. Say so, instead of
-	// quoting the uptime as if it were the truth.
-	unknownWindowNote := ""
-	if windowGuess {
-		unknownWindowNote = " Note: pg_stat_reset() was never called, so this window is only a lower bound taken " +
-			"from postmaster uptime — the counters may span much longer (they survive a clean restart), or the " +
-			"statistics may have been lost on a crash. Call pg_stat_reset() to establish a window you can trust."
+	// quoting the uptime as if it were the truth. Only the verdicts that lean on the
+	// window's length carry the note; "used" needs no window to be believed.
+	withWindowNote := func(r Reason) Reason {
+		if windowGuess {
+			r.Notes = append(r.Notes, NoteStatsResetNever)
+		}
+
+		return r
 	}
 
 	switch {
 	case len(usedOn) > 0 && !usedOnPrim:
-		return VerdictUsed, fmt.Sprintf(
-			"keep: idle on the primary but used on %s. Replica scan counters are not "+
-				"replicated back — dropping it would break replica reads",
-			strings.Join(usedOn, ", "))
+		return VerdictUsed, reasonOf(ReasonUsedOnReplicaOnly, ReasonParams{UsedOn: usedOn}) //nolint:exhaustruct
 
 	case len(usedOn) > 0:
-		return VerdictUsed, "keep: used on " + strings.Join(usedOn, ", ")
+		return VerdictUsed, reasonOf(ReasonUsed, ReasonParams{UsedOn: usedOn}) //nolint:exhaustruct
 
 	case minWindow < th.MinWindowDays:
-		return VerdictInsufficientData, fmt.Sprintf(
-			"the shortest statistics window is %.1f day(s), below the %.0f-day minimum — "+
-				"wait until it covers a full business cycle (a monthly report can be the only user of an index).%s",
-			minWindow, th.MinWindowDays, unknownWindowNote)
+		return VerdictInsufficientData, withWindowNote(reasonOf(ReasonWindowTooShort, ReasonParams{ //nolint:exhaustruct
+			WindowDays: minWindow, MinWindowDays: th.MinWindowDays,
+		}))
 
 	case totalScans > 0:
-		return VerdictStaleEvidence, fmt.Sprintf(
-			"%d scan(s) over %.0f day(s) — too few to call it used, but they may be recent: "+
-				"the counter cannot say WHEN. Run pg_stat_reset() and re-check after a full business cycle",
-			totalScans, minWindow)
+		return VerdictStaleEvidence, reasonOf(ReasonFewScans, ReasonParams{ //nolint:exhaustruct
+			TotalScans: totalScans, WindowDays: minWindow,
+		})
 
 	default:
-		return VerdictDropCandidate, fmt.Sprintf(
-			"zero scans on all %d host(s) over %.0f day(s).%s", len(hosts), minWindow, unknownWindowNote)
+		return VerdictDropCandidate, withWindowNote(reasonOf(ReasonNeverScanned, ReasonParams{ //nolint:exhaustruct
+			HostCount: len(hosts), WindowDays: minWindow,
+		}))
 	}
+}
+
+func reasonOf(code ReasonCode, p ReasonParams) Reason {
+	return Reason{Code: code, Notes: nil, Params: p}
 }

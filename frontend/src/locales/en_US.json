@@ -455,11 +455,27 @@
     "menuOverview": "Overview",
     "menuUsage": "Usage",
     "menuProblems": "Problems",
+    "menuAnalysis": "Analysis",
     "report": {
-      "title": "Verdicts: may this index be dropped",
-      "hint": "Unlike the raw-counter Unused indexes table, idx_scan here is weighed against the window it accumulated over (since the statistics reset) and against every host of the cluster at once: scan counters are not replicated, and an index idle on the primary may serve reads on a replica. Partitioned indexes are judged as a whole — scans summed across all partitions; only the parent index can be dropped.",
-      "verdict": "Verdict",
+      "title": "Unused index analysis",
+      "hint": "Unlike the raw-counter Unused indexes table, idx_scan here is weighed against the window it accumulated over (since the statistics reset) and against every host of the cluster at once: scan counters are not replicated, and an index idle on the primary may serve reads on a replica. Partitioned indexes are judged as a whole — scans summed across all partitions; only the parent index can be dropped. Unique indexes are left out: their idx_scan does not grow when the index enforces a constraint, so it proves nothing.",
+      "disclaimer": "This is advice and it can be wrong: the assessment weighs nothing but scan counters over a known window. It cannot see rare seasonal jobs, plans that have never run yet, or the workload from before the last statistics reset. Read the reasoning yourself before running DROP INDEX.",
+      "verdict": "Assessment",
+      "allVerdicts": "All assessments",
       "reason": "Reasoning",
+      "reasons": {
+        "unreachable_hosts": "Cannot judge: no contact with {hosts}. idx_scan is per-instance and is not replicated, so an index idle on the hosts that answered may be serving reads on the one that did not.",
+        "no_evidence": "No host reported this index.",
+        "used_on_replica_only": "Keep: idle on the primary but used on {usedOn}. Replica scan counters are not replicated back — dropping it would break replica reads.",
+        "used": "Keep: used on {usedOn}.",
+        "window_too_short": "The shortest statistics window is {window} d, below the {minWindow}-day minimum. Wait until it covers a full business cycle: a monthly report can be the only user of an index.",
+        "few_scans": "{scans} scan(s) over {days} d — too few to call it used, but they may be recent: the counter cannot say WHEN. Run pg_stat_reset() and revisit after a full business cycle.",
+        "never_scanned": "Zero scans on all {hostCount} host(s) over {days} d."
+      },
+      "notes": {
+        "stats_reset_never": "Note: pg_stat_reset() was never called, so this window is only a lower bound taken from postmaster uptime. The counters survive a clean restart and may span much longer, or they may have been lost in a crash. Call pg_stat_reset() to establish a window you can trust.",
+        "partitioned": "This is a partitioned index: the scans of its {n} per-partition child indexes are summed here, and a DROP must target the parent — PostgreSQL refuses to drop a child and points at the parent instead, which removes the index from EVERY partition. A cold partition with zero scans is partition pruning working, not a dead index."
+      },
       "verdicts": {
         "drop_candidate": "Drop candidate",
         "used": "Used",
@@ -468,11 +484,13 @@
         "unknown": "Unknown"
       },
       "partitioned": "partitioned: {n} parts",
-      "unreachable": "Unreachable hosts: {hosts}. Every verdict is \"unknown\": scan counters are not replicated, and the index may be in use on a host that did not answer.",
+      "unreachable": "Unreachable hosts: {hosts}. Every assessment is \"unknown\": scan counters are not replicated, and the index may be in use on a host that did not answer.",
       "host": "Host",
+      "rolePrimary": "Primary",
+      "roleReplica": "Replica",
       "window": "Window",
       "scansPerDay": "Scans/day",
-      "replica": "replica",
+      "rate": "{n} scans/day",
       "statsResetUnknown": "The statistics reset time is unknown — the window falls back to postmaster uptime and may understate the real observation period.",
       "days": "d"
     }

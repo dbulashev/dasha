@@ -511,11 +511,27 @@
     "menuOverview": "Übersicht",
     "menuUsage": "Nutzung",
     "menuProblems": "Probleme",
+    "menuAnalysis": "Analyse",
     "report": {
-      "title": "Urteile: darf dieser Index gelöscht werden",
-      "hint": "Anders als die Rohzähler-Tabelle „Ungenutzte Indizes“ wird idx_scan hier gegen das Beobachtungsfenster (seit dem Statistik-Reset) und gegen alle Hosts des Clusters zugleich gewogen: Scan-Zähler werden nicht repliziert, und ein auf dem Primary untätiger Index kann Lesezugriffe auf einem Replikat bedienen. Partitionierte Indizes werden als Ganzes beurteilt — Scans über alle Partitionen summiert; löschbar ist nur der Eltern-Index.",
-      "verdict": "Urteil",
+      "title": "Analyse ungenutzter Indizes",
+      "hint": "Anders als die Rohzähler-Tabelle „Ungenutzte Indizes“ wird idx_scan hier gegen das Beobachtungsfenster (seit dem Statistik-Reset) und gegen alle Hosts des Clusters zugleich gewogen: Scan-Zähler werden nicht repliziert, und ein auf dem Primary untätiger Index kann Lesezugriffe auf einem Replikat bedienen. Partitionierte Indizes werden als Ganzes beurteilt — Scans über alle Partitionen summiert; löschbar ist nur der Eltern-Index. Eindeutige Indizes bleiben außen vor: Ihr idx_scan wächst nicht, wenn der Index eine Constraint durchsetzt, und beweist daher nichts.",
+      "disclaimer": "Das Werkzeug gibt Empfehlungen und kann sich irren: Die Bewertung stützt sich allein auf Scan-Zähler über ein bekanntes Fenster. Seltene saisonale Jobs, noch nie ausgeführte Pläne und die Last vor dem letzten Statistik-Reset sieht sie nicht. Prüfen Sie die Begründung selbst, bevor Sie DROP INDEX ausführen.",
+      "verdict": "Bewertung",
+      "allVerdicts": "Alle Bewertungen",
       "reason": "Begründung",
+      "reasons": {
+        "unreachable_hosts": "Keine Beurteilung möglich: keine Verbindung zu {hosts}. idx_scan ist instanzlokal und wird nicht repliziert — ein auf den erreichten Hosts untätiger Index kann auf dem nicht erreichten Lesezugriffe bedienen.",
+        "no_evidence": "Kein Host hat diesen Index gemeldet.",
+        "used_on_replica_only": "Behalten: auf dem Primary untätig, aber auf {usedOn} in Benutzung. Scan-Zähler von Replikaten werden nicht zurückrepliziert — ein Löschen würde Lesezugriffe auf dem Replikat brechen.",
+        "used": "Behalten: in Benutzung auf {usedOn}.",
+        "window_too_short": "Das kürzeste Statistikfenster beträgt {window} T. und liegt unter dem Minimum von {minWindow} T. Warten Sie, bis es einen vollen Geschäftszyklus abdeckt: Ein Monatsbericht kann der einzige Nutzer eines Index sein.",
+        "few_scans": "{scans} Scan(s) in {days} T. — zu wenige, um den Index als genutzt zu bezeichnen, doch sie können jüngeren Datums sein: Der Zähler weiß nicht, WANN. Führen Sie pg_stat_reset() aus und prüfen Sie nach einem vollen Geschäftszyklus erneut.",
+        "never_scanned": "Null Scans auf allen {hostCount} Host(s) in {days} T."
+      },
+      "notes": {
+        "stats_reset_never": "Hinweis: pg_stat_reset() wurde nie aufgerufen, daher ist dieses Fenster nur eine Untergrenze aus der Postmaster-Laufzeit. Die Zähler überstehen einen sauberen Neustart und können weit mehr abdecken — oder sie gingen bei einem Absturz verloren. Rufen Sie pg_stat_reset() auf, um ein belastbares Fenster zu erhalten.",
+        "partitioned": "Dies ist ein partitionierter Index: Die Scans seiner {n} Kind-Indizes je Partition sind hier summiert, und ein DROP muss den Eltern-Index treffen — PostgreSQL weigert sich, ein Kind zu löschen, und verweist auf den Eltern-Index, was den Index von JEDER Partition entfernt. Eine kalte Partition mit null Scans ist funktionierendes Partition-Pruning, kein toter Index."
+      },
       "verdicts": {
         "drop_candidate": "Löschkandidat",
         "used": "In Benutzung",
@@ -524,11 +540,13 @@
         "unknown": "Unbekannt"
       },
       "partitioned": "partitioniert: {n} Part.",
-      "unreachable": "Nicht erreichbare Hosts: {hosts}. Jedes Urteil ist „unbekannt“: Scan-Zähler werden nicht repliziert, und der Index kann auf einem nicht antwortenden Host in Benutzung sein.",
+      "unreachable": "Nicht erreichbare Hosts: {hosts}. Jede Bewertung ist „unbekannt“: Scan-Zähler werden nicht repliziert, und der Index kann auf einem nicht antwortenden Host in Benutzung sein.",
       "host": "Host",
+      "rolePrimary": "Primary",
+      "roleReplica": "Replikat",
       "window": "Fenster",
       "scansPerDay": "Scans/Tag",
-      "replica": "Replikat",
+      "rate": "{n} Scans/Tag",
       "statsResetUnknown": "Der Zeitpunkt des Statistik-Resets ist unbekannt — das Fenster basiert auf der Postmaster-Laufzeit und kann den echten Beobachtungszeitraum unterschätzen.",
       "days": "T."
     }
