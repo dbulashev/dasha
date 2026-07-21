@@ -450,7 +450,9 @@ func filterUnusedReport(
 	verdict *serverhttp.GetIndexesUnusedReportParamsVerdict,
 	table, index *string,
 ) []indexadvice.IndexReport {
-	if verdict == nil && emptyFilter(table) && emptyFilter(index) {
+	tableTerm, indexTerm := filterTerm(table), filterTerm(index)
+
+	if verdict == nil && tableTerm == "" && indexTerm == "" {
 		return reports
 	}
 
@@ -461,7 +463,11 @@ func filterUnusedReport(
 			continue
 		}
 
-		if !matchesFilter(r.Table, table) || !matchesFilter(r.Index, index) {
+		if tableTerm != "" && !strings.Contains(strings.ToLower(r.Table), tableTerm) {
+			continue
+		}
+
+		if indexTerm != "" && !strings.Contains(strings.ToLower(r.Index), indexTerm) {
 			continue
 		}
 
@@ -471,16 +477,13 @@ func filterUnusedReport(
 	return out
 }
 
-func emptyFilter(f *string) bool {
-	return f == nil || strings.TrimSpace(*f) == ""
-}
-
-func matchesFilter(value string, f *string) bool {
-	if emptyFilter(f) {
-		return true
+// filterTerm normalizes a filter once instead of per row; "" means "match everything".
+func filterTerm(f *string) string {
+	if f == nil {
+		return ""
 	}
 
-	return strings.Contains(strings.ToLower(value), strings.ToLower(strings.TrimSpace(*f)))
+	return strings.ToLower(strings.TrimSpace(*f))
 }
 
 // reasonParams keeps every field a pointer: which ones a reason quotes depends on its

@@ -174,7 +174,7 @@ func (r Reason) baseText() string {
 		return fmt.Sprintf("zero scans on all %d host(s) over %.0f day(s).", p.HostCount, p.WindowDays)
 
 	default:
-		return ""
+		return unknownCode("reason", string(r.Code))
 	}
 }
 
@@ -194,8 +194,16 @@ func (r Reason) noteText(n NoteCode) string {
 			r.Params.Partitions)
 
 	default:
-		return ""
+		return unknownCode("note", string(n))
 	}
+}
+
+// unknownCode is what a code with no prose renders as. Deliberately loud and quoted
+// rather than "": a new code that nobody wrote a sentence for must be visible in the
+// API response and the UI, not silently shorten the explanation. It does not panic —
+// a missing sentence on one index is not worth failing the whole cluster's report.
+func unknownCode(kind, code string) string {
+	return fmt.Sprintf("(unknown %s code %q — this is a bug in dasha, please report it)", kind, code)
 }
 
 func hostRates(hs []HostRate) string {
@@ -353,28 +361,28 @@ func Report(scans dto.IndexClusterScans, th Thresholds) []IndexReport {
 
 		verdict, reason := decide(hosts, scans.Unreachable, th)
 
+		// The child count is quoted by the partitioned note, so it has to be in place
+		// before Text() renders it.
+		partitions := 0
+
 		if r.partitioned {
-			reason.Params.Partitions = len(r.children)
+			partitions = len(r.children)
+			reason.Params.Partitions = partitions
 			reason.Notes = append(reason.Notes, NotePartitioned)
 		}
 
-		rep := IndexReport{ //nolint:exhaustruct
+		out = append(out, IndexReport{
 			Schema:      r.schema,
 			Table:       r.table,
 			Index:       r.index,
 			Partitioned: r.partitioned,
+			Partitions:  partitions,
 			SizeBytes:   size,
 			Verdict:     verdict,
 			Reason:      reason,
 			ReasonText:  reason.Text(),
 			PerInstance: hosts,
-		}
-
-		if r.partitioned {
-			rep.Partitions = len(r.children)
-		}
-
-		out = append(out, rep)
+		})
 	}
 
 	return out
