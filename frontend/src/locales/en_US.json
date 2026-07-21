@@ -169,6 +169,7 @@
     "retentionGiB": "Retention limit, GiB",
     "invalidDuration": "Invalid format (e.g. 30s, 5m, 1h)",
     "mustBePositive": "Must be ≥ 0",
+    "spikeDurationTooLong": "The window must be at least twice the spike duration",
     "hot": {
       "title": "Hot objects",
       "hint": "Delta snapshots of table/index activity: an exact top per metric class plus a tail histogram. Collected from every cluster host on a schedule.",
@@ -276,6 +277,7 @@
       "peak_value": "Peak",
       "threshold_pct": "Threshold",
       "duration": "Spike duration",
+      "coverage": "Coverage",
       "window_size": "Window",
       "current": "Current value",
       "min_baseline_active": "Min. baseline",

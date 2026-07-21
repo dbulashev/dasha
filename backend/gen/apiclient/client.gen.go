@@ -176,10 +176,10 @@ type ActivitySpikeTrigger struct {
 	// RecoveryDuration Snapshot the aftermath once activity stays below threshold this long; "0s" disables
 	RecoveryDuration string `json:"RecoveryDuration"`
 
-	// SpikeDuration Go duration string (e.g. "5m")
+	// SpikeDuration How long activity must stay above the threshold, Go duration string (e.g. "2m"). Must be <= WindowSize / 2, otherwise the spike inflates its own baseline before it can fire. Single dips shorter than half this value are tolerated, provided 70% of the probes stay above the threshold.
 	SpikeDuration string `json:"SpikeDuration"`
 
-	// WindowSize Go duration string (e.g. "5m")
+	// WindowSize Moving-average baseline window, Go duration string (e.g. "30m")
 	WindowSize string `json:"WindowSize"`
 }
 

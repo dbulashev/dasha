@@ -51,13 +51,13 @@ func TestConfigValidate(t *testing.T) {
 		{"hot_top_n too high", func(c *Config) { c.HotTopN = 1001 }, true},
 		{"hot_retention_days zero", func(c *Config) { c.HotRetentionDays = 0 }, true},
 		{
-			name:    "spike_duration at 2x window is allowed",
-			mutate:  func(c *Config) { c.Defaults.ActivitySpike.SpikeDuration = 60 * time.Second },
+			name:    "spike_duration at half the window is allowed",
+			mutate:  func(c *Config) { c.Defaults.ActivitySpike.SpikeDuration = 15 * time.Second },
 			wantErr: false,
 		},
 		{
-			name:    "spike_duration above 2x window",
-			mutate:  func(c *Config) { c.Defaults.ActivitySpike.SpikeDuration = 61 * time.Second },
+			name:    "spike_duration above half the window",
+			mutate:  func(c *Config) { c.Defaults.ActivitySpike.SpikeDuration = 16 * time.Second },
 			wantErr: true,
 		},
 	}
@@ -80,7 +80,7 @@ func TestConfigValidateOverride(t *testing.T) {
 	t.Parallel()
 
 	// Defaults carry window_size = 30s, so the cross-field rule caps an
-	// overriding spike_duration at 60s.
+	// overriding spike_duration at 15s.
 	cfg := validConfig()
 
 	tests := []struct {
@@ -103,9 +103,23 @@ func TestConfigValidateOverride(t *testing.T) {
 		{
 			name: "consistent window and spike",
 			override: map[string]any{"activity_spike": map[string]any{
-				"window_size": "5m", "spike_duration": "1m",
+				"window_size": "30m", "spike_duration": "2m",
 			}},
 			wantErr: false,
+		},
+		{
+			name: "spike at exactly half the overriding window",
+			override: map[string]any{"activity_spike": map[string]any{
+				"window_size": "10m", "spike_duration": "5m",
+			}},
+			wantErr: false,
+		},
+		{
+			name: "spike above half the overriding window",
+			override: map[string]any{"activity_spike": map[string]any{
+				"window_size": "10m", "spike_duration": "6m",
+			}},
+			wantErr: true,
 		},
 		{
 			name:     "valid direction",
@@ -118,7 +132,7 @@ func TestConfigValidateOverride(t *testing.T) {
 			wantErr:  true,
 		},
 		{
-			name:     "spike exceeds 2x default window",
+			name:     "spike exceeds half the default window",
 			override: map[string]any{"activity_spike": map[string]any{"spike_duration": "5m"}},
 			wantErr:  true,
 		},
@@ -178,8 +192,8 @@ func TestConfigValidateOverride(t *testing.T) {
 func TestConfigValidateEffective(t *testing.T) {
 	t.Parallel()
 
-	// Valid under a 30s default window (50s <= 2*30s), invalid once it tightens.
-	override := map[string]any{"activity_spike": map[string]any{"spike_duration": "50s"}}
+	// Valid under a 30s default window (2*12s <= 30s), invalid once it tightens.
+	override := map[string]any{"activity_spike": map[string]any{"spike_duration": "12s"}}
 
 	wide := validConfig()
 	if err := wide.ValidateEffective(override); err != nil {
@@ -187,7 +201,7 @@ func TestConfigValidateEffective(t *testing.T) {
 	}
 
 	tight := validConfig()
-	tight.Defaults.ActivitySpike.WindowSize = 20 * time.Second // 2*20s = 40s < 50s
+	tight.Defaults.ActivitySpike.WindowSize = 20 * time.Second // 20s / 2 = 10s < 12s
 
 	if err := tight.ValidateEffective(override); err == nil {
 		t.Fatal("override should be rejected once the default window is tightened")

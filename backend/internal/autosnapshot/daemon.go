@@ -74,6 +74,10 @@ type hostState struct {
 	windowSamples       []activitySample
 	lastInRecovery      *bool
 	aboveThresholdSince *time.Time
+	lastAboveAt         *time.Time      // last probe at/above the threshold — measures how long the current dip lasts
+	spikeAbove          int             // probes at/above the threshold since aboveThresholdSince
+	spikeTotal          int             // all probes since aboveThresholdSince (coverage = above/total)
+	spikePeak           int             // highest active count seen since aboveThresholdSince
 	lastBelowBaselineAt *time.Time      // throttles below-baseline events to avoid per-poll spam
 	lockPeak            *BackgroundPeak // worst blocked-session count during a forming spike (hybrid lock capture)
 	inSpike             bool            // a spike snapshot was taken and not yet resolved
@@ -84,6 +88,69 @@ type hostState struct {
 type activitySample struct {
 	at    time.Time
 	count int
+}
+
+// spikeStep is what one probe did to the forming-spike state.
+type spikeStep int
+
+const (
+	spikeAborted spikeStep = iota // no candidate is forming (a dip outlasted the grace window, or never started)
+	spikeStarted                  // this probe opened a new candidate
+	spikeForming                  // a candidate is running: this probe was above the threshold, or a tolerated dip
+)
+
+// advanceSpike folds one probe into the forming-spike state. A dip below the
+// threshold does not abort the candidate as long as it stays within dipGrace:
+// real load is saw-toothed, and dropping the candidate on the first low probe
+// makes any spike_duration spanning several polls unreachable. Coverage
+// (checked at fire time) keeps flapping load from qualifying.
+func (s *hostState) advanceSpike(now time.Time, count int, threshold float64, dipGrace time.Duration) spikeStep {
+	if float64(count) < threshold {
+		if s.aboveThresholdSince == nil || s.lastAboveAt == nil || now.Sub(*s.lastAboveAt) > dipGrace {
+			s.resetSpike()
+
+			return spikeAborted
+		}
+
+		s.spikeTotal++
+
+		return spikeForming
+	}
+
+	s.lastAboveAt = &now
+	s.spikeAbove++
+	s.spikeTotal++
+
+	if count > s.spikePeak {
+		s.spikePeak = count
+	}
+
+	if s.aboveThresholdSince == nil {
+		s.aboveThresholdSince = &now
+
+		return spikeStarted
+	}
+
+	return spikeForming
+}
+
+// spikeCoverage is the share of probes that were above the threshold since the
+// candidate opened.
+func (s *hostState) spikeCoverage() float64 {
+	if s.spikeTotal == 0 {
+		return 0
+	}
+
+	return float64(s.spikeAbove) / float64(s.spikeTotal)
+}
+
+func (s *hostState) resetSpike() {
+	s.aboveThresholdSince = nil
+	s.lastAboveAt = nil
+	s.spikeAbove = 0
+	s.spikeTotal = 0
+	s.spikePeak = 0
+	s.lockPeak = nil
 }
 
 // NewDaemon wires a daemon from its dependencies.

@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS autosnapshot_config_global (
 	seedAutosnapshotConfigGlobalSQL = `
 INSERT INTO autosnapshot_config_global (id, defaults)
 VALUES (1, '{
-    "activity_spike": {"enabled": true, "window_size": "5m", "active_threshold_pct": 50, "spike_duration": "5m"},
+    "activity_spike": {"enabled": true, "window_size": "30m", "active_threshold_pct": 50, "spike_duration": "2m"},
     "role_change":    {"enabled": true, "direction": "both"}
 }'::jsonb)
 ON CONFLICT (id) DO NOTHING`

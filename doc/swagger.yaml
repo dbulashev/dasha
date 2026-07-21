@@ -5501,12 +5501,15 @@ components:
           type: boolean
         WindowSize:
           type: string
-          description: Go duration string (e.g. "5m")
+          description: Moving-average baseline window, Go duration string (e.g. "30m")
         ActiveThresholdPct:
           type: integer
         SpikeDuration:
           type: string
-          description: Go duration string (e.g. "5m")
+          description: >-
+            How long activity must stay above the threshold, Go duration string (e.g. "2m").
+            Must be <= WindowSize / 2, otherwise the spike inflates its own baseline before it can fire.
+            Single dips shorter than half this value are tolerated, provided 70% of the probes stay above the threshold.
         RecoveryDuration:
           type: string
           description: Snapshot the aftermath once activity stays below threshold this long; "0s" disables

@@ -60,9 +60,15 @@ func validateMergedDefaults(td TriggerDefaults) error {
 	return validateSpikeCross(td.ActivitySpike)
 }
 
+// validateSpikeCross keeps the baseline window long enough for the spike to
+// stand out against it. The baseline is a moving average over window_size, so a
+// spike that must hold for a comparable stretch inflates its own baseline and
+// the crossing dies out before spike_duration elapses — the rule becomes
+// unreachable. Requiring the window to be at least twice the duration leaves
+// the majority of the baseline made of pre-spike samples.
 func validateSpikeCross(s ActivitySpikeTrigger) error {
-	if s.SpikeDuration > 2*s.WindowSize {
-		return errors.New("spike_duration must be <= 2 * window_size")
+	if 2*s.SpikeDuration > s.WindowSize {
+		return errors.New("spike_duration must be <= window_size / 2")
 	}
 
 	return nil

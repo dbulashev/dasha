@@ -3,12 +3,17 @@ package autosnapshot
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"go.uber.org/zap"
 
 	"github.com/dbulashev/dasha/internal/config"
 )
+
+// minSpikeCoverage — share of probes that must sit at/above the threshold over
+// the candidate for it to count as a spike rather than as flapping load.
+const minSpikeCoverage = 0.7
 
 func (d *Daemon) processCluster(
 	ctx context.Context,
@@ -71,7 +76,7 @@ func (d *Daemon) tickActivitySpike(
 	// Below the activity floor the spike rule is unreliable (a 2→3 jump is +50%);
 	// skip it and debug-log (throttled) rather than persist a trigger_event.
 	if baseline < float64(cfg.MinBaselineActive) {
-		state.aboveThresholdSince = nil
+		state.resetSpike()
 		d.handleRecovery(ctx, cfg, t, cl, instance, database, state, now, count)
 
 		if count >= cfg.MinBaselineActive && belowBaselineDue(state, now, cfg.MaxSnapshotFrequency) {
@@ -88,15 +93,25 @@ func (d *Daemon) tickActivitySpike(
 		return
 	}
 
-	if float64(count) < threshold {
-		state.aboveThresholdSince = nil
-		state.lockPeak = nil
+	// A dip shorter than half the required duration keeps the candidate alive.
+	switch state.advanceSpike(now, count, threshold, t.SpikeDuration/2) {
+	case spikeAborted:
 		d.handleRecovery(ctx, cfg, t, cl, instance, database, state, now, count)
 
 		return
-	}
+	case spikeStarted:
+		state.recoveryBelowSince = nil
+		// Freeze the recovery reference at the clean pre-spike threshold; capturing it
+		// at fire time (baseline already inflated by the spike) makes the drop fire
+		// mid-incident. Don't re-inflate it on a re-crossing within the same incident.
+		if !state.inSpike {
+			state.spikeThreshold = threshold
+		}
 
-	state.recoveryBelowSince = nil
+		return
+	case spikeForming:
+		state.recoveryBelowSince = nil
+	}
 
 	// Sample blocked sessions while the spike forms, keeping only the running peak,
 	// so the snapshot can report it even if the trigger fires after the storm subsided.
@@ -108,19 +123,14 @@ func (d *Daemon) tickActivitySpike(
 		}
 	}
 
-	if state.aboveThresholdSince == nil {
-		state.aboveThresholdSince = &now
-		// Freeze the recovery reference at the clean pre-spike threshold; capturing it
-		// at fire time (baseline already inflated by the spike) makes the drop fire
-		// mid-incident. Don't re-inflate it on a re-crossing within the same incident.
-		if !state.inSpike {
-			state.spikeThreshold = threshold
-		}
-
+	if now.Sub(*state.aboveThresholdSince) < t.SpikeDuration {
 		return
 	}
 
-	if now.Sub(*state.aboveThresholdSince) < t.SpikeDuration {
+	// Dips are tolerated one at a time, but the spike must still dominate the
+	// candidate — otherwise load flapping around the threshold would qualify.
+	coverage := state.spikeCoverage()
+	if coverage < minSpikeCoverage {
 		return
 	}
 
@@ -129,7 +139,7 @@ func (d *Daemon) tickActivitySpike(
 			zap.String("cluster", string(cl.Name)),
 			zap.String("instance", instance),
 			zap.Float64("baseline", baseline),
-			zap.Int("peak_value", count))
+			zap.Int("peak_value", state.spikePeak))
 
 		return
 	}
@@ -137,16 +147,16 @@ func (d *Daemon) tickActivitySpike(
 	trigCtx := map[string]any{
 		"trigger":       "activity_spike",
 		"baseline":      baseline,
-		"peak_value":    count,
+		"peak_value":    state.spikePeak,
 		"threshold_pct": t.ActiveThresholdPct,
 		"window_size":   t.WindowSize.String(),
 		"duration":      now.Sub(*state.aboveThresholdSince).String(),
+		"coverage":      math.Round(coverage*100) / 100,
 		"host":          instance,
 	}
 
 	err = d.takeSnapshot(ctx, cfg, cl, instance, database, TriggerActivitySpike, "auto:activity_spike", trigCtx, state.lockPeak)
-	state.aboveThresholdSince = nil
-	state.lockPeak = nil
+	state.resetSpike()
 
 	// On failure don't advance incident state or enqueue a deferred follow-up;
 	// the spike retries on the next sustained crossing.

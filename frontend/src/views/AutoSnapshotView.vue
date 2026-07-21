@@ -117,6 +117,16 @@ function goDurationToMs(v: string): number | null {
   return matched ? total : null
 }
 
+// Cross-field rule (autosnapshot/validation.go): the baseline window must be at
+// least twice the spike duration, or a sustained spike inflates its own baseline
+// and the crossing dies out before the duration elapses.
+const spikeDurationRule = (v: string) => {
+  const spike = goDurationToMs(v)
+  const window = goDurationToMs(cfg.value?.Defaults.ActivitySpike.WindowSize ?? '')
+  if (spike === null || window === null) return true
+  return 2 * spike <= window || t('autosnapshot.spikeDurationTooLong')
+}
+
 // Backend bounds (http/autosnapshot.go): lock_probe_count 1..20, lock_probe_interval 100ms..5s.
 const probeCountRule = (v: number) =>
   (Number.isInteger(Number(v)) && Number(v) >= 1 && Number(v) <= 20) ||
@@ -237,6 +247,7 @@ function contextRows(ctx: Record<string, unknown> | undefined) {
 function fmtCtxValue(key: string, v: unknown): string {
   if (v == null) return '—'
   if (key === 'threshold_pct') return `+${v}%`
+  if (key === 'coverage') return `${Math.round(Number(v) * 100)}%`
   if (key === 'baseline') return Number(v).toFixed(1)
   if (key === 'duration' || key === 'window_size') return String(v).replace(/(\d)\.\d+s/, '$1s')
   return String(v)
@@ -438,7 +449,7 @@ onMounted(() => {
                     :disabled="!isAdmin"
                     :rules="[durationRule]"
                     density="compact"
-                    placeholder="5m"
+                    placeholder="30m"
                   />
                 </v-col>
                 <v-col cols="12" sm="6" md="3">
@@ -457,9 +468,9 @@ onMounted(() => {
                     v-model="cfg.Defaults.ActivitySpike.SpikeDuration"
                     :label="t('autosnapshot.spikeDuration')"
                     :disabled="!isAdmin"
-                    :rules="[durationRule]"
+                    :rules="[durationRule, spikeDurationRule]"
                     density="compact"
-                    placeholder="5m"
+                    placeholder="2m"
                   />
                 </v-col>
                 <v-col cols="12" sm="6" md="3">
