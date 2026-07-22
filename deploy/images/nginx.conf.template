@@ -41,6 +41,9 @@ server {
         proxy_buffers 4 16k;
     }
 
+    # Optional MCP proxy — present only when the entrypoint renders it (MCP_URL set).
+    include /etc/nginx/conf.d/mcp/*.conf;
+
     # Hashed build artefacts from Vite (assets/<name>-<hash>.{js,css,...}) —
     # filename changes on every build, so they can be cached "forever".
     location /assets/ {

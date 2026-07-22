@@ -21,6 +21,14 @@ else
     export HTTPS_REDIRECT_BLOCK=''
 fi
 
+# /mcp → dasha-mcp, only when the deployment wires an MCP endpoint. The directory
+# is always (re)created empty so a disabled MCP leaves no stale location behind.
+rm -rf /etc/nginx/conf.d/mcp
+mkdir -p /etc/nginx/conf.d/mcp
+if [ -n "${MCP_URL:-}" ]; then
+    envsubst '${MCP_URL}' < /etc/nginx/templates/mcp-location.conf.template > /etc/nginx/conf.d/mcp/mcp.conf
+fi
+
 envsubst '${BACKEND_URL} ${HTTPS_REDIRECT_BLOCK}' < /etc/nginx/templates/nginx.conf.template > /etc/nginx/conf.d/default.conf
 
 exec nginx -g 'daemon off;'
