@@ -335,6 +335,11 @@ mcp:
   # NOTE: there is intentionally no shared-token option. Every request must carry
   # its own credential (Authorization: Bearer / X-API-Key) — a shared fallback
   # identity would collapse per-user RBAC and audit for all header-less clients.
+  # -- Publish the MCP endpoint through the frontend nginx at <ui-host>/mcp, so it
+  # reuses the UI's Ingress/Gateway and TLS instead of needing its own. Requests
+  # still carry a per-user token; nginx forwards it untouched. Set to false to keep
+  # the endpoint cluster-internal only.
+  frontendProxy: true
   # -- Service type for the MCP endpoint. Independent of the UI Service so exposing
   # the dashboard (service.type) does not also publish the plain-HTTP MCP port.
   # Empty = fall back to service.type.
@@ -344,8 +349,8 @@ mcp:
   nodeSelector: {}
   tolerations: []
   affinity: {}
-  # To expose the MCP endpoint outside the cluster, front this Service with your
-  # own Ingress/Gateway (TLS terminated there). The pod speaks plain HTTP/SSE.
+  # With frontendProxy disabled, expose the MCP endpoint by fronting this Service
+  # with your own Ingress/Gateway (TLS terminated there) — the pod speaks plain HTTP/SSE.
 
 service:
   type: ClusterIP

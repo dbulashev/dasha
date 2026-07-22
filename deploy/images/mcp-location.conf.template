@@ -1,0 +1,20 @@
+# MCP connector (dasha-mcp) behind the UI host: clients point at https://<host>/mcp
+# and send their own PAT per request (Authorization: Bearer / X-API-Key), which
+# nginx forwards untouched. Rendered only when MCP_URL is set.
+location /mcp {
+    rewrite ^/mcp/?(.*)$ /$1 break;
+    proxy_pass http://${MCP_URL};
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $forwarded_proto;
+    proxy_set_header Connection "";
+    # Streamable HTTP keeps an SSE stream open: buffering would withhold events
+    # and a short read timeout would cut long-running tool calls.
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 3600s;
+    proxy_send_timeout 3600s;
+}
