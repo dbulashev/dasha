@@ -475,7 +475,7 @@ mcp:
   port: 8765
   # dashaUrl: ""   # empty = in-cluster {release}-backend Service
   # lang: ru       # knowledge-base / playbook language (default en)
-  # frontendProxy: true   # publish at <dasha-host>/mcp (default); false = cluster-internal only
+  # frontendProxy: true   # publish at <dasha-host>/mcp (default); false = expose the Service yourself
 ```
 
 HTTP mode is strict per-user passthrough: the chart deliberately offers no shared fallback token — every client must send its own credential per request, keeping RBAC and audit per-user.
@@ -486,7 +486,7 @@ This creates `{release}-mcp` Deployment + `ClusterIP` Service on port `8765`. By
 { "url": "https://dasha.example.com/mcp", "headers": { "Authorization": "Bearer dasha_pat_…" } }
 ```
 
-The SSE stream is passed through unbuffered; the client's token is forwarded untouched, so RBAC stays per-user. Set `mcp.frontendProxy: false` to keep the endpoint cluster-internal and front the Service with your own Ingress/Gateway instead (terminate TLS there). In a headless deploy (`frontend.enabled: false`) there is no nginx, so the chart adds the `/mcp` rule to the Ingress/HTTPRoute directly.
+The SSE stream is passed through unbuffered; the client's token is forwarded untouched, so RBAC stays per-user. Set `mcp.frontendProxy: false` to drop the chart-managed proxy and expose the endpoint yourself instead — front the `{release}-mcp` Service with your own Ingress/Gateway (terminate TLS there), or publish it directly via `mcp.service.type`. In a headless deploy (`frontend.enabled: false`) there is no nginx, so the chart adds the `/mcp` rule to the Ingress/HTTPRoute directly.
 
 ## Development
 

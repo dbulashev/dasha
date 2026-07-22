@@ -473,7 +473,7 @@ mcp:
   port: 8765
   # dashaUrl: ""   # пусто = in-cluster Service {release}-backend
   # lang: ru       # язык базы знаний / плейбуков (по умолчанию en)
-  # frontendProxy: true   # публиковать на <dasha-host>/mcp (по умолчанию); false = только внутри кластера
+  # frontendProxy: true   # публиковать на <dasha-host>/mcp (по умолчанию); false = публикуете сами
 ```
 
 HTTP-режим — строгий per-user passthrough: чарт намеренно не предлагает общий fallback-токен — каждый клиент присылает собственный credential в каждом запросе, RBAC и аудит остаются per-user.
@@ -484,7 +484,7 @@ HTTP-режим — строгий per-user passthrough: чарт намерен
 { "url": "https://dasha.example.com/mcp", "headers": { "Authorization": "Bearer dasha_pat_…" } }
 ```
 
-SSE-поток проксируется без буферизации, токен клиента передаётся как есть — RBAC остаётся per-user. `mcp.frontendProxy: false` оставляет эндпойнт внутрикластерным: тогда ставьте перед Service свой Ingress/Gateway (TLS терминируется там). В headless-развёртывании (`frontend.enabled: false`) nginx нет, поэтому правило `/mcp` чарт добавляет прямо в Ingress/HTTPRoute.
+SSE-поток проксируется без буферизации, токен клиента передаётся как есть — RBAC остаётся per-user. `mcp.frontendProxy: false` убирает проксирование, управляемое чартом, — публикуете эндпойнт сами: ставите перед Service `{release}-mcp` свой Ingress/Gateway (TLS терминируется там) либо открываете его напрямую через `mcp.service.type`. В headless-развёртывании (`frontend.enabled: false`) nginx нет, поэтому правило `/mcp` чарт добавляет прямо в Ingress/HTTPRoute.
 
 ## Разработка
 
