@@ -17,6 +17,7 @@ RUN apk add --no-cache gettext && \
     grep -qE '^pid[[:space:]]+/tmp/nginx\.pid;' /etc/nginx/nginx.conf
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY deploy/images/nginx.conf.template /etc/nginx/templates/nginx.conf.template
+COPY deploy/images/mcp-location.conf.template /etc/nginx/templates/mcp-location.conf.template
 COPY deploy/images/docker-entrypoint.sh /docker-entrypoint.sh
 RUN rm -f /etc/nginx/conf.d/default.conf && \
     chown -R nginx:nginx /etc/nginx /usr/share/nginx/html /docker-entrypoint.sh

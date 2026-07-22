@@ -36,5 +36,15 @@ spec:
       backendRefs:
         - name: {{ include "dasha.fullname" . }}-backend
           port: {{ .Values.backend.port }}
+    {{- if and .Values.mcp.enabled .Values.mcp.frontendProxy }}
+    # No frontend nginx to proxy /mcp — route it here instead.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /mcp
+      backendRefs:
+        - name: {{ include "dasha.fullname" . }}-mcp
+          port: {{ .Values.mcp.port }}
+    {{- end }}
     {{- end }}
 {{- end }}

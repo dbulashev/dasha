@@ -66,6 +66,10 @@ spec:
               value: {{ template "dasha.fullname" $ }}-backend:{{ .Values.backend.port }}
             - name: FORCE_HTTPS_REDIRECT
               value: {{ include "dasha.tlsEnabled" . | quote }}
+            {{- if and .Values.mcp.enabled .Values.mcp.frontendProxy }}
+            - name: MCP_URL
+              value: {{ template "dasha.fullname" $ }}-mcp:{{ .Values.mcp.port }}
+            {{- end }}
           volumeMounts:
             - name: nginx-cache
               mountPath: /var/cache/nginx

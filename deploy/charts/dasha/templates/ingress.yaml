@@ -77,5 +77,15 @@ spec:
                 name: {{ template "dasha.fullname" $ }}-backend
                 port:
                   name: http
+          {{- if and .Values.mcp.enabled .Values.mcp.frontendProxy }}
+          # No frontend nginx to proxy /mcp — route it here instead.
+          - path: /mcp
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ template "dasha.fullname" $ }}-mcp
+                port:
+                  name: http
+          {{- end }}
           {{- end }}
 {{- end }}
