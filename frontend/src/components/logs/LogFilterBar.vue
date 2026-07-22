@@ -59,11 +59,15 @@ const orderItems = computed(() => [
   { value: 'asc', title: t('logs.orderAsc') },
 ])
 
-// Reset severities that are not valid for the newly selected service type.
+// PG and pooler logs use different severity vocabularies and message formats,
+// so drop what no longer applies to the newly selected service type. Sync flush
+// keeps this from wiping the values that applyPreset/applyState assign right
+// after they set serviceType.
 watch(serviceType, () => {
   const allowed = new Set(severityItems.value)
   severities.value = (severities.value ?? []).filter(s => allowed.has(s))
-})
+  includes.value = []
+}, { flush: 'sync' })
 
 const presetItems = computed(() =>
   LOG_PRESETS.map(p => ({ value: p.id, title: t(`logs.preset.${p.id}`) })),
