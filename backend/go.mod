@@ -19,8 +19,8 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.43.0
-	github.com/yandex-cloud/go-genproto v0.92.0
-	github.com/yandex-cloud/go-sdk v0.31.0
+	github.com/yandex-cloud/go-genproto v0.93.0
+	github.com/yandex-cloud/go-sdk v0.32.0
 	go.uber.org/zap v1.28.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.21.0
