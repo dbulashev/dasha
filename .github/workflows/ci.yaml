@@ -137,6 +137,24 @@ jobs:
       - name: Helm template
         run: helm template test deploy/charts/dasha > /dev/null
 
+  # Report-only: never gates CI and is deliberately kept out of build-check's needs,
+  # because release.yaml gates releases on the build-check check-run.
+  sonar:
+    runs-on: ubuntu-latest
+    # Forks get no secrets: skip instead of failing.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # blame data for New Code; a shallow clone degrades relevance
+      - name: SonarQube Cloud scan
+        uses: SonarSource/sonarqube-scan-action@v8
+        continue-on-error: true
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        with:
+          projectBaseDir: backend
+
   build-check:
     runs-on: ubuntu-latest
     needs: [lint-backend, lint-frontend, lint-helm, test-backend-unit, test-frontend, vulncheck-backend, vulncheck-frontend, trivy-scan]
