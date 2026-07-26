@@ -147,6 +147,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # blame data for New Code; a shallow clone degrades relevance
+          persist-credentials: false # the scanner only reads history, it never pushes
       - name: SonarQube Cloud scan
         uses: SonarSource/sonarqube-scan-action@v8
         continue-on-error: true
