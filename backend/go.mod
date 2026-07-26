@@ -12,7 +12,7 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/labstack/echo/v4 v4.15.4
 	github.com/modelcontextprotocol/go-sdk v1.6.1
-	github.com/oapi-codegen/runtime v1.4.2
+	github.com/oapi-codegen/runtime v1.6.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/samber/do v1.6.0
 	github.com/spf13/cobra v1.10.2
