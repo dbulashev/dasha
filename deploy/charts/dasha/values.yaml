@@ -304,9 +304,12 @@ backend:
   #        name: dasha-oidc-secret
   #        key: clientSecret       # key name in the Secret
   # -- Extra envFrom sources for the backend container: imports a Secret/ConfigMap
-  # whole, variable names equal key names verbatim (no renaming). Use it to add
-  # Secrets beyond secrets.existingSecret, which is limited to one. Sources listed
-  # later win over earlier ones.
+  # whole, variable names equal key names verbatim (no renaming), so each key must
+  # already be a valid env var name — Kubernetes silently skips the ones that are
+  # not (a `client-secret` key never arrives, `clientSecret` does). Use it to add
+  # sources beyond the chart's own env Secret (secrets.existingSecret, or the one
+  # secrets.externalSecret creates), which is limited to one. Sources listed later
+  # win over earlier ones.
   extraEnvFrom: []
   #  - secretRef:
   #      name: dasha-db-passwords

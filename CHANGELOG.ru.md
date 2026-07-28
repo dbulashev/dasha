@@ -3,7 +3,7 @@
 ## Не выпущено
 
 ### Фичи
-- **`extraEnv` / `extraEnvFrom` в Helm-чарте** для контейнеров бэкенда и автоснимков: переменные окружения из Secret'ов, которыми чарт не управляет. `extraEnv` привязывает отдельный ключ Secret'а к переменной с любым именем (например, созданный Dex `clientSecret` — к `DASHA_OIDC_SECRET`), `extraEnvFrom` подключает Secret'ы и ConfigMap'ы целиком, сверх единственного `secrets.existingSecret`.
+- **`extraEnv` / `extraEnvFrom` в Helm-чарте** для контейнеров бэкенда и автоснимков: переменные окружения из Secret'ов, которыми чарт не управляет. `extraEnv` привязывает отдельный ключ Secret'а к переменной с любым именем (например, созданный Dex `clientSecret` — к `DASHA_OIDC_SECRET`), `extraEnvFrom` подключает Secret'ы и ConfigMap'ы целиком, сверх единственного собственного Secret'а чарта.
 
 ## v1.5.0
 

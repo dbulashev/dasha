@@ -672,7 +672,7 @@ backend:
           key: clientSecret       # key Dex actually created
 ```
 
-`backend.extraEnvFrom` covers the other gap — pulling in Secrets beyond the one `secrets.existingSecret` allows. It imports a Secret/ConfigMap whole, with variable names equal to key names:
+`backend.extraEnvFrom` covers the other gap — pulling in sources beyond the chart's own env Secret (`secrets.existingSecret`, or the one `secrets.externalSecret` creates), which is limited to one. It imports a Secret/ConfigMap whole, with variable names equal to key names, so every key must already be a valid environment variable name — Kubernetes silently skips the ones that are not, so a `client-secret` key never arrives while `clientSecret` does:
 
 ```yaml
 backend:

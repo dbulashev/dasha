@@ -670,7 +670,7 @@ backend:
           key: clientSecret       # ключ, который реально создал Dex
 ```
 
-`backend.extraEnvFrom` закрывает вторую проблему — подключение Secret'ов сверх единственного, разрешённого через `secrets.existingSecret`. Он импортирует Secret/ConfigMap целиком, имена переменных равны именам ключей:
+`backend.extraEnvFrom` закрывает вторую проблему — подключение источников сверх единственного собственного Secret'а чарта (`secrets.existingSecret` либо созданного через `secrets.externalSecret`). Он импортирует Secret/ConfigMap целиком, имена переменных равны именам ключей, поэтому каждый ключ обязан быть валидным именем переменной окружения — остальные Kubernetes молча пропускает: ключ `client-secret` до пода не доедет, а `clientSecret` доедет:
 
 ```yaml
 backend:
