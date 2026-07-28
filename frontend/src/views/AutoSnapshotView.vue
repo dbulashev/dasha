@@ -14,7 +14,7 @@ import { useAutosnapshotStatusStore } from '@/stores/autosnapshotStatus'
 import { useViewError } from '@/composables/useViewError'
 import { usePaginatedApiLoader } from '@/composables/useApiLoader'
 import { assertOk } from '@/utils/api'
-import { fmtDateTime } from '@/utils/format'
+import { fmtDateTime, fromDateTimeInput, withZoneLabel } from '@/utils/format'
 import { getErrorMessage } from '@/utils/error'
 import { outcomeI18nKey, triggerI18nKey } from '@/utils/autosnapshot'
 import AutoSnapshotClustersTab from '@/components/autosnapshot/AutoSnapshotClustersTab.vue'
@@ -204,8 +204,12 @@ const {
     if (filterCluster.value) params.cluster_name = filterCluster.value
     if (filterOutcome.value) params.outcome = filterOutcome.value
     if (filterTriggerType.value) params.trigger_type = filterTriggerType.value
-    if (filterFrom.value) params.from = new Date(filterFrom.value + 'T00:00:00').toISOString()
-    if (filterTo.value) params.to = new Date(filterTo.value + 'T23:59:59.999').toISOString()
+    // Day bounds are wall clock in the display zone, matching the timestamps
+    // the table renders.
+    const from = filterFrom.value ? fromDateTimeInput(`${filterFrom.value}T00:00:00`) : null
+    const to = filterTo.value ? fromDateTimeInput(`${filterTo.value}T23:59:59.999`) : null
+    if (from) params.from = from.toISOString()
+    if (to) params.to = to.toISOString()
     return getAutosnapshotTriggerEvents(params as Parameters<typeof getAutosnapshotTriggerEvents>[0])
   },
   {
@@ -673,7 +677,7 @@ onMounted(() => {
               <v-col cols="6" sm="6" md="2">
                 <v-text-field
                   v-model="filterFrom"
-                  :label="t('autosnapshot.filter.from')"
+                  :label="withZoneLabel(t('autosnapshot.filter.from'))"
                   type="date"
                   density="compact"
                   hide-details
@@ -683,7 +687,7 @@ onMounted(() => {
               <v-col cols="6" sm="6" md="2">
                 <v-text-field
                   v-model="filterTo"
-                  :label="t('autosnapshot.filter.to')"
+                  :label="withZoneLabel(t('autosnapshot.filter.to'))"
                   type="date"
                   density="compact"
                   hide-details

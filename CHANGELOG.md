@@ -5,6 +5,9 @@
 ### Features
 - **`extraEnv` / `extraEnvFrom` in the Helm chart** for the backend and autosnapshot containers: environment variables from Secrets the chart does not manage. `extraEnv` binds one Secret key to a variable of any name (e.g. a Dex-issued `clientSecret` to `DASHA_OIDC_SECRET`), `extraEnvFrom` mounts whole Secrets/ConfigMaps beyond the chart's own single env Secret.
 
+### Bug Fixes
+- **Date range pickers now follow the chosen time zone.** In the log search (custom period, Grafana range copy/paste, histogram zoom) and in the auto-snapshot history filter, a typed date was read in the browser's zone while the results were rendered in the selected one — so the searched window was off by the difference between them. The fields now say which zone they are in, and a shared log-search link keeps the same period for a recipient viewing another zone.
+
 ## v1.5.0
 
 ### Features

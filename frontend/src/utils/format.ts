@@ -1,6 +1,6 @@
 import { useLocaleStore } from '@/stores/locale'
 import { usePrefsStore } from '@/stores/prefs'
-import { isValidTimeZone, tzSuffix } from '@/constants/timezones'
+import { isValidTimeZone, tzSuffix, zoneOffsetMs } from '@/constants/timezones'
 
 export function fmtLag(seconds: number | null | undefined): string {
   if (seconds == null || seconds === 0) return '0 s'
@@ -118,6 +118,50 @@ function zoneSuffix(): string {
   const tz = activeZone()
 
   return tz === 'local' ? '' : tzSuffix(tz)
+}
+
+/**
+ * Suffix a form label with the display zone ("From (GMT+3)"). Dates a user types
+ * need the same labelling as the ones we render: a bare "10:00" in a field says
+ * nothing about which zone it will be read in.
+ */
+export function withZoneLabel(label: string): string {
+  const zone = zoneSuffix().trim()
+
+  return zone ? `${label} (${zone})` : label
+}
+
+// Offset of the display zone at a given instant; 'local' means the browser's own
+// offset, which is what an unqualified Date already uses.
+function zoneOffsetAt(at: Date): number {
+  const tz = activeZone()
+
+  return tz === 'local' ? -at.getTimezoneOffset() * 60000 : zoneOffsetMs(tz, at)
+}
+
+/**
+ * Wall clock of an instant in the display zone, as the `YYYY-MM-DDTHH:mm:ss`
+ * value a `date`/`datetime-local` input takes. Native date inputs only ever
+ * speak the browser's zone, so a range picked next to timestamps rendered in a
+ * fixed zone would otherwise mean a different moment than it shows.
+ */
+export function toDateTimeInput(at: Date): string {
+  return new Date(at.getTime() + zoneOffsetAt(at)).toISOString().slice(0, 19)
+}
+
+/**
+ * Inverse of toDateTimeInput: a wall clock typed into such an input, read in the
+ * display zone. Returns null for an unparsable value (including an empty field).
+ */
+export function fromDateTimeInput(value: string): Date | null {
+  const wall = Date.parse(`${value}Z`)
+  if (isNaN(wall)) return null
+
+  // The offset that applies is the one in effect at the resulting instant, not
+  // at the naive guess — across a DST change the two differ.
+  const guess = wall - zoneOffsetAt(new Date(wall))
+
+  return new Date(wall - zoneOffsetAt(new Date(guess)))
 }
 
 function parseDate(iso: string | null | undefined): Date | null {

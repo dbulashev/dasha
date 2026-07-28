@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import type { LocationQuery } from 'vue-router'
 import type { GetLogsServiceType } from '@/api/models'
 import { copyToClipboard } from '@/utils/sql'
+import { fromDateTimeInput, toDateTimeInput, withZoneLabel } from '@/utils/format'
 import { LOG_PRESETS, severityOptions, type LogFilters, type LogOrder } from './types'
 
 const props = defineProps<{
@@ -33,7 +34,8 @@ const pageSize = ref<number>(100)
 const order = ref<LogOrder>('desc')
 const preset = ref<string | null>(null)
 
-// Custom range bounds (datetime-local strings).
+// Custom range bounds — datetime-local strings, read as wall clock in the zone
+// the UI renders timestamps in (settings), not in the browser's own zone.
 const customFrom = ref<string>('')
 const customTo = ref<string>('')
 
@@ -110,10 +112,9 @@ const rangeMs: Record<string, number> = {
 
 function computeRange(): { from: string; to: string } | null {
   if (range.value === 'custom') {
-    if (!customFrom.value || !customTo.value) return null
-    const from = new Date(customFrom.value)
-    const to = new Date(customTo.value)
-    if (isNaN(from.getTime()) || isNaN(to.getTime()) || from >= to) return null
+    const from = fromDateTimeInput(customFrom.value)
+    const to = fromDateTimeInput(customTo.value)
+    if (!from || !to || from >= to) return null
     return { from: from.toISOString(), to: to.toISOString() }
   }
   const ms = rangeMs[range.value] ?? rangeMs['1h']
@@ -125,30 +126,22 @@ const rangeError = computed(() => range.value === 'custom' && computeRange() ===
 
 // Grafana time-picker clipboard interop ("Copy/Paste time range"):
 // relative {"from":"now-1h","to":"now"} or absolute
-// {"from":"2026-07-08 00:00:00","to":"2026-07-08 23:59:59"} in local time.
+// {"from":"2026-07-08 00:00:00","to":"2026-07-08 23:59:59"} in the display zone.
 const rangeCopied = ref(false)
 
-function pad(n: number): string {
-  return String(n).padStart(2, '0')
-}
-
-// Local wall-clock time in Grafana's absolute format.
+// Wall clock of an instant in Grafana's absolute format, in the display zone.
 function fmtGrafanaAbs(d: Date): string {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
-}
-
-// datetime-local input value for the custom range fields.
-function fmtInputValue(d: Date): string {
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+  return toDateTimeInput(d).replace('T', ' ')
 }
 
 function copyGrafanaRange() {
   let payload: { from: string; to: string }
   if (range.value === 'custom') {
-    if (rangeError.value) return
+    const r = computeRange()
+    if (!r) return
     payload = {
-      from: fmtGrafanaAbs(new Date(customFrom.value)),
-      to: fmtGrafanaAbs(new Date(customTo.value)),
+      from: fmtGrafanaAbs(new Date(r.from)),
+      to: fmtGrafanaAbs(new Date(r.to)),
     }
   } else {
     payload = { from: `now-${range.value}`, to: 'now' }
@@ -160,10 +153,17 @@ function copyGrafanaRange() {
   }, 1500)
 }
 
-// "2026-07-08 00:00:00" (and ISO variants) parsed as local time.
-function parseGrafanaAbs(s: string): Date | null {
-  const d = new Date(s.replace(' ', 'T'))
-  return isNaN(d.getTime()) ? null : d
+// Absolute bound from a link or the clipboard: a value carrying its own offset
+// ("…Z", "…+03:00") is already an instant; a bare wall clock
+// ("2026-07-08 00:00:00") is read in the display zone, like the fields.
+function parseBound(value: string): Date | null {
+  const v = value.trim().replace(' ', 'T')
+  if (!v) return null
+  if (/(?:z|[+-]\d{2}:?\d{2})$/i.test(v)) {
+    const d = new Date(v)
+    return isNaN(d.getTime()) ? null : d
+  }
+  return fromDateTimeInput(v)
 }
 
 const REL_UNIT_MS: Record<string, number> = { m: 60_000, h: 3_600_000, d: 86_400_000, w: 7 * 86_400_000 }
@@ -187,17 +187,17 @@ async function pasteGrafanaRange() {
     const ms = Number(rel[1]) * REL_UNIT_MS[rel[2]]
     const now = new Date()
     range.value = 'custom'
-    customFrom.value = fmtInputValue(new Date(now.getTime() - ms))
-    customTo.value = fmtInputValue(now)
+    customFrom.value = toDateTimeInput(new Date(now.getTime() - ms))
+    customTo.value = toDateTimeInput(now)
     return
   }
 
-  const from = parseGrafanaAbs(parsed.from)
-  const to = parseGrafanaAbs(parsed.to)
+  const from = parseBound(parsed.from)
+  const to = parseBound(parsed.to)
   if (!from || !to) return
   range.value = 'custom'
-  customFrom.value = fmtInputValue(from)
-  customTo.value = fmtInputValue(to)
+  customFrom.value = toDateTimeInput(from)
+  customTo.value = toDateTimeInput(to)
 }
 
 // Host/database/user are rarely used — they live behind a spoiler that opens
@@ -242,8 +242,13 @@ function toState(): FilterState {
   if (serviceType.value !== 'postgresql') s.service = serviceType.value
   if (range.value === 'custom') {
     s.range = 'custom'
-    s.from = customFrom.value
-    s.to = customTo.value
+    // Shared as instants rather than wall clock: whoever opens the link may
+    // render another zone, and the window must stay the same period.
+    const r = computeRange()
+    if (r) {
+      s.from = r.from
+      s.to = r.to
+    }
   } else if (range.value !== '1h') {
     s.range = range.value
   }
@@ -272,10 +277,12 @@ function applyState(s: FilterState) {
   const svc = asStr(s.service)
   serviceType.value = svc === 'pooler' ? 'pooler' : 'postgresql'
   const r = asStr(s.range)
-  if (r === 'custom' && asStr(s.from) && asStr(s.to)) {
+  const from = parseBound(asStr(s.from))
+  const to = parseBound(asStr(s.to))
+  if (r === 'custom' && from && to) {
     range.value = 'custom'
-    customFrom.value = asStr(s.from)
-    customTo.value = asStr(s.to)
+    customFrom.value = toDateTimeInput(from)
+    customTo.value = toDateTimeInput(to)
   } else {
     range.value = rangeMs[r] ? r : '1h'
   }
@@ -418,8 +425,8 @@ function applyAbsoluteRange(fromIso: string, toIso: string) {
   const to = new Date(toIso)
   if (isNaN(from.getTime()) || isNaN(to.getTime()) || from >= to) return
   range.value = 'custom'
-  customFrom.value = fmtInputValue(from)
-  customTo.value = fmtInputValue(to)
+  customFrom.value = toDateTimeInput(from)
+  customTo.value = toDateTimeInput(to)
 }
 
 defineExpose({ applyDrill, addExclude, applyAbsoluteRange })
@@ -479,7 +486,7 @@ defineExpose({ applyDrill, addExclude, applyAbsoluteRange })
             <v-text-field
               v-model="customFrom"
               type="datetime-local"
-              :label="t('logs.from')"
+              :label="withZoneLabel(t('logs.from'))"
               density="compact"
               hide-details
               :error="rangeError"
@@ -489,7 +496,7 @@ defineExpose({ applyDrill, addExclude, applyAbsoluteRange })
             <v-text-field
               v-model="customTo"
               type="datetime-local"
-              :label="t('logs.to')"
+              :label="withZoneLabel(t('logs.to'))"
               density="compact"
               hide-details
               :error="rangeError"
