@@ -84,10 +84,20 @@ spec:
               port: http
             initialDelaySeconds: 3
             periodSeconds: 10
-          {{- if or .Values.secrets.externalSecret.enabled (ne .Values.secrets.existingSecret "") }}
+          {{- with .Values.backend.extraEnv }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- $chartSecret := or .Values.secrets.externalSecret.enabled (ne .Values.secrets.existingSecret "") }}
+          {{- if or $chartSecret .Values.backend.extraEnvFrom }}
           envFrom:
+            {{- if $chartSecret }}
             - secretRef:
                 name: {{ include "dasha.envSecretName" . }}
+            {{- end }}
+            {{- with .Values.backend.extraEnvFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- end }}
           volumeMounts:
             - name: tmp
