@@ -49,6 +49,52 @@ export function isValidTimeZone(timeZone: string): boolean {
   return ok
 }
 
+const wallClockFormats = new Map<string, Intl.DateTimeFormat | null>()
+
+function wallClockFormat(timeZone: string): Intl.DateTimeFormat | null {
+  const cached = wallClockFormats.get(timeZone)
+  if (cached !== undefined) return cached
+
+  let fmt: Intl.DateTimeFormat | null = null
+  try {
+    fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    })
+  } catch {
+    fmt = null
+  }
+
+  wallClockFormats.set(timeZone, fmt)
+
+  return fmt
+}
+
+/**
+ * Offset of a zone from UTC at the given instant, in milliseconds
+ * (Europe/Moscow → +10800000). Taken from the tz database rather than
+ * hardcoded, so DST and past offset changes are handled; an unknown zone gives
+ * 0 (UTC) instead of throwing.
+ */
+export function zoneOffsetMs(timeZone: string, at: Date): number {
+  const fmt = wallClockFormat(timeZone)
+  if (!fmt) return 0
+
+  const parts = fmt.formatToParts(at)
+  const num = (type: string) => Number(parts.find((p) => p.type === type)?.value)
+  const wall = Date.UTC(num('year'), num('month') - 1, num('day'), num('hour'), num('minute'), num('second'))
+  if (isNaN(wall)) return 0
+
+  // formatToParts carries no milliseconds — compare against the whole second.
+  return wall - Math.floor(at.getTime() / 1000) * 1000
+}
+
 /**
  * Short offset label for a zone ("GMT+3"), read from the tz database. Returns an
  * empty string if the runtime does not know the zone, so a caller can fall back
