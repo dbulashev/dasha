@@ -70,10 +70,20 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- if or .Values.secrets.externalSecret.enabled (ne .Values.secrets.existingSecret "") }}
+          {{- with .Values.autosnapshot.extraEnv }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- $chartSecret := or .Values.secrets.externalSecret.enabled (ne .Values.secrets.existingSecret "") }}
+          {{- if or $chartSecret .Values.autosnapshot.extraEnvFrom }}
           envFrom:
+            {{- if $chartSecret }}
             - secretRef:
                 name: {{ include "dasha.envSecretName" . }}
+            {{- end }}
+            {{- with .Values.autosnapshot.extraEnvFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- end }}
           volumeMounts:
             - name: config

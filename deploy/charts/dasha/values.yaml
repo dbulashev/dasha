@@ -292,6 +292,27 @@ backend:
   port: 8000
   resources: {}
   terminationGracePeriodSeconds: 30
+  # -- Extra environment variables for the backend container.
+  # Each entry names the variable explicitly and points at a single Secret key, so
+  # the key can be renamed on the way in. Use this when the Secret is owned by
+  # someone else (Dex, an operator, a neighbouring chart) and its key names are not
+  # the ones *_from_env expects. On a name collision these win over envFrom.
+  extraEnv: []
+  #  - name: DASHA_OIDC_SECRET    # variable name in the pod (config: client_secret_from_env)
+  #    valueFrom:
+  #      secretKeyRef:
+  #        name: dasha-oidc-secret
+  #        key: clientSecret       # key name in the Secret
+  # -- Extra envFrom sources for the backend container: imports a Secret/ConfigMap
+  # whole, variable names equal key names verbatim (no renaming), so each key must
+  # already be a valid env var name — Kubernetes silently skips the ones that are
+  # not (a `client-secret` key never arrives, `clientSecret` does). Use it to add
+  # sources beyond the chart's own env Secret (secrets.existingSecret, or the one
+  # secrets.externalSecret creates), which is limited to one. Sources listed later
+  # win over earlier ones.
+  extraEnvFrom: []
+  #  - secretRef:
+  #      name: dasha-db-passwords
   # -- Extra volumes to attach to the backend pod, i.e. for keycloak or pg certs
   extraVolumes: []
   #  - name: certs
@@ -314,6 +335,10 @@ autosnapshot:
   replicaCount: 1
   resources: {}
   terminationGracePeriodSeconds: 30
+  # -- Same semantics as backend.extraEnv / backend.extraEnvFrom (documented above).
+  # The daemon reads the same config, so it needs the same variables as the backend.
+  extraEnv: []
+  extraEnvFrom: []
   extraVolumes: []
   extraVolumeMounts: []
 

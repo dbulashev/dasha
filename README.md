@@ -650,6 +650,39 @@ secrets:
           property: password
 ```
 
+#### Extra environment variables (`extraEnv` / `extraEnvFrom`)
+
+The `secrets.` block feeds a single Secret to the pod via `envFrom`, so variable names must equal that Secret's key names. When the Secret is owned by someone else — Dex, an operator, a neighbouring chart — its keys are named their way, and `envFrom` cannot rename them. `backend.extraEnv` names each variable explicitly and points at one key, which does the renaming:
+
+```yaml
+config:
+  auth:
+    mode: oidc
+    oidc:
+      issuer_url: "https://dex.example.com"
+      client_id: dasha
+      client_secret_from_env: DASHA_OIDC_SECRET
+
+backend:
+  extraEnv:
+    - name: DASHA_OIDC_SECRET     # variable the config expects
+      valueFrom:
+        secretKeyRef:
+          name: dasha-oidc-secret
+          key: clientSecret       # key Dex actually created
+```
+
+`backend.extraEnvFrom` covers the other gap — pulling in sources beyond the chart's own env Secret (`secrets.existingSecret`, or the one `secrets.externalSecret` creates), which is limited to one. It imports a Secret/ConfigMap whole, with variable names equal to key names, so every key must already be a valid environment variable name — Kubernetes silently skips the ones that are not, so a `client-secret` key never arrives while `clientSecret` does:
+
+```yaml
+backend:
+  extraEnvFrom:
+    - secretRef:
+        name: dasha-db-passwords
+```
+
+Both exist on `autosnapshot` as well; the daemon reads the same config, so it needs the same variables. On a name collision `extraEnv` wins over anything from `envFrom`, and within `envFrom` later sources win over earlier ones — the chart's own Secret is listed first, so `extraEnvFrom` overrides it.
+
 #### With Yandex MDB service discovery
 
 ```yaml
@@ -752,7 +785,7 @@ ingress:
 #### Key chart features
 
 - **Config as ConfigMap** — `dasha.yaml` rendered from values, no passwords inline
-- **Passwords via env** — `password_from_env` + ESO or existing Kubernetes Secret
+- **Passwords via env** — `password_from_env` + ESO or existing Kubernetes Secret; `extraEnv` / `extraEnvFrom` for Secrets managed outside the chart
 - **Cloud SA keys** — per-folder `authorized_key.json` via ESO or existing Secret
 - **Frontend optional** — deploy backend only for API access
 - **Ingress / Gateway API** — single `/` rule routes to frontend (which proxies `/api/` and `/auth/` to backend); auto HTTP→HTTPS redirect when TLS is enabled; cert-manager support; mutually exclusive `gatewayAPI.enabled` for K8s Gateway API (`gateway.networking.k8s.io/v1`)

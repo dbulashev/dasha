@@ -648,6 +648,39 @@ secrets:
           property: password
 ```
 
+#### Дополнительные переменные окружения (`extraEnv` / `extraEnvFrom`)
+
+Блок `secrets.` подключает к поду ровно один Secret через `envFrom`, поэтому имена переменных обязаны совпадать с именами ключей в этом Secret. Если Secret создаёт кто-то другой — Dex, оператор, соседний чарт, — ключи в нём названы по-своему, а `envFrom` переименовывать не умеет. `backend.extraEnv` объявляет каждую переменную явно и ссылается на конкретный ключ, за счёт чего переименование и происходит:
+
+```yaml
+config:
+  auth:
+    mode: oidc
+    oidc:
+      issuer_url: "https://dex.example.com"
+      client_id: dasha
+      client_secret_from_env: DASHA_OIDC_SECRET
+
+backend:
+  extraEnv:
+    - name: DASHA_OIDC_SECRET     # переменная, которую ждёт конфиг
+      valueFrom:
+        secretKeyRef:
+          name: dasha-oidc-secret
+          key: clientSecret       # ключ, который реально создал Dex
+```
+
+`backend.extraEnvFrom` закрывает вторую проблему — подключение источников сверх единственного собственного Secret'а чарта (`secrets.existingSecret` либо созданного через `secrets.externalSecret`). Он импортирует Secret/ConfigMap целиком, имена переменных равны именам ключей, поэтому каждый ключ обязан быть валидным именем переменной окружения — остальные Kubernetes молча пропускает: ключ `client-secret` до пода не доедет, а `clientSecret` доедет:
+
+```yaml
+backend:
+  extraEnvFrom:
+    - secretRef:
+        name: dasha-db-passwords
+```
+
+Оба параметра есть и у `autosnapshot` — демон читает тот же конфиг, значит ему нужны те же переменные. При совпадении имён `extraEnv` побеждает всё, что приходит через `envFrom`, а внутри `envFrom` побеждает источник, указанный позже: собственный Secret чарта идёт первым, поэтому `extraEnvFrom` его перекрывает.
+
 #### С сервис-дискавери Yandex MDB
 
 ```yaml
@@ -750,7 +783,7 @@ ingress:
 #### Ключевые возможности чарта
 
 - **Конфиг как ConfigMap** — `dasha.yaml` рендерится из values, пароли не хранятся в открытом виде
-- **Пароли через env** — `password_from_env` + ESO или существующий Kubernetes Secret
+- **Пароли через env** — `password_from_env` + ESO или существующий Kubernetes Secret; `extraEnv` / `extraEnvFrom` для Secret'ов, которыми управляет не чарт
 - **Ключи сервисных аккаунтов** — отдельный `authorized_key.json` для каждого фолдера через ESO или существующий Secret
 - **Фронтенд опционален** — можно развернуть только бэкенд для доступа через API
 - **Ingress / Gateway API** — одно правило `/` на фронтенд (который проксирует `/api/` и `/auth/` на бэкенд); авто-редирект HTTP→HTTPS при включённом TLS; поддержка cert-manager; взаимоисключающий `gatewayAPI.enabled` для K8s Gateway API (`gateway.networking.k8s.io/v1`)
