@@ -40,7 +40,9 @@ const { items: chartData, loading } = useApiLoader<QueryTop10Chart | null>(
     database: databaseName.value ?? undefined,
   }),
   {
-    deps: [clusterName, hostName, databaseName],
+    // databaseName is sent, but is not a dep: pg_stat_statements is
+    // instance-wide, so switching database would refetch the same numbers.
+    deps: [clusterName, hostName],
     guard: () => !!clusterName.value && !!hostName.value,
     onError,
     defaultValue: null,

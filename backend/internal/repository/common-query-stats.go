@@ -18,7 +18,11 @@ func (p *PgxPool) GetQueryStatsStatus(
 	instanceName,
 	databaseName string,
 ) (dto.QueryStatsStatus, error) {
-	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
+	// Same pool the statistics are read through, so the status describes what
+	// the pages actually show: on a multi-database instance the extension may
+	// live in another database, and reporting it as missing there would deny
+	// data that is being displayed.
+	pool, err := p.pgssPool(ctx, clusterName, instanceName, databaseName)
 	if err != nil {
 		return dto.QueryStatsStatus{}, fmt.Errorf("GetQueryStatsStatus | %w", err)
 	}

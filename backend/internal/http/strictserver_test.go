@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/labstack/echo/v4"
 )
 
 func TestMapDatabaseError(t *testing.T) {
@@ -43,30 +44,35 @@ func TestMapDatabaseError(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-
-			got := mapDatabaseError(tt.err)
-
-			if tt.wantCode == 0 {
-				if got != nil {
-					t.Fatalf("expected no mapping, got %d", got.Code)
-				}
-
-				return
-			}
-
-			if got == nil {
-				t.Fatalf("expected %d, got no mapping", tt.wantCode)
-			}
-
-			if got.Code != tt.wantCode {
-				t.Errorf("expected %d, got %d", tt.wantCode, got.Code)
-			}
-
-			// echo.HTTPError unwraps to Internal, so the original error must
-			// still be reachable — the handler logs it.
-			if !errors.Is(got, tt.err) {
-				t.Error("original error should stay reachable for the log")
-			}
+			assertMapped(t, mapDatabaseError(tt.err), tt.wantCode, tt.err)
 		})
+	}
+}
+
+// assertMapped checks one mapping result: wantCode 0 means the error is none of
+// the handler's business and must pass through unmapped.
+func assertMapped(t *testing.T, got *echo.HTTPError, wantCode int, src error) {
+	t.Helper()
+
+	if wantCode == 0 {
+		if got != nil {
+			t.Fatalf("expected no mapping, got %d", got.Code)
+		}
+
+		return
+	}
+
+	if got == nil {
+		t.Fatalf("expected %d, got no mapping", wantCode)
+	}
+
+	if got.Code != wantCode {
+		t.Errorf("expected %d, got %d", wantCode, got.Code)
+	}
+
+	// echo.HTTPError unwraps to Internal, so the original error must still be
+	// reachable — the handler logs it.
+	if !errors.Is(got, src) {
+		t.Error("original error should stay reachable for the log")
 	}
 }

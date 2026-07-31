@@ -466,6 +466,13 @@ func TestGetTablesDescribeLockTimeout(t *testing.T) {
 	_, err = tx.Exec(ctx, "LOCK TABLE orders IN ACCESS EXCLUSIVE MODE")
 	require.NoError(t, err)
 
+	// The table lock does not extend to its indexes: pg_relation_size() opens
+	// the index on its own, so reading index sizes would sail past a lock held
+	// on the table alone. REINDEX takes the indexes too, and holds them until
+	// this transaction ends — the state a maintenance window really leaves.
+	_, err = tx.Exec(ctx, "REINDEX TABLE orders")
+	require.NoError(t, err)
+
 	for _, tc := range []struct {
 		name string
 		call func() error

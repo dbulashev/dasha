@@ -604,7 +604,10 @@ func (p *PgxPool) getQueriesReport( //nolint:gocyclo
 }
 
 func (p *PgxPool) ResetQueryStats(ctx context.Context, clusterName, instanceName, databaseName string) error {
-	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
+	// The reset function drops the instance-wide statistics wherever it is
+	// called from, so it has to be called where the extension exists — the same
+	// database the statistics are read through.
+	pool, err := p.pgssPool(ctx, clusterName, instanceName, databaseName)
 	if err != nil {
 		return fmt.Errorf("ResetQueryStats | %w", err)
 	}

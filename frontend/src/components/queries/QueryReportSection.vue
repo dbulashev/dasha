@@ -89,7 +89,9 @@ const { items: liveItems, loading } = useApiLoader<QueryReport[]>(
     exclude_users: excludeUsers.value.length ? excludeUsers.value : undefined,
   }),
   {
-    deps: [clusterName, hostName, databaseName, excludeUsers, isSnapshot],
+    // databaseName is sent, but is not a dep: pg_stat_statements is
+    // instance-wide, so switching database would refetch the same numbers.
+    deps: [clusterName, hostName, excludeUsers, isSnapshot],
     guard: () => !!clusterName.value && !!hostName.value && !isSnapshot.value,
     onError,
   },

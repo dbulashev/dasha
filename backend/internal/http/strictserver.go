@@ -57,15 +57,15 @@ func New(
 	e.Debug = true
 
 	e.HTTPErrorHandler = func(err error, c echo.Context) {
-		// A stalled database query is not a server fault, and "500 Internal
-		// Server Error" tells the user nothing about what happened — report the
-		// deadline or the lock explicitly instead.
+		// Running out of time, or giving up on a lock, is not a server fault,
+		// and "500 Internal Server Error" tells the user nothing about what
+		// happened — report the deadline or the lock explicitly instead.
 		if dbErr := mapDatabaseError(err); dbErr != nil {
 			if c.Response().Committed {
 				return
 			}
 
-			logger.Warn("database query did not complete",
+			logger.Warn("request did not complete",
 				zap.Int("status", dbErr.Code),
 				zap.String("method", c.Request().Method),
 				zap.String("path", c.Request().URL.Path),
@@ -139,8 +139,10 @@ func New(
 }
 
 const (
-	msgQueryTimeout = "the database did not answer within the query timeout; " +
-		"the table may be locked by another transaction, or the instance overloaded"
+	// Every handler shares this one, and not all of them talk to PostgreSQL —
+	// so it names no table and no lock. A wait on a lock is a 423.
+	msgQueryTimeout = "the request timed out: the database, or another service " +
+		"it queries, did not answer in time"
 	msgObjectLocked = "another transaction holds a lock that blocks reading this table " +
 		"(running ALTER TABLE, VACUUM FULL, REINDEX, or a transaction left open); " +
 		"lock_timeout cancelled the query instead of waiting"

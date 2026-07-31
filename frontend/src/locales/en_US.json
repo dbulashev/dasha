@@ -110,7 +110,7 @@
     "ms": "ms",
     "us": "µs"
   },
-  "errorQueryTimeout": "The database did not answer within the query timeout. The table may be locked by another transaction, or the instance may be overloaded.",
+  "errorQueryTimeout": "The request timed out: the database, or another service it queries, did not answer in time. The instance may be overloaded, or the request too heavy.",
   "errorObjectLocked": "A lock held by another transaction blocks reading this table — usually a running ALTER TABLE, VACUUM FULL, REINDEX, or a transaction left open. Dasha does not wait for it; try again later.",
   "pgssNotInstalled": "pgssNotInstalled",
   "pgssNotEnabled": "pgssNotEnabled",

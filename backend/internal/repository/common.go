@@ -626,6 +626,10 @@ func (p *PgxPool) forgetPool(pool *pgxpool.Pool) {
 // lockTimeout bounds how long a query may wait for a lock on a user object.
 const lockTimeout = "1s"
 
+// rollbackTimeout bounds the deferred rollback that runs after the request
+// context is gone.
+const rollbackTimeout = 5 * time.Second
+
 // querier is the part of pgx.Tx that the lock-timeout callers use, so the same
 // callback works when the query has to run outside a transaction.
 type querier interface {
@@ -656,8 +660,14 @@ func (p *PgxPool) withLockTimeout(ctx context.Context, pool *pgxpool.Pool, fn fu
 	// Read-only work, so always roll back: the transaction must not outlive the
 	// request as an idle-in-transaction session holding locks of its own. The
 	// rollback outlives a cancelled request context on purpose — otherwise pgx
-	// destroys the connection instead of returning it to the pool.
-	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	// destroys the connection instead of returning it to the pool — but on a
+	// deadline of its own, so an unresponsive backend cannot hold the caller here.
+	defer func() {
+		rbCtx, rbCancel := context.WithTimeout(context.WithoutCancel(ctx), rollbackTimeout)
+		defer rbCancel()
+
+		_ = tx.Rollback(rbCtx)
+	}()
 
 	if _, err := tx.Exec(ctx, "SET LOCAL lock_timeout = '"+lockTimeout+"'"); err != nil {
 		return fmt.Errorf("set lock_timeout | %w", err)
