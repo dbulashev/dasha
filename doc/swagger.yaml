@@ -1130,6 +1130,10 @@ paths:
                 $ref: '#/components/schemas/TableDescribe'
         '404':
           $ref: '#/components/responses/NotFound'
+        '423':
+          $ref: '#/components/responses/ObjectLocked'
+        '504':
+          $ref: '#/components/responses/QueryTimeout'
 
   /api/tables/describe-bloat:
     get:
@@ -1157,6 +1161,10 @@ paths:
                 $ref: '#/components/schemas/TableDescribeBloat'
         '404':
           $ref: '#/components/responses/NotFound'
+        '423':
+          $ref: '#/components/responses/ObjectLocked'
+        '504':
+          $ref: '#/components/responses/QueryTimeout'
 
   /api/tables/describe-vacuum-stats:
     get:
@@ -1274,6 +1282,10 @@ paths:
                   $ref: '#/components/schemas/TableDescribePartition'
         '404':
           $ref: '#/components/responses/NotFound'
+        '423':
+          $ref: '#/components/responses/ObjectLocked'
+        '504':
+          $ref: '#/components/responses/QueryTimeout'
 
   /api/tables/schemas:
     get:
@@ -1791,6 +1803,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/DatabaseOptional'
       responses:
         '200':
           description: Success
@@ -1807,6 +1820,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/DatabaseOptional'
       responses:
         '200':
           description: Success
@@ -1825,6 +1839,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/DatabaseOptional'
       responses:
         '200':
           description: Success
@@ -1843,6 +1858,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/DatabaseOptional'
         - in: query
           name: exclude_users
           schema:
@@ -2514,6 +2530,23 @@ components:
   responses:
     NotFound:
       description: not found
+    ObjectLocked:
+      description: >
+        Another transaction holds a lock that blocks reading the object (ALTER
+        TABLE, VACUUM FULL, REINDEX, a transaction left open). The query was
+        cancelled by lock_timeout rather than left waiting; retry later.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorMessage'
+    QueryTimeout:
+      description: >
+        The database did not answer within the query timeout — an overloaded
+        instance, or a wait the lock timeout does not cover.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorMessage'
   parameters:
     IncludeRevoked:
       in: query
@@ -2542,7 +2575,28 @@ components:
         type: string
       required: true
 
+    DatabaseOptional:
+      in: query
+      name: database
+      schema:
+        type: string
+      required: false
+      description: >
+        Database whose pg_stat_statements view is read. The extension may be
+        installed in one database only, and in a schema outside search_path;
+        its contents are instance-wide either way. Defaults to any database of
+        the instance that has the extension.
+
   schemas:
+    ErrorMessage:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          description: Human-readable reason the request could not be answered.
+
     PersonalAccessTokenCreate:
       type: object
       required:

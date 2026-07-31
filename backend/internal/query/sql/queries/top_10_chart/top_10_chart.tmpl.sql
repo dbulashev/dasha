@@ -10,7 +10,7 @@ WITH agg AS (
         COALESCE(sum(temp_blks_read), 0) AS temp_blks_read,
         COALESCE(sum(temp_blks_written), 0) AS temp_blks_written,
         sum(wal_records) AS wal_records
-    FROM pg_stat_statements
+    FROM {{ .Pgss }}
     GROUP BY queryid
 )
 (SELECT 'calls' AS metric, queryid, COALESCE(100.0 * calls / NULLIF(sum(calls) OVER(), 0), 0) AS pct FROM agg ORDER BY calls DESC LIMIT 10)

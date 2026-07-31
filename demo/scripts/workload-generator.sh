@@ -7,6 +7,9 @@ until pg_isready -h pg18-master -p 5432 -U demo -d demo; do sleep 2; done
 echo "Waiting for pg17-master..."
 until pg_isready -h pg17-master -p 5432 -U demo -d demo; do sleep 2; done
 
+echo "Waiting for pg18-standalone..."
+until pg_isready -h pg18-standalone -p 5432 -U demo -d demo; do sleep 2; done
+
 echo "=== Starting continuous pgbench load ==="
 pgbench -h pg18-master -U demo -d demo -c 4 -j 2 -T 0 -P 60 &
 pgbench -h pg17-master -U demo -d demo -c 2 -j 1 -T 0 -P 60 &
@@ -28,6 +31,25 @@ echo "=== Starting continuous lock generator ==="
     sleep 3
   done
 ) &
+
+# --- Exclusive table lock generator (separate background process) ---
+# Holds ACCESS EXCLUSIVE on locked_table_demo for 40s, then releases it for 20s:
+# during the locked window "Describe table" cannot even read the table size
+# (pg_relation_size takes an ACCESS SHARE lock), so the API must answer 423
+# "object is locked" — and the very same page must load normally in between.
+# Set LOCK_TABLE_GENERATOR=off to keep the table always readable.
+if [ "${LOCK_TABLE_GENERATOR:-on}" != "off" ]; then
+  echo "=== Starting exclusive table lock generator ==="
+  (
+    while true; do
+      psql -h pg18-master -U demo -d demo -c \
+        "BEGIN; LOCK TABLE locked_table_demo IN ACCESS EXCLUSIVE MODE; SELECT pg_sleep(40); ROLLBACK;" 2>/dev/null
+      sleep 20
+    done
+  ) &
+else
+  echo "=== Exclusive table lock generator disabled (LOCK_TABLE_GENERATOR=off) ==="
+fi
 
 # --- Continuous long-running queries (separate background process) ---
 echo "=== Starting long-running query generator ==="
@@ -134,6 +156,14 @@ SQL
     SELECT status, count(*), avg(amount) FROM orders GROUP BY status;
     SELECT * FROM orders WHERE amount > 9000 ORDER BY created_at DESC LIMIT 20;
     SELECT * FROM customer_profiles WHERE bio IS NOT NULL ORDER BY random() LIMIT 5;
+SQL
+
+  # 5b. Queries on pg18-standalone, whose pg_stat_statements lives in schema
+  #     "ext" — without them the custom-schema case would have nothing to show.
+  psql -h pg18-standalone -U demo -d demo <<'SQL' 2>/dev/null
+    SELECT count(*) FROM orders;
+    SELECT status, count(*) FROM orders GROUP BY status;
+    SELECT * FROM orders ORDER BY created_at DESC LIMIT 10;
 SQL
 
   # 6. Hash / range→hash partition load (hot-objects rollup demo)

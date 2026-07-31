@@ -36,7 +36,7 @@ func (f *fakeRepo) GetInstanceInfo(context.Context, string, string) (dto.Instanc
 	return dto.InstanceInfo{}, nil //nolint:exhaustruct
 }
 
-func (f *fakeRepo) GetQueriesReport(ctx context.Context, _, _ string, _ []string) ([]dto.QueryReport, error) {
+func (f *fakeRepo) GetQueriesReport(ctx context.Context, _, _, _ string, _ []string) ([]dto.QueryReport, error) {
 	if f.report == nil {
 		return nil, nil
 	}

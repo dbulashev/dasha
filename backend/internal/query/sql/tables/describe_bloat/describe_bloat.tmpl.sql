@@ -12,4 +12,4 @@ SELECT
     approx_free_space,
     pg_catalog.pg_size_pretty(approx_free_space) AS approx_free_space_pretty,
     approx_free_percent
-FROM pgstattuple_approx((quote_ident($1) || '.' || quote_ident($2))::regclass)
+FROM {{ .PgstattupleApprox }}((quote_ident($1) || '.' || quote_ident($2))::regclass)

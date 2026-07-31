@@ -3,8 +3,14 @@ set -e
 
 echo "=== PG18 Standalone: creating extensions and orders table ==="
 psql -U demo -d demo <<'SQL'
-CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
-CREATE EXTENSION IF NOT EXISTS pgstattuple;
+-- Extensions deliberately live in a dedicated schema that is NOT on the default
+-- search_path — the "CREATE EXTENSION … SCHEMA ext" layout many installations
+-- use. Unqualified queries against pg_stat_statements then fail with "relation
+-- does not exist", so this cluster is the demo case for schema resolution:
+-- query stats here must work exactly as on the other two clusters.
+CREATE SCHEMA IF NOT EXISTS ext;
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements SCHEMA ext;
+CREATE EXTENSION IF NOT EXISTS pgstattuple SCHEMA ext;
 
 -- Create orders table with same schema (no data — will come via logical replication)
 CREATE TABLE orders (

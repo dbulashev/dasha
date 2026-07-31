@@ -130,7 +130,7 @@ func (s *Handlers) GetQueriesTop10ByTime(
 	ctx context.Context,
 	req serverhttp.GetQueriesTop10ByTimeRequestObject,
 ) (serverhttp.GetQueriesTop10ByTimeResponseObject, error) {
-	queries, err := s.repo.GetQueriesTop10ByTime(ctx, req.Params.ClusterName, req.Params.Instance)
+	queries, err := s.repo.GetQueriesTop10ByTime(ctx, req.Params.ClusterName, req.Params.Instance, deref(req.Params.Database))
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.GetQueriesTop10ByTime404Response{}, nil
 	}
@@ -160,7 +160,7 @@ func (s *Handlers) GetQueriesTop10ByWal(
 	ctx context.Context,
 	req serverhttp.GetQueriesTop10ByWalRequestObject,
 ) (serverhttp.GetQueriesTop10ByWalResponseObject, error) {
-	queries, err := s.repo.GetQueriesTop10ByWal(ctx, req.Params.ClusterName, req.Params.Instance)
+	queries, err := s.repo.GetQueriesTop10ByWal(ctx, req.Params.ClusterName, req.Params.Instance, deref(req.Params.Database))
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.GetQueriesTop10ByWal404Response{}, nil
 	}
@@ -187,7 +187,7 @@ func (s *Handlers) GetQueriesTop10Chart(
 	ctx context.Context,
 	req serverhttp.GetQueriesTop10ChartRequestObject,
 ) (serverhttp.GetQueriesTop10ChartResponseObject, error) {
-	items, err := s.repo.GetQueriesTop10Chart(ctx, req.Params.ClusterName, req.Params.Instance)
+	items, err := s.repo.GetQueriesTop10Chart(ctx, req.Params.ClusterName, req.Params.Instance, deref(req.Params.Database))
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.GetQueriesTop10Chart404Response{}, nil
 	}
@@ -238,7 +238,8 @@ func (s *Handlers) GetQueriesReport(
 		excludeUsers = *req.Params.ExcludeUsers
 	}
 
-	queries, err := s.repo.GetQueriesReport(ctx, req.Params.ClusterName, req.Params.Instance, excludeUsers)
+	queries, err := s.repo.GetQueriesReport(ctx, req.Params.ClusterName, req.Params.Instance,
+		deref(req.Params.Database), excludeUsers)
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.GetQueriesReport404Response{}, nil
 	}
@@ -292,7 +293,8 @@ func (s *Handlers) GetQueriesCompare(
 			excludeUsers = *req.Params.ExcludeUsers
 		}
 
-		reportsB, err = s.repo.GetQueriesReport(ctx, req.Params.ClusterName, req.Params.Instance, excludeUsers)
+		reportsB, err = s.repo.GetQueriesReport(ctx, req.Params.ClusterName, req.Params.Instance,
+			req.Params.Database, excludeUsers)
 		if errors.Is(err, repository.ErrNotFound) {
 			return serverhttp.GetQueriesCompare404Response{}, nil
 		}

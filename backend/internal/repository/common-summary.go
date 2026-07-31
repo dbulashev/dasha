@@ -3,8 +3,11 @@ package repository
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
 
 	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/enums"
@@ -44,6 +47,107 @@ func (p *PgxPool) getPoolByClusterNameAndInstance(
 	}
 
 	return nil, fmt.Errorf("%w | %s/%s", ErrNotFound, clusterName, instanceName)
+}
+
+// pgssPool picks the pool to read pg_stat_statements through. The view is
+// per-database — the extension may be created in one database only, and in a
+// schema of its own there — while its contents are instance-wide. A named
+// database is therefore a preference, not a constraint: reading the same
+// instance-wide numbers through a database that lacks the extension would only
+// fail, so any database that has it serves just as well. The named pool is kept
+// as the last resort, to let the query report the real error.
+func (p *PgxPool) pgssPool(
+	ctx context.Context,
+	clusterName,
+	instanceName,
+	databaseName string,
+) (*pgxpool.Pool, error) {
+	var named *pgxpool.Pool
+
+	if databaseName != "" {
+		pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
+		if err != nil {
+			return nil, err
+		}
+
+		if p.extensionSchema(ctx, pool, extPgss) != "" {
+			return pool, nil
+		}
+
+		named = pool
+	}
+
+	pools, err := p.getPoolsByClusterAndInstance(ctx, clusterName, instanceName)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, pool := range pools {
+		if p.extensionSchema(ctx, pool, extPgss) != "" {
+			if named != nil {
+				p.logger.Debug("pg_stat_statements missing in the requested database, reading through another one",
+					zap.String("cluster", clusterName),
+					zap.String("instance", instanceName),
+					zap.String("requested_database", databaseName))
+			}
+
+			return pool, nil
+		}
+	}
+
+	if named != nil {
+		return named, nil
+	}
+
+	return pools[0], nil
+}
+
+// getPoolsByClusterAndInstance returns every per-database pool of one instance,
+// ordered by database name so that a fallback pick — and the error a broken
+// instance reports — stays the same between calls.
+func (p *PgxPool) getPoolsByClusterAndInstance(
+	ctx context.Context,
+	clusterName,
+	instanceName string,
+) ([]*pgxpool.Pool, error) {
+	err := p.ensurePool(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("ensure pool | %w", err)
+	}
+
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	var items []pgxPoolItem
+
+	for cluster, clusterItems := range p.pools {
+		if cluster.String() != clusterName {
+			continue
+		}
+
+		for _, item := range clusterItems {
+			if item.Host.String() != instanceName {
+				continue
+			}
+
+			items = append(items, item)
+		}
+	}
+
+	if len(items) == 0 {
+		return nil, fmt.Errorf("%w | %s/%s", ErrNotFound, clusterName, instanceName)
+	}
+
+	slices.SortFunc(items, func(a, b pgxPoolItem) int {
+		return strings.Compare(a.Database.String(), b.Database.String())
+	})
+
+	pools := make([]*pgxpool.Pool, 0, len(items))
+	for _, item := range items {
+		pools = append(pools, item.pool)
+	}
+
+	return pools, nil
 }
 
 func (p *PgxPool) getPoolsByClusterAndDatabase(

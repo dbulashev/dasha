@@ -104,12 +104,19 @@ func (p *PgxPool) getQueryStatsReadable(
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	qStr, err := query.Get(serverVersion, enums.QueryCommonQueryStatsReadable, nil)
+	qStr, err := query.Get(serverVersion, enums.QueryCommonQueryStatsReadable, p.pgssTemplateData(ctx, pool))
 	if err != nil {
 		return false, fmt.Errorf("getQueryStatsReadable | %w", err)
 	}
 
 	_, err = pool.Exec(ctx, qStr)
+	if err != nil {
+		// Not an error for the caller — the UI just reports "not readable" —
+		// but the actual reason (privileges, custom schema) is only visible here.
+		p.logger.Debug("pg_stat_statements is not readable", zap.Error(err))
 
-	return err == nil, nil
+		return false, nil
+	}
+
+	return true, nil
 }

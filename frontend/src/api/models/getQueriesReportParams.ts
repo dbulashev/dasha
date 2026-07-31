@@ -5,11 +5,17 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { ClusterNameParameter } from './clusterNameParameter'
+import type { DatabaseOptionalParameter } from './databaseOptionalParameter'
 import type { InstanceParameter } from './instanceParameter'
 
 export type GetQueriesReportParams = {
   cluster_name: ClusterNameParameter
   instance: InstanceParameter
+  /**
+ * Database whose pg_stat_statements view is read. The extension may be installed in one database only, and in a schema outside search_path; its contents are instance-wide either way. Defaults to any database of the instance that has the extension.
+
+ */
+  database?: DatabaseOptionalParameter
   /**
    * Comma-separated list of usernames to exclude from the report
    */

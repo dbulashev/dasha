@@ -25,5 +25,5 @@ SELECT
         temp_blk_read_time + temp_blk_write_time)
            ) / nullif(sum(total_exec_time), 0))::numeric(5,2), 0) AS cpu_pct,
     left(query, 48) AS query_trunc
-FROM pg_stat_statements
+FROM {{ .Pgss }}
 GROUP BY queryid, query ORDER BY sum(total_exec_time) DESC LIMIT 10;

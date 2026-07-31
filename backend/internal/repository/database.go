@@ -191,7 +191,7 @@ func (p *PgxPool) getPgssStatsResetTime(ctx context.Context, serverVersion int, 
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	qStr, err := query.Get(serverVersion, enums.QueryDatabasePgssStatsResetTime, nil)
+	qStr, err := query.Get(serverVersion, enums.QueryDatabasePgssStatsResetTime, p.pgssTemplateData(ctx, pool))
 	if err != nil {
 		return nil, fmt.Errorf("getPgssStatsResetTime | %w", err)
 	}

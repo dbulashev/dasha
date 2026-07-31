@@ -111,10 +111,10 @@ type Repository interface {
 	GetHotSampleIndexes(ctx context.Context, clusterName, instanceName, databaseName string, schema, object *string) ([]hotobjects.AnchorRow, *time.Time, bool, error)
 	GetQueriesBlocked(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.QueryBlocked, error)
 	GetQueriesRunning(ctx context.Context, clusterName, instanceName, databaseName string, minDuration int, queryFilter *string, queryFilterMode string, username *string) ([]dto.QueryRunning, error)
-	GetQueriesTop10ByTime(ctx context.Context, clusterName, instanceName string) ([]dto.QueryTop10ByTime, error)
-	GetQueriesTop10ByWal(ctx context.Context, clusterName, instanceName string) ([]dto.QueryTop10ByWal, error)
-	GetQueriesReport(ctx context.Context, clusterName, instanceName string, excludeUsers []string) ([]dto.QueryReport, error)
-	GetQueriesTop10Chart(ctx context.Context, clusterName, instanceName string) ([]dto.QueryTop10ChartItem, error)
+	GetQueriesTop10ByTime(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.QueryTop10ByTime, error)
+	GetQueriesTop10ByWal(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.QueryTop10ByWal, error)
+	GetQueriesReport(ctx context.Context, clusterName, instanceName, databaseName string, excludeUsers []string) ([]dto.QueryReport, error)
+	GetQueriesTop10Chart(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.QueryTop10ChartItem, error)
 	GetQueryStatsStatus(ctx context.Context, clusterName, instanceName, databaseName string) (dto.QueryStatsStatus, error)
 	ResetQueryStats(ctx context.Context, clusterName, instanceName, databaseName string) error
 	GetActiveConnectionCount(ctx context.Context, clusterName, instanceName string) (int, error)
@@ -163,6 +163,7 @@ type PgxPool struct {
 	logger              *zap.Logger
 	pgStatsViewConfig   string   // configured pg_stats_view from global config
 	resolvedPgStatsView sync.Map // *pgxpool.Pool → string (resolved view name)
+	resolvedExtSchemas  sync.Map // extSchemaKey → string (quoted extension schema)
 	pgssResetFuncConfig string   // configured pgss_reset_function from global config
 	poolConfig          config.PoolConfig
 }
@@ -179,19 +180,27 @@ func NewRepositoryPgxPool(clusters config.Clusters, pgStatsView, pgssResetFunc s
 	}
 }
 
-// pgssResetFunction returns the configured pgss reset function, or the default
-// when unset/invalid. Validated against validPgIdentifier (no injection risk).
-func (p *PgxPool) pgssResetFunction() string {
+// pgssResetFunction returns the configured pgss reset function, or the extension's
+// own pg_stat_statements_reset when unset/invalid — qualified with the schema the
+// extension lives in, since that need not be on the search_path.
+// A configured name is validated against validPgIdentifier (no injection risk) and
+// used as written: it may carry its own schema (monitoring.reset_pgss), and without
+// one it is resolved through the search_path, as its author intended.
+func (p *PgxPool) pgssResetFunction(ctx context.Context, pool *pgxpool.Pool) string {
+	fallback := func() string {
+		return qualify(p.extensionSchema(ctx, pool, extPgss), defaultPgssResetFunc)
+	}
+
 	f := strings.TrimSpace(p.pgssResetFuncConfig)
 	if f == "" {
-		return defaultPgssResetFunc
+		return fallback()
 	}
 
 	if !validPgIdentifier.MatchString(f) {
 		p.logger.Warn("invalid pgss_reset_function, using default",
 			zap.String("configured", f), zap.String("default", defaultPgssResetFunc))
 
-		return defaultPgssResetFunc
+		return fallback()
 	}
 
 	return f
@@ -307,17 +316,33 @@ func (p *PgxPool) ensurePool(ctx context.Context) error {
 		// Check individual host+db pairs.
 		var kept []pgxPoolItem
 
+		seen := make(map[hostDbKey]bool, len(items))
+
 		for _, item := range items {
 			key := hostDbKey{item.Host, item.Database}
-			if desiredSet[key] {
-				kept = append(kept, item)
-			} else {
+
+			switch {
+			case !desiredSet[key]:
 				toClose = append(toClose, item.pool)
 				p.logger.Debug("pool removed",
 					zap.String("cluster", string(clName)),
 					zap.String("host", string(item.Host)),
 					zap.String("database", string(item.Database)),
 				)
+			case seen[key]:
+				// Left over from two ensurePool calls that planned the same
+				// connection before either had registered it. Nothing looks a
+				// second pool up, so it would idle here forever.
+				toClose = append(toClose, item.pool)
+				p.logger.Debug("duplicate pool dropped",
+					zap.String("cluster", string(clName)),
+					zap.String("host", string(item.Host)),
+					zap.String("database", string(item.Database)),
+				)
+			default:
+				seen[key] = true
+
+				kept = append(kept, item)
 			}
 		}
 
@@ -355,6 +380,8 @@ func (p *PgxPool) ensurePool(ctx context.Context) error {
 
 	// Close removed pools in background (Close waits for active queries).
 	for _, pool := range toClose {
+		p.forgetPool(pool)
+
 		go pool.Close()
 	}
 
@@ -412,14 +439,45 @@ func (p *PgxPool) ensurePool(ctx context.Context) error {
 	wg.Wait()
 	close(resultsCh)
 
-	// Collect successful connections under lock.
+	// Collect successful connections under lock. Planning happens without one, so
+	// a concurrent ensurePool — six lookup paths call it, and a cold start has
+	// them all racing — may have connected the same host+db and got here first.
+	// The late pool is closed rather than appended: no lookup would ever reach it.
+	var duplicates []*pgxpool.Pool
+
 	p.mu.Lock()
+
 	for r := range resultsCh {
+		if p.hasPoolLocked(r.clusterName, r.item) {
+			duplicates = append(duplicates, r.item.pool)
+
+			continue
+		}
+
 		p.pools[r.clusterName] = append(p.pools[r.clusterName], r.item)
 	}
+
 	p.mu.Unlock()
 
+	for _, pool := range duplicates {
+		p.logger.Debug("duplicate pool closed after a concurrent connect")
+
+		go pool.Close()
+	}
+
 	return nil
+}
+
+// hasPoolLocked reports whether a pool for this host+db is already registered.
+// Callers must hold p.mu.
+func (p *PgxPool) hasPoolLocked(clusterName config.ClusterName, item pgxPoolItem) bool {
+	for _, existing := range p.pools[clusterName] {
+		if existing.Host == item.Host && existing.Database == item.Database {
+			return true
+		}
+	}
+
+	return false
 }
 
 // Dasha opens one pool per (host, database) and connects as a single monitoring
@@ -473,6 +531,179 @@ func (p *PgxPool) getPool(ctx context.Context, dsn string) (*pgxpool.Pool, error
 	}
 
 	return ret, nil
+}
+
+// Extensions whose objects the SQL templates address by name. Each is commonly
+// installed into a dedicated schema (CREATE EXTENSION … SCHEMA ext), which is
+// not on the default search_path.
+const (
+	extPgss        = "pg_stat_statements"
+	extPgstattuple = "pgstattuple"
+)
+
+// extensionSchemaQuery returns the schema an extension is installed into.
+const extensionSchemaQuery = `
+SELECT n.nspname
+FROM pg_catalog.pg_extension e
+JOIN pg_catalog.pg_namespace n ON n.oid = e.extnamespace
+WHERE e.extname::text = $1`
+
+// extSchemaKey caches a resolved schema per pool, not per host: pg_extension is
+// a per-database catalog, so the same instance can hold the extension in a
+// different schema in every database.
+type extSchemaKey struct {
+	pool *pgxpool.Pool
+	ext  string
+}
+
+// extSchemaEntry caches one lookup. A miss is held briefly, so CREATE EXTENSION
+// does not need a Dasha restart to take effect; a hit is held long, since
+// ALTER EXTENSION … SET SCHEMA is rare but must not require one either.
+type extSchemaEntry struct {
+	schema  string
+	expires time.Time
+}
+
+const (
+	extSchemaMissTTL = time.Minute
+	extSchemaHitTTL  = time.Hour
+)
+
+// extensionSchema returns the quoted schema of an installed extension, or "" when
+// it is absent (or the catalog is unreadable — the caller's query then fails on
+// its own terms rather than here).
+func (p *PgxPool) extensionSchema(ctx context.Context, pool *pgxpool.Pool, ext string) string {
+	key := extSchemaKey{pool: pool, ext: ext}
+	if v, ok := p.resolvedExtSchemas.Load(key); ok {
+		entry := v.(extSchemaEntry)
+		if time.Now().Before(entry.expires) {
+			return entry.schema
+		}
+	}
+
+	queryCtx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	var schema string
+
+	err := pool.QueryRow(queryCtx, extensionSchemaQuery, ext).Scan(&schema)
+	if err != nil {
+		if !errors.Is(err, pgx.ErrNoRows) {
+			p.logger.Warn("extension schema lookup failed",
+				zap.String("extension", ext), zap.Error(err))
+		}
+
+		p.resolvedExtSchemas.Store(key, extSchemaEntry{schema: "", expires: time.Now().Add(extSchemaMissTTL)})
+
+		return ""
+	}
+
+	quoted := pgx.Identifier{schema}.Sanitize()
+	p.resolvedExtSchemas.Store(key, extSchemaEntry{schema: quoted, expires: time.Now().Add(extSchemaHitTTL)})
+
+	p.logger.Debug("extension schema resolved",
+		zap.String("extension", ext), zap.String("schema", quoted))
+
+	return quoted
+}
+
+// forgetPool drops the per-pool caches of a pool that is being closed. Both are
+// keyed by the pool pointer, so without this a cluster whose hosts or databases
+// churn — service discovery, a config reload — accumulates entries no lookup can
+// ever reach again.
+func (p *PgxPool) forgetPool(pool *pgxpool.Pool) {
+	p.resolvedPgStatsView.Delete(pool)
+
+	p.resolvedExtSchemas.Range(func(k, _ any) bool {
+		if key, ok := k.(extSchemaKey); ok && key.pool == pool {
+			p.resolvedExtSchemas.Delete(k)
+		}
+
+		return true
+	})
+}
+
+// lockTimeout bounds how long a query may wait for a lock on a user object.
+const lockTimeout = "1s"
+
+// querier is the part of pgx.Tx that the lock-timeout callers use, so the same
+// callback works when the query has to run outside a transaction.
+type querier interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
+// withLockTimeout runs fn inside a read-only transaction that gives up on locks
+// quickly, so a table held by DDL (ALTER TABLE, VACUUM FULL, REINDEX) fails with
+// SQLSTATE 55P03 — reported as 423 with the reason — instead of stalling until
+// the query deadline and surfacing as an opaque timeout.
+//
+// SET LOCAL, not a session SET, and not a startup parameter: PgBouncer refuses a
+// connection carrying an untracked startup parameter, and a transaction-pooling
+// pooler discards session state between transactions. A transaction, though,
+// always stays on one backend.
+//
+// A pooler in statement mode rejects BEGIN outright; there the query still runs,
+// just without a lock timeout — as it did before this existed.
+func (p *PgxPool) withLockTimeout(ctx context.Context, pool *pgxpool.Pool, fn func(querier) error) error {
+	tx, err := pool.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly}) //nolint:exhaustruct
+	if err != nil {
+		p.logger.Debug("no transaction available, running without lock_timeout", zap.Error(err))
+
+		return fn(pool)
+	}
+
+	// Read-only work, so always roll back: the transaction must not outlive the
+	// request as an idle-in-transaction session holding locks of its own. The
+	// rollback outlives a cancelled request context on purpose — otherwise pgx
+	// destroys the connection instead of returning it to the pool.
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+
+	if _, err := tx.Exec(ctx, "SET LOCAL lock_timeout = '"+lockTimeout+"'"); err != nil {
+		return fmt.Errorf("set lock_timeout | %w", err)
+	}
+
+	return fn(tx)
+}
+
+// qualify prefixes an object with its schema, leaving it bare when the schema is
+// unknown — then the query behaves exactly as before schema resolution existed.
+func qualify(schema, object string) string {
+	if schema == "" {
+		return object
+	}
+
+	return schema + "." + object
+}
+
+// pgssTemplateData carries the schema-qualified pg_stat_statements relations into
+// the SQL templates. Qualifying in the SQL — rather than extending search_path on
+// the connection — is what keeps this working behind a transaction-pooling pooler,
+// which discards session state between transactions (Odyssey's pool_discard
+// issues RESET ALL; PgBouncer hands the next query to another backend).
+type pgssTemplateData struct {
+	Pgss     string
+	PgssInfo string
+}
+
+func (p *PgxPool) pgssTemplateData(ctx context.Context, pool *pgxpool.Pool) pgssTemplateData {
+	schema := p.extensionSchema(ctx, pool, extPgss)
+
+	return pgssTemplateData{
+		Pgss:     qualify(schema, "pg_stat_statements"),
+		PgssInfo: qualify(schema, "pg_stat_statements_info"),
+	}
+}
+
+// pgstattupleTemplateData carries the schema-qualified pgstattuple functions.
+type pgstattupleTemplateData struct {
+	PgstattupleApprox string
+}
+
+func (p *PgxPool) pgstattupleTemplateData(ctx context.Context, pool *pgxpool.Pool) pgstattupleTemplateData {
+	return pgstattupleTemplateData{
+		PgstattupleApprox: qualify(p.extensionSchema(ctx, pool, extPgstattuple), "pgstattuple_approx"),
+	}
 }
 
 // resolvePgStatsView checks whether the globally configured pg_stats view is accessible

@@ -14,6 +14,7 @@ import (
 	"github.com/dbulashev/dasha/gen/serverhttp"
 	"github.com/dbulashev/dasha/internal/auth"
 	"github.com/dbulashev/dasha/internal/http/logger"
+	"github.com/dbulashev/dasha/internal/repository"
 )
 
 type API struct {
@@ -56,6 +57,41 @@ func New(
 	e.Debug = true
 
 	e.HTTPErrorHandler = func(err error, c echo.Context) {
+		// A stalled database query is not a server fault, and "500 Internal
+		// Server Error" tells the user nothing about what happened — report the
+		// deadline or the lock explicitly instead.
+		if dbErr := mapDatabaseError(err); dbErr != nil {
+			if c.Response().Committed {
+				return
+			}
+
+			logger.Warn("database query did not complete",
+				zap.Int("status", dbErr.Code),
+				zap.String("method", c.Request().Method),
+				zap.String("path", c.Request().URL.Path),
+				zap.Error(err),
+			)
+
+			// Written here rather than through DefaultHTTPErrorHandler: with
+			// e.Debug the default one appends err.Error() to the body, and the
+			// internal chain carries the failing SQL. The cause belongs in the
+			// log above, not in the answer.
+			msg, _ := dbErr.Message.(string)
+
+			var respErr error
+			if c.Request().Method == http.MethodHead {
+				respErr = c.NoContent(dbErr.Code)
+			} else {
+				respErr = c.JSON(dbErr.Code, echo.Map{"message": msg})
+			}
+
+			if respErr != nil {
+				logger.Error("failed to write database error response", zap.Error(respErr))
+			}
+
+			return
+		}
+
 		// A cancelled request context means the client disconnected — nobody
 		// will receive the response, so don't log it as a server error.
 		if !c.Response().Committed && !errors.Is(err, context.Canceled) {
@@ -99,6 +135,27 @@ func New(
 	return &API{
 		Echo:   e,
 		Logger: logger,
+	}
+}
+
+const (
+	msgQueryTimeout = "the database did not answer within the query timeout; " +
+		"the table may be locked by another transaction, or the instance overloaded"
+	msgObjectLocked = "another transaction holds a lock that blocks reading this table " +
+		"(running ALTER TABLE, VACUUM FULL, REINDEX, or a transaction left open); " +
+		"lock_timeout cancelled the query instead of waiting"
+)
+
+// mapDatabaseError turns a database stall into its own HTTP status, or returns
+// nil when err is anything else.
+func mapDatabaseError(err error) *echo.HTTPError {
+	switch {
+	case repository.IsLockTimeout(err):
+		return echo.NewHTTPError(http.StatusLocked, msgObjectLocked).SetInternal(err)
+	case repository.IsTimeout(err):
+		return echo.NewHTTPError(http.StatusGatewayTimeout, msgQueryTimeout).SetInternal(err)
+	default:
+		return nil
 	}
 }
 

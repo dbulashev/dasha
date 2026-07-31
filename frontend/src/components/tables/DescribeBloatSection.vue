@@ -5,7 +5,7 @@ import { getPgstattupleAvailable, getTablesDescribeBloat } from '@/api/gen/defau
 import type { TableDescribeBloat } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { assertOk } from '@/utils/api'
-import { getErrorMessage } from '@/utils/error'
+import { apiErrorText } from '@/utils/error'
 import { fmtRowCount } from '@/utils/format'
 
 const props = defineProps<{ schema: string; table: string }>()
@@ -53,7 +53,7 @@ async function calculateBloat() {
     })
     bloatData.value = assertOk(res) as TableDescribeBloat
   } catch (err) {
-    bloatError.value = getErrorMessage(err)
+    bloatError.value = apiErrorText(err, t)
     bloatData.value = null
   } finally {
     bloatLoading.value = false

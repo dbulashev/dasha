@@ -15,7 +15,7 @@ const props = defineProps<{
   snapshotData?: QueryReport[] | null
 }>()
 
-const { clusterName, hostName } = useClusterInfo()
+const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
 const { onError } = useViewError()
 const excludeUsersStore = useExcludeUsersStore()
@@ -85,10 +85,11 @@ const { items: liveItems, loading } = useApiLoader<QueryReport[]>(
   () => getQueriesReport({
     cluster_name: clusterName.value!,
     instance: hostName.value!,
+    database: databaseName.value ?? undefined,
     exclude_users: excludeUsers.value.length ? excludeUsers.value : undefined,
   }),
   {
-    deps: [clusterName, hostName, excludeUsers, isSnapshot],
+    deps: [clusterName, hostName, databaseName, excludeUsers, isSnapshot],
     guard: () => !!clusterName.value && !!hostName.value && !isSnapshot.value,
     onError,
   },

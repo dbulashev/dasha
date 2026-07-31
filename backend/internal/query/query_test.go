@@ -56,6 +56,57 @@ func TestGet_TemplateDataExecution(t *testing.T) {
 	assert.NotContains(t, sql2, "pg_catalog.pg_stats")
 }
 
+// TestGet_PgssRelationQualified covers the pg_stat_statements templates across the
+// version-specific variants: an extension installed outside search_path is only
+// reachable when its schema reaches the SQL.
+func TestGet_PgssRelationQualified(t *testing.T) {
+	t.Parallel()
+
+	data := struct{ Pgss, PgssInfo string }{
+		Pgss:     `"ext".pg_stat_statements`,
+		PgssInfo: `"ext".pg_stat_statements_info`,
+	}
+
+	queries := []struct {
+		name    string
+		version int
+		query   enums.Query
+		want    string
+	}{
+		{"top by time, PG14", 140000, enums.QueryQueriesTop10ByTime, data.Pgss},
+		{"top by time, PG15", 150000, enums.QueryQueriesTop10ByTime, data.Pgss},
+		{"top by time, PG17", 170000, enums.QueryQueriesTop10ByTime, data.Pgss},
+		{"report, PG14", 140000, enums.QueryQueriesReport, data.Pgss},
+		{"report, PG17", 170000, enums.QueryQueriesReport, data.Pgss},
+		{"top by wal", 170000, enums.QueryQueriesTop10ByWal, data.Pgss},
+		{"top 10 chart", 170000, enums.QueryQueriesTop10Chart, data.Pgss},
+		{"readable probe", 170000, enums.QueryCommonQueryStatsReadable, data.Pgss},
+		{"stats reset time", 170000, enums.QueryDatabasePgssStatsResetTime, data.PgssInfo},
+	}
+
+	for _, tt := range queries {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			sql, err := Get(tt.version, tt.query, data)
+			require.NoError(t, err)
+			assert.Contains(t, sql, tt.want)
+			assert.NotContains(t, sql, "{{", "template should be fully rendered")
+		})
+	}
+}
+
+// TestGet_PgstattupleQualified is the same guarantee for the bloat template.
+func TestGet_PgstattupleQualified(t *testing.T) {
+	t.Parallel()
+
+	sql, err := Get(170000, enums.QueryTablesDescribeBloat,
+		struct{ PgstattupleApprox string }{PgstattupleApprox: `"ext".pgstattuple_approx`})
+	require.NoError(t, err)
+	assert.Contains(t, sql, `"ext".pgstattuple_approx(`)
+	assert.NotContains(t, sql, "{{", "template should be fully rendered")
+}
+
 // TestFindTemplate_VersionSelection tests the version-specific template selection logic.
 //
 // Algorithm: keeps dirs where dirVersion > serverVersion, picks MIN of those.
