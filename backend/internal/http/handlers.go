@@ -54,3 +54,18 @@ func paginationDefaults(limitPtr, offsetPtr *int, defaultLimit int) (int, int) {
 
 	return limit, offset
 }
+
+// pageOf cuts one page out of a slice, for endpoints that compute the whole
+// result before they can filter or count it and so cannot push LIMIT into SQL.
+func pageOf[T any](items []T, limit, offset int) []T {
+	if offset >= len(items) {
+		return nil
+	}
+
+	items = items[offset:]
+	if len(items) > limit {
+		items = items[:limit]
+	}
+
+	return items
+}

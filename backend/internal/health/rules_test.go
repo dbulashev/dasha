@@ -652,6 +652,76 @@ func findRule(t *testing.T, id string) Rule {
 	return Rule{}
 }
 
+func TestSequenceExhaustion_SeveritiesMatchSchemaLintLevels(t *testing.T) {
+	// The page and the recommendation must agree: a finding shown as an error
+	// there cannot come back as LOW here. Both read the same thresholds.
+	cases := []struct {
+		name    string
+		freePct float64
+		want    Severity
+	}{
+		{"below the error threshold", 4, SeverityHigh},
+		{"below the warning threshold", 9, SeverityMedium},
+		{"below the notice threshold", 19, SeverityLow},
+		{"enough headroom", 25, ""},
+	}
+
+	rule := findRule(t, "sequence_exhaustion")
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			hit := rule.Evaluate(RawMetrics{SequenceExhaustionMax: 1 - tc.freePct/100}) //nolint:exhaustruct
+
+			if tc.want == "" {
+				if hit != nil {
+					t.Fatalf("%.0f%% free must not trigger, got %s", tc.freePct, hit.Severity)
+				}
+
+				return
+			}
+
+			if hit == nil {
+				t.Fatalf("%.0f%% free must trigger %s, got nothing", tc.freePct, tc.want)
+			}
+
+			if hit.Severity != tc.want {
+				t.Errorf("%.0f%% free: severity = %s, want %s", tc.freePct, hit.Severity, tc.want)
+			}
+		})
+	}
+}
+
+func TestSequenceExhaustion_FollowsConfiguredThresholds(t *testing.T) {
+	rule := findRule(t, "sequence_exhaustion")
+
+	// 30% free is healthy by default and a problem once the operator says so —
+	// the rule must read the same overrides the page does, or the two would
+	// disagree about the very same sequence.
+	m := RawMetrics{SequenceExhaustionMax: 0.7} //nolint:exhaustruct
+
+	if hit := rule.Evaluate(m); hit != nil {
+		t.Fatalf("30%% free must be silent by default, got %s", hit.Severity)
+	}
+
+	m.SequenceThresholds = map[string]float64{"error": 50, "warning": 60, "notice": 70}
+
+	hit := rule.Evaluate(m)
+	if hit == nil || hit.Severity != SeverityMedium {
+		t.Fatalf("with the raised thresholds 30%% free is MEDIUM, got %+v", hit)
+	}
+}
+
+func TestSequenceExhaustion_BoundaryMatchesThePage(t *testing.T) {
+	rule := findRule(t, "sequence_exhaustion")
+
+	// Exactly 5% free: the page calls this a warning (its error threshold is
+	// strictly below 5%), so the recommendation must not be HIGH.
+	hit := rule.Evaluate(RawMetrics{SequenceExhaustionMax: 0.95}) //nolint:exhaustruct
+	if hit == nil || hit.Severity != SeverityMedium {
+		t.Fatalf("at exactly 5%% free want MEDIUM, got %+v", hit)
+	}
+}
+
 func TestRules_MetricsBackedConditionsFire(t *testing.T) {
 	cases := []struct {
 		name string

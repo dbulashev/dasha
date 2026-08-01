@@ -501,6 +501,10 @@ func provideConfig() (*config.Config, error) {
 		return nil, fmt.Errorf("provideConfig | auth config: %w", err)
 	}
 
+	if err := c.SchemaLint.Validate(); err != nil {
+		return nil, fmt.Errorf("provideConfig | schema_lint: %w", err)
+	}
+
 	return &c, nil
 }
 
@@ -509,7 +513,7 @@ func provideClusters(cfg config.Config) config.Clusters {
 }
 
 func provideRepository(cfg config.Config, clusters config.Clusters, logger *zap.Logger) repository.Repository {
-	return repository.NewRepositoryPgxPool(clusters, cfg.PgStatsView, cfg.PgssResetFunction, cfg.DBPool, logger)
+	return repository.NewRepositoryPgxPool(clusters, cfg.PgStatsView, cfg.PgssResetFunction, cfg.DBPool, cfg.SchemaLint, logger)
 }
 
 func provideDiscovery(

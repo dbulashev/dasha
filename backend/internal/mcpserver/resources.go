@@ -63,6 +63,12 @@ func registerResources(s *mcp.Server, lang string) {
 				"class and frequent event means, and which tool to call next.",
 		},
 		{
+			"schema-checks", "Schema check reference",
+			"Read before interpreting schema_lint results: what each check code means, " +
+				"which params it fills, what the defect leads to and what the first action " +
+				"is — including the two cases where the obvious fix is the wrong one.",
+		},
+		{
 			"workflow", "Diagnostic workflows",
 			"Read when unsure which tool to call next: complaint-to-tool-chain playbooks " +
 				"(slow database, everything hangs, disk filling, replica lag, app errors, fleet " +

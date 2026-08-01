@@ -464,6 +464,41 @@ func (d *DashaClient) WaitEvents(ctx context.Context, cluster, instance string) 
 	return pick(r.JSON200, r.HTTPResponse, "wait_events")
 }
 
+// SchemaLint returns the structural defects of one database's schema: code,
+// level, object and the numbers behind each finding. Reads the system catalog
+// only. Optional level filter ("error", "warning", "notice") narrows the list
+// without changing the summary counts.
+func (d *DashaClient) SchemaLint(ctx context.Context, cluster, instance, database, level string, limit int) (any, error) {
+	params := &apiclient.GetSchemaLintParams{ //nolint:exhaustruct
+		ClusterName: cluster, Instance: instance, Database: database, Limit: opt(limit),
+	}
+
+	if level != "" {
+		l := apiclient.GetSchemaLintParamsLevel(level)
+		params.Level = &l
+	}
+
+	r, err := d.api.GetSchemaLintWithResponse(ctx, params, d.editor(ctx))
+	if err != nil {
+		return nil, wrapErr("schema_lint", err)
+	}
+
+	return pick(r.JSON200, r.HTTPResponse, "schema_lint")
+}
+
+// SchemaLintSummary returns per-database finding counts for one instance —
+// which database to look at before pulling its full report.
+func (d *DashaClient) SchemaLintSummary(ctx context.Context, cluster, instance string) (any, error) {
+	r, err := d.api.GetSchemaLintSummaryWithResponse(ctx, &apiclient.GetSchemaLintSummaryParams{
+		ClusterName: cluster, Instance: instance,
+	}, d.editor(ctx))
+	if err != nil {
+		return nil, wrapErr("schema_lint_summary", err)
+	}
+
+	return pick(r.JSON200, r.HTTPResponse, "schema_lint_summary")
+}
+
 // QueryReport returns the full pg_stat_statements report for an instance,
 // optionally excluding the given usernames (e.g. monitoring/replication roles).
 func (d *DashaClient) QueryReport(ctx context.Context, cluster, instance string, excludeUsers []string) (any, error) {

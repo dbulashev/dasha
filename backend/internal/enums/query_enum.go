@@ -141,6 +141,24 @@ const (
 	QueryReplicationSlots Query = "replication/slots"
 	// QueryReplicationStatus is a Query of type replication/status.
 	QueryReplicationStatus Query = "replication/status"
+	// QuerySchemaLintPartitionRoots is a Query of type schema_lint/partition_roots.
+	QuerySchemaLintPartitionRoots Query = "schema_lint/partition_roots"
+	// QuerySchemaLintPublicCreatePrivileges is a Query of type schema_lint/public_create_privileges.
+	QuerySchemaLintPublicCreatePrivileges Query = "schema_lint/public_create_privileges"
+	// QuerySchemaLintRelationsWithoutColumns is a Query of type schema_lint/relations_without_columns.
+	QuerySchemaLintRelationsWithoutColumns Query = "schema_lint/relations_without_columns"
+	// QuerySchemaLintRelationsWithoutFk is a Query of type schema_lint/relations_without_fk.
+	QuerySchemaLintRelationsWithoutFk Query = "schema_lint/relations_without_fk"
+	// QuerySchemaLintRelationsWithoutKey is a Query of type schema_lint/relations_without_key.
+	QuerySchemaLintRelationsWithoutKey Query = "schema_lint/relations_without_key"
+	// QuerySchemaLintSequencesUsage is a Query of type schema_lint/sequences_usage.
+	QuerySchemaLintSequencesUsage Query = "schema_lint/sequences_usage"
+	// QuerySchemaLintUnloggedObjects is a Query of type schema_lint/unlogged_objects.
+	QuerySchemaLintUnloggedObjects Query = "schema_lint/unlogged_objects"
+	// QuerySchemaLintUnsafeNames is a Query of type schema_lint/unsafe_names.
+	QuerySchemaLintUnsafeNames Query = "schema_lint/unsafe_names"
+	// QuerySchemaLintUuidLikeColumns is a Query of type schema_lint/uuid_like_columns.
+	QuerySchemaLintUuidLikeColumns Query = "schema_lint/uuid_like_columns"
 	// QuerySettingsAnalyzeSettings is a Query of type settings/analyze_settings.
 	QuerySettingsAnalyzeSettings Query = "settings/analyze_settings"
 	// QuerySettingsAutovacuumSettings is a Query of type settings/autovacuum_settings.
@@ -251,6 +269,15 @@ var _QueryNames = []string{
 	string(QueryReplicationLag),
 	string(QueryReplicationSlots),
 	string(QueryReplicationStatus),
+	string(QuerySchemaLintPartitionRoots),
+	string(QuerySchemaLintPublicCreatePrivileges),
+	string(QuerySchemaLintRelationsWithoutColumns),
+	string(QuerySchemaLintRelationsWithoutFk),
+	string(QuerySchemaLintRelationsWithoutKey),
+	string(QuerySchemaLintSequencesUsage),
+	string(QuerySchemaLintUnloggedObjects),
+	string(QuerySchemaLintUnsafeNames),
+	string(QuerySchemaLintUuidLikeColumns),
 	string(QuerySettingsAnalyzeSettings),
 	string(QuerySettingsAutovacuumSettings),
 	string(QuerySettingsPgSettings),
@@ -348,6 +375,15 @@ func QueryValues() []Query {
 		QueryReplicationLag,
 		QueryReplicationSlots,
 		QueryReplicationStatus,
+		QuerySchemaLintPartitionRoots,
+		QuerySchemaLintPublicCreatePrivileges,
+		QuerySchemaLintRelationsWithoutColumns,
+		QuerySchemaLintRelationsWithoutFk,
+		QuerySchemaLintRelationsWithoutKey,
+		QuerySchemaLintSequencesUsage,
+		QuerySchemaLintUnloggedObjects,
+		QuerySchemaLintUnsafeNames,
+		QuerySchemaLintUuidLikeColumns,
 		QuerySettingsAnalyzeSettings,
 		QuerySettingsAutovacuumSettings,
 		QuerySettingsPgSettings,
@@ -449,6 +485,15 @@ var _QueryValue = map[string]Query{
 	"replication/lag":                               QueryReplicationLag,
 	"replication/slots":                             QueryReplicationSlots,
 	"replication/status":                            QueryReplicationStatus,
+	"schema_lint/partition_roots":                   QuerySchemaLintPartitionRoots,
+	"schema_lint/public_create_privileges":          QuerySchemaLintPublicCreatePrivileges,
+	"schema_lint/relations_without_columns":         QuerySchemaLintRelationsWithoutColumns,
+	"schema_lint/relations_without_fk":              QuerySchemaLintRelationsWithoutFk,
+	"schema_lint/relations_without_key":             QuerySchemaLintRelationsWithoutKey,
+	"schema_lint/sequences_usage":                   QuerySchemaLintSequencesUsage,
+	"schema_lint/unlogged_objects":                  QuerySchemaLintUnloggedObjects,
+	"schema_lint/unsafe_names":                      QuerySchemaLintUnsafeNames,
+	"schema_lint/uuid_like_columns":                 QuerySchemaLintUuidLikeColumns,
 	"settings/analyze_settings":                     QuerySettingsAnalyzeSettings,
 	"settings/autovacuum_settings":                  QuerySettingsAutovacuumSettings,
 	"settings/pg_settings":                          QuerySettingsPgSettings,

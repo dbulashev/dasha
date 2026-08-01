@@ -735,7 +735,8 @@
     "possibleNullsHint": "FK, deren Spalten NULL zulassen — möglicherweise fehlt ein NOT NULL Constraint.",
     "possibleSimilar": "Ähnliche FK",
     "possibleSimilarHint": "FK-Paare auf derselben Tabelle, die redundant sein könnten.",
-    "similarFk": "Ähnlicher FK"
+    "similarFk": "Ähnlicher FK",
+    "toSchema": "Referenziertes Schema"
   },
   "settings": {
     "pgSettings": "PostgreSQL-Hauptparameter",
@@ -1458,6 +1459,154 @@
       "empty": "Bisher hat sich niemand angemeldet.",
       "never": "nie",
       "hint": "Die Liste wächst mit jeder SSO-Anmeldung. Rollen kommen vom Identity Provider und sind hier nicht editierbar."
+    }
+  },
+  "schemaLint": {
+    "page": {
+      "menuItem": "Schemaprüfungen",
+      "title": "Schemaprüfungen",
+      "hint": "Die Prüfungen lesen ausschließlich den Systemkatalog — Benutzerdaten werden nie berührt. Dieser Bereich beantwortet die Frage «was stimmt mit der Struktur nicht»: Defekte, die im laufenden Betrieb unsichtbar bleiben, bis etwas ausfällt. Ergebnisse werden einige Minuten zwischengespeichert; nach einer Korrektur «Aktualisieren» drücken.",
+      "refresh": "Aktualisieren",
+      "clean": "Keine Defekte gefunden",
+      "duration": "Prüfungen dauerten {ms} ms",
+      "fromCache": "Aus dem Cache",
+      "truncated": "Eine Prüfung hat ihr Zeilenlimit erreicht: die Liste ist unvollständig und die Zähler sind Untergrenzen.",
+      "skippedTitle": "Einige Prüfungen wurden nicht ausgeführt",
+      "skippedHint": "Diese Prüfungen lieferten kein Ergebnis — sie dürfen nicht als sauber gelesen werden.",
+      "grantHint": "Benötigtes Recht: {privilege}",
+      "checkFilter": "Prüfung",
+      "objectFilter": "Objekt",
+      "groupByCheck": "Nach Prüfung",
+      "groupByObject": "Nach Objekt",
+      "noFindings": "Keine Defekte gefunden",
+      "skippedObjects": "{count} Objekt nicht lesbar | {count} Objekte nicht lesbar"
+    },
+    "levels": {
+      "error": "Fehler",
+      "warning": "Warnung",
+      "notice": "Hinweis"
+    },
+    "skipReasons": {
+      "insufficient_privileges": "unzureichende Rechte",
+      "unsupported_version": "von dieser PostgreSQL-Version nicht unterstützt",
+      "disabled": "in der Konfiguration deaktiviert",
+      "error": "Ausführungsfehler"
+    },
+    "notes": {
+      "uniqueNullable": "Der eindeutige Index umfasst eine NULL-fähige Spalte: als REPLICA IDENTITY taugt er nicht, die logische Replikation nimmt diese Tabelle nicht.",
+      "int4Owner": "Die besitzende Spalte ist {type}: ALTER SEQUENCE allein genügt nicht — auch der Spaltentyp muss geändert werden, eine lange Operation mit Wartungsfenster.",
+      "partitions": "Derselbe Defekt wurde auf {n} Partitionen gefunden; der Befund wird an der Elterntabelle gezeigt."
+    },
+    "table": {
+      "level": "Stufe",
+      "check": "Prüfung",
+      "object": "Objekt",
+      "howToFix": "Behebung",
+      "copySql": "SQL kopieren",
+      "partitions": "{n} Partitionen"
+    },
+    "checks": {
+      "sequence_exhaustion": {
+        "title": "Sequenz kurz vor der Erschöpfung",
+        "description": "{usedPct}% des Bereichs sind verbraucht: aktueller Wert {lastValue} bei einer Obergrenze von {maxValue}. Sind die Werte aufgebraucht, scheitert jedes INSERT mit «nextval: reached maximum value».",
+        "howToFix": "Den Wertebereich der Sequenz erweitern. Gehört sie zu einer integer-Spalte, muss auch deren Typ geändert werden — die Obergrenze setzt die Spalte, nicht die Sequenz.",
+        "fixSql": "ALTER SEQUENCE {schema}.{object} AS bigint;"
+      },
+      "no_primary_key": {
+        "title": "Tabelle ohne Primärschlüssel",
+        "description": "Die Tabelle hat keinen PRIMARY KEY. Ohne REPLICA IDENTITY repliziert die logische Replikation weder UPDATE noch DELETE, pg_repack verweigert die Tabelle, und von zwei identischen Zeilen lässt sich keine einzeln löschen.",
+        "howToFix": "Einen Primärschlüssel hinzufügen oder REPLICA IDENTITY auf einen eindeutigen Index setzen, dessen Spalten alle NOT NULL sind."
+      },
+      "no_unique_key": {
+        "title": "Tabelle ohne eindeutigen Schlüssel",
+        "description": "Die Tabelle hat weder einen Primärschlüssel noch einen brauchbaren eindeutigen Index (partielle und Ausdrucksindizes zählen nicht als Schlüssel). Zeilen sind ununterscheidbar: Duplikate lassen sich nicht einzeln entfernen, logische Replikation von UPDATE und DELETE ist unmöglich.",
+        "howToFix": "Festlegen, was eine Zeile eindeutig macht, und einen PRIMARY KEY oder eine UNIQUE-Bedingung über NOT-NULL-Spalten anlegen."
+      },
+      "public_create_privilege": {
+        "title": "PUBLIC darf Objekte im Schema anlegen",
+        "description": "PUBLIC besitzt CREATE auf Schema {schema} (Eigentümer {owner}). Jeder Datenbankbenutzer kann dort ein Objekt anlegen, das über den search_path aufgelöste Aufrufe abfängt — der Vektor von CVE-2018-1058.",
+        "howToFix": "CREATE von PUBLIC entziehen. Ab PostgreSQL 15 ist ein geschlossenes public-Schema die Voreinstellung.",
+        "fixSql": "REVOKE CREATE ON SCHEMA {schema} FROM PUBLIC;"
+      },
+      "unlogged_relation": {
+        "title": "Nicht protokollierte Tabelle",
+        "description": "Die Tabelle ist UNLOGGED: ihr Inhalt übersteht keinen Absturz und erreicht die Replikate nie — auf einem Standby ist sie immer leer.",
+        "howToFix": "Sollen die Daten einen Neustart überstehen und auf Replikaten sichtbar sein, die Tabelle auf protokolliert umstellen. Die Operation schreibt die Tabelle vollständig neu.",
+        "fixSql": "ALTER TABLE {schema}.{object} SET LOGGED;"
+      },
+      "unlogged_sequence": {
+        "title": "Nicht protokollierte Sequenz",
+        "description": "Die Sequenz ist UNLOGGED: nach einem Absturz fällt ihr Wert auf den letzten Checkpoint zurück, und auf die Replikate gelangt sie nicht.",
+        "howToFix": "Die Sequenz auf protokolliert umstellen, wenn ihre Werte einen Absturz überstehen müssen.",
+        "fixSql": "ALTER SEQUENCE {schema}.{object} SET LOGGED;"
+      },
+      "uuid_in_non_uuid_type": {
+        "title": "UUID außerhalb des Typs uuid gespeichert",
+        "description": "Spalte {column} von {object} hat den Typ {columnType}, ihr Inhalt sieht aber nach einer UUID aus. Der Typ uuid belegt 16 Byte gegenüber 36 der Zeichenkette — gespart wird an der Tabelle selbst, an jedem Index über dieser Spalte und an jedem Fremdschlüssel, der auf sie zeigt.",
+        "howToFix": "Prüfen, ob die Spalte tatsächlich UUIDs enthält (Heuristik nach Name und Länge). Wenn ja, den Typ auf uuid ändern — das schreibt die Tabelle neu und braucht ein Wartungsfenster. Wenn nein, die Prüfung in der Konfiguration abschalten."
+      },
+      "relation_without_fk": {
+        "title": "Tabelle ohne Fremdschlüsselbeziehungen",
+        "description": "Auf {object} verweist kein Fremdschlüssel, und die Tabelle selbst verweist auf nichts. Entweder ist sie vergessen worden, oder ihre Beziehungen existieren nur im Anwendungscode — dann sichert nichts die Integrität.",
+        "howToFix": "Die Tabelle löschen, wenn sie nicht mehr gebraucht wird. Bestehen Beziehungen, sind aber nicht deklariert, Fremdschlüssel anlegen. Verzichtet das Schema bewusst auf Fremdschlüssel, die Prüfung abschalten."
+      },
+      "relation_without_columns": {
+        "title": "Tabelle ohne Spalten",
+        "description": "{object} hat keine lebende Spalte mehr — alle gelöscht oder nie angelegt. Sie speichert nichts, belegt aber Katalogplatz und landet in jedem Dump.",
+        "howToFix": "Die Tabelle löschen oder Spalten hinzufügen, falls sie für eine nie gebaute Struktur angelegt wurde."
+      },
+      "reserved_word_in_name": {
+        "title": "Objektname ist ein reserviertes Schlüsselwort",
+        "description": "Der Name {object} ist ein reserviertes SQL-Schlüsselwort. Er lässt sich nicht ohne Anführungszeichen schreiben: Migrationen, Dumps und Skripte, die das vergessen, scheitern — oder schlimmer, werden anders geparst als gemeint.",
+        "howToFix": "Das Objekt umbenennen. Ist das nicht möglich, muss jede Referenz darauf zitiert werden."
+      },
+      "unsafe_chars_in_name": {
+        "title": "Objektname muss zitiert werden",
+        "description": "Der Name {object} enthält Zeichen außerhalb von [A-Za-z0-9_] — Punkt, Leerzeichen, Bindestrich, Anführungszeichen oder Nicht-ASCII. Jede Referenz muss zitiert werden, und Werkzeuge, die das nicht tun, brechen daran.",
+        "howToFix": "Das Objekt umbenennen — nur Buchstaben, Ziffern und Unterstriche."
+      },
+      "invalid_constraint": {
+        "title": "Bedingung wurde nie validiert (NOT VALID)",
+        "description": "Bedingung {constraint} auf {object} wurde als NOT VALID angelegt: sie gilt für neue Zeilen, die vorhandenen Daten wurden nie geprüft. Der Planer verlässt sich auf eine solche Bedingung nicht — es besteht der Anschein von Integrität, nicht Integrität selbst.",
+        "howToFix": "Validieren: ALTER TABLE ... VALIDATE CONSTRAINT. Liest die ganze Tabelle, nimmt aber nur eine schwache Sperre und blockiert weder Lesen noch Schreiben.",
+        "fixSql": "ALTER TABLE {schema}.{object} VALIDATE CONSTRAINT {constraint};"
+      },
+      "fk_type_mismatch": {
+        "title": "Spaltentypen des Fremdschlüssels stimmen nicht überein",
+        "description": "Fremdschlüssel {constraint} auf {object} verweist auf {otherObject}, die Spaltentypen unterscheiden sich jedoch. Jede referenzielle Prüfung castet, wodurch der Index auf der Elternseite aus dem Plan fallen und Vergleiche unerwartet ausfallen können.",
+        "howToFix": "Die Spaltentypen angleichen. Das ist ein ALTER TABLE mit Neuschreiben — ein Wartungsfenster einplanen."
+      },
+      "fk_nullable": {
+        "title": "Fremdschlüsselspalten sind NULL-fähig",
+        "description": "Fremdschlüssel {constraint} auf {object} umfasst die NULL-fähigen Spalten {otherObject}. Unter MATCH SIMPLE besteht eine Zeile mit NULL in einer davon die Prüfung vollständig — die Beziehung ist faktisch optional, auch wenn sie verpflichtend gemeint ist.",
+        "howToFix": "Ist die Beziehung verpflichtend, NOT NULL auf die Schlüsselspalten setzen. Ist sie optional, ist das gewollt und die Prüfung kann abgeschaltet werden."
+      },
+      "fk_similar": {
+        "title": "Ähnliche Fremdschlüssel",
+        "description": "Tabelle {object} trägt die Fremdschlüssel {constraint} und {otherObject} über überlappende Spalten zum selben Ziel. Einer ist höchstwahrscheinlich ein Überbleibsel einer Migration: er kostet Katalogplatz und eine weitere Prüfung bei jedem Schreibvorgang.",
+        "howToFix": "Die Definitionen vergleichen und den überflüssigen entfernen. Eine Heuristik — die Entscheidung liegt bei Ihnen."
+      },
+      "index_similar": {
+        "title": "Ähnliche Indizes",
+        "description": "Die Indizes {index} und {otherObject} auf {object} sind nach Normalisierung ihrer Definitionen identisch. Ein doppelter Index kostet Platz und bremst Schreibvorgänge und Wartung, ohne etwas beizutragen.",
+        "howToFix": "Die Definitionen auf der Indexanalyse-Seite vergleichen und den überflüssigen löschen. Ein Index hinter einer Bedingung lässt sich nicht direkt löschen — zuerst die Bedingung entfernen."
+      },
+      "btree_on_array": {
+        "title": "B-Tree-Index auf einer Array-Spalte",
+        "description": "Index {index} auf {object} ist ein Btree über einer Array-Spalte. Er dient nur dem Vergleich ganzer Arrays: Containment-Abfragen nutzen ihn nicht, er belegt also höchstwahrscheinlich nur Platz.",
+        "howToFix": "GIN verwenden, wenn nach Elementen gesucht wird. Werden ganze Arrays verglichen, ist der Index angemessen und der Befund kann ignoriert werden."
+      }
+    },
+    "databases": {
+      "title": "Datenbanken der Instanz",
+      "hint": "Schemadefekte leben in einer Datenbank, nicht im Cluster. Der Durchlauf besucht alle konfigurierten Datenbanken der Instanz nacheinander und kann dauern.",
+      "show": "Anzeigen",
+      "hide": "Ausblenden",
+      "failed": "nicht lesbar",
+      "loading": "Datenbanken werden durchlaufen…",
+      "empty": "Keine Daten",
+      "skipped": "Nicht geprüft",
+      "skippedHint": "So viele Prüfungen liefen in dieser Datenbank nicht. Die Nullen bedeuten ungeprüft, nicht sauber."
     }
   }
 }

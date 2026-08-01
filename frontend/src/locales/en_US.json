@@ -781,7 +781,8 @@
     "possibleNullsHint": "Foreign keys whose columns allow NULL — they may need a NOT NULL constraint.",
     "possibleSimilar": "Similar FKs",
     "possibleSimilarHint": "Pairs of foreign keys on the same table that may be redundant.",
-    "similarFk": "Similar FK"
+    "similarFk": "Similar FK",
+    "toSchema": "Referenced schema"
   },
   "settings": {
     "pgSettings": "Main PostgreSQL parameters",
@@ -1503,6 +1504,154 @@
       "empty": "Nobody has signed in yet.",
       "never": "never",
       "hint": "The list grows as people sign in through SSO. Roles come from the identity provider and are not editable here."
+    }
+  },
+  "schemaLint": {
+    "page": {
+      "menuItem": "Schema Checks",
+      "title": "Schema Checks",
+      "hint": "The checks read the system catalog only — user data is never touched. This page answers \"what is wrong with the structure\", the class of defects that stays invisible at runtime until it breaks something. Results are cached for a few minutes; press Refresh after fixing one.",
+      "refresh": "Refresh",
+      "clean": "No defects found",
+      "duration": "Checks took {ms} ms",
+      "fromCache": "Served from cache",
+      "truncated": "A check hit its row limit: the list is incomplete and the counters are a lower bound.",
+      "skippedTitle": "Some checks did not run",
+      "skippedHint": "These checks produced no result — do not read them as clean.",
+      "grantHint": "Needs privilege: {privilege}",
+      "checkFilter": "Check",
+      "objectFilter": "Object",
+      "groupByCheck": "By check",
+      "groupByObject": "By object",
+      "noFindings": "No defects found",
+      "skippedObjects": "{count} object could not be read | {count} objects could not be read"
+    },
+    "levels": {
+      "error": "Error",
+      "warning": "Warning",
+      "notice": "Notice"
+    },
+    "skipReasons": {
+      "insufficient_privileges": "insufficient privileges",
+      "unsupported_version": "not supported by this PostgreSQL version",
+      "disabled": "disabled in configuration",
+      "error": "execution error"
+    },
+    "notes": {
+      "uniqueNullable": "The unique index covers a nullable column: it cannot serve as REPLICA IDENTITY, so logical replication will not take this table.",
+      "int4Owner": "The owning column is {type}: ALTER SEQUENCE alone is not enough — the column type has to change too, which is a long operation needing a window.",
+      "partitions": "The same defect was found on {n} partitions; the finding is shown on the parent table."
+    },
+    "table": {
+      "level": "Level",
+      "check": "Check",
+      "object": "Object",
+      "howToFix": "How to fix",
+      "copySql": "Copy SQL",
+      "partitions": "{n} partitions"
+    },
+    "checks": {
+      "sequence_exhaustion": {
+        "title": "Sequence close to exhaustion",
+        "description": "{usedPct}% of the range is consumed: current value {lastValue} against a ceiling of {maxValue}. Once the values run out, INSERT starts failing with \"nextval: reached maximum value\".",
+        "howToFix": "Widen the sequence range. If it belongs to an integer column, the column type has to change as well — the ceiling is set by the column, not by the sequence.",
+        "fixSql": "ALTER SEQUENCE {schema}.{object} AS bigint;"
+      },
+      "no_primary_key": {
+        "title": "Table without a primary key",
+        "description": "The table has no PRIMARY KEY. Logical replication cannot replicate UPDATE and DELETE without a REPLICA IDENTITY, pg_repack refuses to process the table, and one row of a duplicated pair cannot be deleted on its own.",
+        "howToFix": "Add a primary key, or set REPLICA IDENTITY to a unique index whose columns are all NOT NULL."
+      },
+      "no_unique_key": {
+        "title": "Table without a unique key",
+        "description": "The table has neither a primary key nor a usable unique index (partial and expression indexes do not count as keys). Rows are indistinguishable: duplicates cannot be removed individually and logical replication of UPDATE and DELETE is impossible.",
+        "howToFix": "Decide what makes a row unique and add a PRIMARY KEY or a UNIQUE constraint over NOT NULL columns."
+      },
+      "public_create_privilege": {
+        "title": "PUBLIC may create objects in the schema",
+        "description": "PUBLIC holds CREATE on schema {schema} (owned by {owner}). Any database user can create an object there that intercepts calls resolved through search_path — the CVE-2018-1058 vector.",
+        "howToFix": "Revoke CREATE from PUBLIC. In PostgreSQL 15 and later a closed public schema is the default.",
+        "fixSql": "REVOKE CREATE ON SCHEMA {schema} FROM PUBLIC;"
+      },
+      "unlogged_relation": {
+        "title": "Unlogged table",
+        "description": "The table is UNLOGGED: its contents will not survive a crash and never reach the replicas — on a standby such a table is always empty.",
+        "howToFix": "If the data has to survive a restart and be visible on replicas, switch the table to logged. The operation rewrites the whole table.",
+        "fixSql": "ALTER TABLE {schema}.{object} SET LOGGED;"
+      },
+      "unlogged_sequence": {
+        "title": "Unlogged sequence",
+        "description": "The sequence is UNLOGGED: after a crash its value rolls back to the last checkpoint, and it never reaches the replicas.",
+        "howToFix": "Switch the sequence to logged if its values have to survive a crash.",
+        "fixSql": "ALTER SEQUENCE {schema}.{object} SET LOGGED;"
+      },
+      "uuid_in_non_uuid_type": {
+        "title": "UUID kept outside the uuid type",
+        "description": "Column {column} of {object} is {columnType} and its contents look like a UUID. The uuid type takes 16 bytes against 36 for the string — saved on the table itself, on every index over that column and on every foreign key pointing at it.",
+        "howToFix": "Check whether the column really holds UUIDs (this is a heuristic, based on name and length). If it does, change the type to uuid — that rewrites the table and needs a window. If it does not, switch the check off in the configuration."
+      },
+      "relation_without_fk": {
+        "title": "Table takes part in no foreign key",
+        "description": "Nothing references {object} and it references nothing. Either the table has been forgotten, or its relationships exist only in application code — in which case nothing enforces integrity.",
+        "howToFix": "Drop the table if it is no longer needed. If the relationships exist but are undeclared, add foreign keys. If this schema deliberately avoids foreign keys, turn the check off."
+      },
+      "relation_without_columns": {
+        "title": "Table without columns",
+        "description": "{object} has no live columns left — all dropped, or never added. It stores nothing, yet occupies catalog space and lands in every dump.",
+        "howToFix": "Drop the table, or add the columns if it was created ahead of a structure that never arrived."
+      },
+      "reserved_word_in_name": {
+        "title": "Object name is a reserved keyword",
+        "description": "The name {object} is a reserved SQL keyword. It cannot be written unquoted: migrations, dumps and scripts that forget to quote it fail — or worse, parse into something other than intended.",
+        "howToFix": "Rename the object. If renaming is impossible, make sure every reference to it is quoted."
+      },
+      "unsafe_chars_in_name": {
+        "title": "Object name requires quoting",
+        "description": "The name {object} contains characters outside [A-Za-z0-9_] — a dot, a space, a hyphen, a quote or non-ASCII. Every reference to it has to be quoted, and tooling that does not breaks on it.",
+        "howToFix": "Rename the object using letters, digits and underscores only."
+      },
+      "invalid_constraint": {
+        "title": "Constraint was never validated (NOT VALID)",
+        "description": "Constraint {constraint} on {object} was created NOT VALID: it applies to new rows, but the existing data was never checked. The planner will not rely on such a constraint, so what you have is the appearance of integrity, not integrity.",
+        "howToFix": "Validate it: ALTER TABLE ... VALIDATE CONSTRAINT. It reads the whole table but takes a weak lock and blocks neither reads nor writes.",
+        "fixSql": "ALTER TABLE {schema}.{object} VALIDATE CONSTRAINT {constraint};"
+      },
+      "fk_type_mismatch": {
+        "title": "Foreign key column types disagree",
+        "description": "Foreign key {constraint} on {object} references {otherObject}, but the column types differ. Every referential check casts, which can keep the parent-side index out of the plan and make comparisons behave unexpectedly.",
+        "howToFix": "Bring the column types together. That is an ALTER TABLE with a rewrite — plan a window."
+      },
+      "fk_nullable": {
+        "title": "Foreign key columns are nullable",
+        "description": "Foreign key {constraint} on {object} covers the nullable columns {otherObject}. Under MATCH SIMPLE a row with NULL in any of them passes the check entirely, so the relationship is optional in practice even when it is meant to be required.",
+        "howToFix": "If the relationship is required, add NOT NULL to the key columns. If it is optional, this is by design and the check can be switched off."
+      },
+      "fk_similar": {
+        "title": "Similar foreign keys",
+        "description": "Table {object} carries foreign keys {constraint} and {otherObject} over overlapping columns to the same target. One is most likely a leftover from a migration: it costs catalog space and one more check on every write.",
+        "howToFix": "Compare the definitions and drop the redundant one. This is a heuristic — the judgement is yours."
+      },
+      "index_similar": {
+        "title": "Similar indexes",
+        "description": "Indexes {index} and {otherObject} on {object} are identical once their definitions are normalized. A duplicate index costs space and slows writes and maintenance while adding nothing.",
+        "howToFix": "Compare the definitions on the index analysis page and drop the redundant one. An index backing a constraint cannot be dropped directly — remove the constraint first."
+      },
+      "btree_on_array": {
+        "title": "B-tree index on an array column",
+        "description": "Index {index} on {object} is a btree over an array column. It only serves whole-array comparison: containment queries will not use it, so it most likely just occupies space.",
+        "howToFix": "Use GIN if elements are searched. If whole arrays are compared, the index is appropriate and this finding can be ignored."
+      }
+    },
+    "databases": {
+      "title": "Databases of the instance",
+      "hint": "Schema defects live in a database, not in a cluster. The sweep visits every configured database of the instance one after another and may take a while.",
+      "show": "Show",
+      "hide": "Hide",
+      "failed": "unreadable",
+      "loading": "Sweeping databases…",
+      "empty": "No data",
+      "skipped": "Not checked",
+      "skippedHint": "This many checks did not run in this database. The zero counts mean unchecked, not clean."
     }
   }
 }

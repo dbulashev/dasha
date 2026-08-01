@@ -3,6 +3,11 @@
 ## v1.5.1
 
 ### Features
+- **Schema Checks**, a new page: structural defects that stay invisible until they break something — a sequence about to run out of values, a table without a primary key, a forgotten `UNLOGGED` relation, a schema anyone may create objects in. Only the system catalog is read, never user data. Findings come with what the defect leads to and how to fix it, with a ready SQL statement to copy where the fix is unambiguous; a defect found on the partitions of one table is shown once, on the parent. Checks that could not run are listed separately with the reason, so an unchecked schema is never mistaken for a clean one. An instance-wide overview shows the counts of every database, not just the selected one. The page is hidden on replicas.
+- **Sequences running out of values now affect the health score without a metrics datasource.** The recommendation used to appear only in metrics-backed mode; it is now also raised from the schema checks, at the same thresholds the page uses, and links to the sequences behind it.
+- **The checks that already had pages of their own — invalid constraints, foreign-key type mismatches, nullable keys, similar keys and indexes, B-tree on arrays — now also appear in the schema report**, so one place answers what is wrong with the schema. Those pages keep working as before, and every one of them now shows the schema of the object, which was missing.
+- **Schema checks now also cover names that break tooling** (a reserved SQL keyword as an object name, characters that force quoting everywhere) and unvalidated `NOT VALID` constraints, which used to be visible only on the FK Analysis page.
+- **Two MCP tools**, `schema_lint` and `schema_lint_summary`, plus a knowledge-base page explaining every check — including the two cases where the obvious fix is the wrong one.
 - **`extraEnv` / `extraEnvFrom` in the Helm chart** for the backend and autosnapshot containers: environment variables from Secrets the chart does not manage. `extraEnv` binds one Secret key to a variable of any name (e.g. a Dex-issued `clientSecret` to `DASHA_OIDC_SECRET`), `extraEnvFrom` mounts whole Secrets/ConfigMaps beyond the chart's own single env Secret.
 
 ### Bug Fixes

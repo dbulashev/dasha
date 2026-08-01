@@ -107,6 +107,7 @@ const locksLink = computed(() => withQuery("locks"));
 const progressLink = computed(() => withQuery("progress"));
 const fkAnalysisLink = computed(() => withQuery("fk-analysis"));
 const maintenanceLink = computed(() => withQuery("maintenance"));
+const schemaLintLink = computed(() => withQuery("schema-lint"));
 const replicationLink = computed(() => withQuery("replication"));
 const settingsLink = computed(() => withQuery("settings"));
 const logsLink = computed(() => withQuery("logs"));
@@ -115,9 +116,9 @@ const autoSnapshotLink = computed(() => withQuery("auto-snapshot"));
 const hasLogSearchClusters = computed(() => clusterStore.hasLogSearchClusters);
 
 // Track whether the currently selected host is a standby. When true the
-// Maintenance menu item is hidden and any visit to /maintenance redirects to
-// /main — autovacuum/ANALYZE run only on the primary, so showing maintenance
-// data from a replica is misleading.
+// Maintenance and Schema Checks menu items are hidden and any visit to them
+// redirects to /main — autovacuum/ANALYZE run only on the primary, and schema
+// defects can only be fixed there, so showing either from a replica misleads.
 const currentCluster = computed(() => String(route.params.clustername ?? ''))
 const currentHost = computed(() => String(route.query.host ?? ''))
 
@@ -133,10 +134,15 @@ const isReplica = computed(() =>
   instanceInfoStore.isReplica(currentCluster.value, currentHost.value),
 )
 
+const primaryOnlyRoutes = ['/maintenance', '/schema-lint']
+
 watch(
   [isReplica, () => route.path],
   ([replica, path]) => {
-    if (replica && (path === '/maintenance' || path.startsWith('/maintenance/'))) {
+    const primaryOnly = primaryOnlyRoutes.some(
+      (base) => path === base || path.startsWith(`${base}/`),
+    )
+    if (replica && primaryOnly) {
       router.replace({ path: `/main/${currentCluster.value}`, query: route.query })
     }
   },
@@ -235,6 +241,7 @@ watch(() => route.path, () => {
           <v-list-item :title="t('FK Analysis')" prepend-icon="mdi-relation-many-to-many" link :to="fkAnalysisLink"></v-list-item>
           <v-list-item :title="t('Replication')" prepend-icon="mdi-database-sync-outline" link :to="replicationLink"></v-list-item>
           <v-list-item v-if="!isReplica" :title="t('Maintenance')" prepend-icon="mdi-wrench-outline" link :to="maintenanceLink"></v-list-item>
+          <v-list-item v-if="!isReplica" :title="t('schemaLint.page.menuItem')" prepend-icon="mdi-clipboard-check-outline" link :to="schemaLintLink"></v-list-item>
           <v-list-item :title="t('Settings')" prepend-icon="mdi-database-settings-outline" link :to="settingsLink"></v-list-item>
           <v-list-item v-if="hasLogSearchClusters" :title="t('Logs')" prepend-icon="mdi-text-box-search-outline" link :to="logsLink"></v-list-item>
           <v-list-item v-if="autosnapshotVisible" :title="t('autosnapshot.menu')" prepend-icon="mdi-camera-timer" link :to="autoSnapshotLink"></v-list-item>

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/dbulashev/dasha/internal/metrics"
+	"github.com/dbulashev/dasha/internal/schemalint"
 )
 
 var (
@@ -301,6 +302,10 @@ type Config struct {
 
 	// HealthScore groups Health Score settings (metrics-backed mode).
 	HealthScore HealthScoreConfig `mapstructure:"health_score"`
+
+	// SchemaLint tunes the schema checks: which run, which schemas to ignore,
+	// sequence thresholds and how long a report stays cached.
+	SchemaLint schemalint.Config `mapstructure:"schema_lint"`
 }
 
 // PoolConfig tunes a pgx connection pool. Zero MaxConns/MaxConnIdleTime fall back
