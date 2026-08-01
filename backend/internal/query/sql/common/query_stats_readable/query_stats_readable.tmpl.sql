@@ -1,1 +1,1 @@
-SELECT * FROM pg_stat_statements LIMIT 1
+SELECT * FROM {{ .Pgss }} LIMIT 1

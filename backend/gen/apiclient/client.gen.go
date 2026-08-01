@@ -405,6 +405,12 @@ type DatabaseSize struct {
 	SizePretty string `json:"SizePretty"`
 }
 
+// ErrorMessage defines model for ErrorMessage.
+type ErrorMessage struct {
+	// Message Human-readable reason the request could not be answered.
+	Message string `json:"message"`
+}
+
 // FkTypeMismatch defines model for FkTypeMismatch.
 type FkTypeMismatch struct {
 	FkName        string   `json:"FkName"`
@@ -1616,11 +1622,20 @@ type ClusterName = string
 // Database defines model for Database.
 type Database = string
 
+// DatabaseOptional defines model for DatabaseOptional.
+type DatabaseOptional = string
+
 // IncludeRevoked defines model for IncludeRevoked.
 type IncludeRevoked = bool
 
 // Instance defines model for Instance.
 type Instance = string
+
+// ObjectLocked defines model for ObjectLocked.
+type ObjectLocked = ErrorMessage
+
+// QueryTimeout defines model for QueryTimeout.
+type QueryTimeout = ErrorMessage
 
 // ListAllPersonalTokensParams defines parameters for ListAllPersonalTokens.
 type ListAllPersonalTokensParams struct {
@@ -2146,6 +2161,9 @@ type GetQueriesReportParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
 	Instance    Instance    `form:"instance" json:"instance"`
 
+	// Database Database whose pg_stat_statements view is read. The extension may be installed in one database only, and in a schema outside search_path; its contents are instance-wide either way. Defaults to any database of the instance that has the extension.
+	Database *DatabaseOptional `form:"database,omitempty" json:"database,omitempty"`
+
 	// ExcludeUsers Comma-separated list of usernames to exclude from the report
 	ExcludeUsers *[]string `form:"exclude_users,omitempty" json:"exclude_users,omitempty"`
 }
@@ -2200,18 +2218,27 @@ type PostSnapshotParams struct {
 type GetQueriesTop10ByTimeParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
 	Instance    Instance    `form:"instance" json:"instance"`
+
+	// Database Database whose pg_stat_statements view is read. The extension may be installed in one database only, and in a schema outside search_path; its contents are instance-wide either way. Defaults to any database of the instance that has the extension.
+	Database *DatabaseOptional `form:"database,omitempty" json:"database,omitempty"`
 }
 
 // GetQueriesTop10ByWalParams defines parameters for GetQueriesTop10ByWal.
 type GetQueriesTop10ByWalParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
 	Instance    Instance    `form:"instance" json:"instance"`
+
+	// Database Database whose pg_stat_statements view is read. The extension may be installed in one database only, and in a schema outside search_path; its contents are instance-wide either way. Defaults to any database of the instance that has the extension.
+	Database *DatabaseOptional `form:"database,omitempty" json:"database,omitempty"`
 }
 
 // GetQueriesTop10ChartParams defines parameters for GetQueriesTop10Chart.
 type GetQueriesTop10ChartParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
 	Instance    Instance    `form:"instance" json:"instance"`
+
+	// Database Database whose pg_stat_statements view is read. The extension may be installed in one database only, and in a schema outside search_path; its contents are instance-wide either way. Defaults to any database of the instance that has the extension.
+	Database *DatabaseOptional `form:"database,omitempty" json:"database,omitempty"`
 }
 
 // GetReplicationConfigParams defines parameters for GetReplicationConfig.
@@ -9521,6 +9548,22 @@ func NewGetQueriesReportRequest(server string, params *GetQueriesReportParams) (
 			}
 		}
 
+		if params.Database != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "database", runtime.ParamLocationQuery, *params.Database); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		if params.ExcludeUsers != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", false, "exclude_users", runtime.ParamLocationQuery, *params.ExcludeUsers); err != nil {
@@ -10045,6 +10088,22 @@ func NewGetQueriesTop10ByTimeRequest(server string, params *GetQueriesTop10ByTim
 			}
 		}
 
+		if params.Database != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "database", runtime.ParamLocationQuery, *params.Database); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		queryURL.RawQuery = queryValues.Encode()
 	}
 
@@ -10102,6 +10161,22 @@ func NewGetQueriesTop10ByWalRequest(server string, params *GetQueriesTop10ByWalP
 			}
 		}
 
+		if params.Database != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "database", runtime.ParamLocationQuery, *params.Database); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		queryURL.RawQuery = queryValues.Encode()
 	}
 
@@ -10157,6 +10232,22 @@ func NewGetQueriesTop10ChartRequest(server string, params *GetQueriesTop10ChartP
 					queryValues.Add(k, v2)
 				}
 			}
+		}
+
+		if params.Database != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "database", runtime.ParamLocationQuery, *params.Database); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
 		}
 
 		queryURL.RawQuery = queryValues.Encode()
@@ -14025,6 +14116,8 @@ type GetTablesDescribeResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *TableDescribe
+	JSON423      *ObjectLocked
+	JSON504      *QueryTimeout
 }
 
 // Status returns HTTPResponse.Status
@@ -14047,6 +14140,8 @@ type GetTablesDescribeBloatResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *TableDescribeBloat
+	JSON423      *ObjectLocked
+	JSON504      *QueryTimeout
 }
 
 // Status returns HTTPResponse.Status
@@ -14069,6 +14164,8 @@ type GetTablesDescribePartitionsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *[]TableDescribePartition
+	JSON423      *ObjectLocked
+	JSON504      *QueryTimeout
 }
 
 // Status returns HTTPResponse.Status
@@ -17622,6 +17719,20 @@ func ParseGetTablesDescribeResponse(rsp *http.Response) (*GetTablesDescribeRespo
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 423:
+		var dest ObjectLocked
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON423 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
+		var dest QueryTimeout
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON504 = &dest
+
 	}
 
 	return response, nil
@@ -17648,6 +17759,20 @@ func ParseGetTablesDescribeBloatResponse(rsp *http.Response) (*GetTablesDescribe
 		}
 		response.JSON200 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 423:
+		var dest ObjectLocked
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON423 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
+		var dest QueryTimeout
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON504 = &dest
+
 	}
 
 	return response, nil
@@ -17673,6 +17798,20 @@ func ParseGetTablesDescribePartitionsResponse(rsp *http.Response) (*GetTablesDes
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 423:
+		var dest ObjectLocked
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON423 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
+		var dest QueryTimeout
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON504 = &dest
 
 	}
 

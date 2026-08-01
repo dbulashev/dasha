@@ -342,14 +342,20 @@ services:
     # Set SPIKE_GENERATOR=off to disable the built-in periodic activity spiker
     # (keeps the steady baseline) for a clean controlled test via spike-test.sh:
     #   SPIKE_GENERATOR=off docker compose -f demo/docker-compose.yaml up -d --force-recreate workload-generator
+    # LOCK_TABLE_GENERATOR=off keeps locked_table_demo readable at all times
+    # (the periodic ACCESS EXCLUSIVE lock is what makes "Describe table" return
+    # 423 while it is held).
     environment:
       SPIKE_GENERATOR: "${SPIKE_GENERATOR:-on}"
+      LOCK_TABLE_GENERATOR: "${LOCK_TABLE_GENERATOR:-on}"
     volumes:
       - ./scripts/workload-generator.sh:/workload-generator.sh:ro
     depends_on:
       pg18-master:
         condition: service_healthy
       pg17-master:
+        condition: service_healthy
+      pg18-standalone:
         condition: service_healthy
     networks:
       - dasha-demo

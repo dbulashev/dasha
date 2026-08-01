@@ -18,7 +18,7 @@ import { fmtMs, pickTimeScale, fmtScaled } from '@/utils/format'
 
 ChartJS.register(LinearScale, PointElement, Tooltip)
 
-const { clusterName, hostName } = useClusterInfo()
+const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
 const { onError } = useViewError()
 
@@ -29,8 +29,11 @@ const { items, loading } = useApiLoader<QueryReport[]>(
   () => getQueriesReport({
     cluster_name: clusterName.value!,
     instance: hostName.value!,
+    database: databaseName.value ?? undefined,
   }),
   {
+    // databaseName is sent, but is not a dep: pg_stat_statements is
+    // instance-wide, so switching database would refetch the same numbers.
     deps: [clusterName, hostName],
     guard: () => !!clusterName.value && !!hostName.value,
     onError,

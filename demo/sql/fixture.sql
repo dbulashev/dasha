@@ -258,6 +258,20 @@ INSERT INTO hot_update_demo (counter, status)
 SELECT i % 1000, (ARRAY['active','idle','busy'])[1 + i % 3]
 FROM generate_series(1, 10000) i;
 
+-- Table kept under an ACCESS EXCLUSIVE lock by the workload generator, so
+-- "Describe table" hits lock_timeout and the API answers 423 instead of 500.
+-- Nothing else touches it — the lock must not stall the rest of the workload.
+CREATE TABLE locked_table_demo (
+    id serial PRIMARY KEY,
+    payload text NOT NULL,
+    updated_at timestamptz DEFAULT now()
+);
+
+INSERT INTO locked_table_demo (payload)
+SELECT repeat('locked row ', 10) || i FROM generate_series(1, 5000) i;
+
+CREATE INDEX idx_locked_table_demo_updated ON locked_table_demo (updated_at);
+
 -- Materialized view for row estimate on matview
 CREATE MATERIALIZED VIEW mv_order_summary AS
 SELECT

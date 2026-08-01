@@ -161,6 +161,7 @@ import type {
   MaintenanceTransactionIdDanger,
   MaintenanceVacuumProgress,
   NotFoundResponse,
+  ObjectLockedResponse,
   PersonalAccessToken,
   PersonalAccessTokenCreate,
   PersonalAccessTokenCreated,
@@ -178,6 +179,7 @@ import type {
   QueryReport,
   QueryRunning,
   QueryStatsStatus,
+  QueryTimeoutResponse,
   QueryTop10ByTime,
   QueryTop10ByWal,
   QueryTop10Chart,
@@ -5180,10 +5182,24 @@ export type getTablesDescribeResponse404 = {
   status: 404
 }
 
+export type getTablesDescribeResponse423 = {
+  data: ObjectLockedResponse
+  status: 423
+}
+
+export type getTablesDescribeResponse504 = {
+  data: QueryTimeoutResponse
+  status: 504
+}
+
 export type getTablesDescribeResponseSuccess = getTablesDescribeResponse200 & {
   headers: Headers
 }
-export type getTablesDescribeResponseError = getTablesDescribeResponse404 & {
+export type getTablesDescribeResponseError = (
+  | getTablesDescribeResponse404
+  | getTablesDescribeResponse423
+  | getTablesDescribeResponse504
+) & {
   headers: Headers
 }
 
@@ -5223,7 +5239,7 @@ export const getGetTablesDescribeQueryKey = (params?: MaybeRef<GetTablesDescribe
 
 export const getGetTablesDescribeQueryOptions = <
   TData = Awaited<ReturnType<typeof getTablesDescribe>>,
-  TError = NotFoundResponse,
+  TError = NotFoundResponse | ObjectLockedResponse | QueryTimeoutResponse,
 >(
   params: MaybeRef<GetTablesDescribeParams>,
   options?: {
@@ -5248,11 +5264,14 @@ export const getGetTablesDescribeQueryOptions = <
 export type GetTablesDescribeQueryResult = NonNullable<
   Awaited<ReturnType<typeof getTablesDescribe>>
 >
-export type GetTablesDescribeQueryError = NotFoundResponse
+export type GetTablesDescribeQueryError =
+  | NotFoundResponse
+  | ObjectLockedResponse
+  | QueryTimeoutResponse
 
 export function useGetTablesDescribe<
   TData = Awaited<ReturnType<typeof getTablesDescribe>>,
-  TError = NotFoundResponse,
+  TError = NotFoundResponse | ObjectLockedResponse | QueryTimeoutResponse,
 >(
   params: MaybeRef<GetTablesDescribeParams>,
   options?: {
@@ -5279,10 +5298,24 @@ export type getTablesDescribeBloatResponse404 = {
   status: 404
 }
 
+export type getTablesDescribeBloatResponse423 = {
+  data: ObjectLockedResponse
+  status: 423
+}
+
+export type getTablesDescribeBloatResponse504 = {
+  data: QueryTimeoutResponse
+  status: 504
+}
+
 export type getTablesDescribeBloatResponseSuccess = getTablesDescribeBloatResponse200 & {
   headers: Headers
 }
-export type getTablesDescribeBloatResponseError = getTablesDescribeBloatResponse404 & {
+export type getTablesDescribeBloatResponseError = (
+  | getTablesDescribeBloatResponse404
+  | getTablesDescribeBloatResponse423
+  | getTablesDescribeBloatResponse504
+) & {
   headers: Headers
 }
 
@@ -5324,7 +5357,7 @@ export const getGetTablesDescribeBloatQueryKey = (
 
 export const getGetTablesDescribeBloatQueryOptions = <
   TData = Awaited<ReturnType<typeof getTablesDescribeBloat>>,
-  TError = NotFoundResponse,
+  TError = NotFoundResponse | ObjectLockedResponse | QueryTimeoutResponse,
 >(
   params: MaybeRef<GetTablesDescribeBloatParams>,
   options?: {
@@ -5349,11 +5382,14 @@ export const getGetTablesDescribeBloatQueryOptions = <
 export type GetTablesDescribeBloatQueryResult = NonNullable<
   Awaited<ReturnType<typeof getTablesDescribeBloat>>
 >
-export type GetTablesDescribeBloatQueryError = NotFoundResponse
+export type GetTablesDescribeBloatQueryError =
+  | NotFoundResponse
+  | ObjectLockedResponse
+  | QueryTimeoutResponse
 
 export function useGetTablesDescribeBloat<
   TData = Awaited<ReturnType<typeof getTablesDescribeBloat>>,
-  TError = NotFoundResponse,
+  TError = NotFoundResponse | ObjectLockedResponse | QueryTimeoutResponse,
 >(
   params: MaybeRef<GetTablesDescribeBloatParams>,
   options?: {
@@ -5694,10 +5730,24 @@ export type getTablesDescribePartitionsResponse404 = {
   status: 404
 }
 
+export type getTablesDescribePartitionsResponse423 = {
+  data: ObjectLockedResponse
+  status: 423
+}
+
+export type getTablesDescribePartitionsResponse504 = {
+  data: QueryTimeoutResponse
+  status: 504
+}
+
 export type getTablesDescribePartitionsResponseSuccess = getTablesDescribePartitionsResponse200 & {
   headers: Headers
 }
-export type getTablesDescribePartitionsResponseError = getTablesDescribePartitionsResponse404 & {
+export type getTablesDescribePartitionsResponseError = (
+  | getTablesDescribePartitionsResponse404
+  | getTablesDescribePartitionsResponse423
+  | getTablesDescribePartitionsResponse504
+) & {
   headers: Headers
 }
 
@@ -5742,7 +5792,7 @@ export const getGetTablesDescribePartitionsQueryKey = (
 
 export const getGetTablesDescribePartitionsQueryOptions = <
   TData = Awaited<ReturnType<typeof getTablesDescribePartitions>>,
-  TError = NotFoundResponse,
+  TError = NotFoundResponse | ObjectLockedResponse | QueryTimeoutResponse,
 >(
   params: MaybeRef<GetTablesDescribePartitionsParams>,
   options?: {
@@ -5768,11 +5818,14 @@ export const getGetTablesDescribePartitionsQueryOptions = <
 export type GetTablesDescribePartitionsQueryResult = NonNullable<
   Awaited<ReturnType<typeof getTablesDescribePartitions>>
 >
-export type GetTablesDescribePartitionsQueryError = NotFoundResponse
+export type GetTablesDescribePartitionsQueryError =
+  | NotFoundResponse
+  | ObjectLockedResponse
+  | QueryTimeoutResponse
 
 export function useGetTablesDescribePartitions<
   TData = Awaited<ReturnType<typeof getTablesDescribePartitions>>,
-  TError = NotFoundResponse,
+  TError = NotFoundResponse | ObjectLockedResponse | QueryTimeoutResponse,
 >(
   params: MaybeRef<GetTablesDescribePartitionsParams>,
   options?: {

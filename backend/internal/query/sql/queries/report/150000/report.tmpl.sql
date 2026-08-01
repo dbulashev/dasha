@@ -25,7 +25,7 @@ WITH stst as (
         sum(wal_records) AS wal_records,
         sum(wal_fpi) AS wal_fpi,
         sum(wal_bytes) AS wal_bytes
-    FROM pg_stat_statements pss
+    FROM {{ .Pgss }} pss
     JOIN pg_catalog.pg_roles r ON r.oid = pss.userid
     WHERE r.rolname != ALL($1::text[])
     GROUP BY queryid

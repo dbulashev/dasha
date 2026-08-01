@@ -60,8 +60,8 @@ func (p *PgxPool) GetQueriesRunning(
 	return ret, nil
 }
 
-func (p *PgxPool) GetQueriesTop10ByTime(ctx context.Context, clusterName, instanceName string) ([]dto.QueryTop10ByTime, error) {
-	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, "")
+func (p *PgxPool) GetQueriesTop10ByTime(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.QueryTop10ByTime, error) {
+	pool, err := p.pgssPool(ctx, clusterName, instanceName, databaseName)
 	if err != nil {
 		return nil, fmt.Errorf("GetQueriesTop10ByTime | %w", err)
 	}
@@ -83,8 +83,8 @@ func (p *PgxPool) GetQueriesTop10ByTime(ctx context.Context, clusterName, instan
 	return ret, nil
 }
 
-func (p *PgxPool) GetQueriesTop10ByWal(ctx context.Context, clusterName, instanceName string) ([]dto.QueryTop10ByWal, error) {
-	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, "")
+func (p *PgxPool) GetQueriesTop10ByWal(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.QueryTop10ByWal, error) {
+	pool, err := p.pgssPool(ctx, clusterName, instanceName, databaseName)
 	if err != nil {
 		return nil, fmt.Errorf("GetQueriesTop10ByWal | %w", err)
 	}
@@ -106,8 +106,8 @@ func (p *PgxPool) GetQueriesTop10ByWal(ctx context.Context, clusterName, instanc
 	return ret, nil
 }
 
-func (p *PgxPool) GetQueriesTop10Chart(ctx context.Context, clusterName, instanceName string) ([]dto.QueryTop10ChartItem, error) {
-	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, "")
+func (p *PgxPool) GetQueriesTop10Chart(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.QueryTop10ChartItem, error) {
+	pool, err := p.pgssPool(ctx, clusterName, instanceName, databaseName)
 	if err != nil {
 		return nil, fmt.Errorf("GetQueriesTop10Chart | %w", err)
 	}
@@ -129,8 +129,14 @@ func (p *PgxPool) GetQueriesTop10Chart(ctx context.Context, clusterName, instanc
 	return ret, nil
 }
 
-func (p *PgxPool) GetQueriesReport(ctx context.Context, clusterName, instanceName string, excludeUsers []string) ([]dto.QueryReport, error) {
-	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, "")
+func (p *PgxPool) GetQueriesReport(
+	ctx context.Context,
+	clusterName,
+	instanceName,
+	databaseName string,
+	excludeUsers []string,
+) ([]dto.QueryReport, error) {
+	pool, err := p.pgssPool(ctx, clusterName, instanceName, databaseName)
 	if err != nil {
 		return nil, fmt.Errorf("GetQueriesReport | %w", err)
 	}
@@ -283,7 +289,7 @@ func (p *PgxPool) getQueriesTop10ByTime(ctx context.Context, serverVersion int, 
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	qStr, err := query.Get(serverVersion, enums.QueryQueriesTop10ByTime, nil)
+	qStr, err := query.Get(serverVersion, enums.QueryQueriesTop10ByTime, p.pgssTemplateData(ctx, pool))
 	if err != nil {
 		return nil, fmt.Errorf("getQueriesTop10ByTime | %w", err)
 	}
@@ -329,7 +335,7 @@ func (p *PgxPool) getQueriesTop10ByWal(ctx context.Context, serverVersion int, p
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	qStr, err := query.Get(serverVersion, enums.QueryQueriesTop10ByWal, nil)
+	qStr, err := query.Get(serverVersion, enums.QueryQueriesTop10ByWal, p.pgssTemplateData(ctx, pool))
 	if err != nil {
 		return nil, fmt.Errorf("getQueriesTop10ByWal | %w", err)
 	}
@@ -372,7 +378,7 @@ func (p *PgxPool) getQueriesTop10Chart(ctx context.Context, serverVersion int, p
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	qStr, err := query.Get(serverVersion, enums.QueryQueriesTop10Chart, nil)
+	qStr, err := query.Get(serverVersion, enums.QueryQueriesTop10Chart, p.pgssTemplateData(ctx, pool))
 	if err != nil {
 		return nil, fmt.Errorf("getQueriesTop10Chart | %w", err)
 	}
@@ -419,7 +425,7 @@ func (p *PgxPool) getQueriesReport( //nolint:gocyclo
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	qStr, err := query.Get(serverVersion, enums.QueryQueriesReport, nil)
+	qStr, err := query.Get(serverVersion, enums.QueryQueriesReport, p.pgssTemplateData(ctx, pool))
 	if err != nil {
 		return nil, fmt.Errorf("getQueriesReport | %w", err)
 	}
@@ -598,7 +604,10 @@ func (p *PgxPool) getQueriesReport( //nolint:gocyclo
 }
 
 func (p *PgxPool) ResetQueryStats(ctx context.Context, clusterName, instanceName, databaseName string) error {
-	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
+	// The reset function drops the instance-wide statistics wherever it is
+	// called from, so it has to be called where the extension exists — the same
+	// database the statistics are read through.
+	pool, err := p.pgssPool(ctx, clusterName, instanceName, databaseName)
 	if err != nil {
 		return fmt.Errorf("ResetQueryStats | %w", err)
 	}
@@ -606,7 +615,7 @@ func (p *PgxPool) ResetQueryStats(ctx context.Context, clusterName, instanceName
 	queryCtx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	fn := p.pgssResetFunction()
+	fn := p.pgssResetFunction(queryCtx, pool)
 
 	_, err = pool.Exec(queryCtx, "SELECT "+fn+"()")
 	if err != nil {

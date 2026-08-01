@@ -92,25 +92,27 @@ func (p *PgxPool) getTablesDescribeMetadata(
 		return nil, fmt.Errorf("query.Get | %w", err)
 	}
 
-	row := pool.QueryRow(ctx, qStr, schemaName, tableName)
-
 	var ret dto.TableDescribe
 
-	err = row.Scan(
-		&ret.Schema,
-		&ret.TableName,
-		&ret.TableType,
-		&ret.AccessMethod,
-		&ret.Tablespace,
-		&ret.Options,
-		&ret.SizeTotal,
-		&ret.SizeTable,
-		&ret.SizeToast,
-		&ret.SizeIndexes,
-		&ret.EstimatedRows,
-		&ret.StatInfo,
-		&ret.PartitionOf,
-	)
+	// Reads the table size, which takes an ACCESS SHARE lock — hence the lock
+	// timeout: a table under DDL must report the lock, not a timeout.
+	err = p.withLockTimeout(ctx, pool, func(q querier) error {
+		return q.QueryRow(ctx, qStr, schemaName, tableName).Scan(
+			&ret.Schema,
+			&ret.TableName,
+			&ret.TableType,
+			&ret.AccessMethod,
+			&ret.Tablespace,
+			&ret.Options,
+			&ret.SizeTotal,
+			&ret.SizeTable,
+			&ret.SizeToast,
+			&ret.SizeIndexes,
+			&ret.EstimatedRows,
+			&ret.StatInfo,
+			&ret.PartitionOf,
+		)
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil //nolint:nilnil
@@ -187,34 +189,39 @@ func (p *PgxPool) getTablesDescribeIndexes(
 		return nil, fmt.Errorf("query.Get | %w", err)
 	}
 
-	rows, err := pool.Query(ctx, qStr, schemaName, tableName)
-	if err != nil {
-		return nil, fmt.Errorf("query | %w", err)
-	}
-
 	ret := make([]dto.TableDescribeIndex, 0, 10) //nolint:mnd
 
-	for rows.Next() {
-		var idx dto.TableDescribeIndex
-
-		err = rows.Scan(
-			&idx.Name,
-			&idx.Definition,
-			&idx.IsPrimary,
-			&idx.IsUnique,
-			&idx.IsValid,
-			&idx.SizeBytes,
-			&idx.Size,
-		)
+	// Index sizes take an ACCESS SHARE lock on each index (see metadata above).
+	err = p.withLockTimeout(ctx, pool, func(q querier) error {
+		rows, err := q.Query(ctx, qStr, schemaName, tableName)
 		if err != nil {
-			return nil, fmt.Errorf("scan | %w", err)
+			return fmt.Errorf("query | %w", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var idx dto.TableDescribeIndex
+
+			err = rows.Scan(
+				&idx.Name,
+				&idx.Definition,
+				&idx.IsPrimary,
+				&idx.IsUnique,
+				&idx.IsValid,
+				&idx.SizeBytes,
+				&idx.Size,
+			)
+			if err != nil {
+				return fmt.Errorf("scan | %w", err)
+			}
+
+			ret = append(ret, idx)
 		}
 
-		ret = append(ret, idx)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("rows | %w", err)
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, fmt.Errorf("indexes | %w", err)
 	}
 
 	return ret, nil
@@ -409,28 +416,31 @@ func (p *PgxPool) getTablesDescribeBloat(
 	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 
-	qStr, err := query.Get(serverVersion, enums.QueryTablesDescribeBloat, nil)
+	qStr, err := query.Get(serverVersion, enums.QueryTablesDescribeBloat, p.pgstattupleTemplateData(ctx, pool))
 	if err != nil {
 		return nil, fmt.Errorf("query.Get | %w", err)
 	}
 
 	var ret dto.TableDescribeBloat
 
-	err = pool.QueryRow(ctx, qStr, schemaName, tableName).Scan(
-		&ret.TableLen,
-		&ret.TableLenPretty,
-		&ret.ApproxTupleCount,
-		&ret.ApproxTupleLen,
-		&ret.ApproxTupleLenPretty,
-		&ret.ApproxTuplePercent,
-		&ret.DeadTupleCount,
-		&ret.DeadTupleLen,
-		&ret.DeadTupleLenPretty,
-		&ret.DeadTuplePercent,
-		&ret.ApproxFreeSpace,
-		&ret.ApproxFreeSpacePretty,
-		&ret.ApproxFreePercent,
-	)
+	// pgstattuple_approx scans the table under an ACCESS SHARE lock.
+	err = p.withLockTimeout(ctx, pool, func(q querier) error {
+		return q.QueryRow(ctx, qStr, schemaName, tableName).Scan(
+			&ret.TableLen,
+			&ret.TableLenPretty,
+			&ret.ApproxTupleCount,
+			&ret.ApproxTupleLen,
+			&ret.ApproxTupleLenPretty,
+			&ret.ApproxTuplePercent,
+			&ret.DeadTupleCount,
+			&ret.DeadTupleLen,
+			&ret.DeadTupleLenPretty,
+			&ret.DeadTuplePercent,
+			&ret.ApproxFreeSpace,
+			&ret.ApproxFreeSpacePretty,
+			&ret.ApproxFreePercent,
+		)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("scan | %w", err)
 	}
@@ -475,32 +485,37 @@ func (p *PgxPool) getTablesDescribePartitions(
 		return nil, fmt.Errorf("query.Get | %w", err)
 	}
 
-	rows, err := pool.Query(ctx, qStr, schemaName, tableName, limit, offset)
-	if err != nil {
-		return nil, fmt.Errorf("query | %w", err)
-	}
-
 	ret := make([]dto.TableDescribePartition, 0, limit)
 
-	for rows.Next() {
-		var p dto.TableDescribePartition
-
-		err = rows.Scan(
-			&p.Schema,
-			&p.Name,
-			&p.PartitionExpression,
-			&p.SizeBytes,
-			&p.Size,
-		)
+	// Partition sizes take an ACCESS SHARE lock on each partition.
+	err = p.withLockTimeout(ctx, pool, func(q querier) error {
+		rows, err := q.Query(ctx, qStr, schemaName, tableName, limit, offset)
 		if err != nil {
-			return nil, fmt.Errorf("scan | %w", err)
+			return fmt.Errorf("query | %w", err)
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var part dto.TableDescribePartition
+
+			err = rows.Scan(
+				&part.Schema,
+				&part.Name,
+				&part.PartitionExpression,
+				&part.SizeBytes,
+				&part.Size,
+			)
+			if err != nil {
+				return fmt.Errorf("scan | %w", err)
+			}
+
+			ret = append(ret, part)
 		}
 
-		ret = append(ret, p)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("rows | %w", err)
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, fmt.Errorf("partitions | %w", err)
 	}
 
 	return ret, nil

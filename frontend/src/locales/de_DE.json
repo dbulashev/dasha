@@ -88,6 +88,8 @@
     "revoked": "Widerrufen",
     "adminMaxDays": "Admin-Token laufen nach spätestens {days} Tagen ab"
   },
+  "errorQueryTimeout": "Die Anfrage hat das Zeitlimit überschritten: Die Datenbank oder ein anderer abgefragter Dienst hat nicht rechtzeitig geantwortet. Möglicherweise ist die Instanz überlastet oder die Anfrage zu aufwendig.",
+  "errorObjectLocked": "Eine Sperre einer anderen Transaktion verhindert das Lesen dieser Tabelle — meist ein laufendes ALTER TABLE, VACUUM FULL, REINDEX oder eine offen gelassene Transaktion. Dasha wartet nicht darauf; versuchen Sie es später erneut.",
   "pgssNotInstalled": "Die Erweiterung pg_stat_statements ist in dieser Datenbank nicht installiert. Abfragestatistiken (Top 10, Bericht) sind nicht verfügbar.",
   "pgssNotEnabled": "Die Erweiterung pg_stat_statements ist installiert, aber nicht aktiviert. Fügen Sie sie zu shared_preload_libraries hinzu und starten Sie PostgreSQL neu.",
   "pgssNotReadable": "Die Erweiterung pg_stat_statements ist installiert und aktiviert, aber der aktuelle Benutzer hat keinen Zugriff auf die Daten.",

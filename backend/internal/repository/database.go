@@ -133,7 +133,9 @@ func (p *PgxPool) getStatsResetTime(ctx context.Context, serverVersion int, pool
 }
 
 func (p *PgxPool) GetPgssStatsResetTime(ctx context.Context, clusterName, instanceName, databaseName string) (*dto.StatsResetTime, error) {
-	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
+	// pg_stat_statements_info belongs to the extension, so it has to be read
+	// through the database that holds it — see pgssPool.
+	pool, err := p.pgssPool(ctx, clusterName, instanceName, databaseName)
 	if err != nil {
 		return nil, fmt.Errorf("GetPgssStatsResetTime | %w", err)
 	}
@@ -191,7 +193,7 @@ func (p *PgxPool) getPgssStatsResetTime(ctx context.Context, serverVersion int, 
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	qStr, err := query.Get(serverVersion, enums.QueryDatabasePgssStatsResetTime, nil)
+	qStr, err := query.Get(serverVersion, enums.QueryDatabasePgssStatsResetTime, p.pgssTemplateData(ctx, pool))
 	if err != nil {
 		return nil, fmt.Errorf("getPgssStatsResetTime | %w", err)
 	}

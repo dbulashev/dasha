@@ -3,7 +3,9 @@
 package repository
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -437,4 +439,71 @@ func TestGetTablesSearchLimit(t *testing.T) {
 	result, err := p.getTablesSearch(ctx, vNum, pool, "public", "", 2)
 	require.NoError(t, err)
 	assert.LessOrEqual(t, len(result), 2, "should respect limit")
+}
+
+// TestGetTablesDescribeLockTimeout holds the table the way ALTER TABLE or
+// VACUUM FULL would: the description must come back as a lock, quickly, instead
+// of waiting out the query deadline and surfacing as an opaque failure.
+func TestGetTablesDescribeLockTimeout(t *testing.T) {
+	t.Parallel()
+	pool := testinfra.IsolatePool(t)
+	p := NewTestPgxPool(pool, zap.NewNop())
+	ctx := t.Context()
+
+	vNum, err := p.getServerVersionNum(ctx, pool)
+	require.NoError(t, err)
+
+	blocker, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+
+	defer blocker.Release()
+
+	tx, err := blocker.Begin(ctx)
+	require.NoError(t, err)
+
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+
+	_, err = tx.Exec(ctx, "LOCK TABLE orders IN ACCESS EXCLUSIVE MODE")
+	require.NoError(t, err)
+
+	// The table lock does not extend to its indexes: pg_relation_size() opens
+	// the index on its own, so reading index sizes would sail past a lock held
+	// on the table alone. REINDEX takes the indexes too, and holds them until
+	// this transaction ends — the state a maintenance window really leaves.
+	_, err = tx.Exec(ctx, "REINDEX TABLE orders")
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		name string
+		call func() error
+	}{
+		{"metadata", func() error {
+			_, err := p.getTablesDescribeMetadata(ctx, vNum, pool, "public", "orders")
+
+			return err
+		}},
+		{"indexes", func() error {
+			_, err := p.getTablesDescribeIndexes(ctx, vNum, pool, "public", "orders")
+
+			return err
+		}},
+		{"bloat", func() error {
+			_, err := p.getTablesDescribeBloat(ctx, vNum, pool, "public", "orders")
+
+			return err
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			start := time.Now()
+			err := tc.call()
+
+			require.Error(t, err)
+			assert.True(t, IsLockTimeout(err), "expected SQLSTATE 55P03, got %v", err)
+			assert.False(t, IsTimeout(err), "a lock must not be reported as a deadline")
+			// Not just below queryTimeout: the answer is only useful if it beats
+			// the timeouts API consumers allow, which start at 5s.
+			assert.Less(t, time.Since(start), 5*time.Second,
+				"must give up on the lock before a consumer gives up on us")
+		})
+	}
 }
