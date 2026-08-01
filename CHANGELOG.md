@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.5.1
 
 ### Features
 - **`extraEnv` / `extraEnvFrom` in the Helm chart** for the backend and autosnapshot containers: environment variables from Secrets the chart does not manage. `extraEnv` binds one Secret key to a variable of any name (e.g. a Dex-issued `clientSecret` to `DASHA_OIDC_SECRET`), `extraEnvFrom` mounts whole Secrets/ConfigMaps beyond the chart's own single env Secret.
