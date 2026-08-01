@@ -29,7 +29,7 @@
     "vue-chartjs": "^5.3.4",
     "vue-i18n": "^11.4.6",
     "vue-router": "^5.1.0",
-    "vuetify": "^3.12.9"
+    "vuetify": "^3.13.0"
   },
   "devDependencies": {
     "@mdi/font": "^7.4.47",
