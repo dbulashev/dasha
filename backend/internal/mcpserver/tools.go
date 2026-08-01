@@ -48,6 +48,14 @@ type hotArgs struct {
 	Limit    int    `json:"limit,omitempty" jsonschema:"Max objects to return, hottest first (default 30)"`
 }
 
+type schemaLintArgs struct {
+	Cluster  string `json:"cluster" jsonschema:"Dasha cluster name"`
+	Instance string `json:"instance" jsonschema:"Dasha instance / host name (must be the primary)"`
+	Database string `json:"database" jsonschema:"Database whose schema to check"`
+	Level    string `json:"level,omitempty" jsonschema:"Keep only findings of this level: 'error', 'warning' or 'notice'. Omit for all"`
+	Limit    int    `json:"limit,omitempty" jsonschema:"Max findings to return, worst level first (default 100)"`
+}
+
 type healthDetailsArgs struct {
 	Cluster  string `json:"cluster" jsonschema:"Dasha cluster name"`
 	Instance string `json:"instance" jsonschema:"Dasha instance / host name"`
@@ -344,6 +352,44 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 		Description: "List the largest tables in a database by total size.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a dbArgs) (*mcp.CallToolResult, any, error) {
 		return jsonResult(c.TopTables(ctx, a.Cluster, a.Instance, a.Database))
+	})
+
+	addTool(s, &mcp.Tool{
+		Name: "schema_lint",
+		Description: "Structural defects of one database's schema, from the system catalog only — no user data " +
+			"is read, which is what makes this safe to run on production. Answers what is wrong with the " +
+			"STRUCTURE, not what is happening now; the result changes on deploys, not by the second. Each " +
+			"finding carries a code, a level ('error', 'warning', 'notice'), the object and the numbers in " +
+			"params — build the wording yourself, the API ships no prose. " +
+			"ALWAYS read `skipped` before concluding anything: a check listed there did NOT run (no privilege, " +
+			"unsupported version, timeout), so its absence from `findings` proves nothing — say so instead of " +
+			"reporting the schema as clean. `truncated: true` means a check hit its row cap and the counts are " +
+			"a lower bound. When params.partitions is set, the finding is already rolled up to the parent table " +
+			"and covers that many partitions — address the parent, never a single partition. " +
+			"Reading the findings: 'no_primary_key' is not an instruction to add a key on the spot — ask what " +
+			"the table is for and whether logical replication or pg_repack is in the picture, and note that a " +
+			"unique index over a nullable column (params.unique_nullable) cannot serve as REPLICA IDENTITY. " +
+			"'sequence_exhaustion' with params.owned_column_type = 'integer' needs the COLUMN type changed too, " +
+			"which rewrites the table and needs a maintenance window — recommending only ALTER SEQUENCE there " +
+			"is wrong. 'uuid_in_non_uuid_type' is a heuristic on column name and length, not a fact: say it " +
+			"needs verifying. Runs on the primary only; on a standby the endpoint has nothing to fix.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, a schemaLintArgs) (*mcp.CallToolResult, any, error) {
+		if a.Level != "" && a.Level != "error" && a.Level != "warning" && a.Level != "notice" {
+			return errResult("level must be 'error', 'warning' or 'notice'"), nil, nil
+		}
+
+		return jsonResult(c.SchemaLint(ctx, a.Cluster, a.Instance, a.Database, a.Level, a.Limit))
+	})
+
+	addTool(s, &mcp.Tool{
+		Name: "schema_lint_summary",
+		Description: "Finding counts per level for every database of an instance — use it to pick which " +
+			"database deserves a full schema_lint call, since schema defects live in a database, not in a " +
+			"cluster. Zero counts mean a clean database ONLY when skipped=0 and failed=false: skipped counts " +
+			"checks that did not run there, and failed=true means the database could not be read at all. " +
+			"The sweep is capped in the number of databases, so a very large instance may be reported only in part.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, a instanceArgs) (*mcp.CallToolResult, any, error) {
+		return jsonResult(c.SchemaLintSummary(ctx, a.Cluster, a.Instance))
 	})
 
 	addTool(s, &mcp.Tool{

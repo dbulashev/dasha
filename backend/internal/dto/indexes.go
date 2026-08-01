@@ -13,8 +13,9 @@ type IndexBloat struct {
 }
 
 type IndexBtreeOnArray struct {
-	Table string
-	Index string
+	Schema string
+	Table  string
+	Index  string
 }
 
 type IndexCaching struct {
@@ -44,6 +45,7 @@ type IndexMissing struct {
 }
 
 type IndexSimilar1 struct {
+	Schema                  string
 	Table                   string
 	I1UniqueIndexName       string
 	I2IndexName             string
@@ -54,12 +56,14 @@ type IndexSimilar1 struct {
 }
 
 type IndexSimilar2 struct {
+	Schema  string
 	Table   string
 	FkName  string
 	FkName2 string
 }
 
 type IndexSimilar3 struct {
+	Schema                    string
 	Table                     string
 	I1IndexName               string
 	I2IndexName               string

@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-var kbResourceNames = []string{"health-rules", "wait-events", "workflow"}
+var kbResourceNames = []string{"health-rules", "schema-checks", "wait-events", "workflow"}
 
 func TestKBHandler_ServesMarkdown(t *testing.T) {
 	t.Parallel()

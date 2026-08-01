@@ -27,6 +27,7 @@ WITH
         WHERE c.contype IN ('f')
     )
 SELECT
+    n_from.nspname AS schema_name,
     c.fk_name,
     r_from.relname,
     c.rel_att_names
@@ -43,4 +44,6 @@ FROM (
          GROUP BY 1, 2, 3
      ) AS c
          INNER JOIN pg_catalog.pg_class AS r_from
-                    ON r_from.oid = c.conrelid;
+                    ON r_from.oid = c.conrelid
+         INNER JOIN pg_catalog.pg_namespace AS n_from
+                    ON n_from.oid = r_from.relnamespace;

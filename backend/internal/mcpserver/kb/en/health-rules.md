@@ -7,7 +7,7 @@ Score bands: ≥80 healthy, 40–79 degraded, <40 critical.
 
 **Critical ceiling:** one catastrophic condition clamps the whole score to ≤30
 regardless of other categories: XID age past the failsafe zone, any checksum
-failure, a sequence ≥95% exhausted, or host disk ≥90% full.
+failure, a sequence with under 5% of its values left, or host disk ≥90% full.
 
 **Key XID constants:** 150M — aggressive freezing starts
 (vacuum_freeze_table_age); 200M — forced anti-wraparound autovacuum
@@ -98,8 +98,14 @@ Any data-page checksum failure. Always HIGH and clamps the score ≤30:
 data corruption. Check disks and backups immediately.
 
 ### sequence_exhaustion
-Worst sequence usage vs its type limit (e.g. int4 PK). LOW ≥75%, MED ≥85%,
-HIGH ≥95% (≥95% also clamps score ≤30). Plan bigint migration before writes stop.
+Worst sequence usage vs the limit that actually applies (an int4 owner column
+caps a bigint sequence at 2147483647). LOW below 20% free, MED below 10%, HIGH
+below 5% (which also clamps the score to ≤30) — the same points, and the same
+boundaries, where `schema_lint` calls it notice/warning/error, and they move
+together when sequence_thresholds is configured. Fed by metrics when a datasource is configured, by the schema-lint catalog
+sweep otherwise. Widen the sequence, and the owning column too when it is int4:
+that part rewrites the table and needs a window. See `schema_lint` for the
+sequences behind the number.
 
 ### host_disk_space
 Fullest host filesystem (metrics mode only). LOW ≥70%, MED ≥80%, HIGH ≥90%

@@ -106,6 +106,8 @@ import type {
   GetReplicationConfigParams,
   GetReplicationSlotsParams,
   GetReplicationStatusParams,
+  GetSchemaLintParams,
+  GetSchemaLintSummaryParams,
   GetSettingsAnalyzeParams,
   GetSnapshotsParams,
   GetStatsResetTimeParams,
@@ -187,6 +189,8 @@ import type {
   ReplicationSlot,
   ReplicationStatus,
   RowEstimate,
+  SchemaLintDatabaseSummary,
+  SchemaLintReport,
   SettingsNotification,
   SnapshotCreated,
   SnapshotListItem,
@@ -10734,6 +10738,227 @@ export function useGetAutosnapshotSummary<
   request?: SecondParameter<typeof customFetch>
 }): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetAutosnapshotSummaryQueryOptions(options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Reads the system catalog only — never user data — and returns defects that runtime pages cannot show: a sequence about to run out of values, a table without a primary key before logical replication is turned on, an unlogged relation nobody remembers creating, a schema PUBLIC may create objects in. A check that could not run is reported in `skipped` with its reason rather than being left out, because a check that did not run must not read as a clean result. Findings on partitions are rolled up to the root table. Results are cached briefly; pass refresh=true after fixing something.
+ * @summary Structural defects of one database's schema
+ */
+export type getSchemaLintResponse200 = {
+  data: SchemaLintReport
+  status: 200
+}
+
+export type getSchemaLintResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getSchemaLintResponse504 = {
+  data: QueryTimeoutResponse
+  status: 504
+}
+
+export type getSchemaLintResponseSuccess = getSchemaLintResponse200 & {
+  headers: Headers
+}
+export type getSchemaLintResponseError = (getSchemaLintResponse404 | getSchemaLintResponse504) & {
+  headers: Headers
+}
+
+export type getSchemaLintResponse = getSchemaLintResponseSuccess | getSchemaLintResponseError
+
+export const getGetSchemaLintUrl = (params: GetSchemaLintParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0 ? `/api/schema-lint?${stringifiedParams}` : `/api/schema-lint`
+}
+
+export const getSchemaLint = async (
+  params: GetSchemaLintParams,
+  options?: RequestInit,
+): Promise<getSchemaLintResponse> => {
+  return customFetch<getSchemaLintResponse>(getGetSchemaLintUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetSchemaLintQueryKey = (params?: MaybeRef<GetSchemaLintParams>) => {
+  return ['api', 'schema-lint', ...(params ? [params] : [])] as const
+}
+
+export const getGetSchemaLintQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSchemaLint>>,
+  TError = NotFoundResponse | QueryTimeoutResponse,
+>(
+  params: MaybeRef<GetSchemaLintParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getSchemaLint>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetSchemaLintQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSchemaLint>>> = ({ signal }) =>
+    getSchemaLint(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSchemaLint>>,
+    TError,
+    TData
+  >
+}
+
+export type GetSchemaLintQueryResult = NonNullable<Awaited<ReturnType<typeof getSchemaLint>>>
+export type GetSchemaLintQueryError = NotFoundResponse | QueryTimeoutResponse
+
+/**
+ * @summary Structural defects of one database's schema
+ */
+
+export function useGetSchemaLint<
+  TData = Awaited<ReturnType<typeof getSchemaLint>>,
+  TError = NotFoundResponse | QueryTimeoutResponse,
+>(
+  params: MaybeRef<GetSchemaLintParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getSchemaLint>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSchemaLintQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Schema defects live in a database, not in a cluster, so the report of the currently selected database does not answer what the instance as a whole looks like. Walks every configured database of the instance and returns the counts per level. The sweep is sequential, capped in the number of databases and time-bounded; a database that could not be read is marked failed rather than reported as having no findings. Reuses the same cache as the per-database report, so opening a database after the sweep costs nothing.
+ * @summary Per-database finding counts for one instance
+ */
+export type getSchemaLintSummaryResponse200 = {
+  data: SchemaLintDatabaseSummary[]
+  status: 200
+}
+
+export type getSchemaLintSummaryResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getSchemaLintSummaryResponse504 = {
+  data: QueryTimeoutResponse
+  status: 504
+}
+
+export type getSchemaLintSummaryResponseSuccess = getSchemaLintSummaryResponse200 & {
+  headers: Headers
+}
+export type getSchemaLintSummaryResponseError = (
+  | getSchemaLintSummaryResponse404
+  | getSchemaLintSummaryResponse504
+) & {
+  headers: Headers
+}
+
+export type getSchemaLintSummaryResponse =
+  | getSchemaLintSummaryResponseSuccess
+  | getSchemaLintSummaryResponseError
+
+export const getGetSchemaLintSummaryUrl = (params: GetSchemaLintSummaryParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/schema-lint/summary?${stringifiedParams}`
+    : `/api/schema-lint/summary`
+}
+
+export const getSchemaLintSummary = async (
+  params: GetSchemaLintSummaryParams,
+  options?: RequestInit,
+): Promise<getSchemaLintSummaryResponse> => {
+  return customFetch<getSchemaLintSummaryResponse>(getGetSchemaLintSummaryUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetSchemaLintSummaryQueryKey = (params?: MaybeRef<GetSchemaLintSummaryParams>) => {
+  return ['api', 'schema-lint', 'summary', ...(params ? [params] : [])] as const
+}
+
+export const getGetSchemaLintSummaryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSchemaLintSummary>>,
+  TError = NotFoundResponse | QueryTimeoutResponse,
+>(
+  params: MaybeRef<GetSchemaLintSummaryParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getSchemaLintSummary>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetSchemaLintSummaryQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSchemaLintSummary>>> = ({ signal }) =>
+    getSchemaLintSummary(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSchemaLintSummary>>,
+    TError,
+    TData
+  >
+}
+
+export type GetSchemaLintSummaryQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSchemaLintSummary>>
+>
+export type GetSchemaLintSummaryQueryError = NotFoundResponse | QueryTimeoutResponse
+
+/**
+ * @summary Per-database finding counts for one instance
+ */
+
+export function useGetSchemaLintSummary<
+  TData = Awaited<ReturnType<typeof getSchemaLintSummary>>,
+  TError = NotFoundResponse | QueryTimeoutResponse,
+>(
+  params: MaybeRef<GetSchemaLintSummaryParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getSchemaLintSummary>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSchemaLintSummaryQueryOptions(params, options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
 

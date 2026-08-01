@@ -96,6 +96,11 @@ const router = createRouter({
       component: () => import('../views/MaintenanceView.vue'),
     },
     {
+      path: '/schema-lint/:clustername?',
+      name: 'schema-lint',
+      component: () => import('../views/SchemaLintView.vue'),
+    },
+    {
       path: '/replication/:clustername?',
       name: 'replication',
       component: () => import('../views/ReplicationView.vue'),

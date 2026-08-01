@@ -2516,6 +2516,113 @@ paths:
         '501':
           description: Storage not configured
 
+  /api/schema-lint:
+    get:
+      operationId: getSchemaLint
+      summary: Structural defects of one database's schema
+      description: >-
+        Reads the system catalog only — never user data — and returns defects that
+        runtime pages cannot show: a sequence about to run out of values, a table
+        without a primary key before logical replication is turned on, an unlogged
+        relation nobody remembers creating, a schema PUBLIC may create objects in.
+        A check that could not run is reported in `skipped` with its reason rather
+        than being left out, because a check that did not run must not read as a
+        clean result. Findings on partitions are rolled up to the root table.
+        Results are cached briefly; pass refresh=true after fixing something.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+        - in: query
+          name: level
+          description: Keep only findings of this severity. The summary still counts every finding.
+          schema:
+            type: string
+            enum:
+              - error
+              - warning
+              - notice
+          required: false
+        - in: query
+          name: code
+          description: Keep only findings of these checks.
+          schema:
+            type: array
+            items:
+              type: string
+          required: false
+        - in: query
+          name: schema
+          description: Keep only findings in schemas whose name contains this substring, case-insensitively.
+          schema:
+            type: string
+          required: false
+        - in: query
+          name: object
+          description: Keep only findings on objects whose name contains this substring, case-insensitively.
+          schema:
+            type: string
+          required: false
+        - in: query
+          name: refresh
+          description: Recompute instead of answering from the cache.
+          schema:
+            type: boolean
+            default: false
+          required: false
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 100
+          required: false
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+          required: false
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SchemaLintReport'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '504':
+          $ref: '#/components/responses/QueryTimeout'
+
+  /api/schema-lint/summary:
+    get:
+      operationId: getSchemaLintSummary
+      summary: Per-database finding counts for one instance
+      description: >-
+        Schema defects live in a database, not in a cluster, so the report of the
+        currently selected database does not answer what the instance as a whole
+        looks like. Walks every configured database of the instance and returns the
+        counts per level. The sweep is sequential, capped in the number of databases
+        and time-bounded; a database that could not be read is marked failed rather
+        than reported as having no findings. Reuses the same cache as the per-database
+        report, so opening a database after the sweep costs nothing.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SchemaLintDatabaseSummary'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '504':
+          $ref: '#/components/responses/QueryTimeout'
+
 components:
   securitySchemes:
     BearerAuth:
@@ -3022,10 +3129,13 @@ components:
     FksPossibleNulls:
       type: object
       required:
+        - Schema
         - FkName
         - RelName
         - AttNames
       properties:
+        Schema:
+          type: string
         FkName:
           type: string
         RelName:
@@ -3037,10 +3147,13 @@ components:
     FksPossibleSimilar:
       type: object
       required:
+        - Schema
         - Table
         - FkName
         - Fk1Name
       properties:
+        Schema:
+          type: string
         Table:
           type: string
         FkName:
@@ -3050,12 +3163,16 @@ components:
     FkTypeMismatch:
       type: object
       required:
+        - Schema
         - FkName
         - FromRel
         - RelAttNames
+        - ToSchema
         - ToRel
         - ToRelAttNames
       properties:
+        Schema:
+          type: string
         FkName:
           type: string
         FromRel:
@@ -3064,6 +3181,8 @@ components:
           type: array
           items:
             type: string
+        ToSchema:
+          type: string
         ToRel:
           type: string
         ToRelAttNames:
@@ -3139,9 +3258,12 @@ components:
     IndexBtreeOnArray:
       type: object
       required:
+        - Schema
         - Table
         - Index
       properties:
+        Schema:
+          type: string
         Table:
           type: string
         Index:
@@ -3216,6 +3338,7 @@ components:
     IndexSimilar1:
       type: object
       required:
+        - Schema
         - Table
         - I1UniqueIndexName
         - I2IndexName
@@ -3224,6 +3347,8 @@ components:
         - I1UsedInConstraint
         - I2UsedInConstraint
       properties:
+        Schema:
+          type: string
         Table:
           type: string
         I1UniqueIndexName:
@@ -3242,10 +3367,13 @@ components:
     IndexSimilar2:
       type: object
       required:
+        - Schema
         - Table
         - FkName
         - FkName2
       properties:
+        Schema:
+          type: string
         Table:
           type: string
         FkName:
@@ -3256,6 +3384,7 @@ components:
     IndexSimilar3:
       type: object
       required:
+        - Schema
         - Table
         - I1IndexName
         - I2IndexName
@@ -3265,6 +3394,8 @@ components:
         - I1UsedInConstraint
         - I2UsedInConstraint
       properties:
+        Schema:
+          type: string
         Table:
           type: string
         I1IndexName:
@@ -5938,3 +6069,225 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ToastCandidate'
+
+    SchemaLintReport:
+      type: object
+      required:
+        - findings
+        - skipped
+        - summary
+        - total
+        - truncated
+        - duration_ms
+      properties:
+        findings:
+          description: Page of findings, worst level first. Order is stable across requests.
+          type: array
+          items:
+            $ref: '#/components/schemas/SchemaLintFinding'
+        skipped:
+          description: >-
+            Checks that produced no findings because they could not run. Shown next
+            to the findings so an unchecked schema is never mistaken for a clean one.
+          type: array
+          items:
+            $ref: '#/components/schemas/SchemaLintSkip'
+        summary:
+          $ref: '#/components/schemas/SchemaLintSummary'
+        total:
+          description: Findings matching the filters before the page was cut.
+          type: integer
+        truncated:
+          description: >-
+            A check hit its row cap and its findings are incomplete. The counts are
+            a lower bound.
+          type: boolean
+        duration_ms:
+          description: How long the checks took. Zero when the report came from the cache.
+          type: integer
+          format: int64
+
+    SchemaLintSummary:
+      description: Findings per level, counted over the whole result, not the page.
+      type: object
+      required:
+        - error
+        - warning
+        - notice
+      properties:
+        error:
+          type: integer
+        warning:
+          type: integer
+        notice:
+          type: integer
+
+    SchemaLintFinding:
+      type: object
+      required:
+        - code
+        - level
+        - object_type
+        - schema
+        - object
+      properties:
+        code:
+          description: >-
+            Stable identifier of the check. Titles, explanations and fix instructions
+            are rendered from it — the API carries no prose.
+          type: string
+        level:
+          type: string
+          enum:
+            - error
+            - warning
+            - notice
+        object_type:
+          type: string
+          enum:
+            - sequence
+            - relation
+            - schema
+            - attribute
+            - constraint
+            - index
+        schema:
+          type: string
+        object:
+          description: >-
+            Object the finding is about. Equals schema for schema-level checks; for
+            an attribute this is the relation, and the column is in params.
+          type: string
+        params:
+          $ref: '#/components/schemas/SchemaLintFindingParams'
+        related_route:
+          description: Frontend route with more context on this object, when one exists.
+          type: string
+
+    SchemaLintFindingParams:
+      description: >-
+        The values a finding's wording quotes. Which fields are set depends on code —
+        a client reads only the ones its phrasing for that code needs.
+      type: object
+      properties:
+        used_pct:
+          description: Share of the sequence range already consumed — set for sequence_exhaustion.
+          type: number
+          format: double
+        last_value:
+          description: Current value of the sequence.
+          type: integer
+          format: int64
+        max_value:
+          description: >-
+            Ceiling that actually applies. For a sequence owned by an int4 column this
+            is 2147483647 even when the sequence itself is a bigint: the column
+            overflows first.
+          type: integer
+          format: int64
+        owned_by:
+          description: table.column the sequence feeds, empty when it is standalone.
+          type: string
+        owned_column_type:
+          description: >-
+            Type of the owning column. An integer here means the fix is a column type
+            change, not just ALTER SEQUENCE — a long operation needing a window.
+          type: string
+        owner:
+          description: Schema owner — set for public_create_privilege.
+          type: string
+        column:
+          description: Column the finding is about — set when object_type is attribute.
+          type: string
+        column_type:
+          description: Declared type of that column, e.g. character varying(36).
+          type: string
+        constraint:
+          description: Constraint the finding is about — set when object_type is constraint.
+          type: string
+        referenced_by:
+          description: schema.table on the other side of a foreign key, when the constraint is one.
+          type: string
+        index:
+          description: Index the finding is about — set when object_type is index.
+          type: string
+        other_object:
+          description: >-
+            The second half of a finding stated as a pair: the similar index, the
+            similar key, the referenced table, or the columns a key covers.
+          type: string
+        partitions:
+          description: >-
+            Partitions rolled up into this row. Present when the same defect was found
+            on the partitions of one table; the finding addresses the root table.
+          type: integer
+        unique_nullable:
+          description: >-
+            The table's unique index covers a nullable column — set for no_primary_key.
+            Such an index cannot serve as REPLICA IDENTITY, so "you already have a
+            unique index" would be wrong advice.
+          type: boolean
+
+    SchemaLintSkip:
+      type: object
+      required:
+        - code
+        - reason
+      properties:
+        code:
+          description: >-
+            The check that did not run, or partition_roots for the helper query whose
+            absence leaves partition findings unrolled.
+          type: string
+        reason:
+          type: string
+          enum:
+            - insufficient_privileges
+            - unsupported_version
+            - disabled
+            - error
+        detail:
+          description: >-
+            Technical marker only — a SQLSTATE or "timeout". Never carries values read
+            from the database, and never prose: the sentence a user reads is rendered
+            by the client from code, reason and count.
+          type: string
+        count:
+          description: How many objects the check could not look at, when it can say.
+          type: integer
+        required_privilege:
+          description: >-
+            Grant the monitoring role needs for this check, when it needs more than the
+            basics. Set for insufficient_privileges.
+          type: string
+
+    SchemaLintDatabaseSummary:
+      type: object
+      required:
+        - database
+        - error
+        - warning
+        - notice
+        - skipped
+        - failed
+      properties:
+        database:
+          type: string
+        error:
+          type: integer
+        warning:
+          type: integer
+        notice:
+          type: integer
+        skipped:
+          description: >-
+            Checks that did not run in this database (no privilege, unsupported
+            version, failure). Zero findings alongside a non-zero value here is an
+            unchecked schema, not a clean one. Checks disabled in the configuration
+            are not counted — those are a decision, not a gap.
+          type: integer
+        failed:
+          description: >-
+            The database could not be read at all. Its counts are zero because nothing
+            was checked, not because it is clean.
+          type: boolean

@@ -112,6 +112,31 @@ const (
 	ReplicaToMaster RoleChangeTriggerDirection = "replica_to_master"
 )
 
+// Defines values for SchemaLintFindingLevel.
+const (
+	SchemaLintFindingLevelError   SchemaLintFindingLevel = "error"
+	SchemaLintFindingLevelNotice  SchemaLintFindingLevel = "notice"
+	SchemaLintFindingLevelWarning SchemaLintFindingLevel = "warning"
+)
+
+// Defines values for SchemaLintFindingObjectType.
+const (
+	SchemaLintFindingObjectTypeAttribute  SchemaLintFindingObjectType = "attribute"
+	SchemaLintFindingObjectTypeConstraint SchemaLintFindingObjectType = "constraint"
+	SchemaLintFindingObjectTypeIndex      SchemaLintFindingObjectType = "index"
+	SchemaLintFindingObjectTypeRelation   SchemaLintFindingObjectType = "relation"
+	SchemaLintFindingObjectTypeSchema     SchemaLintFindingObjectType = "schema"
+	SchemaLintFindingObjectTypeSequence   SchemaLintFindingObjectType = "sequence"
+)
+
+// Defines values for SchemaLintSkipReason.
+const (
+	SchemaLintSkipReasonDisabled               SchemaLintSkipReason = "disabled"
+	SchemaLintSkipReasonError                  SchemaLintSkipReason = "error"
+	SchemaLintSkipReasonInsufficientPrivileges SchemaLintSkipReason = "insufficient_privileges"
+	SchemaLintSkipReasonUnsupportedVersion     SchemaLintSkipReason = "unsupported_version"
+)
+
 // Defines values for GetHotObjectHistoryParamsKind.
 const (
 	GetHotObjectHistoryParamsKindIndex GetHotObjectHistoryParamsKind = "index"
@@ -126,8 +151,8 @@ const (
 
 // Defines values for GetHotPercentileParamsKind.
 const (
-	GetHotPercentileParamsKindIndex GetHotPercentileParamsKind = "index"
-	GetHotPercentileParamsKindTable GetHotPercentileParamsKind = "table"
+	Index GetHotPercentileParamsKind = "index"
+	Table GetHotPercentileParamsKind = "table"
 )
 
 // Defines values for GetHotPercentileParamsClass.
@@ -163,6 +188,13 @@ const (
 const (
 	Like    GetQueriesRunningParamsQueryFilterMode = "like"
 	NotLike GetQueriesRunningParamsQueryFilterMode = "not_like"
+)
+
+// Defines values for GetSchemaLintParamsLevel.
+const (
+	Error   GetSchemaLintParamsLevel = "error"
+	Notice  GetSchemaLintParamsLevel = "notice"
+	Warning GetSchemaLintParamsLevel = "warning"
 )
 
 // ActivitySpikeTrigger defines model for ActivitySpikeTrigger.
@@ -416,8 +448,10 @@ type FkTypeMismatch struct {
 	FkName        string   `json:"FkName"`
 	FromRel       string   `json:"FromRel"`
 	RelAttNames   []string `json:"RelAttNames"`
+	Schema        string   `json:"Schema"`
 	ToRel         string   `json:"ToRel"`
 	ToRelAttNames []string `json:"ToRelAttNames"`
+	ToSchema      string   `json:"ToSchema"`
 }
 
 // FksPossibleNulls defines model for FksPossibleNulls.
@@ -425,12 +459,14 @@ type FksPossibleNulls struct {
 	AttNames []string `json:"AttNames"`
 	FkName   string   `json:"FkName"`
 	RelName  string   `json:"RelName"`
+	Schema   string   `json:"Schema"`
 }
 
 // FksPossibleSimilar defines model for FksPossibleSimilar.
 type FksPossibleSimilar struct {
 	Fk1Name string `json:"Fk1Name"`
 	FkName  string `json:"FkName"`
+	Schema  string `json:"Schema"`
 	Table   string `json:"Table"`
 }
 
@@ -725,8 +761,9 @@ type IndexBloat struct {
 
 // IndexBtreeOnArray defines model for IndexBtreeOnArray.
 type IndexBtreeOnArray struct {
-	Index string `json:"Index"`
-	Table string `json:"Table"`
+	Index  string `json:"Index"`
+	Schema string `json:"Schema"`
+	Table  string `json:"Table"`
 }
 
 // IndexCaching defines model for IndexCaching.
@@ -784,6 +821,7 @@ type IndexSimilar1 struct {
 	I2IndexDefinition       string `json:"I2IndexDefinition"`
 	I2IndexName             string `json:"I2IndexName"`
 	I2UsedInConstraint      string `json:"I2UsedInConstraint"`
+	Schema                  string `json:"Schema"`
 	Table                   string `json:"Table"`
 }
 
@@ -791,6 +829,7 @@ type IndexSimilar1 struct {
 type IndexSimilar2 struct {
 	FkName  string `json:"FkName"`
 	FkName2 string `json:"FkName2"`
+	Schema  string `json:"Schema"`
 	Table   string `json:"Table"`
 }
 
@@ -802,6 +841,7 @@ type IndexSimilar3 struct {
 	I2IndexDefinition         string `json:"I2IndexDefinition"`
 	I2IndexName               string `json:"I2IndexName"`
 	I2UsedInConstraint        string `json:"I2UsedInConstraint"`
+	Schema                    string `json:"Schema"`
 	SimplifiedIndexDefinition string `json:"SimplifiedIndexDefinition"`
 	Table                     string `json:"Table"`
 }
@@ -1406,6 +1446,136 @@ type RowEstimate struct {
 	ToastThreshold    int              `json:"ToastThreshold"`
 	TupleHeaderSize   int              `json:"TupleHeaderSize"`
 	WillToast         bool             `json:"WillToast"`
+}
+
+// SchemaLintDatabaseSummary defines model for SchemaLintDatabaseSummary.
+type SchemaLintDatabaseSummary struct {
+	Database string `json:"database"`
+	Error    int    `json:"error"`
+
+	// Failed The database could not be read at all. Its counts are zero because nothing was checked, not because it is clean.
+	Failed bool `json:"failed"`
+	Notice int  `json:"notice"`
+
+	// Skipped Checks that did not run in this database (no privilege, unsupported version, failure). Zero findings alongside a non-zero value here is an unchecked schema, not a clean one. Checks disabled in the configuration are not counted — those are a decision, not a gap.
+	Skipped int `json:"skipped"`
+	Warning int `json:"warning"`
+}
+
+// SchemaLintFinding defines model for SchemaLintFinding.
+type SchemaLintFinding struct {
+	// Code Stable identifier of the check. Titles, explanations and fix instructions are rendered from it — the API carries no prose.
+	Code  string                 `json:"code"`
+	Level SchemaLintFindingLevel `json:"level"`
+
+	// Object Object the finding is about. Equals schema for schema-level checks; for an attribute this is the relation, and the column is in params.
+	Object     string                      `json:"object"`
+	ObjectType SchemaLintFindingObjectType `json:"object_type"`
+
+	// Params The values a finding's wording quotes. Which fields are set depends on code — a client reads only the ones its phrasing for that code needs.
+	Params *SchemaLintFindingParams `json:"params,omitempty"`
+
+	// RelatedRoute Frontend route with more context on this object, when one exists.
+	RelatedRoute *string `json:"related_route,omitempty"`
+	Schema       string  `json:"schema"`
+}
+
+// SchemaLintFindingLevel defines model for SchemaLintFinding.Level.
+type SchemaLintFindingLevel string
+
+// SchemaLintFindingObjectType defines model for SchemaLintFinding.ObjectType.
+type SchemaLintFindingObjectType string
+
+// SchemaLintFindingParams The values a finding's wording quotes. Which fields are set depends on code — a client reads only the ones its phrasing for that code needs.
+type SchemaLintFindingParams struct {
+	// Column Column the finding is about — set when object_type is attribute.
+	Column *string `json:"column,omitempty"`
+
+	// ColumnType Declared type of that column, e.g. character varying(36).
+	ColumnType *string `json:"column_type,omitempty"`
+
+	// Constraint Constraint the finding is about — set when object_type is constraint.
+	Constraint *string `json:"constraint,omitempty"`
+
+	// Index Index the finding is about — set when object_type is index.
+	Index *string `json:"index,omitempty"`
+
+	// LastValue Current value of the sequence.
+	LastValue *int64 `json:"last_value,omitempty"`
+
+	// MaxValue Ceiling that actually applies. For a sequence owned by an int4 column this is 2147483647 even when the sequence itself is a bigint: the column overflows first.
+	MaxValue *int64 `json:"max_value,omitempty"`
+
+	// OtherObject The second half of a finding stated as a pair: the similar index, the similar key, the referenced table, or the columns a key covers.
+	OtherObject *string `json:"other_object,omitempty"`
+
+	// OwnedBy table.column the sequence feeds, empty when it is standalone.
+	OwnedBy *string `json:"owned_by,omitempty"`
+
+	// OwnedColumnType Type of the owning column. An integer here means the fix is a column type change, not just ALTER SEQUENCE — a long operation needing a window.
+	OwnedColumnType *string `json:"owned_column_type,omitempty"`
+
+	// Owner Schema owner — set for public_create_privilege.
+	Owner *string `json:"owner,omitempty"`
+
+	// Partitions Partitions rolled up into this row. Present when the same defect was found on the partitions of one table; the finding addresses the root table.
+	Partitions *int `json:"partitions,omitempty"`
+
+	// ReferencedBy schema.table on the other side of a foreign key, when the constraint is one.
+	ReferencedBy *string `json:"referenced_by,omitempty"`
+
+	// UniqueNullable The table's unique index covers a nullable column — set for no_primary_key. Such an index cannot serve as REPLICA IDENTITY, so "you already have a unique index" would be wrong advice.
+	UniqueNullable *bool `json:"unique_nullable,omitempty"`
+
+	// UsedPct Share of the sequence range already consumed — set for sequence_exhaustion.
+	UsedPct *float64 `json:"used_pct,omitempty"`
+}
+
+// SchemaLintReport defines model for SchemaLintReport.
+type SchemaLintReport struct {
+	// DurationMs How long the checks took. Zero when the report came from the cache.
+	DurationMs int64 `json:"duration_ms"`
+
+	// Findings Page of findings, worst level first. Order is stable across requests.
+	Findings []SchemaLintFinding `json:"findings"`
+
+	// Skipped Checks that produced no findings because they could not run. Shown next to the findings so an unchecked schema is never mistaken for a clean one.
+	Skipped []SchemaLintSkip `json:"skipped"`
+
+	// Summary Findings per level, counted over the whole result, not the page.
+	Summary SchemaLintSummary `json:"summary"`
+
+	// Total Findings matching the filters before the page was cut.
+	Total int `json:"total"`
+
+	// Truncated A check hit its row cap and its findings are incomplete. The counts are a lower bound.
+	Truncated bool `json:"truncated"`
+}
+
+// SchemaLintSkip defines model for SchemaLintSkip.
+type SchemaLintSkip struct {
+	// Code The check that did not run, or partition_roots for the helper query whose absence leaves partition findings unrolled.
+	Code string `json:"code"`
+
+	// Count How many objects the check could not look at, when it can say.
+	Count *int `json:"count,omitempty"`
+
+	// Detail Technical marker only — a SQLSTATE or "timeout". Never carries values read from the database, and never prose: the sentence a user reads is rendered by the client from code, reason and count.
+	Detail *string              `json:"detail,omitempty"`
+	Reason SchemaLintSkipReason `json:"reason"`
+
+	// RequiredPrivilege Grant the monitoring role needs for this check, when it needs more than the basics. Set for insufficient_privileges.
+	RequiredPrivilege *string `json:"required_privilege,omitempty"`
+}
+
+// SchemaLintSkipReason defines model for SchemaLintSkip.Reason.
+type SchemaLintSkipReason string
+
+// SchemaLintSummary Findings per level, counted over the whole result, not the page.
+type SchemaLintSummary struct {
+	Error   int `json:"error"`
+	Notice  int `json:"notice"`
+	Warning int `json:"warning"`
 }
 
 // SettingsNotification defines model for SettingsNotification.
@@ -2259,6 +2429,39 @@ type GetReplicationStatusParams struct {
 	Instance    Instance    `form:"instance" json:"instance"`
 }
 
+// GetSchemaLintParams defines parameters for GetSchemaLint.
+type GetSchemaLintParams struct {
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance    `form:"instance" json:"instance"`
+	Database    Database    `form:"database" json:"database"`
+
+	// Level Keep only findings of this severity. The summary still counts every finding.
+	Level *GetSchemaLintParamsLevel `form:"level,omitempty" json:"level,omitempty"`
+
+	// Code Keep only findings of these checks.
+	Code *[]string `form:"code,omitempty" json:"code,omitempty"`
+
+	// Schema Keep only findings in schemas whose name contains this substring, case-insensitively.
+	Schema *string `form:"schema,omitempty" json:"schema,omitempty"`
+
+	// Object Keep only findings on objects whose name contains this substring, case-insensitively.
+	Object *string `form:"object,omitempty" json:"object,omitempty"`
+
+	// Refresh Recompute instead of answering from the cache.
+	Refresh *bool `form:"refresh,omitempty" json:"refresh,omitempty"`
+	Limit   *int  `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset  *int  `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// GetSchemaLintParamsLevel defines parameters for GetSchemaLint.
+type GetSchemaLintParamsLevel string
+
+// GetSchemaLintSummaryParams defines parameters for GetSchemaLintSummary.
+type GetSchemaLintSummaryParams struct {
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance    `form:"instance" json:"instance"`
+}
+
 // GetSettingsAnalyzeParams defines parameters for GetSettingsAnalyze.
 type GetSettingsAnalyzeParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
@@ -2742,6 +2945,12 @@ type ClientInterface interface {
 
 	// GetReplicationStatus request
 	GetReplicationStatus(ctx context.Context, params *GetReplicationStatusParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetSchemaLint request
+	GetSchemaLint(ctx context.Context, params *GetSchemaLintParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetSchemaLintSummary request
+	GetSchemaLintSummary(ctx context.Context, params *GetSchemaLintSummaryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetSettingsAnalyze request
 	GetSettingsAnalyze(ctx context.Context, params *GetSettingsAnalyzeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -3895,6 +4104,30 @@ func (c *Client) GetReplicationSlots(ctx context.Context, params *GetReplication
 
 func (c *Client) GetReplicationStatus(ctx context.Context, params *GetReplicationStatusParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetReplicationStatusRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetSchemaLint(ctx context.Context, params *GetSchemaLintParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetSchemaLintRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetSchemaLintSummary(ctx context.Context, params *GetSchemaLintSummaryParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetSchemaLintSummaryRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -10432,6 +10665,244 @@ func NewGetReplicationStatusRequest(server string, params *GetReplicationStatusP
 	return req, nil
 }
 
+// NewGetSchemaLintRequest generates requests for GetSchemaLint
+func NewGetSchemaLintRequest(server string, params *GetSchemaLintParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/schema-lint")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, params.ClusterName); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "instance", runtime.ParamLocationQuery, params.Instance); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "database", runtime.ParamLocationQuery, params.Database); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.Level != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "level", runtime.ParamLocationQuery, *params.Level); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Code != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "code", runtime.ParamLocationQuery, *params.Code); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Schema != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "schema", runtime.ParamLocationQuery, *params.Schema); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Object != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "object", runtime.ParamLocationQuery, *params.Object); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Refresh != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "refresh", runtime.ParamLocationQuery, *params.Refresh); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetSchemaLintSummaryRequest generates requests for GetSchemaLintSummary
+func NewGetSchemaLintSummaryRequest(server string, params *GetSchemaLintSummaryParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/schema-lint/summary")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, params.ClusterName); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "instance", runtime.ParamLocationQuery, params.Instance); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetSettingsAnalyzeRequest generates requests for GetSettingsAnalyze
 func NewGetSettingsAnalyzeRequest(server string, params *GetSettingsAnalyzeParams) (*http.Request, error) {
 	var err error
@@ -12024,6 +12495,12 @@ type ClientWithResponsesInterface interface {
 
 	// GetReplicationStatusWithResponse request
 	GetReplicationStatusWithResponse(ctx context.Context, params *GetReplicationStatusParams, reqEditors ...RequestEditorFn) (*GetReplicationStatusResponse, error)
+
+	// GetSchemaLintWithResponse request
+	GetSchemaLintWithResponse(ctx context.Context, params *GetSchemaLintParams, reqEditors ...RequestEditorFn) (*GetSchemaLintResponse, error)
+
+	// GetSchemaLintSummaryWithResponse request
+	GetSchemaLintSummaryWithResponse(ctx context.Context, params *GetSchemaLintSummaryParams, reqEditors ...RequestEditorFn) (*GetSchemaLintSummaryResponse, error)
 
 	// GetSettingsAnalyzeWithResponse request
 	GetSettingsAnalyzeWithResponse(ctx context.Context, params *GetSettingsAnalyzeParams, reqEditors ...RequestEditorFn) (*GetSettingsAnalyzeResponse, error)
@@ -14024,6 +14501,52 @@ func (r GetReplicationStatusResponse) StatusCode() int {
 	return 0
 }
 
+type GetSchemaLintResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *SchemaLintReport
+	JSON504      *QueryTimeout
+}
+
+// Status returns HTTPResponse.Status
+func (r GetSchemaLintResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetSchemaLintResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetSchemaLintSummaryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]SchemaLintDatabaseSummary
+	JSON504      *QueryTimeout
+}
+
+// Status returns HTTPResponse.Status
+func (r GetSchemaLintSummaryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetSchemaLintSummaryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetSettingsAnalyzeResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -15193,6 +15716,24 @@ func (c *ClientWithResponses) GetReplicationStatusWithResponse(ctx context.Conte
 		return nil, err
 	}
 	return ParseGetReplicationStatusResponse(rsp)
+}
+
+// GetSchemaLintWithResponse request returning *GetSchemaLintResponse
+func (c *ClientWithResponses) GetSchemaLintWithResponse(ctx context.Context, params *GetSchemaLintParams, reqEditors ...RequestEditorFn) (*GetSchemaLintResponse, error) {
+	rsp, err := c.GetSchemaLint(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetSchemaLintResponse(rsp)
+}
+
+// GetSchemaLintSummaryWithResponse request returning *GetSchemaLintSummaryResponse
+func (c *ClientWithResponses) GetSchemaLintSummaryWithResponse(ctx context.Context, params *GetSchemaLintSummaryParams, reqEditors ...RequestEditorFn) (*GetSchemaLintSummaryResponse, error) {
+	rsp, err := c.GetSchemaLintSummary(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetSchemaLintSummaryResponse(rsp)
 }
 
 // GetSettingsAnalyzeWithResponse request returning *GetSettingsAnalyzeResponse
@@ -17588,6 +18129,72 @@ func ParseGetReplicationStatusResponse(rsp *http.Response) (*GetReplicationStatu
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetSchemaLintResponse parses an HTTP response from a GetSchemaLintWithResponse call
+func ParseGetSchemaLintResponse(rsp *http.Response) (*GetSchemaLintResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetSchemaLintResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SchemaLintReport
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
+		var dest QueryTimeout
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON504 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetSchemaLintSummaryResponse parses an HTTP response from a GetSchemaLintSummaryWithResponse call
+func ParseGetSchemaLintSummaryResponse(rsp *http.Response) (*GetSchemaLintSummaryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetSchemaLintSummaryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []SchemaLintDatabaseSummary
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
+		var dest QueryTimeout
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON504 = &dest
 
 	}
 

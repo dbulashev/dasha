@@ -23,10 +23,12 @@ WITH fk_with_attributes AS (SELECT c.conname              as fk_name,
                                                ON frel_att.attrelid = c.confrelid AND
                                                   frel_att.attnum = fk_confkey.confkey_number
                             WHERE c.contype IN ('f'))
-SELECT c.fk_name,
+SELECT n_from.nspname AS schema_name,
+       c.fk_name,
        r_from.relname,
        c.rel_att_names,
-       r_to.relname frelname,
+       n_to.nspname   AS fschema_name,
+       r_to.relname   frelname,
        c.frel_att_names
 FROM (SELECT fk_name,
              conrelid,
@@ -39,4 +41,8 @@ FROM (SELECT fk_name,
          INNER JOIN pg_catalog.pg_class AS r_from
                     ON r_from.oid = c.conrelid
          INNER JOIN pg_catalog.pg_class AS r_to
-                    ON r_to.oid = c.confrelid;
+                    ON r_to.oid = c.confrelid
+         INNER JOIN pg_catalog.pg_namespace AS n_from
+                    ON n_from.oid = r_from.relnamespace
+         INNER JOIN pg_catalog.pg_namespace AS n_to
+                    ON n_to.oid = r_to.relnamespace;

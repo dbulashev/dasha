@@ -127,6 +127,7 @@ func autosnapshotExec(cmd *cobra.Command, _ []string) error {
 		cfg.PgStatsView,
 		cfg.PgssResetFunction,
 		cfg.EffectiveAutosnapshotPool(),
+		cfg.SchemaLint,
 		logger,
 	)
 

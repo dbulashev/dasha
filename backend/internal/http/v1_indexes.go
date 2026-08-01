@@ -66,8 +66,9 @@ func (s *Handlers) GetIndexesBtreeOnArray(
 		indexes,
 		func(t dto.IndexBtreeOnArray) serverhttp.IndexBtreeOnArray {
 			return serverhttp.IndexBtreeOnArray{
-				Table: t.Table,
-				Index: t.Index,
+				Schema: t.Schema,
+				Table:  t.Table,
+				Index:  t.Index,
 			}
 		})
 
@@ -200,6 +201,7 @@ func (s *Handlers) GetIndexesSimilar1(
 		indexes,
 		func(t dto.IndexSimilar1) serverhttp.IndexSimilar1 {
 			return serverhttp.IndexSimilar1{
+				Schema:                  t.Schema,
 				Table:                   t.Table,
 				I1UniqueIndexName:       t.I1UniqueIndexName,
 				I2IndexName:             t.I2IndexName,
@@ -230,6 +232,7 @@ func (s *Handlers) GetIndexesSimilar2(
 		indexes,
 		func(t dto.IndexSimilar2) serverhttp.IndexSimilar2 {
 			return serverhttp.IndexSimilar2{
+				Schema:  t.Schema,
 				Table:   t.Table,
 				FkName:  t.FkName,
 				FkName2: t.FkName2,
@@ -256,6 +259,7 @@ func (s *Handlers) GetIndexesSimilar3(
 		indexes,
 		func(t dto.IndexSimilar3) serverhttp.IndexSimilar3 {
 			return serverhttp.IndexSimilar3{
+				Schema:                    t.Schema,
 				Table:                     t.Table,
 				I1IndexName:               t.I1IndexName,
 				I2IndexName:               t.I2IndexName,

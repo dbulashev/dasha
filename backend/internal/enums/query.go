@@ -70,6 +70,15 @@ package enums
 //	replication/lag
 //	replication/slots
 //	replication/status
+//	schema_lint/partition_roots
+//	schema_lint/public_create_privileges
+//	schema_lint/relations_without_columns
+//	schema_lint/relations_without_fk
+//	schema_lint/relations_without_key
+//	schema_lint/sequences_usage
+//	schema_lint/unlogged_objects
+//	schema_lint/unsafe_names
+//	schema_lint/uuid_like_columns
 //	settings/analyze_settings
 //	settings/autovacuum_settings
 //	settings/pg_settings
