@@ -139,10 +139,13 @@ function copyFix(f: SchemaLintFinding) {
   setTimeout(() => (copied.value = null), 2000)
 }
 
-// A relation is best explored on its describe page; anything else goes to the
-// section the check declared, if any.
+// A relation is best explored on its describe page, and so is a column: the
+// finding is addressed by table plus column, and the table page is where the
+// column is. Anything else goes to the section the check declared, if any.
 function relatedLink(f: SchemaLintFinding) {
-  if (f.object_type === 'relation') return describeLink(f.schema, f.object)
+  if (f.object_type === 'relation' || f.object_type === 'attribute') {
+    return describeLink(f.schema, f.object)
+  }
   if (!f.related_route || f.related_route === '/schema-lint') return null
   return { path: `${f.related_route}/${route.params.clustername ?? ''}`, query: route.query }
 }
