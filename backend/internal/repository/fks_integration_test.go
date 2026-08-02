@@ -77,6 +77,11 @@ func TestGetFkTypeMismatch(t *testing.T) {
 		if fk.FromRel == "products" && fk.ToRel == "categories" {
 			found = true
 			assert.NotEmpty(t, fk.FkName)
+			// Both sides carry their schema: without it a finding cannot be
+			// addressed, filtered or suppressed.
+			assert.Equal(t, "public", fk.Schema)
+			assert.Equal(t, "public", fk.ToSchema)
+
 			break
 		}
 	}

@@ -255,6 +255,7 @@ func TestGetIndexesSimilar1(t *testing.T) {
 	// May be empty — depends on index structure matching similar_1 criteria
 
 	for _, idx := range result {
+		assert.NotEmpty(t, idx.Schema)
 		assert.NotEmpty(t, idx.Table)
 		assert.NotEmpty(t, idx.I1UniqueIndexName)
 		assert.NotEmpty(t, idx.I2IndexName)

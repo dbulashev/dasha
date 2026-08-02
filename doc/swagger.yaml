@@ -3022,10 +3022,13 @@ components:
     FksPossibleNulls:
       type: object
       required:
+        - Schema
         - FkName
         - RelName
         - AttNames
       properties:
+        Schema:
+          type: string
         FkName:
           type: string
         RelName:
@@ -3037,10 +3040,13 @@ components:
     FksPossibleSimilar:
       type: object
       required:
+        - Schema
         - Table
         - FkName
         - Fk1Name
       properties:
+        Schema:
+          type: string
         Table:
           type: string
         FkName:
@@ -3050,12 +3056,16 @@ components:
     FkTypeMismatch:
       type: object
       required:
+        - Schema
         - FkName
         - FromRel
         - RelAttNames
+        - ToSchema
         - ToRel
         - ToRelAttNames
       properties:
+        Schema:
+          type: string
         FkName:
           type: string
         FromRel:
@@ -3064,6 +3074,8 @@ components:
           type: array
           items:
             type: string
+        ToSchema:
+          type: string
         ToRel:
           type: string
         ToRelAttNames:
@@ -3139,9 +3151,12 @@ components:
     IndexBtreeOnArray:
       type: object
       required:
+        - Schema
         - Table
         - Index
       properties:
+        Schema:
+          type: string
         Table:
           type: string
         Index:
@@ -3216,6 +3231,7 @@ components:
     IndexSimilar1:
       type: object
       required:
+        - Schema
         - Table
         - I1UniqueIndexName
         - I2IndexName
@@ -3224,6 +3240,8 @@ components:
         - I1UsedInConstraint
         - I2UsedInConstraint
       properties:
+        Schema:
+          type: string
         Table:
           type: string
         I1UniqueIndexName:
@@ -3242,10 +3260,13 @@ components:
     IndexSimilar2:
       type: object
       required:
+        - Schema
         - Table
         - FkName
         - FkName2
       properties:
+        Schema:
+          type: string
         Table:
           type: string
         FkName:
@@ -3256,6 +3277,7 @@ components:
     IndexSimilar3:
       type: object
       required:
+        - Schema
         - Table
         - I1IndexName
         - I2IndexName
@@ -3265,6 +3287,8 @@ components:
         - I1UsedInConstraint
         - I2UsedInConstraint
       properties:
+        Schema:
+          type: string
         Table:
           type: string
         I1IndexName:

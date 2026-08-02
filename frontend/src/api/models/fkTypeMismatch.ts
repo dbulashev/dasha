@@ -6,9 +6,11 @@
  */
 
 export interface FkTypeMismatch {
+  Schema: string
   FkName: string
   FromRel: string
   RelAttNames: string[]
+  ToSchema: string
   ToRel: string
   ToRelAttNames: string[]
 }

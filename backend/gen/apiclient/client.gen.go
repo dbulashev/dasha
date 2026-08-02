@@ -416,8 +416,10 @@ type FkTypeMismatch struct {
 	FkName        string   `json:"FkName"`
 	FromRel       string   `json:"FromRel"`
 	RelAttNames   []string `json:"RelAttNames"`
+	Schema        string   `json:"Schema"`
 	ToRel         string   `json:"ToRel"`
 	ToRelAttNames []string `json:"ToRelAttNames"`
+	ToSchema      string   `json:"ToSchema"`
 }
 
 // FksPossibleNulls defines model for FksPossibleNulls.
@@ -425,12 +427,14 @@ type FksPossibleNulls struct {
 	AttNames []string `json:"AttNames"`
 	FkName   string   `json:"FkName"`
 	RelName  string   `json:"RelName"`
+	Schema   string   `json:"Schema"`
 }
 
 // FksPossibleSimilar defines model for FksPossibleSimilar.
 type FksPossibleSimilar struct {
 	Fk1Name string `json:"Fk1Name"`
 	FkName  string `json:"FkName"`
+	Schema  string `json:"Schema"`
 	Table   string `json:"Table"`
 }
 
@@ -725,8 +729,9 @@ type IndexBloat struct {
 
 // IndexBtreeOnArray defines model for IndexBtreeOnArray.
 type IndexBtreeOnArray struct {
-	Index string `json:"Index"`
-	Table string `json:"Table"`
+	Index  string `json:"Index"`
+	Schema string `json:"Schema"`
+	Table  string `json:"Table"`
 }
 
 // IndexCaching defines model for IndexCaching.
@@ -784,6 +789,7 @@ type IndexSimilar1 struct {
 	I2IndexDefinition       string `json:"I2IndexDefinition"`
 	I2IndexName             string `json:"I2IndexName"`
 	I2UsedInConstraint      string `json:"I2UsedInConstraint"`
+	Schema                  string `json:"Schema"`
 	Table                   string `json:"Table"`
 }
 
@@ -791,6 +797,7 @@ type IndexSimilar1 struct {
 type IndexSimilar2 struct {
 	FkName  string `json:"FkName"`
 	FkName2 string `json:"FkName2"`
+	Schema  string `json:"Schema"`
 	Table   string `json:"Table"`
 }
 
@@ -802,6 +809,7 @@ type IndexSimilar3 struct {
 	I2IndexDefinition         string `json:"I2IndexDefinition"`
 	I2IndexName               string `json:"I2IndexName"`
 	I2UsedInConstraint        string `json:"I2UsedInConstraint"`
+	Schema                    string `json:"Schema"`
 	SimplifiedIndexDefinition string `json:"SimplifiedIndexDefinition"`
 	Table                     string `json:"Table"`
 }

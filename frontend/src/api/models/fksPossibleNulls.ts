@@ -6,6 +6,7 @@
  */
 
 export interface FksPossibleNulls {
+  Schema: string
   FkName: string
   RelName: string
   AttNames: string[]

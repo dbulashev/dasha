@@ -91,16 +91,17 @@ func (p *PgxPool) getFksPossibleNulls(ctx context.Context, serverVersion int, po
 
 	for rows.Next() {
 		var (
-			fkName, relName string
-			attNames        []string
+			schema, fkName, relName string
+			attNames                []string
 		)
 
-		err = rows.Scan(&fkName, &relName, &attNames)
+		err = rows.Scan(&schema, &fkName, &relName, &attNames)
 		if err != nil {
 			return nil, fmt.Errorf("getFksPossibleNulls | %w", err)
 		}
 
 		ret = append(ret, dto.FksPossibleNulls{
+			Schema:   schema,
 			FkName:   fkName,
 			RelName:  relName,
 			AttNames: attNames,
@@ -136,14 +137,15 @@ func (p *PgxPool) getFksPossibleSimilar(ctx context.Context, serverVersion int, 
 	}
 
 	for rows1.Next() {
-		var table, fkName, fk1Name string
+		var schema, table, fkName, fk1Name string
 
-		err = rows1.Scan(&table, &fkName, &fk1Name)
+		err = rows1.Scan(&schema, &table, &fkName, &fk1Name)
 		if err != nil {
 			return nil, fmt.Errorf("getFksPossibleSimilar | %w", err)
 		}
 
 		ret = append(ret, dto.FksPossibleSimilar{
+			Schema:  schema,
 			Table:   table,
 			FkName:  fkName,
 			Fk1Name: fk1Name,
@@ -162,14 +164,15 @@ func (p *PgxPool) getFksPossibleSimilar(ctx context.Context, serverVersion int, 
 	}
 
 	for rows2.Next() {
-		var table, fkName, fk1Name string
+		var schema, table, fkName, fk1Name string
 
-		err = rows2.Scan(&table, &fkName, &fk1Name)
+		err = rows2.Scan(&schema, &table, &fkName, &fk1Name)
 		if err != nil {
 			return nil, fmt.Errorf("getFksPossibleSimilar | %w", err)
 		}
 
 		ret = append(ret, dto.FksPossibleSimilar{
+			Schema:  schema,
 			Table:   table,
 			FkName:  fkName,
 			Fk1Name: fk1Name,
@@ -204,19 +207,22 @@ func (p *PgxPool) getFkTypeMismatch(ctx context.Context, serverVersion int, pool
 	for rows.Next() {
 		var (
 			fkName                     string
+			schema, toSchema           string
 			fromRel, toRel             string
 			relAttNames, toRelAttNames []string
 		)
 
-		err = rows.Scan(&fkName, &fromRel, &relAttNames, &toRel, &toRelAttNames)
+		err = rows.Scan(&schema, &fkName, &fromRel, &relAttNames, &toSchema, &toRel, &toRelAttNames)
 		if err != nil {
 			return nil, fmt.Errorf("getFkTypeMismatch | %w", err)
 		}
 
 		ret = append(ret, dto.FkTypeMismatch{
+			Schema:        schema,
 			FkName:        fkName,
 			FromRel:       fromRel,
 			RelAttNames:   relAttNames,
+			ToSchema:      toSchema,
 			ToRel:         toRel,
 			ToRelAttNames: toRelAttNames,
 		})

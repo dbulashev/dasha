@@ -6,6 +6,7 @@
  */
 
 export interface IndexBtreeOnArray {
+  Schema: string
   Table: string
   Index: string
 }

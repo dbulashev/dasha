@@ -1,6 +1,7 @@
 WITH
     idx AS (
         SELECT
+            n.nspname as schema_name,
             c.relname as table_name,
             ic.relname as index_name,
             ic.oid,
@@ -27,12 +28,14 @@ WITH
         FROM pg_catalog.pg_index AS i
                  INNER JOIN pg_catalog.pg_class AS ic ON i.indexrelid = ic.oid
                  INNER JOIN pg_catalog.pg_class AS c ON i.indrelid = c.oid
+                 INNER JOIN pg_catalog.pg_namespace AS n ON n.oid = c.relnamespace
         WHERE NOT EXISTS (
             SELECT 1 FROM pg_locks
             WHERE relation = c.oid AND mode = 'AccessExclusiveLock' AND granted
         )
     )
 SELECT
+    i1.schema_name,
     i1.table_name,
     i1.index_name as i1_unique_index_name,
     i2.index_name as i2_index_name,

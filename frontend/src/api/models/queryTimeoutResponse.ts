@@ -7,7 +7,7 @@
 import type { ErrorMessage } from './errorMessage'
 
 /**
- * The database did not answer within the query timeout — an overloaded instance, or a wait the lock timeout does not cover.
+ * The request did not complete within its timeout — the database, or another service it queries, did not answer in time. Any endpoint may answer with it; a wait on a lock is reported as 423 instead.
 
  */
 export type QueryTimeoutResponse = ErrorMessage

@@ -6,6 +6,7 @@
  */
 
 export interface FksPossibleSimilar {
+  Schema: string
   Table: string
   FkName: string
   Fk1Name: string
