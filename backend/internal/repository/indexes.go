@@ -612,16 +612,17 @@ func (p *PgxPool) getIndexesBtreeOnArray(
 	ret := make([]dto.IndexBtreeOnArray, 0, 10) //nolint:mnd
 
 	for rows.Next() {
-		var table, index string
+		var schema, table, index string
 
-		err = rows.Scan(&table, &index)
+		err = rows.Scan(&schema, &table, &index)
 		if err != nil {
 			return nil, fmt.Errorf("getIndexesBtreeOnArray | %w", err)
 		}
 
 		ret = append(ret, dto.IndexBtreeOnArray{
-			Table: table,
-			Index: index,
+			Schema: schema,
+			Table:  table,
+			Index:  index,
 		})
 	}
 
@@ -839,6 +840,7 @@ func (p *PgxPool) getIndexesSimilar1(
 
 	for rows.Next() {
 		var (
+			schema,
 			table,
 			i1UniqueIndexName,
 			i2IndexName,
@@ -848,7 +850,8 @@ func (p *PgxPool) getIndexesSimilar1(
 			i2UsedInConstraint pgtype.Text
 		)
 
-		err = rows.Scan(&table,
+		err = rows.Scan(&schema,
+			&table,
 			&i1UniqueIndexName,
 			&i2IndexName,
 			&i1UniqueIndexDefinition,
@@ -861,6 +864,7 @@ func (p *PgxPool) getIndexesSimilar1(
 		}
 
 		ret = append(ret, dto.IndexSimilar1{
+			Schema:                  schema,
 			Table:                   table,
 			I1UniqueIndexName:       i1UniqueIndexName,
 			I2IndexName:             i2IndexName,
@@ -895,14 +899,15 @@ func (p *PgxPool) getIndexesSimilar2(ctx context.Context, serverVersion int, poo
 	ret := make([]dto.IndexSimilar2, 0, 10) //nolint: mnd
 
 	for rows.Next() {
-		var table, fkName, fkName2 string
+		var schema, table, fkName, fkName2 string
 
-		err = rows.Scan(&table, &fkName, &fkName2)
+		err = rows.Scan(&schema, &table, &fkName, &fkName2)
 		if err != nil {
 			return nil, fmt.Errorf("getIndexesSimilar2 | %w", err)
 		}
 
 		ret = append(ret, dto.IndexSimilar2{
+			Schema:  schema,
 			Table:   table,
 			FkName:  fkName,
 			FkName2: fkName2,
@@ -938,6 +943,7 @@ func (p *PgxPool) getIndexesSimilar3(
 
 	for rows.Next() {
 		var (
+			schema,
 			table,
 			i1IndexName,
 			i2IndexName,
@@ -949,6 +955,7 @@ func (p *PgxPool) getIndexesSimilar3(
 		)
 
 		err = rows.Scan(
+			&schema,
 			&table,
 			&i1IndexName,
 			&i2IndexName,
@@ -963,6 +970,7 @@ func (p *PgxPool) getIndexesSimilar3(
 		}
 
 		ret = append(ret, dto.IndexSimilar3{
+			Schema:                    schema,
 			Table:                     table,
 			I1IndexName:               i1IndexName,
 			I2IndexName:               i2IndexName,

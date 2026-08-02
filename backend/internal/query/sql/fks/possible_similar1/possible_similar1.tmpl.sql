@@ -36,6 +36,7 @@ WITH
         GROUP BY 1, 2, 3
     )
 SELECT
+    n_from.nspname AS schema_name,
     r_from.relname,
     c1.fk_name,
     c2.fk_name fk_name2
@@ -44,3 +45,4 @@ FROM fk_with_attributes_grouped AS c1
     AND c1.conrelid = c2.conrelid AND c1.confrelid = c2.confrelid
     AND c1.rel_att_names = c2.rel_att_names
          INNER JOIN pg_catalog.pg_class AS r_from ON r_from.oid = c1.conrelid
+         INNER JOIN pg_catalog.pg_namespace AS n_from ON n_from.oid = r_from.relnamespace

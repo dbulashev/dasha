@@ -12,9 +12,11 @@ const { t } = useI18n()
 const { onError } = useViewError()
 
 const headers = computed(() => [
+  { title: t('header.schema'), key: 'Schema' },
   { title: t('fk.fkName'), key: 'FkName' },
   { title: t('fk.fromTable'), key: 'FromRel' },
   { title: t('fk.columns'), key: 'RelAttNames' },
+  { title: t('fk.toSchema'), key: 'ToSchema' },
   { title: t('fk.toTable'), key: 'ToRel' },
   { title: t('fk.toColumns'), key: 'ToRelAttNames' },
 ])

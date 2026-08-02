@@ -6,6 +6,7 @@
  */
 
 export interface IndexSimilar3 {
+  Schema: string
   Table: string
   I1IndexName: string
   I2IndexName: string

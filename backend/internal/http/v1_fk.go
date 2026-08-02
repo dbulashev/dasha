@@ -28,9 +28,11 @@ func (s *Handlers) GetFkTypeMismatch(
 		fkTypeMismatches,
 		func(t dto.FkTypeMismatch) serverhttp.FkTypeMismatch {
 			return serverhttp.FkTypeMismatch{
+				Schema:        t.Schema,
 				FkName:        t.FkName,
 				FromRel:       t.FromRel,
 				RelAttNames:   t.RelAttNames,
+				ToSchema:      t.ToSchema,
 				ToRel:         t.ToRel,
 				ToRelAttNames: t.ToRelAttNames,
 			}
@@ -56,6 +58,7 @@ func (s *Handlers) GetFksPossibleNulls(
 		fksPossibleNulls,
 		func(t dto.FksPossibleNulls) serverhttp.FksPossibleNulls {
 			return serverhttp.FksPossibleNulls{
+				Schema:   t.Schema,
 				FkName:   t.FkName,
 				RelName:  t.RelName,
 				AttNames: t.AttNames,
@@ -82,6 +85,7 @@ func (s *Handlers) GetFksPossibleSimilar(
 		fksPossibleSimilar,
 		func(t dto.FksPossibleSimilar) serverhttp.FksPossibleSimilar {
 			return serverhttp.FksPossibleSimilar{
+				Schema:  t.Schema,
 				Table:   t.Table,
 				FkName:  t.FkName,
 				Fk1Name: t.Fk1Name,
