@@ -16,8 +16,8 @@ func TestRegistry_NoDuplicateCodes(t *testing.T) {
 
 func TestRegistry_EveryCheckIsComplete(t *testing.T) {
 	for _, c := range registry {
-		if c.ObjectType == "" || c.RelatedRoute == "" {
-			t.Errorf("%s: object type and related route are part of the contract", c.Code)
+		if c.ObjectType == "" || c.RelatedRoute == "" || c.Query == "" {
+			t.Errorf("%s: object type, related route and query are part of the contract", c.Code)
 		}
 
 		if c.MinVersion < MinSupportedVersion {

@@ -19,7 +19,7 @@ import (
 
 // seedSchemaLintDefects plants one instance of every defect the stage-1 checks
 // look for. Returns the server version so version-gated assertions can adapt.
-func seedSchemaLintDefects(t *testing.T, ctx context.Context, pool *pgxpool.Pool, vNum int) {
+func seedSchemaLintDefects(ctx context.Context, t *testing.T, pool *pgxpool.Pool, vNum int) {
 	t.Helper()
 
 	stmts := []string{
@@ -68,7 +68,7 @@ func seedSchemaLintDefects(t *testing.T, ctx context.Context, pool *pgxpool.Pool
 	}
 }
 
-func schemaLintReport(t *testing.T, ctx context.Context, p *PgxPool, pool *pgxpool.Pool, vNum int) schemalint.Report {
+func schemaLintReport(ctx context.Context, t *testing.T, p *PgxPool, pool *pgxpool.Pool, vNum int) schemalint.Report {
 	t.Helper()
 
 	return schemalint.BuildReport(p.collectSchemaLint(ctx, pool, vNum), p.schemaLintConfig)
@@ -93,9 +93,9 @@ func TestSchemaLint_DetectsSeededDefects(t *testing.T) {
 	vNum, err := p.getServerVersionNum(ctx, pool)
 	require.NoError(t, err)
 
-	seedSchemaLintDefects(t, ctx, pool, vNum)
+	seedSchemaLintDefects(ctx, t, pool, vNum)
 
-	report := schemaLintReport(t, ctx, p, pool, vNum)
+	report := schemaLintReport(ctx, t, p, pool, vNum)
 
 	for _, s := range report.Skipped {
 		assert.NotEqual(t, schemalint.SkipError, s.Reason,
@@ -230,7 +230,7 @@ func TestSchemaLint_SystemSchemasAreNeverReported(t *testing.T) {
 	vNum, err := p.getServerVersionNum(ctx, pool)
 	require.NoError(t, err)
 
-	report := schemaLintReport(t, ctx, p, pool, vNum)
+	report := schemaLintReport(ctx, t, p, pool, vNum)
 
 	for _, f := range report.Findings {
 		assert.False(t, strings.HasPrefix(f.Schema, "pg_"),
@@ -252,7 +252,7 @@ func TestSchemaLint_UnreadableSequenceBecomesSkip(t *testing.T) {
 	vNum, err := admin.getServerVersionNum(ctx, adminPool)
 	require.NoError(t, err)
 
-	seedSchemaLintDefects(t, ctx, adminPool, vNum)
+	seedSchemaLintDefects(ctx, t, adminPool, vNum)
 
 	const role = "lint_watcher"
 
@@ -286,7 +286,7 @@ func TestSchemaLint_UnreadableSequenceBecomesSkip(t *testing.T) {
 	defer rolePool.Close()
 
 	watcher := NewTestPgxPool(rolePool, zap.NewNop())
-	report := schemaLintReport(t, ctx, watcher, rolePool, vNum)
+	report := schemaLintReport(ctx, t, watcher, rolePool, vNum)
 
 	var skipped bool
 

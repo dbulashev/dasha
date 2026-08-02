@@ -111,6 +111,11 @@ func (p *PgxPool) GetSequenceHeadroom(
 	clusterName, instanceName, databaseName string,
 ) (float64, bool, error) {
 	if databaseName != "" {
+		// Same bound as the instance-wide sweep below: the caller is a health-score
+		// poll either way, and one database must not be able to hold it longer.
+		ctx, cancel := context.WithTimeout(ctx, schemaLintHeadroomTimeout)
+		defer cancel()
+
 		pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
 		if err != nil {
 			return 0, false, fmt.Errorf("GetSequenceHeadroom | %w", err)

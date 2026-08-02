@@ -716,7 +716,13 @@ func sortFindings(findings []Finding) {
 			return c
 		}
 
-		return cmp.Compare(a.Params.Index, b.Params.Index)
+		if c := cmp.Compare(a.Params.Index, b.Params.Index); c != 0 {
+			return c
+		}
+
+		// One index can be similar to two others: same object, same first index,
+		// different second. Without this the pair order is the row order.
+		return cmp.Compare(a.Params.OtherObject, b.Params.OtherObject)
 	})
 }
 

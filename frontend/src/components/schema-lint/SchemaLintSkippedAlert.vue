@@ -23,7 +23,7 @@ function reasonText(skip: SchemaLintSkip) {
   const key = `schemaLint.skipReasons.${skip.reason}`
   const parts = [te(key) ? t(key) : skip.reason]
 
-  if (skip.count) parts.push(t('schemaLint.page.skippedObjects', skip.count, { count: skip.count }))
+  if (skip.count) parts.push(t('schemaLint.page.skippedObjects', { count: skip.count }, skip.count))
   if (skip.detail) parts.push(`(${skip.detail})`)
 
   return parts.join(' ')

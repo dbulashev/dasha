@@ -77,6 +77,9 @@ func TestMergeSchemaLintInputs_OnlyMergesRows(t *testing.T) {
 		ServerVersionNum: 160000,
 		Sequences:        []schemalint.SequenceRow{{Object: "a"}},
 		Skipped:          []schemalint.Skip{{Code: "x"}},
+		PartitionRoots: map[schemalint.ObjectRef]schemalint.ObjectRef{
+			{Schema: "public", Object: "child"}: {Schema: "public", Object: "root"},
+		},
 	}
 
 	mergeSchemaLintInputs(&dst, schemalint.Inputs{
@@ -85,6 +88,9 @@ func TestMergeSchemaLintInputs_OnlyMergesRows(t *testing.T) {
 		Unlogged:         []schemalint.UnloggedRow{{Object: "t"}},
 		Skipped:          []schemalint.Skip{{Code: "y"}},
 		Truncated:        true,
+		PartitionRoots: map[schemalint.ObjectRef]schemalint.ObjectRef{
+			{Schema: "public", Object: "other"}: {Schema: "public", Object: "other_root"},
+		},
 	})
 
 	if len(dst.Sequences) != 2 || len(dst.Unlogged) != 1 {
@@ -95,6 +101,12 @@ func TestMergeSchemaLintInputs_OnlyMergesRows(t *testing.T) {
 	// would let a failed query add its rows AND its "did not run" note.
 	if len(dst.Skipped) != 1 || dst.ServerVersionNum != 160000 || dst.Truncated {
 		t.Errorf("only row slices may be merged, got %+v", dst.Skipped)
+	}
+
+	// The roots map is read once per report rather than per query, so it is the
+	// caller's too — merging it here would hide where it actually comes from.
+	if len(dst.PartitionRoots) != 1 {
+		t.Errorf("the partition roots map is caller-owned, got %d entries", len(dst.PartitionRoots))
 	}
 }
 

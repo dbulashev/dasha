@@ -1,6 +1,7 @@
 package schemalint
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -57,29 +58,32 @@ func TestSequenceLevels_Thresholds(t *testing.T) {
 		{freePct: 100, found: false},
 	}
 
+	// A subtest per threshold: one broken boundary must not hide the others.
 	for _, tt := range tests {
-		in := Inputs{Sequences: []SequenceRow{seqRow("public", "s", tt.freePct, "bigint")}}
+		t.Run(fmt.Sprintf("%.1f%% free", tt.freePct), func(t *testing.T) {
+			in := Inputs{Sequences: []SequenceRow{seqRow("public", "s", tt.freePct, "bigint")}}
 
-		got := findingsByCode(BuildReport(in, Config{}), CodeSequenceExhaustion)
-		if !tt.found {
-			if len(got) != 0 {
-				t.Errorf("free %.1f%%: expected no finding, got %v", tt.freePct, got)
+			got := findingsByCode(BuildReport(in, Config{}), CodeSequenceExhaustion)
+			if !tt.found {
+				if len(got) != 0 {
+					t.Errorf("expected no finding, got %v", got)
+				}
+
+				return
 			}
 
-			continue
-		}
+			if len(got) != 1 {
+				t.Fatalf("expected 1 finding, got %d", len(got))
+			}
 
-		if len(got) != 1 {
-			t.Fatalf("free %.1f%%: expected 1 finding, got %d", tt.freePct, len(got))
-		}
+			if got[0].Level != tt.want {
+				t.Errorf("level = %s, want %s", got[0].Level, tt.want)
+			}
 
-		if got[0].Level != tt.want {
-			t.Errorf("free %.1f%%: level = %s, want %s", tt.freePct, got[0].Level, tt.want)
-		}
-
-		if got[0].Params.UsedPct == nil || *got[0].Params.UsedPct != 100-tt.freePct {
-			t.Errorf("free %.1f%%: used_pct not reported as the complement", tt.freePct)
-		}
+			if got[0].Params.UsedPct == nil || *got[0].Params.UsedPct != 100-tt.freePct {
+				t.Errorf("used_pct not reported as the complement")
+			}
+		})
 	}
 }
 
