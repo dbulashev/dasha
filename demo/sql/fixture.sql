@@ -303,6 +303,107 @@ CREATE INDEX IF NOT EXISTS idx_orders_invalid ON orders (id) WHERE id < 0;
 UPDATE pg_index SET indisvalid = false WHERE indexrelid = 'idx_orders_invalid'::regclass;
 
 -- =============================================
+-- Schema Checks fixtures
+-- One instance of every check the /schema-lint page runs by default, so the
+-- page is not almost empty in the demo. Nothing below is touched by the
+-- workload generator.
+-- =============================================
+
+-- A second schema, so the schema filter and the grouping have something to
+-- separate; PUBLIC may create in it (public_create_privilege).
+CREATE SCHEMA legacy;
+GRANT CREATE ON SCHEMA legacy TO PUBLIC;
+
+-- sequence_exhaustion: a serial with ~15% of int4 left. That alone is a notice,
+-- but the owning column is integer, which raises it to a warning and makes the
+-- report say ALTER SEQUENCE is not the whole fix. Deliberately kept above the
+-- 5%-free error threshold: an error-level sequence clamps the health score of
+-- the whole instance, and the demo dashboard should not sit permanently red.
+CREATE TABLE legacy.visit_counters (
+    id serial PRIMARY KEY,
+    label text NOT NULL
+);
+INSERT INTO legacy.visit_counters (label) SELECT 'counter_' || i FROM generate_series(1, 10) i;
+SELECT setval('legacy.visit_counters_id_seq', 1825000000);
+
+-- The same check on a standalone sequence with a small maxvalue: no owning
+-- column, so it stays a notice.
+CREATE SEQUENCE legacy.batch_no_seq MAXVALUE 1000;
+SELECT setval('legacy.batch_no_seq', 880);
+
+-- no_primary_key: a unique index exists, but over a nullable column, so it is
+-- no REPLICA IDENTITY either (unique_nullable).
+CREATE TABLE legacy.import_rows (
+    external_ref integer UNIQUE,
+    payload text
+);
+INSERT INTO legacy.import_rows (external_ref, payload)
+SELECT i, 'row_' || i FROM generate_series(1, 200) i;
+
+-- unlogged_relation / unlogged_sequence (unlogged sequences need PG 15+).
+CREATE UNLOGGED TABLE legacy.session_scratch (
+    id bigint PRIMARY KEY,
+    token text NOT NULL
+);
+INSERT INTO legacy.session_scratch SELECT i, md5(i::text) FROM generate_series(1, 500) i;
+
+CREATE UNLOGGED SEQUENCE legacy.scratch_seq;
+
+-- uuid_in_non_uuid_type: a UUID kept as varchar(36).
+CREATE TABLE legacy.external_accounts (
+    id serial PRIMARY KEY,
+    account_uid varchar(36) NOT NULL,
+    provider text NOT NULL
+);
+INSERT INTO legacy.external_accounts (account_uid, provider)
+SELECT gen_random_uuid()::text, 'provider_' || (i % 5) FROM generate_series(1, 300) i;
+
+-- relation_without_columns: every column dropped, the relation stays.
+CREATE TABLE legacy.abandoned (obsolete integer);
+ALTER TABLE legacy.abandoned DROP COLUMN obsolete;
+
+-- reserved_word_in_name / unsafe_chars_in_name.
+CREATE TABLE legacy."order" (
+    id serial PRIMARY KEY,
+    placed_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE legacy."order items" (
+    id serial PRIMARY KEY,
+    qty integer NOT NULL
+);
+
+-- relation_without_fk (off by default): a table on neither side of any FK.
+CREATE TABLE legacy.audit_log (
+    id bigserial PRIMARY KEY,
+    happened_at timestamptz DEFAULT now(),
+    message text NOT NULL
+);
+INSERT INTO legacy.audit_log (message) SELECT 'event ' || i FROM generate_series(1, 200) i;
+
+-- Partition rollup: the same defect on every partition is shown once, on the
+-- parent, with a partition count. Two checks at once — no key on the table, and
+-- a UUID kept as varchar on a column — so both rollup keys are exercised: the
+-- one addressed by the relation alone and the one addressed by relation +
+-- column. Not UNLOGGED: PostgreSQL refuses that on a partitioned table.
+CREATE TABLE legacy.staging_rows (
+    id bigint,
+    record_uid varchar(36) NOT NULL,
+    batch_date date NOT NULL
+) PARTITION BY RANGE (batch_date);
+
+CREATE TABLE legacy.staging_rows_2026_01 PARTITION OF legacy.staging_rows
+    FOR VALUES FROM ('2026-01-01') TO ('2026-02-01');
+CREATE TABLE legacy.staging_rows_2026_02 PARTITION OF legacy.staging_rows
+    FOR VALUES FROM ('2026-02-01') TO ('2026-03-01');
+CREATE TABLE legacy.staging_rows_2026_03 PARTITION OF legacy.staging_rows
+    FOR VALUES FROM ('2026-03-01') TO ('2026-04-01');
+
+INSERT INTO legacy.staging_rows (id, record_uid, batch_date)
+SELECT i, gen_random_uuid()::text, '2026-01-01'::date + (random()*80)::int
+FROM generate_series(1, 3000) i;
+
+-- =============================================
 -- Warm up stats
 -- =============================================
 SELECT count(*) FROM orders;

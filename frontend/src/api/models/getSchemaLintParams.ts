@@ -29,10 +29,6 @@ export type GetSchemaLintParams = {
    * Keep only findings on objects whose name contains this substring, case-insensitively.
    */
   object?: string
-  /**
-   * Recompute instead of answering from the cache.
-   */
-  refresh?: boolean
   limit?: number
   offset?: number
 }

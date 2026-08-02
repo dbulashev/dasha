@@ -10747,7 +10747,7 @@ export function useGetAutosnapshotSummary<
 }
 
 /**
- * Reads the system catalog only — never user data — and returns defects that runtime pages cannot show: a sequence about to run out of values, a table without a primary key before logical replication is turned on, an unlogged relation nobody remembers creating, a schema PUBLIC may create objects in. A check that could not run is reported in `skipped` with its reason rather than being left out, because a check that did not run must not read as a clean result. Findings on partitions are rolled up to the root table. Results are cached briefly; pass refresh=true after fixing something.
+ * Reads the system catalog only — never user data — and returns defects that runtime pages cannot show: a sequence about to run out of values, a table without a primary key before logical replication is turned on, an unlogged relation nobody remembers creating, a schema PUBLIC may create objects in. A check that could not run is reported in `skipped` with its reason rather than being left out, because a check that did not run must not read as a clean result. Findings on partitions are rolled up to the root table. Always computed on request, never served from a cache.
  * @summary Structural defects of one database's schema
  */
 export type getSchemaLintResponse200 = {
@@ -10853,7 +10853,7 @@ export function useGetSchemaLint<
 }
 
 /**
- * Schema defects live in a database, not in a cluster, so the report of the currently selected database does not answer what the instance as a whole looks like. Walks every configured database of the instance and returns the counts per level. The sweep is sequential, capped in the number of databases and time-bounded; a database that could not be read is marked failed rather than reported as having no findings. Reuses the same cache as the per-database report, so opening a database after the sweep costs nothing.
+ * Schema defects live in a database, not in a cluster, so the report of the currently selected database does not answer what the instance as a whole looks like. Walks every configured database of the instance and returns the counts per level. The sweep is sequential, capped in the number of databases and time-bounded; a database that could not be read is marked failed rather than reported as having no findings.
  * @summary Per-database finding counts for one instance
  */
 export type getSchemaLintSummaryResponse200 = {

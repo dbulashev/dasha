@@ -98,47 +98,6 @@ func TestMergeSchemaLintInputs_OnlyMergesRows(t *testing.T) {
 	}
 }
 
-func TestAllChecksFailed(t *testing.T) {
-	tests := []struct {
-		name   string
-		report schemalint.Report
-		want   bool
-	}{
-		{
-			name:   "every check errored — nothing was learned",
-			report: schemalint.Report{Skipped: []schemalint.Skip{{Reason: schemalint.SkipError}}},
-			want:   true,
-		},
-		{
-			name: "a check reported what it could not see — that is a result",
-			report: schemalint.Report{Skipped: []schemalint.Skip{
-				{Reason: schemalint.SkipError},
-				{Reason: schemalint.SkipInsufficientPrivileges},
-			}},
-			want: false,
-		},
-		{
-			name: "findings present",
-			report: schemalint.Report{
-				Findings: []schemalint.Finding{{Code: schemalint.CodeNoPrimaryKey}},
-				Skipped:  []schemalint.Skip{{Reason: schemalint.SkipError}},
-			},
-			want: false,
-		},
-		{
-			name:   "nothing failed",
-			report: schemalint.Report{Skipped: []schemalint.Skip{{Reason: schemalint.SkipDisabled}}},
-			want:   false,
-		},
-	}
-
-	for _, tt := range tests {
-		if got := allChecksFailed(tt.report); got != tt.want {
-			t.Errorf("%s: got %v, want %v", tt.name, got, tt.want)
-		}
-	}
-}
-
 func TestPlanCollapses(t *testing.T) {
 	if !planCollapses([]string{schemalint.CodeNoPrimaryKey}) {
 		t.Error("relation checks roll up to the partition root and need the roots map")

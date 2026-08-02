@@ -21,10 +21,8 @@ func (s *Handlers) GetSchemaLint(
 	ctx context.Context,
 	req serverhttp.GetSchemaLintRequestObject,
 ) (serverhttp.GetSchemaLintResponseObject, error) {
-	refresh := req.Params.Refresh != nil && *req.Params.Refresh
-
 	report, err := s.repo.GetSchemaLintReport(ctx,
-		req.Params.ClusterName, req.Params.Instance, req.Params.Database, refresh)
+		req.Params.ClusterName, req.Params.Instance, req.Params.Database)
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.GetSchemaLint404Response{}, nil
 	}

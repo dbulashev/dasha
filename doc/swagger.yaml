@@ -2528,7 +2528,7 @@ paths:
         A check that could not run is reported in `skipped` with its reason rather
         than being left out, because a check that did not run must not read as a
         clean result. Findings on partitions are rolled up to the root table.
-        Results are cached briefly; pass refresh=true after fixing something.
+        Always computed on request, never served from a cache.
       parameters:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
@@ -2564,13 +2564,6 @@ paths:
             type: string
           required: false
         - in: query
-          name: refresh
-          description: Recompute instead of answering from the cache.
-          schema:
-            type: boolean
-            default: false
-          required: false
-        - in: query
           name: limit
           schema:
             type: integer
@@ -2604,8 +2597,7 @@ paths:
         looks like. Walks every configured database of the instance and returns the
         counts per level. The sweep is sequential, capped in the number of databases
         and time-bounded; a database that could not be read is marked failed rather
-        than reported as having no findings. Reuses the same cache as the per-database
-        report, so opening a database after the sweep costs nothing.
+        than reported as having no findings.
       parameters:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
@@ -6103,7 +6095,7 @@ components:
             a lower bound.
           type: boolean
         duration_ms:
-          description: How long the checks took. Zero when the report came from the cache.
+          description: How long the checks took.
           type: integer
           format: int64
 

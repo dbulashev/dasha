@@ -44,11 +44,8 @@ const clean = computed(() => counters.value.every((c) => c.count === 0))
 
     <v-spacer />
 
-    <span v-if="durationMs > 0" class="text-caption text-medium-emphasis">
+    <span class="text-caption text-medium-emphasis">
       {{ t('schemaLint.page.duration', { ms: durationMs }) }}
-    </span>
-    <span v-else class="text-caption text-medium-emphasis">
-      {{ t('schemaLint.page.fromCache') }}
     </span>
   </div>
 </template>
