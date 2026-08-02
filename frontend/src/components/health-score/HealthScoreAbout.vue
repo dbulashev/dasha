@@ -182,6 +182,9 @@ clamp(0 … 100)</pre>
               <li>{{ t('healthScore.about.criticalXid') }}</li>
               <li>{{ t('healthScore.about.criticalAutovacuum') }}</li>
               <li>{{ t('healthScore.about.criticalTrackCounts') }}</li>
+              <li>{{ t('healthScore.about.criticalSequence') }}</li>
+              <li>{{ t('healthScore.about.criticalChecksum') }}</li>
+              <li>{{ t('healthScore.about.criticalDisk') }}</li>
             </ul>
           </v-alert>
 

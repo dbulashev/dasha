@@ -13,9 +13,13 @@ const (
 	DefaultSequenceNoticePct  = 20.0
 )
 
-// DefaultCacheTTL is how long a report stays reusable. Schema defects change on
-// deploys, not per second; the page's refresh button covers the impatient case.
-const DefaultCacheTTL = 5 * time.Minute
+// DefaultSequenceCacheTTL is how long the worst-sequence number the health score
+// reads stays reusable. The report itself is never cached — this one is, because
+// the score is polled from the home page and the number behind it costs a read of
+// every sequence in every database of the instance. Sequences drain over days,
+// so a quarter of an hour of staleness cannot hide anything the next poll would
+// have caught.
+const DefaultSequenceCacheTTL = 15 * time.Minute
 
 // Config is the global schema_lint section. Global rather than per-cluster, as
 // with the other analysis settings.
@@ -24,7 +28,7 @@ type Config struct {
 	EnabledChecks      []string           `mapstructure:"enabled_checks"`
 	IgnoreSchemas      []string           `mapstructure:"ignore_schemas"`
 	SequenceThresholds map[string]float64 `mapstructure:"sequence_thresholds"`
-	CacheTTL           time.Duration      `mapstructure:"cache_ttl"`
+	SequenceCacheTTL   time.Duration      `mapstructure:"sequence_cache_ttl"`
 }
 
 // enabled reports whether a check should run: the registry default, overridden
@@ -74,8 +78,9 @@ func (c Config) sequenceThreshold(l Level) float64 {
 }
 
 // LevelForFreePct is sequenceLevel for callers outside this package — the
-// health-score rule, so that the page and the recommendation cannot disagree on
-// where a threshold lies, including at the exact boundary. A nil map means the
+// health-score rule, so that both sides put a threshold in the same place,
+// including at the exact boundary. It classifies headroom alone: the int4-owner
+// escalation fromSequences applies is not part of it. A nil map means the
 // defaults.
 func LevelForFreePct(freePct float64, thresholds map[string]float64) (Level, bool) {
 	return Config{SequenceThresholds: thresholds}.sequenceLevel(freePct) //nolint:exhaustruct
@@ -96,11 +101,11 @@ func (c Config) sequenceLevel(freePct float64) (Level, bool) {
 	}
 }
 
-// CacheTTLOrDefault keeps a zero config usable.
-func (c Config) CacheTTLOrDefault() time.Duration {
-	if c.CacheTTL <= 0 {
-		return DefaultCacheTTL
+// SequenceCacheTTLOrDefault keeps a zero config usable.
+func (c Config) SequenceCacheTTLOrDefault() time.Duration {
+	if c.SequenceCacheTTL <= 0 {
+		return DefaultSequenceCacheTTL
 	}
 
-	return c.CacheTTL
+	return c.SequenceCacheTTL
 }

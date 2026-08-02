@@ -71,19 +71,18 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 - Autovacuum and autoanalyze configuration review
 
 **Schema Checks**
-- Structural defects the runtime pages cannot show: a sequence running out of values, a table without a primary key before logical replication is enabled, a forgotten `UNLOGGED` relation, a schema `PUBLIC` may create objects in (CVE-2018-1058)
-- Reads the system catalog only — user data is never touched, which is also the argument for running it on production
-- Three severities (`error` / `warning` / `notice`) assigned in Go from the facts a query returns, so thresholds are configurable without touching SQL; findings on partitions roll up to the root table instead of flooding the report
-- A check that cannot run (no privilege, unsupported version, timeout) is listed as skipped with its reason: an unchecked schema never reads as a clean one
-- Instance-wide overview: per-database counts for every configured database, so the answer is not limited to the one currently selected
-- Heuristic and noisy checks (a UUID kept as `varchar`, tables outside any foreign key) are suppressible, and the noisiest are off until switched on
-- Every check that already had a page of its own — invalid constraints, foreign-key type mismatches, nullable keys, similar keys and indexes, B-tree on arrays — feeds the same report through one registry, so the page and the report cannot drift apart
-- Naming checks limited to what breaks tooling — a reserved keyword as a name, characters that force quoting — not to style; and unvalidated (`NOT VALID`) constraints, which the FK Analysis page already lists, now also reach the report
-- Hidden on standbys — the schema is identical to the primary, but it cannot be fixed there
+- 17 structural checks: a sequence running out of values, a table without a primary key or without any unique key, an `UNLOGGED` relation or sequence, a schema `PUBLIC` may create objects in (CVE-2018-1058), a UUID kept as `varchar`, a relation with no columns left, a reserved keyword or a quoting-unsafe character in an object name, tables outside any foreign key
+- Three severities (`error` / `warning` / `notice`); findings on the partitions of one table roll up to the root table
+- A check that cannot run (no privilege, unsupported version, timeout) is listed as skipped with its reason
+- Instance-wide overview: per-database counts for every configured database
+- Heuristic and noisy checks (a UUID kept as `varchar`, tables outside any foreign key, similar keys and indexes) are suppressible by check and by schema mask; the noisiest are off until switched on
+- Invalid constraints, foreign-key type mismatches, nullable keys, similar keys and indexes and B-tree on arrays appear both in the schema report and on their own pages
+- Every finding carries what the defect leads to and how to fix it, with a copyable SQL statement where the fix is unambiguous
+- Hidden on standbys
 
 **Health Score**
 - Composite 0–100 instance score across eight categories (connections, performance, storage, replication, maintenance, horizon, WAL/checkpoint, locks) with continuous penalty functions — top-level `/health-score` page plus a Home-page gauge
-- Parallel rules engine producing prioritized recommendations (severity, metric values, per-database drill-down) that stay in lockstep with the score
+- Parallel rules engine producing prioritized recommendations: severity, metric values, per-database drill-down
 - Optional **metrics-backed mode**: with a Prometheus/VictoriaMetrics datasource configured (`health_score.metrics`), the score, recommendations and a trend with seasonal baseline and dip detection are computed from time series (pgSCV, Yandex MDB, pgbouncer, host metrics) instead of point-in-time SQL; the SQL snapshot stays the zero-config fallback
 - Scoring model details: [README-health-score.md](README-health-score.md)
 
@@ -226,8 +225,8 @@ log_search:
 
 #### Schema Checks (optional)
 
-The `/schema-lint` page works without configuration. The global `schema_lint` block silences what is
-noise in a given fleet and tunes the sequence thresholds:
+The `/schema-lint` page works without configuration. The global `schema_lint` block silences checks and
+schemas, and tunes the sequence thresholds:
 
 ```yaml
 schema_lint:
@@ -238,7 +237,7 @@ schema_lint:
     error: 5
     warning: 10
     notice: 20
-  cache_ttl: 5m                              # the page's Refresh button bypasses it
+  sequence_cache_ttl: 15m                    # TTL of the worst-sequence value the health score reads
 ```
 
 #### Authentication (optional)
@@ -843,9 +842,14 @@ See [CHANGELOG.md](CHANGELOG.md) for release notes.
 ## Third-party components
 
 The SQL behind **Schema Checks** is derived from [db_verifier](https://github.com/sdblist/db_verifier)
-(MIT, © Nikonov, 2024), a set of structural checks for PostgreSQL. The logic is adapted to Dasha —
-severity is assigned outside SQL, partition findings are rolled up, system schemas are filtered
-uniformly. Per-template attribution: [backend/internal/query/README.md](backend/internal/query/README.md).
+(MIT, © Nikonov, 2024), a set of structural checks for PostgreSQL [backend/internal/query/README.md](backend/internal/query/README.md).
+
+The **lock tree** query comes from [postgres_dba](https://github.com/NikolayS/postgres_dba)
+(BSD 3-Clause, © 2017 Nikolay Samokhvalov) — `sql/l2_lock_trees.sql`, adapted to run as a single
+statement without psql version branches. Licence text:
+[backend/internal/query/LICENSE-postgres_dba](backend/internal/query/LICENSE-postgres_dba).
+
+Index bloat estimation descends from ioguix's pgsql-bloat-estimation.
 
 ## License
 

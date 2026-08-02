@@ -51,14 +51,11 @@ const (
 	undefinedFunctionCode     = "42883"
 )
 
-type schemaLintCacheEntry struct {
-	report    schemalint.Report
-	expiresAt time.Time
-}
-
-// sequenceHeadroomEntry shares the cache map with the reports under its own key
-// prefix. Far cheaper to compute, and it also stands in for a failed probe, on
-// a shorter TTL of its own.
+// sequenceHeadroomEntry is the only thing kept between requests. The report
+// itself is not cached: the page is opened deliberately and expects to see the
+// schema as it is now. This one number is different — the health score reads it
+// on every poll of the home page, and it costs a read of every sequence in every
+// database of the instance. A failed probe is stored too, on a shorter TTL.
 type sequenceHeadroomEntry struct {
 	worst     float64
 	known     bool
@@ -69,27 +66,20 @@ type sequenceHeadroomEntry struct {
 // assembles the report. A failing check never fails the report: it is recorded
 // as a skip with its reason, because a check that did not run must not read as
 // a clean result.
+//
+// Always computed, never served from a cache: opening the page is a deliberate
+// act, usually right after changing something, and a stale answer there is worse
+// than the catalog scan it saves.
 func (p *PgxPool) GetSchemaLintReport(
 	ctx context.Context,
 	clusterName, instanceName, databaseName string,
-	refresh bool,
 ) (schemalint.Report, error) {
 	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
 	if err != nil {
 		return schemalint.Report{}, fmt.Errorf("GetSchemaLintReport | %w", err)
 	}
 
-	// The key always names a real database: an empty databaseName resolves to
-	// whichever pool answered, and caching that under "" would keep a second
-	// copy of the same database's report.
-	databaseName = poolDatabase(pool, databaseName)
-	key := schemaLintCacheKey(clusterName, instanceName, databaseName)
-
-	if cached, ok := p.cachedSchemaLintReport(key, refresh); ok {
-		return cached, nil
-	}
-
-	return p.schemaLintReportForPool(ctx, key, clusterName, databaseName, pool)
+	return p.schemaLintReportForPool(ctx, clusterName, poolDatabase(pool, databaseName), pool)
 }
 
 // poolDatabase names the database a pool is connected to, falling back to the
@@ -184,9 +174,9 @@ func (p *PgxPool) sequenceHeadroomForPool(
 	clusterName, instanceName, databaseName string,
 	pool *pgxpool.Pool,
 ) (float64, bool, error) {
-	key := "sequences/" + schemaLintCacheKey(clusterName, instanceName, databaseName)
+	key := sequenceHeadroomCacheKey(clusterName, instanceName, databaseName)
 
-	if cached, ok := p.schemaLintCache.Load(key); ok {
+	if cached, ok := p.sequenceHeadroomCache.Load(key); ok {
 		if entry, valid := cached.(sequenceHeadroomEntry); valid && time.Now().Before(entry.expiresAt) {
 			return entry.worst, entry.known, nil
 		}
@@ -203,7 +193,7 @@ func (p *PgxPool) sequenceHeadroomForPool(
 		return 0, false, fmt.Errorf("GetSequenceHeadroom | %s | %w", databaseName, err)
 	}
 
-	p.storeSequenceHeadroom(key, worst, known, p.schemaLintConfig.CacheTTLOrDefault())
+	p.storeSequenceHeadroom(key, worst, known, p.schemaLintConfig.SequenceCacheTTLOrDefault())
 
 	return worst, known, nil
 }
@@ -231,41 +221,22 @@ func (p *PgxPool) readSequenceHeadroom(ctx context.Context, pool *pgxpool.Pool) 
 }
 
 func (p *PgxPool) storeSequenceHeadroom(key string, worst float64, known bool, ttl time.Duration) {
-	p.schemaLintCache.Store(key, sequenceHeadroomEntry{
+	p.sequenceHeadroomCache.Store(key, sequenceHeadroomEntry{
 		worst:     worst,
 		known:     known,
 		expiresAt: time.Now().Add(ttl),
 	})
 }
 
-func schemaLintCacheKey(clusterName, instanceName, databaseName string) string {
+func sequenceHeadroomCacheKey(clusterName, instanceName, databaseName string) string {
 	return clusterName + "/" + instanceName + "/" + databaseName
 }
 
-func (p *PgxPool) cachedSchemaLintReport(key string, refresh bool) (schemalint.Report, bool) {
-	if refresh {
-		return schemalint.Report{}, false
-	}
-
-	cached, ok := p.schemaLintCache.Load(key)
-	if !ok {
-		return schemalint.Report{}, false
-	}
-
-	entry, valid := cached.(schemaLintCacheEntry)
-	if !valid || !time.Now().Before(entry.expiresAt) {
-		return schemalint.Report{}, false
-	}
-
-	return entry.report, true
-}
-
 // schemaLintReportForPool is the shared body of the single-database report and
-// the instance sweep: the sweep holds pools, not database names, and both must
-// fill the same cache so opening the page after the sweep is free.
+// the instance sweep: the sweep holds pools, not database names.
 func (p *PgxPool) schemaLintReportForPool(
 	ctx context.Context,
-	key, clusterName, databaseName string,
+	clusterName, databaseName string,
 	pool *pgxpool.Pool,
 ) (schemalint.Report, error) {
 	vNum, err := p.getServerVersionNum(ctx, pool)
@@ -279,43 +250,7 @@ func (p *PgxPool) schemaLintReportForPool(
 
 	p.logSchemaLintSkips(clusterName, databaseName, report.Skipped)
 
-	// A report where nothing actually ran must not be cached: an expired sweep
-	// deadline would otherwise pin an empty "all skipped" answer to the page for
-	// the whole TTL, and it reads exactly like a clean schema.
-	if ctx.Err() == nil && !allChecksFailed(report) {
-		p.schemaLintCache.Store(key, schemaLintCacheEntry{
-			report:    report,
-			expiresAt: time.Now().Add(p.schemaLintConfig.CacheTTLOrDefault()),
-		})
-	}
-
-	p.evictStaleSchemaLintCache()
-
 	return report, nil
-}
-
-// allChecksFailed reports whether every check that was supposed to run ended in
-// SkipError — a report with no evidence in it at all.
-func allChecksFailed(report schemalint.Report) bool {
-	if len(report.Findings) > 0 {
-		return false
-	}
-
-	failed := 0
-
-	for _, s := range report.Skipped {
-		switch s.Reason {
-		case schemalint.SkipError:
-			failed++
-		case schemalint.SkipDisabled, schemalint.SkipUnsupportedVersion:
-			// Deliberately not run — says nothing about whether the rest worked.
-		case schemalint.SkipInsufficientPrivileges:
-			// The check ran and reported what it could not see: that is a result.
-			return false
-		}
-	}
-
-	return failed > 0
 }
 
 // GetSchemaLintSummary walks every database of one instance and returns the
@@ -337,22 +272,17 @@ func (p *PgxPool) GetSchemaLintSummary(
 	out := make([]schemalint.DatabaseSummary, 0, len(pools))
 
 	for _, dbp := range pools {
-		key := schemaLintCacheKey(clusterName, instanceName, dbp.database)
+		report, err := p.schemaLintReportForPool(ctx, clusterName, dbp.database, dbp.pool)
+		if err != nil {
+			p.logger.Warn("schema lint sweep: database unreadable",
+				zap.String("cluster", clusterName),
+				zap.String("instance", instanceName),
+				zap.String("database", dbp.database),
+				zap.Error(err))
 
-		report, ok := p.cachedSchemaLintReport(key, false)
-		if !ok {
-			report, err = p.schemaLintReportForPool(ctx, key, clusterName, dbp.database, dbp.pool)
-			if err != nil {
-				p.logger.Warn("schema lint sweep: database unreadable",
-					zap.String("cluster", clusterName),
-					zap.String("instance", instanceName),
-					zap.String("database", dbp.database),
-					zap.Error(err))
+			out = append(out, schemalint.DatabaseSummary{Database: dbp.database, Failed: true})
 
-				out = append(out, schemalint.DatabaseSummary{Database: dbp.database, Failed: true})
-
-				continue
-			}
+			continue
 		}
 
 		out = append(out, schemalint.DatabaseSummary{
@@ -425,28 +355,6 @@ func (p *PgxPool) instanceDatabasePools(
 	}
 
 	return pools, nil
-}
-
-// evictStaleSchemaLintCache drops expired entries so a database that stops being
-// queried (dropped, removed from the config) does not keep its report forever.
-// One pass per computed report — the map holds one key per database.
-func (p *PgxPool) evictStaleSchemaLintCache() {
-	now := time.Now()
-
-	p.schemaLintCache.Range(func(k, v any) bool {
-		switch entry := v.(type) {
-		case schemaLintCacheEntry:
-			if now.After(entry.expiresAt) {
-				p.schemaLintCache.Delete(k)
-			}
-		case sequenceHeadroomEntry:
-			if now.After(entry.expiresAt) {
-				p.schemaLintCache.Delete(k)
-			}
-		}
-
-		return true
-	})
 }
 
 // collectSchemaLint runs the planned queries one after another. Sequential on

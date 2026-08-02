@@ -110,7 +110,7 @@ type Repository interface {
 	GetMaintenanceAutovacuumSummary(ctx context.Context, clusterName, instanceName, databaseName string) (*dto.MaintenanceAutovacuumSummary, error)
 	GetHotSampleTables(ctx context.Context, clusterName, instanceName, databaseName string, schema, object *string) ([]hotobjects.AnchorRow, *time.Time, bool, error)
 	GetHotSampleIndexes(ctx context.Context, clusterName, instanceName, databaseName string, schema, object *string) ([]hotobjects.AnchorRow, *time.Time, bool, error)
-	GetSchemaLintReport(ctx context.Context, clusterName, instanceName, databaseName string, refresh bool) (schemalint.Report, error)
+	GetSchemaLintReport(ctx context.Context, clusterName, instanceName, databaseName string) (schemalint.Report, error)
 	GetSchemaLintSummary(ctx context.Context, clusterName, instanceName string) ([]schemalint.DatabaseSummary, error)
 	GetSequenceHeadroom(ctx context.Context, clusterName, instanceName, databaseName string) (float64, bool, error)
 	GetQueriesBlocked(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.QueryBlocked, error)
@@ -161,17 +161,17 @@ type pgxPoolItem struct {
 type PgxPools map[config.ClusterName][]pgxPoolItem
 
 type PgxPool struct {
-	mu                  sync.RWMutex
-	clusters            config.Clusters
-	pools               PgxPools
-	logger              *zap.Logger
-	pgStatsViewConfig   string   // configured pg_stats_view from global config
-	resolvedPgStatsView sync.Map // *pgxpool.Pool → string (resolved view name)
-	resolvedExtSchemas  sync.Map // extSchemaKey → string (quoted extension schema)
-	pgssResetFuncConfig string   // configured pgss_reset_function from global config
-	poolConfig          config.PoolConfig
-	schemaLintConfig    schemalint.Config
-	schemaLintCache     sync.Map // cluster/instance/database → schemaLintCacheEntry
+	mu                    sync.RWMutex
+	clusters              config.Clusters
+	pools                 PgxPools
+	logger                *zap.Logger
+	pgStatsViewConfig     string   // configured pg_stats_view from global config
+	resolvedPgStatsView   sync.Map // *pgxpool.Pool → string (resolved view name)
+	resolvedExtSchemas    sync.Map // extSchemaKey → string (quoted extension schema)
+	pgssResetFuncConfig   string   // configured pgss_reset_function from global config
+	poolConfig            config.PoolConfig
+	schemaLintConfig      schemalint.Config
+	sequenceHeadroomCache sync.Map // cluster/instance/database → sequenceHeadroomEntry
 }
 
 func NewRepositoryPgxPool(

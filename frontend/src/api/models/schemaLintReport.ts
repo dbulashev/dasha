@@ -18,6 +18,6 @@ export interface SchemaLintReport {
   total: number
   /** A check hit its row cap and its findings are incomplete. The counts are a lower bound. */
   truncated: boolean
-  /** How long the checks took. Zero when the report came from the cache. */
+  /** How long the checks took. */
   duration_ms: number
 }

@@ -8,13 +8,14 @@ no licence headers.
 
 - Project: https://github.com/sdblist/db_verifier
 - Licence: MIT, © Nikonov, 2024
-- Used in: `schema_lint/*` — the structural checks are derived from db_verifier's
-  check set. The logic is adapted to Dasha: severity is assigned in Go from the
-  facts a query returns instead of being baked into separate per-severity
-  queries, partition rollup happens in post-processing, and system schemas are
-  filtered uniformly.
+- The checks are derived from db_verifier's check set. The logic is adapted to
+  Dasha: severity is assigned in Go from the facts a query returns instead of
+  being baked into separate per-severity queries, partition rollup happens in
+  post-processing, and system schemas are filtered uniformly.
 
-Mapping of Dasha templates to the original checks:
+Every borrowed template and the original check it comes from. The ones outside
+the `schema_lint` tree power pages of their own and reach the schema report
+through the registry rather than being reimplemented there.
 
 | Template | db_verifier checks |
 |---|---|
@@ -26,12 +27,31 @@ Mapping of Dasha templates to the original checks:
 | `schema_lint/relations_without_fk` | `fk1007` |
 | `schema_lint/relations_without_columns` | `r1002` |
 | `schema_lint/unsafe_names` | subset of `n1001`–`n1026` (keyword and quoting cases only) |
-| `schema_lint/partition_roots` | — (Dasha's own, feeds the partition rollup) |
+| `constraints/invalid_constraints` | `c1001` |
+| `fks/type_mismatch` | `fk1001` |
+| `fks/possible_nulls` | `fk1002` |
+| `fks/possible_similar1` | `fk1010` |
+| `fks/possible_similar2` | `fk1011` |
+| `indexes/similar_1` | `i1001` |
+| `indexes/similar_2` | `i1003` |
+| `indexes/similar_3` | `i1005` |
+| `indexes/duplicate` | `i1005` |
+| `indexes/btree_on_array` | `i1010` |
 
-Checks that live outside the `schema_lint` tree — they power pages of their own and
-feed the schema report through the registry rather than being reimplemented — come
-from the same project: `constraints/invalid_constraints` (`c1001`), `fks/type_mismatch`
-(`fk1001`), `fks/possible_nulls` (`fk1002`), `fks/possible_similar1`,
-`fks/possible_similar2` (`fk1010`, `fk1011`), `indexes/similar_1`,
-`indexes/similar_2`, `indexes/similar_3`, `indexes/duplicate` (`i1001`, `i1003`,
-`i1005`), `indexes/btree_on_array` (`i1010`).
+## postgres_dba
+
+- Project: https://github.com/NikolayS/postgres_dba
+- Licence: BSD 3-Clause, © 2017 Nikolay Samokhvalov — full text in
+  [LICENSE-postgres_dba](LICENSE-postgres_dba)
+- Used in: `locks/tree` — derived from `sql/l2_lock_trees.sql`. The same
+  `activity` / `blockers` / `tree` recursion over `pg_blocking_pids()`, with the
+  psql `\if` version branches replaced by a single statement (the PG14+
+  `pg_locks.waitstart` wait age is read unconditionally, since Dasha supports
+  PG14+), the output narrowed to the columns the page renders, and the query text
+  truncated at 500 characters. The same query is explained in
+  https://postgres.ai/blog/20211018-postgresql-lock-trees.
+
+## ioguix pgsql-bloat-estimation
+
+`indexes/bloat` uses the well-known statistics-based bloat estimation that
+originates in ioguix's pgsql-bloat-estimation (PostgreSQL licence).

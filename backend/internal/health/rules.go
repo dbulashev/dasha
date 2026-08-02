@@ -715,8 +715,10 @@ var Registry = []Rule{
 		ID: "sequence_exhaustion", Category: CategoryStorage, RelatedRoute: "/schema-lint",
 		Evaluate: func(m RawMetrics) *Hit {
 			// Severity comes from the schema-lint classifier itself rather than
-			// from restated numbers: same thresholds, same boundaries, so a
-			// finding shown as an error there is never a LOW here.
+			// from restated numbers, so both sides share the thresholds and the
+			// boundaries. They can still differ by one step: the page raises the
+			// level for a sequence owned by an int4 column, and the ratio here
+			// carries no column type to raise on.
 			level, found := schemalint.LevelForFreePct(freePctOf(m.SequenceExhaustionMax), m.SequenceThresholds)
 			if !found {
 				return nil

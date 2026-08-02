@@ -6,8 +6,11 @@ maintenance 0.15, storage 0.10, horizon 0.10, wal_checkpoint 0.10, locks 0.10.
 Score bands: ≥80 healthy, 40–79 degraded, <40 critical.
 
 **Critical ceiling:** one catastrophic condition clamps the whole score to ≤30
-regardless of other categories: XID age past the failsafe zone, any checksum
-failure, a sequence with under 5% of its values left, or host disk ≥90% full.
+regardless of other categories: XID age past the failsafe zone, autovacuum
+globally off, track_counts off, a sequence with under 5% of its values left, any
+checksum failure, or host disk ≥90% full. The first four are evaluated on the
+primary only — a standby runs no autovacuum and advances no sequences. Checksum
+failures and a full disk are role-agnostic and clamp any instance.
 
 **Key XID constants:** 150M — aggressive freezing starts
 (vacuum_freeze_table_age); 200M — forced anti-wraparound autovacuum
@@ -100,12 +103,15 @@ data corruption. Check disks and backups immediately.
 ### sequence_exhaustion
 Worst sequence usage vs the limit that actually applies (an int4 owner column
 caps a bigint sequence at 2147483647). LOW below 20% free, MED below 10%, HIGH
-below 5% (which also clamps the score to ≤30) — the same points, and the same
-boundaries, where `schema_lint` calls it notice/warning/error, and they move
-together when sequence_thresholds is configured. Fed by metrics when a datasource is configured, by the schema-lint catalog
-sweep otherwise. Widen the sequence, and the owning column too when it is int4:
-that part rewrites the table and needs a window. See `schema_lint` for the
-sequences behind the number.
+below 5% (which also clamps the score to ≤30) — the same points `schema_lint`
+uses, moving together when `schema_lint.sequence_thresholds` is configured. But
+`schema_lint` raises the level one step for an `integer` owner column and this
+rule does not: its level can be one below the schema check's. Fed by metrics
+when a datasource is configured; otherwise read from the catalog across every
+database of the instance, so the number is the worst sequence anywhere on it.
+Widen the sequence, and the owning column too when it is int4: that part
+rewrites the table and needs a window. See `schema_lint` for the sequences
+behind the number.
 
 ### host_disk_space
 Fullest host filesystem (metrics mode only). LOW ≥70%, MED ≥80%, HIGH ≥90%

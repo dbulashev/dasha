@@ -1533,7 +1533,7 @@ type SchemaLintFindingParams struct {
 
 // SchemaLintReport defines model for SchemaLintReport.
 type SchemaLintReport struct {
-	// DurationMs How long the checks took. Zero when the report came from the cache.
+	// DurationMs How long the checks took.
 	DurationMs int64 `json:"duration_ms"`
 
 	// Findings Page of findings, worst level first. Order is stable across requests.
@@ -2446,11 +2446,8 @@ type GetSchemaLintParams struct {
 
 	// Object Keep only findings on objects whose name contains this substring, case-insensitively.
 	Object *string `form:"object,omitempty" json:"object,omitempty"`
-
-	// Refresh Recompute instead of answering from the cache.
-	Refresh *bool `form:"refresh,omitempty" json:"refresh,omitempty"`
-	Limit   *int  `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset  *int  `form:"offset,omitempty" json:"offset,omitempty"`
+	Limit  *int    `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset *int    `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
 // GetSchemaLintParamsLevel defines parameters for GetSchemaLint.
@@ -10774,22 +10771,6 @@ func NewGetSchemaLintRequest(server string, params *GetSchemaLintParams) (*http.
 		if params.Object != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "object", runtime.ParamLocationQuery, *params.Object); err != nil {
-				return nil, err
-			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-				return nil, err
-			} else {
-				for k, v := range parsed {
-					for _, v2 := range v {
-						queryValues.Add(k, v2)
-					}
-				}
-			}
-
-		}
-
-		if params.Refresh != nil {
-
-			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "refresh", runtime.ParamLocationQuery, *params.Refresh); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err

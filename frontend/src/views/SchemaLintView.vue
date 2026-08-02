@@ -44,7 +44,7 @@ const page = ref(1)
 // leave an older request in flight whose late reply would clobber the newer one.
 let reqId = 0
 
-async function load(p = 1, refresh = false) {
+async function load(p = 1) {
   if (!clusterName.value || !hostName.value || !databaseName.value) return
 
   const myId = ++reqId
@@ -60,7 +60,6 @@ async function load(p = 1, refresh = false) {
       code: codeFilter.value.length ? codeFilter.value : undefined,
       schema: schemaQuery.value?.trim() || undefined,
       object: objectQuery.value?.trim() || undefined,
-      refresh: refresh || undefined,
       limit: pageSize,
       offset: (p - 1) * pageSize,
     })
@@ -127,16 +126,6 @@ function onLevelPick(level: GetSchemaLintLevel | null) {
           <v-icon v-bind="props" size="small" color="medium-emphasis">mdi-help-circle-outline</v-icon>
         </template>
       </v-tooltip>
-      <v-spacer />
-      <v-btn
-        variant="text"
-        size="small"
-        prepend-icon="mdi-refresh"
-        :loading="loading"
-        @click="load(1, true)"
-      >
-        {{ t('schemaLint.page.refresh') }}
-      </v-btn>
     </v-card-title>
 
     <v-card-text>

@@ -28,8 +28,12 @@ per-partition fixes anyway.
 
 `params`: `used_pct`, `last_value`, `max_value`, `owned_by`, `owned_column_type`.
 
-Levels by values still free: < 5% error, < 10% warning, < 20% notice — the same
-points as the `sequence_exhaustion` health rule (HIGH/MEDIUM/LOW).
+Levels by values still free: < 5% error, < 10% warning, < 20% notice. An
+`integer` owner column raises the level one step. Operators can move the
+thresholds with `schema_lint.sequence_thresholds`; the `sequence_exhaustion`
+health rule reads the same setting and sits on the same points, but does not
+apply the int4 step — its level can be one below this one. Never state a
+threshold you did not read here.
 
 `max_value` is the ceiling that actually applies, not always the sequence's own:
 a bigint sequence owned by an `integer` column breaks at 2147483647, when the
