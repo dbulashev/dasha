@@ -35,6 +35,7 @@ func (s *Handlers) GetHealthScore(
 
 	if raw, matched, ok := s.metricsRawWithCatalog(ctx, req.Params.ClusterName, req.Params.Instance); ok {
 		raw.WalLevelManaged = walManaged
+		s.overlaySequenceExhaustion(ctx, &raw, req.Params.ClusterName, req.Params.Instance, "")
 		result = health.CalculateWithWeights(raw, weights)
 		source = "metrics"
 		// Resolved but no series matched any selector — the metrics score is built
@@ -55,6 +56,7 @@ func (s *Handlers) GetHealthScore(
 
 		raw := rawFromSnapshot(m)
 		raw.WalLevelManaged = walManaged
+		s.overlaySequenceExhaustion(ctx, &raw, req.Params.ClusterName, req.Params.Instance, "")
 		result = health.CalculateWithWeights(raw, weights)
 	}
 
@@ -79,6 +81,37 @@ func (s *Handlers) GetHealthScore(
 		Source:          &src,
 		MetricsDegraded: &metricsDegraded,
 	}, nil
+}
+
+// overlaySequenceExhaustion fills the sequence headroom the SQL snapshot does
+// not carry, reading it from the schema-lint report (cached, so the health score
+// does not pay for a catalog sweep on every poll).
+//
+// The database argument carries the caller's scope straight through: empty means
+// the whole instance, which is what the gauge and the instance-wide
+// recommendations measure, and a name means that database's drill-down. Passing
+// a single database where the caller meant the instance is how the gauge and the
+// recommendation below it end up disagreeing about the same sequence.
+//
+// Left alone when the metrics datasource already supplied the signal, and
+// skipped on standbys, where the report is not produced at all. A failure is
+// silent by design: an unavailable schema-lint report must not take down the
+// score, and the metric stays at "no signal" rather than a made-up value.
+func (s *Handlers) overlaySequenceExhaustion(ctx context.Context, raw *health.RawMetrics, cluster, instance, database string) {
+	// The rule reads its thresholds from the same configuration the page uses,
+	// so overriding sequence_thresholds moves both together.
+	raw.SequenceThresholds = s.cfg.SchemaLint.SequenceThresholds
+
+	if raw.InRecovery || raw.SequenceExhaustionMax > 0 {
+		return
+	}
+
+	worst, known, err := s.repo.GetSequenceHeadroom(ctx, cluster, instance, database)
+	if err != nil || !known {
+		return
+	}
+
+	raw.SequenceExhaustionMax = worst
 }
 
 // walLevelManaged reports whether the cluster's provider fixes wal_level
@@ -256,6 +289,7 @@ func (s *Handlers) GetHealthScoreRecommendations(
 	}
 
 	raw.WalLevelManaged = s.walLevelManaged(ctx, req.Params.ClusterName)
+	s.overlaySequenceExhaustion(ctx, &raw, req.Params.ClusterName, req.Params.Instance, database)
 
 	recs := health.Evaluate(raw, database != "")
 

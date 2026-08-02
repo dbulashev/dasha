@@ -781,7 +781,8 @@
     "possibleNullsHint": "Foreign keys whose columns allow NULL — they may need a NOT NULL constraint.",
     "possibleSimilar": "Similar FKs",
     "possibleSimilarHint": "Pairs of foreign keys on the same table that may be redundant.",
-    "similarFk": "Similar FK"
+    "similarFk": "Similar FK",
+    "toSchema": "Referenced schema"
   },
   "settings": {
     "pgSettings": "Main PostgreSQL parameters",
@@ -977,9 +978,9 @@
   },
   "healthScore": {
     "title": "Health Score",
-    "tooltip": "An overall health score for the PostgreSQL instance (0–100). It accounts for connections, performance, storage, replication and maintenance.",
+    "tooltip": "Overall health of a PostgreSQL instance, 0 to 100. Covers connections, performance, storage, replication and maintenance.",
     "openDetailsPage": "Details",
-    "metricsDegraded": "Metrics mode (datasource) is on and the target was matched, but no metric matched the selectors — the score is built on missing signals and may be understated. Check the label matching: GET /api/common/health-score/datasource/status.",
+    "metricsDegraded": "Metrics mode is on and the instance was found in the datasource, but no metric matched the selectors: the score was built from empty data and may be too low. Check that the labels line up — GET /api/common/health-score/datasource/status.",
     "excellent": "Excellent",
     "warning": "Warning",
     "problems": "Problems",
@@ -1049,20 +1050,23 @@
     },
     "about": {
       "toggle": "How the health score works",
-      "intro": "A composite metric (0–100) describing the overall state of a PostgreSQL instance across eight categories. Higher is better.",
-      "formulaTitle": "Formula",
-      "formulaDescription": "For each category i a continuous penalty (0..100) is computed from the raw metrics and summed with weights that add up to 1.0. Weights are validated and normalised; invalid values fall back to the defaults.",
-      "dropTitle": "When a category is dropped",
-      "dropIntro": "Categories with no useful signal on the current instance are dropped, and their weight is redistributed proportionally across the rest:",
-      "dropReplication": "Replication — dropped when the instance has no replicas.",
-      "dropMaintenance": "Maintenance — dropped when pg_is_in_recovery() = true (a standby). Autovacuum and ANALYZE do not run on a replica, so the metrics describe the primary.",
-      "rulesEngine": "In parallel, a rules engine evaluates the same metrics and produces a list of recommendations with links. Rules and penalties are independent: penalties yield the numeric score, rules yield the list of actions. Every rule contributes to the score (a penalty or a floor), so a condition never shows up in the recommendations without moving the number.",
-      "criticalTitle": "Critical threshold (floor)",
-      "criticalIntro": "A weighted average dilutes catastrophes. Any of the conditions below forces the final score into the red zone (≤ 30), bypassing the average — otherwise an outage would dissolve into the healthy categories. Applied on the primary only (on a standby the condition refers to the primary):",
-      "criticalXid": "XID wraparound at failsafe: max(age(datfrozenxid), age(relfrozenxid)) ≥ 1.6 billion (vacuum_failsafe_age), where PostgreSQL itself falls back to emergency VACUUM.",
-      "criticalAutovacuum": "autovacuum is globally disabled — bloat and XID age grow unchecked.",
-      "criticalTrackCounts": "track_counts is disabled — autovacuum is “blind” and effectively never runs.",
-      "categoriesTitle": "8 categories with their default weights",
+      "intro": "One number from 0 to 100 for how the instance is doing. 100 means nothing is wrong; the lower it goes, the more there is. It is made up of eight categories.",
+      "formulaTitle": "How the score is calculated",
+      "formulaDescription": "Each category earns a penalty between 0 and 100 that grows with the metric, without steps. The score is 100 minus those penalties, each taken with its weight; the weights add up to one. Weights configured wrongly fall back to the defaults.",
+      "dropTitle": "When a category is left out",
+      "dropIntro": "When there is nothing to measure on this instance, the category does not count towards the score and its weight is shared out among the rest:",
+      "dropReplication": "Replication — when the instance has no replicas: there is no lag to measure.",
+      "dropMaintenance": "Maintenance — on a replica. Autovacuum and ANALYZE do not run there, and whatever the statistics show describes the primary.",
+      "rulesEngine": "The same metrics are read in parallel by a set of rules, which produce the recommendations with links to the relevant pages. The score answers \"how bad is it\", the rules answer \"what exactly to do\". Most rules also move the score. Two do not carry a penalty of their own — sequence_exhaustion and checksum_failures only clamp the score once they reach the critical condition — so a recommendation can show up before its category penalty grows.",
+      "criticalTitle": "When the score drops straight into the red",
+      "criticalIntro": "An average across categories can hide an outage: one disaster gets lost among seven healthy categories. So there are conditions that put the score at 30 or below whatever the average says. They are checked on the primary — on a replica the same condition describes the primary:",
+      "criticalXid": "XID age has reached 1.6 billion (vacuum_failsafe_age), where PostgreSQL has already switched to emergency VACUUM by itself.",
+      "criticalAutovacuum": "Autovacuum is off entirely — dead row versions and XID age keep growing and nothing is going to stop them.",
+      "criticalTrackCounts": "track_counts is off — autovacuum cannot see the statistics and effectively never runs.",
+      "criticalSequence": "A sequence has less than 5% of its values left — the same threshold that Schema Checks reports as an error. INSERTs are about to start failing.",
+      "criticalChecksum": "At least one page failed its checksum — that is data corruption. It means exactly the same on a replica as on the primary, so the condition applies on any node.",
+      "criticalDisk": "The fullest filesystem on the host is 90% used or more (metrics mode only). The role does not matter here either: when the space runs out, primary and replica both stop.",
+      "categoriesTitle": "Eight categories and their default weights",
       "categoryDescriptions": {
         "connections": "Connection usage, idle in transaction, long transactions",
         "performance": "Cache hit ratio, track_io_timing",
@@ -1073,14 +1077,14 @@
         "wal_checkpoint": "Requested/timed checkpoint ratio, wal_level mismatches",
         "locks": "Lock waiters, ungranted locks, deadlocks, lock pool saturation"
       },
-      "penaltyTitle": "Penalty thresholds",
-      "penaltyDescription": "The penalty grows continuously with the metric. The breakpoints are the metric values at which the slope of the penalty function changes: below the first point there is no penalty, between points it grows smoothly, and past the last one it reaches the category maximum. That is how the “→” arrows in the table read: first point → second point → third point.",
+      "penaltyTitle": "How the penalty grows",
+      "penaltyDescription": "The penalty grows with the metric smoothly, but at a few points the growth changes pace. Below the first point there is no penalty at all; between points it builds up gradually; past the last one the category is penalised in full. The arrows in the table read as \"first point → second → third\".",
       "thCategory": "Category",
       "thMetric": "Metric",
-      "thBreakpoints": "Breakpoints (no penalty → maximum)",
-      "xidCalibration": "The XID age penalty starts at autovacuum_freeze_max_age (200 M), reaches 80 at vacuum_failsafe_age (1.6 B) and 100 at the shutdown wall of ~2.1 B; relfrozenxid follows the same curve via max(datfrozenxid, relfrozenxid).",
-      "rulesTitle": "Rules and severity",
-      "rulesDescription": "Each rule fires when a discrete LOW / MEDIUM / HIGH threshold is crossed. Instance-only categories are hidden when drilling down into a single database, and the whole maintenance category is hidden on a standby.",
+      "thBreakpoints": "Breakpoints (from \"no penalty\" to the maximum)",
+      "xidCalibration": "The XID age thresholds come from PostgreSQL itself: the penalty starts at 200 million, where emergency autovacuum kicks in (autovacuum_freeze_max_age), reaches 80 at 1.6 billion (vacuum_failsafe_age) and 100 around 2.1 billion, where the server stops handing out new transactions. The worse of the two ages is used — per database and per table.",
+      "rulesTitle": "Rules and how serious they are",
+      "rulesDescription": "A rule fires when its metric crosses the LOW, MEDIUM or HIGH threshold. With a single database selected, instance-wide rules are not shown; on a replica the whole maintenance category is hidden.",
       "ruleNotes": {
         "high_connection_ratio": "count(*) from pg_stat_activity / max_connections — the headroom before new connections are refused.",
         "idle_in_transaction": "Sessions with state='idle in transaction'. Each one holds locks and pins the MVCC horizon.",
@@ -1116,22 +1120,22 @@
         "checksum_failures": "Any non-zero rate of checksum errors means data corruption; it also forces the score into the red zone.",
         "host_cpu_saturation": "load_avg_15 / n_vcpu. Above 1 the CPU queue exceeds the core count.",
         "pooler_saturation": "server_conns / pool_size of the pooler; approaching 1.0 puts clients in a queue.",
-        "sequence_exhaustion": "The worst sequence usage share; at ≥0.95 it forces the score down (writes stop on overflow).",
+        "sequence_exhaustion": "Worst sequence against the ceiling that actually applies — a bigint sequence owned by an integer column is measured against 2147483647, not its own maxvalue. Thresholds are shared with the Schema Checks page (schema_lint.sequence_thresholds), so a finding shown there as an error is never LOW here; the HIGH band also forces the score into the red zone.",
         "latency_regression": "Current latency / seasonal baseline (hour × weekday); works on any workload.",
         "seq_scan_regression": "Current seq-scan row rate / seasonal baseline; growth means indexes are unused or statistics went stale (ANALYZE).",
         "host_disk_space": "The used share of the most-utilised filesystem on the host (pgSCV/YC); ≥90% forces the overall score into the red zone."
       },
-      "drilldownTitle": "Drill down (per-database breakdown)",
-      "drilldown": "The “Databases” table collects the same metrics per database as for the instance: cache hit ratio, dead tuples, vacuum staleness. Click a row and the selected database becomes the filter: the rules engine recomputes in its context, and the instance-only categories (Connections / Replication / Horizon / WAL / Locks) are hidden.",
+      "drilldownTitle": "Per-database drill-down",
+      "drilldown": "The \"Databases\" table collects the same metrics per database as for the instance: cache hit ratio, dead row versions, vacuum staleness. Clicking a row picks that database as the filter — the rules are recomputed in its context, and instance-wide categories (connections, replication, horizon, WAL, locks) are hidden.",
       "trendTitle": "Trend and seasonal baseline",
-      "trendIntro": "When a metrics datasource is configured, a trend appears under the gauge: score + seasonal baseline + latency. The seasonal baseline is the expected value of the metric at a specific point in the weekly cycle (load is cyclical: weekdays ≠ weekends, day ≠ night), not an overall average. It is built like this:",
-      "trendBucketing": "Bucketing by “hour of week”: every history point lands in one of 168 buckets (7 days × 24 hours), hour_of_week = weekday×24 + hour.",
-      "trendMedian": "The median per bucket over a long window (28 days by default) — robust to outliers: a one-off nightly VACUUM or a deploy does not move the baseline.",
-      "trendUsage": "The current value is compared against its own baseline for that hour of the week, not against a global average:",
-      "trendDips": "Dips: the score fell below the baseline for that hour of the week by more than the threshold → a red dot on the trend. A regular nightly batch is not a dip — its baseline is low too, so there is no false alarm.",
-      "trendLatency": "Latency regression → performance: current latency / seasonal baseline. It works on any workload because it compares a query against itself rather than against an absolute 50/200/1000 ms threshold.",
-      "trendExample": "For example: 50 ms on Monday at 14:00 (baseline 45 ms) is near normal; the same 50 ms on Monday at 03:00 (baseline 12 ms) is ~4× the baseline — a real anomaly. One value, two verdicts.",
-      "trendDegrade": "The seasonal baseline and dips appear as history accumulates; while there is little of it the trend degrades gracefully — without the baseline line or dip markers.",
+      "trendIntro": "With a metrics datasource configured, a chart appears under the gauge: the score, the seasonal baseline and latency. The baseline is what the value usually is at this particular hour of the week, not an average over all time — load is cyclical, weekdays are not weekends and nights are not days. It is built like this:",
+      "trendBucketing": "Every point of history falls into one of 168 buckets — 7 days of 24 hours.",
+      "trendMedian": "Each bucket takes the median over a long window, 28 days by default. A median is not thrown off by outliers: one nightly VACUUM or a deploy will not move it.",
+      "trendUsage": "The current value is compared against the baseline of its own hour of the week, not against an overall average:",
+      "trendDips": "A dip is the score falling below the baseline for that hour by more than the threshold; the chart marks it with a red dot. A regular nightly batch is not a dip — its baseline is low as well, so there is no false alarm.",
+      "trendLatency": "Rising latency counts towards performance: current latency divided by the seasonal baseline. That works on any workload, because a query is compared with itself rather than with an absolute 50/200/1000 ms.",
+      "trendExample": "For example: 50 ms on Monday at 14:00 against a baseline of 45 ms is business as usual. The same 50 ms on Monday at 3 a.m. against a baseline of 12 ms is four times the usual — a real anomaly. One value, two verdicts.",
+      "trendDegrade": "The baseline and the dips appear as history accumulates. Until there is enough, the chart simply omits the baseline line and the red dots.",
       "penaltyPoints": {
         "connection_ratio": "0.60 → 0.80 → 0.95+",
         "idle_in_tx": "+5 each, max 30",
@@ -1140,9 +1144,9 @@
         "max_dead_ratio": "≤20 → 20–30 → >30",
         "avg_dead_ratio": ">15 → up to +30",
         "tables_high_bloat": ">5 → up to +30",
-        "max_replay_lag": ">10 s → max",
-        "max_lag_bytes": ">16 MiB → max",
-        "disconnected_replicas": "+25 per replica",
+        "max_replay_lag": ">1 s → >5 s → >30 s, up to 50",
+        "max_lag_bytes": ">100 MiB → up to 30",
+        "disconnected_replicas": "+30 per replica, max 60",
         "max_xid_age": "200 M → 1.6 B → 2.1 B",
         "vacuum_backlog_tables": ">5 → +1.5 each, max 15",
         "max_overdue_vacuum_age_hours": ">168 → >504 → >1440 h",
@@ -1159,7 +1163,7 @@
         "wal_level_mismatch": "minimal+replicas 80; logical+no slot 5"
       },
       "ruleThresholds": {
-        "high_connection_ratio": "≥0.70 / ≥0.85 / ≥0.95",
+        "high_connection_ratio": "≥0.60 / ≥0.80 / ≥0.95",
         "idle_in_transaction": "≥2 / ≥5 / ≥10",
         "long_running_transaction": "≥300 / ≥600 / ≥1800 s",
         "low_cache_hit_ratio": "<95 / <90 / <85 %",
@@ -1169,17 +1173,17 @@
         "many_bloated_tables": "≥5 / ≥10 / ≥20",
         "low_hot_update_ratio": "<0.80 / <0.65 / <0.50",
         "high_newpage_update_ratio": "≥0.05 / ≥0.10 / ≥0.20 (PG 16+)",
-        "replication_lag_time": "≥10 / ≥60 / ≥300 s",
-        "replication_lag_bytes": "≥16 MiB / ≥256 MiB / ≥1 GiB",
-        "disconnected_replicas": "≥1 / ≥2 / ≥3",
+        "replication_lag_time": "≥1 / ≥5 / ≥30 s",
+        "replication_lag_bytes": "≥10 MiB / ≥100 MiB / ≥1 GiB",
+        "disconnected_replicas": "MED ≥1 / HIGH ≥2",
         "xid_wraparound_risk": "≥150 M / ≥200 M / ≥1.6 B",
         "vacuum_backlog": "≥6 / ≥15 / ≥30 tables",
         "stale_vacuum": "≥7 / ≥21 / ≥60 days",
         "tables_never_vacuumed": "≥1 / ≥2 / ≥5",
         "autovacuum_disabled": "HIGH",
         "track_counts_disabled": "HIGH",
-        "tables_with_autovacuum_off": "≥1 / ≥5 / ≥20",
-        "relfrozenxid_age_outlier": "≥200 M / ≥500 M / ≥1 B",
+        "tables_with_autovacuum_off": "LOW when ≥1",
+        "relfrozenxid_age_outlier": "≥150 M / ≥200 M / ≥1.6 B",
         "stale_planner_stats": "≥3 / ≥5 / ≥10",
         "horizon_lag_xids": "≥1 M / ≥10 M / ≥100 M",
         "requested_checkpoint_ratio": "≥5 / ≥10 / ≥20 %",
@@ -1189,11 +1193,11 @@
         "longest_lock_wait_seconds": "≥10 / ≥30 / ≥60 s",
         "ungranted_locks": "≥2 / ≥5 / ≥15",
         "deadlocks_rate": "LOW when >0",
-        "lock_pool_saturation": "≥0.4 / ≥0.6 / ≥0.8",
+        "lock_pool_saturation": "≥0.5 / ≥0.6 / ≥0.8",
         "checksum_failures": "HIGH when >0",
         "host_cpu_saturation": ">1 / >2 / >4 (load/vCPU)",
         "pooler_saturation": "≥0.5 / ≥0.6 / ≥0.8",
-        "sequence_exhaustion": "≥0.75 / ≥0.85 / ≥0.95",
+        "sequence_exhaustion": "<20 / <10 / <5 % of values still free",
         "latency_regression": "×1.5 / ×3 / ×6 vs baseline",
         "seq_scan_regression": "×1.5 / ×3 / ×6 vs baseline",
         "host_disk_space": "≥70 / ≥80 / ≥90 %"
@@ -1448,7 +1452,7 @@
     },
     "trend": {
       "title": "Health Score trend",
-      "baselineHelp": "The seasonal baseline is the median score per “hour × weekday” bucket over a long history window (so it follows the daily and weekly shape of the load). The current score is compared against the baseline for that same hour of the week; a drop below it by more than the threshold is flagged with a red dot (a dip).",
+      "baselineHelp": "The seasonal baseline is what the score usually is at a given hour of the week: the median over a long window of history, taken separately for each of the 168 hours. The current score is compared against that, and when it falls below by more than the threshold the chart marks a red dot — a dip.",
       "score": "Score",
       "baseline": "Seasonal baseline",
       "latency": "Latency",
@@ -1460,7 +1464,7 @@
         "14d": "14d",
         "30d": "30d"
       },
-      "unavailable": "The trend is unavailable: no metrics datasource is configured, or the target was not matched.",
+      "unavailable": "No trend available: the metrics datasource is not configured, or the instance was not found in it.",
       "noData": "No data for this period."
     }
   },
@@ -1503,6 +1507,152 @@
       "empty": "Nobody has signed in yet.",
       "never": "never",
       "hint": "The list grows as people sign in through SSO. Roles come from the identity provider and are not editable here."
+    }
+  },
+  "schemaLint": {
+    "page": {
+      "menuItem": "Schema Checks",
+      "title": "Schema Checks",
+      "hint": "The checks read the system catalog only — user data is never touched. This page answers \"what is wrong with the structure\", the class of defects that stays invisible at runtime until it breaks something.",
+      "clean": "No defects found",
+      "duration": "Checks took {ms} ms",
+      "truncated": "A check hit its row limit: the list is incomplete and the counters are a lower bound.",
+      "skippedTitle": "Some checks did not run",
+      "skippedHint": "These checks produced no result — do not read them as clean.",
+      "grantHint": "Needs privilege: {privilege}",
+      "checkFilter": "Check",
+      "objectFilter": "Object",
+      "groupByCheck": "By check",
+      "groupByObject": "By object",
+      "noFindings": "No defects found",
+      "skippedObjects": "{count} object could not be read | {count} objects could not be read"
+    },
+    "levels": {
+      "error": "Error",
+      "warning": "Warning",
+      "notice": "Notice"
+    },
+    "skipReasons": {
+      "insufficient_privileges": "insufficient privileges",
+      "unsupported_version": "not supported by this PostgreSQL version",
+      "disabled": "disabled in configuration",
+      "error": "execution error"
+    },
+    "notes": {
+      "uniqueNullable": "The unique index covers a nullable column: it cannot serve as REPLICA IDENTITY, so logical replication will not take this table.",
+      "int4Owner": "The owning column is {type}: ALTER SEQUENCE alone is not enough — the column type has to change too, which is a long operation needing a window.",
+      "partitions": "The same defect was found on {n} partitions; the finding is shown on the parent table."
+    },
+    "table": {
+      "level": "Level",
+      "check": "Check",
+      "object": "Object",
+      "howToFix": "How to fix",
+      "copySql": "Copy SQL",
+      "partitions": "{n} partitions"
+    },
+    "checks": {
+      "sequence_exhaustion": {
+        "title": "Sequence close to exhaustion",
+        "description": "{usedPct}% of the range is consumed: current value {lastValue} against a ceiling of {maxValue}. Once the values run out, INSERT starts failing with \"nextval: reached maximum value\".",
+        "howToFix": "Widen the sequence range. If it belongs to an integer column, the column type has to change as well — the ceiling is set by the column, not by the sequence.",
+        "fixSql": "ALTER SEQUENCE {schema}.{object} AS bigint;"
+      },
+      "no_primary_key": {
+        "title": "Table without a primary key",
+        "description": "The table has no PRIMARY KEY. Logical replication cannot replicate UPDATE and DELETE without a REPLICA IDENTITY, pg_repack refuses to process the table, and one row of a duplicated pair cannot be deleted on its own.",
+        "howToFix": "Add a primary key, or set REPLICA IDENTITY to a unique index whose columns are all NOT NULL."
+      },
+      "no_unique_key": {
+        "title": "Table without a unique key",
+        "description": "The table has neither a primary key nor a usable unique index (partial and expression indexes do not count as keys). Rows are indistinguishable: duplicates cannot be removed individually and logical replication of UPDATE and DELETE is impossible.",
+        "howToFix": "Decide what makes a row unique and add a PRIMARY KEY or a UNIQUE constraint over NOT NULL columns."
+      },
+      "public_create_privilege": {
+        "title": "PUBLIC may create objects in the schema",
+        "description": "PUBLIC holds CREATE on schema {schema} (owned by {owner}). Any database user can create an object there that intercepts calls resolved through search_path — the CVE-2018-1058 vector.",
+        "howToFix": "Revoke CREATE from PUBLIC. In PostgreSQL 15 and later a closed public schema is the default.",
+        "fixSql": "REVOKE CREATE ON SCHEMA {schema} FROM PUBLIC;"
+      },
+      "unlogged_relation": {
+        "title": "Unlogged table",
+        "description": "The table is UNLOGGED: its contents will not survive a crash and never reach the replicas — on a standby such a table is always empty.",
+        "howToFix": "If the data has to survive a restart and be visible on replicas, switch the table to logged. The operation rewrites the whole table.",
+        "fixSql": "ALTER TABLE {schema}.{object} SET LOGGED;"
+      },
+      "unlogged_sequence": {
+        "title": "Unlogged sequence",
+        "description": "The sequence is UNLOGGED: after a crash its value rolls back to the last checkpoint, and it never reaches the replicas.",
+        "howToFix": "Switch the sequence to logged if its values have to survive a crash.",
+        "fixSql": "ALTER SEQUENCE {schema}.{object} SET LOGGED;"
+      },
+      "uuid_in_non_uuid_type": {
+        "title": "UUID kept outside the uuid type",
+        "description": "Column {column} of {object} is {columnType} and its contents look like a UUID. The uuid type takes 16 bytes against 36 for the string — saved on the table itself, on every index over that column and on every foreign key pointing at it.",
+        "howToFix": "Check whether the column really holds UUIDs (this is a heuristic, based on name and length). If it does, change the type to uuid — that rewrites the table and needs a window. If it does not, switch the check off in the configuration."
+      },
+      "relation_without_fk": {
+        "title": "Table takes part in no foreign key",
+        "description": "Nothing references {object} and it references nothing. Either the table has been forgotten, or its relationships exist only in application code — in which case nothing enforces integrity.",
+        "howToFix": "Drop the table if it is no longer needed. If the relationships exist but are undeclared, add foreign keys. If this schema deliberately avoids foreign keys, turn the check off."
+      },
+      "relation_without_columns": {
+        "title": "Table without columns",
+        "description": "{object} has no live columns left — all dropped, or never added. It stores nothing, yet occupies catalog space and lands in every dump.",
+        "howToFix": "Drop the table, or add the columns if it was created ahead of a structure that never arrived."
+      },
+      "reserved_word_in_name": {
+        "title": "Object name is a reserved keyword",
+        "description": "The name {object} is a reserved SQL keyword. It cannot be written unquoted: migrations, dumps and scripts that forget to quote it fail — or worse, parse into something other than intended.",
+        "howToFix": "Rename the object. If renaming is impossible, make sure every reference to it is quoted."
+      },
+      "unsafe_chars_in_name": {
+        "title": "Object name requires quoting",
+        "description": "The name {object} contains characters outside [A-Za-z0-9_] — a dot, a space, a hyphen, a quote or non-ASCII. Every reference to it has to be quoted, and tooling that does not breaks on it.",
+        "howToFix": "Rename the object using letters, digits and underscores only."
+      },
+      "invalid_constraint": {
+        "title": "Constraint was never validated (NOT VALID)",
+        "description": "Constraint {constraint} on {object} was created NOT VALID: it applies to new rows, but the existing data was never checked. The planner will not rely on such a constraint, so what you have is the appearance of integrity, not integrity.",
+        "howToFix": "Validate it: ALTER TABLE ... VALIDATE CONSTRAINT. It reads the whole table but takes a weak lock and blocks neither reads nor writes.",
+        "fixSql": "ALTER TABLE {schema}.{object} VALIDATE CONSTRAINT {constraint};"
+      },
+      "fk_type_mismatch": {
+        "title": "Foreign key column types disagree",
+        "description": "Foreign key {constraint} on {object} references {otherObject}, but the column types differ. Every referential check casts, which can keep the parent-side index out of the plan and make comparisons behave unexpectedly.",
+        "howToFix": "Bring the column types together. That is an ALTER TABLE with a rewrite — plan a window."
+      },
+      "fk_nullable": {
+        "title": "Foreign key columns are nullable",
+        "description": "Foreign key {constraint} on {object} covers the nullable columns {otherObject}. Under MATCH SIMPLE a row with NULL in any of them passes the check entirely, so the relationship is optional in practice even when it is meant to be required.",
+        "howToFix": "If the relationship is required, add NOT NULL to the key columns. If it is optional, this is by design and the check can be switched off."
+      },
+      "fk_similar": {
+        "title": "Similar foreign keys",
+        "description": "Table {object} carries foreign keys {constraint} and {otherObject} over overlapping columns to the same target. One is most likely a leftover from a migration: it costs catalog space and one more check on every write.",
+        "howToFix": "Compare the definitions and drop the redundant one. This is a heuristic — the judgement is yours."
+      },
+      "index_similar": {
+        "title": "Similar indexes",
+        "description": "Indexes {index} and {otherObject} on {object} are identical once their definitions are normalized. A duplicate index costs space and slows writes and maintenance while adding nothing.",
+        "howToFix": "Compare the definitions on the index analysis page and drop the redundant one. An index backing a constraint cannot be dropped directly — remove the constraint first."
+      },
+      "btree_on_array": {
+        "title": "B-tree index on an array column",
+        "description": "Index {index} on {object} is a btree over an array column. It only serves whole-array comparison: containment queries will not use it, so it most likely just occupies space.",
+        "howToFix": "Use GIN if elements are searched. If whole arrays are compared, the index is appropriate and this finding can be ignored."
+      }
+    },
+    "databases": {
+      "title": "Databases of the instance",
+      "hint": "Schema defects live in a database, not in a cluster. The sweep visits every configured database of the instance one after another and may take a while.",
+      "show": "Show",
+      "hide": "Hide",
+      "failed": "unreadable",
+      "loading": "Sweeping databases…",
+      "empty": "No data",
+      "skipped": "Not checked",
+      "skippedHint": "This many checks did not run in this database. The zero counts mean unchecked, not clean."
     }
   }
 }

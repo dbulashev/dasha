@@ -70,9 +70,19 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 - Checkpoint ratio analysis (`checkpoint_req` vs `checkpoint_timed`)
 - Autovacuum and autoanalyze configuration review
 
+**Schema Checks**
+- 17 structural checks: a sequence running out of values, a table without a primary key or without any unique key, an `UNLOGGED` relation or sequence, a schema `PUBLIC` may create objects in (CVE-2018-1058), a UUID kept as `varchar`, a relation with no columns left, a reserved keyword or a quoting-unsafe character in an object name, tables outside any foreign key
+- Three severities (`error` / `warning` / `notice`); findings on the partitions of one table roll up to the root table
+- A check that cannot run (no privilege, unsupported version, timeout) is listed as skipped with its reason
+- Instance-wide overview: per-database counts for every configured database
+- Heuristic and noisy checks (a UUID kept as `varchar`, tables outside any foreign key, similar keys and indexes) are suppressible by check and by schema mask; the noisiest are off until switched on
+- Invalid constraints, foreign-key type mismatches, nullable keys, similar keys and indexes and B-tree on arrays appear both in the schema report and on their own pages
+- Every finding carries what the defect leads to and how to fix it, with a copyable SQL statement where the fix is unambiguous
+- Hidden on standbys
+
 **Health Score**
 - Composite 0–100 instance score across eight categories (connections, performance, storage, replication, maintenance, horizon, WAL/checkpoint, locks) with continuous penalty functions — top-level `/health-score` page plus a Home-page gauge
-- Parallel rules engine producing prioritized recommendations (severity, metric values, per-database drill-down) that stay in lockstep with the score
+- Parallel rules engine producing prioritized recommendations: severity, metric values, per-database drill-down
 - Optional **metrics-backed mode**: with a Prometheus/VictoriaMetrics datasource configured (`health_score.metrics`), the score, recommendations and a trend with seasonal baseline and dip detection are computed from time series (pgSCV, Yandex MDB, pgbouncer, host metrics) instead of point-in-time SQL; the SQL snapshot stays the zero-config fallback
 - Scoring model details: [README-health-score.md](README-health-score.md)
 
@@ -100,7 +110,7 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 - Yandex Managed Service for PostgreSQL service discovery
 - Primary / replica role display
 - Optional snapshot storage database (daily-partitioned tables, `dasha migrate` CLI)
-- [MCP connector](#mcp-connector-dasha-mcp) (`dasha-mcp`): read-only MCP server exposing fleet diagnostics to AI assistants (22 tools, 5 prompts)
+- [MCP connector](#mcp-connector-dasha-mcp) (`dasha-mcp`): read-only MCP server exposing fleet diagnostics to AI assistants (28 tools, 5 prompts)
 
 **User Preferences** (Settings dialog — gear in the user menu)
 - Interface language: English, Russian, German — auto-detected from the browser when unset, switchable at runtime, persisted locally (untranslated keys fall back to English)
@@ -211,6 +221,23 @@ log_search:
   admin_rate_limit:
     requests_per_second: 0.2      # 1 request per 5s
     burst: 20
+```
+
+#### Schema Checks (optional)
+
+The `/schema-lint` page works without configuration. The global `schema_lint` block silences checks and
+schemas, and tunes the sequence thresholds:
+
+```yaml
+schema_lint:
+  disabled_checks: [uuid_in_non_uuid_type]   # never run these
+  enabled_checks: [relation_without_fk]      # opt-in for checks that are off by default
+  ignore_schemas: ["_timescaledb*", "cron"]  # glob masks; system schemas are always excluded
+  sequence_thresholds:                       # percent of values still free
+    error: 5
+    warning: 10
+    notice: 20
+  sequence_cache_ttl: 15m                    # TTL of the worst-sequence value the health score reads
 ```
 
 #### Authentication (optional)
@@ -369,9 +396,9 @@ The demo includes:
 
 `dasha-mcp` is a separate, **read-only** [MCP](https://modelcontextprotocol.io) server over the Dasha API. It lets AI assistants query the fleet's PostgreSQL diagnostics as tools/prompts, forwarding each caller's token to Dasha so its RBAC is preserved. Any MCP-compatible client works — Claude Desktop, Claude Code, Cursor, Continue, **opencode**, etc.
 
-- **Tools (26):** `list_clusters`, `fleet_health`, `get_instance_info`, `get_health_score`, `get_health_recommendations`, `health_details` (turns a recommendation into a target: pass its `rule_id` as `detail` to get the offending tables, databases or sessions — the per-table drill-downs also take a `database`, the instance-wide ones do not), `health_trend`, `health_databases`, `top_queries` (by time/WAL), `query_report`, `list_snapshots`, `query_compare`, `running_queries`, `blocked_queries`, `list_indexes` (missing/unused/usage), `unused_index_report` (cluster-wide verdict on whether an index is safe to DROP: weighs the scan counter against every host of the cluster and against the statistics window behind it, because `idx_scan` is not replicated and a counter without its window means nothing), `top_tables`, `hot_tables` / `hot_indexes` (top hot objects per metric class — reads/writes/io — from the daily delta snapshots, summed over every cluster host, with a coverage ratio that says how representative the top is; needs snapshot storage), `describe_table`, `get_replication`, `settings_analyze`, `wait_events`, `connections`, `vacuum_danger`, `search_logs` (Yandex Cloud PostgreSQL/pooler logs; Yandex-MDB-discovered clusters only, rate-limited per user). All are annotated **read-only** and closed-world so compatible clients can surface (and auto-approve) them as safe. The server also ships usage **instructions** that prime the model on which tool/prompt to reach for.
+- **Tools (28):** `list_clusters`, `fleet_health`, `get_instance_info`, `get_health_score`, `get_health_recommendations`, `health_details` (turns a recommendation into a target: pass its `rule_id` as `detail` to get the offending tables, databases or sessions — the per-table drill-downs also take a `database`, the instance-wide ones do not), `health_trend`, `health_databases`, `top_queries` (by time/WAL), `query_report`, `list_snapshots`, `query_compare`, `running_queries`, `blocked_queries`, `list_indexes` (missing/unused/usage), `unused_index_report` (cluster-wide verdict on whether an index is safe to DROP: weighs the scan counter against every host of the cluster and against the statistics window behind it, because `idx_scan` is not replicated and a counter without its window means nothing), `top_tables`, `schema_lint` / `schema_lint_summary` (structural defects of a schema from the system catalog: sequences running out of values, tables without a primary key, unlogged relations, schemas PUBLIC may create in — with a `skipped` list naming the checks that could not run, so a missing check is never mistaken for a clean result), `hot_tables` / `hot_indexes` (top hot objects per metric class — reads/writes/io — from the daily delta snapshots, summed over every cluster host, with a coverage ratio that says how representative the top is; needs snapshot storage), `describe_table`, `get_replication`, `settings_analyze`, `wait_events`, `connections`, `vacuum_danger`, `search_logs` (Yandex Cloud PostgreSQL/pooler logs; Yandex-MDB-discovered clusters only, rate-limited per user). All are annotated **read-only** and closed-world so compatible clients can surface (and auto-approve) them as safe. The server also ships usage **instructions** that prime the model on which tool/prompt to reach for.
 - **Prompts (5):** `diagnose_cluster`, `explain_health_score`, `find_index_opportunities`, `investigate_slow_queries`, `fleet_overview` — linear playbooks: numbered steps, one tool per step, with an interpretation criterion on each (built for models without deep PostgreSQL expertise; strong models simply move faster through them).
-- **Resources (3):** an embedded knowledge base the model can read on demand — `dasha://kb/health-rules` (every health rule with LOW/MED/HIGH thresholds and first actions), `dasha://kb/wait-events` (wait event glossary), `dasha://kb/workflow` (complaint-to-tool-chain playbooks and API care rules).
+- **Resources (4):** an embedded knowledge base the model can read on demand — `dasha://kb/health-rules` (every health rule with LOW/MED/HIGH thresholds and first actions), `dasha://kb/schema-checks` (every schema-check code, the params it fills and its first action), `dasha://kb/wait-events` (wait event glossary), `dasha://kb/workflow` (complaint-to-tool-chain playbooks and API care rules).
 - **Language:** `--lang en|ru` (or `DASHA_MCP_LANG`) selects the language of the knowledge base, playbooks and instructions; tool names, schemas and results stay English.
 
 **Prerequisite:** a Dasha API token — a [personal access token](#personal-access-tokens-optional) (`dasha_pat_…`) or a static config token. It determines the role (`viewer` is enough).
@@ -811,6 +838,21 @@ See [CHANGELOG.md](CHANGELOG.md) for release notes.
 * [Ilya Lukyanov](mailto:lukyanov1985@gmail.com)
 * [Roman Minebaev](https://github.com/minebaev)
 * [Rustem Sagdeev](https://github.com/SagdeevRR)
+
+## Third-party components
+
+The SQL behind **Schema Checks** is derived from [db_verifier](https://github.com/sdblist/db_verifier)
+(MIT, © 2024 Nikonov — licence text in the project's `LICENSE` file), a set of structural checks for
+PostgreSQL. Per-template attribution: [backend/internal/query/README.md](backend/internal/query/README.md).
+
+The **lock tree** query comes from [postgres_dba](https://github.com/NikolayS/postgres_dba)
+(BSD 3-Clause, © 2017 Nikolay Samokhvalov) — `sql/l2_lock_trees.sql`, adapted to run as a single
+statement without psql version branches. Licence text:
+[backend/internal/query/LICENSE-postgres_dba](backend/internal/query/LICENSE-postgres_dba).
+
+Index bloat estimation descends from [pgsql-bloat-estimation](https://github.com/ioguix/pgsql-bloat-estimation)
+(BSD-style — the PostgreSQL licence, © 2015-2019 Jehan-Guillaume (ioguix) de Rorthais; licence text in the
+project's `LICENSE` file).
 
 ## License
 

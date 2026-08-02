@@ -68,9 +68,19 @@
 - Анализ соотношения чекпоинтов (`checkpoint_req` vs `checkpoint_timed`)
 - Обзор конфигурации автовакуума и автоанализа
 
+**Проверки схемы**
+- 17 структурных проверок: кончающаяся последовательность, таблица без первичного ключа или без единого уникального ключа, `UNLOGGED`-таблица или последовательность, схема, в которой `PUBLIC` может создавать объекты (CVE-2018-1058), UUID в `varchar`, отношение без колонок, зарезервированное слово или требующий кавычек символ в имени объекта, таблицы вне внешних ключей
+- Три уровня (`error` / `warning` / `notice`); находки по партициям одной таблицы схлопываются до родительской
+- Проверка, которая не смогла выполниться (нет прав, неподдерживаемая версия, таймаут), попадает в список пропущенных с причиной
+- Сводка по инстансу: счётчики по каждой настроенной базе
+- Эвристические и шумные проверки (UUID в `varchar`, таблицы вне внешних ключей, похожие ключи и индексы) подавляются по коду проверки и по маске схемы; самые шумные выключены до явного включения
+- Невалидные ограничения, несовпадение типов во внешних ключах, nullable-ключи, похожие ключи и индексы, B-tree по массивам попадают и в отчёт по схеме, и на свои отдельные страницы
+- У каждой находки есть описание последствий и способ исправления, а где решение однозначно — готовый SQL для копирования
+- На репликах раздел скрыт
+
 **Health Score**
 - Композитная оценка инстанса 0–100 по восьми категориям (соединения, производительность, хранилище, репликация, обслуживание, горизонт, WAL/чекпоинты, блокировки) с непрерывными штрафными функциями — отдельная страница `/health-score` плюс индикатор на главной
-- Параллельный движок правил с приоритизированными рекомендациями (severity, значения метрик, drill-down по базам), согласованными с оценкой
+- Параллельный движок правил с приоритизированными рекомендациями: severity, значения метрик, drill-down по базам
 - Опциональный **режим на метриках**: при настроенном источнике Prometheus/VictoriaMetrics (`health_score.metrics`) оценка, рекомендации и тренд с сезонным базлайном и детекцией провалов считаются по временным рядам (pgSCV, Yandex MDB, pgbouncer, метрики хоста) вместо точечного SQL; SQL-снимок остаётся fallback'ом без настройки
 - Детали модели скоринга: [README-health-score.ru.md](README-health-score.ru.md)
 
@@ -98,7 +108,7 @@
 - Сервис-дискавери Yandex Managed Service for PostgreSQL
 - Отображение роли хоста (primary / replica)
 - Опциональная БД хранилища снимков (секционированные таблицы, CLI `dasha migrate`)
-- [MCP-коннектор](#mcp-коннектор-dasha-mcp) (`dasha-mcp`): read-only MCP-сервер с диагностикой флота для AI-ассистентов (22 tools, 5 prompts)
+- [MCP-коннектор](#mcp-коннектор-dasha-mcp) (`dasha-mcp`): read-only MCP-сервер с диагностикой флота для AI-ассистентов (28 tools, 5 prompts)
 
 **Пользовательские настройки** (диалог настроек — шестерёнка в меню пользователя)
 - Язык интерфейса: английский, русский, немецкий — при незаданном определяется по браузеру, меняется на лету, сохраняется локально (непереведённые ключи откатываются на английский)
@@ -209,6 +219,23 @@ log_search:
   admin_rate_limit:
     requests_per_second: 0.2      # 1 запрос в 5с
     burst: 20
+```
+
+#### Проверки схемы (опционально)
+
+Страница `/schema-lint` работает без настройки. Глобальная секция `schema_lint` гасит проверки и схемы
+и подстраивает пороги последовательностей:
+
+```yaml
+schema_lint:
+  disabled_checks: [uuid_in_non_uuid_type]   # не запускать эти проверки
+  enabled_checks: [relation_without_fk]      # включить те, что выключены по умолчанию
+  ignore_schemas: ["_timescaledb*", "cron"]  # маски; системные схемы отсекаются всегда
+  sequence_thresholds:                       # процент оставшихся значений
+    error: 5
+    warning: 10
+    notice: 20
+  sequence_cache_ttl: 15m                    # TTL значения худшей последовательности для health score
 ```
 
 #### Аутентификация (опционально)
@@ -367,9 +394,9 @@ make demo-lab-down     # Остановить и очистить
 
 `dasha-mcp` — отдельный **read-only** [MCP](https://modelcontextprotocol.io)-сервер поверх Dasha API. Позволяет AI-ассистентам запрашивать диагностику флота PostgreSQL как tools/prompts, прокидывая токен каждого вызывающего в Dasha (RBAC сохраняется). Подходит любой MCP-совместимый клиент — Claude Desktop, Claude Code, Cursor, Continue, **opencode** и т.д.
 
-- **Tools (26):** `list_clusters`, `fleet_health`, `get_instance_info`, `get_health_score`, `get_health_recommendations`, `health_details` (превращает рекомендацию в цель: передайте её `rule_id` как `detail` — вернутся сами таблицы, базы или сессии; потабличным drill-down нужна ещё `database`, инстанс-уровневым — нет), `health_trend`, `health_databases`, `top_queries` (по времени/WAL), `query_report`, `list_snapshots`, `query_compare`, `running_queries`, `blocked_queries`, `list_indexes` (missing/unused/usage), `unused_index_report` (вердикт по всему кластеру: можно ли удалить индекс — счётчик сканов взвешивается по всем хостам и по окну статистики, т.к. `idx_scan` не реплицируется, а счётчик без окна ничего не значит), `top_tables`, `hot_tables` / `hot_indexes` (топ горячих объектов по классам метрик — чтения/записи/io — из суточных дельта-снимков, просуммированных по всем хостам кластера, с coverage-долей репрезентативности топа; требует snapshot-хранилище), `describe_table`, `get_replication`, `settings_analyze`, `wait_events`, `connections`, `vacuum_danger`, `search_logs` (логи PostgreSQL/пулера из Yandex Cloud; только для кластеров из Yandex MDB discovery, с per-user rate limit). Все помечены **read-only** и closed-world, чтобы совместимые клиенты показывали (и авто-аппрувили) их как безопасные. Сервер также отдаёт **инструкции** по использованию, которые подсказывают модели, какой tool/prompt выбрать.
+- **Tools (28):** `list_clusters`, `fleet_health`, `get_instance_info`, `get_health_score`, `get_health_recommendations`, `health_details` (превращает рекомендацию в цель: передайте её `rule_id` как `detail` — вернутся сами таблицы, базы или сессии; потабличным drill-down нужна ещё `database`, инстанс-уровневым — нет), `health_trend`, `health_databases`, `top_queries` (по времени/WAL), `query_report`, `list_snapshots`, `query_compare`, `running_queries`, `blocked_queries`, `list_indexes` (missing/unused/usage), `unused_index_report` (вердикт по всему кластеру: можно ли удалить индекс — счётчик сканов взвешивается по всем хостам и по окну статистики, т.к. `idx_scan` не реплицируется, а счётчик без окна ничего не значит), `top_tables`, `schema_lint` / `schema_lint_summary` (дефекты структуры схемы по системному каталогу: кончающиеся последовательности, таблицы без первичного ключа, unlogged-объекты, схемы, где может создавать объекты PUBLIC — со списком `skipped`, называющим невыполнившиеся проверки, чтобы пропуск не приняли за чистый результат), `hot_tables` / `hot_indexes` (топ горячих объектов по классам метрик — чтения/записи/io — из суточных дельта-снимков, просуммированных по всем хостам кластера, с coverage-долей репрезентативности топа; требует snapshot-хранилище), `describe_table`, `get_replication`, `settings_analyze`, `wait_events`, `connections`, `vacuum_danger`, `search_logs` (логи PostgreSQL/пулера из Yandex Cloud; только для кластеров из Yandex MDB discovery, с per-user rate limit). Все помечены **read-only** и closed-world, чтобы совместимые клиенты показывали (и авто-аппрувили) их как безопасные. Сервер также отдаёт **инструкции** по использованию, которые подсказывают модели, какой tool/prompt выбрать.
 - **Prompts (5):** `diagnose_cluster`, `explain_health_score`, `find_index_opportunities`, `investigate_slow_queries`, `fleet_overview` — линейные плейбуки: нумерованные шаги, один tool на шаг, с критерием трактовки на каждом (рассчитаны на модели без глубокой экспертизы PostgreSQL; сильные модели просто проходят их быстрее).
-- **Resources (3):** встроенная база знаний, которую модель читает по запросу — `dasha://kb/health-rules` (каждое правило health score с порогами LOW/MED/HIGH и первыми действиями), `dasha://kb/wait-events` (глоссарий wait events), `dasha://kb/workflow` (сценарии «жалоба → цепочка инструментов» и правила бережности к API).
+- **Resources (4):** встроенная база знаний, которую модель читает по запросу — `dasha://kb/health-rules` (каждое правило health score с порогами LOW/MED/HIGH и первыми действиями), `dasha://kb/schema-checks` (каждый код проверки схемы, его params и первое действие), `dasha://kb/wait-events` (глоссарий wait events), `dasha://kb/workflow` (сценарии «жалоба → цепочка инструментов» и правила бережности к API).
 - **Язык:** `--lang en|ru` (или `DASHA_MCP_LANG`) выбирает язык базы знаний, плейбуков и инструкций; имена tools, схемы и результаты остаются английскими.
 
 **Предусловие:** токен Dasha API — [персональный токен](#персональные-api-токены-опционально) (`dasha_pat_…`) или статический config-токен. Он определяет роль (`viewer` достаточно).
@@ -809,6 +836,21 @@ ingress:
 * [Ilya Lukyanov](mailto:lukyanov1985@gmail.com)
 * [Roman Minebaev](https://github.com/minebaev)
 * [Rustem Sagdeev](https://github.com/SagdeevRR)
+
+## Сторонние компоненты
+
+SQL для раздела **Проверки схемы** заимствован из проекта [db_verifier](https://github.com/sdblist/db_verifier)
+(MIT, © 2024 Nikonov — текст лицензии в файле `LICENSE` проекта) — набора проверок структуры БД для
+PostgreSQL. Атрибуция по шаблонам: [backend/internal/query/README.md](backend/internal/query/README.md).
+
+Запрос **дерева блокировок** взят из [postgres_dba](https://github.com/NikolayS/postgres_dba)
+(BSD 3-Clause, © 2017 Nikolay Samokhvalov) — `sql/l2_lock_trees.sql`, адаптирован в один запрос
+без psql-ветвлений по версии. Текст лицензии:
+[backend/internal/query/LICENSE-postgres_dba](backend/internal/query/LICENSE-postgres_dba).
+
+Оценка bloat индексов происходит из [pgsql-bloat-estimation](https://github.com/ioguix/pgsql-bloat-estimation)
+(BSD-подобная лицензия PostgreSQL, © 2015-2019 Jehan-Guillaume (ioguix) de Rorthais; текст лицензии —
+в файле `LICENSE` проекта).
 
 ## Лицензия
 

@@ -54,7 +54,8 @@ Investigating:
 - health_trend needs metrics-backed mode (a configured datasource); it returns an error otherwise.
 - query_compare needs snapshot IDs from list_snapshots.
 - search_logs works only on clusters with supports_logs=true (see list_clusters) and is rate-limited per user because every call reaches the Yandex Cloud API: combine all filters into one call, keep dedup on, and after a 429 wait ~30 seconds instead of retrying immediately.
-- If unsure how to interpret a result or which tool to call next, read the resources first: dasha://kb/workflow (complaint-to-tool-chain playbooks), dasha://kb/health-rules (rule thresholds and first actions), dasha://kb/wait-events (wait event glossary).
+- schema_lint answers a different question from every other tool: what is wrong with the STRUCTURE, not what is happening now. Read its skipped list before concluding anything — a check that could not run says nothing about the schema, and reporting "clean" over a non-empty skipped list is a false all-clear. Two findings have a fix that is NOT the obvious one: sequence_exhaustion on an owned_column_type of 'integer' needs the column type changed (a table rewrite, needs a window), not just ALTER SEQUENCE; and no_primary_key on a table whose unique index is nullable cannot be answered with "you already have a unique index" — that index is no replica identity. Read dasha://kb/schema-checks before advising on a code you do not know.
+- If unsure how to interpret a result or which tool to call next, read the resources first: dasha://kb/workflow (complaint-to-tool-chain playbooks), dasha://kb/health-rules (rule thresholds and first actions), dasha://kb/schema-checks (schema defect codes and their fixes), dasha://kb/wait-events (wait event glossary).
 
 If a result is refused as too large, narrow it (one database, a smaller range, or a more specific tool).`,
 
@@ -127,7 +128,8 @@ If a result is refused as too large, narrow it (one database, a smaller range, o
 - health_trend требует режима метрик (настроенный datasource), иначе вернёт ошибку.
 - query_compare требует ID снимков из list_snapshots.
 - search_logs работает только на кластерах с supports_logs=true (см. list_clusters) и лимитирован per-user, т.к. каждый вызов уходит в Yandex Cloud API: собирайте все фильтры в один вызов, держите dedup включённым, после 429 ждите ~30 секунд вместо немедленного повтора.
-- Если непонятно, как трактовать результат или какой инструмент звать дальше — сначала прочитайте ресурсы: dasha://kb/workflow (сценарии «жалоба -> цепочка»), dasha://kb/health-rules (пороги правил и первые действия), dasha://kb/wait-events (глоссарий wait events).
+- schema_lint отвечает не на тот вопрос, что остальные инструменты: что не так со СТРУКТУРОЙ, а не что происходит сейчас. Прежде чем делать выводы, прочитайте его список skipped — проверка, которая не выполнилась, не говорит о схеме ничего, и «всё чисто» при непустом skipped — ложное «отбой». У двух находок правильное лечение НЕ очевидное: sequence_exhaustion с owned_column_type = 'integer' требует смены типа колонки (переписывание таблицы, нужно окно), а не только ALTER SEQUENCE; а no_primary_key на таблице с nullable уникальным индексом нельзя закрывать фразой «у вас же есть unique» — такой индекс не годится в replica identity. Перед советами по незнакомому коду читайте dasha://kb/schema-checks.
+- Если непонятно, как трактовать результат или какой инструмент звать дальше — сначала прочитайте ресурсы: dasha://kb/workflow (сценарии «жалоба -> цепочка»), dasha://kb/health-rules (пороги правил и первые действия), dasha://kb/schema-checks (коды дефектов схемы и их лечение), dasha://kb/wait-events (глоссарий wait events).
 
 Если результат отклонён как слишком большой — сузьте запрос (одна база, меньший диапазон или более специфичный инструмент).`,
 

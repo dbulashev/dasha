@@ -20,6 +20,7 @@ import (
 	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/hotobjects"
 	"github.com/dbulashev/dasha/internal/pkg/mapstruct"
+	"github.com/dbulashev/dasha/internal/schemalint"
 )
 
 const (
@@ -109,6 +110,9 @@ type Repository interface {
 	GetMaintenanceAutovacuumSummary(ctx context.Context, clusterName, instanceName, databaseName string) (*dto.MaintenanceAutovacuumSummary, error)
 	GetHotSampleTables(ctx context.Context, clusterName, instanceName, databaseName string, schema, object *string) ([]hotobjects.AnchorRow, *time.Time, bool, error)
 	GetHotSampleIndexes(ctx context.Context, clusterName, instanceName, databaseName string, schema, object *string) ([]hotobjects.AnchorRow, *time.Time, bool, error)
+	GetSchemaLintReport(ctx context.Context, clusterName, instanceName, databaseName string) (schemalint.Report, error)
+	GetSchemaLintSummary(ctx context.Context, clusterName, instanceName string) ([]schemalint.DatabaseSummary, error)
+	GetSequenceHeadroom(ctx context.Context, clusterName, instanceName, databaseName string) (float64, bool, error)
 	GetQueriesBlocked(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.QueryBlocked, error)
 	GetQueriesRunning(ctx context.Context, clusterName, instanceName, databaseName string, minDuration int, queryFilter *string, queryFilterMode string, username *string) ([]dto.QueryRunning, error)
 	GetQueriesTop10ByTime(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.QueryTop10ByTime, error)
@@ -157,18 +161,26 @@ type pgxPoolItem struct {
 type PgxPools map[config.ClusterName][]pgxPoolItem
 
 type PgxPool struct {
-	mu                  sync.RWMutex
-	clusters            config.Clusters
-	pools               PgxPools
-	logger              *zap.Logger
-	pgStatsViewConfig   string   // configured pg_stats_view from global config
-	resolvedPgStatsView sync.Map // *pgxpool.Pool → string (resolved view name)
-	resolvedExtSchemas  sync.Map // extSchemaKey → string (quoted extension schema)
-	pgssResetFuncConfig string   // configured pgss_reset_function from global config
-	poolConfig          config.PoolConfig
+	mu                    sync.RWMutex
+	clusters              config.Clusters
+	pools                 PgxPools
+	logger                *zap.Logger
+	pgStatsViewConfig     string   // configured pg_stats_view from global config
+	resolvedPgStatsView   sync.Map // *pgxpool.Pool → string (resolved view name)
+	resolvedExtSchemas    sync.Map // extSchemaKey → string (quoted extension schema)
+	pgssResetFuncConfig   string   // configured pgss_reset_function from global config
+	poolConfig            config.PoolConfig
+	schemaLintConfig      schemalint.Config
+	sequenceHeadroomCache sync.Map // cluster/instance/database → sequenceHeadroomEntry
 }
 
-func NewRepositoryPgxPool(clusters config.Clusters, pgStatsView, pgssResetFunc string, poolCfg config.PoolConfig, logger *zap.Logger) Repository {
+func NewRepositoryPgxPool(
+	clusters config.Clusters,
+	pgStatsView, pgssResetFunc string,
+	poolCfg config.PoolConfig,
+	schemaLintCfg schemalint.Config,
+	logger *zap.Logger,
+) Repository {
 	return &PgxPool{
 		clusters:            clusters,
 		pools:               PgxPools{},
@@ -177,6 +189,7 @@ func NewRepositoryPgxPool(clusters config.Clusters, pgStatsView, pgssResetFunc s
 		pgStatsViewConfig:   pgStatsView,
 		pgssResetFuncConfig: pgssResetFunc,
 		poolConfig:          poolCfg,
+		schemaLintConfig:    schemaLintCfg,
 	}
 }
 

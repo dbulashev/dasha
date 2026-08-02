@@ -3,7 +3,27 @@ package health
 import (
 	"cmp"
 	"sort"
+
+	"github.com/dbulashev/dasha/internal/schemalint"
 )
+
+// freePctOf converts the consumed ratio this engine measures (0..1) into the
+// percent-of-values-free that the schema-lint thresholds are stated in.
+func freePctOf(usedRatio float64) float64 {
+	return 100 * (1 - usedRatio)
+}
+
+// severityForLevel maps a schema-lint level onto the score engine's severities.
+func severityForLevel(l schemalint.Level) Severity {
+	switch l {
+	case schemalint.LevelError:
+		return SeverityHigh
+	case schemalint.LevelWarning:
+		return SeverityMedium
+	default:
+		return SeverityLow
+	}
+}
 
 // Severity is the importance of a triggered rule.
 type Severity string
@@ -690,14 +710,21 @@ var Registry = []Rule{
 		// Sequence / ID-space exhaustion: a sequence approaching its type limit
 		// (e.g. int4 PK). Overflow stops writes — plan a migration to bigint.
 		// Rule-only by design; the critical floor handles the near-overflow case.
-		ID: "sequence_exhaustion", Category: CategoryStorage, RelatedRoute: "/tables",
+		// Fed either by the metrics datasource or by the schema-lint report, so
+		// the rule fires in both scoring modes.
+		ID: "sequence_exhaustion", Category: CategoryStorage, RelatedRoute: "/schema-lint",
 		Evaluate: func(m RawMetrics) *Hit {
-			sev := severityFor(m.SequenceExhaustionMax, 0.95, 0.85, 0.75)
-			if sev == "" {
+			// Severity comes from the schema-lint classifier itself rather than
+			// from restated numbers, so both sides share the thresholds and the
+			// boundaries. They can still differ by one step: the page raises the
+			// level for a sequence owned by an int4 column, and the ratio here
+			// carries no column type to raise on.
+			level, found := schemalint.LevelForFreePct(freePctOf(m.SequenceExhaustionMax), m.SequenceThresholds)
+			if !found {
 				return nil
 			}
 
-			return &Hit{Severity: sev, MetricValue: m.SequenceExhaustionMax}
+			return &Hit{Severity: severityForLevel(level), MetricValue: m.SequenceExhaustionMax}
 		},
 	},
 	{

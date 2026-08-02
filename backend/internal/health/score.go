@@ -1,6 +1,10 @@
 package health
 
-import "math"
+import (
+	"math"
+
+	"github.com/dbulashev/dasha/internal/schemalint"
+)
 
 // RawMetrics contains raw metrics collected from PostgreSQL for health score calculation.
 type RawMetrics struct {
@@ -67,6 +71,11 @@ type RawMetrics struct {
 	// (e.g. Yandex MDB forces logical) — the wasted-overhead rule would only
 	// nag about a setting the user cannot change.
 	WalLevelManaged bool
+
+	// SequenceThresholds overrides where a sequence becomes a problem, in percent
+	// of values still free. Nil means the defaults; it is the same configuration
+	// the Schema Checks page reads, so the two cannot disagree.
+	SequenceThresholds map[string]float64
 
 	// Metrics-backed only (host/pooler saturation, data integrity). The SQL
 	// snapshot leaves these zero, which reads as "absent" and stays neutral.
@@ -137,10 +146,6 @@ const (
 // number green next to a HIGH wraparound recommendation. The ceiling keeps the
 // number consistent with the rules engine, which surfaces the same conditions.
 const criticalScoreCeiling = 30.0
-
-// sequenceExhaustionCritical is the sequence usage ratio at which ID-space
-// overflow is imminent (writes stop), warranting the critical floor.
-const sequenceExhaustionCritical = 0.95
 
 // diskUsedCritical is the host disk usage ratio at which free space is
 // dangerously low: a full data volume stops writes and can corrupt/crash the
@@ -266,7 +271,9 @@ func criticalCeiling(m RawMetrics) float64 {
 	}
 
 	// Sequence / ID-space exhaustion near the limit — writes stop on overflow.
-	if m.SequenceExhaustionMax >= sequenceExhaustionCritical {
+	// The floor applies exactly where the schema checks call it an error.
+	if level, found := schemalint.LevelForFreePct(freePctOf(m.SequenceExhaustionMax), m.SequenceThresholds); found &&
+		level == schemalint.LevelError {
 		return criticalScoreCeiling
 	}
 

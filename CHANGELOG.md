@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Features
+- **Schema Checks**, a new page: structural defects that stay invisible until they break something — a sequence about to run out of values, a table without a primary key, a forgotten `UNLOGGED` relation, a schema anyone may create objects in. Findings come with what the defect leads to and how to fix it, with a ready SQL statement to copy where the fix is unambiguous; a defect found on the partitions of one table is shown once, on the parent. Checks that could not run are listed separately with the reason, so an unchecked schema is never mistaken for a clean one. An instance-wide overview shows the counts of every database, not just the selected one. The page is hidden on replicas.
+- **The health score accounts for sequence exhaustion without a metrics datasource.** The recommendation is built from the schema checks, at the same thresholds, and links to the sequences behind it.
+- **Invalid constraints, foreign-key type mismatches, nullable keys, similar keys and indexes and B-tree on arrays were added to the schema report** — everything about the schema in one place. Their own pages keep working as before and additionally show the schema of the object.
+- **Added checks for names that break tooling** (a reserved SQL keyword as an object name, characters that force quoting everywhere) and for `NOT VALID` constraints that were never validated — previously only the FK Analysis page showed them.
+- **Two MCP tools**, `schema_lint` and `schema_lint_summary`, plus a knowledge-base page explaining every check — including the two cases where the obvious fix is the wrong one.
+
 ## v1.5.1
 
 ### Features
