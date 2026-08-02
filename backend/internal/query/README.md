@@ -7,7 +7,7 @@ no licence headers.
 ## db_verifier
 
 - Project: https://github.com/sdblist/db_verifier
-- Licence: MIT, © Nikonov, 2024
+- Licence: MIT, © 2024 Nikonov — full text in the project's `LICENSE` file
 - The checks are derived from db_verifier's check set. The logic is adapted to
   Dasha: severity is assigned in Go from the facts a query returns instead of
   being baked into separate per-severity queries, partition rollup happens in
@@ -53,5 +53,8 @@ through the registry rather than being reimplemented there.
 
 ## ioguix pgsql-bloat-estimation
 
-`indexes/bloat` uses the well-known statistics-based bloat estimation that
-originates in ioguix's pgsql-bloat-estimation (PostgreSQL licence).
+- Project: https://github.com/ioguix/pgsql-bloat-estimation
+- Licence: BSD-style (the PostgreSQL licence), © 2015-2019 Jehan-Guillaume
+  (ioguix) de Rorthais — full text in the project's `LICENSE` file
+- Used in: `indexes/bloat` — the well-known statistics-based bloat estimation
+  that originates there.

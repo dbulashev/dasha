@@ -842,14 +842,17 @@ See [CHANGELOG.md](CHANGELOG.md) for release notes.
 ## Third-party components
 
 The SQL behind **Schema Checks** is derived from [db_verifier](https://github.com/sdblist/db_verifier)
-(MIT, © Nikonov, 2024), a set of structural checks for PostgreSQL [backend/internal/query/README.md](backend/internal/query/README.md).
+(MIT, © 2024 Nikonov — licence text in the project's `LICENSE` file), a set of structural checks for
+PostgreSQL. Per-template attribution: [backend/internal/query/README.md](backend/internal/query/README.md).
 
 The **lock tree** query comes from [postgres_dba](https://github.com/NikolayS/postgres_dba)
 (BSD 3-Clause, © 2017 Nikolay Samokhvalov) — `sql/l2_lock_trees.sql`, adapted to run as a single
 statement without psql version branches. Licence text:
 [backend/internal/query/LICENSE-postgres_dba](backend/internal/query/LICENSE-postgres_dba).
 
-Index bloat estimation descends from ioguix's pgsql-bloat-estimation.
+Index bloat estimation descends from [pgsql-bloat-estimation](https://github.com/ioguix/pgsql-bloat-estimation)
+(BSD-style — the PostgreSQL licence, © 2015-2019 Jehan-Guillaume (ioguix) de Rorthais; licence text in the
+project's `LICENSE` file).
 
 ## License
 

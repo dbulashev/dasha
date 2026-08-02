@@ -703,7 +703,9 @@ func TestSequenceExhaustion_FollowsConfiguredThresholds(t *testing.T) {
 		t.Fatalf("30%% free must be silent by default, got %s", hit.Severity)
 	}
 
-	m.SequenceThresholds = map[string]float64{"error": 50, "warning": 60, "notice": 70}
+	// 30% free now sits in the warning band (between the error and the warning
+	// threshold), which the page shows as a warning and the score as MEDIUM.
+	m.SequenceThresholds = map[string]float64{"error": 20, "warning": 40, "notice": 50}
 
 	hit := rule.Evaluate(m)
 	if hit == nil || hit.Severity != SeverityMedium {

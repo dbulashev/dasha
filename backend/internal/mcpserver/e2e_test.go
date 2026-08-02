@@ -166,14 +166,14 @@ func TestE2E_ResourcesAndPrompts(t *testing.T) {
 	}
 	defer cs.Close()
 
-	// All three knowledge-base resources are advertised.
+	// Every knowledge-base resource is advertised.
 	lr, err := cs.ListResources(ctx, nil)
 	if err != nil {
 		t.Fatalf("ListResources: %v", err)
 	}
 
-	if len(lr.Resources) != 3 {
-		t.Fatalf("ListResources returned %d resources, want 3", len(lr.Resources))
+	if len(lr.Resources) != len(kbResourceNames) {
+		t.Fatalf("ListResources returned %d resources, want %d", len(lr.Resources), len(kbResourceNames))
 	}
 
 	for _, r := range lr.Resources {

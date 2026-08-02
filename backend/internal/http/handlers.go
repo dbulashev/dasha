@@ -58,8 +58,10 @@ func paginationDefaults(limitPtr, offsetPtr *int, defaultLimit int) (int, int) {
 // pageOf cuts one page out of a slice, for endpoints that compute the whole
 // result before they can filter or count it and so cannot push LIMIT into SQL.
 func pageOf[T any](items []T, limit, offset int) []T {
+	// Empty, not nil: a page past the end is still an array to whoever reads the
+	// JSON, and the helper should not depend on its caller mapping the result.
 	if offset >= len(items) {
-		return nil
+		return []T{}
 	}
 
 	items = items[offset:]

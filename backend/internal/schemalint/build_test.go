@@ -4,14 +4,26 @@ import (
 	"testing"
 )
 
+// seqRow builds a sequence whose raw values agree with the headroom it claims.
+// They must not disagree: an int4 owner makes 2147483647 the ceiling and the
+// headroom is recomputed from last_value against it (see effectiveHeadroom),
+// so a bigint maxvalue there would silently discard freePct.
 func seqRow(schema, name string, freePct float64, ownedType string) SequenceRow {
+	const minValue = 1
+
+	// Just below math.MaxInt64, so the derived last_value cannot overflow.
+	maxValue := int64(9_000_000_000_000_000_000)
+	if isInt4(ownedType) {
+		maxValue = int4Max
+	}
+
 	return SequenceRow{
 		Schema:          schema,
 		Object:          name,
-		LastValue:       100,
+		LastValue:       maxValue - int64(float64(maxValue-minValue)*freePct/100),
 		LastValueKnown:  true,
-		MaxValue:        9223372036854775807,
-		MinValue:        1,
+		MaxValue:        maxValue,
+		MinValue:        minValue,
 		FreePct:         freePct,
 		OwnedColumnType: ownedType,
 	}

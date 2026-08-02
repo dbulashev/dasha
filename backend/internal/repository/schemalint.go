@@ -211,6 +211,9 @@ func (p *PgxPool) readSequenceHeadroom(ctx context.Context, pool *pgxpool.Pool) 
 
 	var in schemalint.Inputs
 
+	// Truncation is deliberately ignored here: the query orders by free_pct with
+	// nulls first, so the capped rows are the ones furthest from their ceiling.
+	// The worst sequence is always in what was read.
 	if _, err := p.runSchemaLintQuery(ctx, pool, qStr, enums.QuerySchemaLintSequencesUsage, &in); err != nil {
 		return 0, false, err
 	}

@@ -117,7 +117,7 @@ Each bullet: what's measured / how it's computed, then LOW / MEDIUM / HIGH thres
 - `tables_never_vacuumed` — tables with both `last_vacuum IS NULL` and `last_autovacuum IS NULL`. Thresholds ≥1 / ≥2 / ≥5.
 - `autovacuum_disabled` — global GUC `autovacuum=off`. Bloat and XID age grow unchecked. HIGH.
 - `track_counts_disabled` — global GUC `track_counts=off`. Autovacuum has no statistics to act on and effectively stops. HIGH.
-- `tables_with_autovacuum_off` — tables with `autovacuum_enabled=false` in `pg_class.reloptions`. Thresholds ≥1 / ≥5 / ≥20.
+- `tables_with_autovacuum_off` — tables with `autovacuum_enabled=false` in `pg_class.reloptions`. LOW as soon as there is one; the count itself is not graded.
 - `relfrozenxid_age_outlier` — worst per-table `age(relfrozenxid)` from `pg_class`. Per-table flavour of `xid_wraparound_risk`. Thresholds ≥150 M / ≥200 M / ≥1.6 B.
 - `stale_planner_stats` — tables whose `n_mod_since_analyze` exceeds their (reloption-aware) auto-analyze threshold and that have not been analyzed in 3 h (planner has outdated stats). Thresholds ≥3 / ≥5 / ≥10 tables.
 
@@ -134,7 +134,7 @@ Each bullet: what's measured / how it's computed, then LOW / MEDIUM / HIGH thres
 - `longest_lock_wait_seconds` — `EXTRACT(EPOCH FROM now() - state_change)` of the longest current Lock-wait. Thresholds ≥10 / ≥30 / ≥60 seconds.
 - `ungranted_locks` — rows in `pg_locks` with `granted=false`. Queued lock requests piling up behind a holder. Thresholds ≥2 / ≥5 / ≥15.
 - `deadlocks_rate` — the `deadlocks` counter from `pg_stat_database`, accumulating since the last `pg_stat_database_reset`. There is no per-day rate here, so the fact itself is what counts: above zero is already worth a look at the log. LOW when the total is > 0.
-- `lock_pool_saturation` — `count(*) from pg_locks` divided by `max_connections × max_locks_per_transaction` (size of the heavyweight-lock shared pool). Thresholds ≥0.4 / ≥0.6 / ≥0.8.
+- `lock_pool_saturation` — `count(*) from pg_locks` divided by `max_connections × max_locks_per_transaction` (size of the heavyweight-lock shared pool). Thresholds ≥0.5 / ≥0.6 / ≥0.8.
 
 ## Per-database detail
 

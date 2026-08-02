@@ -20,26 +20,38 @@ const items = ref<SchemaLintDatabaseSummary[]>([])
 const loading = ref(false)
 const expanded = ref(false)
 
+// Guards against out-of-order responses: the sweep walks every database and may
+// take minutes, so a reply for the instance the user has already left must not
+// land on the one now on screen.
+let reqId = 0
+
 // The sweep visits every database of the instance, so it is only run when the
 // user asks for the overview — not on every visit to the page.
 async function load() {
   if (!clusterName.value || !hostName.value) return
+
+  const myId = ++reqId
   loading.value = true
   try {
     const res = await getSchemaLintSummary({
       cluster_name: clusterName.value,
       instance: hostName.value,
     })
+    if (myId !== reqId) return // superseded — leave state to the newer load
+
     items.value = assertOk<SchemaLintDatabaseSummary[]>(res) ?? []
   } catch (err) {
+    if (myId !== reqId) return
+
     onError(getErrorMessage(err), err)
     items.value = []
   } finally {
-    loading.value = false
+    if (myId === reqId) loading.value = false
   }
 }
 
 watch([clusterName, hostName], () => {
+  reqId++ // whatever is in flight describes the previous instance
   items.value = []
   if (expanded.value) load()
 })

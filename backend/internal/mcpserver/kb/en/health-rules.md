@@ -7,8 +7,10 @@ Score bands: ≥80 healthy, 40–79 degraded, <40 critical.
 
 **Critical ceiling:** one catastrophic condition clamps the whole score to ≤30
 regardless of other categories: XID age past the failsafe zone, autovacuum
-globally off, track_counts off, a sequence with under 5% of its values left, any
-checksum failure, or host disk ≥90% full. The first four are evaluated on the
+globally off, track_counts off, a sequence past the `schema_lint` error
+threshold (under 5% of its values left by default, moves with
+`schema_lint.sequence_thresholds`), any checksum failure, or host disk ≥90%
+full. The first four are evaluated on the
 primary only — a standby runs no autovacuum and advances no sequences. Checksum
 failures and a full disk are role-agnostic and clamp any instance.
 

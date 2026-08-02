@@ -117,7 +117,7 @@ score = 100 − Σ (penalty_i × weight_i)
 - `tables_never_vacuumed` — таблицы, у которых одновременно `last_vacuum IS NULL` и `last_autovacuum IS NULL`. Пороги ≥1 / ≥2 / ≥5.
 - `autovacuum_disabled` — глобальный GUC `autovacuum=off`. Bloat и возраст XID растут бесконтрольно. HIGH.
 - `track_counts_disabled` — глобальный GUC `track_counts=off`. У autovacuum нет статистики, фактически он не работает. HIGH.
-- `tables_with_autovacuum_off` — таблицы с `autovacuum_enabled=false` в `pg_class.reloptions`. Пороги ≥1 / ≥5 / ≥20.
+- `tables_with_autovacuum_off` — таблицы с `autovacuum_enabled=false` в `pg_class.reloptions`. LOW уже при одной; количество не градуируется.
 - `relfrozenxid_age_outlier` — худший `age(relfrozenxid)` по таблицам из `pg_class`. Потабличная версия `xid_wraparound_risk`. Пороги ≥150 М / ≥200 М / ≥1.6 Б.
 - `stale_planner_stats` — таблицы, у которых `n_mod_since_analyze` превышает их (с учётом reloptions) порог auto-analyze и которые не анализировались более 3 ч (статистика планировщика устарела). Пороги ≥3 / ≥5 / ≥10 таблиц.
 
@@ -134,7 +134,7 @@ score = 100 − Σ (penalty_i × weight_i)
 - `longest_lock_wait_seconds` — `EXTRACT(EPOCH FROM now() - state_change)` самого долгого текущего Lock-wait. Пороги ≥10 / ≥30 / ≥60 секунд.
 - `ungranted_locks` — строки в `pg_locks` с `granted=false`. Очередь запросов блокировок, скопившаяся за держателем. Пороги ≥2 / ≥5 / ≥15.
 - `deadlocks_rate` — счётчик `deadlocks` из `pg_stat_database`, накапливается с последнего `pg_stat_database_reset`. Скорости в сутки у нас нет, поэтому используется сам факт: больше нуля — уже повод посмотреть лог. LOW при значении > 0.
-- `lock_pool_saturation` — `count(*) из pg_locks` делёное на `max_connections × max_locks_per_transaction` (размер общего пула heavyweight-блокировок). Пороги ≥0.4 / ≥0.6 / ≥0.8.
+- `lock_pool_saturation` — `count(*) из pg_locks` делёное на `max_connections × max_locks_per_transaction` (размер общего пула heavyweight-блокировок). Пороги ≥0.5 / ≥0.6 / ≥0.8.
 
 ## Детализация по базам
 

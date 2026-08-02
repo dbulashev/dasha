@@ -44,8 +44,25 @@ const page = ref(1)
 // leave an older request in flight whose late reply would clobber the newer one.
 let reqId = 0
 
+function resetReport() {
+  findings.value = []
+  skipped.value = []
+  summary.value = { error: 0, warning: 0, notice: 0 }
+  total.value = 0
+  truncated.value = false
+  durationMs.value = 0
+}
+
 async function load(p = 1) {
-  if (!clusterName.value || !hostName.value || !databaseName.value) return
+  if (!clusterName.value || !hostName.value || !databaseName.value) {
+    // No target left: drop the previous database's report and invalidate the
+    // request still in flight for it, which would otherwise land on nothing.
+    reqId++
+    resetReport()
+    loading.value = false
+
+    return
+  }
 
   const myId = ++reqId
   loading.value = true
@@ -76,10 +93,7 @@ async function load(p = 1) {
   } catch (err) {
     if (myId !== reqId) return
     onError(getErrorMessage(err), err)
-    findings.value = []
-    skipped.value = []
-    summary.value = { error: 0, warning: 0, notice: 0 }
-    total.value = 0
+    resetReport()
   } finally {
     if (myId === reqId) loading.value = false
   }

@@ -33,5 +33,5 @@ FROM pg_catalog.pg_sequence s
 WHERE NOT s.seqcycle
   AND n.nspname NOT LIKE 'pg\_%'
   AND n.nspname <> 'information_schema'
-ORDER BY free_pct NULLS LAST
+ORDER BY free_pct NULLS FIRST
 LIMIT $1

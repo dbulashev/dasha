@@ -304,9 +304,10 @@ UPDATE pg_index SET indisvalid = false WHERE indexrelid = 'idx_orders_invalid'::
 
 -- =============================================
 -- Schema Checks fixtures
--- One instance of every check the /schema-lint page runs by default, so the
--- page is not almost empty in the demo. Nothing below is touched by the
--- workload generator.
+-- One instance of every check the /schema-lint page runs by default, plus
+-- relation_without_fk, which is off by default and only shows up once it is
+-- enabled in the config. Keeps the page from being almost empty in the demo.
+-- Nothing below is touched by the workload generator.
 -- =============================================
 
 -- A second schema, so the schema filter and the grouping have something to

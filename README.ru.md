@@ -840,14 +840,17 @@ ingress:
 ## Сторонние компоненты
 
 SQL для раздела **Проверки схемы** заимствован из проекта [db_verifier](https://github.com/sdblist/db_verifier)
-(MIT, © Nikonov, 2024) — набора проверок структуры БД для PostgreSQL [backend/internal/query/README.md](backend/internal/query/README.md).
+(MIT, © 2024 Nikonov — текст лицензии в файле `LICENSE` проекта) — набора проверок структуры БД для
+PostgreSQL. Атрибуция по шаблонам: [backend/internal/query/README.md](backend/internal/query/README.md).
 
 Запрос **дерева блокировок** взят из [postgres_dba](https://github.com/NikolayS/postgres_dba)
 (BSD 3-Clause, © 2017 Nikolay Samokhvalov) — `sql/l2_lock_trees.sql`, адаптирован в один запрос
 без psql-ветвлений по версии. Текст лицензии:
 [backend/internal/query/LICENSE-postgres_dba](backend/internal/query/LICENSE-postgres_dba).
 
-Оценка bloat индексов происходит из pgsql-bloat-estimation (ioguix).
+Оценка bloat индексов происходит из [pgsql-bloat-estimation](https://github.com/ioguix/pgsql-bloat-estimation)
+(BSD-подобная лицензия PostgreSQL, © 2015-2019 Jehan-Guillaume (ioguix) de Rorthais; текст лицензии —
+в файле `LICENSE` проекта).
 
 ## Лицензия
 

@@ -19,4 +19,5 @@ FROM roots r
     JOIN pg_catalog.pg_class     rc ON rc.oid = r.root
     JOIN pg_catalog.pg_namespace rn ON rn.oid = rc.relnamespace
 WHERE r.rel <> r.root
+ORDER BY child_schema, child_name
 LIMIT $1
