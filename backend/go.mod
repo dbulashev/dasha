@@ -11,7 +11,7 @@ require (
 	github.com/gorilla/securecookie v1.1.2
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/labstack/echo/v4 v4.15.4
-	github.com/modelcontextprotocol/go-sdk v1.6.1
+	github.com/modelcontextprotocol/go-sdk v1.7.0
 	github.com/oapi-codegen/runtime v1.6.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/samber/do v1.6.0
@@ -19,7 +19,7 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.43.0
-	github.com/yandex-cloud/go-genproto v0.93.0
+	github.com/yandex-cloud/go-genproto v0.99.0
 	github.com/yandex-cloud/go-sdk v0.32.0
 	go.uber.org/zap v1.28.0
 	golang.org/x/oauth2 v0.36.0

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.5.1
 
 ### Features
 - **Schema Checks**, a new page: structural defects that stay invisible until they break something — a sequence about to run out of values, a table without a primary key, a forgotten `UNLOGGED` relation, a schema anyone may create objects in. Findings come with what the defect leads to and how to fix it, with a ready SQL statement to copy where the fix is unambiguous; a defect found on the partitions of one table is shown once, on the parent. Checks that could not run are listed separately with the reason, so an unchecked schema is never mistaken for a clean one. An instance-wide overview shows the counts of every database, not just the selected one. The page is hidden on replicas.
