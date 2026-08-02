@@ -47,4 +47,4 @@ FROM idx as i1
          INNER JOIN idx AS i2 ON i1.indrelid = i2.indrelid
     AND i1.indisunique AND NOT i2.indisunique
     AND replace(i1.simplified_object_definition, ' UNIQUE ', ' ') = i2.simplified_object_definition
-ORDER BY 1, 2;
+ORDER BY i1.table_name, i1.index_name;
