@@ -114,7 +114,8 @@ jobs:
       - name: Integration tests (PG ${{ matrix.pg-version }})
         run: |
           cd backend
-          POSTGRES_VERSION=${{ matrix.pg-version }} go test -tags=integration -v -timeout=5m ./internal/repository/
+          POSTGRES_VERSION=${{ matrix.pg-version }} go test -tags=integration -v -timeout=10m \
+            ./internal/repository/ ./internal/discovery/postgres/
 
   test-frontend:
     runs-on: ubuntu-latest

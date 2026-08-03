@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"regexp"
 	"strings"
 	"sync"
@@ -417,14 +418,16 @@ func (p *PgxPool) ensurePool(ctx context.Context) error {
 				port = "5432"
 			}
 
-			dsn := fmt.Sprintf("postgres://%s:%s@%s/%s",
-				t.cluster.UserName,
-				t.cluster.Password,
-				net.JoinHostPort(string(t.host), port),
-				t.db,
-			)
+			// url.URL escapes credentials; a hand-built string breaks on a
+			// password containing @ : / or ?.
+			dsn := url.URL{ //nolint:exhaustruct
+				Scheme: "postgres",
+				User:   url.UserPassword(t.cluster.UserName, t.cluster.Password),
+				Host:   net.JoinHostPort(string(t.host), port),
+				Path:   "/" + string(t.db),
+			}
 
-			pool, err := p.getPool(ctx, dsn)
+			pool, err := p.getPool(ctx, dsn.String())
 			if err != nil {
 				p.logger.Warn("failed to connect to database, skipping",
 					zap.String("cluster", string(t.cluster.Name)),

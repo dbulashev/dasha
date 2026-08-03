@@ -166,6 +166,23 @@ SQL
     SELECT * FROM orders ORDER BY created_at DESC LIMIT 10;
 SQL
 
+  # 5c. Queries on the discovered databases of pg18-standalone — Dasha finds
+  #     them itself, so they need traffic of their own to be worth opening.
+  psql -h pg18-standalone -U demo -d analytics <<'SQL' 2>/dev/null
+    SELECT event_type, count(*) FROM events GROUP BY event_type;
+    SELECT * FROM events WHERE user_id = (random() * 5000)::int ORDER BY created_at DESC LIMIT 20;
+SQL
+
+  psql -h pg18-standalone -U demo -d billing <<'SQL' 2>/dev/null
+    SELECT status, sum(amount) FROM invoices GROUP BY status;
+    SELECT i.id, i.amount, p.paid_at FROM invoices i JOIN payments p ON p.invoice_id = i.id LIMIT 20;
+SQL
+
+  psql -h pg18-standalone -U demo -d archive <<'SQL' 2>/dev/null
+    SELECT status, count(*) FROM orders_2024 GROUP BY status;
+    SELECT count(*) FROM orders_2024 WHERE created_at > timestamptz '2024-06-01';
+SQL
+
   # 6. Hash / range→hash partition load (hot-objects rollup demo)
   #    Reads + writes spread across every partition, so the hot-objects top must
   #    roll the leaves up into sensor_readings and metrics_2026_0N.

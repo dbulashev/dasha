@@ -108,6 +108,7 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 **Infrastructure**
 - Multi-cluster support with per-cluster host/database selection
 - Yandex Managed Service for PostgreSQL service discovery
+- In-cluster database discovery — the database list comes from the cluster itself and refreshes without a restart
 - Primary / replica role display
 - Optional snapshot storage database (daily-partitioned tables, `dasha migrate` CLI)
 - [MCP connector](#mcp-connector-dasha-mcp) (`dasha-mcp`): read-only MCP server exposing fleet diagnostics to AI assistants (28 tools, 5 prompts)
@@ -205,6 +206,35 @@ discovery:
           exclude_name: "test"
           exclude_db: "system_db"
 ```
+
+#### Database discovery inside a cluster (optional)
+
+Instead of listing `databases` by hand, Dasha can ask the cluster itself and keep the list current —
+a database created after startup shows up within `refresh_interval`, a dropped one disappears
+together with its connections:
+
+```yaml
+discovery:
+  onprem_prod:                    # entry name = cluster name (lower-case)
+    type: postgres
+    config:
+      hosts: [pg-01.local, pg-02.local]   # primary and replicas
+      port: 5432                  # default 5432
+      user: dasha
+      password: secret            # or password_from_env: DASHA_PG_PASSWORD
+      bootstrap_db: postgres      # database the discovery query connects to
+      refresh_interval: 5         # minutes, default 5
+      db: ".*"                    # regex filter
+      exclude_db: "(template.*)"
+```
+
+The role needs `pg_monitor` and `CONNECT` on the databases to be monitored: databases it may not
+connect to are simply left out. Templates and databases with connections disabled are never listed.
+Hosts are tried in order and the one that answered is preferred next time, so a single unreachable
+host costs nothing; while no host answers, the previously discovered list is kept.
+
+Dasha opens one connection pool per host and database, so on a cluster with dozens of databases
+narrow the list with `db` / `exclude_db` and check `db_pool.max_conns`.
 
 #### Log Search (optional)
 
@@ -531,7 +561,7 @@ The SSE stream is passed through unbuffered; the client's token is forwarded unt
 │   │   ├── autosnapshot/         # Auto-snapshot daemon (triggers, retention, leader election)
 │   │   ├── config/               # Configuration types
 │   │   ├── deps/                 # DI container (samber/do)
-│   │   ├── discovery/            # Service discovery (Yandex MDB)
+│   │   ├── discovery/            # Service discovery (Yandex MDB, in-cluster databases)
 │   │   ├── dto/                  # Response data structures
 │   │   ├── enums/                # Query enum (auto-generated)
 │   │   ├── health/               # Health Score engine (penalties, rules)

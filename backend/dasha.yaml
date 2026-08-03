@@ -24,3 +24,16 @@ clusters:
     hosts:
       - localhost
       - my-postgresql.domain.local
+
+# discovery:
+#   onprem_prod:                 # entry name = cluster name
+#     type: postgres
+#     config:
+#       hosts: [pg-01.local, pg-02.local]
+#       port: 5432               # default 5432
+#       user: dasha
+#       password: secret         # or password_from_env: DASHA_PG_PASSWORD
+#       bootstrap_db: postgres   # database the discovery query connects to
+#       refresh_interval: 5      # minutes, default 5
+#       db: ".*"                 # regex include
+#       exclude_db: "template.*" # regex exclude
