@@ -1,5 +1,6 @@
 .DS_Store
 .git
+tests/
 .gitignore
 .gitlab-ci.yml
 *.swp

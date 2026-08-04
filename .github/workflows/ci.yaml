@@ -137,6 +137,8 @@ jobs:
         run: helm lint deploy/charts/dasha
       - name: Helm template
         run: helm template test deploy/charts/dasha > /dev/null
+      - name: Helm render tests
+        run: deploy/charts/dasha/tests/render-tests.sh
 
   # Report-only: never gates CI and is deliberately kept out of build-check's needs,
   # because release.yaml gates releases on the build-check check-run.

@@ -135,8 +135,15 @@ with the main route.
 {{- if not (dig "name" "" $eg) -}}
 {{- fail "gatewayAPI.createGateway=false requires gatewayAPI.existingGateway.name — the HTTPRoute has no Gateway to attach to" -}}
 {{- end -}}
-{{- if and .Values.gatewayAPI.tls.enabled .Values.gatewayAPI.tls.redirect (dig "redirectSectionName" "" $eg) (not (dig "sectionName" "" $eg)) -}}
+{{- $section := dig "sectionName" "" $eg -}}
+{{- $redirectSection := dig "redirectSectionName" "" $eg -}}
+{{- if and .Values.gatewayAPI.tls.enabled .Values.gatewayAPI.tls.redirect $redirectSection -}}
+{{- if not $section -}}
 {{- fail "gatewayAPI.existingGateway.redirectSectionName is set while existingGateway.sectionName is empty — the main HTTPRoute would attach to the HTTP listener as well and take precedence over the redirect route. Name the HTTPS listener in existingGateway.sectionName." -}}
+{{- end -}}
+{{- if eq $section $redirectSection -}}
+{{- fail (printf "gatewayAPI.existingGateway.sectionName and existingGateway.redirectSectionName are both %q — both HTTPRoutes would attach to the same listener and the redirect would loop onto itself. Point redirectSectionName at the HTTP listener and sectionName at the HTTPS one." $redirectSection) -}}
+{{- end -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}

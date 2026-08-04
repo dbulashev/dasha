@@ -852,7 +852,7 @@ gatewayAPI:
 - `gatewayClassName`, `allowedRoutes` и `tls.certManager` описывают Gateway и в этом режиме игнорируются: listener'ы, сертификат и политика привязки маршрутов — на стороне владельца Gateway. `tls.enabled` по-прежнему важен: он говорит чарту, что точка входа работает по HTTPS (`auth.require_https` в конфиге), и включает рендер редирект-маршрута.
 - Пустой `sectionName` привязывает маршрут ко всем подходящим listener'ам этого Gateway, включая обычный HTTP, — и Dasha начинает отдаваться открытым текстом. При `tls.enabled: true` в конфиг попадает ещё и `auth.require_https`, так что через такой HTTP-listener вход не сработает вовсе. Указывайте HTTPS-listener явно.
 - Привязку из другого namespace должен разрешать `allowedRoutes` самого Gateway (`from: All` или `Selector` под namespace релиза) — чарт это проверить не может, непривязанный маршрут виден как `Accepted=False` у `HTTPRoute`.
-- Редирект-маршрут рендерится только если `existingGateway.redirectSectionName` указывает на HTTP-listener: без `sectionName` он привязался бы и к HTTPS-listener, зациклив редирект на себя. Ещё требуется заданный `existingGateway.sectionName` — иначе основной маршрут привяжется к тому же HTTP-listener и выиграет у редиректа; на такой комбинации `helm template` падает.
+- Редирект-маршрут рендерится только если `existingGateway.redirectSectionName` указывает на HTTP-listener: без `sectionName` он привязался бы и к HTTPS-listener, зациклив редирект на себя. Ещё требуется заданный `existingGateway.sectionName`, причём другой listener — иначе оба маршрута окажутся на одном listener'е и основной выиграет у редиректа (или редирект зациклится на себя); на таких комбинациях `helm template` падает.
 
 #### Режим только API (без фронтенда)
 

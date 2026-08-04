@@ -434,8 +434,8 @@ gatewayAPI:
     sectionName: ""
     # HTTP listener for the HTTP→HTTPS redirect route. The redirect route is only
     # rendered when this is set: without a sectionName it would also attach to the
-    # HTTPS listener and loop. Empty = no redirect route (the Gateway owner
-    # usually already redirects).
+    # HTTPS listener and loop. Must differ from sectionName above. Empty = no
+    # redirect route (the Gateway owner usually already redirects).
     redirectSectionName: ""
   # Namespace for the Gateway resource. Empty = release namespace.
   # Some implementations (e.g. Istio) expect the Gateway in the same namespace as the controller (istio-system).
