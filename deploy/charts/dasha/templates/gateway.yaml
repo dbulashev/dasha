@@ -1,4 +1,4 @@
-{{- if .Values.gatewayAPI.enabled }}
+{{- if and .Values.gatewayAPI.enabled .Values.gatewayAPI.createGateway }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway

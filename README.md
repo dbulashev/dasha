@@ -821,12 +821,39 @@ gatewayAPI:
 The cert-manager `Certificate` is created in the Gateway's namespace (`gatewayNamespace`, defaults to the release namespace). Cross-namespace secret refs would require a `ReferenceGrant`, which the chart does not render — keeping Certificate and Gateway colocated avoids that.
 
 Rendered resources (all conditional on `gatewayAPI.enabled: true`):
-- `Gateway` — HTTP listener always; HTTPS listener only when `gatewayAPI.tls.enabled: true`.
+- `Gateway` — only when `gatewayAPI.createGateway: true` (default); HTTP listener always, HTTPS listener only when `gatewayAPI.tls.enabled: true`.
 - `HTTPRoute` (main) — attached to the HTTPS listener when `tls.enabled`, otherwise to the HTTP listener.
-- `HTTPRoute` (HTTP→HTTPS redirect, `RequestRedirect` filter) — only when `gatewayAPI.tls.enabled && gatewayAPI.tls.redirect`.
-- `Certificate` (cert-manager) — only when `gatewayAPI.tls.certManager.enabled`.
+- `HTTPRoute` (HTTP→HTTPS redirect, `RequestRedirect` filter) — only when `gatewayAPI.tls.enabled && gatewayAPI.tls.redirect`, and on an existing Gateway additionally when `existingGateway.redirectSectionName` is set.
+- `Certificate` (cert-manager) — only when `gatewayAPI.tls.certManager.enabled` and the chart owns the Gateway.
 
 `ingress.enabled` and `gatewayAPI.enabled` are mutually exclusive — `helm template` fails if both are true.
+
+#### HTTPRoute on an existing Gateway
+
+When the cluster already has a shared Gateway, managed outside this chart together with its certificates, set `createGateway: false` — the chart then renders only the `HTTPRoute` and attaches it to that Gateway:
+
+```yaml
+gatewayAPI:
+  enabled: true
+  hostname: dasha.example.com
+  createGateway: false
+  existingGateway:
+    name: shared-gateway
+    namespace: istio-system
+    # Listener to attach to — name the HTTPS one when tls.enabled.
+    sectionName: https
+    # Set only if you also want the chart to render the HTTP→HTTPS redirect route.
+    # redirectSectionName: http
+  tls:
+    enabled: true
+```
+
+Notes:
+- `existingGateway.name` is required; `helm template` fails without it.
+- `gatewayClassName`, `allowedRoutes` and `tls.certManager` describe the Gateway and are ignored in this mode — its listeners, TLS certificate and route-attachment policy belong to its owner. `tls.enabled` still matters: it tells the chart the endpoint is HTTPS (`auth.require_https` in the rendered config) and gates the redirect route.
+- Leaving `sectionName` empty attaches the route to every compatible listener of that Gateway — a plain HTTP one included, which then serves Dasha in cleartext. With `tls.enabled: true` the rendered config also gets `auth.require_https`, so sessions arriving over that HTTP listener cannot log in at all. Name the HTTPS listener explicitly.
+- Attachment across namespaces has to be permitted by that Gateway's own `allowedRoutes` (`from: All` or a `Selector` matching the release namespace) — the chart cannot check this, an unattached route shows up as `Accepted=False` on the `HTTPRoute`.
+- The redirect route is rendered only when `existingGateway.redirectSectionName` names the HTTP listener: without a `sectionName` it would attach to the HTTPS listener too and redirect it onto itself. It also requires `existingGateway.sectionName` to be set — otherwise the main route would attach to the same HTTP listener and win over the redirect; `helm template` fails on that combination.
 
 #### API-only mode (without frontend)
 

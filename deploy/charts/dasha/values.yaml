@@ -418,6 +418,25 @@ gatewayAPI:
   # gatewayClassName: istio | nginx | envoy | cilium | ...
   gatewayClassName: istio
   hostname: dasha.example.com
+  # Create the Gateway (and its Certificate). Set to false to render only the
+  # HTTPRoute and attach it to a Gateway the chart does not own — configure it
+  # under existingGateway below.
+  createGateway: true
+  # Gateway to attach the HTTPRoute to when createGateway=false.
+  existingGateway:
+    # Required when createGateway=false.
+    name: ""
+    # Empty = gatewayNamespace, then release namespace.
+    namespace: ""
+    # Listener to attach to. Empty = no sectionName, i.e. every listener of that
+    # Gateway whose hostname and protocol accept this route — a plain HTTP one
+    # included. Name the HTTPS listener explicitly when tls.enabled=true.
+    sectionName: ""
+    # HTTP listener for the HTTP→HTTPS redirect route. The redirect route is only
+    # rendered when this is set: without a sectionName it would also attach to the
+    # HTTPS listener and loop. Empty = no redirect route (the Gateway owner
+    # usually already redirects).
+    redirectSectionName: ""
   # Namespace for the Gateway resource. Empty = release namespace.
   # Some implementations (e.g. Istio) expect the Gateway in the same namespace as the controller (istio-system).
   gatewayNamespace: ""

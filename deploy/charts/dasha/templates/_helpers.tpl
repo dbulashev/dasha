@@ -114,18 +114,74 @@ Invoke from a guaranteed-rendered template (e.g. configmap.yaml).
 {{- end -}}
 
 {{/*
-Validate Gateway API configuration. When Gateway lives in a different namespace
-than the release (e.g. istio-system), allowedRoutes.namespaces.from must NOT be "Same"
-or HTTPRoute from the release namespace cannot attach to the Gateway.
+Validate Gateway API configuration. When the chart owns the Gateway and it lives in a
+different namespace than the release (e.g. istio-system), allowedRoutes.namespaces.from
+must NOT be "Same" or HTTPRoute from the release namespace cannot attach to the Gateway.
+With createGateway=false the listeners belong to someone else, so the checks are on the
+parent reference instead: it must exist, and the redirect route must not share a listener
+with the main route.
 */}}
 {{- define "dasha.validateGatewayAPI" -}}
 {{- if .Values.gatewayAPI.enabled -}}
+{{- if .Values.gatewayAPI.createGateway -}}
 {{- $gwNs := .Values.gatewayAPI.gatewayNamespace -}}
 {{- $releaseNs := include "dasha.namespace" . -}}
 {{- $from := dig "namespaces" "from" "Same" .Values.gatewayAPI.allowedRoutes -}}
 {{- if and $gwNs (ne $gwNs $releaseNs) (eq $from "Same") -}}
 {{- fail (printf "gatewayAPI.gatewayNamespace=%q differs from release namespace %q, but gatewayAPI.allowedRoutes.namespaces.from=\"Same\" — HTTPRoute cannot attach. Set allowedRoutes.namespaces.from to \"All\" or \"Selector\"." $gwNs $releaseNs) -}}
 {{- end -}}
+{{- else -}}
+{{- $eg := .Values.gatewayAPI.existingGateway | default dict -}}
+{{- if not (dig "name" "" $eg) -}}
+{{- fail "gatewayAPI.createGateway=false requires gatewayAPI.existingGateway.name — the HTTPRoute has no Gateway to attach to" -}}
+{{- end -}}
+{{- if and .Values.gatewayAPI.tls.enabled .Values.gatewayAPI.tls.redirect (dig "redirectSectionName" "" $eg) (not (dig "sectionName" "" $eg)) -}}
+{{- fail "gatewayAPI.existingGateway.redirectSectionName is set while existingGateway.sectionName is empty — the main HTTPRoute would attach to the HTTP listener as well and take precedence over the redirect route. Name the HTTPS listener in existingGateway.sectionName." -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Gateway referenced by the HTTPRoutes: the chart's own Gateway, or an existing one
+when createGateway=false.
+*/}}
+{{- define "dasha.routeGatewayName" -}}
+{{- if .Values.gatewayAPI.createGateway -}}
+{{- include "dasha.fullname" . -}}
+{{- else -}}
+{{- dig "name" "" (.Values.gatewayAPI.existingGateway | default dict) -}}
+{{- end -}}
+{{- end -}}
+
+{{- define "dasha.routeGatewayNamespace" -}}
+{{- if .Values.gatewayAPI.createGateway -}}
+{{- include "dasha.gatewayNamespace" . -}}
+{{- else -}}
+{{- dig "namespace" "" (.Values.gatewayAPI.existingGateway | default dict) | default (include "dasha.gatewayNamespace" .) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+Listener the main HTTPRoute attaches to. Empty for an existing Gateway unless set —
+its listener names are not ours to guess.
+*/}}
+{{- define "dasha.routeSectionName" -}}
+{{- if .Values.gatewayAPI.createGateway -}}
+{{- ternary "https" "http" .Values.gatewayAPI.tls.enabled -}}
+{{- else -}}
+{{- dig "sectionName" "" (.Values.gatewayAPI.existingGateway | default dict) -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+HTTP listener the redirect HTTPRoute attaches to. Empty means no redirect route.
+*/}}
+{{- define "dasha.redirectSectionName" -}}
+{{- if .Values.gatewayAPI.createGateway -}}
+{{- "http" -}}
+{{- else -}}
+{{- dig "redirectSectionName" "" (.Values.gatewayAPI.existingGateway | default dict) -}}
 {{- end -}}
 {{- end -}}
 
