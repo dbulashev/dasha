@@ -4,8 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"sync"
 	"time"
+
+	"github.com/go-viper/mapstructure/v2"
 
 	"github.com/dbulashev/dasha/internal/metrics"
 	"github.com/dbulashev/dasha/internal/schemalint"
@@ -138,6 +142,10 @@ type Cluster struct {
 // SourceYandexMDB marks clusters discovered from Yandex Managed Databases.
 const SourceYandexMDB = "yandex-mdb"
 
+// SourcePostgres marks clusters whose databases are discovered by querying the
+// cluster itself.
+const SourcePostgres = "postgres"
+
 // SupportsLogs reports whether cluster logs can be searched via the provider
 // API. Single source of truth for the capability — exposed to the frontend as
 // Cluster.supports_logs and checked by the logs service.
@@ -164,10 +172,50 @@ type YandexMDBConfig struct {
 	Clusters        []DiscoveryClusterFilter `mapstructure:"clusters"`
 }
 
-// DiscoveryEntry represents a single discovery source (one folder).
+// DiscoveryEntry represents a single discovery source (one folder). Config is
+// kept raw: every discovery type has its own shape and decodes the block into
+// its own struct via DecodeDiscoveryConfig.
 type DiscoveryEntry struct {
-	Type   string          `mapstructure:"type"`
-	Config YandexMDBConfig `mapstructure:"config"`
+	Type   string         `mapstructure:"type"`
+	Config map[string]any `mapstructure:"config"`
+}
+
+// DecodeDiscoveryConfig decodes a raw discovery config block into a provider's
+// own config struct. Decoder settings mirror viper's, so a block behaves the
+// same whether viper unmarshals it directly or it is decoded here: notably
+// weak typing, which lets `port: 5432` land in a string field.
+//
+// Keys the target struct has no field for are returned instead of rejected: an
+// old config with a stale key must keep working, but a typo (`excludedb` for
+// `exclude_db` silently widens what is monitored) is worth a warning from the
+// caller, which has the entry name and a logger.
+func DecodeDiscoveryConfig[T any](raw map[string]any) (T, []string, error) {
+	var (
+		out      T
+		metadata mapstructure.Metadata
+	)
+
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{ //nolint:exhaustruct
+		Result:           &out,
+		Metadata:         &metadata,
+		WeaklyTypedInput: true,
+		DecodeHook: mapstructure.ComposeDecodeHookFunc(
+			mapstructure.StringToTimeDurationHookFunc(),
+			mapstructure.StringToSliceHookFunc(","),
+		),
+	})
+	if err != nil {
+		return out, nil, fmt.Errorf("new decoder: %w", err)
+	}
+
+	if err := decoder.Decode(raw); err != nil {
+		return out, nil, fmt.Errorf("decode discovery config: %w", err)
+	}
+
+	// Sorted so the warning reads the same on every start.
+	slices.Sort(metadata.Unused)
+
+	return out, metadata.Unused, nil
 }
 
 // LogSearchConfig holds global limits for Yandex Cloud log search.
@@ -346,15 +394,19 @@ type HealthScoreConfig struct {
 // Clusters is the interface for obtaining the current list of clusters.
 type Clusters interface {
 	Get(ctx context.Context) ([]Cluster, error)
-	// Update replaces discovered clusters while keeping static ones.
-	Update(discovered []Cluster)
+	// UpdateSource replaces the clusters published by one discovery source,
+	// keeping static ones and the other sources untouched. It returns the names
+	// it refused to publish because another owner already holds them.
+	UpdateSource(source string, discovered []Cluster) []string
 }
 
 // ClustersFromConfig stores static + discovery clusters with thread-safe access.
+// Discovered clusters are kept per source (the discovery entry name), so one
+// source's refresh cycle cannot drop what another source published.
 type ClustersFromConfig struct {
 	mu         sync.RWMutex
 	static     []Cluster
-	discovered []Cluster
+	discovered map[string][]Cluster
 }
 
 func NewClustersFromConfig(cfg Config) Clusters {
@@ -366,7 +418,8 @@ func NewClustersFromConfig(cfg Config) Clusters {
 	}
 
 	return &ClustersFromConfig{ //nolint:exhaustruct
-		static: cfg.Clusters,
+		static:     cfg.Clusters,
+		discovered: make(map[string][]Cluster),
 	}
 }
 
@@ -374,17 +427,66 @@ func (c *ClustersFromConfig) Get(_ context.Context) ([]Cluster, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	all := make([]Cluster, 0, len(c.static)+len(c.discovered))
+	total := len(c.static)
+	for _, cls := range c.discovered {
+		total += len(cls)
+	}
+
+	all := make([]Cluster, 0, total)
 	all = append(all, c.static...)
-	all = append(all, c.discovered...)
+
+	// Sources in sorted order: the cluster list reaches the API in this order,
+	// so it must not depend on map iteration.
+	for _, source := range slices.Sorted(maps.Keys(c.discovered)) {
+		all = append(all, c.discovered[source]...)
+	}
 
 	return all, nil
 }
 
-// Update replaces the set of discovered clusters.
-func (c *ClustersFromConfig) Update(discovered []Cluster) {
+// UpdateSource replaces the clusters published by source. Names already taken by
+// a static cluster or by another source are dropped and returned: two clusters
+// sharing a name would silently merge into one set of pools downstream.
+func (c *ClustersFromConfig) UpdateSource(source string, discovered []Cluster) []string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.discovered = discovered
+	taken := make(map[ClusterName]bool, len(c.static))
+	for i := range c.static {
+		taken[c.static[i].Name] = true
+	}
+
+	for key, cls := range c.discovered {
+		if key == source {
+			continue
+		}
+
+		for i := range cls {
+			taken[cls[i].Name] = true
+		}
+	}
+
+	var rejected []string
+
+	accepted := make([]Cluster, 0, len(discovered))
+
+	for _, cl := range discovered {
+		if taken[cl.Name] {
+			rejected = append(rejected, cl.Name.String())
+
+			continue
+		}
+
+		taken[cl.Name] = true
+
+		accepted = append(accepted, cl)
+	}
+
+	if c.discovered == nil {
+		c.discovered = make(map[string][]Cluster, 1)
+	}
+
+	c.discovered[source] = accepted
+
+	return rejected
 }

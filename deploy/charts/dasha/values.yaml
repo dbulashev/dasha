@@ -97,6 +97,16 @@ config:
   #      refresh_interval: 5
   #      clusters:
   #        - name: ".*"
+  #  onprem_prod:                 # entry name = cluster name; databases come from the cluster itself
+  #    type: postgres
+  #    config:
+  #      hosts: [pg-01.example.com, pg-02.example.com]
+  #      port: "5432"
+  #      user: postgres_monitoring
+  #      password_from_env: DISCOVERY_ONPREM_PASSWORD
+  #      bootstrap_db: postgres   # database the discovery query connects to
+  #      refresh_interval: 5
+  #      exclude_db: "template.*"
 
   # -- Snapshot storage (optional): a PostgreSQL DB for pgss snapshots and Health
   # Score weight overrides. The DB connection can be split into two roles:

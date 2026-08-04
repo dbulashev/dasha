@@ -4,20 +4,29 @@ package discovery
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"go.uber.org/zap"
 
 	"github.com/dbulashev/dasha/internal/config"
-	"github.com/dbulashev/dasha/internal/discovery/filter"
+	"github.com/dbulashev/dasha/internal/discovery/postgres"
 	"github.com/dbulashev/dasha/internal/discovery/yandex"
 )
 
 const (
-	defaultRefreshInterval = 5 // minutes
 	discoveryTypeYandexMDB = config.SourceYandexMDB
+	discoveryTypePostgres  = config.SourcePostgres
 )
+
+// Provider discovers clusters from a single configured source.
+type Provider interface {
+	// Discover returns the current set of clusters for this source. A non-nil
+	// error means the cycle failed: the engine then keeps whatever the source
+	// published last instead of replacing it.
+	Discover(ctx context.Context) ([]config.Cluster, error)
+	// Interval is how often Discover is called.
+	Interval() time.Duration
+}
 
 // Engine runs periodic discovery and updates the Clusters provider.
 type Engine struct {
@@ -51,166 +60,97 @@ func (e *Engine) Start(ctx context.Context) error {
 		return nil
 	}
 
-	multipleFolders := len(e.cfg) > 1
+	// Only Yandex folders qualify their cluster names, so only they are counted:
+	// adding an entry of another type must not rename clusters that are already
+	// being monitored under their bare name.
+	prefixNames := countEntries(e.cfg, discoveryTypeYandexMDB) > 1
 
-	for folderName, entry := range e.cfg {
-		switch entry.Type {
-		case discoveryTypeYandexMDB:
-			if err := e.startYandexMDB(ctx, folderName, entry.Config, multipleFolders); err != nil {
-				e.logger.Warn("failed to start yandex-mdb discovery",
-					zap.String("folder", folderName), zap.Error(err))
-			}
-		default:
-			e.logger.Warn("unknown discovery type, skipped",
-				zap.String("folder", folderName), zap.String("type", entry.Type))
-		}
-	}
-
-	return nil
-}
-
-func (e *Engine) startYandexMDB(ctx context.Context, folderName string, cfg config.YandexMDBConfig, prefixWithFolder bool) error {
-	password := cfg.Password
-	if cfg.PasswordFromEnv != "" {
-		password = os.Getenv(cfg.PasswordFromEnv)
-	}
-
-	if cfg.AuthorizedKey == "" {
-		return fmt.Errorf("authorized_key is required for folder %q", folderName)
-	}
-
-	if cfg.FolderID == "" {
-		return fmt.Errorf("folder_id is required for folder %q", folderName)
-	}
-
-	sdk, err := yandex.NewSDK(cfg.AuthorizedKey)
-	if err != nil {
-		return fmt.Errorf("init yandex sdk for folder %q: %w", folderName, err)
-	}
-
-	if e.registry != nil {
-		e.registry.Register(cfg.FolderID, sdk)
-	}
-
-	filters := make([]filter.Filter, 0, len(cfg.Clusters))
-	for _, c := range cfg.Clusters {
-		f, err := filter.New(c.Name, c.Db, c.ExcludeName, c.ExcludeDb)
+	for name, entry := range e.cfg {
+		provider, err := e.newProvider(name, entry, prefixNames)
 		if err != nil {
-			return fmt.Errorf("compile filter for folder %q: %w", folderName, err)
+			e.logger.Warn("failed to start discovery",
+				zap.String("entry", name),
+				zap.String("type", entry.Type),
+				zap.Error(err),
+			)
+
+			continue
 		}
 
-		filters = append(filters, *f)
+		go e.runLoop(ctx, name, provider)
+
+		e.logger.Info("discovery started",
+			zap.String("entry", name),
+			zap.String("type", entry.Type),
+			zap.Duration("interval", provider.Interval()),
+		)
 	}
-
-	interval := time.Duration(cfg.RefreshInterval) * time.Minute
-	if cfg.RefreshInterval <= 0 {
-		interval = time.Duration(defaultRefreshInterval) * time.Minute
-	}
-
-	go e.runLoop(ctx, sdk, folderName, cfg.FolderID, cfg.User, password, filters, interval, prefixWithFolder)
-
-	e.logger.Info("yandex-mdb discovery started",
-		zap.String("folder", folderName),
-		zap.String("folder_id", cfg.FolderID),
-		zap.Duration("interval", interval),
-	)
 
 	return nil
 }
 
-func (e *Engine) runLoop(
-	ctx context.Context,
-	sdk *yandex.SDK,
-	folderName, folderID, username, password string,
-	filters []filter.Filter,
-	interval time.Duration,
-	prefixWithFolder bool,
-) {
-	// Run first discovery immediately.
-	e.discover(ctx, sdk, folderName, folderID, username, password, filters, prefixWithFolder)
+// countEntries returns how many discovery entries have the given type.
+func countEntries(cfg map[string]config.DiscoveryEntry, entryType string) int {
+	count := 0
 
-	ticker := time.NewTicker(interval)
+	for _, entry := range cfg {
+		if entry.Type == entryType {
+			count++
+		}
+	}
+
+	return count
+}
+
+// newProvider builds the provider for one discovery entry.
+func (e *Engine) newProvider(name string, entry config.DiscoveryEntry, prefixName bool) (Provider, error) {
+	switch entry.Type {
+	case discoveryTypeYandexMDB:
+		return yandex.NewProvider(name, entry.Config, e.registry, prefixName, e.logger)
+	case discoveryTypePostgres:
+		// The entry name is the cluster name, so it needs no qualifying.
+		return postgres.NewProvider(name, entry.Config, e.logger)
+	default:
+		return nil, fmt.Errorf("unknown discovery type %q", entry.Type)
+	}
+}
+
+func (e *Engine) runLoop(ctx context.Context, name string, provider Provider) {
+	// Run first discovery immediately.
+	e.discover(ctx, name, provider)
+
+	ticker := time.NewTicker(provider.Interval())
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
-			e.logger.Info("discovery engine stopped", zap.String("folder", folderName))
+			e.logger.Info("discovery stopped", zap.String("entry", name))
 
 			return
 		case <-ticker.C:
-			e.discover(ctx, sdk, folderName, folderID, username, password, filters, prefixWithFolder)
+			e.discover(ctx, name, provider)
 		}
 	}
 }
 
-func (e *Engine) discover(
-	ctx context.Context,
-	sdk *yandex.SDK,
-	folderName, folderID, username, password string,
-	filters []filter.Filter,
-	prefixWithFolder bool,
-) {
-	ycClusters, err := sdk.GetPostgreSQLClusters(ctx, folderID, filters, e.logger)
+func (e *Engine) discover(ctx context.Context, name string, provider Provider) {
+	discovered, err := provider.Discover(ctx)
 	if err != nil {
-		e.logger.Warn("discovery cycle failed", zap.String("folder", folderName), zap.Error(err))
+		e.logger.Warn("discovery cycle failed", zap.String("entry", name), zap.Error(err))
 
 		return
 	}
 
-	discovered := make([]config.Cluster, 0, len(ycClusters))
-	for _, yc := range ycClusters {
-		clusterName := yc.Name
-		if prefixWithFolder {
-			clusterName = folderName + "_" + clusterName
-		}
-
-		hosts := make([]config.Host, 0, len(yc.Hosts))
-		for _, h := range yc.Hosts {
-			hosts = append(hosts, config.Host(h.Name))
-		}
-
-		databases := make([]config.Database, 0, len(yc.Databases))
-		for _, db := range yc.Databases {
-			databases = append(databases, config.Database(db.Name))
-		}
-
-		hostNames := make([]string, 0, len(hosts))
-		for _, h := range hosts {
-			hostNames = append(hostNames, string(h))
-		}
-
-		dbNames := make([]string, 0, len(databases))
-		for _, db := range databases {
-			dbNames = append(dbNames, string(db))
-		}
-
-		e.logger.Debug("discovered cluster",
-			zap.String("folder", folderName),
-			zap.String("cluster", clusterName),
-			zap.Strings("hosts", hostNames),
-			zap.Strings("databases", dbNames),
+	if rejected := e.clusters.UpdateSource(name, discovered); len(rejected) > 0 {
+		e.logger.Warn("discovered clusters skipped, name already in use",
+			zap.String("entry", name),
+			zap.Strings("clusters", rejected),
 		)
-
-		discovered = append(discovered, config.Cluster{
-			Name:       config.ClusterName(clusterName),
-			UserName:   username,
-			Password:   password,
-			Port:       yandex.YandexMDBPort,
-			Databases:  databases,
-			Hosts:      hosts,
-			Source:     discoveryTypeYandexMDB,
-			ProviderID: yc.ID,
-			Labels: map[string]string{
-				"folder_id": folderID,
-				"folder":    folderName,
-			},
-		})
 	}
 
-	e.clusters.Update(discovered)
 	e.logger.Debug("discovery cycle completed",
-		zap.String("folder", folderName),
+		zap.String("entry", name),
 		zap.Int("clusters", len(discovered)),
 	)
 }

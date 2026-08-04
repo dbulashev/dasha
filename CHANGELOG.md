@@ -8,6 +8,7 @@
 - **Invalid constraints, foreign-key type mismatches, nullable keys, similar keys and indexes and B-tree on arrays were added to the schema report** — everything about the schema in one place. Their own pages keep working as before and additionally show the schema of the object.
 - **Added checks for names that break tooling** (a reserved SQL keyword as an object name, characters that force quoting everywhere) and for `NOT VALID` constraints that were never validated — previously only the FK Analysis page showed them.
 - **Two MCP tools**, `schema_lint` and `schema_lint_summary`, plus a knowledge-base page explaining every check — including the two cases where the obvious fix is the wrong one.
+- **Automatic database discovery inside a cluster** (`type: postgres` in the `discovery` section): instead of listing the databases by hand, Dasha asks the cluster and keeps the list current — a database created after startup appears within the refresh interval, a dropped one disappears together with its connections. Databases can be narrowed by regex, and those the monitoring role may not connect to are left out. While no host of the cluster answers, the previously discovered list is kept.
 
 ## v1.5.1
 

@@ -39,13 +39,21 @@ clusters:
       - pg17-replica-1
       - pg17-replica-2
 
-  - name: pg18-standalone
-    username: demo
-    password: demo
-    databases:
-      - demo
-    hosts:
-      - pg18-standalone
+# pg18-standalone is the demo case for in-cluster database discovery: no
+# databases are listed, Dasha asks the cluster itself (demo, analytics, billing,
+# archive — see sql/pg18-standalone-init.sh) and refreshes the list without a
+# restart, so a CREATE/DROP DATABASE shows up in the UI within a minute.
+discovery:
+  pg18-standalone:               # entry name = cluster name
+    type: postgres
+    config:
+      hosts:
+        - pg18-standalone
+      port: 5432
+      user: demo
+      password: demo
+      refresh_interval: 1        # minutes; 1 to keep the demo responsive
+      exclude_db: "^postgres$"   # the maintenance database is of no interest
 
 # Metrics-backed Health Score (demo). Reads from the overlay's VictoriaMetrics
 # (demo/docker-compose.metrics.yaml). Providers are self-managed: pgSCV for PG
