@@ -1,4 +1,5 @@
-{{- if and .Values.gatewayAPI.enabled .Values.gatewayAPI.tls.enabled .Values.gatewayAPI.tls.redirect }}
+{{- $redirectSection := include "dasha.redirectSectionName" . }}
+{{- if and .Values.gatewayAPI.enabled .Values.gatewayAPI.tls.enabled .Values.gatewayAPI.tls.redirect $redirectSection }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
@@ -9,9 +10,9 @@ metadata:
     {{- include "dasha.labels" . | nindent 4 }}
 spec:
   parentRefs:
-    - name: {{ include "dasha.fullname" . }}
-      namespace: {{ include "dasha.gatewayNamespace" . }}
-      sectionName: http
+    - name: {{ include "dasha.routeGatewayName" . }}
+      namespace: {{ include "dasha.routeGatewayNamespace" . }}
+      sectionName: {{ $redirectSection }}
   hostnames:
     - {{ .Values.gatewayAPI.hostname }}
   rules:

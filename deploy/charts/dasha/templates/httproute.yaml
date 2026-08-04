@@ -9,9 +9,11 @@ metadata:
     {{- include "dasha.labels" . | nindent 4 }}
 spec:
   parentRefs:
-    - name: {{ include "dasha.fullname" . }}
-      namespace: {{ include "dasha.gatewayNamespace" . }}
-      sectionName: {{ ternary "https" "http" .Values.gatewayAPI.tls.enabled }}
+    - name: {{ include "dasha.routeGatewayName" . }}
+      namespace: {{ include "dasha.routeGatewayNamespace" . }}
+      {{- with include "dasha.routeSectionName" . }}
+      sectionName: {{ . }}
+      {{- end }}
   hostnames:
     - {{ .Values.gatewayAPI.hostname }}
   rules:

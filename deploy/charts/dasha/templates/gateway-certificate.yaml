@@ -1,4 +1,4 @@
-{{- if and .Values.gatewayAPI.enabled .Values.gatewayAPI.tls.enabled .Values.gatewayAPI.tls.certManager.enabled }}
+{{- if and .Values.gatewayAPI.enabled .Values.gatewayAPI.createGateway .Values.gatewayAPI.tls.enabled .Values.gatewayAPI.tls.certManager.enabled }}
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate

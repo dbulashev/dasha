@@ -11,6 +11,10 @@ test-integration: ## Run integration tests (requires docker). Use POSTGRES_VERSI
 	cd backend && POSTGRES_VERSION=$(POSTGRES_VERSION) go test -tags=integration -v -timeout=5m -coverprofile=coverage-integration.out -coverpkg=./internal/repository/,./internal/query/ ./internal/repository/
 	@cd backend && go tool cover -func=coverage-integration.out | tail -1
 
+.PHONY: test-helm
+test-helm: ## Run Helm chart render tests (requires helm)
+	deploy/charts/dasha/tests/render-tests.sh
+
 .PHONY: test-all
 test-all: test-unit test-integration ## Run all tests
 

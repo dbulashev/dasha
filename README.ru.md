@@ -820,12 +820,39 @@ gatewayAPI:
 `Certificate` от cert-manager создаётся в namespace Gateway (`gatewayNamespace`, по умолчанию — release namespace). Cross-namespace ссылки на secret потребовали бы `ReferenceGrant`, который чарт не рендерит — поэтому Certificate и Gateway держим в одном namespace.
 
 Рендеримые ресурсы (все условны от `gatewayAPI.enabled: true`):
-- `Gateway` — HTTP-listener всегда; HTTPS-listener только при `gatewayAPI.tls.enabled: true`.
+- `Gateway` — только при `gatewayAPI.createGateway: true` (по умолчанию); HTTP-listener всегда, HTTPS-listener только при `gatewayAPI.tls.enabled: true`.
 - `HTTPRoute` (основной) — привязан к HTTPS-listener при `tls.enabled`, иначе к HTTP-listener.
-- `HTTPRoute` (редирект HTTP→HTTPS, filter `RequestRedirect`) — только при `gatewayAPI.tls.enabled && gatewayAPI.tls.redirect`.
-- `Certificate` (cert-manager) — только при `gatewayAPI.tls.certManager.enabled`.
+- `HTTPRoute` (редирект HTTP→HTTPS, filter `RequestRedirect`) — только при `gatewayAPI.tls.enabled && gatewayAPI.tls.redirect`, а для чужого Gateway — дополнительно при заданном `existingGateway.redirectSectionName`.
+- `Certificate` (cert-manager) — только при `gatewayAPI.tls.certManager.enabled` и когда Gateway создаёт сам чарт.
 
 `ingress.enabled` и `gatewayAPI.enabled` взаимоисключаются — `helm template` падает, если оба true.
+
+#### HTTPRoute к уже существующему Gateway
+
+Если в кластере уже есть общий Gateway, который живёт вне этого чарта вместе со своими сертификатами, поставьте `createGateway: false` — чарт отрендерит только `HTTPRoute` и привяжет его к этому Gateway:
+
+```yaml
+gatewayAPI:
+  enabled: true
+  hostname: dasha.example.com
+  createGateway: false
+  existingGateway:
+    name: shared-gateway
+    namespace: istio-system
+    # Listener для привязки — при tls.enabled указывайте HTTPS.
+    sectionName: https
+    # Задавайте, только если редирект HTTP→HTTPS должен рендерить чарт.
+    # redirectSectionName: http
+  tls:
+    enabled: true
+```
+
+Важное:
+- `existingGateway.name` обязателен — без него `helm template` падает.
+- `gatewayClassName`, `allowedRoutes` и `tls.certManager` описывают Gateway и в этом режиме игнорируются: listener'ы, сертификат и политика привязки маршрутов — на стороне владельца Gateway. `tls.enabled` по-прежнему важен: он говорит чарту, что точка входа работает по HTTPS (`auth.require_https` в конфиге), и включает рендер редирект-маршрута.
+- Пустой `sectionName` привязывает маршрут ко всем подходящим listener'ам этого Gateway, включая обычный HTTP, — и Dasha начинает отдаваться открытым текстом. При `tls.enabled: true` в конфиг попадает ещё и `auth.require_https`, так что через такой HTTP-listener вход не сработает вовсе. Указывайте HTTPS-listener явно.
+- Привязку из другого namespace должен разрешать `allowedRoutes` самого Gateway (`from: All` или `Selector` под namespace релиза) — чарт это проверить не может, непривязанный маршрут виден как `Accepted=False` у `HTTPRoute`.
+- Редирект-маршрут рендерится только если `existingGateway.redirectSectionName` указывает на HTTP-listener: без `sectionName` он привязался бы и к HTTPS-listener, зациклив редирект на себя. Ещё требуется заданный `existingGateway.sectionName`, причём другой listener — иначе оба маршрута окажутся на одном listener'е и основной выиграет у редиректа (или редирект зациклится на себя); на таких комбинациях `helm template` падает.
 
 #### Режим только API (без фронтенда)
 
