@@ -115,7 +115,7 @@ jobs:
         run: |
           cd backend
           POSTGRES_VERSION=${{ matrix.pg-version }} go test -tags=integration -v -timeout=10m \
-            ./internal/repository/ ./internal/discovery/postgres/
+            ./internal/repository/ ./internal/discovery/postgres/ ./internal/storage/
 
   test-frontend:
     runs-on: ubuntu-latest

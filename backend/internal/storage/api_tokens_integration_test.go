@@ -39,7 +39,7 @@ func TestMain(m *testing.M) {
 func newTestStorage(t *testing.T) *Storage {
 	t.Helper()
 
-	pool := testinfra.IsolatePool(t)
+	pool := testinfra.IsolateEmptyPool(t)
 	ctx := t.Context()
 
 	_, err := pool.Exec(ctx, createAPITokensSQL)

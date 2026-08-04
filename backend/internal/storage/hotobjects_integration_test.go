@@ -19,7 +19,7 @@ import (
 func newHotTestStorage(t *testing.T) *Storage {
 	t.Helper()
 
-	pool := testinfra.IsolatePool(t)
+	pool := testinfra.IsolateEmptyPool(t)
 	ctx := t.Context()
 
 	for _, ddl := range []string{createHotAnchorSQL, createHotSnapshotSQL, createHotSnapshotIdxSQL, createHotTopSQL, createHotTopObjectIdxSQL} {

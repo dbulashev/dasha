@@ -25,6 +25,22 @@ func SetTestContainer(c *TestContainer) {
 // The database is automatically dropped when the test completes.
 func IsolatePool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
+
+	return isolate(t, fixtureDBName)
+}
+
+// IsolateEmptyPool is IsolatePool without the workload fixture: the database is
+// cloned from template1. Tests that create the application schema must use it —
+// the fixture owns table names the schema also uses (users), and a colliding
+// CREATE TABLE IF NOT EXISTS silently keeps the fixture table.
+func IsolateEmptyPool(t *testing.T) *pgxpool.Pool {
+	t.Helper()
+
+	return isolate(t, "template1")
+}
+
+func isolate(t *testing.T, template string) *pgxpool.Pool {
+	t.Helper()
 	require.NotNil(t, tc, "TestContainer not initialized — call SetTestContainer in TestMain")
 
 	// Use test name as DB name (sanitized)
@@ -32,9 +48,8 @@ func IsolatePool(t *testing.T) *pgxpool.Pool {
 
 	ctx := t.Context()
 
-	// Create database from fixture template
 	_, err := tc.Admin.Exec(ctx, fmt.Sprintf(
-		"CREATE DATABASE %s TEMPLATE %s", dbName, fixtureDBName))
+		"CREATE DATABASE %s TEMPLATE %s", dbName, template))
 	require.NoError(t, err, "create test database")
 
 	// Connect to the new database
