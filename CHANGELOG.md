@@ -11,6 +11,10 @@
 - **The Helm chart can publish Dasha through an existing Gateway** (`gatewayAPI.createGateway: false`): the chart renders only the `HTTPRoute` and attaches it to a shared Gateway that lives outside the chart with its own listeners and certificates.
 - **Automatic database discovery inside a cluster** (`type: postgres` in the `discovery` section): instead of listing the databases by hand, Dasha asks the cluster and keeps the list current — a database created after startup appears within the refresh interval, a dropped one disappears together with its connections. Databases can be narrowed by regex, and those the monitoring role may not connect to are left out. While no host of the cluster answers, the previously discovered list is kept.
 
+### Bug Fixes
+- **The MCP connector works behind TLS.** With `auth.require_https` on, every MCP call was refused with 403: the caller's scheme was dropped instead of forwarded to Dasha.
+- **A refused MCP call names its reason** instead of always blaming the token's role, and a failed tool call is logged with its cause.
+
 ## v1.5.1
 
 ### Features

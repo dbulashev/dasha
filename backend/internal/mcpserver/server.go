@@ -41,11 +41,32 @@ func newServer(client *DashaClient, version, lang string, cache *mcp.SchemaCache
 	registerPrompts(s, t)
 	registerResources(s, lang)
 
+	s.AddReceivingMiddleware(forwardedProtoMiddleware())
+
 	if client.logger != nil {
 		s.AddReceivingMiddleware(loggingMiddleware(client.logger))
 	}
 
 	return s
+}
+
+// forwardedProtoMiddleware carries the caller's scheme, as the proxy in front of
+// this server reported it, into the outbound Dasha call. Without it every call
+// would arrive at Dasha as the scheme of this hop, which is plain HTTP, and
+// auth.require_https would refuse it. Stdio carries no such header: nothing is
+// bound and the outbound call goes without one.
+func forwardedProtoMiddleware() mcp.Middleware {
+	return func(next mcp.MethodHandler) mcp.MethodHandler {
+		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+			if e := req.GetExtra(); e != nil && e.Header != nil {
+				if p := normalizeProto(e.Header.Get("X-Forwarded-Proto")); p != "" {
+					ctx = withForwardedProto(ctx, p)
+				}
+			}
+
+			return next(ctx, method, req)
+		}
+	}
 }
 
 // loggingMiddleware logs every incoming MCP call — method, target (tool,
@@ -76,7 +97,9 @@ func loggingMiddleware(logger *zap.Logger) mcp.Middleware {
 				logger.Warn("mcp call failed", append(fields, zap.Error(err))...)
 			default:
 				if r, ok := res.(*mcp.CallToolResult); ok && r.IsError {
-					fields = append(fields, zap.Bool("is_error", true))
+					// The message reaches the model; without it here an is_error is
+					// undebuggable from outside.
+					fields = append(fields, zap.Bool("is_error", true), zap.String("error", resultErrText(r)))
 				}
 
 				logger.Info("mcp call", fields...)
@@ -85,4 +108,16 @@ func loggingMiddleware(logger *zap.Logger) mcp.Middleware {
 			return res, err
 		}
 	}
+}
+
+// resultErrText returns the first text block of a failed tool result, clipped to
+// the shared log-field cap.
+func resultErrText(r *mcp.CallToolResult) string {
+	for _, c := range r.Content {
+		if t, ok := c.(*mcp.TextContent); ok {
+			return clip(t.Text)
+		}
+	}
+
+	return ""
 }

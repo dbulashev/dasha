@@ -63,6 +63,83 @@ func TestTokenCacheKey(t *testing.T) {
 	}
 }
 
+func TestEditorHeaders(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		cfg      Config
+		ctxProto string // scheme of the inbound request, if any
+		token    string
+		proto    string
+	}{
+		// No inbound scheme (stdio): the header is omitted rather than guessed.
+		{"token only", Config{DashaURL: "http://localhost", Token: "tok"}, "", "tok", ""}, //nolint:exhaustruct
+		{
+			"inbound proto is forwarded",
+			Config{DashaURL: "http://localhost", Token: "tok"}, //nolint:exhaustruct
+			"https", "tok", "https",
+		},
+		{
+			"plain-http caller is reported as such",
+			Config{DashaURL: "http://localhost", Token: "tok"}, //nolint:exhaustruct
+			"http", "tok", "http",
+		},
+		{"neither", Config{DashaURL: "http://localhost"}, "", "", ""}, //nolint:exhaustruct
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			c, err := NewDashaClient(tt.cfg)
+			if err != nil {
+				t.Fatalf("NewDashaClient: %v", err)
+			}
+
+			ctx := t.Context()
+			if tt.ctxProto != "" {
+				ctx = withForwardedProto(ctx, tt.ctxProto)
+			}
+
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			if err := c.editor(ctx)(ctx, req); err != nil {
+				t.Fatalf("editor: %v", err)
+			}
+
+			if got := req.Header.Get("X-API-Key"); got != tt.token {
+				t.Errorf("X-API-Key = %q, want %q", got, tt.token)
+			}
+
+			if got := req.Header.Get("X-Forwarded-Proto"); got != tt.proto {
+				t.Errorf("X-Forwarded-Proto = %q, want %q", got, tt.proto)
+			}
+		})
+	}
+}
+
+func TestNormalizeProto(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]string{
+		"https":            "https",
+		"http":             "http",
+		"HTTPS":            "https",
+		"  https  ":        "https",
+		"https, http":      "https", // chained proxies append; the first is the client
+		"":                 "",
+		"ftp":              "",
+		"https\r\nX-A: b":  "", // never forward an attacker-shaped value
+		"javascript:alert": "",
+	}
+
+	for in, want := range tests {
+		if got := normalizeProto(in); got != want {
+			t.Errorf("normalizeProto(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestServerCache_LRUEvictionAndReuse(t *testing.T) {
 	t.Parallel()
 
