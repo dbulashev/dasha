@@ -183,6 +183,18 @@ jobs:
           go-version: "1.26.5"
           cache-dependency-path: backend/go.sum
       - run: cd backend && go build ./cmd/...
+      # ./cmd/... already compiles the MCP binary, but release ships it from
+      # Dockerfile.mcp — build that image (no push) so a broken image build shows
+      # up here instead of at tag time.
+      - uses: docker/setup-buildx-action@v4
+      - name: Build MCP image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/images/Dockerfile.mcp
+          push: false
+          build-args: |
+            BUILD_NUMBER=ci
       - uses: actions/setup-node@v7
         with:
           node-version: 22
