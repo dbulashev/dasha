@@ -133,8 +133,10 @@ func TestE2E_RejectsBadToken(t *testing.T) {
 		t.Errorf("expected IsError on 401, got success")
 	}
 
-	if got := firstText(res); !strings.Contains(strings.ToLower(got), "access denied") {
-		t.Errorf("result = %q, want an access-denied message", got)
+	// Asserted on the status, not the wording: 401 and 403 are worded differently
+	// on purpose.
+	if got := firstText(res); !strings.Contains(got, "401") {
+		t.Errorf("result = %q, want a message naming the 401", got)
 	}
 }
 

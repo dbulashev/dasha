@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -51,12 +52,53 @@ func (d *DashaClient) withToken(token string) *DashaClient {
 	return &c
 }
 
+// protoCtxKey carries the scheme the caller reached this server with, from the
+// inbound MCP request to the outbound Dasha call.
+type protoCtxKey struct{}
+
+// withForwardedProto binds the caller's scheme to ctx, so the outbound call
+// reports the scheme of the original client rather than of this hop.
+func withForwardedProto(ctx context.Context, proto string) context.Context {
+	return context.WithValue(ctx, protoCtxKey{}, proto)
+}
+
+func forwardedProtoFrom(ctx context.Context) string {
+	p, _ := ctx.Value(protoCtxKey{}).(string)
+
+	return p
+}
+
+// normalizeProto reduces an X-Forwarded-Proto value to "http", "https" or "".
+// Only the first entry is read (proxies append, left to right, so the first is
+// the original client) and anything else is dropped — the value is forwarded to
+// Dasha, and only these two mean anything to it.
+func normalizeProto(v string) string {
+	first, _, _ := strings.Cut(v, ",")
+
+	switch strings.ToLower(strings.TrimSpace(first)) {
+	case "https":
+		return "https"
+	case "http":
+		return "http"
+	default:
+		return ""
+	}
+}
+
 // editor injects this client's token as X-API-Key: the stdio single identity, or
-// the per-request identity bound by withToken in HTTP mode.
-func (d *DashaClient) editor(_ context.Context) apiclient.RequestEditorFn {
+// the per-request identity bound by withToken in HTTP mode. It also forwards the
+// caller's scheme as X-Forwarded-Proto — auth.require_https refuses a request it
+// cannot see as HTTPS, and this hop is plain HTTP.
+func (d *DashaClient) editor(ctx context.Context) apiclient.RequestEditorFn {
+	proto := forwardedProtoFrom(ctx)
+
 	return func(_ context.Context, req *http.Request) error {
 		if d.token != "" {
 			req.Header.Set("X-API-Key", d.token)
+		}
+
+		if proto != "" {
+			req.Header.Set("X-Forwarded-Proto", proto)
 		}
 
 		return nil
@@ -815,8 +857,15 @@ func statusError(op string, resp *http.Response) error {
 	}
 
 	switch code {
-	case http.StatusUnauthorized, http.StatusForbidden:
-		return fmt.Errorf("dasha: access denied (%d) — the token's role is insufficient for %s", code, op)
+	case http.StatusUnauthorized:
+		return fmt.Errorf("dasha: not authenticated (401) on %s — the token is missing, invalid or expired", op)
+	case http.StatusForbidden:
+		// Not stated as "insufficient role": 403 also covers a request Dasha
+		// rejects before authorising it, and naming only the role sends the reader
+		// hunting through RBAC.
+		return fmt.Errorf("dasha: refused (403) on %s — either the token's role is insufficient, or Dasha "+
+			"rejected the request before authorising it (auth.require_https answers 403 when the call does "+
+			"not arrive as HTTPS and carries no X-Forwarded-Proto)", op)
 	case http.StatusNotFound:
 		return fmt.Errorf("dasha: not found (404) — unknown cluster/instance/database")
 	case http.StatusTooManyRequests:
