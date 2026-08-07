@@ -917,7 +917,6 @@
     "lastAutoanalyze": "Letztes Auto-ANALYZE",
     "deadRows": "Tote Zeilen",
     "liveRows": "Lebende Zeilen",
-    "tableNameFilter": "Nach Tabellenname filtern",
     "autovacuumFreezeMaxAge": "Autovacuum Freeze Max Age",
     "transactionIdDanger": "Transaction-ID-Erschöpfungsgefahr",
     "transactionsLeft": "Transaktionen übrig",
