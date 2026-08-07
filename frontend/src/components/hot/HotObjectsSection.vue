@@ -7,7 +7,7 @@ import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useViewError } from '@/composables/useViewError'
 import { ApiError, assertOk } from '@/utils/api'
 import { getErrorMessage } from '@/utils/error'
-import { fmtBytes, fmtCompact, fmtDateTime, fmtInt } from '@/utils/format'
+import { fmtBytes, fmtCompact, fmtDateTime, fmtInt, fmtWindow } from '@/utils/format'
 import { useDescribeLink } from '@/composables/useDescribeLink'
 import { usePrefsStore } from '@/stores/prefs'
 import PaginationControls from '@/components/PaginationControls.vue'
@@ -125,6 +125,27 @@ const measured = computed(() => {
   return w ? Object.values(w).some(x => x.complete) : false
 })
 
+// The rate column is normalised to the window, so the window itself has to be
+// visible: "per day" taken from an 18-hour capture is extrapolated, not measured.
+// Longest complete host window, matching how the backend picks the divisor.
+const windowLabel = computed(() => {
+  const w = report.value?.snapshot.windows
+  if (!w) return null
+
+  let longest: { from: string; to: string } | null = null
+  let longestMs = 0
+  for (const x of Object.values(w)) {
+    if (!x.complete) continue
+    const ms = new Date(x.to).getTime() - new Date(x.from).getTime()
+    if (ms > longestMs) {
+      longestMs = ms
+      longest = x
+    }
+  }
+
+  return longest ? fmtWindow(longest.from, longest.to) : null
+})
+
 const coveragePct = computed(() => {
   const c = report.value?.snapshot.coverage
   if (c == null) return null
@@ -189,6 +210,13 @@ const title = computed(() => t(props.kind === 'table' ? 'hot.tablesTitle' : 'hot
       <v-chip v-if="coveragePct != null && measured" size="small" variant="tonal">
         {{ t('hot.coverage', { pct: coveragePct }) }}
       </v-chip>
+      <v-tooltip v-if="windowLabel && measured" :text="t('hot.windowHint')" location="bottom" max-width="420">
+        <template #activator="{ props: tp }">
+          <v-chip v-bind="tp" size="small" variant="tonal">
+            {{ t('hot.window', { window: windowLabel }) }}
+          </v-chip>
+        </template>
+      </v-tooltip>
       <v-spacer />
       <v-select
         v-model="selectedClass"

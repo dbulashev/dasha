@@ -207,9 +207,14 @@ export function fmtChartTime(value: string | number | Date, withDate: boolean): 
   return d.toLocaleString(locale, { ...time, month: '2-digit', day: '2-digit' })
 }
 
-export function fmtAge(createdAt: string | null | undefined, statsReset: string | null | undefined, unknownLabel = '?'): string {
-  if (!createdAt || !statsReset) return unknownLabel
-  const diff = new Date(createdAt).getTime() - new Date(statsReset).getTime()
+/**
+ * Length of a time window ("2d 3h 10m"): the pg_stat_statements accumulation
+ * window (last stats reset → snapshot) or a hot-snapshot delta window. It is a
+ * span, never the age of the snapshot itself.
+ */
+export function fmtWindow(from: string | null | undefined, to: string | null | undefined, unknownLabel = '?'): string {
+  if (!from || !to) return unknownLabel
+  const diff = new Date(to).getTime() - new Date(from).getTime()
   if (diff < 0) return '—'
   let remaining = Math.floor(diff / 1000)
   const days = Math.floor(remaining / 86400)

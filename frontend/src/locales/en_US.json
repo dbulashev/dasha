@@ -130,14 +130,15 @@
     "snapshotA": "Snapshot A",
     "snapshotB": "Snapshot B / Live",
     "liveData": "Live data",
-    "age": "age",
+    "statsWindow": "stats window",
+    "statsWindowHint": "The period the numbers cover: from the last pg_stat_statements reset to the moment the snapshot was taken (for live data — to now).",
     "hideAbsentA": "Hide rows absent from A",
     "hideAbsentB": "Hide rows absent from B",
     "absent": "Absent",
     "selectSnapshots": "Select snapshots to compare",
     "storageUnavailable": "Snapshot storage is not configured. Comparison is unavailable.",
     "stats": "Total: {total} | In both: {both} | Only in A: {onlyA} | Only in B: {onlyB}",
-    "ageUnknown": "age unknown"
+    "statsWindowUnknown": "window unknown"
   },
   "autosnapshot": {
     "menu": "Auto snapshots",
@@ -360,6 +361,7 @@
     "isReady": "Ready",
     "constraint": "Constraint",
     "percentIndexUsed": "% of index used",
+    "indexScanShare": "Index scan share",
     "estimatedRows": "Estimated rows",
     "uniqueIndexName": "Unique index",
     "indexName2": "Index 2",
@@ -396,7 +398,7 @@
     "cacheHitRates": "Computed from pg_statio — cumulative statistics since the last reset",
     "tableBloat": "Bloat is estimated from pg_stats (null_frac, avg_width). Accuracy depends on how recently ANALYZE ran",
     "indexBloat": "Bloat is estimated from pg_class and pg_stats — use pgstattuple for exact figures",
-    "missingIndexes": "Estimated rows — a rough figure from pg_class.reltuples",
+    "missingIndexes": "A heuristic, not a diagnosis: tables of 10,000+ rows whose share of index scans is below 95%. Existing indexes are not taken into account. Estimated rows is a rough figure from pg_class.reltuples.",
     "indexUsage": "Index usage percentage — estimated from cumulative scan statistics",
     "tableCaching": "Hit rate is computed from pg_statio — cumulative counters since statistics were last reset",
     "indexCaching": "Hit rate is computed from pg_statio — cumulative counters since statistics were last reset",
@@ -445,7 +447,7 @@
     "hitRate": "Index cache hit rate",
     "caching": "Index caching",
     "invalidOrNotReady": "Invalid / not ready indexes",
-    "missing": "Missing indexes",
+    "missing": "Index candidates",
     "similar1": "Similar indexes (algorithm 1: unique vs non-unique)",
     "similar1Hint": "Non-unique indexes that are a subset of a unique index on the same table.",
     "similar2": "Similar indexes (algorithm 2: by FK)",
@@ -918,7 +920,7 @@
   "hot": {
     "tablesTitle": "Hot tables",
     "indexesTitle": "Hot indexes",
-    "hint": "Scheduled activity-counter deltas (daily by default) collected by the autosnapshot daemon from every cluster host and summed (the counters are not replicated). An exact top per metric class is stored plus a tail histogram — coverage shows how much of the total activity landed in the top. The \"Per day\" column is normalized by the snapshot's actual window. Expand a row for the per-host breakdown.",
+    "hint": "Scheduled activity-counter deltas (daily by default) collected by the autosnapshot daemon from every cluster host and summed (the counters are not replicated). An exact top per metric class is stored plus a tail histogram — coverage shows how much of the total activity landed in the top. The \"Rate/day\" column is normalized by the snapshot's actual window (shown as a chip next to the coverage). Expand a row for the per-host breakdown.",
     "classLabel": "Class",
     "class": {
       "reads": "Reads",
@@ -928,7 +930,9 @@
     "coverage": "Top covers {pct}%",
     "date": "Snapshot",
     "latestSnapshot": "Latest",
-    "ratePerDay": "Per day",
+    "ratePerDay": "Rate/day",
+    "window": "Window: {window}",
+    "windowHint": "The snapshot's actual window — the interval between the baseline and the current counter slice. The \"Rate/day\" column is normalized by it: a window shorter than a day means the numbers are scaled to a day, not measured over one.",
     "host": "Host",
     "rolePrimary": "Primary",
     "roleReplica": "Replica",
@@ -937,13 +941,13 @@
     "tail": {
       "summary": "Outside the top: {count} objects, sum {sum} (P50 {median}, P90 {p90}, max {max})",
       "idle": "Outside the top: {count} objects, all idle over the snapshot window — the top covers the entire load.",
-      "hint": "The distribution tail — the objects that missed the stored top, kept as a shape, not by name. The numbers use the ranking metric of the class (e.g. index tuples read for Reads), totalled over the snapshot window — NOT per day like the table above: sum = the whole tail's total; P50 / P90 = the median and 90th-percentile object; max = the single busiest tail object. A flat, low tail with high coverage means the top is representative; a high P90 / max means warm objects sit just below the top."
+      "hint": "The distribution tail — the objects that missed the stored top, kept as a shape, not by name. The numbers use the ranking metric of the class (e.g. index tuples read for Reads), totalled over the snapshot window — NOT a daily rate like the table above: sum = the whole tail's total; P50 / P90 = the median and 90th-percentile object; max = the single busiest tail object. A flat, low tail with high coverage means the top is representative; a high P90 / max means warm objects sit just below the top."
     },
     "noSnapshots": "No snapshots yet — the daemon captures on a schedule, daily by default (snapshot storage must be enabled).",
     "warmingUp": "First snapshot taken — it only seeds the baseline. Deltas appear after the next scheduled capture.",
     "describe": {
       "title": "Hotness",
-      "hint": "Live delta since the last anchor slice: the absolute rate (class key per day) and the place in this database's activity distribution. The percentile is relative: on a quiet database \"hotter than 90% of tables\" does not mean real load — read the rate.",
+      "hint": "Live delta since the last anchor slice: the absolute rate (class key per day, normalized by the window length) and the place in this database's activity distribution. The percentile is relative: on a quiet database \"hotter than 90% of tables\" does not mean real load — read the rate.",
       "hotterThan": "{class}: ~{rate}/day — more active than ~{pct}% of tables",
       "inTop": "{class}: ~{rate}/day — in the hot top",
       "quiet": "{class}: ~{rate}/day — background activity",
