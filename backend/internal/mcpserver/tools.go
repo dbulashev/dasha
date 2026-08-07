@@ -315,8 +315,10 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 
 	addTool(s, &mcp.Tool{
 		Name: "list_indexes",
-		Description: "List index findings for a database: kind='missing' (suggested new indexes, " +
-			"default), 'unused' (never scanned), or 'usage' (scan statistics).",
+		Description: "List index findings for a database: kind='missing' (default) — index candidates, a " +
+			"heuristic over pg_stat_user_tables: tables of 10k+ live rows whose share of index scans is below " +
+			"95%. It reads no queries and ignores the indexes a table already has, so a hit means 'worth " +
+			"inspecting', never 'an index is missing'. 'unused' (never scanned), or 'usage' (scan statistics).",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a listIndexesArgs) (*mcp.CallToolResult, any, error) {
 		switch a.Kind {
 		case "", "missing":
@@ -400,7 +402,9 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			"— it states what share of total activity the stored top holds; a low coverage means a fat tail of " +
 			"warm objects that the entries do not show. snapshot.hosts_missing non-empty means the snapshot is " +
 			"partial. Hash-partitioned tables appear as the parent (partitions summed); range/list partitions " +
-			"appear individually. Use rate_per_day for comparisons, not raw deltas. Requires snapshot storage (501 otherwise). " +
+			"appear individually. Use rate_per_day for comparisons, not raw deltas: it is the class key normalised " +
+			"to the snapshot's actual window (snapshot.windows), so a sub-day window is scaled up to a day, not " +
+			"measured over one. Requires snapshot storage (501 otherwise). " +
 			"Pairs well with maintenance metrics: a table hot on writes usually deserves per-table autovacuum tuning.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a hotArgs) (*mcp.CallToolResult, any, error) {
 		if a.Class != "" && a.Class != "reads" && a.Class != "writes" && a.Class != "io" {

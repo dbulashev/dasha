@@ -16,7 +16,7 @@ const { onError } = useViewError()
 const headers = computed(() => [
   { title: t('header.schema'), key: 'Schema' },
   { title: t('header.table'), key: 'Table' },
-  { title: t('header.percentIndexUsed'), key: 'PercentOfTimesIndexUsed' },
+  { title: t('header.indexScanShare'), key: 'PercentOfTimesIndexUsed' },
   { title: t('header.estimatedRows'), key: 'EstimatedRows' },
 ])
 
@@ -38,7 +38,7 @@ const { items, loading } = useApiLoader<IndexMissing[]>(
   <v-card class="mb-4">
     <v-card-title class="d-flex align-center ga-1">
       {{ t('indexes.missing') }}
-      <v-tooltip :text="t('hint.missingIndexes')" location="bottom">
+      <v-tooltip :text="t('hint.missingIndexes')" location="bottom" max-width="480">
         <template #activator="{ props }">
           <v-icon v-bind="props" size="small" color="medium-emphasis">mdi-help-circle-outline</v-icon>
         </template>

@@ -18,7 +18,7 @@ import { useApiLoader } from '@/composables/useApiLoader'
 import { useViewError } from '@/composables/useViewError'
 import { useExcludeUsersStore } from '@/stores/excludeUsers'
 import { assertOk } from '@/utils/api'
-import { fmtAge, fmtDateTime } from '@/utils/format'
+import { fmtWindow, fmtDateTime } from '@/utils/format'
 import { snapshotReasonI18nKey } from '@/utils/autosnapshot'
 import type { CompareSortKey } from '@/components/queries/compare-types'
 import { compareSortFieldMap } from '@/components/queries/compare-types'
@@ -124,23 +124,25 @@ async function loadLivePgssReset() {
   }
 }
 
-const ageUnknown = computed(() => t('compare.ageUnknown'))
+const statsWindowUnknown = computed(() => t('compare.statsWindowUnknown'))
 
-const ageA = computed(() => {
+// Span from the last pg_stat_statements reset to the moment the numbers were
+// taken — how much history each side covers, not how old the snapshot is.
+const statsWindowA = computed(() => {
   if (!selectedA.value) return ''
   const snap = snapshotsList.value.find(s => s.Id === selectedA.value)
   if (!snap) return ''
-  return fmtAge(snap.CreatedAt, snap.PgssStatsReset ?? undefined, ageUnknown.value)
+  return fmtWindow(snap.PgssStatsReset ?? undefined, snap.CreatedAt, statsWindowUnknown.value)
 })
 
-const ageB = computed(() => {
+const statsWindowB = computed(() => {
   if (selectedB.value) {
     const snap = snapshotsList.value.find(s => s.Id === selectedB.value)
     if (!snap) return ''
-    return fmtAge(snap.CreatedAt, snap.PgssStatsReset ?? undefined, ageUnknown.value)
+    return fmtWindow(snap.PgssStatsReset ?? undefined, snap.CreatedAt, statsWindowUnknown.value)
   }
   if (!livePgssStatsReset.value) return ''
-  return fmtAge(new Date().toISOString(), livePgssStatsReset.value, ageUnknown.value)
+  return fmtWindow(livePgssStatsReset.value, new Date().toISOString(), statsWindowUnknown.value)
 })
 
 const filteredItems = computed(() => {
@@ -271,7 +273,11 @@ watch([selectedA, selectedB, excludeUsers], () => {
               hide-details
               style="max-width: 260px;"
             />
-            <span v-if="ageA && compareData" class="text-caption text-medium-emphasis">{{ t('compare.age') }}: {{ ageA }}</span>
+            <v-tooltip v-if="statsWindowA && compareData" :text="t('compare.statsWindowHint')" location="bottom" max-width="420">
+              <template #activator="{ props: tp }">
+                <span v-bind="tp" class="text-caption text-medium-emphasis">{{ t('compare.statsWindow') }}: {{ statsWindowA }}</span>
+              </template>
+            </v-tooltip>
           </v-col>
           <v-col cols="12" sm="6" class="d-flex align-center ga-2">
             <span class="text-caption font-weight-bold">B:</span>
@@ -284,7 +290,11 @@ watch([selectedA, selectedB, excludeUsers], () => {
               hide-details
               style="max-width: 260px;"
             />
-            <span v-if="ageB && compareData" class="text-caption text-medium-emphasis">{{ t('compare.age') }}: {{ ageB }}</span>
+            <v-tooltip v-if="statsWindowB && compareData" :text="t('compare.statsWindowHint')" location="bottom" max-width="420">
+              <template #activator="{ props: tp }">
+                <span v-bind="tp" class="text-caption text-medium-emphasis">{{ t('compare.statsWindow') }}: {{ statsWindowB }}</span>
+              </template>
+            </v-tooltip>
           </v-col>
         </v-row>
         <v-row dense align="center" class="mt-1">

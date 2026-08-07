@@ -17,7 +17,7 @@ import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useViewError } from '@/composables/useViewError'
 import { useAuthStore } from '@/stores/auth'
 import { assertOk } from '@/utils/api'
-import { fmtAge, fmtDateTime } from '@/utils/format'
+import { fmtWindow, fmtDateTime } from '@/utils/format'
 import { snapshotReasonI18nKey } from '@/utils/autosnapshot'
 import QueryReportSection from '@/components/queries/QueryReportSection.vue'
 import LockSnapshotDialog from '@/components/queries/LockSnapshotDialog.vue'
@@ -230,7 +230,7 @@ async function loadLivePgssReset() {
   }
 }
 
-const ageUnknown = computed(() => t('compare.ageUnknown'))
+const statsWindowUnknown = computed(() => t('compare.statsWindowUnknown'))
 
 const selectedSnapshot = computed(() =>
   selectedSnapshotId.value
@@ -238,12 +238,14 @@ const selectedSnapshot = computed(() =>
     : null,
 )
 
-const ageText = computed(() => {
+// Span from the last pg_stat_statements reset to the moment the numbers were
+// taken — how much history the report covers, not how old the snapshot is.
+const statsWindowText = computed(() => {
   if (isViewingSnapshot.value && selectedSnapshot.value) {
-    return fmtAge(selectedSnapshot.value.CreatedAt, selectedSnapshot.value.PgssStatsReset ?? undefined, ageUnknown.value)
+    return fmtWindow(selectedSnapshot.value.PgssStatsReset ?? undefined, selectedSnapshot.value.CreatedAt, statsWindowUnknown.value)
   }
   if (!isViewingSnapshot.value && livePgssStatsReset.value) {
-    return fmtAge(new Date().toISOString(), livePgssStatsReset.value, ageUnknown.value)
+    return fmtWindow(livePgssStatsReset.value, new Date().toISOString(), statsWindowUnknown.value)
   }
   return ''
 })
@@ -315,9 +317,14 @@ watch([clusterName, hostName, databaseName], async () => {
       hide-details
       style="max-width: 300px;"
     />
-    <span v-if="ageText" class="text-caption text-medium-emphasis">
-      {{ t('compare.age') }}: {{ ageText }}
-    </span>
+    <v-tooltip v-if="statsWindowText" :text="t('compare.statsWindowHint')" location="bottom" max-width="420">
+      <template #activator="{ props: tp }">
+        <span v-bind="tp" class="text-caption text-medium-emphasis d-inline-flex align-center ga-1">
+          <v-icon size="small">mdi-timer-sand</v-icon>
+          {{ t('compare.statsWindow') }}: {{ statsWindowText }}
+        </span>
+      </template>
+    </v-tooltip>
     <v-btn
       v-if="isViewingSnapshot && selectedSnapshot && selectedSnapshot.HasLocks"
       variant="tonal"

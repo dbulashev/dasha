@@ -108,14 +108,15 @@
     "snapshotA": "Snapshot A",
     "snapshotB": "Snapshot B / Live",
     "liveData": "Aktuelle Daten",
-    "age": "Alter",
+    "statsWindow": "Statistikfenster",
+    "statsWindowHint": "Der Zeitraum, den die Zahlen abdecken: vom letzten pg_stat_statements-Reset bis zum Zeitpunkt des Snapshots (bei aktuellen Daten bis jetzt).",
     "hideAbsentA": "Fehlende in A ausblenden",
     "hideAbsentB": "Fehlende in B ausblenden",
     "absent": "Nicht vorhanden",
     "selectSnapshots": "Wählen Sie Snapshots zum Vergleichen aus",
     "storageUnavailable": "Snapshot-Speicher ist nicht konfiguriert. Vergleich nicht verfügbar.",
     "stats": "Gesamt: {total} | Gemeinsam: {both} | Nur in A: {onlyA} | Nur in B: {onlyB}",
-    "ageUnknown": "Alter unbekannt"
+    "statsWindowUnknown": "Fenster unbekannt"
   },
   "autosnapshot": {
     "menu": "Auto-Snapshots",
@@ -323,6 +324,7 @@
     "isReady": "Bereit",
     "constraint": "Constraint",
     "percentIndexUsed": "% Indexnutzung",
+    "indexScanShare": "Anteil Index-Scans",
     "estimatedRows": "Geschätzte Zeilen",
     "uniqueIndexName": "Eindeutiger Index",
     "indexName2": "Index 2",
@@ -359,7 +361,7 @@
     "cacheHitRates": "Berechnet aus pg_statio — kumulative Statistiken seit dem letzten Reset",
     "tableBloat": "Bloat basiert auf pg_stats (null_frac, avg_width). Genauigkeit hängt von der Aktualität von ANALYZE ab",
     "indexBloat": "Bloat basiert auf pg_class und pg_stats — für genaue Daten verwenden Sie pgstattuple",
-    "missingIndexes": "Geschätzte Zeilen — Näherung aus pg_class.reltuples",
+    "missingIndexes": "Eine Heuristik, keine Diagnose: Tabellen ab 10 000 Zeilen, deren Anteil an Index-Scans unter 95 % liegt. Vorhandene Indizes werden nicht berücksichtigt. Geschätzte Zeilen — Näherung aus pg_class.reltuples.",
     "indexUsage": "Indexnutzung in Prozent — Schätzung basierend auf kumulativen Scan-Statistiken",
     "tableCaching": "Hit Rate aus pg_statio — kumulative Zähler seit dem letzten Statistik-Reset",
     "indexCaching": "Hit Rate aus pg_statio — kumulative Zähler seit dem letzten Statistik-Reset",
@@ -501,7 +503,7 @@
     "hitRate": "Cache-Trefferquote der Indizes",
     "caching": "Index-Caching",
     "invalidOrNotReady": "Ungültige / nicht bereite Indizes",
-    "missing": "Fehlende Indizes",
+    "missing": "Index-Kandidaten",
     "similar1": "Ähnliche Indizes (Algorithmus 1: eindeutig vs. nicht-eindeutig)",
     "similar1Hint": "Nicht-eindeutige Indizes, die eine Teilmenge eines eindeutigen Index derselben Tabelle sind.",
     "similar2": "Ähnliche Indizes (Algorithmus 2: nach FK)",
@@ -872,7 +874,7 @@
   "hot": {
     "tablesTitle": "Heiße Tabellen",
     "indexesTitle": "Heiße Indizes",
-    "hint": "Geplante Deltas der Aktivitätszähler (standardmäßig täglich), vom Autosnapshot-Daemon von allen Cluster-Hosts gesammelt und summiert (die Zähler werden nicht repliziert). Gespeichert wird ein exaktes Top pro Metrikklasse plus ein Histogramm des Rests — die Abdeckung zeigt, welcher Anteil der Gesamtaktivität im Top gelandet ist. Die Spalte „Pro Tag“ ist auf das tatsächliche Snapshot-Fenster normiert. Zeile aufklappen für die Aufschlüsselung pro Host.",
+    "hint": "Geplante Deltas der Aktivitätszähler (standardmäßig täglich), vom Autosnapshot-Daemon von allen Cluster-Hosts gesammelt und summiert (die Zähler werden nicht repliziert). Gespeichert wird ein exaktes Top pro Metrikklasse plus ein Histogramm des Rests — die Abdeckung zeigt, welcher Anteil der Gesamtaktivität im Top gelandet ist. Die Spalte „Rate/Tag“ ist auf das tatsächliche Snapshot-Fenster normiert (als Chip daneben angezeigt). Zeile aufklappen für die Aufschlüsselung pro Host.",
     "classLabel": "Klasse",
     "class": {
       "reads": "Lesezugriffe",
@@ -882,7 +884,9 @@
     "coverage": "Top deckt {pct}% ab",
     "date": "Snapshot",
     "latestSnapshot": "Neuester",
-    "ratePerDay": "Pro Tag",
+    "ratePerDay": "Rate/Tag",
+    "window": "Fenster: {window}",
+    "windowHint": "Das tatsächliche Snapshot-Fenster — der Abstand zwischen Basis- und aktuellem Zählerabzug. Die Spalte „Rate/Tag“ ist darauf normiert: Bei einem Fenster unter 24 Stunden sind die Zahlen auf einen Tag hochgerechnet, nicht über einen Tag gemessen.",
     "host": "Host",
     "rolePrimary": "Primary",
     "roleReplica": "Replikat",
@@ -891,13 +895,13 @@
     "tail": {
       "summary": "Außerhalb des Tops: {count} Objekte, Summe {sum} (P50 {median}, P90 {p90}, max {max})",
       "idle": "Außerhalb des Tops: {count} Objekte, alle im Snapshot-Fenster inaktiv — das Top deckt die gesamte Last ab.",
-      "hint": "Der Verteilungsrest — Objekte, die es nicht ins gespeicherte Top geschafft haben; als Form gespeichert, nicht namentlich. Die Zahlen nutzen die Ranking-Metrik der Klasse (z. B. gelesene Indextupel bei Lesezugriffen), summiert über das Snapshot-Fenster — NICHT pro Tag wie die Tabelle oben: Summe = Gesamtwert des Rests; P50 / P90 = Median- und 90-Perzentil-Objekt; max = das aktivste einzelne Objekt des Rests. Flacher, niedriger Rest bei hoher Abdeckung = repräsentatives Top; hohe P90 / max = warme Objekte knapp unter dem Top."
+      "hint": "Der Verteilungsrest — Objekte, die es nicht ins gespeicherte Top geschafft haben; als Form gespeichert, nicht namentlich. Die Zahlen nutzen die Ranking-Metrik der Klasse (z. B. gelesene Indextupel bei Lesezugriffen), summiert über das Snapshot-Fenster — NICHT als Tagesrate wie die Tabelle oben: Summe = Gesamtwert des Rests; P50 / P90 = Median- und 90-Perzentil-Objekt; max = das aktivste einzelne Objekt des Rests. Flacher, niedriger Rest bei hoher Abdeckung = repräsentatives Top; hohe P90 / max = warme Objekte knapp unter dem Top."
     },
     "noSnapshots": "Noch keine Snapshots — der Daemon erfasst nach Zeitplan, standardmäßig täglich (Snapshot-Speicher muss aktiviert sein).",
     "warmingUp": "Erster Snapshot erstellt — er legt nur die Basislinie an. Deltas erscheinen nach der nächsten geplanten Erfassung.",
     "describe": {
       "title": "Aktivität",
-      "hint": "Live-Delta seit dem letzten Anker-Abzug: absolute Rate (Klassenschlüssel pro Tag) und Platz in der Aktivitätsverteilung dieser Datenbank. Das Perzentil ist relativ: auf einer ruhigen Datenbank bedeutet „heißer als 90%“ keine echte Last — auf die Rate schauen.",
+      "hint": "Live-Delta seit dem letzten Anker-Abzug: absolute Rate (Klassenschlüssel pro Tag, auf die Fensterlänge normiert) und Platz in der Aktivitätsverteilung dieser Datenbank. Das Perzentil ist relativ: auf einer ruhigen Datenbank bedeutet „heißer als 90%“ keine echte Last — auf die Rate schauen.",
       "hotterThan": "{class}: ~{rate}/Tag — aktiver als ~{pct}% der Tabellen",
       "inTop": "{class}: ~{rate}/Tag — im Top der heißen",
       "quiet": "{class}: ~{rate}/Tag — Hintergrundaktivität",
