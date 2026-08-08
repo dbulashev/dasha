@@ -104,6 +104,7 @@
     }
   },
   "time": {
+    "d": "d",
     "h": "h",
     "min": "min",
     "sec": "sec",
@@ -309,7 +310,6 @@
     "source": "Source",
     "duration": "Duration",
     "durationMs": "Duration (ms)",
-    "waiting": "Waiting",
     "query": "Query",
     "startedAt": "Started at",
     "backendType": "Backend type",
@@ -436,7 +436,9 @@
     "intervalSec": "{n} s",
     "playTooltip": "Start auto-refresh",
     "stopTooltip": "Stop auto-refresh",
-    "refreshTooltip": "Refresh now"
+    "refreshTooltip": "Refresh now",
+    "clientLocal": "local",
+    "waitUnnamed": "waiting (the server does not name the event)"
   },
   "indexes": {
     "all": "All indexes",
@@ -601,6 +603,14 @@
     "table": "All locks (table)",
     "noActiveLocks": "No active locks",
     "blockedProcesses": "Blocked processes: {count}"
+  },
+  "hostRole": {
+    "primary": "Primary",
+    "replica": "Replica",
+    "unknown": "Unknown role",
+    "primaryHint": "This host accepts writes",
+    "replicaHint": "This host is in recovery: read-only",
+    "unknownHint": "Could not determine the host role"
   },
   "Common summary": "Common summary",
   "home": {
@@ -947,7 +957,7 @@
     "warmingUp": "First snapshot taken — it only seeds the baseline. Deltas appear after the next scheduled capture.",
     "describe": {
       "title": "Hotness",
-      "hint": "Live delta since the last anchor slice: the absolute rate (class key per day, normalized by the window length) and the place in this database's activity distribution. The percentile is relative: on a quiet database \"hotter than 90% of tables\" does not mean real load — read the rate.",
+      "hint": "Live delta since the last anchor slice: the absolute rate (class key per day, normalized by the live window — anchor slice to now, not the snapshot window) and the place in this database's activity distribution. The percentile is relative: on a quiet database \"hotter than 90% of tables\" does not mean real load — read the rate.",
       "hotterThan": "{class}: ~{rate}/day — more active than ~{pct}% of tables",
       "inTop": "{class}: ~{rate}/day — in the hot top",
       "quiet": "{class}: ~{rate}/day — background activity",

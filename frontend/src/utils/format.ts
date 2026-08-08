@@ -208,13 +208,21 @@ export function fmtChartTime(value: string | number | Date, withDate: boolean): 
 }
 
 /**
- * Length of a time window ("2d 3h 10m"): the pg_stat_statements accumulation
- * window (last stats reset → snapshot) or a hot-snapshot delta window. It is a
- * span, never the age of the snapshot itself.
+ * Length of a time window ("2 дн 3 ч 10 мин"): the pg_stat_statements
+ * accumulation window (last stats reset → snapshot) or a hot-snapshot delta
+ * window. It is a span, never the age of the snapshot itself.
  */
-export function fmtWindow(from: string | null | undefined, to: string | null | undefined, unknownLabel = '?'): string {
+export function fmtWindow(
+  from: string | null | undefined,
+  to: string | null | undefined,
+  t: TFunc,
+  unknownLabel = '?',
+): string {
   if (!from || !to) return unknownLabel
-  const diff = new Date(to).getTime() - new Date(from).getTime()
+  const fromMs = new Date(from).getTime()
+  const toMs = new Date(to).getTime()
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) return unknownLabel
+  const diff = toMs - fromMs
   if (diff < 0) return '—'
   let remaining = Math.floor(diff / 1000)
   const days = Math.floor(remaining / 86400)
@@ -224,10 +232,10 @@ export function fmtWindow(from: string | null | undefined, to: string | null | u
   const min = Math.floor(remaining / 60)
   const sec = remaining % 60
   const parts: string[] = []
-  if (days > 0) parts.push(`${days}d`)
-  if (hrs > 0) parts.push(`${hrs}h`)
-  if (min > 0) parts.push(`${min}m`)
-  if (sec > 0 || parts.length === 0) parts.push(`${sec}s`)
+  if (days > 0) parts.push(`${days} ${t('time.d')}`)
+  if (hrs > 0) parts.push(`${hrs} ${t('time.h')}`)
+  if (min > 0) parts.push(`${min} ${t('time.min')}`)
+  if (sec > 0 || parts.length === 0) parts.push(`${sec} ${t('time.sec')}`)
   return parts.join(' ')
 }
 

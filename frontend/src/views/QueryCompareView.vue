@@ -132,17 +132,17 @@ const statsWindowA = computed(() => {
   if (!selectedA.value) return ''
   const snap = snapshotsList.value.find(s => s.Id === selectedA.value)
   if (!snap) return ''
-  return fmtWindow(snap.PgssStatsReset ?? undefined, snap.CreatedAt, statsWindowUnknown.value)
+  return fmtWindow(snap.PgssStatsReset ?? undefined, snap.CreatedAt, t, statsWindowUnknown.value)
 })
 
 const statsWindowB = computed(() => {
   if (selectedB.value) {
     const snap = snapshotsList.value.find(s => s.Id === selectedB.value)
     if (!snap) return ''
-    return fmtWindow(snap.PgssStatsReset ?? undefined, snap.CreatedAt, statsWindowUnknown.value)
+    return fmtWindow(snap.PgssStatsReset ?? undefined, snap.CreatedAt, t, statsWindowUnknown.value)
   }
   if (!livePgssStatsReset.value) return ''
-  return fmtWindow(livePgssStatsReset.value, new Date().toISOString(), statsWindowUnknown.value)
+  return fmtWindow(livePgssStatsReset.value, new Date().toISOString(), t, statsWindowUnknown.value)
 })
 
 const filteredItems = computed(() => {

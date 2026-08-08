@@ -58,6 +58,7 @@
     }
   },
   "time": {
+    "d": "T",
     "h": "Std",
     "min": "Min",
     "sec": "Sek",
@@ -276,6 +277,12 @@
   },
   "cpuTimeWarning": "Abfragen mit negativer CPU-Zeit gefunden (total_plan_time + total_exec_time − blk_read_time − blk_write_time < 0). Wenn pg_stat_statements.track_planning deaktiviert ist, ist plan_time = 0 und der negative Wert weist auf potenziell hohe Planungszeit hin. Aktivieren Sie track_planning für genaue Daten.",
   "header": {
+    "state": "Zustand",
+    "source": "Quelle",
+    "pid": "PID",
+    "user": "Benutzer",
+    "duration": "Dauer",
+    "backendType": "Backend-Typ",
     "lockedItem": "Gesperrtes Objekt",
     "blockedPid": "Blockierte PID",
     "blockedUser": "Blockierter Benutzer",
@@ -492,7 +499,9 @@
     "intervalSec": "{n} s",
     "playTooltip": "Auto-Aktualisierung aktivieren",
     "stopTooltip": "Auto-Aktualisierung stoppen",
-    "refreshTooltip": "Jetzt aktualisieren"
+    "refreshTooltip": "Jetzt aktualisieren",
+    "clientLocal": "local",
+    "waitUnnamed": "wartet (der Server benennt das Ereignis nicht)"
   },
   "indexes": {
     "all": "Alle Indizes",
@@ -556,6 +565,14 @@
       "statsResetUnknown": "Der Zeitpunkt des Statistik-Resets ist unbekannt — das Fenster basiert auf der Postmaster-Laufzeit und kann den echten Beobachtungszeitraum unterschätzen.",
       "days": "T."
     }
+  },
+  "hostRole": {
+    "primary": "Primär",
+    "replica": "Replik",
+    "unknown": "Rolle unbekannt",
+    "primaryHint": "Dieser Host akzeptiert Schreibvorgänge",
+    "replicaHint": "Dieser Host ist im Recovery-Modus: nur lesend",
+    "unknownHint": "Die Rolle des Hosts konnte nicht ermittelt werden"
   },
   "Common summary": "Allgemeine Übersicht",
   "home": {
@@ -901,7 +918,7 @@
     "warmingUp": "Erster Snapshot erstellt — er legt nur die Basislinie an. Deltas erscheinen nach der nächsten geplanten Erfassung.",
     "describe": {
       "title": "Aktivität",
-      "hint": "Live-Delta seit dem letzten Anker-Abzug: absolute Rate (Klassenschlüssel pro Tag, auf die Fensterlänge normiert) und Platz in der Aktivitätsverteilung dieser Datenbank. Das Perzentil ist relativ: auf einer ruhigen Datenbank bedeutet „heißer als 90%“ keine echte Last — auf die Rate schauen.",
+      "hint": "Live-Delta seit dem letzten Anker-Abzug: absolute Rate (Klassenschlüssel pro Tag, auf das Live-Fenster normiert — vom Anker-Abzug bis jetzt, nicht auf das Snapshot-Fenster) und Platz in der Aktivitätsverteilung dieser Datenbank. Das Perzentil ist relativ: auf einer ruhigen Datenbank bedeutet „heißer als 90%“ keine echte Last — auf die Rate schauen.",
       "hotterThan": "{class}: ~{rate}/Tag — aktiver als ~{pct}% der Tabellen",
       "inTop": "{class}: ~{rate}/Tag — im Top der heißen",
       "quiet": "{class}: ~{rate}/Tag — Hintergrundaktivität",

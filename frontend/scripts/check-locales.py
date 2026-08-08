@@ -6,8 +6,13 @@ and forgotten in the others, a duplicate key silently overriding an earlier one,
 and a translation whose {placeholders} drifted from the reference text.
 
 ru_RU is the reference: it is the locale the features are written in first.
-Findings are reported as warnings and the check exits 0 — untranslated strings
-fall back at runtime, so they must not block a build. Use --strict to fail.
+
+Findings come in two grades. Errors are defects in the files themselves —
+invalid JSON, a duplicate key whose later value silently wins, a placeholder set
+that drifted from the reference — and they fail the check. Warnings are gaps in
+translation coverage (a key missing from a locale, or one that no longer exists
+in the reference); those fall back at runtime, so they never fail unless
+--strict is passed.
 """
 
 import argparse
@@ -51,7 +56,7 @@ def flatten(data, prefix=''):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--strict', action='store_true',
-                        help='exit 1 when anything is reported')
+                        help='also fail on translation-coverage warnings')
     args = parser.parse_args()
 
     files = sorted(LOCALES_DIR.glob('*.json'))
@@ -59,6 +64,7 @@ def main():
         print(f'no locale files found in {LOCALES_DIR}')
         return 0
 
+    errors = []
     warnings = []
     locales = {}
 
@@ -67,22 +73,22 @@ def main():
         try:
             data, duplicates = load(path)
         except json.JSONDecodeError as err:
-            warnings.append(f'{name}: invalid JSON — {err}')
+            errors.append(f'{name}: invalid JSON — {err}')
             continue
 
         for key in sorted(set(duplicates)):
-            warnings.append(f'{name}: duplicate key "{key}" — the later value silently wins')
+            errors.append(f'{name}: duplicate key "{key}" — the later value silently wins')
 
         locales[name] = flatten(data)
 
     if REFERENCE not in locales:
         print(f'{REFERENCE}.json is missing or unparsable — nothing to compare against')
-        return 1 if args.strict else 0
+        return 1
 
     reference = locales[REFERENCE]
     for key, value in reference.items():
         if not isinstance(value, str):
-            warnings.append(f'{REFERENCE}: "{key}" is {type(value).__name__}, expected a string')
+            errors.append(f'{REFERENCE}: "{key}" is {type(value).__name__}, expected a string')
 
     for name, flat in sorted(locales.items()):
         if name == REFERENCE:
@@ -99,16 +105,23 @@ def main():
             expected = set(PLACEHOLDER.findall(reference[key]))
             actual = set(PLACEHOLDER.findall(value))
             if expected != actual:
-                warnings.append(
+                errors.append(
                     f'{name}: "{key}" placeholders {sorted(actual)} != {REFERENCE} {sorted(expected)}')
 
-    if warnings:
-        print('\n'.join(warnings))
-        print(f'\nlocales: {len(warnings)} warning(s) in {len(locales)} files, {len(reference)} keys')
-        return 1 if args.strict else 0
+    for line in errors:
+        print(f'ERROR   {line}')
+    for line in warnings:
+        print(f'warning {line}')
 
-    print(f'locales OK: {len(locales)} files, {len(reference)} keys')
-    return 0
+    if errors or warnings:
+        print(f'\nlocales: {len(errors)} error(s), {len(warnings)} warning(s) '
+              f'in {len(locales)} files, {len(reference)} keys')
+    else:
+        print(f'locales OK: {len(locales)} files, {len(reference)} keys')
+
+    if errors:
+        return 1
+    return 1 if (warnings and args.strict) else 0
 
 
 if __name__ == '__main__':

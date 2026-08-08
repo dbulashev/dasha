@@ -1321,16 +1321,27 @@ type QueryReportMetrics struct {
 
 // QueryRunning defines model for QueryRunning.
 type QueryRunning struct {
-	BackendType string    `json:"BackendType"`
-	Duration    string    `json:"Duration"`
-	DurationMs  float64   `json:"DurationMs"`
-	Pid         int32     `json:"Pid"`
-	Query       string    `json:"Query"`
-	Source      string    `json:"Source"`
-	StartedAt   time.Time `json:"StartedAt"`
-	State       string    `json:"State"`
-	User        string    `json:"User"`
-	Waiting     bool      `json:"Waiting"`
+	BackendType string `json:"BackendType"`
+
+	// ClientAddr Client IP address, empty for a connection over a unix socket
+	ClientAddr string    `json:"ClientAddr"`
+	Duration   string    `json:"Duration"`
+	DurationMs float64   `json:"DurationMs"`
+	Pid        int32     `json:"Pid"`
+	Query      string    `json:"Query"`
+	Source     string    `json:"Source"`
+	StartedAt  time.Time `json:"StartedAt"`
+	State      string    `json:"State"`
+	User       string    `json:"User"`
+
+	// WaitEvent pg_stat_activity.wait_event, empty when the backend is not waiting or on PostgreSQL below 9.6
+	WaitEvent string `json:"WaitEvent"`
+
+	// WaitEventType pg_stat_activity.wait_event_type, empty when the backend is not waiting or on PostgreSQL below 9.6
+	WaitEventType string `json:"WaitEventType"`
+
+	// Waiting True for a wait that blocks progress — every wait_event_type except Client, Timeout and Activity
+	Waiting bool `json:"Waiting"`
 }
 
 // QueryStatsStatus defines model for QueryStatsStatus.

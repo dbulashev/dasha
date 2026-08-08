@@ -12,7 +12,7 @@ test-integration: ## Run integration tests (requires docker). Use POSTGRES_VERSI
 	@cd backend && go tool cover -func=coverage-integration.out | tail -1
 
 .PHONY: test-locales
-test-locales: ## Check i18n locale files (key parity, duplicates, placeholders); warns only
+test-locales: ## Check i18n locale files; fails on duplicates/placeholder drift, warns on missing translations
 	frontend/scripts/check-locales.py
 
 .PHONY: test-helm

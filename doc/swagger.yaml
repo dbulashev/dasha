@@ -4026,6 +4026,9 @@ components:
         - Source
         - Duration
         - Waiting
+        - WaitEventType
+        - WaitEvent
+        - ClientAddr
         - Query
         - StartedAt
         - DurationMs
@@ -4043,6 +4046,16 @@ components:
           type: string
         Waiting:
           type: boolean
+          description: True for a wait that blocks progress — every wait_event_type except Client, Timeout and Activity
+        WaitEventType:
+          type: string
+          description: pg_stat_activity.wait_event_type, empty when the backend is not waiting or on PostgreSQL below 9.6
+        WaitEvent:
+          type: string
+          description: pg_stat_activity.wait_event, empty when the backend is not waiting or on PostgreSQL below 9.6
+        ClientAddr:
+          type: string
+          description: Client IP address, empty for a connection over a unix socket
         Query:
           type: string
         StartedAt:
