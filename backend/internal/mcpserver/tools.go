@@ -307,8 +307,10 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 
 	addTool(s, &mcp.Tool{
 		Name: "running_queries",
-		Description: "List currently running queries on a database (pid, duration, state, query) — " +
-			"useful to spot long-running or stuck statements.",
+		Description: "List currently running queries on a database (pid, duration, state, client address, " +
+			"wait event, query) — useful to spot long-running or stuck statements. 'waiting' marks a wait that " +
+			"blocks progress: every wait_event_type except Client, Timeout and Activity, which are the idle " +
+			"background of any healthy instance.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a dbArgs) (*mcp.CallToolResult, any, error) {
 		return jsonResult(c.RunningQueries(ctx, a.Cluster, a.Instance, a.Database))
 	})

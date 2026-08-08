@@ -116,24 +116,14 @@ const dateItems = computed(() => {
   return [latest, ...items]
 })
 
-// A snapshot with no complete host window (the very first capture, which only
-// seeds anchors, or a run where every host's stats epoch broke) carries no real
-// deltas — its coverage defaults to a meaningless 100%. Treat it as "warming up"
-// rather than showing an empty top under a bogus coverage chip.
-const measured = computed(() => {
-  const w = report.value?.snapshot.windows
-  return w ? Object.values(w).some(x => x.complete) : false
-})
-
-// The rate column is normalised to the window, so the window itself has to be
-// visible: "per day" taken from an 18-hour capture is extrapolated, not measured.
-// Longest complete host window, matching how the backend picks the divisor.
-const windowLabel = computed(() => {
+// Longest complete host window — the same one the backend picks as the rate
+// divisor (hotWindowDays).
+const longestWindow = computed(() => {
   const w = report.value?.snapshot.windows
   if (!w) return null
 
   let longest: { from: string; to: string } | null = null
-  let longestMs = 0
+  let longestMs = -1
   for (const x of Object.values(w)) {
     if (!x.complete) continue
     const ms = new Date(x.to).getTime() - new Date(x.from).getTime()
@@ -143,8 +133,20 @@ const windowLabel = computed(() => {
     }
   }
 
-  return longest ? fmtWindow(longest.from, longest.to) : null
+  return longest
 })
+
+// A snapshot with no complete host window (the very first capture, which only
+// seeds anchors, or a run where every host's stats epoch broke) carries no real
+// deltas — its coverage defaults to a meaningless 100%. Treat it as "warming up"
+// rather than showing an empty top under a bogus coverage chip.
+const measured = computed(() => longestWindow.value !== null)
+
+// The rate column is normalised to the window, so the window itself has to be
+// visible: "per day" taken from an 18-hour capture is extrapolated, not measured.
+const windowLabel = computed(() =>
+  longestWindow.value ? fmtWindow(longestWindow.value.from, longestWindow.value.to, t) : null,
+)
 
 const coveragePct = computed(() => {
   const c = report.value?.snapshot.coverage
@@ -210,7 +212,7 @@ const title = computed(() => t(props.kind === 'table' ? 'hot.tablesTitle' : 'hot
       <v-chip v-if="coveragePct != null && measured" size="small" variant="tonal">
         {{ t('hot.coverage', { pct: coveragePct }) }}
       </v-chip>
-      <v-tooltip v-if="windowLabel && measured" :text="t('hot.windowHint')" location="bottom" max-width="420">
+      <v-tooltip v-if="windowLabel" :text="t('hot.windowHint')" location="bottom" max-width="420">
         <template #activator="{ props: tp }">
           <v-chip v-bind="tp" size="small" variant="tonal">
             {{ t('hot.window', { window: windowLabel }) }}

@@ -20,16 +20,19 @@ type QueryBlocked struct {
 }
 
 type QueryRunning struct {
-	Pid         int32
-	State       string
-	Source      string
-	Duration    string
-	Waiting     bool
-	Query       string
-	StartedAt   time.Time
-	DurationMs  float64
-	User        string
-	BackendType string
+	Pid           int32
+	State         string
+	Source        string
+	Duration      string
+	Waiting       bool
+	WaitEventType string
+	WaitEvent     string
+	ClientAddr    string
+	Query         string
+	StartedAt     time.Time
+	DurationMs    float64
+	User          string
+	BackendType   string
 }
 
 type QueryTop10ByTime struct {

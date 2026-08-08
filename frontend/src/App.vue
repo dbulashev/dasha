@@ -48,6 +48,7 @@ const route = useRoute()
 const router = useRouter()
 
 import ClusterHostDbSelector from './components/ClusterHostDbSelector.vue'
+import HostRoleBadge from './components/HostRoleBadge.vue'
 import LoginCard from './components/auth/LoginCard.vue'
 import UserMenu from './components/auth/UserMenu.vue'
 import SettingsDialog from './components/prefs/SettingsDialog.vue'
@@ -122,8 +123,11 @@ const hasLogSearchClusters = computed(() => clusterStore.hasLogSearchClusters);
 const currentCluster = computed(() => String(route.params.clustername ?? ''))
 const currentHost = computed(() => String(route.query.host ?? ''))
 
+// route.path is watched too so a navigation refreshes the info once its TTL has
+// expired — otherwise the role shown in the drawer could stay stale for the
+// whole time a single page is open.
 watch(
-  [currentCluster, currentHost, () => authStore.initialized && !authStore.requiresLogin],
+  [currentCluster, currentHost, () => authStore.initialized && !authStore.requiresLogin, () => route.path],
   ([cluster, host, ready]) => {
     if (ready && cluster && host) instanceInfoStore.ensure(cluster, host)
   },
@@ -212,6 +216,7 @@ watch(() => route.path, () => {
       <v-navigation-drawer v-model="drawer"
         :location="$vuetify.display.mobile ? 'bottom' : undefined"
         >
+        <HostRoleBadge />
         <v-list nav>
           <v-list-item :title="t('Home')"  prepend-icon="mdi-sigma" link :to="mainLink"></v-list-item>
           <v-list-item v-if="authStore.isAdmin" :title="t('healthScore.page.menuItem')" prepend-icon="mdi-heart-pulse" link :to="healthScoreLink"></v-list-item>

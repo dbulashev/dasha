@@ -110,16 +110,19 @@ func (s *Handlers) GetQueriesRunning(
 		queries,
 		func(t dto.QueryRunning) serverhttp.QueryRunning {
 			return serverhttp.QueryRunning{
-				Pid:         t.Pid,
-				State:       t.State,
-				Source:      t.Source,
-				Duration:    t.Duration,
-				Waiting:     t.Waiting,
-				Query:       sanitize.SQL(t.Query),
-				StartedAt:   t.StartedAt,
-				DurationMs:  t.DurationMs,
-				User:        t.User,
-				BackendType: t.BackendType,
+				Pid:           t.Pid,
+				State:         t.State,
+				Source:        t.Source,
+				Duration:      t.Duration,
+				Waiting:       t.Waiting,
+				WaitEventType: t.WaitEventType,
+				WaitEvent:     t.WaitEvent,
+				ClientAddr:    t.ClientAddr,
+				Query:         sanitize.SQL(t.Query),
+				StartedAt:     t.StartedAt,
+				DurationMs:    t.DurationMs,
+				User:          t.User,
+				BackendType:   t.BackendType,
 			}
 		})
 

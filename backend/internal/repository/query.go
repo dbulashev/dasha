@@ -253,28 +253,32 @@ func (p *PgxPool) getQueriesRunning(
 		var (
 			pid                                                  int32
 			state, source, duration, queryStr, user, backendType string
+			waitEventType, waitEvent, clientAddr                 string
 			waiting                                              bool
 			startedAt                                            time.Time
 			durationMs                                           float64
 		)
 
-		err = rows.Scan(&pid, &state, &source, &duration, &waiting, &queryStr,
-			&startedAt, &durationMs, &user, &backendType)
+		err = rows.Scan(&pid, &state, &source, &duration, &waiting, &waitEventType, &waitEvent,
+			&clientAddr, &queryStr, &startedAt, &durationMs, &user, &backendType)
 		if err != nil {
 			return nil, fmt.Errorf("getQueriesRunning | %w", err)
 		}
 
 		ret = append(ret, dto.QueryRunning{
-			Pid:         pid,
-			State:       state,
-			Source:      source,
-			Duration:    duration,
-			Waiting:     waiting,
-			Query:       queryStr,
-			StartedAt:   startedAt,
-			DurationMs:  durationMs,
-			User:        user,
-			BackendType: backendType,
+			Pid:           pid,
+			State:         state,
+			Source:        source,
+			Duration:      duration,
+			Waiting:       waiting,
+			WaitEventType: waitEventType,
+			WaitEvent:     waitEvent,
+			ClientAddr:    clientAddr,
+			Query:         queryStr,
+			StartedAt:     startedAt,
+			DurationMs:    durationMs,
+			User:          user,
+			BackendType:   backendType,
 		})
 	}
 

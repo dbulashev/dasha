@@ -10,7 +10,14 @@ export interface QueryRunning {
   State: string
   Source: string
   Duration: string
+  /** True for a wait that blocks progress — every wait_event_type except Client, Timeout and Activity */
   Waiting: boolean
+  /** pg_stat_activity.wait_event_type, empty when the backend is not waiting or on PostgreSQL below 9.6 */
+  WaitEventType: string
+  /** pg_stat_activity.wait_event, empty when the backend is not waiting or on PostgreSQL below 9.6 */
+  WaitEvent: string
+  /** Client IP address, empty for a connection over a unix socket */
+  ClientAddr: string
   Query: string
   StartedAt: string
   DurationMs: number

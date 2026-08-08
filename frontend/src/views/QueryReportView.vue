@@ -74,6 +74,9 @@ async function doReset() {
     if (res.status === 204) {
       resetSnackbarMsg.value = t('resetQueryStatsSuccess')
       resetSnackbarColor.value = 'success'
+      // The reset moved the pgss window start; refetch it so the live window
+      // is not computed from the pre-reset timestamp.
+      await loadLivePgssReset()
     } else if (res.status === 403) {
       resetSnackbarMsg.value = t('resetQueryStatsForbidden')
       resetSnackbarColor.value = 'warning'
@@ -242,10 +245,10 @@ const selectedSnapshot = computed(() =>
 // taken — how much history the report covers, not how old the snapshot is.
 const statsWindowText = computed(() => {
   if (isViewingSnapshot.value && selectedSnapshot.value) {
-    return fmtWindow(selectedSnapshot.value.PgssStatsReset ?? undefined, selectedSnapshot.value.CreatedAt, statsWindowUnknown.value)
+    return fmtWindow(selectedSnapshot.value.PgssStatsReset ?? undefined, selectedSnapshot.value.CreatedAt, t, statsWindowUnknown.value)
   }
   if (!isViewingSnapshot.value && livePgssStatsReset.value) {
-    return fmtWindow(livePgssStatsReset.value, new Date().toISOString(), statsWindowUnknown.value)
+    return fmtWindow(livePgssStatsReset.value, new Date().toISOString(), t, statsWindowUnknown.value)
   }
   return ''
 })

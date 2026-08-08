@@ -19,17 +19,62 @@ const { t } = useI18n()
 const { onError } = useViewError()
 const store = useActiveQueriesStore()
 
+// Lexicographic order puts 10.0.0.2 ahead of 9.0.0.1; pad the octets so the
+// column sorts the way an address list is read. Anything not dotted-quad (IPv6,
+// the empty local/background case) keeps its plain string order.
+function addrSortKey(addr: string | undefined): string {
+  if (!addr) return ''
+  const octets = addr.split('.')
+  if (octets.length !== 4 || octets.some(o => !/^\d{1,3}$/.test(o))) return addr
+  return octets.map(o => o.padStart(3, '0')).join('.')
+}
+
 const headers = computed(() => [
   { title: t('header.pid'), key: 'Pid' },
-  { title: t('header.source'), key: 'Source' },
-  { title: t('header.duration'), key: 'DurationMs' },
-  { title: t('header.waiting'), key: 'Waiting' },
+  // Address plus application_name in one cell, sorted by address so a noisy host groups together.
+  {
+    title: t('header.source'),
+    key: 'ClientAddr',
+    sortRaw: (a: QueryRunning, b: QueryRunning) =>
+      addrSortKey(a.ClientAddr).localeCompare(addrSortKey(b.ClientAddr)),
+  },
   { title: t('header.user'), key: 'User' },
+  { title: t('header.state'), key: 'State' },
+  { title: t('header.duration'), key: 'DurationMs' },
+  // Sorted by type, so sessions stuck on the same kind of wait end up next to each other.
+  { title: t('header.waitEvent'), key: 'WaitEventType' },
   { title: t('header.backendType'), key: 'BackendType' },
 ])
 
 function fmtMs(ms: number | null | undefined): string {
   return fmtMsUtil(ms, t)
+}
+
+// Waiting is the contract's own verdict — every wait_event_type except the idle
+// background (Client, Timeout, Activity). Don't restate the rule here.
+function waitClass(item: QueryRunning): string {
+  return item.Waiting ? 'text-warning' : 'text-medium-emphasis'
+}
+
+// PostgreSQL names a wait by both parts, e.g. Lock: transactionid. Before 9.6
+// the server reports no name at all, only the boolean.
+function waitText(item: QueryRunning): string {
+  if (!item.WaitEventType) return item.Waiting ? t('queries.waitUnnamed') : '—'
+  return item.WaitEvent ? `${item.WaitEventType}: ${item.WaitEvent}` : item.WaitEventType
+}
+
+// client_addr is NULL both for a unix socket and for a background worker that
+// never had a client — only the former is "local".
+function clientAddrText(item: QueryRunning): string {
+  if (item.ClientAddr) return item.ClientAddr
+  // BackendType is empty before PG 10, where every visible backend is a client one.
+  return !item.BackendType || item.BackendType === 'client backend' ? t('queries.clientLocal') : '—'
+}
+
+function stateColor(state: string | undefined): string {
+  if (state === 'idle in transaction') return 'warning'
+  if (state === 'idle in transaction (aborted)') return 'error'
+  return 'default'
 }
 
 // Vuetify v-data-table expects string keys; coerce Pid (number) so :expanded matches :item-value.
@@ -215,7 +260,17 @@ watch(intervalSec, () => autoRefresh.restart())
         :expanded="items.map(itemKey)"
         :item-value="itemKey"
       >
+        <template #item.ClientAddr="{ item }">
+          <span :class="{ 'text-medium-emphasis': !item.ClientAddr }">{{ clientAddrText(item) }}</span>
+          <span v-if="item.Source" class="text-medium-emphasis"> ({{ item.Source }})</span>
+        </template>
+        <template #item.State="{ item }">
+          <v-chip size="small" variant="tonal" :color="stateColor(item.State)">{{ item.State }}</v-chip>
+        </template>
         <template #item.DurationMs="{ item }">{{ fmtMs(item.DurationMs) }}</template>
+        <template #item.WaitEventType="{ item }">
+          <span :class="waitClass(item)">{{ waitText(item) }}</span>
+        </template>
         <template #expanded-row="{ columns, item }">
           <tr v-if="item.Query" class="running-expanded-row">
             <td :colspan="columns.length" class="py-1 expanded-cell">

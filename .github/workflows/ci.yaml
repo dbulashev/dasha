@@ -121,6 +121,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+      - name: Check locale files
+        run: frontend/scripts/check-locales.py
       - uses: actions/setup-node@v7
         with:
           node-version: 22
