@@ -100,7 +100,11 @@ def main():
             warnings.append(f'{name}: unknown key "{key}" (absent from {REFERENCE})')
 
         for key, value in flat.items():
-            if key not in reference or not isinstance(value, str) or not isinstance(reference[key], str):
+            # non-string reference entries are already reported against the reference itself
+            if key not in reference or not isinstance(reference[key], str):
+                continue
+            if not isinstance(value, str):
+                errors.append(f'{name}: "{key}" is {type(value).__name__}, expected a string')
                 continue
             expected = set(PLACEHOLDER.findall(reference[key]))
             actual = set(PLACEHOLDER.findall(value))
