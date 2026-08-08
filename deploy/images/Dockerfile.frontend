@@ -19,12 +19,12 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 COPY deploy/images/nginx.conf.template /etc/nginx/templates/nginx.conf.template
 COPY deploy/images/mcp-location.conf.template /etc/nginx/templates/mcp-location.conf.template
 COPY deploy/images/docker-entrypoint.sh /docker-entrypoint.sh
-# nginx creates its temp dirs (client_temp, proxy_temp, ...) under /var/cache/nginx
-# at startup; group root + g+w keeps that working under any uid, not only nginx's.
+# The entrypoint renders configs into conf.d and nginx creates its temp dirs under
+# /var/cache/nginx at startup. Group root + g+w on both keeps that working under any
+# uid (OpenShift assigns a random one, gid is always 0), not only nginx's.
 RUN rm -f /etc/nginx/conf.d/default.conf && \
-    chown -R nginx:nginx /etc/nginx /usr/share/nginx/html /docker-entrypoint.sh && \
-    chown -R nginx:0 /var/cache/nginx && \
-    chmod -R g+w /var/cache/nginx
+    chown -R nginx:0 /etc/nginx /usr/share/nginx/html /docker-entrypoint.sh /var/cache/nginx && \
+    chmod -R g+w /etc/nginx/conf.d /var/cache/nginx
 USER nginx
 EXPOSE 3000
 ENTRYPOINT ["/docker-entrypoint.sh"]
