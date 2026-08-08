@@ -131,6 +131,90 @@ jobs:
       - run: cd frontend && npm ci
       # - run: cd frontend && npm run test:unit
 
+  # The frontend image runs nginx as a non-root user, so a missing write permission
+  # inside it only surfaces at startup — build the image and actually serve a request.
+  smoke-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Build frontend image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/images/Dockerfile.frontend
+          push: false
+          load: true
+          tags: dasha-frontend:ci
+          build-args: |
+            BUILD_NUMBER=ci
+      # BACKEND_URL points at nothing on purpose: nginx resolves the upstream name at
+      # startup, so the default "backend" would fail here for the wrong reason.
+      - name: Serve a request
+        run: |
+          docker run -d --name frontend-smoke \
+            -e BACKEND_URL=127.0.0.1:8000 -p 3000:3000 dasha-frontend:ci
+          for _ in $(seq 30); do
+            if curl -fsS -o /dev/null http://localhost:3000/; then exit 0; fi
+            sleep 1
+          done
+          echo "::error::frontend did not serve / within 30s"
+          docker logs frontend-smoke
+          exit 1
+
+  # Same idea for the backend image: it runs migrations at startup as a non-root user,
+  # so let it come up against a real PostgreSQL and answer a request.
+  smoke-backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - name: Build backend image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/images/Dockerfile.backend
+          push: false
+          load: true
+          tags: dasha-backend:ci
+          build-args: |
+            BUILD_NUMBER=ci
+      # storage.dsn is set so the image's "dasha migrate" step actually runs the
+      # migrations; --network host reaches the service container's mapped port.
+      - name: Serve a request
+        run: |
+          cat > /tmp/dasha.yaml <<'EOF'
+          clusters:
+            - name: ci
+              username: postgres
+              password: postgres
+              databases: [postgres]
+              hosts: [127.0.0.1]
+          storage:
+            dsn: postgres://postgres:postgres@127.0.0.1:5432/postgres
+          EOF
+          docker run -d --name backend-smoke --network host \
+            -v /tmp/dasha.yaml:/etc/dasha/dasha.yaml:ro dasha-backend:ci
+          for _ in $(seq 30); do
+            if curl -fsS http://localhost:8000/api/clusters | grep -q '"ci"'; then exit 0; fi
+            sleep 1
+          done
+          echo "::error::backend did not answer /api/clusters within 30s"
+          docker logs backend-smoke
+          exit 1
+
   lint-helm:
     runs-on: ubuntu-latest
     steps:
@@ -177,7 +261,7 @@ jobs:
 
   build-check:
     runs-on: ubuntu-latest
-    needs: [lint-backend, lint-frontend, lint-helm, test-backend-unit, test-frontend, vulncheck-backend, vulncheck-frontend, trivy-scan]
+    needs: [lint-backend, lint-frontend, lint-helm, test-backend-unit, test-frontend, smoke-frontend, smoke-backend, vulncheck-backend, vulncheck-frontend, trivy-scan]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7

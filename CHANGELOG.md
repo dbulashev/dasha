@@ -23,6 +23,8 @@
 - **The MCP connector works behind TLS.** With `auth.require_https` on, every MCP call was refused with 403: the caller's scheme was dropped instead of forwarded to Dasha.
 - **A refused MCP call names its reason** instead of always blaming the token's role, and a failed tool call is logged with its cause.
 - **Resetting query statistics updates the stats window right away** — it used to keep counting from the pre-reset moment until the page was reloaded.
+- **The frontend container starts outside Kubernetes.** Run with Docker or Docker Compose it died immediately with `mkdir() "/var/cache/nginx/client_temp" failed (13: Permission denied)`.
+- **The Docker Compose example starts as documented.** It no longer includes the auto-snapshot daemon, which cannot run without a configured storage.
 
 ## v1.5.1
 
