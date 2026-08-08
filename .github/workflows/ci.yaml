@@ -152,15 +152,28 @@ jobs:
       # startup, so the default "backend" would fail here for the wrong reason.
       - name: Serve a request
         run: |
-          docker run -d --name frontend-smoke \
-            -e BACKEND_URL=127.0.0.1:8000 -p 3000:3000 dasha-frontend:ci
-          for _ in $(seq 30); do
-            if curl -fsS -o /dev/null http://localhost:3000/; then exit 0; fi
-            sleep 1
-          done
-          echo "::error::frontend did not serve / within 30s"
-          docker logs frontend-smoke
-          exit 1
+          serve_check() {
+            name="$1"
+            shift
+            docker run -d --name "$name" "$@" \
+              -e BACKEND_URL=127.0.0.1:8000 -p 3000:3000 dasha-frontend:ci
+            for _ in $(seq 30); do
+              if curl -fsS -o /dev/null http://localhost:3000/; then
+                docker rm -f "$name" >/dev/null
+                return 0
+              fi
+              sleep 1
+            done
+            echo "::error::frontend did not serve / within 30s ($name)"
+            docker logs "$name"
+            return 1
+          }
+
+          serve_check frontend-smoke
+          # nginx writes its rendered configs and temp dirs as the container user, so
+          # a uid it does not own breaks startup. OpenShift assigns a random one and
+          # guarantees only gid 0 — the image must survive that, not just its own uid.
+          serve_check frontend-smoke-uid --user 12345:0
 
   # Same idea for the backend image: it runs migrations at startup as a non-root user,
   # so let it come up against a real PostgreSQL and answer a request.
