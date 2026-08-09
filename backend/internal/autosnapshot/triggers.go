@@ -358,9 +358,22 @@ func (d *Daemon) takeSnapshot(
 		return errEmptyReport
 	}
 
-	provenance := database
-	if db, derr := d.repo.PgssDatabase(ctx, string(cl.Name), instance, database); derr == nil {
-		provenance = db
+	// Provenance is recorded, not guessed: the report may have been read through
+	// a database other than the requested one, so falling back to the request
+	// would label the snapshot with numbers it did not come from.
+	provenance, err := d.repo.PgssDatabase(ctx, string(cl.Name), instance, database)
+	if err != nil {
+		d.insertEvent(ctx, TriggerEvent{
+			ClusterName:    string(cl.Name),
+			Instance:       instance,
+			Database:       &database,
+			TriggerType:    trigType,
+			Outcome:        OutcomeError,
+			TriggerContext: trigCtx,
+			ErrorMessage:   strPtr(fmt.Sprintf("pgss database: %v", err)),
+		})
+
+		return err
 	}
 
 	var pgssReset *time.Time

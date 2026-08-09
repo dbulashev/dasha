@@ -53,23 +53,25 @@ const { items: chartData, loading } = useApiLoader<QueryTop10Chart | null>(
 const barData = computed(() => {
   if (!chartData.value) return null
 
-  const allQueryIds = new Set<string>()
+  // Instance-wide, the same queryid is reported once per database, so series are
+  // keyed by the pair — keying by queryid alone would merge the databases into
+  // whichever row the lookup happened to find first.
+  const series = new Map<string, { queryId: string; datname: string }>()
   for (const metric of METRICS) {
     const items = chartData.value[metric] as QueryTop10ChartItem[]
     if (items) {
       for (const item of items) {
-        allQueryIds.add(item.QueryID)
+        series.set(`${item.QueryID}|${item.Datname}`, { queryId: item.QueryID, datname: item.Datname })
       }
     }
   }
 
-  const queryIdList = [...allQueryIds]
-
-  const datasets = queryIdList.map((qid, idx) => ({
-    label: String(qid),
+  const datasets = [...series.values()].map((s, idx) => ({
+    label: s.datname ? `${s.queryId} · ${s.datname}` : s.queryId,
+    queryId: s.queryId,
     data: METRICS.map(metric => {
       const items = chartData.value![metric] as QueryTop10ChartItem[]
-      return items?.find(i => i.QueryID === qid)?.Pct ?? 0
+      return items?.find(i => i.QueryID === s.queryId && i.Datname === s.datname)?.Pct ?? 0
     }),
     backgroundColor: CHART_COLORS[idx % CHART_COLORS.length],
   }))
@@ -87,7 +89,7 @@ function onChartClick(_event: unknown, elements: { datasetIndex: number }[]) {
   if (!elements.length || !barData.value || elements[0] == undefined) return
   const idx = elements[0].datasetIndex
   if (barData.value.datasets[idx] == undefined) return
-  const queryId = barData.value.datasets[idx].label
+  const queryId = barData.value.datasets[idx].queryId
   copyToClipboard(queryId)
   copiedQueryId.value = queryId
   snackbar.value = true

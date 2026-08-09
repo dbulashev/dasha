@@ -375,10 +375,11 @@ func TestGetQueriesReport(t *testing.T) {
 	for _, q := range result {
 		assert.NotZero(t, q.QueryID)
 
-		// Percentages should be in valid range when present
+		// Percentages should be in valid range when present. Time shares are
+		// float8 division, so a lone row in its database can land an ULP over 100.
 		if q.TotalTimePct != nil {
 			assert.GreaterOrEqual(t, *q.TotalTimePct, 0.0)
-			assert.LessOrEqual(t, *q.TotalTimePct, 100.0)
+			assert.LessOrEqual(t, *q.TotalTimePct, 100.0+1e-9)
 		}
 		if q.CacheHitRatio != nil {
 			assert.GreaterOrEqual(t, *q.CacheHitRatio, 0.0)

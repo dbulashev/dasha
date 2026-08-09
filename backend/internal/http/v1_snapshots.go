@@ -44,11 +44,23 @@ func (s *Handlers) PostSnapshot(
 		return nil, fmt.Errorf("PostSnapshot | get report: %w", err)
 	}
 
-	// The requested database is only a preference; store the one the statistics
-	// were actually read through, so the snapshot says where its numbers came from.
-	provenance := req.Params.Database
-	if db, derr := s.repo.PgssDatabase(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database); derr == nil {
-		provenance = db
+	// No readable extension anywhere on the host yields an empty report; storing it
+	// would add a snapshot that explains nothing, as the auto-snapshot path already
+	// refuses to do.
+	if len(reports) == 0 {
+		return serverhttp.PostSnapshot404Response{}, nil
+	}
+
+	// The requested database is only a preference; store the one the statistics were
+	// actually read through, so the snapshot says where its numbers came from. Left
+	// unresolved it would be a guess, so the snapshot is not created at all.
+	provenance, err := s.repo.PgssDatabase(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
+	if errors.Is(err, repository.ErrNotFound) {
+		return serverhttp.PostSnapshot404Response{}, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("PostSnapshot | pgss database: %w", err)
 	}
 
 	var pgssStatsReset *time.Time
