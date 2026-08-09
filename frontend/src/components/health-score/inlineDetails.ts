@@ -88,7 +88,11 @@ export const INLINE_SPECS: Record<string, InlineSpec> = {
     needsDatabase: false,
     columns: (t) => [
       { key: 'PID', title: 'PID' },
+      { key: 'Database', title: t('healthScore.inline.col.database') },
       { key: 'Username', title: t('healthScore.inline.col.username') },
+      // Tells an autovacuum worker apart from a client session — the worker's
+      // long snapshot is expected and must not be terminated.
+      { key: 'BackendType', title: t('healthScore.inline.col.backendType') },
       { key: 'State', title: t('healthScore.inline.col.state') },
       {
         key: 'XactDurationSeconds',

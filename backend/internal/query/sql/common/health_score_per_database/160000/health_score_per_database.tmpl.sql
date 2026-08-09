@@ -79,18 +79,15 @@ maintenance_metrics AS (
     FROM pg_database
     WHERE datname = current_database()
 ),
--- Same HOT metrics as health_score.tmpl.sql, so the per-database score reflects
--- the HOT rules the drill-down shows for that database.
+-- PG 14/15 fork: n_tup_newpage_upd arrived in PG 16, so the ratio stays 0 here
+-- and high_newpage_update_ratio simply never fires (see base template).
 hot_update_metrics AS (
     SELECT
         COALESCE(
             SUM(n_tup_hot_upd)::float8 / NULLIF(SUM(n_tup_upd), 0),
             1.0
         )::float8 AS hot_update_ratio,
-        COALESCE(
-            SUM(n_tup_newpage_upd)::float8 / NULLIF(SUM(n_tup_upd), 0),
-            0
-        )::float8 AS newpage_update_ratio
+        0::float8 AS newpage_update_ratio
     FROM pg_stat_user_tables
     WHERE n_tup_upd > 1000
 )

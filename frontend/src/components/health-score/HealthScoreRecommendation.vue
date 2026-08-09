@@ -33,7 +33,27 @@ const { t, te } = useI18n()
 const route = useRoute()
 const { clusterName, hostName, databaseName, currentCluster } = useClusterInfo()
 
-const effectiveDatabase = computed(() => props.database || databaseName.value || '')
+// Database the finding itself belongs to, as resolved by the backend: the
+// session's database for instance-wide activity rules, the snapshot's database
+// for per-database ones. Null means nothing narrower than the instance.
+const recDatabase = computed(() => props.rec.database || null)
+
+// A session can sit in a database Dasha has no pool for (not listed in the
+// cluster config). Naming it is still useful, but routing to it is not — there
+// is nothing to query there.
+const recDatabaseTracked = computed(() => {
+  const dbs = currentCluster.value?.databases
+  if (!recDatabase.value || !dbs?.length) return true
+  return dbs.includes(recDatabase.value)
+})
+
+const effectiveDatabase = computed(
+  () =>
+    props.database ||
+    (recDatabaseTracked.value ? recDatabase.value : null) ||
+    databaseName.value ||
+    '',
+)
 
 const expanded = ref(false)
 
@@ -47,7 +67,10 @@ const relatedLink = computed(() => {
   const [path, search] = raw.split('?')
   const cluster = (route.params.clustername as string) ?? ''
   const host = route.query.host ? String(route.query.host) : null
-  const db = route.query.db ? String(route.query.db) : null
+  // The finding's own database wins over the header selector: pages like
+  // Running Queries filter by the connected database, so keeping the current
+  // selection would open an empty page when the problem sits elsewhere.
+  const db = effectiveDatabase.value || (route.query.db ? String(route.query.db) : null)
 
   const query: Record<string, string> = {}
   if (search) {
@@ -224,6 +247,15 @@ async function copySql() {
           {{ rec.severity }}
         </v-chip>
         <span class="text-body-1 font-weight-medium">{{ title }}</span>
+        <v-chip
+          variant="tonal"
+          size="small"
+          :color="recDatabaseTracked ? undefined : 'warning'"
+          :prepend-icon="recDatabase ? 'mdi-database' : 'mdi-server'"
+          :title="recDatabaseTracked ? undefined : t('healthScore.recommendations.databaseNotTracked')"
+        >
+          {{ recDatabase ?? t('healthScore.recommendations.scopeCluster') }}
+        </v-chip>
         <v-spacer />
         <v-btn
           v-if="logsLink"

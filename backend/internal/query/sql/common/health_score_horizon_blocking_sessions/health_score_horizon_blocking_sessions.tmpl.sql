@@ -3,7 +3,11 @@
 -- horizon_lag_xids recommendation.
 SELECT
     pid,
+    COALESCE(datname, '') AS datname,
     COALESCE(usename, '') AS usename,
+    -- backend_type tells an autovacuum worker apart from a client session: the
+    -- worker legitimately holds a long-running snapshot and must not be killed.
+    COALESCE(backend_type, '') AS backend_type,
     state,
     COALESCE(wait_event_type, '') AS wait_event_type,
     COALESCE(wait_event, '') AS wait_event,

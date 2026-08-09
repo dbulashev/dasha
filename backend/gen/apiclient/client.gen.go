@@ -571,7 +571,10 @@ type HealthScoreHistoryPoint struct {
 
 // HealthScoreHorizonBlockingSession defines model for HealthScoreHorizonBlockingSession.
 type HealthScoreHorizonBlockingSession struct {
+	// BackendType pg_stat_activity.backend_type — "autovacuum worker" marks a session that legitimately holds a long snapshot and must not be terminated.
+	BackendType         string  `json:"BackendType"`
 	BackendXmin         string  `json:"BackendXmin"`
+	Database            string  `json:"Database"`
 	PID                 int32   `json:"PID"`
 	Query               string  `json:"Query"`
 	State               string  `json:"State"`
@@ -592,8 +595,11 @@ type HealthScoreLowHotUpdateTable struct {
 
 // HealthScoreRecommendation defines model for HealthScoreRecommendation.
 type HealthScoreRecommendation struct {
-	Category     string                            `json:"category"`
-	Context      *map[string]interface{}           `json:"context"`
+	Category string                  `json:"category"`
+	Context  *map[string]interface{} `json:"context"`
+
+	// Database Database the finding belongs to. Null when it is instance-wide and no single database owns it.
+	Database     *string                           `json:"database"`
 	MetricValue  float64                           `json:"metric_value"`
 	RelatedRoute *string                           `json:"related_route"`
 	RuleId       string                            `json:"rule_id"`

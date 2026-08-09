@@ -7,7 +7,10 @@
 
 export interface HealthScoreHorizonBlockingSession {
   PID: number
+  Database: string
   Username: string
+  /** pg_stat_activity.backend_type — "autovacuum worker" marks a session that legitimately holds a long snapshot and must not be terminated. */
+  BackendType: string
   State: string
   WaitEventType: string
   WaitEvent: string

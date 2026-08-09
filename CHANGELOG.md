@@ -19,6 +19,8 @@
 - **"Age" in the query report and in snapshot comparison is now "stats window"**, with a tooltip: it is the period the numbers cover — from the last statistics reset to the moment of capture — not the age of the snapshot.
 - **In Hot tables and Hot indexes the "Per day" column is now "Rate/day"**, and the snapshot's actual window is shown next to the coverage: a capture shorter than a day is scaled up to a day, not measured over one.
 - **The query report, the Top 10 widgets and the charts now follow the selected database.** A switch above them chooses between the current database and the whole instance; in instance mode every row names the database it belongs to, and percentages are always shares of whatever is on screen. Previously the numbers covered the whole instance while the page was labelled with one database.
+- **Every health-score recommendation names the database it belongs to**, or is marked cluster-wide when no single database owns it. The "Open" link opens the right database. With a metrics datasource configured, findings computed over the whole instance stay marked cluster-wide.
+- **The hints for a held-back horizon and a long transaction say when to leave the process alone.** The oldest snapshot is often held by autovacuum: on a large table, or during a freeze, a long run is normal. The sessions behind the finding now show the process type and the database.
 
 ### Bug Fixes
 - **Snapshots are visible from every database of a host.** A snapshot holds the statistics of the whole instance, but was only listed while the database it happened to be taken through was selected — an auto-snapshot taken through `postgres` was invisible from the application database. The stored numbers now carry the database each statement belongs to, so a snapshot can be read either way, and the list shows which databases each one covers. Snapshots taken by earlier versions keep being shown instance-wide and cannot be compared against newer ones or against live statistics — the app says so instead of pairing them.
@@ -28,6 +30,8 @@
 - **A refused MCP call names its reason** instead of always blaming the token's role, and a failed tool call is logged with its cause.
 - **Resetting query statistics updates the stats window right away** — it used to keep counting from the pre-reset moment until the page was reloaded.
 - **The frontend container starts outside Kubernetes.** Run with Docker or Docker Compose it died immediately with `mkdir() "/var/cache/nginx/client_temp" failed (13: Permission denied)`.
+- **A database's health score reflects its HOT-update efficiency.**
+- **The Health Score page warns when the metrics datasource matched nothing.**
 - **The Docker Compose example starts as documented.** It no longer includes the auto-snapshot daemon, which cannot run without a configured storage.
 
 ## v1.5.1

@@ -86,12 +86,18 @@ A rule fires when its metric crosses the LOW, MEDIUM or HIGH threshold. What is 
 - instance-wide categories (`connections`, `replication`, `horizon`, `wal_checkpoint`, `locks`) are not shown once a single database is selected;
 - the whole `maintenance` category is hidden on a replica (`pg_is_in_recovery() = true`).
 
+Every recommendation carries the database it belongs to, and the UI shows it next to the rule. Per-database rules carry the database the snapshot was taken in; the activity-driven instance-wide ones (`long_running_transaction`, `idle_in_transaction`, `horizon_lag_xids`) carry the database of the session behind the finding — `pg_stat_activity` is instance-wide, so that is usually *not* the database currently selected in the header. `idle_in_transaction` counts sessions, so it names the database holding the most of them (oldest transaction breaks a tie), while the two "oldest wins" rules name the database of that one session. Rules that no single database owns show up as cluster-wide. The "Open" link passes that database along, so Running Queries opens against the one the problem is in instead of the current selection.
+
+In [metrics-backed mode](#metrics-backed-mode-history-baseline-richer-signals) the picture shifts: the signals the datasource provides are aggregates over the whole instance (`sum()`/`max()` across every database), so the rules they feed — `low_cache_hit_ratio`, `high_max_dead_ratio`, `high_avg_dead_ratio`, `low_hot_update_ratio`, `xid_wraparound_risk`, `checksum_failures`, `host_disk_space`, `latency_regression`, `seq_scan_regression` — are reported cluster-wide rather than pinned to a database that did not necessarily cause them. Rules fed by the catalog overlay (bloat count, vacuum queue, `high_newpage_update_ratio`, `relfrozenxid`, planner stats) keep naming the database the snapshot was read from, in both modes.
+
+`sequence_exhaustion` is cluster-wide at instance scope in *both* modes: the datasource series is a `max()`, and the SQL fallback likewise sweeps every database pool of the instance and returns the worst sequence anywhere on it. Only the per-database drill-down reads a single database, and there the finding is attributed to it.
+
 Each bullet: what's measured / how it's computed, then LOW / MEDIUM / HIGH thresholds.
 
 ### Connections
 - `high_connection_ratio` — `count(*) from pg_stat_activity / max_connections`. Headroom before the server starts rejecting new sessions. Thresholds ≥0.60 / ≥0.80 / ≥0.95.
 - `idle_in_transaction` — sessions in `pg_stat_activity` with `state='idle in transaction'` for over 30 seconds. Each one holds locks and pins the MVCC horizon, blocking VACUUM. Thresholds ≥2 / ≥5 / ≥10.
-- `long_running_transaction` — `now() - xact_start` of the longest running transaction. Long transactions amplify bloat and prevent freezing. Thresholds ≥300 / ≥600 / ≥1800 seconds.
+- `long_running_transaction` — `now() - xact_start` of the longest running transaction. Long transactions amplify bloat and prevent freezing. Thresholds ≥300 / ≥600 / ≥1800 seconds. Autovacuum workers are counted too: they are the ones that clean up bloat, so hours-long runs on a big table (or a freeze) are expected — `backend_type` tells them apart, and terminating one only makes it start over.
 
 ### Performance
 - `low_cache_hit_ratio` — `heap_blks_hit / (heap_blks_hit + heap_blks_read)` over `pg_statio_user_tables`, in %. Share of page reads served from `shared_buffers` rather than the OS / disk. Thresholds <95 / <90 / <85.
@@ -122,7 +128,7 @@ Each bullet: what's measured / how it's computed, then LOW / MEDIUM / HIGH thres
 - `stale_planner_stats` — tables whose `n_mod_since_analyze` exceeds their (reloption-aware) auto-analyze threshold and that have not been analyzed in 3 h (planner has outdated stats). Thresholds ≥3 / ≥5 / ≥10 tables.
 
 ### Horizon
-- `horizon_lag_xids` — `txid_current() - min(backend_xmin)` over `pg_stat_activity`. Number of transactions VACUUM cannot reclaim because some session still sees them (long tx, abandoned replication slot, prepared tx). Thresholds ≥1 M / ≥10 M / ≥100 M.
+- `horizon_lag_xids` — `txid_current() - min(backend_xmin)` over `pg_stat_activity`. Number of transactions VACUUM cannot reclaim because some session still sees them (long tx, abandoned replication slot, prepared tx). Thresholds ≥1 M / ≥10 M / ≥100 M. The drill-down lists `backend_type` next to each session: an autovacuum worker holding the horizon is doing its job and releases it on its own.
 
 ### WAL / checkpoints
 - `requested_checkpoint_ratio` — `checkpoints_req / (checkpoints_req + checkpoints_timed)` from `pg_stat_bgwriter` (PG <17) / `pg_stat_checkpointer` (PG 17+). High share means `max_wal_size` is undersized or there's a write spike. Needs ≥10 samples. Thresholds ≥5 % / ≥10 % / ≥20 %.
@@ -138,7 +144,7 @@ Each bullet: what's measured / how it's computed, then LOW / MEDIUM / HIGH thres
 
 ## Per-database detail
 
-The "Databases" table collects the same metrics per database as it does for the instance: cache hit ratio, dead row versions, vacuum age. Each row is aggregated into a `DatabaseScore`. The rules are recomputed in the context of the selected database, and instance-wide categories are hidden. The table sorts by size or score, and a database can be pinned as the context for the recommendations.
+The "Databases" table collects the same metrics per database as it does for the instance: cache hit ratio, dead row versions, vacuum age, HOT-update efficiency. Each row is aggregated into a `DatabaseScore`. The rules are recomputed in the context of the selected database, and instance-wide categories are hidden. The table sorts by size or score, and a database can be pinned as the context for the recommendations.
 
 ## Metrics-backed mode (history, baseline, richer signals)
 
@@ -157,6 +163,8 @@ The score consumes a **normalized signal set**; provider adapters translate each
 | Host | pgSCV system collector | YC host metrics |
 
 Label schemes differ per provider/deployment, so **selector templates are configurable** per target (`selectors:` + `targets:`). `GET /api/common/health-score/datasource/status?cluster_name=…&instance=…` reports, per role, the chosen provider, the rendered selector and how many series matched (exactly one = OK) — use it to validate matching.
+
+When the instance resolves but **no series matches any selector**, the score is metrics-backed yet built from absent signals, which read as healthy — the gauge goes green on no data at all. Both the Home card and the Health Score page flag that state, and the page adds that the Databases table stays on the SQL snapshot, so a green gauge above a red database is the expected symptom of broken label matching rather than a contradiction.
 
 **Service-discovered clusters** (from `discovery:`, e.g. Yandex MDB) are auto-mapped from their discovery metadata, so they need no `targets:` entry: the host FQDN becomes `{{.Host}}`, the cloud resource id (MDB cluster id) `{{.Service}}`, the `folder_id` label `{{.Env}}` and the short host `{{.Container}}`; providers come from `providers_default` (e.g. `core: pgscv`, `pooler/host: yc_native`). Only the selector templates stay your customization surface. A static `targets:` entry always overrides the derived mapping; set `auto_map_discovered: false` to require explicit targets, or `discovery_env_label` to feed `{{.Env}}` from a different discovery label.
 

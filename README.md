@@ -82,7 +82,7 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 
 **Health Score**
 - Composite 0–100 instance score across eight categories (connections, performance, storage, replication, maintenance, horizon, WAL/checkpoint, locks) with continuous penalty functions — top-level `/health-score` page plus a Home-page gauge
-- Parallel rules engine producing prioritized recommendations: severity, metric values, per-database drill-down
+- Parallel rules engine producing prioritized recommendations: severity, metric values, the database each finding belongs to, per-database drill-down
 - Optional **metrics-backed mode**: with a Prometheus/VictoriaMetrics datasource configured (`health_score.metrics`), the score, recommendations and a trend with seasonal baseline and dip detection are computed from time series (pgSCV, Yandex MDB, pgbouncer, host metrics) instead of point-in-time SQL; the SQL snapshot stays the zero-config fallback
 - Scoring model details: [README-health-score.md](README-health-score.md)
 

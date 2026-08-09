@@ -625,3 +625,72 @@ func TestRedistributeWeights_OtherSumZero(t *testing.T) {
 		t.Errorf("with no surviving categories, total weight must be 0, got %v", total)
 	}
 }
+
+func TestHotUpdatePenalty_MatchesRuleThresholds(t *testing.T) {
+	cases := []struct {
+		ratio float64
+		want  float64
+	}{
+		{1.0, 0},
+		{0.85, 0},
+		{0.79, 5},
+		{0.64, 15},
+		{0.49, 30},
+	}
+
+	for _, c := range cases {
+		if got := hotUpdatePenalty(c.ratio); got != c.want {
+			t.Errorf("hot ratio %v: expected penalty %v, got %v", c.ratio, c.want, got)
+		}
+	}
+}
+
+func TestCalculate_HotPenaltyAppliedOnce(t *testing.T) {
+	// The HOT grade lives in applyInstanceAdjustments, not in penaltyStorage:
+	// adding it to both would charge a low ratio twice.
+	m := RawMetrics{
+		MaxConnections:       100,
+		TotalConnections:     5,
+		CacheHitRatio:        99.9,
+		AutovacuumEnabled:    true,
+		TrackCountsEnabled:   true,
+		TrackIoTimingEnabled: true,
+		HotUpdateRatio:       0.4,
+	}
+
+	for _, c := range Calculate(m).Categories {
+		if c.Name != CategoryStorage {
+			continue
+		}
+
+		if c.Penalty != 30 {
+			t.Errorf("expected storage penalty 30 for hot ratio 0.4, got %v", c.Penalty)
+		}
+
+		return
+	}
+
+	t.Fatal("storage category missing from the result")
+}
+
+func TestScoreAndRulesAgreeOnHot(t *testing.T) {
+	// Any HOT ratio the rule fires on must move the score, in both paths:
+	// the per-DB drill-down used to show HOT findings on databases scored 100.
+	for _, ratio := range []float64{0.79, 0.64, 0.49} {
+		fired := false
+
+		for _, r := range Registry {
+			if r.ID == "low_hot_update_ratio" && r.Evaluate(RawMetrics{HotUpdateRatio: ratio}) != nil {
+				fired = true
+			}
+		}
+
+		if !fired {
+			t.Fatalf("test sanity: low_hot_update_ratio must fire at ratio %v", ratio)
+		}
+
+		if hotUpdatePenalty(ratio) == 0 {
+			t.Errorf("hot ratio %v fires the rule but carries no penalty", ratio)
+		}
+	}
+}

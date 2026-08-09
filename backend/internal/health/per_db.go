@@ -11,9 +11,11 @@ type PerDBMetrics struct {
 
 	CacheHitRatio float64
 
-	MaxDeadRatio    float64
-	AvgDeadRatio    float64
-	TablesHighBloat int
+	MaxDeadRatio       float64
+	AvgDeadRatio       float64
+	TablesHighBloat    int
+	HotUpdateRatio     float64
+	NewpageUpdateRatio float64
 
 	MaxXidAge                int64
 	VacuumBacklogTables      int
@@ -49,10 +51,13 @@ func ComputePerDB(metrics []PerDBMetrics, w Weights, inRecovery bool) []Database
 
 	for _, m := range metrics {
 		raw := RawMetrics{
+			Database:                 m.Database,
 			CacheHitRatio:            m.CacheHitRatio,
 			MaxDeadRatio:             m.MaxDeadRatio,
 			AvgDeadRatio:             m.AvgDeadRatio,
 			TablesHighBloat:          m.TablesHighBloat,
+			HotUpdateRatio:           m.HotUpdateRatio,
+			NewpageUpdateRatio:       m.NewpageUpdateRatio,
 			MaxXidAge:                m.MaxXidAge,
 			VacuumBacklogTables:      m.VacuumBacklogTables,
 			MaxOverdueVacuumAgeHours: m.MaxOverdueVacuumAgeHours,
@@ -64,6 +69,12 @@ func ComputePerDB(metrics []PerDBMetrics, w Weights, inRecovery bool) []Database
 			penaltyStorage(raw),
 			penaltyMaintenance(raw),
 		}
+
+		// HOT efficiency is collected per database, so it is graded here the same
+		// way the instance aggregate grades it — otherwise a database showing the
+		// HOT recommendations still scores a clean 100.
+		addPenalty(cats, CategoryStorage, hotUpdatePenalty(m.HotUpdateRatio))
+		setDetail(cats, CategoryStorage, "hot_update_ratio", m.HotUpdateRatio)
 
 		if inRecovery {
 			// Zero maintenance penalty so the standby never gets dinged
@@ -104,58 +115,6 @@ func ComputePerDB(metrics []PerDBMetrics, w Weights, inRecovery bool) []Database
 	}
 
 	return result
-}
-
-// PerDBCategoryRollup returns the size-weighted mean per-category score across
-// all databases. The result is keyed by category name and contains the rollup
-// score (0–100) for use by the instance-level aggregate. Categories dropped for
-// a database (Weight == 0, e.g. maintenance on a standby) are excluded, so a
-// zero-weight Score=100 does not leak into the mean as a misleading green.
-func PerDBCategoryRollup(scores []DatabaseScore) map[string]float64 {
-	if len(scores) == 0 {
-		return nil
-	}
-
-	type acc struct {
-		weighted float64
-		size     int64
-	}
-
-	by := make(map[Category]*acc, len(PerDBApplicableCategories))
-
-	for _, ds := range scores {
-		size := ds.SizeBytes
-		if size <= 0 {
-			size = 1 // avoid zero-weight DBs being dropped entirely
-		}
-
-		for _, c := range ds.Categories {
-			if c.Weight == 0 {
-				continue // dropped category — don't roll its placeholder Score=100 in
-			}
-
-			a, ok := by[c.Name]
-			if !ok {
-				a = &acc{}
-				by[c.Name] = a
-			}
-
-			a.weighted += c.Score * float64(size)
-			a.size += size
-		}
-	}
-
-	out := make(map[string]float64, len(by))
-
-	for name, a := range by {
-		if a.size == 0 {
-			continue
-		}
-
-		out[string(name)] = math.Round(a.weighted/float64(a.size)*10) / 10
-	}
-
-	return out
 }
 
 // WorstDatabase returns the database with the lowest overall score, or

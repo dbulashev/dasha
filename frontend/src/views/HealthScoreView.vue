@@ -56,12 +56,27 @@ const { items: data, loading } = useApiLoader<HealthScore | null>(
     <v-card class="mb-4">
       <v-card-text>
         <v-skeleton-loader v-if="loading" type="heading, text@3" />
-        <div v-else-if="data && Array.isArray(data.categories)" class="d-flex align-center ga-8 flex-wrap">
-          <HealthScoreGauge :score="data.score" :size="160" :width="14" />
-          <div class="flex-grow-1" style="min-width: 280px">
-            <HealthScoreCategories :categories="data.categories" />
+        <template v-else-if="data && Array.isArray(data.categories)">
+          <!-- Without this the gauge sits at a green score built from no data at
+               all, and the Databases table below (always SQL) looks like it
+               contradicts it. -->
+          <v-alert
+            v-if="data.metrics_degraded"
+            type="warning"
+            variant="tonal"
+            density="compact"
+            class="mb-4"
+            icon="mdi-alert"
+          >
+            {{ t('healthScore.metricsDegraded') }} {{ t('healthScore.metricsDegradedDatabases') }}
+          </v-alert>
+          <div class="d-flex align-center ga-8 flex-wrap">
+            <HealthScoreGauge :score="data.score" :size="160" :width="14" />
+            <div class="flex-grow-1" style="min-width: 280px">
+              <HealthScoreCategories :categories="data.categories" />
+            </div>
           </div>
-        </div>
+        </template>
       </v-card-text>
     </v-card>
 

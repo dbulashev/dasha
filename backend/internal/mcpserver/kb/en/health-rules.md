@@ -22,6 +22,18 @@ failures and a full disk are role-agnostic and clamp any instance.
 Below: every rule ID as reported by get_health_recommendations, when it fires
 (LOW / MED / HIGH), and the first action to take.
 
+**The `database` field** on each recommendation is the database to query for
+evidence — use it instead of the one you were asked about. A null means the
+finding is cluster-wide and no single database owns it. In metrics mode the
+signals that come from the datasource are aggregates over the whole instance,
+so `low_cache_hit_ratio`, `high_max_dead_ratio`, `high_avg_dead_ratio`,
+`low_hot_update_ratio`, `xid_wraparound_risk`, `checksum_failures`,
+`host_disk_space`, `latency_regression` and `seq_scan_regression` come back
+null there and per-database in snapshot mode — do not read a null as "the
+problem is not in any database". `sequence_exhaustion` is null at instance
+scope in either mode (it is the worst sequence anywhere on the instance) and
+named only in the per-database drill-down.
+
 ## connections (weight 0.15)
 
 ### high_connection_ratio
@@ -37,7 +49,11 @@ set idle_in_transaction_session_timeout.
 ### long_running_transaction
 Oldest transaction age. LOW ≥300s, MED ≥600s, HIGH ≥1800s.
 First: `running_queries` — decide whether to terminate; long transactions
-also hold the horizon (see horizon_lag_xids).
+also hold the horizon (see horizon_lag_xids). Check backend_type before
+advising termination: an autovacuum worker legitimately runs for hours on a
+large table or a freeze, and killing it only restarts the same work. The
+recommendation names the database the session runs in — it is often not the
+one currently selected.
 
 ### host_cpu_saturation
 15-min load average / vCPU (metrics mode only). LOW ≥1, MED ≥2, HIGH ≥4.
@@ -190,7 +206,10 @@ How far the oldest snapshot/transaction holds the vacuum horizon behind,
 in transactions. LOW ≥1M, MED ≥10M, HIGH ≥100M. VACUUM sees dead tuples as
 "not yet removable". First: `running_queries` — find the backend with the
 oldest xmin (long transaction, idle-in-transaction, stale replication slot)
-and terminate/fix it.
+and terminate/fix it. If that backend is an autovacuum worker, never advise
+terminating it: it is the cleanup itself and releases the horizon when done.
+The horizon is cluster-wide, but the recommendation names the database of the
+session holding it.
 
 ## wal_checkpoint (weight 0.10)
 

@@ -45,6 +45,8 @@ func (s *Handlers) GetHealthScoreDatabases(
 			MaxDeadRatio:             m.MaxDeadRatio,
 			AvgDeadRatio:             m.AvgDeadRatio,
 			TablesHighBloat:          m.TablesHighBloat,
+			HotUpdateRatio:           m.HotUpdateRatio,
+			NewpageUpdateRatio:       m.NewpageUpdateRatio,
 			MaxXidAge:                m.MaxXidAge,
 			VacuumBacklogTables:      m.VacuumBacklogTables,
 			MaxOverdueVacuumAgeHours: m.MaxOverdueVacuumAgeHours,
@@ -224,7 +226,9 @@ func (s *Handlers) GetHealthScoreHorizonBlockingSessions(
 	for _, r := range rows {
 		out = append(out, serverhttp.HealthScoreHorizonBlockingSession{
 			PID:                 r.PID,
+			Database:            r.Database,
 			Username:            r.Username,
+			BackendType:         r.BackendType,
 			State:               r.State,
 			WaitEventType:       r.WaitEventType,
 			WaitEvent:           r.WaitEvent,

@@ -753,3 +753,236 @@ func TestRules_MetricsBackedConditionsFire(t *testing.T) {
 		})
 	}
 }
+
+func TestEvaluate_DatabaseAttribution(t *testing.T) {
+	// pg_stat_activity is instance-wide, so the session behind an activity rule
+	// usually lives in another database than the snapshot's. Each recommendation
+	// has to carry the database the UI should open, not the selected one.
+	m := RawMetrics{
+		Database:                   "snapshot_db",
+		MaxConnections:             100,
+		TotalConnections:           5,
+		CacheHitRatio:              99.9,
+		IdleInTransaction:          6,
+		IdleInTransactionDatabase:  "idle_db",
+		LongestTransactionSeconds:  3600,
+		LongestTransactionDatabase: "long_tx_db",
+		HorizonLagXids:             50_000_000,
+		HorizonDatabase:            "horizon_db",
+		MaxDeadRatio:               50,
+		HotUpdateRatio:             1.0,
+		AutovacuumEnabled:          true,
+		TrackCountsEnabled:         true,
+		TrackIoTimingEnabled:       true,
+		WalLevel:                   "replica",
+	}
+
+	got := make(map[string]string, len(Registry))
+	for _, r := range Evaluate(m, false) {
+		got[r.RuleID] = r.Database
+	}
+
+	want := map[string]string{
+		"idle_in_transaction":      "idle_db",
+		"long_running_transaction": "long_tx_db",
+		"horizon_lag_xids":         "horizon_db",
+		"high_max_dead_ratio":      "snapshot_db", // per-database metric
+	}
+
+	for rule, db := range want {
+		if _, ok := got[rule]; !ok {
+			t.Fatalf("test sanity: rule %q did not fire", rule)
+		}
+
+		if got[rule] != db {
+			t.Errorf("rule %q: expected database %q, got %q", rule, db, got[rule])
+		}
+	}
+}
+
+func TestEvaluate_InstanceWideRuleHasNoDatabase(t *testing.T) {
+	// Nothing pins a saturated connection pool to one database — it must stay
+	// unattributed so the UI labels it cluster-wide.
+	m := RawMetrics{
+		Database:         "snapshot_db",
+		MaxConnections:   100,
+		TotalConnections: 99,
+		CacheHitRatio:    99.9,
+		HotUpdateRatio:   1.0,
+	}
+
+	for _, r := range Evaluate(m, false) {
+		if r.RuleID != "high_connection_ratio" {
+			continue
+		}
+
+		if r.Database != "" {
+			t.Errorf("high_connection_ratio must not name a database, got %q", r.Database)
+		}
+
+		return
+	}
+
+	t.Fatal("test sanity: high_connection_ratio did not fire")
+}
+
+// metricsBackedRaw is a metrics-mode snapshot: the datasource signals are
+// instance-wide aggregates, the rest is the catalog overlay read from Database.
+func metricsBackedRaw() RawMetrics {
+	return RawMetrics{
+		Database:            "catalog_db",
+		MetricsInstanceWide: true,
+
+		MaxConnections:   100,
+		TotalConnections: 5,
+
+		// From the datasource — sum()/max() over every database.
+		CacheHitRatio:  80,
+		MaxDeadRatio:   50,
+		AvgDeadRatio:   30,
+		HotUpdateRatio: 0.4,
+		MaxXidAge:      xidFreezeMaxAge,
+
+		// Overlaid from the catalog snapshot of Database.
+		TablesHighBloat:         8,
+		NewpageUpdateRatio:      0.25,
+		VacuumBacklogTables:     10,
+		TablesNeverVacuumed:     3,
+		TablesWithAutovacuumOff: 2,
+		StalePlannerStatsTables: 6,
+
+		AutovacuumEnabled:    true,
+		TrackCountsEnabled:   true,
+		TrackIoTimingEnabled: true,
+	}
+}
+
+func TestEvaluate_MetricsModeDropsDatabaseOnAggregateRules(t *testing.T) {
+	// In metrics mode the per-database-looking signals are instance-wide
+	// PromQL aggregates, so naming the catalog snapshot's database would point
+	// the UI at a database that has nothing to do with the finding.
+	got := make(map[string]string, len(Registry))
+	for _, r := range Evaluate(metricsBackedRaw(), false) {
+		got[r.RuleID] = r.Database
+	}
+
+	want := map[string]string{
+		// Datasource aggregates — unattributed.
+		"low_cache_hit_ratio":  "",
+		"high_max_dead_ratio":  "",
+		"high_avg_dead_ratio":  "",
+		"low_hot_update_ratio": "",
+		"xid_wraparound_risk":  "",
+		// Catalog overlay — still describes one database.
+		"many_bloated_tables":        "catalog_db",
+		"high_newpage_update_ratio":  "catalog_db",
+		"vacuum_backlog":             "catalog_db",
+		"tables_never_vacuumed":      "catalog_db",
+		"tables_with_autovacuum_off": "catalog_db",
+		"stale_planner_stats":        "catalog_db",
+	}
+
+	for rule, db := range want {
+		if _, ok := got[rule]; !ok {
+			t.Fatalf("test sanity: rule %q did not fire", rule)
+		}
+
+		if got[rule] != db {
+			t.Errorf("rule %q in metrics mode: expected database %q, got %q", rule, db, got[rule])
+		}
+	}
+}
+
+func TestEvaluate_SnapshotModeKeepsDatabaseOnSameRules(t *testing.T) {
+	// The very same values read from a SQL snapshot ARE facts about that
+	// database, so the attribution must survive there — the drop is a property
+	// of the metrics path only.
+	m := metricsBackedRaw()
+	m.MetricsInstanceWide = false
+
+	got := make(map[string]string, len(Registry))
+	for _, r := range Evaluate(m, false) {
+		got[r.RuleID] = r.Database
+	}
+
+	for rule := range metricsInstanceWideRules {
+		if _, ok := got[rule]; !ok {
+			continue // needs a signal this fixture does not carry
+		}
+
+		if got[rule] != "catalog_db" {
+			t.Errorf("rule %q in snapshot mode: expected database %q, got %q", rule, "catalog_db", got[rule])
+		}
+	}
+}
+
+func TestEvaluate_SequenceExhaustionScope(t *testing.T) {
+	// At instance scope the worst sequence is picked across every database of
+	// the instance — by the datasource's max() and, just as much, by the SQL
+	// fallback sweeping all pools. Only the drill-down reads one database.
+	m := metricsBackedRaw()
+	m.MetricsInstanceWide = false // the SQL path is instance-wide here as well
+	m.SequenceExhaustionMax = 0.99
+	m.SequenceThresholds = map[string]float64{"error": 20, "warning": 40, "notice": 50}
+
+	find := func(t *testing.T, databaseScoped bool) Recommendation {
+		t.Helper()
+
+		for _, r := range Evaluate(m, databaseScoped) {
+			if r.RuleID == "sequence_exhaustion" {
+				return r
+			}
+		}
+
+		t.Fatalf("test sanity: sequence_exhaustion did not fire (databaseScoped=%v)", databaseScoped)
+
+		return Recommendation{} //nolint:exhaustruct // unreachable, t.Fatalf stops the test
+	}
+
+	if got := find(t, false).Database; got != "" {
+		t.Errorf("at instance scope sequence_exhaustion spans every database, got %q", got)
+	}
+
+	if got := find(t, true).Database; got != "catalog_db" {
+		t.Errorf("in the drill-down sequence_exhaustion describes one database, got %q", got)
+	}
+}
+
+func TestUnattributedRuleSets_MatchRegistry(t *testing.T) {
+	// A typo or a renamed/removed rule would silently leave the entry dead, and
+	// an instance-only category is already unattributed — the entry would be
+	// redundant. Both mean a map has drifted from the registry.
+	byID := make(map[string]Rule, len(Registry))
+	for _, r := range Registry {
+		byID[r.ID] = r
+	}
+
+	sets := map[string]map[string]bool{
+		"metricsInstanceWideRules":    metricsInstanceWideRules,
+		"instanceScopeAggregateRules": instanceScopeAggregateRules,
+	}
+
+	for name, set := range sets {
+		for id := range set {
+			r, ok := byID[id]
+			if !ok {
+				t.Errorf("%s names %q, which is not in the registry", name, id)
+				continue
+			}
+
+			if instanceOnlyCategories[r.Category] {
+				t.Errorf("%s: rule %q is in instance-only category %q — the entry is redundant",
+					name, id, r.Category)
+			}
+		}
+	}
+
+	// instanceScopeAggregateRules already drops the attribution at instance
+	// scope, which is the only scope the metrics path runs in — listing a rule
+	// in both would make the metrics entry unreachable.
+	for id := range instanceScopeAggregateRules {
+		if metricsInstanceWideRules[id] {
+			t.Errorf("rule %q is in both sets — the metricsInstanceWideRules entry is dead", id)
+		}
+	}
+}
