@@ -10,6 +10,13 @@ JOIN pg_namespace n ON n.oid = c.relnamespace
 -- counter in health_score.tmpl.sql, which scans relkind ('r','m','t').
 WHERE c.relkind IN ('r', 'm', 't')
   AND c.reloptions IS NOT NULL
-  AND 'autovacuum_enabled=false' = ANY (c.reloptions)
+  -- reloptions keeps the spelling the user typed (off/0/f/no), so the option
+  -- has to be parsed, not string-matched.
+  AND EXISTS (
+      SELECT 1
+      FROM pg_options_to_table(c.reloptions) o
+      WHERE o.option_name = 'autovacuum_enabled'
+        AND NOT o.option_value::boolean
+  )
 ORDER BY n.nspname, c.relname
 LIMIT $1 OFFSET $2

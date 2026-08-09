@@ -181,8 +181,15 @@ horizon_metrics AS (
 -- Per-table maintenance: scans pg_class once for relfrozenxid + storage params.
 per_table_metrics AS (
     SELECT
+        -- reloptions keeps the spelling the user typed (off/0/f/no), so the
+        -- option has to be parsed, not string-matched.
         COUNT(*) FILTER (
-            WHERE 'autovacuum_enabled=false' = ANY(COALESCE(reloptions, ARRAY[]::text[]))
+            WHERE EXISTS (
+                SELECT 1
+                FROM pg_options_to_table(COALESCE(reloptions, ARRAY[]::text[])) o
+                WHERE o.option_name = 'autovacuum_enabled'
+                  AND NOT o.option_value::boolean
+            )
         )::int AS tables_with_autovacuum_off,
         COALESCE(MAX(age(relfrozenxid))::bigint, 0) AS max_relfrozenxid_age
     FROM pg_class

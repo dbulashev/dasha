@@ -92,6 +92,12 @@ func (s *Signals) Set(k SignalKind, v float64) {
 	s.Have[k] = true
 }
 
+// Has reports whether the datasource carried the signal at all. Callers use it
+// to tell "absent" from "read as zero" and fill the gap from another source.
+func (s Signals) Has(k SignalKind) bool {
+	return s.Have[k]
+}
+
 // Get returns the value and whether the signal is present.
 func (s Signals) Get(k SignalKind) (float64, bool) {
 	v, ok := s.Value[k]

@@ -5,6 +5,7 @@ SELECT
     datname,
     age(datfrozenxid)::bigint AS xid_age
 FROM pg_database
-WHERE datallowconn AND NOT datistemplate
+-- No datallowconn/datistemplate filter: template0 and template1 are often the
+-- oldest datfrozenxid in the cluster, so they must stay in the list.
 ORDER BY xid_age DESC
 LIMIT $1 OFFSET $2

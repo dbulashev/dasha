@@ -1332,7 +1332,7 @@
         "title": "Horizont von langer Transaktion gehalten",
         "short": "Horizont liegt {metric_value} Transaktionen zurück — VACUUM kann tote Versionen nicht löschen.",
         "detail": "Lange Transaktionen (Repeatable Read oder idle in transaction) halten den DB-Horizont. VACUUM überspringt tote Versionen «aber noch nicht entfernbar». Finden Sie den Prozess mit dem kleinsten backend_xmin und beenden Sie ihn. Prüfen Sie zuerst backend_type: Den Horizont kann auch ein Autovacuum-Worker selbst halten (etwa beim Einfrieren einer großen Tabelle) — das ist reguläre Arbeit, nicht beenden, er gibt den Horizont selbst frei.",
-        "sql": "SELECT pid, usename, state, query, now() - xact_start AS duration\nFROM pg_stat_activity\nWHERE backend_xmin IS NOT NULL\nORDER BY backend_xmin\nLIMIT 5;"
+        "sql": "SELECT pid, usename, state, query, now() - xact_start AS duration\nFROM pg_stat_activity\nWHERE backend_xmin IS NOT NULL\nORDER BY age(backend_xmin) DESC\nLIMIT 5;"
       },
       "requested_checkpoint_ratio": {
         "title": "Zu viele außerplanmäßige Checkpoints",
