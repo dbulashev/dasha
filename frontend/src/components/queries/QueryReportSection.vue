@@ -7,7 +7,9 @@ import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useApiLoader } from '@/composables/useApiLoader'
 import { useViewError } from '@/composables/useViewError'
 import { useDebouncedRef } from '@/composables/useDebouncedRef'
+import { useQueryScope } from '@/composables/useQueryScope'
 import { useExcludeUsersStore } from '@/stores/excludeUsers'
+import { usePrefsStore } from '@/stores/prefs'
 import ReportCard from '@/components/queries/ReportCard.vue'
 import SqlDialog from '@/components/queries/SqlDialog.vue'
 
@@ -19,6 +21,8 @@ const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
 const { onError } = useViewError()
 const excludeUsersStore = useExcludeUsersStore()
+const prefs = usePrefsStore()
+const { scope, isInstanceScope } = useQueryScope()
 
 type ReportSortKey = 'total_time' | 'mean_time' | 'stddev_time' | 'calls' | 'wal' | 'rows' | 'cpu_time' | 'io_time' | 'temp_blks'
 
@@ -86,12 +90,11 @@ const { items: liveItems, loading } = useApiLoader<QueryReport[]>(
     cluster_name: clusterName.value!,
     instance: hostName.value!,
     database: databaseName.value ?? undefined,
+    scope: scope.value,
     exclude_users: excludeUsers.value.length ? excludeUsers.value : undefined,
   }),
   {
-    // databaseName is sent, but is not a dep: pg_stat_statements is
-    // instance-wide, so switching database would refetch the same numbers.
-    deps: [clusterName, hostName, excludeUsers, isSnapshot],
+    deps: [clusterName, hostName, databaseName, scope, excludeUsers, isSnapshot],
     guard: () => !!clusterName.value && !!hostName.value && !isSnapshot.value,
     onError,
   },
@@ -102,11 +105,17 @@ const items = computed(() => isSnapshot.value ? (props.snapshotData ?? []) : liv
 const search = ref<string | null>('')
 const debouncedSearch = useDebouncedRef(search, 200)
 
+// Instance scope returns the top of every database, which on a host with many
+// of them is hundreds of cards; render them in pages instead of all at once.
+const visibleCount = ref(prefs.pageSize)
+
 const filteredItems = computed(() => {
   const q = (debouncedSearch.value ?? '').trim().toLowerCase()
   if (!q) return items.value
   return items.value.filter((item) =>
-    item.Query.toLowerCase().includes(q) || String(item.QueryID).includes(q),
+    item.Query.toLowerCase().includes(q) ||
+    String(item.QueryID).includes(q) ||
+    (item.Datname ?? '').toLowerCase().includes(q),
   )
 })
 
@@ -117,6 +126,12 @@ const sortedItems = computed(() => {
     const vb = (b[field] as number | null | undefined) ?? 0
     return vb - va
   })
+})
+
+const visibleItems = computed(() => sortedItems.value.slice(0, visibleCount.value))
+
+watch([debouncedSearch, reportSortBy, items, () => prefs.pageSize], () => {
+  visibleCount.value = prefs.pageSize
 })
 
 const hasNegativeCpuTime = computed(() =>
@@ -188,12 +203,18 @@ function showSqlDialog(item: QueryReport) {
       <v-progress-linear v-if="loading" indeterminate />
       <div v-else-if="sortedItems.length">
         <ReportCard
-          v-for="item in sortedItems"
-          :key="item.QueryID"
+          v-for="item in visibleItems"
+          :key="`${item.QueryID}-${item.Datname ?? ''}`"
           :item="item"
+          :show-database="isInstanceScope"
           :sort-by="reportSortBy"
           @show-sql="showSqlDialog"
         />
+        <div v-if="visibleItems.length < sortedItems.length" class="d-flex justify-center">
+          <v-btn variant="text" size="small" @click="visibleCount += prefs.pageSize">
+            {{ t('report.showMore', { shown: visibleItems.length, total: sortedItems.length }) }}
+          </v-btn>
+        </div>
       </div>
       <div v-else-if="!loading" class="text-medium-emphasis">{{ t('noData') }}</div>
     </v-card-text>

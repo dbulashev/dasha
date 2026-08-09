@@ -11,6 +11,7 @@ import (
 
 	"github.com/dbulashev/dasha/gen/serverhttp"
 	"github.com/dbulashev/dasha/internal/autosnapshot"
+	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/pkg/mapstruct"
 	"github.com/dbulashev/dasha/internal/pkg/shortcut"
 	"github.com/dbulashev/dasha/internal/repository"
@@ -43,6 +44,25 @@ func (s *Handlers) PostSnapshot(
 		return nil, fmt.Errorf("PostSnapshot | get report: %w", err)
 	}
 
+	// No readable extension anywhere on the host yields an empty report; storing it
+	// would add a snapshot that explains nothing, as the auto-snapshot path already
+	// refuses to do.
+	if len(reports) == 0 {
+		return serverhttp.PostSnapshot404Response{}, nil
+	}
+
+	// The requested database is only a preference; store the one the statistics were
+	// actually read through, so the snapshot says where its numbers came from. Left
+	// unresolved it would be a guess, so the snapshot is not created at all.
+	provenance, err := s.repo.PgssDatabase(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
+	if errors.Is(err, repository.ErrNotFound) {
+		return serverhttp.PostSnapshot404Response{}, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("PostSnapshot | pgss database: %w", err)
+	}
+
 	var pgssStatsReset *time.Time
 
 	resetTime, err := s.repo.GetPgssStatsResetTime(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
@@ -63,11 +83,12 @@ func (s *Handlers) PostSnapshot(
 			}
 		}
 
-		lc := autosnapshot.CaptureLocks(ctx, s.repo, req.Params.ClusterName, req.Params.Instance, req.Params.Database, probeCount, probeInterval)
+		lc := autosnapshot.CaptureLocks(ctx, s.repo, req.Params.ClusterName, req.Params.Instance, req.Params.Database,
+			dto.ScopeInstance, probeCount, probeInterval)
 		locks = &lc
 	}
 
-	id, createdAt, err := s.storage.CreateSnapshot(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, reports, storage.SnapshotOpts{
+	id, createdAt, err := s.storage.CreateSnapshot(ctx, req.Params.ClusterName, req.Params.Instance, provenance, reports, storage.SnapshotOpts{
 		PgssStatsReset: pgssStatsReset,
 		LocksData:      locks,
 	})
@@ -89,7 +110,7 @@ func (s *Handlers) GetSnapshots(
 		return serverhttp.GetSnapshots501Response{}, nil
 	}
 
-	items, err := s.storage.ListSnapshots(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
+	items, err := s.storage.ListSnapshots(ctx, req.Params.ClusterName, req.Params.Instance)
 	if err != nil {
 		return nil, fmt.Errorf("GetSnapshots | %w", err)
 	}
@@ -100,6 +121,8 @@ func (s *Handlers) GetSnapshots(
 			return serverhttp.SnapshotListItem{
 				Id:             openapi_types.UUID(item.ID),
 				CreatedAt:      item.CreatedAt,
+				Database:       shortcut.Ptr(item.Database),
+				Databases:      shortcut.Ptr(item.Databases),
 				DashaVersion:   item.DashaVersion,
 				JsonVersion:    item.JsonVersion,
 				PgssStatsReset: item.PgssStatsReset,
@@ -119,7 +142,7 @@ func (s *Handlers) GetSnapshot(
 		return serverhttp.GetSnapshot501Response{}, nil
 	}
 
-	reports, err := s.storage.GetSnapshot(ctx, req.Id)
+	reports, jsonVersion, err := s.storage.GetSnapshot(ctx, req.Id)
 	if err != nil {
 		return nil, fmt.Errorf("GetSnapshot | %w", err)
 	}
@@ -128,8 +151,17 @@ func (s *Handlers) GetSnapshot(
 		return serverhttp.GetSnapshot404Response{}, nil
 	}
 
+	database := deref(req.Params.Database)
+
+	// Rows of a pre-attribution snapshot name no database; narrowing one would
+	// filter it down to nothing, so it stays instance-wide.
+	scope := resolveScope(req.Params.Scope, database)
+	if jsonVersion < storage.ScopedJSONVersion {
+		scope = dto.ScopeInstance
+	}
+
 	var ret serverhttp.GetSnapshot200JSONResponse = mapstruct.SliceMap(
-		reports, mapQueryReport)
+		scopeReport(reports, scope, database), mapQueryReport)
 
 	return ret, nil
 }

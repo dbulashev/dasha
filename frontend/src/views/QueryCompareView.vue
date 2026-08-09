@@ -19,16 +19,19 @@ import { useViewError } from '@/composables/useViewError'
 import { useExcludeUsersStore } from '@/stores/excludeUsers'
 import { assertOk } from '@/utils/api'
 import { fmtWindow, fmtDateTime } from '@/utils/format'
-import { snapshotReasonI18nKey } from '@/utils/autosnapshot'
+import { snapshotReasonI18nKey, snapshotCoverage } from '@/utils/autosnapshot'
 import type { CompareSortKey } from '@/components/queries/compare-types'
 import { compareSortFieldMap } from '@/components/queries/compare-types'
 import CompareCard from '@/components/queries/CompareCard.vue'
 import SqlDialog from '@/components/queries/SqlDialog.vue'
+import ScopeSwitch from '@/components/queries/ScopeSwitch.vue'
+import { useQueryScope } from '@/composables/useQueryScope'
 
 const { clusterName, hostName, databaseName } = useClusterInfo()
 const { t } = useI18n()
 const { clearError, onError } = useViewError()
 const excludeUsersStore = useExcludeUsersStore()
+const { scope, hasScopeChoice } = useQueryScope()
 
 const excludeUsers = ref<string[]>(
   clusterName.value ? excludeUsersStore.getExcludeUsers(clusterName.value) : [],
@@ -85,18 +88,44 @@ const sortOptions = computed(() => [
 const snapshotTitle = (s: SnapshotListItem) =>
   `${fmtDateTime(s.CreatedAt)} · ${t(snapshotReasonI18nKey(s.Reason), s.Reason ?? 'manual')}`
 
+// A snapshot stored before per-database attribution names no database, so it
+// identifies a statement by queryid alone. Pairing it with a side that does
+// would match nothing; live statistics always count as the newer generation.
+const isAttributed = (id: string | null) =>
+  id === null || (snapshotsList.value.find(s => s.Id === id)?.JsonVersion ?? 2) >= 2
+
+const attributedA = computed(() => isAttributed(selectedA.value))
+const attributedB = computed(() => isAttributed(selectedB.value))
+
+// Refused by the API, and told here before the request goes out.
+const mixedGenerations = computed(() =>
+  selectedA.value !== null && attributedA.value !== attributedB.value,
+)
+
+// Two legacy sides still compare — instance-wide, the only reading they support.
+const legacyCompare = computed(() => !attributedA.value && !attributedB.value)
+
+const effectiveScope = computed(() => (legacyCompare.value ? 'instance' : scope.value))
+
+// Snapshots are host-wide, so each line says which databases it holds — and
+// which ones hold none, the sides that cannot be paired with the rest.
+const snapshotSubtitle = (s: SnapshotListItem) =>
+  snapshotCoverage(s.Databases) || t('snapshotNoAttribution')
+
 const selectorAItems = computed(() =>
   snapshotsList.value.map(s => ({
     value: s.Id,
     title: snapshotTitle(s),
+    subtitle: snapshotSubtitle(s),
   })),
 )
 
 const selectorBItems = computed(() => {
-  const live = { value: null as string | null, title: t('compare.liveData') }
+  const live = { value: null as string | null, title: t('compare.liveData'), subtitle: '' }
   const items = snapshotsList.value.map(s => ({
     value: s.Id as string | null,
     title: snapshotTitle(s),
+    subtitle: snapshotSubtitle(s),
   }))
   return [live, ...items]
 })
@@ -192,15 +221,15 @@ async function loadSnapshotsStatus() {
 }
 
 async function loadSnapshotsList() {
-  if (!snapshotsAvailable.value || !clusterName.value || !hostName.value || !databaseName.value) {
+  if (!snapshotsAvailable.value || !clusterName.value || !hostName.value) {
     snapshotsList.value = []
     return
   }
   try {
+    // Snapshots are host-wide: one holds every database of the instance.
     const res = await getSnapshots({
       cluster_name: clusterName.value,
       instance: hostName.value,
-      database: databaseName.value,
     })
     snapshotsList.value = assertOk<SnapshotListItem[]>(res) ?? []
   } catch {
@@ -213,6 +242,11 @@ async function loadCompare() {
     compareData.value = null
     return
   }
+  // The API refuses this pair; saying so here spares the round trip.
+  if (mixedGenerations.value) {
+    compareData.value = null
+    return
+  }
   loading.value = true
   clearError()
   try {
@@ -220,6 +254,7 @@ async function loadCompare() {
       cluster_name: clusterName.value,
       instance: hostName.value,
       database: databaseName.value,
+      scope: effectiveScope.value,
       snapshot_a: selectedA.value,
     }
     if (selectedB.value) {
@@ -248,7 +283,7 @@ watch([clusterName, hostName, databaseName], async () => {
   await loadSnapshotsList()
 }, { immediate: true })
 
-watch([selectedA, selectedB, excludeUsers], () => {
+watch([selectedA, selectedB, excludeUsers, scope], () => {
   loadCompare()
 })
 </script>
@@ -262,11 +297,15 @@ watch([selectedA, selectedB, excludeUsers], () => {
     <v-card class="mb-4 compare-sticky-header" elevation="2">
       <v-card-text class="py-2">
         <v-row dense align="center">
+          <v-col v-if="hasScopeChoice" cols="12" class="d-flex align-center ga-2 pb-1">
+            <ScopeSwitch :force-instance="legacyCompare" />
+          </v-col>
           <v-col cols="12" sm="6" class="d-flex align-center ga-2">
             <span class="text-caption font-weight-bold">A:</span>
             <v-select
               v-model="selectedA"
               :items="selectorAItems"
+              :item-props="(item) => ({ subtitle: item.subtitle })"
               :label="t('compare.snapshotA')"
               density="compact"
               variant="outlined"
@@ -284,6 +323,7 @@ watch([selectedA, selectedB, excludeUsers], () => {
             <v-select
               v-model="selectedB"
               :items="selectorBItems"
+              :item-props="(item) => ({ subtitle: item.subtitle })"
               :label="t('compare.snapshotB')"
               density="compact"
               variant="outlined"
@@ -337,12 +377,17 @@ watch([selectedA, selectedB, excludeUsers], () => {
       </v-card-text>
     </v-card>
 
+    <v-alert v-if="mixedGenerations" type="warning" class="mb-4">
+      {{ t('compare.mixedGenerations') }}
+    </v-alert>
+
     <v-progress-linear v-if="loading" indeterminate class="mb-4" />
     <template v-else-if="compareData && sortedItems.length">
       <CompareCard
         v-for="item in sortedItems"
-        :key="item.QueryID"
+        :key="`${item.QueryID}-${item.Datname ?? ''}`"
         :item="item"
+        :show-database="effectiveScope === 'instance'"
         :sort-by="sortBy"
         @show-sql="showSqlDialog"
       />

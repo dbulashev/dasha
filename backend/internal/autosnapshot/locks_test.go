@@ -15,7 +15,7 @@ type fakeProber struct {
 	calls   int
 }
 
-func (f *fakeProber) GetQueriesBlocked(_ context.Context, _, _, _ string) ([]dto.QueryBlocked, error) {
+func (f *fakeProber) GetQueriesBlocked(_ context.Context, _, _, _, _ string) ([]dto.QueryBlocked, error) {
 	i := f.calls
 	f.calls++
 
@@ -52,7 +52,7 @@ func TestCaptureLocks_HarshestByCount(t *testing.T) {
 		blockedRows(1, 2, 3),
 	}}
 
-	c := CaptureLocks(context.Background(), repo, "c", "i", "db", 3, 0)
+	c := CaptureLocks(context.Background(), repo, "c", "i", "db", dto.ScopeInstance, 3, 0)
 	if !c.Captured {
 		t.Fatalf("expected Captured")
 	}
@@ -70,7 +70,7 @@ func TestCaptureLocks_TieBreakByWait(t *testing.T) {
 		{withWait(1, 500), withWait(2, 50)}, // same count (2), longer max wait
 	}}
 
-	c := CaptureLocks(context.Background(), repo, "c", "i", "db", 2, 0)
+	c := CaptureLocks(context.Background(), repo, "c", "i", "db", dto.ScopeInstance, 2, 0)
 	if c.BlockedCount != 2 || c.MaxWaitMs != 500 {
 		t.Errorf("got count=%d wait=%v, want count=2 wait=500", c.BlockedCount, c.MaxWaitMs)
 	}
@@ -86,7 +86,7 @@ func TestCaptureLocks_CapsAndSortsRows(t *testing.T) {
 
 	repo := &fakeProber{results: [][]dto.QueryBlocked{rows}}
 
-	c := CaptureLocks(context.Background(), repo, "c", "i", "db", 1, 0)
+	c := CaptureLocks(context.Background(), repo, "c", "i", "db", dto.ScopeInstance, 1, 0)
 	if c.BlockedCount != 150 {
 		t.Errorf("BlockedCount = %d, want 150", c.BlockedCount)
 	}
@@ -106,7 +106,7 @@ func TestCaptureLocks_BestEffortOnError(t *testing.T) {
 
 	repo := &fakeProber{errs: []error{errors.New("boom"), errors.New("boom"), errors.New("boom")}}
 
-	c := CaptureLocks(context.Background(), repo, "c", "i", "db", 3, 0)
+	c := CaptureLocks(context.Background(), repo, "c", "i", "db", dto.ScopeInstance, 3, 0)
 	if c.Captured {
 		t.Errorf("expected Captured=false when all probes error")
 	}

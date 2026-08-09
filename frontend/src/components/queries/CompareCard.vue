@@ -6,9 +6,10 @@ import { highlightSql, copyToClipboard } from '@/utils/sql'
 import CompareMetricsBlock from './CompareMetricsBlock.vue'
 import '@/assets/sql-highlight.css'
 
-defineProps<{
+const props = defineProps<{
   item: QueryCompareItem
   sortBy: CompareSortKey
+  showDatabase?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -26,9 +27,12 @@ function truncateSql(sql: string, maxLen = 120): string {
 <template>
   <v-card variant="outlined" class="mb-3">
     <!-- Common header: queryid + SQL -->
-    <v-card-title class="text-body-1 pb-1 d-flex align-center">
+    <v-card-title class="text-body-1 pb-1 d-flex align-center ga-1">
       <span>queryid: <span class="text-mono">{{ item.QueryID }}</span></span>
-      <v-btn icon="mdi-content-copy" variant="text" size="x-small" class="ml-1" @click="copyToClipboard(String(item.QueryID))" />
+      <v-btn icon="mdi-content-copy" variant="text" size="x-small" @click="copyToClipboard(String(item.QueryID))" />
+      <v-chip v-if="props.showDatabase && item.Datname" size="x-small" variant="tonal" label prepend-icon="mdi-database">
+        {{ item.Datname }}
+      </v-chip>
     </v-card-title>
     <v-card-text class="pt-0">
       <div class="mb-3 d-flex align-center">

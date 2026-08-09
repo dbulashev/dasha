@@ -12,3 +12,18 @@ export function snapshotReasonI18nKey(reason: string | null | undefined): string
   const trig = reason.startsWith('auto:') ? reason.slice(5) : reason
   return `autosnapshot.trigger.${trig}`
 }
+
+const COVERAGE_NAMES_SHOWN = 4
+
+export function snapshotCoverage(databases: string[] | null | undefined): string {
+  if (!databases || databases.length === 0) return ''
+  if (databases.length <= COVERAGE_NAMES_SHOWN) return databases.join(', ')
+  return `${databases.slice(0, COVERAGE_NAMES_SHOWN).join(', ')} +${databases.length - COVERAGE_NAMES_SHOWN}`
+}
+
+// An empty list means a pre-attribution snapshot, read instance-wide — nothing
+// is missing from it.
+export function snapshotCovers(databases: string[] | null | undefined, database: string | null | undefined): boolean {
+  if (!database || !databases || databases.length === 0) return true
+  return databases.includes(database)
+}

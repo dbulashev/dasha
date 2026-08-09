@@ -264,10 +264,11 @@ func (d *DashaClient) InstanceInfo(ctx context.Context, cluster, instance string
 	return pick(r.JSON200, r.HTTPResponse, "instance_info")
 }
 
-// TopQueriesByTime lists the top queries by total execution time.
-func (d *DashaClient) TopQueriesByTime(ctx context.Context, cluster, instance string) (any, error) {
+// TopQueriesByTime lists the top queries by total execution time. A named
+// database narrows the ranking to it; without one the ranking is instance-wide.
+func (d *DashaClient) TopQueriesByTime(ctx context.Context, cluster, instance, database string) (any, error) {
 	r, err := d.api.GetQueriesTop10ByTimeWithResponse(ctx, &apiclient.GetQueriesTop10ByTimeParams{
-		ClusterName: cluster, Instance: instance,
+		ClusterName: cluster, Instance: instance, Database: opt(database),
 	}, d.editor(ctx))
 	if err != nil {
 		return nil, wrapErr("top_queries", err)
@@ -277,9 +278,9 @@ func (d *DashaClient) TopQueriesByTime(ctx context.Context, cluster, instance st
 }
 
 // TopQueriesByWal lists the top queries by WAL volume.
-func (d *DashaClient) TopQueriesByWal(ctx context.Context, cluster, instance string) (any, error) {
+func (d *DashaClient) TopQueriesByWal(ctx context.Context, cluster, instance, database string) (any, error) {
 	r, err := d.api.GetQueriesTop10ByWalWithResponse(ctx, &apiclient.GetQueriesTop10ByWalParams{
-		ClusterName: cluster, Instance: instance,
+		ClusterName: cluster, Instance: instance, Database: opt(database),
 	}, d.editor(ctx))
 	if err != nil {
 		return nil, wrapErr("top_queries", err)
@@ -409,10 +410,12 @@ func (d *DashaClient) TopTables(ctx context.Context, cluster, instance, database
 	return pick(r.JSON200, r.HTTPResponse, "top_tables")
 }
 
-// BlockedQueries lists sessions blocked on locks (and their blockers).
-func (d *DashaClient) BlockedQueries(ctx context.Context, cluster, instance, database string) (any, error) {
+// BlockedQueries lists sessions blocked on locks (and their blockers). scope
+// "instance" widens the list beyond the named database; object names still
+// resolve through that database's catalog.
+func (d *DashaClient) BlockedQueries(ctx context.Context, cluster, instance, database, scope string) (any, error) {
 	r, err := d.api.GetQueriesBlockedWithResponse(ctx, &apiclient.GetQueriesBlockedParams{
-		ClusterName: cluster, Instance: instance, Database: database,
+		ClusterName: cluster, Instance: instance, Database: database, Scope: opt(scope),
 	}, d.editor(ctx))
 	if err != nil {
 		return nil, wrapErr("blocked_queries", err)
@@ -543,9 +546,9 @@ func (d *DashaClient) SchemaLintSummary(ctx context.Context, cluster, instance s
 
 // QueryReport returns the full pg_stat_statements report for an instance,
 // optionally excluding the given usernames (e.g. monitoring/replication roles).
-func (d *DashaClient) QueryReport(ctx context.Context, cluster, instance string, excludeUsers []string) (any, error) {
+func (d *DashaClient) QueryReport(ctx context.Context, cluster, instance, database string, excludeUsers []string) (any, error) {
 	r, err := d.api.GetQueriesReportWithResponse(ctx, &apiclient.GetQueriesReportParams{
-		ClusterName: cluster, Instance: instance, ExcludeUsers: optStrings(excludeUsers),
+		ClusterName: cluster, Instance: instance, Database: opt(database), ExcludeUsers: optStrings(excludeUsers),
 	}, d.editor(ctx))
 	if err != nil {
 		return nil, wrapErr("query_report", err)
@@ -554,11 +557,12 @@ func (d *DashaClient) QueryReport(ctx context.Context, cluster, instance string,
 	return pick(r.JSON200, r.HTTPResponse, "query_report")
 }
 
-// Snapshots lists the stored pg_stat_statements snapshots for a database — the
-// source of the snapshot IDs that query_compare consumes.
-func (d *DashaClient) Snapshots(ctx context.Context, cluster, instance, database string) (any, error) {
+// Snapshots lists the stored pg_stat_statements snapshots of an instance — the
+// source of the snapshot IDs that query_compare consumes. The listing is
+// host-wide: a snapshot holds every database of the instance.
+func (d *DashaClient) Snapshots(ctx context.Context, cluster, instance string) (any, error) {
 	r, err := d.api.GetSnapshotsWithResponse(ctx, &apiclient.GetSnapshotsParams{
-		ClusterName: cluster, Instance: instance, Database: database,
+		ClusterName: cluster, Instance: instance,
 	}, d.editor(ctx))
 	if err != nil {
 		return nil, wrapErr("list_snapshots", err)
@@ -571,7 +575,7 @@ func (d *DashaClient) Snapshots(ctx context.Context, cluster, instance, database
 // when snapshotB is empty), so regressions between two points in time surface.
 func (d *DashaClient) QueryCompare(
 	ctx context.Context,
-	cluster, instance, database, snapshotA string,
+	cluster, instance, database, scope, snapshotA string,
 	snapshotB *string,
 	excludeUsers []string,
 ) (any, error) {
@@ -590,11 +594,17 @@ func (d *DashaClient) QueryCompare(
 	}
 
 	r, err := d.api.GetQueriesCompareWithResponse(ctx, &apiclient.GetQueriesCompareParams{
-		ClusterName: cluster, Instance: instance, Database: database,
+		ClusterName: cluster, Instance: instance, Database: database, Scope: opt(scope),
 		SnapshotA: a, SnapshotB: bPtr, ExcludeUsers: optStrings(excludeUsers),
 	}, d.editor(ctx))
 	if err != nil {
 		return nil, wrapErr("query_compare", err)
+	}
+
+	// 409 carries the only actionable detail — which pair was refused and why —
+	// so it is passed through instead of collapsing into a bare status code.
+	if r.JSON409 != nil {
+		return nil, fmt.Errorf("mcp: query_compare: %s", r.JSON409.Message)
 	}
 
 	return pick(r.JSON200, r.HTTPResponse, "query_compare")

@@ -2,6 +2,7 @@ package autosnapshot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -9,7 +10,12 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/dbulashev/dasha/internal/config"
+	"github.com/dbulashev/dasha/internal/dto"
 )
+
+// errEmptyReport marks a skipped snapshot: nothing was stored, so the caller
+// must not advance the incident state as if it had been.
+var errEmptyReport = errors.New("autosnapshot: empty report")
 
 func (d *Daemon) processCluster(
 	ctx context.Context,
@@ -306,6 +312,11 @@ func (d *Daemon) tickRoleChange(
 	_ = d.takeSnapshot(ctx, cfg, cl, instance, database, TriggerRoleChange, "auto:role_change", trigCtx, nil)
 }
 
+// takeSnapshot stores one instance-wide pgss snapshot for a host. The database
+// is a preference only: pg_stat_statements holds the same instance-wide rows in
+// every database that has the extension, so one snapshot per host is enough —
+// what varies is which database it could be read through, and that is recorded
+// as the snapshot's provenance.
 func (d *Daemon) takeSnapshot(
 	ctx context.Context,
 	cfg Config,
@@ -331,6 +342,40 @@ func (d *Daemon) takeSnapshot(
 		return err
 	}
 
+	// No readable extension anywhere on the host yields an empty report; storing
+	// it would fill the snapshot selector with entries that explain nothing.
+	if len(reports) == 0 {
+		d.insertEvent(ctx, TriggerEvent{
+			ClusterName:    string(cl.Name),
+			Instance:       instance,
+			Database:       &database,
+			TriggerType:    trigType,
+			Outcome:        OutcomeError,
+			TriggerContext: trigCtx,
+			ErrorMessage:   strPtr("empty report: pg_stat_statements is not readable in any database of the host"),
+		})
+
+		return errEmptyReport
+	}
+
+	// Provenance is recorded, not guessed: the report may have been read through
+	// a database other than the requested one, so falling back to the request
+	// would label the snapshot with numbers it did not come from.
+	provenance, err := d.repo.PgssDatabase(ctx, string(cl.Name), instance, database)
+	if err != nil {
+		d.insertEvent(ctx, TriggerEvent{
+			ClusterName:    string(cl.Name),
+			Instance:       instance,
+			Database:       &database,
+			TriggerType:    trigType,
+			Outcome:        OutcomeError,
+			TriggerContext: trigCtx,
+			ErrorMessage:   strPtr(fmt.Sprintf("pgss database: %v", err)),
+		})
+
+		return err
+	}
+
 	var pgssReset *time.Time
 	if t, err := d.repo.GetPgssStatsResetTime(ctx, string(cl.Name), instance, database); err == nil && t != nil {
 		pgssReset = &t.Time
@@ -340,12 +385,13 @@ func (d *Daemon) takeSnapshot(
 	// not role changes). Best-effort: capture failure never fails the snapshot.
 	var locks *LockCapture
 	if cfg.CaptureLocks && trigType == TriggerActivitySpike {
-		lc := CaptureLocks(ctx, d.repo, string(cl.Name), instance, database, cfg.LockProbeCount, cfg.LockProbeInterval)
+		lc := CaptureLocks(ctx, d.repo, string(cl.Name), instance, provenance, dto.ScopeInstance,
+			cfg.LockProbeCount, cfg.LockProbeInterval)
 		lc.BackgroundPeak = bgPeak
 		locks = &lc
 	}
 
-	id, createdAt, err := d.store.CreateSnapshot(ctx, string(cl.Name), instance, database, reports, SnapshotOpts{
+	id, createdAt, err := d.store.CreateSnapshot(ctx, string(cl.Name), instance, provenance, reports, SnapshotOpts{
 		PgssStatsReset: pgssReset,
 		Reason:         reason,
 		TriggerContext: trigCtx,
@@ -355,7 +401,7 @@ func (d *Daemon) takeSnapshot(
 		d.insertEvent(ctx, TriggerEvent{
 			ClusterName:    string(cl.Name),
 			Instance:       instance,
-			Database:       &database,
+			Database:       &provenance,
 			TriggerType:    trigType,
 			Outcome:        OutcomeError,
 			TriggerContext: trigCtx,
@@ -373,7 +419,7 @@ func (d *Daemon) takeSnapshot(
 	d.mu.Unlock()
 
 	if cfg.ResetQueryStats {
-		if err := d.repo.ResetQueryStats(ctx, string(cl.Name), instance, database); err != nil {
+		if err := d.repo.ResetQueryStats(ctx, string(cl.Name), instance, provenance); err != nil {
 			d.logger.Warn("pg_stat_statements_reset failed after snapshot",
 				zap.String("cluster", string(cl.Name)),
 				zap.String("instance", instance),
@@ -385,7 +431,7 @@ func (d *Daemon) takeSnapshot(
 	d.insertEvent(ctx, TriggerEvent{
 		ClusterName:    string(cl.Name),
 		Instance:       instance,
-		Database:       &database,
+		Database:       &provenance,
 		TriggerType:    trigType,
 		Outcome:        OutcomeSnapshotCreated,
 		SnapshotID:     &snapID,
@@ -395,6 +441,7 @@ func (d *Daemon) takeSnapshot(
 	d.logger.Info("auto snapshot created",
 		zap.String("cluster", string(cl.Name)),
 		zap.String("instance", instance),
+		zap.String("database", provenance),
 		zap.String("reason", reason),
 		zap.String("snapshot_id", id.String()))
 
@@ -481,6 +528,9 @@ func directionAllowed(allowed, actual Direction) bool {
 	return allowed == actual
 }
 
+// firstDatabase is only the preferred database to read pg_stat_statements
+// through; the repository falls back to any database of the host that holds the
+// extension, and the snapshot records which one that was.
 func firstDatabase(cl config.Cluster) string {
 	if len(cl.Databases) == 0 {
 		return "postgres"

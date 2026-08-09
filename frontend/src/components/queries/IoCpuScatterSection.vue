@@ -13,6 +13,7 @@ import type { QueryReport } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useApiLoader } from '@/composables/useApiLoader'
 import { useViewError } from '@/composables/useViewError'
+import { useQueryScope } from '@/composables/useQueryScope'
 import { copyToClipboard } from '@/utils/sql'
 import { fmtMs, pickTimeScale, fmtScaled } from '@/utils/format'
 
@@ -21,6 +22,7 @@ ChartJS.register(LinearScale, PointElement, Tooltip)
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
 const { onError } = useViewError()
+const { scope } = useQueryScope()
 
 const snackbar = ref(false)
 const copiedQueryId = ref('')
@@ -30,11 +32,10 @@ const { items, loading } = useApiLoader<QueryReport[]>(
     cluster_name: clusterName.value!,
     instance: hostName.value!,
     database: databaseName.value ?? undefined,
+    scope: scope.value,
   }),
   {
-    // databaseName is sent, but is not a dep: pg_stat_statements is
-    // instance-wide, so switching database would refetch the same numbers.
-    deps: [clusterName, hostName],
+    deps: [clusterName, hostName, databaseName, scope],
     guard: () => !!clusterName.value && !!hostName.value,
     onError,
   },

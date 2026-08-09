@@ -10,6 +10,11 @@ export interface SnapshotListItem {
   CreatedAt: string
   DashaVersion: string
   JsonVersion: number
+  /** Database the snapshot was read through. Provenance only — the contents cover every database of the instance.
+   */
+  Database?: string
+  /** Databases represented inside the snapshot; empty for json_version 1. */
+  Databases?: string[]
   /** @nullable */
   PgssStatsReset?: string | null
   /** True when a lock snapshot was captured alongside this snapshot */

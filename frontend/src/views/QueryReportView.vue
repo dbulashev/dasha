@@ -18,9 +18,11 @@ import { useViewError } from '@/composables/useViewError'
 import { useAuthStore } from '@/stores/auth'
 import { assertOk } from '@/utils/api'
 import { fmtWindow, fmtDateTime } from '@/utils/format'
-import { snapshotReasonI18nKey } from '@/utils/autosnapshot'
+import { snapshotReasonI18nKey, snapshotCoverage, snapshotCovers } from '@/utils/autosnapshot'
 import QueryReportSection from '@/components/queries/QueryReportSection.vue'
 import LockSnapshotDialog from '@/components/queries/LockSnapshotDialog.vue'
+import ScopeSwitch from '@/components/queries/ScopeSwitch.vue'
+import { useQueryScope } from '@/composables/useQueryScope'
 
 const route = useRoute()
 const router = useRouter()
@@ -28,6 +30,7 @@ const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
 const { clearError, onError } = useViewError()
 const authStore = useAuthStore()
+const { scope, hasScopeChoice } = useQueryScope()
 
 const queryStatsStatus = ref<QueryStatsStatus | null>(null)
 
@@ -115,10 +118,13 @@ const showSnapshotButton = computed(() =>
 const snapshotIdsSet = computed(() => new Set(snapshotsList.value.map(s => s.Id)))
 
 const snapshotSelectItems = computed(() => {
-  const live = { value: null as string | null, title: t('snapshotLiveData') }
+  const live = { value: null as string | null, title: t('snapshotLiveData'), subtitle: '' }
   const items = snapshotsList.value.map(s => ({
     value: s.Id,
     title: `${fmtDateTime(s.CreatedAt)} · ${t(snapshotReasonI18nKey(s.Reason), s.Reason ?? 'manual')}`,
+    // Snapshots are host-wide; the coverage line is what says whether the
+    // database being browsed is inside a given one.
+    subtitle: snapshotCoverage(s.Databases) || t('snapshotNoAttribution'),
   }))
   return [live, ...items]
 })
@@ -134,15 +140,15 @@ async function loadSnapshotsStatus() {
 }
 
 async function loadSnapshotsList() {
-  if (!snapshotsAvailable.value || !clusterName.value || !hostName.value || !databaseName.value) {
+  if (!snapshotsAvailable.value || !clusterName.value || !hostName.value) {
     snapshotsList.value = []
     return
   }
   try {
+    // Snapshots are host-wide: one holds every database of the instance.
     const res = await getSnapshots({
       cluster_name: clusterName.value,
       instance: hostName.value,
-      database: databaseName.value,
     })
     snapshotsList.value = assertOk<SnapshotListItem[]>(res) ?? []
   } catch {
@@ -181,7 +187,10 @@ async function loadSnapshotData(id: string) {
   snapshotLoading.value = true
   snapshotData.value = null
   try {
-    const res = await getSnapshot(id)
+    const res = await getSnapshot(id, {
+      database: databaseName.value ?? undefined,
+      scope: scope.value,
+    })
     snapshotData.value = assertOk<QueryReport[]>(res) ?? []
   } catch (err) {
     onError(String(err), err)
@@ -213,6 +222,11 @@ watch(selectedSnapshotId, (id) => {
   }
 })
 
+// A stored snapshot is read server-side, so the scope switch has to refetch it.
+watch([scope, databaseName], () => {
+  if (selectedSnapshotId.value) loadSnapshotData(selectedSnapshotId.value)
+})
+
 const livePgssStatsReset = ref<string | null>(null)
 
 async function loadLivePgssReset() {
@@ -239,6 +253,25 @@ const selectedSnapshot = computed(() =>
   selectedSnapshotId.value
     ? snapshotsList.value.find(s => s.Id === selectedSnapshotId.value) ?? null
     : null,
+)
+
+// Snapshots taken before per-database attribution hold instance-wide rows only.
+const legacySnapshot = computed(() =>
+  isViewingSnapshot.value && (selectedSnapshot.value?.JsonVersion ?? 2) < 2,
+)
+
+// Narrowing a snapshot to a database it never held leaves an empty page; say so
+// instead of letting it read as "this database ran nothing".
+const snapshotMissesDatabase = computed(() =>
+  isViewingSnapshot.value &&
+  !legacySnapshot.value &&
+  scope.value === 'database' &&
+  !snapshotCovers(selectedSnapshot.value?.Databases, databaseName.value),
+)
+
+// Without the switch on screen there is nothing to point the reader at.
+const snapshotMissesDatabaseKey = computed(() =>
+  hasScopeChoice.value ? 'snapshotMissesDatabase' : 'snapshotMissesDatabaseOnly',
 )
 
 // Span from the last pg_stat_statements reset to the moment the numbers were
@@ -314,12 +347,14 @@ watch([clusterName, hostName, databaseName], async () => {
       v-if="snapshotsAvailable && snapshotsList.length"
       v-model="selectedSnapshotId"
       :items="snapshotSelectItems"
+      :item-props="(item) => ({ subtitle: item.subtitle })"
       :label="t('snapshotSelect')"
       density="compact"
       variant="outlined"
       hide-details
       style="max-width: 300px;"
     />
+    <ScopeSwitch :force-instance="legacySnapshot" />
     <v-tooltip v-if="statsWindowText" :text="t('compare.statsWindowHint')" location="bottom" max-width="420">
       <template #activator="{ props: tp }">
         <span v-bind="tp" class="text-caption text-medium-emphasis d-inline-flex align-center ga-1">
@@ -369,6 +404,10 @@ watch([clusterName, hostName, databaseName], async () => {
       {{ t('resetQueryStats') }}
     </v-btn>
   </div>
+
+  <v-alert v-if="snapshotMissesDatabase" type="info" class="mb-4">
+    {{ t(snapshotMissesDatabaseKey, { database: databaseName, databases: snapshotCoverage(selectedSnapshot?.Databases) }) }}
+  </v-alert>
 
   <v-progress-linear v-if="snapshotLoading" indeterminate class="mb-4" />
   <QueryReportSection v-else :snapshot-data="isViewingSnapshot ? snapshotData : undefined" />

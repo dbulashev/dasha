@@ -10,10 +10,13 @@ import QueryStatsChartSection from '@/components/queries/QueryStatsChartSection.
 import IoCpuScatterSection from '@/components/queries/IoCpuScatterSection.vue'
 import Top10ByTimeSection from '@/components/queries/Top10ByTimeSection.vue'
 import Top10ByWalSection from '@/components/queries/Top10ByWalSection.vue'
+import ScopeSwitch from '@/components/queries/ScopeSwitch.vue'
+import { useQueryScope } from '@/composables/useQueryScope'
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
 const { clearError } = useViewError()
+const { hasScopeChoice } = useQueryScope()
 
 const queryStatsStatus = ref<QueryStatsStatus | null>(null)
 
@@ -53,6 +56,9 @@ watch([clusterName, hostName, databaseName], () => {
 
 <template>
   <v-alert v-if="pgssUnavailable" type="warning" class="mb-4" closable>{{ pgssWarningMessage }}</v-alert>
+  <div v-if="hasScopeChoice" class="d-flex align-center ga-2 mb-2">
+    <ScopeSwitch />
+  </div>
   <QueryStatsChartSection />
   <IoCpuScatterSection />
   <Top10ByTimeSection />

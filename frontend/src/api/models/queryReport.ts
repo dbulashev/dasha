@@ -5,10 +5,17 @@
  * OpenAPI spec version: 1.0.0
  */
 
+/**
+ * One aggregated pg_stat_statements entry of a single database. A queryid is only unique within a database, so a row is identified by the pair (QueryID, Datname). Percentage fields are shares within the requested scope — the database for scope=database, the whole instance otherwise.
+
+ */
 export interface QueryReport {
   /** pg_stat_statements queryid as string to preserve int64 precision in JavaScript */
   QueryID: string
   Query: string
+  /** Database this entry belongs to. Empty when the database no longer exists, or when the row comes from a snapshot stored before per-database attribution existed (json_version 1).
+   */
+  Datname?: string
   /**
    * Distinct PostgreSQL roles that executed this queryid (aggregated across pg_stat_statements rows).
    * @nullable

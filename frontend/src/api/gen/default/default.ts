@@ -109,6 +109,7 @@ import type {
   GetSchemaLintParams,
   GetSchemaLintSummaryParams,
   GetSettingsAnalyzeParams,
+  GetSnapshotParams,
   GetSnapshotsParams,
   GetStatsResetTimeParams,
   GetTablesCachingParams,
@@ -138,6 +139,7 @@ import type {
   HotObjectHistory,
   HotPercentile,
   HotReport,
+  IncomparableSnapshotsResponse,
   IndexBloat,
   IndexBtreeOnArray,
   IndexCaching,
@@ -8528,22 +8530,38 @@ export type getSnapshotResponseError = (getSnapshotResponse404 | getSnapshotResp
 
 export type getSnapshotResponse = getSnapshotResponseSuccess | getSnapshotResponseError
 
-export const getGetSnapshotUrl = (id: string) => {
-  return `/api/queries/snapshot/${id}`
+export const getGetSnapshotUrl = (id: string, params?: GetSnapshotParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/queries/snapshot/${id}?${stringifiedParams}`
+    : `/api/queries/snapshot/${id}`
 }
 
 export const getSnapshot = async (
   id: string,
+  params?: GetSnapshotParams,
   options?: RequestInit,
 ): Promise<getSnapshotResponse> => {
-  return customFetch<getSnapshotResponse>(getGetSnapshotUrl(id), {
+  return customFetch<getSnapshotResponse>(getGetSnapshotUrl(id, params), {
     ...options,
     method: 'GET',
   })
 }
 
-export const getGetSnapshotQueryKey = (id: MaybeRef<string>) => {
-  return ['api', 'queries', 'snapshot', id] as const
+export const getGetSnapshotQueryKey = (
+  id: MaybeRef<string>,
+  params?: MaybeRef<GetSnapshotParams>,
+) => {
+  return ['api', 'queries', 'snapshot', id, ...(params ? [params] : [])] as const
 }
 
 export const getGetSnapshotQueryOptions = <
@@ -8551,6 +8569,7 @@ export const getGetSnapshotQueryOptions = <
   TError = NotFoundResponse | void,
 >(
   id: MaybeRef<string>,
+  params?: MaybeRef<GetSnapshotParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getSnapshot>>, TError, TData>
     request?: SecondParameter<typeof customFetch>
@@ -8558,10 +8577,10 @@ export const getGetSnapshotQueryOptions = <
 ) => {
   const { query: queryOptions, request: requestOptions } = options ?? {}
 
-  const queryKey = getGetSnapshotQueryKey(id)
+  const queryKey = getGetSnapshotQueryKey(id, params)
 
   const queryFn: QueryFunction<Awaited<ReturnType<typeof getSnapshot>>> = ({ signal }) =>
-    getSnapshot(unref(id), { signal, ...requestOptions })
+    getSnapshot(unref(id), unref(params), { signal, ...requestOptions })
 
   return {
     queryKey,
@@ -8579,12 +8598,13 @@ export function useGetSnapshot<
   TError = NotFoundResponse | void,
 >(
   id: MaybeRef<string>,
+  params?: MaybeRef<GetSnapshotParams>,
   options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getSnapshot>>, TError, TData>
     request?: SecondParameter<typeof customFetch>
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetSnapshotQueryOptions(id, options)
+  const queryOptions = getGetSnapshotQueryOptions(id, params, options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
 
@@ -8697,6 +8717,11 @@ export type getQueriesCompareResponse404 = {
   status: 404
 }
 
+export type getQueriesCompareResponse409 = {
+  data: IncomparableSnapshotsResponse
+  status: 409
+}
+
 export type getQueriesCompareResponse501 = {
   data: void
   status: 501
@@ -8707,6 +8732,7 @@ export type getQueriesCompareResponseSuccess = getQueriesCompareResponse200 & {
 }
 export type getQueriesCompareResponseError = (
   | getQueriesCompareResponse404
+  | getQueriesCompareResponse409
   | getQueriesCompareResponse501
 ) & {
   headers: Headers
@@ -8748,7 +8774,7 @@ export const getGetQueriesCompareQueryKey = (params?: MaybeRef<GetQueriesCompare
 
 export const getGetQueriesCompareQueryOptions = <
   TData = Awaited<ReturnType<typeof getQueriesCompare>>,
-  TError = NotFoundResponse | void,
+  TError = NotFoundResponse | IncomparableSnapshotsResponse | void,
 >(
   params: MaybeRef<GetQueriesCompareParams>,
   options?: {
@@ -8773,11 +8799,11 @@ export const getGetQueriesCompareQueryOptions = <
 export type GetQueriesCompareQueryResult = NonNullable<
   Awaited<ReturnType<typeof getQueriesCompare>>
 >
-export type GetQueriesCompareQueryError = NotFoundResponse | void
+export type GetQueriesCompareQueryError = NotFoundResponse | IncomparableSnapshotsResponse | void
 
 export function useGetQueriesCompare<
   TData = Awaited<ReturnType<typeof getQueriesCompare>>,
-  TError = NotFoundResponse | void,
+  TError = NotFoundResponse | IncomparableSnapshotsResponse | void,
 >(
   params: MaybeRef<GetQueriesCompareParams>,
   options?: {

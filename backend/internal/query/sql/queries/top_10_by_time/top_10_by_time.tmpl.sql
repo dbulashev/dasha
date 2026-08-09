@@ -1,29 +1,33 @@
 SELECT
-    queryid,
+    pss.queryid,
+    COALESCE(d.datname, '') AS datname,
     to_char(
-            interval '1 millisecond' * sum(total_exec_time),
+            interval '1 millisecond' * sum(pss.total_exec_time),
             'HH24:MI:SS'
     ) AS exec_time,
-    sum(total_exec_time) AS exec_time_ms,
+    sum(pss.total_exec_time) AS exec_time_ms,
     COALESCE(
         (100 * sum(
-                shared_blk_read_time + shared_blk_write_time +
-                temp_blk_read_time + temp_blk_write_time
-               ) / nullif(sum(total_exec_time), 0))::numeric(5,2)::text || ' / ' ||
-        (100 * sum(total_exec_time - (
-            shared_blk_read_time + shared_blk_write_time +
-            temp_blk_read_time + temp_blk_write_time)
-               ) / nullif(sum(total_exec_time), 0))::numeric(5,2)::text,
+                pss.shared_blk_read_time + pss.shared_blk_write_time +
+                pss.temp_blk_read_time + pss.temp_blk_write_time
+               ) / nullif(sum(pss.total_exec_time), 0))::numeric(5,2)::text || ' / ' ||
+        (100 * sum(pss.total_exec_time - (
+            pss.shared_blk_read_time + pss.shared_blk_write_time +
+            pss.temp_blk_read_time + pss.temp_blk_write_time)
+               ) / nullif(sum(pss.total_exec_time), 0))::numeric(5,2)::text,
         '0.00 / 0.00'
     ) AS "io / cpu, %",
     COALESCE((100 * sum(
-            shared_blk_read_time + shared_blk_write_time +
-            temp_blk_read_time + temp_blk_write_time
-           ) / nullif(sum(total_exec_time), 0))::numeric(5,2), 0) AS io_pct,
-    COALESCE((100 * sum(total_exec_time - (
-        shared_blk_read_time + shared_blk_write_time +
-        temp_blk_read_time + temp_blk_write_time)
-           ) / nullif(sum(total_exec_time), 0))::numeric(5,2), 0) AS cpu_pct,
-    left(query, 48) AS query_trunc
-FROM {{ .Pgss }}
-GROUP BY queryid, query ORDER BY sum(total_exec_time) DESC LIMIT 10;
+            pss.shared_blk_read_time + pss.shared_blk_write_time +
+            pss.temp_blk_read_time + pss.temp_blk_write_time
+           ) / nullif(sum(pss.total_exec_time), 0))::numeric(5,2), 0) AS io_pct,
+    COALESCE((100 * sum(pss.total_exec_time - (
+        pss.shared_blk_read_time + pss.shared_blk_write_time +
+        pss.temp_blk_read_time + pss.temp_blk_write_time)
+           ) / nullif(sum(pss.total_exec_time), 0))::numeric(5,2), 0) AS cpu_pct,
+    left(pss.query, 48) AS query_trunc
+FROM {{ .Pgss }} pss
+LEFT JOIN pg_catalog.pg_database d ON d.oid = pss.dbid
+WHERE $1::text IS NULL OR d.datname = $1
+GROUP BY pss.queryid, pss.query, d.datname
+ORDER BY sum(pss.total_exec_time) DESC LIMIT 10;

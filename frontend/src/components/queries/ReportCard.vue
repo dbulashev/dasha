@@ -10,6 +10,7 @@ type ReportSortKey = 'total_time' | 'mean_time' | 'stddev_time' | 'calls' | 'wal
 const props = defineProps<{
   item: QueryReport
   sortBy: ReportSortKey
+  showDatabase?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -52,6 +53,9 @@ function fmtMs(ms: number | null | undefined): string {
     <v-card-title class="text-body-1 pb-1 d-flex align-center flex-wrap ga-1">
       <span>queryid: <span class="text-mono">{{ item.QueryID }}</span></span>
       <v-btn icon="mdi-content-copy" variant="text" size="x-small" @click="copyToClipboard(String(item.QueryID))" />
+      <v-chip v-if="props.showDatabase && item.Datname" size="x-small" variant="tonal" label prepend-icon="mdi-database">
+        {{ item.Datname }}
+      </v-chip>
       <template v-if="item.Usernames && item.Usernames.length">
         <span class="text-caption text-medium-emphasis ml-2">{{ t('report.users', item.Usernames.length) }}:</span>
         <v-chip v-for="u in item.Usernames" :key="u" size="x-small" variant="tonal" label>{{ u }}</v-chip>
