@@ -76,9 +76,15 @@ func severityRank(s Severity) int {
 }
 
 // Hit is the runtime trigger output for one rule.
+//
+// Database is set only by rules that can pin an otherwise instance-wide finding
+// to one database (the session holding the horizon, for instance); everything
+// else leaves it empty and Evaluate fills in the snapshot's database for rules
+// whose metrics are per-database anyway.
 type Hit struct {
 	Severity    Severity
 	MetricValue float64
+	Database    string
 	Context     map[string]any
 }
 
@@ -97,11 +103,17 @@ type Rule struct {
 }
 
 // Recommendation is one rule's evaluation result, ready to ship over the API.
+//
+// Database names the database the finding belongs to; empty means the finding
+// is instance-wide and no single database owns it. It lets the UI label each
+// recommendation and open the related page against the right database instead
+// of whatever is currently selected.
 type Recommendation struct {
 	RuleID       string         `json:"rule_id"`
 	Category     Category       `json:"category"`
 	Severity     Severity       `json:"severity"`
 	MetricValue  float64        `json:"metric_value"`
+	Database     string         `json:"database,omitempty"`
 	Context      map[string]any `json:"context,omitempty"`
 	RelatedRoute string         `json:"related_route,omitempty"`
 }
@@ -114,6 +126,43 @@ var instanceOnlyCategories = map[Category]bool{
 	CategoryHorizon:       true,
 	CategoryWalCheckpoint: true,
 	CategoryLocks:         true,
+}
+
+// metricsInstanceWideRules lists the rules that sit in a per-database category
+// but whose metric, in a metrics-backed snapshot, is a datasource aggregate over
+// every database (the PromQL catalog wraps them in sum()/max()). Naming
+// RawMetrics.Database for those would point at the one database the catalog
+// snapshot happened to be read from, which has nothing to do with the finding.
+// The same rules read per-database catalog values in snapshot mode and keep
+// their attribution there — hence the RawMetrics.MetricsInstanceWide guard.
+//
+// Rules fed by facts overlayCatalogFacts writes back from the SQL snapshot
+// (bloat count, vacuum queue, newpage ratio, relfrozenxid, planner stats) are
+// deliberately absent: those stay per-database in both modes.
+//
+// sequence_exhaustion is absent for a different reason — its SQL fallback is
+// instance-wide too, so it needs the stronger rule below rather than this one.
+var metricsInstanceWideRules = map[string]bool{
+	"low_cache_hit_ratio":  true, // SigCacheHitRatio
+	"high_max_dead_ratio":  true, // SigMaxDeadRatio
+	"high_avg_dead_ratio":  true, // SigAvgDeadRatio
+	"low_hot_update_ratio": true, // SigHotUpdateRatio
+	"xid_wraparound_risk":  true, // SigXactsLeftWrap
+	"checksum_failures":    true, // SigChecksumFailRate
+	"host_disk_space":      true, // SigDiskUsedRatio — host-wide, not even instance
+	"latency_regression":   true, // SigLatencyMs vs baseline
+	"seq_scan_regression":  true, // SigSeqScanRate vs baseline
+}
+
+// instanceScopeAggregateRules lists the rules whose value covers every database
+// of the instance whenever the evaluation is not database-scoped — in *both*
+// modes, so this outranks metricsInstanceWideRules. The per-database drill-down
+// reads the selected database alone, and there they keep their attribution.
+var instanceScopeAggregateRules = map[string]bool{
+	// repository.GetSequenceHeadroom sweeps every pool of the instance and
+	// returns the worst when called without a database, which is what the
+	// instance-scope handler does; the datasource series is a max() as well.
+	"sequence_exhaustion": true,
 }
 
 // Evaluate runs all rules against the given metrics and returns triggered
@@ -150,6 +199,7 @@ func Evaluate(m RawMetrics, databaseScoped bool) []Recommendation {
 			Category:     r.Category,
 			Severity:     hit.Severity,
 			MetricValue:  hit.MetricValue,
+			Database:     databaseOf(m, r, hit, databaseScoped),
 			Context:      hit.Context,
 			RelatedRoute: r.RelatedRoute,
 		})
@@ -164,6 +214,32 @@ func Evaluate(m RawMetrics, databaseScoped bool) []Recommendation {
 	})
 
 	return out
+}
+
+// databaseOf resolves which database a triggered rule belongs to: the one the
+// rule pinned itself (a specific session), otherwise the snapshot's database
+// for rules whose metrics are per-database. Instance-wide categories stay
+// empty — no single database owns them — and so do the rules whose value spans
+// the whole instance, either always (instanceScopeAggregateRules) or because a
+// datasource supplied it (metricsInstanceWideRules).
+func databaseOf(m RawMetrics, r Rule, hit *Hit, databaseScoped bool) string {
+	if hit.Database != "" {
+		return hit.Database
+	}
+
+	if instanceOnlyCategories[r.Category] {
+		return ""
+	}
+
+	if !databaseScoped && instanceScopeAggregateRules[r.ID] {
+		return ""
+	}
+
+	if m.MetricsInstanceWide && metricsInstanceWideRules[r.ID] {
+		return ""
+	}
+
+	return m.Database
 }
 
 // Registry is the catalog of all rules, in declaration order.
@@ -203,7 +279,11 @@ var Registry = []Rule{
 				return nil
 			}
 
-			return &Hit{Severity: sev, MetricValue: float64(m.IdleInTransaction)}
+			return &Hit{
+				Severity:    sev,
+				MetricValue: float64(m.IdleInTransaction),
+				Database:    m.IdleInTransactionDatabase,
+			}
 		},
 	},
 	{
@@ -216,7 +296,7 @@ var Registry = []Rule{
 				return nil
 			}
 
-			return &Hit{Severity: sev, MetricValue: sec}
+			return &Hit{Severity: sev, MetricValue: sec, Database: m.LongestTransactionDatabase}
 		},
 	},
 	{
@@ -433,7 +513,7 @@ var Registry = []Rule{
 				return nil
 			}
 
-			return &Hit{Severity: sev, MetricValue: lag}
+			return &Hit{Severity: sev, MetricValue: lag, Database: m.HorizonDatabase}
 		},
 	},
 	{

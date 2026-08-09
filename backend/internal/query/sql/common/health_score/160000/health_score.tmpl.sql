@@ -11,6 +11,28 @@ WITH connection_metrics AS (
             EXTRACT(EPOCH FROM (now() - MIN(xact_start) FILTER (WHERE xact_start IS NOT NULL AND pid != pg_backend_pid()))),
             0
         )::float8 AS longest_transaction_seconds,
+        -- Databases the two connection rules point at: pg_stat_activity is
+        -- instance-wide, so the offending session usually lives in a database
+        -- other than the one this snapshot is connected to.
+        COALESCE((
+            SELECT datname
+            FROM pg_stat_activity
+            WHERE xact_start IS NOT NULL AND pid != pg_backend_pid()
+            ORDER BY xact_start
+            LIMIT 1
+        ), '') AS longest_transaction_database,
+        -- The metric is a count, so the database with the most offenders is the
+        -- one to open; oldest transaction breaks a tie.
+        COALESCE((
+            SELECT datname
+            FROM pg_stat_activity
+            WHERE state = 'idle in transaction'
+              AND pid != pg_backend_pid()
+              AND now() - xact_start > interval '30 seconds'
+            GROUP BY datname
+            ORDER BY count(*) DESC, MIN(xact_start)
+            LIMIT 1
+        ), '') AS idle_in_transaction_database,
         (SELECT setting::int FROM pg_settings WHERE name = 'max_connections') AS max_connections
     FROM pg_stat_activity
 ),
@@ -138,7 +160,14 @@ maintenance_metrics AS (
 -- Horizon is cluster-wide; no datname filter (see base template comment).
 horizon_metrics AS (
     SELECT
-        COALESCE(MAX(age(backend_xmin))::bigint, 0) AS horizon_lag_xids
+        COALESCE(MAX(age(backend_xmin))::bigint, 0) AS horizon_lag_xids,
+        COALESCE((
+            SELECT datname
+            FROM pg_stat_activity
+            WHERE backend_xmin IS NOT NULL
+            ORDER BY age(backend_xmin) DESC
+            LIMIT 1
+        ), '') AS horizon_database
     FROM pg_stat_activity
     WHERE backend_xmin IS NOT NULL
 ),
@@ -240,10 +269,15 @@ SELECT
     -- recovery state: standbys cannot run autovacuum/ANALYZE, so the maintenance
     -- category is dropped (its weight is redistributed) when this is true.
     pg_is_in_recovery() AS in_recovery,
+    -- database this snapshot is connected to: the per-database metrics below
+    -- (cache hit, dead tuples, vacuum queue, HOT) describe it, not the instance.
+    current_database()::text AS database,
     c.total_connections,
     c.active_connections,
     c.idle_in_transaction,
+    c.idle_in_transaction_database,
     c.longest_transaction_seconds,
+    c.longest_transaction_database,
     c.max_connections,
     p.cache_hit_ratio,
     g.track_io_timing_enabled,
@@ -263,6 +297,7 @@ SELECT
     pt.tables_with_autovacuum_off,
     pt.max_relfrozenxid_age,
     h.horizon_lag_xids,
+    h.horizon_database,
     cp.timed_checkpoints,
     cp.requested_checkpoints,
     la.active_lock_waiters,

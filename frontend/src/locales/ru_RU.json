@@ -1006,7 +1006,8 @@
         "title": "Health Score",
         "tooltip": "Общая оценка состояния инстанса PostgreSQL от 0 до 100. Учитывает подключения, производительность, хранение, репликацию и обслуживание.",
         "openDetailsPage": "Подробнее",
-        "metricsDegraded": "Включён режим метрик, инстанс в источнике найден, но ни одна метрика не подошла под селекторы: балл посчитан на пустых данных и может быть занижен. Проверьте, совпадают ли лейблы — GET /api/common/health-score/datasource/status.",
+        "metricsDegraded": "Включён режим метрик, инстанс в источнике найден, но ни одна метрика не подошла под селекторы: балл посчитан на пустых данных и завышен — отсутствующие сигналы читаются как здоровые. Проверьте, совпадают ли лейблы — GET /api/common/health-score/datasource/status.",
+        "metricsDegradedDatabases": "Таблица баз ниже всегда считается по SQL-снимку, поэтому её баллы могут быть заметно ниже.",
         "excellent": "Отлично",
         "warning": "Внимание",
         "problems": "Проблемы",
@@ -1267,6 +1268,7 @@
                 "deadTuples": "Dead tuples",
                 "deadRatio": "Dead ratio",
                 "username": "Пользователь",
+                "backendType": "Тип процесса",
                 "state": "State",
                 "xactDuration": "Длительность транзакции",
                 "query": "Запрос"
@@ -1278,6 +1280,8 @@
         "recommendations": {
             "title": "Рекомендации",
             "openRelated": "Перейти",
+            "scopeCluster": "Уровень кластера",
+            "databaseNotTracked": "Эта база не подключена к Dasha — переход откроет другую базу.",
             "searchLogs": "Найти в логах",
             "showHowTo": "Что делать",
             "hideHowTo": "Свернуть",
@@ -1291,12 +1295,12 @@
             "idle_in_transaction": {
                 "title": "Висящие idle in transaction",
                 "short": "Соединений в состоянии idle in transaction (>30с): {metric_value}.",
-                "detail": "Транзакции, забытые приложением, удерживают блокировки и мешают autovacuum. Проверьте логи приложения и идемпотентность транзакций."
+                "detail": "Транзакции, забытые приложением, удерживают блокировки и мешают autovacuum. Проверьте логи приложения и идемпотентность транзакций. В это состояние попадают только клиентские сессии — фоновые процессы вроде autovacuum сюда не относятся."
             },
             "long_running_transaction": {
                 "title": "Долгая открытая транзакция",
                 "short": "Самая старая транзакция работает уже {metric_value} с.",
-                "detail": "Найдите её через pg_stat_activity и решите, нужно ли её прервать (pg_terminate_backend)."
+                "detail": "Найдите её через pg_stat_activity и решите, нужно ли её прервать (pg_terminate_backend). Если это процесс автовакуума (backend_type = 'autovacuum worker', запрос вида «autovacuum: VACUUM …»), долгая работа нормальна: на большой таблице или при заморозке она идёт часами. Прерывать его не нужно — вакуум начнёт всё сначала."
             },
             "low_cache_hit_ratio": {
                 "title": "Низкий cache hit ratio",
@@ -1365,7 +1369,7 @@
             "horizon_lag_xids": {
                 "title": "Горизонт удерживается долгой транзакцией",
                 "short": "Горизонт отстал на {metric_value} транзакций — вакуум не может удалить мёртвые версии строк.",
-                "detail": "Горизонт удерживают долгие транзакции — Repeatable Read или просто забытые idle in transaction. Пока они живы, вакуум видит мёртвые версии строк, но удалять их не имеет права. Найдите процесс с наименьшим backend_xmin и завершите его.",
+                "detail": "Горизонт удерживают долгие транзакции — Repeatable Read или просто забытые idle in transaction. Пока они живы, вакуум видит мёртвые версии строк, но удалять их не имеет права. Найдите процесс с наименьшим backend_xmin и завершите его. Сначала посмотрите на backend_type: горизонт может держать и сам autovacuum worker (например, при заморозке большой таблицы) — это штатная работа, такой процесс прерывать не нужно, он отпустит горизонт сам.",
                 "sql": "SELECT pid, usename, state, query, now() - xact_start AS duration\nFROM pg_stat_activity\nWHERE backend_xmin IS NOT NULL\nORDER BY backend_xmin\nLIMIT 5;"
             },
             "requested_checkpoint_ratio": {

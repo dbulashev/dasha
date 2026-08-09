@@ -135,43 +135,47 @@ func (s *Handlers) walLevelManaged(ctx context.Context, clusterName string) bool
 // the snapshot scoring/recommendation paths and the metrics-mode catalog overlay.
 func rawFromSnapshot(m *dto.HealthScoreMetrics) health.RawMetrics {
 	return health.RawMetrics{
-		InRecovery:                m.InRecovery,
-		TotalConnections:          m.TotalConnections,
-		ActiveConnections:         m.ActiveConnections,
-		IdleInTransaction:         m.IdleInTransaction,
-		LongestTransactionSeconds: m.LongestTransactionSeconds,
-		MaxConnections:            m.MaxConnections,
-		CacheHitRatio:             m.CacheHitRatio,
-		TrackIoTimingEnabled:      m.TrackIoTimingEnabled,
-		MaxDeadRatio:              m.MaxDeadRatio,
-		AvgDeadRatio:              m.AvgDeadRatio,
-		TablesHighBloat:           m.TablesHighBloat,
-		ReplicaCount:              m.ReplicaCount,
-		MaxReplayLagSeconds:       m.MaxReplayLagSeconds,
-		MaxLagBytes:               m.MaxLagBytes,
-		DisconnectedReplicas:      m.DisconnectedReplicas,
-		MaxXidAge:                 m.MaxXidAge,
-		VacuumBacklogTables:       m.VacuumBacklogTables,
-		MaxOverdueVacuumAgeHours:  m.MaxOverdueVacuumAgeHours,
-		TablesNeverVacuumed:       m.TablesNeverVacuumed,
-		AutovacuumEnabled:         m.AutovacuumEnabled,
-		TrackCountsEnabled:        m.TrackCountsEnabled,
-		TablesWithAutovacuumOff:   m.TablesWithAutovacuumOff,
-		MaxRelfrozenxidAge:        m.MaxRelfrozenxidAge,
-		HorizonLagXids:            m.HorizonLagXids,
-		TimedCheckpoints:          m.TimedCheckpoints,
-		RequestedCheckpoints:      m.RequestedCheckpoints,
-		ActiveLockWaiters:         m.ActiveLockWaiters,
-		LongestLockWaitSeconds:    m.LongestLockWaitSeconds,
-		UngrantedLocks:            m.UngrantedLocks,
-		DeadlocksTotal:            m.DeadlocksTotal,
-		HeavyweightLocksTotal:     m.HeavyweightLocksTotal,
-		MaxLocksPerTransaction:    m.MaxLocksPerTransaction,
-		HotUpdateRatio:            m.HotUpdateRatio,
-		NewpageUpdateRatio:        m.NewpageUpdateRatio,
-		StalePlannerStatsTables:   m.StalePlannerStatsTables,
-		WalLevel:                  m.WalLevel,
-		LogicalSlotsActive:        m.LogicalSlotsActive,
+		InRecovery:                 m.InRecovery,
+		Database:                   m.Database,
+		TotalConnections:           m.TotalConnections,
+		ActiveConnections:          m.ActiveConnections,
+		IdleInTransaction:          m.IdleInTransaction,
+		IdleInTransactionDatabase:  m.IdleInTransactionDatabase,
+		LongestTransactionSeconds:  m.LongestTransactionSeconds,
+		LongestTransactionDatabase: m.LongestTransactionDatabase,
+		MaxConnections:             m.MaxConnections,
+		CacheHitRatio:              m.CacheHitRatio,
+		TrackIoTimingEnabled:       m.TrackIoTimingEnabled,
+		MaxDeadRatio:               m.MaxDeadRatio,
+		AvgDeadRatio:               m.AvgDeadRatio,
+		TablesHighBloat:            m.TablesHighBloat,
+		ReplicaCount:               m.ReplicaCount,
+		MaxReplayLagSeconds:        m.MaxReplayLagSeconds,
+		MaxLagBytes:                m.MaxLagBytes,
+		DisconnectedReplicas:       m.DisconnectedReplicas,
+		MaxXidAge:                  m.MaxXidAge,
+		VacuumBacklogTables:        m.VacuumBacklogTables,
+		MaxOverdueVacuumAgeHours:   m.MaxOverdueVacuumAgeHours,
+		TablesNeverVacuumed:        m.TablesNeverVacuumed,
+		AutovacuumEnabled:          m.AutovacuumEnabled,
+		TrackCountsEnabled:         m.TrackCountsEnabled,
+		TablesWithAutovacuumOff:    m.TablesWithAutovacuumOff,
+		MaxRelfrozenxidAge:         m.MaxRelfrozenxidAge,
+		HorizonLagXids:             m.HorizonLagXids,
+		HorizonDatabase:            m.HorizonDatabase,
+		TimedCheckpoints:           m.TimedCheckpoints,
+		RequestedCheckpoints:       m.RequestedCheckpoints,
+		ActiveLockWaiters:          m.ActiveLockWaiters,
+		LongestLockWaitSeconds:     m.LongestLockWaitSeconds,
+		UngrantedLocks:             m.UngrantedLocks,
+		DeadlocksTotal:             m.DeadlocksTotal,
+		HeavyweightLocksTotal:      m.HeavyweightLocksTotal,
+		MaxLocksPerTransaction:     m.MaxLocksPerTransaction,
+		HotUpdateRatio:             m.HotUpdateRatio,
+		NewpageUpdateRatio:         m.NewpageUpdateRatio,
+		StalePlannerStatsTables:    m.StalePlannerStatsTables,
+		WalLevel:                   m.WalLevel,
+		LogicalSlotsActive:         m.LogicalSlotsActive,
 	}
 }
 
@@ -184,9 +188,15 @@ func rawFromSnapshot(m *dto.HealthScoreMetrics) health.RawMetrics {
 // them — even when a datasource is configured.
 func overlayCatalogFacts(raw *health.RawMetrics, m *dto.HealthScoreMetrics) {
 	raw.InRecovery = m.InRecovery
+	raw.Database = m.Database
 
 	// Connections — longest transaction is a catalog/activity fact, not scraped.
 	raw.LongestTransactionSeconds = m.LongestTransactionSeconds
+
+	// Which database each activity-derived finding belongs to: pg_stat_activity
+	// only, so the datasource never carries it.
+	raw.LongestTransactionDatabase = m.LongestTransactionDatabase
+	raw.IdleInTransactionDatabase = m.IdleInTransactionDatabase
 
 	// Performance — track_io_timing GUC.
 	raw.TrackIoTimingEnabled = m.TrackIoTimingEnabled
@@ -210,6 +220,7 @@ func overlayCatalogFacts(raw *health.RawMetrics, m *dto.HealthScoreMetrics) {
 
 	// Horizon — oldest backend_xmin pinning VACUUM.
 	raw.HorizonLagXids = m.HorizonLagXids
+	raw.HorizonDatabase = m.HorizonDatabase
 
 	// WAL / checkpoint configuration.
 	raw.WalLevel = m.WalLevel
@@ -240,6 +251,11 @@ func (s *Handlers) metricsRawWithCatalog(ctx context.Context, cluster, instance 
 	if err != nil {
 		return health.RawMetrics{}, 0, false
 	}
+
+	// Everything the datasource carries is an instance-wide aggregate, so the
+	// rules it feeds must not be pinned to the catalog snapshot's database —
+	// only the facts overlayCatalogFacts writes back below are per-database.
+	raw.MetricsInstanceWide = true
 
 	m, sErr := s.repo.GetHealthScoreMetrics(ctx, cluster, instance, "")
 	if sErr != nil {
@@ -307,11 +323,18 @@ func (s *Handlers) GetHealthScoreRecommendations(
 			routePtr = &route
 		}
 
+		var dbPtr *string
+		if r.Database != "" {
+			db := r.Database
+			dbPtr = &db
+		}
+
 		out = append(out, serverhttp.HealthScoreRecommendation{
 			RuleId:       r.RuleID,
 			Category:     string(r.Category),
 			Severity:     serverhttp.HealthScoreRecommendationSeverity(r.Severity),
 			MetricValue:  r.MetricValue,
+			Database:     dbPtr,
 			Context:      ctxPtr,
 			RelatedRoute: routePtr,
 		})

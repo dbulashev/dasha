@@ -5293,8 +5293,9 @@ components:
           type: boolean
           description: >-
             True when source is "metrics" but no datasource series matched any
-            selector for the target — the score is built from absent signals and
-            may be understated. Check selector label matching at
+            selector for the target — the score is built from absent signals,
+            which read as healthy, so it may be overstated and understate the
+            problem. Check selector label matching at
             GET /api/common/health-score/datasource/status.
         in_recovery:
           type: boolean
@@ -5380,7 +5381,9 @@ components:
       type: object
       required:
         - PID
+        - Database
         - Username
+        - BackendType
         - State
         - WaitEventType
         - WaitEvent
@@ -5391,7 +5394,14 @@ components:
         PID:
           type: integer
           format: int32
+        Database:
+          type: string
         Username:
+          type: string
+        BackendType:
+          description: >-
+            pg_stat_activity.backend_type — "autovacuum worker" marks a session
+            that legitimately holds a long snapshot and must not be terminated.
           type: string
         State:
           type: string
@@ -5425,6 +5435,12 @@ components:
         metric_value:
           type: number
           format: double
+        database:
+          description: >-
+            Database the finding belongs to. Null when it is instance-wide and
+            no single database owns it.
+          type: string
+          nullable: true
         context:
           type: object
           additionalProperties: true

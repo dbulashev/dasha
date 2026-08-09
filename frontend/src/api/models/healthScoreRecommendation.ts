@@ -12,6 +12,11 @@ export interface HealthScoreRecommendation {
   category: string
   severity: HealthScoreRecommendationSeverity
   metric_value: number
+  /**
+   * Database the finding belongs to. Null when it is instance-wide and no single database owns it.
+   * @nullable
+   */
+  database?: string | null
   /** @nullable */
   context?: HealthScoreRecommendationContext
   /** @nullable */

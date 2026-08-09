@@ -193,7 +193,9 @@ func (p *PgxPool) GetHealthScoreHorizonBlockingSessions(
 		var r dto.HealthScoreHorizonBlockingSession
 		if err := rows.Scan(
 			&r.PID,
+			&r.Database,
 			&r.Username,
+			&r.BackendType,
 			&r.State,
 			&r.WaitEventType,
 			&r.WaitEvent,

@@ -7,7 +7,7 @@ import (
 
 func TestComputePerDB_OnlyApplicableCategories(t *testing.T) {
 	scores := ComputePerDB([]PerDBMetrics{
-		{Database: "app", SizeBytes: 1 << 30, CacheHitRatio: 99.9},
+		{Database: "app", SizeBytes: 1 << 30, CacheHitRatio: 99.9, HotUpdateRatio: 1.0},
 	}, DefaultWeights(), false)
 
 	if len(scores) != 1 {
@@ -35,12 +35,13 @@ func TestComputePerDB_OnlyApplicableCategories(t *testing.T) {
 func TestComputePerDB_HealthyScoresHigh(t *testing.T) {
 	scores := ComputePerDB([]PerDBMetrics{
 		{
-			Database:      "healthy",
-			SizeBytes:     1 << 30,
-			CacheHitRatio: 99.9,
-			MaxDeadRatio:  1,
-			AvgDeadRatio:  0.5,
-			MaxXidAge:     50_000_000,
+			Database:       "healthy",
+			SizeBytes:      1 << 30,
+			CacheHitRatio:  99.9,
+			MaxDeadRatio:   1,
+			AvgDeadRatio:   0.5,
+			MaxXidAge:      50_000_000,
+			HotUpdateRatio: 1.0,
 		},
 	}, DefaultWeights(), false)
 
@@ -58,6 +59,7 @@ func TestComputePerDB_BadStorageDrops(t *testing.T) {
 			MaxDeadRatio:    60,
 			AvgDeadRatio:    35,
 			TablesHighBloat: 25,
+			HotUpdateRatio:  1.0,
 		},
 	}, DefaultWeights(), false)
 
@@ -72,7 +74,8 @@ func TestComputePerDB_XidWraparoundFloor(t *testing.T) {
 	m := PerDBMetrics{
 		Database: "danger", SizeBytes: 1 << 30,
 		CacheHitRatio: 99.9, MaxDeadRatio: 1, AvgDeadRatio: 0.5,
-		MaxXidAge: xidFailsafeAge,
+		HotUpdateRatio: 1.0,
+		MaxXidAge:      xidFailsafeAge,
 	}
 
 	primary := ComputePerDB([]PerDBMetrics{m}, DefaultWeights(), false)[0]
@@ -85,91 +88,6 @@ func TestComputePerDB_XidWraparoundFloor(t *testing.T) {
 	standby := ComputePerDB([]PerDBMetrics{m}, DefaultWeights(), true)[0]
 	if standby.Score <= criticalScoreCeiling {
 		t.Errorf("standby per-DB must not be floored on inherited xid age, got %v", standby.Score)
-	}
-}
-
-func TestPerDBCategoryRollup_WeightedBySize(t *testing.T) {
-	// Two databases:
-	// - tiny (1 MB): performance score 100
-	// - huge (10 GB): performance score 50
-	// Weighted-mean should heavily favor huge → ~50.
-	scores := []DatabaseScore{
-		{
-			Database:  "tiny",
-			SizeBytes: 1 << 20,
-			Categories: []CategoryResult{
-				{Name: "performance", Weight: 1, Score: 100},
-			},
-		},
-		{
-			Database:  "huge",
-			SizeBytes: 10 << 30,
-			Categories: []CategoryResult{
-				{Name: "performance", Weight: 1, Score: 50},
-			},
-		},
-	}
-
-	rollup := PerDBCategoryRollup(scores)
-
-	got := rollup["performance"]
-	if got > 51 || got < 49 {
-		t.Errorf("rollup performance should be ~50 (dominated by huge DB), got %v", got)
-	}
-}
-
-func TestPerDBCategoryRollup_PureMean_EqualSize(t *testing.T) {
-	scores := []DatabaseScore{
-		{Database: "a", SizeBytes: 1 << 30, Categories: []CategoryResult{{Name: "performance", Weight: 1, Score: 80}}},
-		{Database: "b", SizeBytes: 1 << 30, Categories: []CategoryResult{{Name: "performance", Weight: 1, Score: 60}}},
-	}
-
-	rollup := PerDBCategoryRollup(scores)
-
-	if math.Abs(rollup["performance"]-70) > 0.5 {
-		t.Errorf("equal-size databases → mean 70, got %v", rollup["performance"])
-	}
-}
-
-func TestPerDBCategoryRollup_ZeroSizeNotDropped(t *testing.T) {
-	scores := []DatabaseScore{
-		{Database: "newly_created", SizeBytes: 0, Categories: []CategoryResult{{Name: "performance", Weight: 1, Score: 100}}},
-	}
-
-	rollup := PerDBCategoryRollup(scores)
-	if rollup["performance"] != 100 {
-		t.Errorf("zero-size DB should still be counted, got %v", rollup["performance"])
-	}
-}
-
-func TestPerDBCategoryRollup_Empty(t *testing.T) {
-	if r := PerDBCategoryRollup(nil); r != nil {
-		t.Errorf("empty input should yield nil, got %v", r)
-	}
-}
-
-func TestPerDBCategoryRollup_SkipsDroppedCategory(t *testing.T) {
-	// A dropped category (Weight == 0, e.g. maintenance on a standby) carries a
-	// placeholder Score=100 — it must not leak into the rollup as a green entry.
-	scores := []DatabaseScore{
-		{
-			Database:  "standby-db",
-			SizeBytes: 1 << 30,
-			Categories: []CategoryResult{
-				{Name: "performance", Weight: 0.5, Score: 60},
-				{Name: "maintenance", Weight: 0, Score: 100},
-			},
-		},
-	}
-
-	rollup := PerDBCategoryRollup(scores)
-
-	if _, ok := rollup["maintenance"]; ok {
-		t.Errorf("dropped maintenance (Weight 0) must be excluded, got %v", rollup["maintenance"])
-	}
-
-	if rollup["performance"] != 60 {
-		t.Errorf("active category should still roll up, got %v", rollup["performance"])
 	}
 }
 
@@ -260,6 +178,7 @@ func TestComputePerDB_InRecoveryDropsMaintenance(t *testing.T) {
 		CacheHitRatio:            99.9,
 		MaxDeadRatio:             1,
 		AvgDeadRatio:             0.5,
+		HotUpdateRatio:           1.0,
 		MaxXidAge:                1_900_000_000, // near wraparound
 		MaxOverdueVacuumAgeHours: 10_000,
 		TablesNeverVacuumed:      5,
@@ -284,6 +203,34 @@ func TestComputePerDB_InRecoveryDropsMaintenance(t *testing.T) {
 			if c.Weight != 0 {
 				t.Errorf("standby maintenance weight must be 0, got %v", c.Weight)
 			}
+		}
+	}
+}
+
+func TestComputePerDB_LowHotUpdateRatioDrops(t *testing.T) {
+	// The per-DB drill-down evaluates the HOT rules against the database's own
+	// metrics, so the per-DB score has to see them too — otherwise a database
+	// with two HOT findings still shows 100.
+	scores := ComputePerDB([]PerDBMetrics{
+		{
+			Database:           "hot",
+			SizeBytes:          1 << 30,
+			CacheHitRatio:      99.9,
+			MaxDeadRatio:       1,
+			AvgDeadRatio:       0.5,
+			MaxXidAge:          50_000_000,
+			HotUpdateRatio:     0.4,
+			NewpageUpdateRatio: 0.25,
+		},
+	}, DefaultWeights(), false)
+
+	if scores[0].Score >= 100 {
+		t.Errorf("database with HOT findings must not score 100, got %v", scores[0].Score)
+	}
+
+	for _, c := range scores[0].Categories {
+		if c.Name == CategoryStorage && c.Penalty == 0 {
+			t.Error("storage penalty must reflect the HOT metrics")
 		}
 	}
 }

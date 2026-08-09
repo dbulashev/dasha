@@ -14,12 +14,29 @@ type RawMetrics struct {
 	// same treatment as the replication category on instances without replicas.
 	InRecovery bool
 
+	// Database the snapshot was taken in. The per-database signals below
+	// (cache hit, dead tuples, vacuum queue, HOT) describe it, so their
+	// recommendations name it instead of the whole instance.
+	Database string
+
+	// MetricsInstanceWide marks a metrics-backed snapshot, where the
+	// time-series signals are datasource aggregates over the whole instance
+	// (sum/max across every database) rather than facts about Database.
+	// See metricsInstanceWideRules — the rules they feed drop the attribution.
+	// Catalog facts overlaid from the SQL snapshot keep theirs.
+	MetricsInstanceWide bool
+
 	// Connections
-	TotalConnections          int
-	ActiveConnections         int
-	IdleInTransaction         int
-	LongestTransactionSeconds float64
-	MaxConnections            int
+	TotalConnections  int
+	ActiveConnections int
+	IdleInTransaction int
+	// IdleInTransactionDatabase / LongestTransactionDatabase name the database
+	// the offending session runs in — pg_stat_activity is instance-wide, so it
+	// is usually not Database above.
+	IdleInTransactionDatabase  string
+	LongestTransactionSeconds  float64
+	LongestTransactionDatabase string
+	MaxConnections             int
 
 	// Performance
 	CacheHitRatio        float64
@@ -48,6 +65,8 @@ type RawMetrics struct {
 
 	// Horizon
 	HorizonLagXids int64
+	// HorizonDatabase is where the session holding the oldest backend_xmin runs.
+	HorizonDatabase string
 
 	// WAL & Checkpoint
 	TimedCheckpoints     int64
@@ -280,6 +299,25 @@ func criticalCeiling(m RawMetrics) float64 {
 	return 100
 }
 
+// hotUpdatePenalty grades the share of UPDATEs that stayed on their page,
+// mirroring low_hot_update_ratio's thresholds. Kept out of penaltyStorage
+// because that function is also fed zero-value metrics, where a 0.0 ratio means
+// "not collected", not "no HOT at all"; every caller that does measure the
+// ratio adds this on top. The SQL returns 1.0 when no table has enough UPDATEs
+// to judge, so quiet databases stay unpenalised.
+func hotUpdatePenalty(ratio float64) float64 {
+	switch {
+	case ratio < 0.50:
+		return 30
+	case ratio < 0.65:
+		return 15
+	case ratio < 0.80:
+		return 5
+	default:
+		return 0
+	}
+}
+
 // criticalXidCeiling clamps the score to the red band once the transaction-ID
 // age reaches the wraparound failsafe zone, where PostgreSQL itself enters
 // emergency VACUUM. Returns 100 (no clamp) below that. Shared with the per-DB
@@ -353,17 +391,8 @@ func applyInstanceAdjustments(categories []CategoryResult, m RawMetrics) {
 		setDetail(categories, CategoryPerformance, "seq_scan_regression", math.Round(m.SeqScanRegressionRatio*100)/100)
 	}
 
-	// Storage: low HOT-update ratio (inverted — lower is worse). The SQL returns
-	// 1.0 when there are too few updates to judge, so quiet databases score 0.
-	switch {
-	case m.HotUpdateRatio < 0.50:
-		addPenalty(categories, CategoryStorage, 30)
-	case m.HotUpdateRatio < 0.65:
-		addPenalty(categories, CategoryStorage, 15)
-	case m.HotUpdateRatio < 0.80:
-		addPenalty(categories, CategoryStorage, 5)
-	}
-
+	// Storage: low HOT-update ratio (inverted — lower is worse).
+	addPenalty(categories, CategoryStorage, hotUpdatePenalty(m.HotUpdateRatio))
 	setDetail(categories, CategoryStorage, "hot_update_ratio", m.HotUpdateRatio)
 
 	// Storage: host disk usage (used/total). Free space running low hurts well
@@ -611,7 +640,7 @@ func penaltyStorage(m RawMetrics) CategoryResult {
 
 	// HOT-chain ruptures (high_newpage_update_ratio rule): a new-page UPDATE
 	// could not stay on the same page and had to touch every index. 0 on PG < 16
-	// (column absent → stays silent) and under per-DB scoring (not collected).
+	// (column absent → stays silent).
 	switch {
 	case m.NewpageUpdateRatio > 0.20:
 		penalty += 20

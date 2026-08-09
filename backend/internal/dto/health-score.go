@@ -39,7 +39,9 @@ type HealthScoreHighDeadRatioTable struct {
 // sessions detail (top sessions by oldest backend_xmin).
 type HealthScoreHorizonBlockingSession struct {
 	PID                 int32
+	Database            string
 	Username            string
+	BackendType         string
 	State               string
 	WaitEventType       string
 	WaitEvent           string
@@ -68,6 +70,10 @@ type HealthScoreDatabaseMetrics struct {
 	VacuumBacklogTables      int
 	MaxOverdueVacuumAgeHours float64
 	TablesNeverVacuumed      int
+
+	// HOT updates
+	HotUpdateRatio     float64
+	NewpageUpdateRatio float64
 }
 
 type HealthScoreMetrics struct {
@@ -76,12 +82,21 @@ type HealthScoreMetrics struct {
 	// is dropped (weight redistributed) when this is set.
 	InRecovery bool
 
+	// Database this snapshot was taken in — the per-database metrics below
+	// (cache hit, dead tuples, vacuum queue, HOT) describe it, not the instance.
+	Database string
+
 	// Connections
-	TotalConnections          int
-	ActiveConnections         int
-	IdleInTransaction         int
-	LongestTransactionSeconds float64
-	MaxConnections            int
+	TotalConnections  int
+	ActiveConnections int
+	IdleInTransaction int
+	// IdleInTransactionDatabase / LongestTransactionDatabase name the database
+	// the offending session runs in — pg_stat_activity is instance-wide, so it
+	// is usually not Database above.
+	IdleInTransactionDatabase  string
+	LongestTransactionSeconds  float64
+	LongestTransactionDatabase string
+	MaxConnections             int
 
 	// Performance
 	CacheHitRatio        float64
@@ -110,6 +125,8 @@ type HealthScoreMetrics struct {
 
 	// Horizon
 	HorizonLagXids int64
+	// HorizonDatabase is where the session holding the oldest backend_xmin runs.
+	HorizonDatabase string
 
 	// WAL & Checkpoint
 	TimedCheckpoints     int64

@@ -1006,7 +1006,8 @@
     "title": "Health Score",
     "tooltip": "Overall health of a PostgreSQL instance, 0 to 100. Covers connections, performance, storage, replication and maintenance.",
     "openDetailsPage": "Details",
-    "metricsDegraded": "Metrics mode is on and the instance was found in the datasource, but no metric matched the selectors: the score was built from empty data and may be too low. Check that the labels line up — GET /api/common/health-score/datasource/status.",
+    "metricsDegraded": "Metrics mode is on and the instance was found in the datasource, but no metric matched the selectors: the score was built from empty data and is too high — absent signals read as healthy. Check that the labels line up — GET /api/common/health-score/datasource/status.",
+    "metricsDegradedDatabases": "The Databases table below is always computed from the SQL snapshot, so its scores can be markedly lower.",
     "excellent": "Excellent",
     "warning": "Warning",
     "problems": "Problems",
@@ -1267,6 +1268,7 @@
         "deadTuples": "Dead tuples",
         "deadRatio": "Dead ratio",
         "username": "User",
+        "backendType": "Backend type",
         "state": "State",
         "xactDuration": "Transaction duration",
         "query": "Query"
@@ -1278,6 +1280,8 @@
     "recommendations": {
       "title": "Recommendations",
       "openRelated": "Open",
+      "scopeCluster": "Cluster-wide",
+      "databaseNotTracked": "This database is not connected to Dasha — the link opens a different one.",
       "searchLogs": "Search the logs",
       "showHowTo": "What to do",
       "hideHowTo": "Collapse",
@@ -1291,12 +1295,12 @@
       "idle_in_transaction": {
         "title": "Lingering idle in transaction",
         "short": "Connections idle in transaction (>30s): {metric_value}.",
-        "detail": "Transactions the application forgot about hold locks and block autovacuum. Check the application logs and whether the transactions are idempotent."
+        "detail": "Transactions the application forgot about hold locks and block autovacuum. Check the application logs and whether the transactions are idempotent. Only client sessions reach this state — background workers such as autovacuum never do."
       },
       "long_running_transaction": {
         "title": "Long-running open transaction",
         "short": "The oldest transaction has been running for {metric_value} s.",
-        "detail": "Find it via pg_stat_activity and decide whether it should be cancelled (pg_terminate_backend)."
+        "detail": "Find it via pg_stat_activity and decide whether it should be cancelled (pg_terminate_backend). If it is an autovacuum worker (backend_type = 'autovacuum worker', a query like \"autovacuum: VACUUM …\"), running for hours is normal on a large table or during a freeze — leave it alone, terminating it only restarts the work."
       },
       "low_cache_hit_ratio": {
         "title": "Low cache hit ratio",
@@ -1365,7 +1369,7 @@
       "horizon_lag_xids": {
         "title": "The horizon is held back by a long transaction",
         "short": "The horizon is {metric_value} transactions behind — cleanup cannot remove dead tuples.",
-        "detail": "Long transactions (Repeatable Read, or idle in transaction) hold back the database horizon, so cleanup skips dead tuples as “not yet removable”. Find the backend with the lowest backend_xmin and end it.",
+        "detail": "Long transactions (Repeatable Read, or idle in transaction) hold back the database horizon, so cleanup skips dead tuples as “not yet removable”. Find the backend with the lowest backend_xmin and end it. Check backend_type first: the horizon can be held by an autovacuum worker itself (freezing a large table, say). That is expected work — leave it running, it releases the horizon on its own.",
         "sql": "SELECT pid, usename, state, query, now() - xact_start AS duration\nFROM pg_stat_activity\nWHERE backend_xmin IS NOT NULL\nORDER BY backend_xmin\nLIMIT 5;"
       },
       "requested_checkpoint_ratio": {

@@ -263,7 +263,14 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 	addTool(s, &mcp.Tool{
 		Name: "get_health_recommendations",
 		Description: "Get prioritized health-score recommendations (rule_id, category, severity, " +
-			"metric_value) for a cluster/instance. Pass database for the per-database drill-down.",
+			"metric_value, database) for a cluster/instance. Pass database for the per-database drill-down. " +
+			"Each recommendation names the database it belongs to — for the activity rules " +
+			"(long_running_transaction, idle_in_transaction, horizon_lag_xids) that is the database of the " +
+			"offending session, so query that one, not the selected one; a null means instance-wide. " +
+			"In metrics mode the rules fed by datasource aggregates (cache hit, dead ratios, HOT, xid age, " +
+			"checksums, disk, regressions) are null as well, and sequence_exhaustion is null at instance " +
+			"scope in either mode — that means no single database owns the number, not that no database " +
+			"is affected.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a recommendationsArgs) (*mcp.CallToolResult, any, error) {
 		var db *string
 		if a.Database != "" {
