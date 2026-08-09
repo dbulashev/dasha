@@ -41,16 +41,18 @@ type LockCapture struct {
 // blockedProber is the slice of Repo captureLocks needs (one method), so it can
 // be unit-tested with a fake.
 type blockedProber interface {
-	GetQueriesBlocked(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.QueryBlocked, error)
+	GetQueriesBlocked(ctx context.Context, clusterName, instanceName, databaseName, scope string) ([]dto.QueryBlocked, error)
 }
 
 // CaptureLocks runs probeCount probes spaced by interval, keeping the harshest (most
 // blocked sessions, tie-broken by longest wait). Best-effort: all-probes-error returns
 // Captured=false rather than failing the snapshot. Exported for reuse by the manual path.
+// Callers pass dto.ScopeInstance: the activity that triggers a capture is measured
+// across the host, so contention in any of its databases belongs in the result.
 func CaptureLocks(
 	ctx context.Context,
 	repo blockedProber,
-	cluster, instance, database string,
+	cluster, instance, database, scope string,
 	probeCount int,
 	interval time.Duration,
 ) LockCapture {
@@ -79,7 +81,7 @@ func CaptureLocks(
 			break
 		}
 
-		rows, err := repo.GetQueriesBlocked(ctx, cluster, instance, database)
+		rows, err := repo.GetQueriesBlocked(ctx, cluster, instance, database, scope)
 		if err != nil {
 			lastErr = err
 

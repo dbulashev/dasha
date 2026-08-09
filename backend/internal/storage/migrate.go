@@ -126,6 +126,9 @@ ALTER TABLE health_score_weights
 	addSnapshotLocksDataSQL = `
 ALTER TABLE snapshots ADD COLUMN IF NOT EXISTS locks_data jsonb`
 
+	addSnapshotDatabasesSQL = `
+ALTER TABLE snapshots ADD COLUMN IF NOT EXISTS databases text[]`
+
 	addAutosnapshotLockConfigSQL = `
 ALTER TABLE autosnapshot_config_global
     ADD COLUMN IF NOT EXISTS capture_locks       boolean  NOT NULL DEFAULT true,
@@ -328,6 +331,7 @@ func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
 		createHotTopObjectIdxSQL,
 		addAutosnapshotHotConfigSQL,
 		dropAutosnapshotHotIntervalSQL,
+		addSnapshotDatabasesSQL,
 	} {
 		if _, err := s.ddlPool.Exec(ctx, ddl); err != nil {
 			return fmt.Errorf("storage: migrate: %w", err)

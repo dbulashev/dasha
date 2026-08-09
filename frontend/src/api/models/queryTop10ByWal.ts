@@ -8,6 +8,8 @@
 export interface QueryTop10ByWal {
   /** pg_stat_statements queryid as string to preserve int64 precision in JavaScript */
   QueryID: string
+  /** Database this entry belongs to; empty when the database no longer exists. */
+  Datname: string
   WalVolume: string
   WalBytes: number
   QueryTrunc: string

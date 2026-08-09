@@ -14,6 +14,7 @@ import type { QueryTop10Chart, QueryTop10ChartItem } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useApiLoader } from '@/composables/useApiLoader'
 import { useViewError } from '@/composables/useViewError'
+import { useQueryScope } from '@/composables/useQueryScope'
 import { copyToClipboard } from '@/utils/sql'
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip)
@@ -32,17 +33,17 @@ const METRICS: (keyof QueryTop10Chart)[] = [
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
 const { onError } = useViewError()
+const { scope } = useQueryScope()
 
 const { items: chartData, loading } = useApiLoader<QueryTop10Chart | null>(
   () => getQueriesTop10Chart({
     cluster_name: clusterName.value!,
     instance: hostName.value!,
     database: databaseName.value ?? undefined,
+    scope: scope.value,
   }),
   {
-    // databaseName is sent, but is not a dep: pg_stat_statements is
-    // instance-wide, so switching database would refetch the same numbers.
-    deps: [clusterName, hostName],
+    deps: [clusterName, hostName, databaseName, scope],
     guard: () => !!clusterName.value && !!hostName.value,
     onError,
     defaultValue: null,

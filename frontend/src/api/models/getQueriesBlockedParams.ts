@@ -7,9 +7,15 @@
 import type { ClusterNameParameter } from './clusterNameParameter'
 import type { DatabaseParameter } from './databaseParameter'
 import type { InstanceParameter } from './instanceParameter'
+import type { ScopeParameter } from './scopeParameter'
 
 export type GetQueriesBlockedParams = {
   cluster_name: ClusterNameParameter
   instance: InstanceParameter
   database: DatabaseParameter
+  /**
+ * Which slice of the instance the answer covers: `database` — only the rows of the named database, `instance` — every database of the host. Defaults to `database` when a database is named and to `instance` otherwise, so callers written before this parameter keep their instance-wide answer. Percentage fields are shares within the chosen scope.
+
+ */
+  scope?: ScopeParameter
 }

@@ -85,7 +85,8 @@ function fmtMsLocal(ms?: number | null): string {
             </span>
           </div>
 
-          <LockTree v-if="rows.length" :items="rows" />
+          <!-- Stored captures are instance-wide, so the database is always worth showing. -->
+          <LockTree v-if="rows.length" :items="rows" show-database />
           <div v-else class="text-medium-emphasis">{{ t('autosnapshot.locks.none') }}</div>
         </template>
       </v-card-text>

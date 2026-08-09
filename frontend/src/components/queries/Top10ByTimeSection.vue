@@ -6,15 +6,18 @@ import type { QueryTop10ByTime } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useApiLoader } from '@/composables/useApiLoader'
 import { useViewError } from '@/composables/useViewError'
+import { useQueryScope } from '@/composables/useQueryScope'
 import { highlightSql, copyToClipboard } from '@/utils/sql'
 import '@/assets/sql-highlight.css'
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
 const { onError } = useViewError()
+const { scope, isInstanceScope } = useQueryScope()
 
 const headers = computed(() => [
   { title: t('header.queryId'), key: 'QueryID' },
+  ...(isInstanceScope.value ? [{ title: t('header.database'), key: 'Datname' }] : []),
   { title: t('header.execTime'), key: 'ExecTimeMs' },
   { title: t('header.ioCpuPct'), key: 'IoCpuPct', sortable: false },
   { title: t('header.queryTrunc'), key: 'QueryTrunc' },
@@ -25,11 +28,10 @@ const { items, loading } = useApiLoader<QueryTop10ByTime[]>(
     cluster_name: clusterName.value!,
     instance: hostName.value!,
     database: databaseName.value ?? undefined,
+    scope: scope.value,
   }),
   {
-    // databaseName is sent, but is not a dep: pg_stat_statements is
-    // instance-wide, so switching database would refetch the same numbers.
-    deps: [clusterName, hostName],
+    deps: [clusterName, hostName, databaseName, scope],
     guard: () => !!clusterName.value && !!hostName.value,
     onError,
   },

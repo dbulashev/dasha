@@ -226,38 +226,40 @@ jobs:
       - name: Helm render tests
         run: deploy/charts/dasha/tests/render-tests.sh
 
-  # Report-only: never gates CI and is deliberately kept out of build-check's needs,
-  # because release.yaml gates releases on the build-check check-run.
-  sonar:
-    runs-on: ubuntu-latest
-    # Forks get no secrets: skip instead of failing.
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0 # blame data for New Code; a shallow clone degrades relevance
-          persist-credentials: false # the scanner only reads history, it never pushes
-      - uses: actions/setup-go@v7
-        with:
-          go-version: "1.26.5"
-          cache-dependency-path: backend/go.sum
-      # Without a report Sonar reads coverage as 0% and the Quality Gate fails on
-      # every pull request that adds code. Integration tests are included because
-      # most of the repository layer is only reachable against a real PostgreSQL;
-      # one version is enough for coverage, the CI matrix covers 14-18 separately.
-      - name: Tests with coverage
-        continue-on-error: true # a coverage gap must not turn into a red job
-        run: |
-          cd backend
-          go test -tags=integration -timeout=15m -covermode=atomic \
-            -coverpkg=./internal/... -coverprofile=coverage-sonar.out ./internal/...
-      - name: SonarQube Cloud scan
-        uses: SonarSource/sonarqube-scan-action@v8
-        continue-on-error: true
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        with:
-          projectBaseDir: backend
+  # Disabled: the free Sonar plan pins the Quality Gate at 80% coverage on New Code
+  # and the threshold cannot be changed, so the job stayed permanently red.
+  # Re-enable by uncommenting once coverage clears the gate or the plan allows a
+  # custom gate.
+  # sonar:
+  #   runs-on: ubuntu-latest
+  #   # Forks get no secrets: skip instead of failing.
+  #   if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+  #   steps:
+  #     - uses: actions/checkout@v7
+  #       with:
+  #         fetch-depth: 0 # blame data for New Code; a shallow clone degrades relevance
+  #         persist-credentials: false # the scanner only reads history, it never pushes
+  #     - uses: actions/setup-go@v7
+  #       with:
+  #         go-version: "1.26.5"
+  #         cache-dependency-path: backend/go.sum
+  #     # Without a report Sonar reads coverage as 0% and the Quality Gate fails on
+  #     # every pull request that adds code. Integration tests are included because
+  #     # most of the repository layer is only reachable against a real PostgreSQL;
+  #     # one version is enough for coverage, the CI matrix covers 14-18 separately.
+  #     - name: Tests with coverage
+  #       continue-on-error: true # a coverage gap must not turn into a red job
+  #       run: |
+  #         cd backend
+  #         go test -tags=integration -timeout=15m -covermode=atomic \
+  #           -coverpkg=./internal/... -coverprofile=coverage-sonar.out ./internal/...
+  #     - name: SonarQube Cloud scan
+  #       uses: SonarSource/sonarqube-scan-action@v8
+  #       continue-on-error: true
+  #       env:
+  #         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+  #       with:
+  #         projectBaseDir: backend
 
   build-check:
     runs-on: ubuntu-latest

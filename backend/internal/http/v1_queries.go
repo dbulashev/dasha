@@ -12,8 +12,15 @@ import (
 	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/pkg/mapstruct"
 	"github.com/dbulashev/dasha/internal/pkg/sanitize"
+	"github.com/dbulashev/dasha/internal/pkg/shortcut"
 	"github.com/dbulashev/dasha/internal/repository"
+	"github.com/dbulashev/dasha/internal/storage"
 )
+
+const msgIncomparableSnapshots = "these two cannot be compared: one names the database of every " +
+	"statement and the other was stored before per-database attribution existed, so a queryid " +
+	"means something different on each side. Compare snapshots of the same generation — " +
+	"live statistics always count as the newer one"
 
 func (s *Handlers) GetPgssStatsResetTime(
 	ctx context.Context,
@@ -39,7 +46,8 @@ func (s *Handlers) GetQueriesBlocked(
 	ctx context.Context,
 	req serverhttp.GetQueriesBlockedRequestObject,
 ) (serverhttp.GetQueriesBlockedResponseObject, error) {
-	queries, err := s.repo.GetQueriesBlocked(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
+	queries, err := s.repo.GetQueriesBlocked(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database,
+		resolveScope(req.Params.Scope, req.Params.Database))
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.GetQueriesBlocked404Response{}, nil
 	}
@@ -54,6 +62,7 @@ func (s *Handlers) GetQueriesBlocked(
 			return serverhttp.QueryBlocked{
 				LockedItem:                            t.LockedItem,
 				BlockedPid:                            t.BlockedPid,
+				BlockedDatabase:                       t.BlockedDatabase,
 				BlockedUser:                           t.BlockedUser,
 				BlockedQuery:                          sanitize.SQL(t.BlockedQuery),
 				BlockedDuration:                       t.BlockedDuration,
@@ -133,7 +142,10 @@ func (s *Handlers) GetQueriesTop10ByTime(
 	ctx context.Context,
 	req serverhttp.GetQueriesTop10ByTimeRequestObject,
 ) (serverhttp.GetQueriesTop10ByTimeResponseObject, error) {
-	queries, err := s.repo.GetQueriesTop10ByTime(ctx, req.Params.ClusterName, req.Params.Instance, deref(req.Params.Database))
+	database := deref(req.Params.Database)
+
+	queries, err := s.repo.GetQueriesTop10ByTime(ctx, req.Params.ClusterName, req.Params.Instance, database,
+		resolveScope(req.Params.Scope, database))
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.GetQueriesTop10ByTime404Response{}, nil
 	}
@@ -147,6 +159,7 @@ func (s *Handlers) GetQueriesTop10ByTime(
 		func(t dto.QueryTop10ByTime) serverhttp.QueryTop10ByTime {
 			return serverhttp.QueryTop10ByTime{
 				QueryID:    strconv.FormatInt(t.QueryID, 10),
+				Datname:    t.Datname,
 				ExecTime:   t.ExecTime,
 				ExecTimeMs: t.ExecTimeMs,
 				IoCpuPct:   t.IoCpuPct,
@@ -163,7 +176,10 @@ func (s *Handlers) GetQueriesTop10ByWal(
 	ctx context.Context,
 	req serverhttp.GetQueriesTop10ByWalRequestObject,
 ) (serverhttp.GetQueriesTop10ByWalResponseObject, error) {
-	queries, err := s.repo.GetQueriesTop10ByWal(ctx, req.Params.ClusterName, req.Params.Instance, deref(req.Params.Database))
+	database := deref(req.Params.Database)
+
+	queries, err := s.repo.GetQueriesTop10ByWal(ctx, req.Params.ClusterName, req.Params.Instance, database,
+		resolveScope(req.Params.Scope, database))
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.GetQueriesTop10ByWal404Response{}, nil
 	}
@@ -177,6 +193,7 @@ func (s *Handlers) GetQueriesTop10ByWal(
 		func(t dto.QueryTop10ByWal) serverhttp.QueryTop10ByWal {
 			return serverhttp.QueryTop10ByWal{
 				QueryID:    strconv.FormatInt(t.QueryID, 10),
+				Datname:    t.Datname,
 				WalVolume:  t.WalVolume,
 				WalBytes:   t.WalBytes,
 				QueryTrunc: sanitize.SQL(t.QueryTrunc),
@@ -190,7 +207,10 @@ func (s *Handlers) GetQueriesTop10Chart(
 	ctx context.Context,
 	req serverhttp.GetQueriesTop10ChartRequestObject,
 ) (serverhttp.GetQueriesTop10ChartResponseObject, error) {
-	items, err := s.repo.GetQueriesTop10Chart(ctx, req.Params.ClusterName, req.Params.Instance, deref(req.Params.Database))
+	database := deref(req.Params.Database)
+
+	items, err := s.repo.GetQueriesTop10Chart(ctx, req.Params.ClusterName, req.Params.Instance, database,
+		resolveScope(req.Params.Scope, database))
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.GetQueriesTop10Chart404Response{}, nil
 	}
@@ -204,6 +224,7 @@ func (s *Handlers) GetQueriesTop10Chart(
 	for _, item := range items {
 		entry := serverhttp.QueryTop10ChartItem{
 			QueryID: strconv.FormatInt(item.QueryID, 10),
+			Datname: item.Datname,
 			Pct:     item.Pct,
 		}
 
@@ -241,8 +262,10 @@ func (s *Handlers) GetQueriesReport(
 		excludeUsers = *req.Params.ExcludeUsers
 	}
 
+	database := deref(req.Params.Database)
+
 	queries, err := s.repo.GetQueriesReport(ctx, req.Params.ClusterName, req.Params.Instance,
-		deref(req.Params.Database), excludeUsers)
+		database, excludeUsers)
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.GetQueriesReport404Response{}, nil
 	}
@@ -252,7 +275,7 @@ func (s *Handlers) GetQueriesReport(
 	}
 
 	var ret serverhttp.GetQueriesReport200JSONResponse = mapstruct.SliceMap(
-		queries,
+		scopeReport(queries, resolveScope(req.Params.Scope, database), database),
 		func(t dto.QueryReport) serverhttp.QueryReport {
 			t.Query = sanitize.SQL(t.Query)
 			return mapQueryReport(t)
@@ -270,7 +293,7 @@ func (s *Handlers) GetQueriesCompare(
 	}
 
 	// Load source A (always a snapshot).
-	reportsA, err := s.storage.GetSnapshot(ctx, uuid.UUID(req.Params.SnapshotA))
+	reportsA, versionA, err := s.storage.GetSnapshot(ctx, uuid.UUID(req.Params.SnapshotA))
 	if err != nil {
 		return nil, fmt.Errorf("GetQueriesCompare | snapshot A: %w", err)
 	}
@@ -279,10 +302,17 @@ func (s *Handlers) GetQueriesCompare(
 		return serverhttp.GetQueriesCompare404Response{}, nil
 	}
 
+	// Live statistics always name the database of each row, so an absent B is
+	// the newer generation.
+	attributedA := versionA >= storage.ScopedJSONVersion
+	attributedB := true
+
 	var reportsB []dto.QueryReport
 
 	if req.Params.SnapshotB != nil {
-		reportsB, err = s.storage.GetSnapshot(ctx, uuid.UUID(*req.Params.SnapshotB))
+		var versionB int
+
+		reportsB, versionB, err = s.storage.GetSnapshot(ctx, uuid.UUID(*req.Params.SnapshotB))
 		if err != nil {
 			return nil, fmt.Errorf("GetQueriesCompare | snapshot B: %w", err)
 		}
@@ -290,7 +320,22 @@ func (s *Handlers) GetQueriesCompare(
 		if reportsB == nil {
 			return serverhttp.GetQueriesCompare404Response{}, nil
 		}
-	} else {
+
+		attributedB = versionB >= storage.ScopedJSONVersion
+	}
+
+	// Decided before the live report is read: on a refusal its rows are thrown
+	// away, and it is a full pass over pg_stat_statements.
+	scope, pairable := compareScope(attributedA, attributedB, req.Params.Scope, req.Params.Database)
+	if !pairable {
+		return serverhttp.GetQueriesCompare409JSONResponse{
+			IncomparableSnapshotsJSONResponse: serverhttp.IncomparableSnapshotsJSONResponse{
+				Message: msgIncomparableSnapshots,
+			},
+		}, nil
+	}
+
+	if req.Params.SnapshotB == nil {
 		var excludeUsers []string
 		if req.Params.ExcludeUsers != nil {
 			excludeUsers = *req.Params.ExcludeUsers
@@ -312,15 +357,15 @@ func (s *Handlers) GetQueriesCompare(
 	}
 
 	joined := mapstruct.SliceFullJoin(
-		reportsA, reportsB,
-		func(r dto.QueryReport) int64 { return r.QueryID },
-		func(r dto.QueryReport) int64 { return r.QueryID },
+		scopeReport(reportsA, scope, req.Params.Database),
+		scopeReport(reportsB, scope, req.Params.Database),
+		reportKeyOf, reportKeyOf,
 	)
 
 	items := make([]serverhttp.QueryCompareItem, 0, len(joined))
 
 	for _, pair := range joined {
-		var queryID int64
+		var key reportKey
 
 		var query string
 
@@ -328,7 +373,7 @@ func (s *Handlers) GetQueriesCompare(
 
 		if pair.Left != nil {
 			pair.Left.Query = sanitize.SQL(pair.Left.Query)
-			queryID = pair.Left.QueryID
+			key = reportKeyOf(*pair.Left)
 			query = pair.Left.Query
 			m := mapQueryReportMetrics(*pair.Left)
 			left = &m
@@ -336,8 +381,8 @@ func (s *Handlers) GetQueriesCompare(
 
 		if pair.Right != nil {
 			pair.Right.Query = sanitize.SQL(pair.Right.Query)
-			if queryID == 0 {
-				queryID = pair.Right.QueryID
+			if key.QueryID == 0 {
+				key = reportKeyOf(*pair.Right)
 			}
 
 			if query == "" {
@@ -349,7 +394,8 @@ func (s *Handlers) GetQueriesCompare(
 		}
 
 		items = append(items, serverhttp.QueryCompareItem{
-			QueryID: strconv.FormatInt(queryID, 10),
+			QueryID: strconv.FormatInt(key.QueryID, 10),
+			Datname: shortcut.Ptr(key.Datname),
 			Query:   query,
 			Left:    left,
 			Right:   right,

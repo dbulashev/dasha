@@ -5,7 +5,7 @@ import type { QueryBlocked } from '@/api/models/index'
 import { fmtMs as fmtMsUtil } from '@/utils/format'
 import '@/assets/sql-highlight.css'
 
-const props = defineProps<{ items: QueryBlocked[]; loading?: boolean }>()
+const props = defineProps<{ items: QueryBlocked[]; loading?: boolean; showDatabase?: boolean }>()
 
 const { t } = useI18n()
 
@@ -16,6 +16,7 @@ function fmtDuration(ms: number | null | undefined, fallback: string): string {
 interface LockTreeNode {
   pid: number
   user: string
+  database: string
   query: string
   duration: string
   mode: string
@@ -23,7 +24,8 @@ interface LockTreeNode {
   blocked: { pid: number; user: string; query: string; duration: string; mode: string; lockedItem: string }[]
 }
 
-// Group blocked/blocking pairs by blocking PID into a one-level tree.
+// Group blocked/blocking pairs by blocking PID into a one-level tree. A pair is
+// always inside one database, so the node carries the name of the blocked side.
 const lockTree = computed<LockTreeNode[]>(() => {
   const map = new Map<number, LockTreeNode>()
   for (const item of props.items) {
@@ -32,6 +34,7 @@ const lockTree = computed<LockTreeNode[]>(() => {
       node = {
         pid: item.BlockingPid,
         user: item.BlockingUser,
+        database: item.BlockedDatabase,
         query: item.CurrentOrRecentQueryInBlockingProcess,
         duration: fmtDuration(item.BlockingDurationMs, item.BlockingDuration),
         mode: item.BlockingMode,
@@ -68,6 +71,9 @@ const lockTree = computed<LockTreeNode[]>(() => {
       <v-card-title class="text-subtitle-1 d-flex align-center ga-2">
         <v-icon color="error" size="small">mdi-lock</v-icon>
         <span>PID {{ node.pid }} ({{ node.user }})</span>
+        <v-chip v-if="props.showDatabase && node.database" size="small" variant="tonal" prepend-icon="mdi-database">
+          {{ node.database }}
+        </v-chip>
         <v-chip size="small" color="warning" variant="tonal">{{ node.state }}</v-chip>
         <v-chip size="small" variant="tonal">{{ node.mode }}</v-chip>
         <v-chip size="small" variant="tonal">{{ node.duration }}</v-chip>

@@ -157,7 +157,20 @@ func healthDetailNames() string {
 type topQueriesArgs struct {
 	Cluster  string `json:"cluster" jsonschema:"Dasha cluster name"`
 	Instance string `json:"instance" jsonschema:"Dasha instance / host name"`
+	Database string `json:"database,omitempty" jsonschema:"Optional: database name; omit to rank across the whole instance"`
 	By       string `json:"by,omitempty" jsonschema:"Ranking metric: 'time' (total execution time, default) or 'wal' (WAL volume)"`
+}
+
+type blockedQueriesArgs struct {
+	Cluster  string `json:"cluster" jsonschema:"Dasha cluster name"`
+	Instance string `json:"instance" jsonschema:"Dasha instance / host name"`
+	Database string `json:"database" jsonschema:"Database name to inspect"`
+	Scope    string `json:"scope,omitempty" jsonschema:"Optional: 'database' (default) lists that database only; 'instance' lists every database of the host"`
+}
+
+type listSnapshotsArgs struct {
+	Cluster  string `json:"cluster" jsonschema:"Dasha cluster name"`
+	Instance string `json:"instance" jsonschema:"Dasha instance / host name"`
 }
 
 type listIndexesArgs struct {
@@ -176,6 +189,7 @@ type healthTrendArgs struct {
 type queryReportArgs struct {
 	Cluster      string   `json:"cluster" jsonschema:"Dasha cluster name"`
 	Instance     string   `json:"instance" jsonschema:"Dasha instance / host name"`
+	Database     string   `json:"database,omitempty" jsonschema:"Optional: database name; omit for the whole instance"`
 	ExcludeUsers []string `json:"exclude_users,omitempty" jsonschema:"Optional: usernames to exclude (e.g. monitoring/replication roles)"`
 }
 
@@ -183,6 +197,7 @@ type queryCompareArgs struct {
 	Cluster      string   `json:"cluster" jsonschema:"Dasha cluster name"`
 	Instance     string   `json:"instance" jsonschema:"Dasha instance / host name"`
 	Database     string   `json:"database" jsonschema:"Database name"`
+	Scope        string   `json:"scope,omitempty" jsonschema:"Optional: 'database' (default) compares that database only; 'instance' compares every database of the host"`
 	SnapshotA    string   `json:"snapshot_a" jsonschema:"Baseline snapshot ID (UUID, from list_snapshots)"`
 	SnapshotB    string   `json:"snapshot_b,omitempty" jsonschema:"Optional: second snapshot ID; omit to compare snapshot_a vs. live stats"`
 	ExcludeUsers []string `json:"exclude_users,omitempty" jsonschema:"Optional: usernames to exclude"`
@@ -293,13 +308,15 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 	addTool(s, &mcp.Tool{
 		Name: "top_queries",
 		Description: "List the top queries for a cluster/instance, ranked by total execution time " +
-			"(by='time', default) or WAL volume (by='wal'). Requires pg_stat_statements.",
+			"(by='time', default) or WAL volume (by='wal'). Pass database to rank inside one database; " +
+			"without it the ranking covers every database of the host and each entry names its own " +
+			"('datname'). Requires pg_stat_statements.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a topQueriesArgs) (*mcp.CallToolResult, any, error) {
 		switch a.By {
 		case "", "time":
-			return jsonResult(c.TopQueriesByTime(ctx, a.Cluster, a.Instance))
+			return jsonResult(c.TopQueriesByTime(ctx, a.Cluster, a.Instance, a.Database))
 		case "wal":
-			return jsonResult(c.TopQueriesByWal(ctx, a.Cluster, a.Instance))
+			return jsonResult(c.TopQueriesByWal(ctx, a.Cluster, a.Instance, a.Database))
 		default:
 			return errResult("by must be 'time' or 'wal'"), nil, nil
 		}
@@ -433,9 +450,12 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 	addTool(s, &mcp.Tool{
 		Name: "blocked_queries",
 		Description: "List sessions currently blocked on locks (and the sessions blocking them) " +
-			"for a database.",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, a dbArgs) (*mcp.CallToolResult, any, error) {
-		return jsonResult(c.BlockedQueries(ctx, a.Cluster, a.Instance, a.Database))
+			"for a database, or for the whole host with scope='instance' — an incident rarely stays " +
+			"inside one database. Every row names the database it belongs to; a lock target in another " +
+			"database is reported as a relation OID, since names resolve through the catalog of the " +
+			"database being read.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, a blockedQueriesArgs) (*mcp.CallToolResult, any, error) {
+		return jsonResult(c.BlockedQueries(ctx, a.Cluster, a.Instance, a.Database, a.Scope))
 	})
 
 	addTool(s, &mcp.Tool{
@@ -498,30 +518,39 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 	addTool(s, &mcp.Tool{
 		Name: "query_report",
 		Description: "Get the full pg_stat_statements report for a cluster/instance (per-query calls, time, " +
-			"rows, I/O). Pass exclude_users to drop noise from monitoring/replication roles. Requires pg_stat_statements.",
+			"rows, I/O). Every row names its database in 'datname' and is ranked within it, so a queryid " +
+			"identifies a statement only together with that name. Pass database to keep only that one — " +
+			"percentages are then shares of it, otherwise shares of the whole instance. Pass exclude_users " +
+			"to drop noise from monitoring/replication roles. Requires pg_stat_statements.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a queryReportArgs) (*mcp.CallToolResult, any, error) {
-		return jsonResult(c.QueryReport(ctx, a.Cluster, a.Instance, a.ExcludeUsers))
+		return jsonResult(c.QueryReport(ctx, a.Cluster, a.Instance, a.Database, a.ExcludeUsers))
 	})
 
 	addTool(s, &mcp.Tool{
 		Name: "list_snapshots",
-		Description: "List the stored pg_stat_statements snapshots for a database (id, captured_at). " +
-			"Use this to obtain the snapshot IDs that query_compare needs. Requires snapshot storage.",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, a dbArgs) (*mcp.CallToolResult, any, error) {
-		return jsonResult(c.Snapshots(ctx, a.Cluster, a.Instance, a.Database))
+		Description: "List the stored pg_stat_statements snapshots of an instance (id, captured_at, " +
+			"which databases each covers). Snapshots are host-wide — 'database' on a listed snapshot is " +
+			"only the database it was read through. Use this to obtain the snapshot IDs that query_compare " +
+			"needs. Requires snapshot storage.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, a listSnapshotsArgs) (*mcp.CallToolResult, any, error) {
+		return jsonResult(c.Snapshots(ctx, a.Cluster, a.Instance))
 	})
 
 	addTool(s, &mcp.Tool{
 		Name: "query_compare",
 		Description: "Compare two pg_stat_statements snapshots (snapshot_a vs snapshot_b) for a database to " +
-			"surface query regressions; omit snapshot_b to compare snapshot_a against live stats. Get IDs from list_snapshots.",
+			"surface query regressions; omit snapshot_b to compare snapshot_a against live stats. Sides are " +
+			"matched by queryid within a database. A snapshot stored before per-database attribution can only " +
+			"be compared against another one of its own generation — pairing it with a newer snapshot, or " +
+			"with live stats, is refused rather than answered with invented matches; list_snapshots reports " +
+			"the generation as json_version. Get IDs from list_snapshots.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a queryCompareArgs) (*mcp.CallToolResult, any, error) {
 		var b *string
 		if a.SnapshotB != "" {
 			b = &a.SnapshotB
 		}
 
-		return jsonResult(c.QueryCompare(ctx, a.Cluster, a.Instance, a.Database, a.SnapshotA, b, a.ExcludeUsers))
+		return jsonResult(c.QueryCompare(ctx, a.Cluster, a.Instance, a.Database, a.Scope, a.SnapshotA, b, a.ExcludeUsers))
 	})
 
 	addTool(s, &mcp.Tool{

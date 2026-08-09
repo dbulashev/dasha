@@ -1741,6 +1741,7 @@ paths:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
         - $ref: '#/components/parameters/Database'
+        - $ref: '#/components/parameters/Scope'
       responses:
         '200':
           description: Success
@@ -1804,6 +1805,7 @@ paths:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
         - $ref: '#/components/parameters/DatabaseOptional'
+        - $ref: '#/components/parameters/Scope'
       responses:
         '200':
           description: Success
@@ -1821,6 +1823,7 @@ paths:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
         - $ref: '#/components/parameters/DatabaseOptional'
+        - $ref: '#/components/parameters/Scope'
       responses:
         '200':
           description: Success
@@ -1840,6 +1843,7 @@ paths:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
         - $ref: '#/components/parameters/DatabaseOptional'
+        - $ref: '#/components/parameters/Scope'
       responses:
         '200':
           description: Success
@@ -1859,6 +1863,7 @@ paths:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
         - $ref: '#/components/parameters/DatabaseOptional'
+        - $ref: '#/components/parameters/Scope'
         - in: query
           name: exclude_users
           schema:
@@ -1925,7 +1930,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
-        - $ref: '#/components/parameters/Database'
+        - $ref: '#/components/parameters/DatabaseOptional'
       responses:
         '200':
           description: Success
@@ -1970,6 +1975,8 @@ paths:
             type: string
             format: uuid
           required: true
+        - $ref: '#/components/parameters/DatabaseOptional'
+        - $ref: '#/components/parameters/Scope'
       responses:
         '200':
           description: Success
@@ -2011,6 +2018,7 @@ paths:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
         - $ref: '#/components/parameters/Database'
+        - $ref: '#/components/parameters/Scope'
         - name: snapshot_a
           in: query
           required: true
@@ -2044,6 +2052,8 @@ paths:
                   $ref: '#/components/schemas/QueryCompareItem'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/IncomparableSnapshots'
         '501':
           description: Storage not configured
   /api/progress/analyze:
@@ -2638,6 +2648,18 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorMessage'
+    IncomparableSnapshots:
+      description: >
+        The two sides cannot be matched against each other: one names the
+        database of every statement and the other does not, because it was
+        stored before per-database attribution existed (json_version 1). A
+        queryid alone does not identify a statement across databases, so
+        pairing them would invent matches. Compare two snapshots of the same
+        generation instead — live statistics always count as the newer one.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorMessage'
     QueryTimeout:
       description: >
         The request did not complete within its timeout — the database, or
@@ -2686,6 +2708,20 @@ components:
         installed in one database only, and in a schema outside search_path;
         its contents are instance-wide either way. Defaults to any database of
         the instance that has the extension.
+
+    Scope:
+      in: query
+      name: scope
+      schema:
+        type: string
+      required: false
+      description: >
+        Which slice of the instance the answer covers: `database` — only the
+        rows of the named database, `instance` — every database of the host.
+        Defaults to `database` when a database is named and to `instance`
+        otherwise, so callers written before this parameter keep their
+        instance-wide answer. Percentage fields are shares within the chosen
+        scope.
 
   schemas:
     ErrorMessage:
@@ -3972,6 +4008,7 @@ components:
       required:
         - LockedItem
         - BlockedPid
+        - BlockedDatabase
         - BlockedUser
         - BlockedQuery
         - BlockedDuration
@@ -3985,9 +4022,16 @@ components:
       properties:
         LockedItem:
           type: string
+          description: >
+            Relation name of the lock target, or its OID when the target lives in
+            another database: names resolve through the catalog of the database
+            the backend reads from.
         BlockedPid:
           type: integer
           format: int32
+        BlockedDatabase:
+          type: string
+          description: Database of the blocked session (the blocking one is always in the same database).
         BlockedUser:
           type: string
         BlockedQuery:
@@ -4073,6 +4117,7 @@ components:
       type: object
       required:
         - QueryID
+        - Datname
         - ExecTime
         - ExecTimeMs
         - IoCpuPct
@@ -4083,6 +4128,9 @@ components:
         QueryID:
           type: string
           description: pg_stat_statements queryid as string to preserve int64 precision in JavaScript
+        Datname:
+          type: string
+          description: Database this entry belongs to; empty when the database no longer exists.
         ExecTime:
           type: string
         ExecTimeMs:
@@ -4103,6 +4151,7 @@ components:
       type: object
       required:
         - QueryID
+        - Datname
         - WalVolume
         - WalBytes
         - QueryTrunc
@@ -4110,6 +4159,9 @@ components:
         QueryID:
           type: string
           description: pg_stat_statements queryid as string to preserve int64 precision in JavaScript
+        Datname:
+          type: string
+          description: Database this entry belongs to; empty when the database no longer exists.
         WalVolume:
           type: string
         WalBytes:
@@ -4122,11 +4174,15 @@ components:
       type: object
       required:
         - QueryID
+        - Datname
         - Pct
       properties:
         QueryID:
           type: string
           description: pg_stat_statements queryid as string to preserve int64 precision in JavaScript
+        Datname:
+          type: string
+          description: Database this entry belongs to; empty when the database no longer exists.
         Pct:
           type: number
           format: double
@@ -4183,6 +4239,11 @@ components:
 
     QueryReport:
       type: object
+      description: >
+        One aggregated pg_stat_statements entry of a single database. A queryid
+        is only unique within a database, so a row is identified by the pair
+        (QueryID, Datname). Percentage fields are shares within the requested
+        scope — the database for scope=database, the whole instance otherwise.
       required:
         - QueryID
         - Query
@@ -4192,6 +4253,12 @@ components:
           description: pg_stat_statements queryid as string to preserve int64 precision in JavaScript
         Query:
           type: string
+        Datname:
+          type: string
+          description: >
+            Database this entry belongs to. Empty when the database no longer
+            exists, or when the row comes from a snapshot stored before
+            per-database attribution existed (json_version 1).
         Usernames:
           type: array
           items:
@@ -4451,6 +4518,9 @@ components:
         QueryID:
           type: string
           description: pg_stat_statements queryid as string to preserve int64 precision in JavaScript
+        Datname:
+          type: string
+          description: Database the pair belongs to; sides are matched by (QueryID, Datname).
         Query:
           type: string
         Left:
@@ -5654,6 +5724,16 @@ components:
           type: string
         JsonVersion:
           type: integer
+        Database:
+          type: string
+          description: >
+            Database the snapshot was read through. Provenance only — the
+            contents cover every database of the instance.
+        Databases:
+          type: array
+          items:
+            type: string
+          description: Databases represented inside the snapshot; empty for json_version 1.
         PgssStatsReset:
           type: string
           format: date-time

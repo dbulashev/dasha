@@ -1215,6 +1215,8 @@ type ProgressVacuum struct {
 
 // QueryBlocked defines model for QueryBlocked.
 type QueryBlocked struct {
+	// BlockedDatabase Database of the blocked session (the blocking one is always in the same database).
+	BlockedDatabase                       string   `json:"BlockedDatabase"`
 	BlockedDuration                       string   `json:"BlockedDuration"`
 	BlockedDurationMs                     *float64 `json:"BlockedDurationMs"`
 	BlockedMode                           string   `json:"BlockedMode"`
@@ -1227,27 +1229,34 @@ type QueryBlocked struct {
 	BlockingPid                           int32    `json:"BlockingPid"`
 	BlockingUser                          string   `json:"BlockingUser"`
 	CurrentOrRecentQueryInBlockingProcess string   `json:"CurrentOrRecentQueryInBlockingProcess"`
-	LockedItem                            string   `json:"LockedItem"`
-	StateOfBlockingProcess                string   `json:"StateOfBlockingProcess"`
+
+	// LockedItem Relation name of the lock target, or its OID when the target lives in another database: names resolve through the catalog of the database the backend reads from.
+	LockedItem             string `json:"LockedItem"`
+	StateOfBlockingProcess string `json:"StateOfBlockingProcess"`
 }
 
 // QueryCompareItem defines model for QueryCompareItem.
 type QueryCompareItem struct {
-	Left  *QueryReportMetrics `json:"Left"`
-	Query string              `json:"Query"`
+	// Datname Database the pair belongs to; sides are matched by (QueryID, Datname).
+	Datname *string             `json:"Datname,omitempty"`
+	Left    *QueryReportMetrics `json:"Left"`
+	Query   string              `json:"Query"`
 
 	// QueryID pg_stat_statements queryid as string to preserve int64 precision in JavaScript
 	QueryID string              `json:"QueryID"`
 	Right   *QueryReportMetrics `json:"Right"`
 }
 
-// QueryReport defines model for QueryReport.
+// QueryReport One aggregated pg_stat_statements entry of a single database. A queryid is only unique within a database, so a row is identified by the pair (QueryID, Datname). Percentage fields are shares within the requested scope — the database for scope=database, the whole instance otherwise.
 type QueryReport struct {
-	CacheHitRatio  *float64 `json:"CacheHitRatio"`
-	Calls          *int64   `json:"Calls"`
-	CallsPct       *float64 `json:"CallsPct"`
-	CpuTimeMs      *float64 `json:"CpuTimeMs"`
-	CpuTimePct     *float64 `json:"CpuTimePct"`
+	CacheHitRatio *float64 `json:"CacheHitRatio"`
+	Calls         *int64   `json:"Calls"`
+	CallsPct      *float64 `json:"CallsPct"`
+	CpuTimeMs     *float64 `json:"CpuTimeMs"`
+	CpuTimePct    *float64 `json:"CpuTimePct"`
+
+	// Datname Database this entry belongs to. Empty when the database no longer exists, or when the row comes from a snapshot stored before per-database attribution existed (json_version 1).
+	Datname        *string  `json:"Datname,omitempty"`
 	ExecTimeMs     *float64 `json:"ExecTimeMs"`
 	IoTimeMs       *float64 `json:"IoTimeMs"`
 	IoTimePct      *float64 `json:"IoTimePct"`
@@ -1353,7 +1362,10 @@ type QueryStatsStatus struct {
 
 // QueryTop10ByTime defines model for QueryTop10ByTime.
 type QueryTop10ByTime struct {
-	CpuPct     float64 `json:"CpuPct"`
+	CpuPct float64 `json:"CpuPct"`
+
+	// Datname Database this entry belongs to; empty when the database no longer exists.
+	Datname    string  `json:"Datname"`
 	ExecTime   string  `json:"ExecTime"`
 	ExecTimeMs float64 `json:"ExecTimeMs"`
 	IoCpuPct   string  `json:"IoCpuPct"`
@@ -1366,6 +1378,9 @@ type QueryTop10ByTime struct {
 
 // QueryTop10ByWal defines model for QueryTop10ByWal.
 type QueryTop10ByWal struct {
+	// Datname Database this entry belongs to; empty when the database no longer exists.
+	Datname string `json:"Datname"`
+
 	// QueryID pg_stat_statements queryid as string to preserve int64 precision in JavaScript
 	QueryID    string `json:"QueryID"`
 	QueryTrunc string `json:"QueryTrunc"`
@@ -1388,7 +1403,9 @@ type QueryTop10Chart struct {
 
 // QueryTop10ChartItem defines model for QueryTop10ChartItem.
 type QueryTop10ChartItem struct {
-	Pct float64 `json:"Pct"`
+	// Datname Database this entry belongs to; empty when the database no longer exists.
+	Datname string  `json:"Datname"`
+	Pct     float64 `json:"Pct"`
 
 	// QueryID pg_stat_statements queryid as string to preserve int64 precision in JavaScript
 	QueryID string `json:"QueryID"`
@@ -1606,6 +1623,12 @@ type SnapshotListItem struct {
 	CreatedAt    time.Time `json:"CreatedAt"`
 	DashaVersion string    `json:"DashaVersion"`
 
+	// Database Database the snapshot was read through. Provenance only — the contents cover every database of the instance.
+	Database *string `json:"Database,omitempty"`
+
+	// Databases Databases represented inside the snapshot; empty for json_version 1.
+	Databases *[]string `json:"Databases,omitempty"`
+
 	// HasLocks True when a lock snapshot was captured alongside this snapshot
 	HasLocks       *bool              `json:"HasLocks,omitempty"`
 	Id             openapi_types.UUID `json:"Id"`
@@ -1811,6 +1834,12 @@ type IncludeRevoked = bool
 
 // Instance defines model for Instance.
 type Instance = string
+
+// Scope defines model for Scope.
+type Scope = string
+
+// IncomparableSnapshots defines model for IncomparableSnapshots.
+type IncomparableSnapshots = ErrorMessage
 
 // ObjectLocked defines model for ObjectLocked.
 type ObjectLocked = ErrorMessage
@@ -2316,15 +2345,21 @@ type GetQueriesBlockedParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
 	Instance    Instance    `form:"instance" json:"instance"`
 	Database    Database    `form:"database" json:"database"`
+
+	// Scope Which slice of the instance the answer covers: `database` — only the rows of the named database, `instance` — every database of the host. Defaults to `database` when a database is named and to `instance` otherwise, so callers written before this parameter keep their instance-wide answer. Percentage fields are shares within the chosen scope.
+	Scope *Scope `form:"scope,omitempty" json:"scope,omitempty"`
 }
 
 // GetQueriesCompareParams defines parameters for GetQueriesCompare.
 type GetQueriesCompareParams struct {
-	ClusterName ClusterName         `form:"cluster_name" json:"cluster_name"`
-	Instance    Instance            `form:"instance" json:"instance"`
-	Database    Database            `form:"database" json:"database"`
-	SnapshotA   openapi_types.UUID  `form:"snapshot_a" json:"snapshot_a"`
-	SnapshotB   *openapi_types.UUID `form:"snapshot_b,omitempty" json:"snapshot_b,omitempty"`
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance    `form:"instance" json:"instance"`
+	Database    Database    `form:"database" json:"database"`
+
+	// Scope Which slice of the instance the answer covers: `database` — only the rows of the named database, `instance` — every database of the host. Defaults to `database` when a database is named and to `instance` otherwise, so callers written before this parameter keep their instance-wide answer. Percentage fields are shares within the chosen scope.
+	Scope     *Scope              `form:"scope,omitempty" json:"scope,omitempty"`
+	SnapshotA openapi_types.UUID  `form:"snapshot_a" json:"snapshot_a"`
+	SnapshotB *openapi_types.UUID `form:"snapshot_b,omitempty" json:"snapshot_b,omitempty"`
 
 	// ExcludeUsers Comma-separated list of usernames to exclude (applies to live B only)
 	ExcludeUsers *[]string `form:"exclude_users,omitempty" json:"exclude_users,omitempty"`
@@ -2344,6 +2379,9 @@ type GetQueriesReportParams struct {
 
 	// Database Database whose pg_stat_statements view is read. The extension may be installed in one database only, and in a schema outside search_path; its contents are instance-wide either way. Defaults to any database of the instance that has the extension.
 	Database *DatabaseOptional `form:"database,omitempty" json:"database,omitempty"`
+
+	// Scope Which slice of the instance the answer covers: `database` — only the rows of the named database, `instance` — every database of the host. Defaults to `database` when a database is named and to `instance` otherwise, so callers written before this parameter keep their instance-wide answer. Percentage fields are shares within the chosen scope.
+	Scope *Scope `form:"scope,omitempty" json:"scope,omitempty"`
 
 	// ExcludeUsers Comma-separated list of usernames to exclude from the report
 	ExcludeUsers *[]string `form:"exclude_users,omitempty" json:"exclude_users,omitempty"`
@@ -2378,11 +2416,22 @@ type GetQueriesRunningParams struct {
 // GetQueriesRunningParamsQueryFilterMode defines parameters for GetQueriesRunning.
 type GetQueriesRunningParamsQueryFilterMode string
 
+// GetSnapshotParams defines parameters for GetSnapshot.
+type GetSnapshotParams struct {
+	// Database Database whose pg_stat_statements view is read. The extension may be installed in one database only, and in a schema outside search_path; its contents are instance-wide either way. Defaults to any database of the instance that has the extension.
+	Database *DatabaseOptional `form:"database,omitempty" json:"database,omitempty"`
+
+	// Scope Which slice of the instance the answer covers: `database` — only the rows of the named database, `instance` — every database of the host. Defaults to `database` when a database is named and to `instance` otherwise, so callers written before this parameter keep their instance-wide answer. Percentage fields are shares within the chosen scope.
+	Scope *Scope `form:"scope,omitempty" json:"scope,omitempty"`
+}
+
 // GetSnapshotsParams defines parameters for GetSnapshots.
 type GetSnapshotsParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
 	Instance    Instance    `form:"instance" json:"instance"`
-	Database    Database    `form:"database" json:"database"`
+
+	// Database Database whose pg_stat_statements view is read. The extension may be installed in one database only, and in a schema outside search_path; its contents are instance-wide either way. Defaults to any database of the instance that has the extension.
+	Database *DatabaseOptional `form:"database,omitempty" json:"database,omitempty"`
 }
 
 // PostSnapshotParams defines parameters for PostSnapshot.
@@ -2402,6 +2451,9 @@ type GetQueriesTop10ByTimeParams struct {
 
 	// Database Database whose pg_stat_statements view is read. The extension may be installed in one database only, and in a schema outside search_path; its contents are instance-wide either way. Defaults to any database of the instance that has the extension.
 	Database *DatabaseOptional `form:"database,omitempty" json:"database,omitempty"`
+
+	// Scope Which slice of the instance the answer covers: `database` — only the rows of the named database, `instance` — every database of the host. Defaults to `database` when a database is named and to `instance` otherwise, so callers written before this parameter keep their instance-wide answer. Percentage fields are shares within the chosen scope.
+	Scope *Scope `form:"scope,omitempty" json:"scope,omitempty"`
 }
 
 // GetQueriesTop10ByWalParams defines parameters for GetQueriesTop10ByWal.
@@ -2411,6 +2463,9 @@ type GetQueriesTop10ByWalParams struct {
 
 	// Database Database whose pg_stat_statements view is read. The extension may be installed in one database only, and in a schema outside search_path; its contents are instance-wide either way. Defaults to any database of the instance that has the extension.
 	Database *DatabaseOptional `form:"database,omitempty" json:"database,omitempty"`
+
+	// Scope Which slice of the instance the answer covers: `database` — only the rows of the named database, `instance` — every database of the host. Defaults to `database` when a database is named and to `instance` otherwise, so callers written before this parameter keep their instance-wide answer. Percentage fields are shares within the chosen scope.
+	Scope *Scope `form:"scope,omitempty" json:"scope,omitempty"`
 }
 
 // GetQueriesTop10ChartParams defines parameters for GetQueriesTop10Chart.
@@ -2420,6 +2475,9 @@ type GetQueriesTop10ChartParams struct {
 
 	// Database Database whose pg_stat_statements view is read. The extension may be installed in one database only, and in a schema outside search_path; its contents are instance-wide either way. Defaults to any database of the instance that has the extension.
 	Database *DatabaseOptional `form:"database,omitempty" json:"database,omitempty"`
+
+	// Scope Which slice of the instance the answer covers: `database` — only the rows of the named database, `instance` — every database of the host. Defaults to `database` when a database is named and to `instance` otherwise, so callers written before this parameter keep their instance-wide answer. Percentage fields are shares within the chosen scope.
+	Scope *Scope `form:"scope,omitempty" json:"scope,omitempty"`
 }
 
 // GetReplicationConfigParams defines parameters for GetReplicationConfig.
@@ -2922,7 +2980,7 @@ type ClientInterface interface {
 	GetQueriesRunning(ctx context.Context, params *GetQueriesRunningParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetSnapshot request
-	GetSnapshot(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+	GetSnapshot(ctx context.Context, id openapi_types.UUID, params *GetSnapshotParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetSnapshotLocks request
 	GetSnapshotLocks(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -3990,8 +4048,8 @@ func (c *Client) GetQueriesRunning(ctx context.Context, params *GetQueriesRunnin
 	return c.Client.Do(req)
 }
 
-func (c *Client) GetSnapshot(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetSnapshotRequest(c.Server, id)
+func (c *Client) GetSnapshot(ctx context.Context, id openapi_types.UUID, params *GetSnapshotParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetSnapshotRequest(c.Server, id, params)
 	if err != nil {
 		return nil, err
 	}
@@ -9550,6 +9608,22 @@ func NewGetQueriesBlockedRequest(server string, params *GetQueriesBlockedParams)
 			}
 		}
 
+		if params.Scope != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "scope", runtime.ParamLocationQuery, *params.Scope); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		queryURL.RawQuery = queryValues.Encode()
 	}
 
@@ -9617,6 +9691,22 @@ func NewGetQueriesCompareRequest(server string, params *GetQueriesCompareParams)
 					queryValues.Add(k, v2)
 				}
 			}
+		}
+
+		if params.Scope != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "scope", runtime.ParamLocationQuery, *params.Scope); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
 		}
 
 		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "snapshot_a", runtime.ParamLocationQuery, params.SnapshotA); err != nil {
@@ -9792,6 +9882,22 @@ func NewGetQueriesReportRequest(server string, params *GetQueriesReportParams) (
 		if params.Database != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "database", runtime.ParamLocationQuery, *params.Database); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Scope != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "scope", runtime.ParamLocationQuery, *params.Scope); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -10035,7 +10141,7 @@ func NewGetQueriesRunningRequest(server string, params *GetQueriesRunningParams)
 }
 
 // NewGetSnapshotRequest generates requests for GetSnapshot
-func NewGetSnapshotRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+func NewGetSnapshotRequest(server string, id openapi_types.UUID, params *GetSnapshotParams) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -10058,6 +10164,44 @@ func NewGetSnapshotRequest(server string, id openapi_types.UUID) (*http.Request,
 	queryURL, err := serverURL.Parse(operationPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Database != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "database", runtime.ParamLocationQuery, *params.Database); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Scope != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "scope", runtime.ParamLocationQuery, *params.Scope); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -10148,16 +10292,20 @@ func NewGetSnapshotsRequest(server string, params *GetSnapshotsParams) (*http.Re
 			}
 		}
 
-		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "database", runtime.ParamLocationQuery, params.Database); err != nil {
-			return nil, err
-		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-			return nil, err
-		} else {
-			for k, v := range parsed {
-				for _, v2 := range v {
-					queryValues.Add(k, v2)
+		if params.Database != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "database", runtime.ParamLocationQuery, *params.Database); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
 				}
 			}
+
 		}
 
 		queryURL.RawQuery = queryValues.Encode()
@@ -10345,6 +10493,22 @@ func NewGetQueriesTop10ByTimeRequest(server string, params *GetQueriesTop10ByTim
 
 		}
 
+		if params.Scope != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "scope", runtime.ParamLocationQuery, *params.Scope); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		queryURL.RawQuery = queryValues.Encode()
 	}
 
@@ -10418,6 +10582,22 @@ func NewGetQueriesTop10ByWalRequest(server string, params *GetQueriesTop10ByWalP
 
 		}
 
+		if params.Scope != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "scope", runtime.ParamLocationQuery, *params.Scope); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		queryURL.RawQuery = queryValues.Encode()
 	}
 
@@ -10478,6 +10658,22 @@ func NewGetQueriesTop10ChartRequest(server string, params *GetQueriesTop10ChartP
 		if params.Database != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "database", runtime.ParamLocationQuery, *params.Database); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Scope != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "scope", runtime.ParamLocationQuery, *params.Scope); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -12456,7 +12652,7 @@ type ClientWithResponsesInterface interface {
 	GetQueriesRunningWithResponse(ctx context.Context, params *GetQueriesRunningParams, reqEditors ...RequestEditorFn) (*GetQueriesRunningResponse, error)
 
 	// GetSnapshotWithResponse request
-	GetSnapshotWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetSnapshotResponse, error)
+	GetSnapshotWithResponse(ctx context.Context, id openapi_types.UUID, params *GetSnapshotParams, reqEditors ...RequestEditorFn) (*GetSnapshotResponse, error)
 
 	// GetSnapshotLocksWithResponse request
 	GetSnapshotLocksWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetSnapshotLocksResponse, error)
@@ -14146,6 +14342,7 @@ type GetQueriesCompareResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *[]QueryCompareItem
+	JSON409      *IncomparableSnapshots
 }
 
 // Status returns HTTPResponse.Status
@@ -15612,8 +15809,8 @@ func (c *ClientWithResponses) GetQueriesRunningWithResponse(ctx context.Context,
 }
 
 // GetSnapshotWithResponse request returning *GetSnapshotResponse
-func (c *ClientWithResponses) GetSnapshotWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetSnapshotResponse, error) {
-	rsp, err := c.GetSnapshot(ctx, id, reqEditors...)
+func (c *ClientWithResponses) GetSnapshotWithResponse(ctx context.Context, id openapi_types.UUID, params *GetSnapshotParams, reqEditors ...RequestEditorFn) (*GetSnapshotResponse, error) {
+	rsp, err := c.GetSnapshot(ctx, id, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
@@ -17741,6 +17938,13 @@ func ParseGetQueriesCompareResponse(rsp *http.Response) (*GetQueriesCompareRespo
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest IncomparableSnapshots
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
 
 	}
 

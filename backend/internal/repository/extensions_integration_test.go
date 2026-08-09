@@ -46,13 +46,13 @@ func TestExtensionSchemaResolution(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, readable, "pg_stat_statements must stay readable outside search_path")
 
-	_, err = p.getQueriesTop10ByTime(ctx, vNum, pool)
+	_, err = p.getQueriesTop10ByTime(ctx, vNum, pool, nil)
 	require.NoError(t, err, "top by time")
 
-	_, err = p.getQueriesTop10ByWal(ctx, vNum, pool)
+	_, err = p.getQueriesTop10ByWal(ctx, vNum, pool, nil)
 	require.NoError(t, err, "top by wal")
 
-	_, err = p.getQueriesTop10Chart(ctx, vNum, pool)
+	_, err = p.getQueriesTop10Chart(ctx, vNum, pool, nil)
 	require.NoError(t, err, "top chart")
 
 	_, err = p.getQueriesReport(ctx, vNum, pool, []string{})

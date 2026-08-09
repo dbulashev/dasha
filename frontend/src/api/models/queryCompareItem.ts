@@ -9,6 +9,8 @@ import type { QueryReportMetrics } from './queryReportMetrics'
 export interface QueryCompareItem {
   /** pg_stat_statements queryid as string to preserve int64 precision in JavaScript */
   QueryID: string
+  /** Database the pair belongs to; sides are matched by (QueryID, Datname). */
+  Datname?: string
   Query: string
   Left?: QueryReportMetrics | null
   Right?: QueryReportMetrics | null

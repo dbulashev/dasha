@@ -13,7 +13,18 @@ import (
 	"github.com/dbulashev/dasha/internal/query"
 )
 
-func (p *PgxPool) GetQueriesBlocked(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.QueryBlocked, error) {
+// GetQueriesBlocked lists blocked/blocking pairs. pg_locks and pg_stat_activity
+// are instance-wide, so scope only decides whether the result is narrowed to the
+// connected database; object names, however, resolve through the catalog of the
+// database the pool connects to — entries of other databases carry a relation
+// OID instead of a name.
+func (p *PgxPool) GetQueriesBlocked(
+	ctx context.Context,
+	clusterName,
+	instanceName,
+	databaseName,
+	scope string,
+) ([]dto.QueryBlocked, error) {
 	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
 	if err != nil {
 		return nil, fmt.Errorf("GetQueriesBlocked | %w", err)
@@ -24,12 +35,22 @@ func (p *PgxPool) GetQueriesBlocked(ctx context.Context, clusterName, instanceNa
 		return nil, fmt.Errorf("get server version | %w", err)
 	}
 
-	ret, err := p.getQueriesBlocked(ctx, vNum, pool)
+	ret, err := p.getQueriesBlocked(ctx, vNum, pool, databaseFilter(databaseName, scope))
 	if err != nil {
 		return nil, fmt.Errorf("getQueriesBlocked | %w", err)
 	}
 
 	return ret, nil
+}
+
+// databaseFilter turns a scope into the nullable SQL parameter the templates
+// take: NULL keeps the answer instance-wide.
+func databaseFilter(databaseName, scope string) *string {
+	if scope == dto.ScopeInstance || databaseName == "" {
+		return nil
+	}
+
+	return &databaseName
 }
 
 func (p *PgxPool) GetQueriesRunning(
@@ -60,7 +81,13 @@ func (p *PgxPool) GetQueriesRunning(
 	return ret, nil
 }
 
-func (p *PgxPool) GetQueriesTop10ByTime(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.QueryTop10ByTime, error) {
+func (p *PgxPool) GetQueriesTop10ByTime(
+	ctx context.Context,
+	clusterName,
+	instanceName,
+	databaseName,
+	scope string,
+) ([]dto.QueryTop10ByTime, error) {
 	pool, err := p.pgssPool(ctx, clusterName, instanceName, databaseName)
 	if err != nil {
 		return nil, fmt.Errorf("GetQueriesTop10ByTime | %w", err)
@@ -75,7 +102,7 @@ func (p *PgxPool) GetQueriesTop10ByTime(ctx context.Context, clusterName, instan
 		return nil, nil
 	}
 
-	ret, err := p.getQueriesTop10ByTime(ctx, vNum, pool)
+	ret, err := p.getQueriesTop10ByTime(ctx, vNum, pool, databaseFilter(databaseName, scope))
 	if err != nil {
 		return nil, fmt.Errorf("getQueriesTop10ByTime | %w", err)
 	}
@@ -83,7 +110,13 @@ func (p *PgxPool) GetQueriesTop10ByTime(ctx context.Context, clusterName, instan
 	return ret, nil
 }
 
-func (p *PgxPool) GetQueriesTop10ByWal(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.QueryTop10ByWal, error) {
+func (p *PgxPool) GetQueriesTop10ByWal(
+	ctx context.Context,
+	clusterName,
+	instanceName,
+	databaseName,
+	scope string,
+) ([]dto.QueryTop10ByWal, error) {
 	pool, err := p.pgssPool(ctx, clusterName, instanceName, databaseName)
 	if err != nil {
 		return nil, fmt.Errorf("GetQueriesTop10ByWal | %w", err)
@@ -98,7 +131,7 @@ func (p *PgxPool) GetQueriesTop10ByWal(ctx context.Context, clusterName, instanc
 		return nil, nil
 	}
 
-	ret, err := p.getQueriesTop10ByWal(ctx, vNum, pool)
+	ret, err := p.getQueriesTop10ByWal(ctx, vNum, pool, databaseFilter(databaseName, scope))
 	if err != nil {
 		return nil, fmt.Errorf("getQueriesTop10ByWal | %w", err)
 	}
@@ -106,7 +139,13 @@ func (p *PgxPool) GetQueriesTop10ByWal(ctx context.Context, clusterName, instanc
 	return ret, nil
 }
 
-func (p *PgxPool) GetQueriesTop10Chart(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.QueryTop10ChartItem, error) {
+func (p *PgxPool) GetQueriesTop10Chart(
+	ctx context.Context,
+	clusterName,
+	instanceName,
+	databaseName,
+	scope string,
+) ([]dto.QueryTop10ChartItem, error) {
 	pool, err := p.pgssPool(ctx, clusterName, instanceName, databaseName)
 	if err != nil {
 		return nil, fmt.Errorf("GetQueriesTop10Chart | %w", err)
@@ -121,7 +160,7 @@ func (p *PgxPool) GetQueriesTop10Chart(ctx context.Context, clusterName, instanc
 		return nil, nil
 	}
 
-	ret, err := p.getQueriesTop10Chart(ctx, vNum, pool)
+	ret, err := p.getQueriesTop10Chart(ctx, vNum, pool, databaseFilter(databaseName, scope))
 	if err != nil {
 		return nil, fmt.Errorf("getQueriesTop10Chart | %w", err)
 	}
@@ -129,6 +168,10 @@ func (p *PgxPool) GetQueriesTop10Chart(ctx context.Context, clusterName, instanc
 	return ret, nil
 }
 
+// GetQueriesReport returns the report of the whole instance, every row tagged
+// with its database and ranked within it. Narrowing to one database is the HTTP
+// layer's job: the same rows are what a snapshot stores, and a snapshot must
+// stay usable after the user switches database.
 func (p *PgxPool) GetQueriesReport(
 	ctx context.Context,
 	clusterName,
@@ -162,7 +205,12 @@ func (p *PgxPool) GetQueriesReport(
 	return ret, nil
 }
 
-func (p *PgxPool) getQueriesBlocked(ctx context.Context, serverVersion int, pool *pgxpool.Pool) ([]dto.QueryBlocked, error) {
+func (p *PgxPool) getQueriesBlocked(
+	ctx context.Context,
+	serverVersion int,
+	pool *pgxpool.Pool,
+	database *string,
+) ([]dto.QueryBlocked, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
@@ -171,7 +219,7 @@ func (p *PgxPool) getQueriesBlocked(ctx context.Context, serverVersion int, pool
 		return nil, fmt.Errorf("getQueriesBlocked | %w", err)
 	}
 
-	rows, err := pool.Query(ctx, qStr)
+	rows, err := pool.Query(ctx, qStr, database)
 	if err != nil {
 		return nil, fmt.Errorf("getQueriesBlocked | %w", err)
 	}
@@ -180,13 +228,13 @@ func (p *PgxPool) getQueriesBlocked(ctx context.Context, serverVersion int, pool
 
 	for rows.Next() {
 		var (
-			lockedItem, blockedUser, blockedQuery, blockedDuration, blockedMode                        string
+			lockedItem, blockedDatabase, blockedUser, blockedQuery, blockedDuration, blockedMode       string
 			blockingUser, stateOfBlockingProcess, currentOrRecentQuery, blockingDuration, blockingMode string
 			blockedPid, blockingPid                                                                    int32
 			blockedDurationMs, blockingDurationMs                                                      pgtype.Float8
 		)
 
-		err = rows.Scan(&lockedItem, &blockedPid, &blockedUser, &blockedQuery, &blockedDuration, &blockedDurationMs,
+		err = rows.Scan(&lockedItem, &blockedPid, &blockedDatabase, &blockedUser, &blockedQuery, &blockedDuration, &blockedDurationMs,
 			&blockedMode, &blockingPid, &blockingUser, &stateOfBlockingProcess,
 			&currentOrRecentQuery, &blockingDuration, &blockingDurationMs, &blockingMode)
 		if err != nil {
@@ -196,6 +244,7 @@ func (p *PgxPool) getQueriesBlocked(ctx context.Context, serverVersion int, pool
 		entry := dto.QueryBlocked{
 			LockedItem:                            lockedItem,
 			BlockedPid:                            blockedPid,
+			BlockedDatabase:                       blockedDatabase,
 			BlockedUser:                           blockedUser,
 			BlockedQuery:                          blockedQuery,
 			BlockedDuration:                       blockedDuration,
@@ -289,7 +338,12 @@ func (p *PgxPool) getQueriesRunning(
 	return ret, nil
 }
 
-func (p *PgxPool) getQueriesTop10ByTime(ctx context.Context, serverVersion int, pool *pgxpool.Pool) ([]dto.QueryTop10ByTime, error) {
+func (p *PgxPool) getQueriesTop10ByTime(
+	ctx context.Context,
+	serverVersion int,
+	pool *pgxpool.Pool,
+	database *string,
+) ([]dto.QueryTop10ByTime, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
@@ -298,7 +352,7 @@ func (p *PgxPool) getQueriesTop10ByTime(ctx context.Context, serverVersion int, 
 		return nil, fmt.Errorf("getQueriesTop10ByTime | %w", err)
 	}
 
-	rows, err := pool.Query(ctx, qStr)
+	rows, err := pool.Query(ctx, qStr, database)
 	if err != nil {
 		return nil, fmt.Errorf("getQueriesTop10ByTime | %w", err)
 	}
@@ -307,18 +361,19 @@ func (p *PgxPool) getQueriesTop10ByTime(ctx context.Context, serverVersion int, 
 
 	for rows.Next() {
 		var (
-			queryID                        int64
-			execTime, ioCpuPct, queryTrunc string
-			execTimeMs, ioPct, cpuPct      float64
+			queryID                                 int64
+			datname, execTime, ioCpuPct, queryTrunc string
+			execTimeMs, ioPct, cpuPct               float64
 		)
 
-		err = rows.Scan(&queryID, &execTime, &execTimeMs, &ioCpuPct, &ioPct, &cpuPct, &queryTrunc)
+		err = rows.Scan(&queryID, &datname, &execTime, &execTimeMs, &ioCpuPct, &ioPct, &cpuPct, &queryTrunc)
 		if err != nil {
 			return nil, fmt.Errorf("getQueriesTop10ByTime | %w", err)
 		}
 
 		ret = append(ret, dto.QueryTop10ByTime{
 			QueryID:    queryID,
+			Datname:    datname,
 			ExecTime:   execTime,
 			ExecTimeMs: execTimeMs,
 			IoCpuPct:   ioCpuPct,
@@ -335,7 +390,12 @@ func (p *PgxPool) getQueriesTop10ByTime(ctx context.Context, serverVersion int, 
 	return ret, nil
 }
 
-func (p *PgxPool) getQueriesTop10ByWal(ctx context.Context, serverVersion int, pool *pgxpool.Pool) ([]dto.QueryTop10ByWal, error) {
+func (p *PgxPool) getQueriesTop10ByWal(
+	ctx context.Context,
+	serverVersion int,
+	pool *pgxpool.Pool,
+	database *string,
+) ([]dto.QueryTop10ByWal, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
@@ -344,7 +404,7 @@ func (p *PgxPool) getQueriesTop10ByWal(ctx context.Context, serverVersion int, p
 		return nil, fmt.Errorf("getQueriesTop10ByWal | %w", err)
 	}
 
-	rows, err := pool.Query(ctx, qStr)
+	rows, err := pool.Query(ctx, qStr, database)
 	if err != nil {
 		return nil, fmt.Errorf("getQueriesTop10ByWal | %w", err)
 	}
@@ -353,18 +413,19 @@ func (p *PgxPool) getQueriesTop10ByWal(ctx context.Context, serverVersion int, p
 
 	for rows.Next() {
 		var (
-			queryID               int64
-			walVolume, queryTrunc string
-			walBytes              int64
+			queryID                        int64
+			datname, walVolume, queryTrunc string
+			walBytes                       int64
 		)
 
-		err = rows.Scan(&queryID, &walVolume, &walBytes, &queryTrunc)
+		err = rows.Scan(&queryID, &datname, &walVolume, &walBytes, &queryTrunc)
 		if err != nil {
 			return nil, fmt.Errorf("getQueriesTop10ByWal | %w", err)
 		}
 
 		ret = append(ret, dto.QueryTop10ByWal{
 			QueryID:    queryID,
+			Datname:    datname,
 			WalVolume:  walVolume,
 			WalBytes:   walBytes,
 			QueryTrunc: queryTrunc,
@@ -378,7 +439,12 @@ func (p *PgxPool) getQueriesTop10ByWal(ctx context.Context, serverVersion int, p
 	return ret, nil
 }
 
-func (p *PgxPool) getQueriesTop10Chart(ctx context.Context, serverVersion int, pool *pgxpool.Pool) ([]dto.QueryTop10ChartItem, error) {
+func (p *PgxPool) getQueriesTop10Chart(
+	ctx context.Context,
+	serverVersion int,
+	pool *pgxpool.Pool,
+	database *string,
+) ([]dto.QueryTop10ChartItem, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
@@ -387,7 +453,7 @@ func (p *PgxPool) getQueriesTop10Chart(ctx context.Context, serverVersion int, p
 		return nil, fmt.Errorf("getQueriesTop10Chart | %w", err)
 	}
 
-	rows, err := pool.Query(ctx, qStr)
+	rows, err := pool.Query(ctx, qStr, database)
 	if err != nil {
 		return nil, fmt.Errorf("getQueriesTop10Chart | %w", err)
 	}
@@ -396,12 +462,12 @@ func (p *PgxPool) getQueriesTop10Chart(ctx context.Context, serverVersion int, p
 
 	for rows.Next() {
 		var (
-			metric  string
-			queryID int64
-			pct     float64
+			metric, datname string
+			queryID         int64
+			pct             float64
 		)
 
-		err = rows.Scan(&metric, &queryID, &pct)
+		err = rows.Scan(&metric, &queryID, &datname, &pct)
 		if err != nil {
 			return nil, fmt.Errorf("getQueriesTop10Chart | %w", err)
 		}
@@ -409,6 +475,7 @@ func (p *PgxPool) getQueriesTop10Chart(ctx context.Context, serverVersion int, p
 		ret = append(ret, dto.QueryTop10ChartItem{
 			Metric:  metric,
 			QueryID: queryID,
+			Datname: datname,
 			Pct:     pct,
 		})
 	}
@@ -420,7 +487,7 @@ func (p *PgxPool) getQueriesTop10Chart(ctx context.Context, serverVersion int, p
 	return ret, nil
 }
 
-func (p *PgxPool) getQueriesReport( //nolint:gocyclo
+func (p *PgxPool) getQueriesReport(
 	ctx context.Context,
 	serverVersion int,
 	pool *pgxpool.Pool,
@@ -446,158 +513,87 @@ func (p *PgxPool) getQueriesReport( //nolint:gocyclo
 			queryID                                                                    int64
 			queryText                                                                  pgtype.Text
 			usernames                                                                  []string
+			datname                                                                    string
 			rowsVal, calls                                                             pgtype.Int8
-			rowsPct, callsPct                                                          pgtype.Float8
-			totalTimeMs, totalTimePct                                                  pgtype.Float8
+			rowsPct, rowsPctInst, callsPct, callsPctInst                               pgtype.Float8
+			totalTimeMs, totalTimePct, totalTimePctInst                                pgtype.Float8
 			execTimeMs, minExecTimeMs, maxExecTimeMs, meanExecTimeMs, stddevExecTimeMs pgtype.Float8
 			planTimeMs, minPlanTimeMs, maxPlanTimeMs, meanPlanTimeMs, stddevPlanTimeMs pgtype.Float8
-			ioTimeMs, ioTimePct                                                        pgtype.Float8
-			cpuTimeMs, cpuTimePct                                                      pgtype.Float8
+			ioTimeMs, ioTimePct, ioTimePctInst                                         pgtype.Float8
+			cpuTimeMs, cpuTimePct, cpuTimePctInst                                      pgtype.Float8
 			cacheHitRatio                                                              pgtype.Float8
-			sharedBlksDirtiedPct, sharedBlksWrittenPct                                 pgtype.Float8
+			sharedBlksDirtiedPct, sharedBlksDirtiedPctInst                             pgtype.Float8
+			sharedBlksWrittenPct, sharedBlksWrittenPctInst                             pgtype.Float8
 			walBytes                                                                   pgtype.Int8
-			walBytesPct                                                                pgtype.Float8
+			walBytesPct, walBytesPctInst                                               pgtype.Float8
 			walRecords, walFpi                                                         pgtype.Int8
 			tempBlks                                                                   pgtype.Int8
-			tempBlksPct                                                                pgtype.Float8
+			tempBlksPct, tempBlksPctInst                                               pgtype.Float8
 		)
 
 		err = rows.Scan(
-			&queryID, &queryText, &usernames,
-			&rowsVal, &rowsPct,
-			&calls, &callsPct,
-			&totalTimeMs, &totalTimePct,
+			&queryID, &queryText, &usernames, &datname,
+			&rowsVal, &rowsPct, &rowsPctInst,
+			&calls, &callsPct, &callsPctInst,
+			&totalTimeMs, &totalTimePct, &totalTimePctInst,
 			&execTimeMs, &minExecTimeMs, &maxExecTimeMs, &meanExecTimeMs, &stddevExecTimeMs,
 			&planTimeMs, &minPlanTimeMs, &maxPlanTimeMs, &meanPlanTimeMs, &stddevPlanTimeMs,
-			&ioTimeMs, &ioTimePct,
-			&cpuTimeMs, &cpuTimePct,
+			&ioTimeMs, &ioTimePct, &ioTimePctInst,
+			&cpuTimeMs, &cpuTimePct, &cpuTimePctInst,
 			&cacheHitRatio,
-			&sharedBlksDirtiedPct, &sharedBlksWrittenPct,
-			&walBytes, &walBytesPct, &walRecords, &walFpi,
-			&tempBlks, &tempBlksPct,
+			&sharedBlksDirtiedPct, &sharedBlksDirtiedPctInst,
+			&sharedBlksWrittenPct, &sharedBlksWrittenPctInst,
+			&walBytes, &walBytesPct, &walBytesPctInst, &walRecords, &walFpi,
+			&tempBlks, &tempBlksPct, &tempBlksPctInst,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("getQueriesReport | %w", err)
 		}
 
-		r := dto.QueryReport{QueryID: queryID, Query: queryText.String, Usernames: usernames} //nolint: exhaustruct
-		if stddevExecTimeMs.Valid {
-			r.StddevExecTimeMs = &stddevExecTimeMs.Float64
-		}
-
-		if stddevPlanTimeMs.Valid {
-			r.StddevPlanTimeMs = &stddevPlanTimeMs.Float64
-		}
-
-		if rowsVal.Valid {
-			r.Rows = &rowsVal.Int64
-		}
-
-		if rowsPct.Valid {
-			r.RowsPct = &rowsPct.Float64
-		}
-
-		if calls.Valid {
-			r.Calls = &calls.Int64
-		}
-
-		if callsPct.Valid {
-			r.CallsPct = &callsPct.Float64
-		}
-
-		if totalTimeMs.Valid {
-			r.TotalTimeMs = &totalTimeMs.Float64
-		}
-
-		if totalTimePct.Valid {
-			r.TotalTimePct = &totalTimePct.Float64
-		}
-
-		if execTimeMs.Valid {
-			r.ExecTimeMs = &execTimeMs.Float64
-		}
-
-		if minExecTimeMs.Valid {
-			r.MinExecTimeMs = &minExecTimeMs.Float64
-		}
-
-		if maxExecTimeMs.Valid {
-			r.MaxExecTimeMs = &maxExecTimeMs.Float64
-		}
-
-		if meanExecTimeMs.Valid {
-			r.MeanExecTimeMs = &meanExecTimeMs.Float64
-		}
-
-		if planTimeMs.Valid {
-			r.PlanTimeMs = &planTimeMs.Float64
-		}
-
-		if minPlanTimeMs.Valid {
-			r.MinPlanTimeMs = &minPlanTimeMs.Float64
-		}
-
-		if maxPlanTimeMs.Valid {
-			r.MaxPlanTimeMs = &maxPlanTimeMs.Float64
-		}
-
-		if meanPlanTimeMs.Valid {
-			r.MeanPlanTimeMs = &meanPlanTimeMs.Float64
-		}
-
-		if ioTimeMs.Valid {
-			r.IoTimeMs = &ioTimeMs.Float64
-		}
-
-		if ioTimePct.Valid {
-			r.IoTimePct = &ioTimePct.Float64
-		}
-
-		if cpuTimeMs.Valid {
-			r.CpuTimeMs = &cpuTimeMs.Float64
-		}
-
-		if cpuTimePct.Valid {
-			r.CpuTimePct = &cpuTimePct.Float64
-		}
-
-		if cacheHitRatio.Valid {
-			r.CacheHitRatio = &cacheHitRatio.Float64
-		}
-
-		if sharedBlksDirtiedPct.Valid {
-			r.SharedBlksDirtiedPct = &sharedBlksDirtiedPct.Float64
-		}
-
-		if sharedBlksWrittenPct.Valid {
-			r.SharedBlksWrittenPct = &sharedBlksWrittenPct.Float64
-		}
-
-		if walBytes.Valid {
-			r.WalBytes = &walBytes.Int64
-		}
-
-		if walBytesPct.Valid {
-			r.WalBytesPct = &walBytesPct.Float64
-		}
-
-		if walRecords.Valid {
-			r.WalRecords = &walRecords.Int64
-		}
-
-		if walFpi.Valid {
-			r.WalFpi = &walFpi.Int64
-		}
-
-		if tempBlks.Valid {
-			r.TempBlks = &tempBlks.Int64
-		}
-
-		if tempBlksPct.Valid {
-			r.TempBlksPct = &tempBlksPct.Float64
-		}
-
-		ret = append(ret, r)
+		ret = append(ret, dto.QueryReport{
+			QueryID:                      queryID,
+			Query:                        queryText.String,
+			Usernames:                    usernames,
+			Datname:                      datname,
+			StddevExecTimeMs:             nullFloat(stddevExecTimeMs),
+			StddevPlanTimeMs:             nullFloat(stddevPlanTimeMs),
+			Rows:                         nullInt(rowsVal),
+			RowsPct:                      nullFloat(rowsPct),
+			RowsPctInstance:              nullFloat(rowsPctInst),
+			Calls:                        nullInt(calls),
+			CallsPct:                     nullFloat(callsPct),
+			CallsPctInstance:             nullFloat(callsPctInst),
+			TotalTimeMs:                  nullFloat(totalTimeMs),
+			TotalTimePct:                 nullFloat(totalTimePct),
+			TotalTimePctInstance:         nullFloat(totalTimePctInst),
+			ExecTimeMs:                   nullFloat(execTimeMs),
+			MinExecTimeMs:                nullFloat(minExecTimeMs),
+			MaxExecTimeMs:                nullFloat(maxExecTimeMs),
+			MeanExecTimeMs:               nullFloat(meanExecTimeMs),
+			PlanTimeMs:                   nullFloat(planTimeMs),
+			MinPlanTimeMs:                nullFloat(minPlanTimeMs),
+			MaxPlanTimeMs:                nullFloat(maxPlanTimeMs),
+			MeanPlanTimeMs:               nullFloat(meanPlanTimeMs),
+			IoTimeMs:                     nullFloat(ioTimeMs),
+			IoTimePct:                    nullFloat(ioTimePct),
+			IoTimePctInstance:            nullFloat(ioTimePctInst),
+			CpuTimeMs:                    nullFloat(cpuTimeMs),
+			CpuTimePct:                   nullFloat(cpuTimePct),
+			CpuTimePctInstance:           nullFloat(cpuTimePctInst),
+			CacheHitRatio:                nullFloat(cacheHitRatio),
+			SharedBlksDirtiedPct:         nullFloat(sharedBlksDirtiedPct),
+			SharedBlksDirtiedPctInstance: nullFloat(sharedBlksDirtiedPctInst),
+			SharedBlksWrittenPct:         nullFloat(sharedBlksWrittenPct),
+			SharedBlksWrittenPctInstance: nullFloat(sharedBlksWrittenPctInst),
+			WalBytes:                     nullInt(walBytes),
+			WalBytesPct:                  nullFloat(walBytesPct),
+			WalBytesPctInstance:          nullFloat(walBytesPctInst),
+			WalRecords:                   nullInt(walRecords),
+			WalFpi:                       nullInt(walFpi),
+			TempBlks:                     nullInt(tempBlks),
+			TempBlksPct:                  nullFloat(tempBlksPct),
+			TempBlksPctInstance:          nullFloat(tempBlksPctInst),
+		})
 	}
 
 	if err := rows.Err(); err != nil {
@@ -605,6 +601,24 @@ func (p *PgxPool) getQueriesReport( //nolint:gocyclo
 	}
 
 	return ret, nil
+}
+
+// nullFloat and nullInt keep a NULL distinguishable from a real zero: the DTO
+// carries pointers, and pgtype's zero value alone would silently become 0.
+func nullFloat(v pgtype.Float8) *float64 {
+	if !v.Valid {
+		return nil
+	}
+
+	return &v.Float64
+}
+
+func nullInt(v pgtype.Int8) *int64 {
+	if !v.Valid {
+		return nil
+	}
+
+	return &v.Int64
 }
 
 func (p *PgxPool) ResetQueryStats(ctx context.Context, clusterName, instanceName, databaseName string) error {
@@ -669,12 +683,11 @@ func (p *PgxPool) GetBlockedSessionCount(ctx context.Context, clusterName, insta
 func (p *PgxPool) getBlockedSessionCount(ctx context.Context, pool *pgxpool.Pool) (int, error) {
 	var n int
 
-	// Scope to the connected database so the cheap background count matches the
-	// detailed capture (blocked.tmpl.sql filters datname = current_database()).
+	// Instance-wide, like the detailed capture it precedes: an activity spike is
+	// detected across the whole host, so contention in any database of it counts.
 	err := pool.QueryRow(ctx,
 		`SELECT count(*) FROM pg_stat_activity a
-		 WHERE a.datname = current_database()
-		   AND cardinality(pg_blocking_pids(a.pid)) > 0`,
+		 WHERE cardinality(pg_blocking_pids(a.pid)) > 0`,
 	).Scan(&n)
 	if err != nil {
 		return 0, fmt.Errorf("blocked count | %w", err)

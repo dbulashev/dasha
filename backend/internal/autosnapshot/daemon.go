@@ -21,7 +21,8 @@ type Repo interface {
 	GetBlockedSessionCount(ctx context.Context, clusterName, instanceName, databaseName string) (int, error)
 	GetInstanceInfo(ctx context.Context, clusterName, instanceName string) (dto.InstanceInfo, error)
 	GetQueriesReport(ctx context.Context, clusterName, instanceName, databaseName string, excludeUsers []string) ([]dto.QueryReport, error)
-	GetQueriesBlocked(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.QueryBlocked, error)
+	GetQueriesBlocked(ctx context.Context, clusterName, instanceName, databaseName, scope string) ([]dto.QueryBlocked, error)
+	PgssDatabase(ctx context.Context, clusterName, instanceName, databaseName string) (string, error)
 	GetPgssStatsResetTime(ctx context.Context, clusterName, instanceName, databaseName string) (*dto.StatsResetTime, error)
 	ResetQueryStats(ctx context.Context, clusterName, instanceName, databaseName string) error
 	GetHotSampleTables(ctx context.Context, clusterName, instanceName, databaseName string, schema, object *string) ([]hotobjects.AnchorRow, *time.Time, bool, error)

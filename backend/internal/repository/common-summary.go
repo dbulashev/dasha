@@ -62,54 +62,102 @@ func (p *PgxPool) pgssPool(
 	instanceName,
 	databaseName string,
 ) (*pgxpool.Pool, error) {
-	var named *pgxpool.Pool
-
-	if databaseName != "" {
-		pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
-		if err != nil {
-			return nil, err
-		}
-
-		if p.extensionSchema(ctx, pool, extPgss) != "" {
-			return pool, nil
-		}
-
-		named = pool
-	}
-
-	pools, err := p.getPoolsByClusterAndInstance(ctx, clusterName, instanceName)
+	item, err := p.pgssPoolItem(ctx, clusterName, instanceName, databaseName)
 	if err != nil {
 		return nil, err
 	}
 
-	for _, pool := range pools {
-		if p.extensionSchema(ctx, pool, extPgss) != "" {
-			if named != nil {
-				p.logger.Debug("pg_stat_statements missing in the requested database, reading through another one",
-					zap.String("cluster", clusterName),
-					zap.String("instance", instanceName),
-					zap.String("requested_database", databaseName))
-			}
+	return item.pool, nil
+}
 
-			return pool, nil
+// PgssDatabase reports which database pg_stat_statements is actually read
+// through — the provenance an auto-snapshot has to record, since the requested
+// database is only a preference (see pgssPool).
+func (p *PgxPool) PgssDatabase(
+	ctx context.Context,
+	clusterName,
+	instanceName,
+	databaseName string,
+) (string, error) {
+	item, err := p.pgssPoolItem(ctx, clusterName, instanceName, databaseName)
+	if err != nil {
+		return "", fmt.Errorf("PgssDatabase | %w", err)
+	}
+
+	return string(item.Database), nil
+}
+
+// pgssPoolItem implements the choice behind pgssPool. Which extension version
+// each database carries is not weighed in: an instance whose databases disagree
+// about it is the DBA's to fix, and picking for them would only move the failure
+// somewhere less obvious.
+func (p *PgxPool) pgssPoolItem(
+	ctx context.Context,
+	clusterName,
+	instanceName,
+	databaseName string,
+) (pgxPoolItem, error) {
+	items, err := p.getPoolItemsByClusterAndInstance(ctx, clusterName, instanceName)
+	if err != nil {
+		return pgxPoolItem{}, err
+	}
+
+	var named *pgxPoolItem
+
+	if databaseName != "" {
+		for i := range items {
+			if string(items[i].Database) == databaseName {
+				named = &items[i]
+
+				break
+			}
+		}
+
+		// A database that was asked for but does not exist stays an error, as it
+		// was before the choice moved here — silently answering from another one
+		// would hide a typo in the request.
+		if named == nil {
+			return pgxPoolItem{}, fmt.Errorf("%w | %s/%s/%s", ErrNotFound, clusterName, instanceName, databaseName)
+		}
+
+		if p.extensionSchema(ctx, named.pool, extPgss) != "" {
+			return *named, nil
 		}
 	}
 
-	if named != nil {
-		return named, nil
+	for i := range items {
+		if p.extensionSchema(ctx, items[i].pool, extPgss) == "" {
+			continue
+		}
+
+		if named != nil {
+			p.logger.Debug("pg_stat_statements missing in the requested database, reading through another one",
+				zap.String("cluster", clusterName),
+				zap.String("instance", instanceName),
+				zap.String("requested_database", databaseName),
+				zap.String("database", string(items[i].Database)))
+		}
+
+		return items[i], nil
 	}
 
-	return pools[0], nil
+	// Nowhere to be found: keep the named pool so the query reports the real
+	// error, and fall back to a stable pick when no database was named.
+	if named != nil {
+		return *named, nil
+	}
+
+	return items[0], nil
 }
 
-// getPoolsByClusterAndInstance returns every per-database pool of one instance,
-// ordered by database name so that a fallback pick — and the error a broken
-// instance reports — stays the same between calls.
-func (p *PgxPool) getPoolsByClusterAndInstance(
+// getPoolItemsByClusterAndInstance returns every per-database pool of one
+// instance, ordered by database name so that a fallback pick — and the error a
+// broken instance reports — stays the same between calls.
+func (p *PgxPool) getPoolItemsByClusterAndInstance(
 	ctx context.Context,
 	clusterName,
 	instanceName string,
-) ([]*pgxpool.Pool, error) {
+) ([]pgxPoolItem, error) {
 	err := p.ensurePool(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("ensure pool | %w", err)
@@ -142,12 +190,7 @@ func (p *PgxPool) getPoolsByClusterAndInstance(
 		return strings.Compare(a.Database.String(), b.Database.String())
 	})
 
-	pools := make([]*pgxpool.Pool, 0, len(items))
-	for _, item := range items {
-		pools = append(pools, item.pool)
-	}
-
-	return pools, nil
+	return items, nil
 }
 
 func (p *PgxPool) getPoolsByClusterAndDatabase(

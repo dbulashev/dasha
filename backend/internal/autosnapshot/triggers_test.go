@@ -2,6 +2,7 @@ package autosnapshot
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -148,6 +149,38 @@ func (f *fakeStore) CreateSnapshot(
 	f.snapshots++
 
 	return uuid.New(), f.now(), nil
+}
+
+// TestTakeSnapshotSkipsEmptyReport guards the case where the extension is
+// readable in no database of the host: storing a zero-row snapshot would only
+// fill the selector with entries that explain nothing.
+func TestTakeSnapshotSkipsEmptyReport(t *testing.T) {
+	t.Parallel()
+
+	store := &fakeStore{Store: nil, now: time.Now, snapshots: 0, events: nil}
+	d := &Daemon{ //nolint:exhaustruct
+		repo: &fakeRepo{report: func(context.Context) ([]dto.QueryReport, error) { //nolint:exhaustruct
+			return nil, nil
+		}},
+		store:  store,
+		logger: zap.NewNop(),
+		hosts:  map[hostKey]*hostState{},
+	}
+
+	err := d.takeSnapshot(context.Background(), validConfig(), oneHostCluster(), "h1", "db1",
+		TriggerActivitySpike, "auto:activity_spike", map[string]any{}, nil)
+
+	if !errors.Is(err, errEmptyReport) {
+		t.Fatalf("err = %v, want errEmptyReport", err)
+	}
+
+	if store.snapshots != 0 {
+		t.Fatalf("stored %d snapshots, want none", store.snapshots)
+	}
+
+	if len(store.events) != 1 || store.events[0].Outcome != OutcomeError {
+		t.Fatalf("expected one error event, got %+v", store.events)
+	}
 }
 
 func (f *fakeStore) InsertTriggerEvent(_ context.Context, e TriggerEvent) error {

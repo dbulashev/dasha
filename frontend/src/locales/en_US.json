@@ -101,7 +101,8 @@
       "cpu_time": "CPU time",
       "io_time": "I/O time",
       "temp_blks": "Temp blocks"
-    }
+    },
+    "showMore": "Show more ({shown} of {total})"
   },
   "time": {
     "d": "d",
@@ -113,21 +114,25 @@
   },
   "errorQueryTimeout": "The request timed out: the database, or another service it queries, did not answer in time. The instance may be overloaded, or the request too heavy.",
   "errorObjectLocked": "A lock held by another transaction blocks reading this table — usually a running ALTER TABLE, VACUUM FULL, REINDEX, or a transaction left open. Dasha does not wait for it; try again later.",
-  "pgssNotInstalled": "pgssNotInstalled",
-  "pgssNotEnabled": "pgssNotEnabled",
-  "pgssNotReadable": "pgssNotReadable",
-  "resetQueryStats": "resetQueryStats",
-  "resetQueryStatsConfirm": "resetQueryStatsConfirm",
-  "resetQueryStatsSuccess": "resetQueryStatsSuccess",
-  "resetQueryStatsForbidden": "resetQueryStatsForbidden",
-  "resetQueryStatsError": "resetQueryStatsError",
-  "createSnapshot": "createSnapshot",
-  "snapshotCreated": "snapshotCreated",
-  "snapshotError": "snapshotError",
-  "snapshotNotFound": "snapshotNotFound",
-  "snapshotLiveData": "snapshotLiveData",
-  "snapshotSelect": "snapshotSelect",
+  "pgssNotInstalled": "The pg_stat_statements extension is not installed in this database. Query statistics (Top 10, report) are unavailable.",
+  "pgssNotEnabled": "The pg_stat_statements extension is installed but not enabled. Add it to shared_preload_libraries and restart PostgreSQL.",
+  "pgssNotReadable": "The pg_stat_statements extension is installed and enabled, but the current user has no access to its data.",
+  "resetQueryStats": "Reset statistics",
+  "resetQueryStatsConfirm": "Reset the pg_stat_statements statistics? This cannot be undone.",
+  "resetQueryStatsSuccess": "pg_stat_statements statistics reset",
+  "resetQueryStatsForbidden": "Resetting statistics is disabled in the configuration",
+  "resetQueryStatsError": "Failed to reset the statistics",
+  "createSnapshot": "Take a snapshot",
+  "snapshotCreated": "Snapshot saved",
+  "snapshotError": "Failed to create the snapshot",
+  "snapshotNotFound": "Snapshot not found",
+  "snapshotLiveData": "Live data",
+  "snapshotSelect": "Data source",
+  "snapshotNoAttribution": "no database names (older snapshot)",
+  "snapshotMissesDatabase": "This snapshot holds no statements of {database} — it covers {databases}. Switch to \"Whole instance\" to see what it does hold.",
+  "snapshotMissesDatabaseOnly": "This snapshot holds no statements of {database} — it covers {databases}.",
   "compare": {
+    "mixedGenerations": "These two cannot be compared: one names the database of every statement and the other was taken before that existed, so a queryid means something different on each side. Pick two snapshots of the same generation — live data always counts as the newer one.",
     "snapshotA": "Snapshot A",
     "snapshotB": "Snapshot B / Live",
     "liveData": "Live data",
@@ -297,7 +302,7 @@
       "manual": "Manual"
     }
   },
-  "cpuTimeWarning": "cpuTimeWarning",
+  "cpuTimeWarning": "Queries with negative CPU time were found (total_plan_time + total_exec_time − blk_read_time − blk_write_time < 0). With pg_stat_statements.track_planning off, plan_time is 0, and a negative value points at potentially high planning time. Turn track_planning on for accurate data.",
   "header": {
     "namespace": "Namespace",
     "kind": "Object class",
@@ -391,8 +396,14 @@
     "childsSize": "Total size of partitions",
     "childsAvgSize": "Average partition size"
   },
-  "noData": "noData",
-  "insufficientData": "insufficientData",
+  "scope": {
+    "database": "Current database",
+    "instance": "Whole instance",
+    "hint": "pg_stat_statements lives in one database but counts the whole instance. \"Current database\" keeps only the selected database’s statements and computes shares within it; \"Whole instance\" shows every database of the host, with shares of the instance.",
+    "legacySnapshot": "This snapshot was taken before per-database attribution: it holds instance-wide numbers with no database names, so it cannot be narrowed to one."
+  },
+  "noData": "No data",
+  "insufficientData": "Insufficient data",
   "hint": {
     "approxSize": "Sizes are estimated from pg_class.relpages",
     "cacheHitRates": "Computed from pg_statio — cumulative statistics since the last reset",
@@ -406,9 +417,9 @@
     "maintenanceInfo": "n_dead_tup / n_live_tup are estimates, refreshed by VACUUM/ANALYZE",
     "partitions": "Partition sizes are estimated from pg_class.relpages"
   },
-  "loadMore": "loadMore",
-  "prev": "prev",
-  "next": "next",
+  "loadMore": "Load more",
+  "prev": "Previous",
+  "next": "Next",
   "tables": {
     "menuOverview": "Overview",
     "menuDescribe": "Describe table",
@@ -602,7 +613,8 @@
     "tree": "Lock tree",
     "table": "All locks (table)",
     "noActiveLocks": "No active locks",
-    "blockedProcesses": "Blocked processes: {count}"
+    "blockedProcesses": "Blocked processes: {count}",
+    "foreignObjectHint": "Objects of other databases are shown as an identifier (OID): the name comes from that database’s catalog, and the connection goes to the selected one."
   },
   "hostRole": {
     "primary": "Primary",

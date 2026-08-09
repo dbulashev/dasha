@@ -6,8 +6,12 @@
  */
 
 export interface QueryBlocked {
+  /** Relation name of the lock target, or its OID when the target lives in another database: names resolve through the catalog of the database the backend reads from.
+   */
   LockedItem: string
   BlockedPid: number
+  /** Database of the blocked session (the blocking one is always in the same database). */
+  BlockedDatabase: string
   BlockedUser: string
   BlockedQuery: string
   BlockedDuration: string

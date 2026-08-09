@@ -55,7 +55,8 @@
       "cpu_time": "CPU-Zeit",
       "io_time": "I/O-Zeit",
       "temp_blks": "Temp Blocks"
-    }
+    },
+    "showMore": "Mehr anzeigen ({shown} von {total})"
   },
   "time": {
     "d": "T",
@@ -105,7 +106,11 @@
   "snapshotNotFound": "Snapshot nicht gefunden",
   "snapshotLiveData": "Aktuelle Daten",
   "snapshotSelect": "Datenquelle",
+  "snapshotNoAttribution": "ohne Datenbanknamen (älterer Snapshot)",
+  "snapshotMissesDatabase": "Dieser Snapshot enthält keine Anweisungen von {database} — er deckt {databases} ab. Wechseln Sie zu „Gesamte Instanz“, um seinen Inhalt zu sehen.",
+  "snapshotMissesDatabaseOnly": "Dieser Snapshot enthält keine Anweisungen von {database} — er deckt {databases} ab.",
   "compare": {
+    "mixedGenerations": "Diese beiden lassen sich nicht vergleichen: einer benennt die Datenbank jeder Anweisung, der andere entstand davor — eine queryid bedeutet auf beiden Seiten etwas anderes. Wählen Sie zwei Snapshots derselben Generation; aktuelle Daten zählen immer als die neuere.",
     "snapshotA": "Snapshot A",
     "snapshotB": "Snapshot B / Live",
     "liveData": "Aktuelle Daten",
@@ -359,7 +364,14 @@
     "parent": "Elterntabelle",
     "childsCount": "Anzahl Partitionen",
     "childsSize": "Größe aller Partitionen",
-    "childsAvgSize": "Durchschnittliche Partitionsgröße"
+    "childsAvgSize": "Durchschnittliche Partitionsgröße",
+    "database": "Datenbank"
+  },
+  "scope": {
+    "database": "Aktuelle Datenbank",
+    "instance": "Gesamte Instanz",
+    "hint": "pg_stat_statements liegt in einer Datenbank, zählt aber die gesamte Instanz. „Aktuelle Datenbank“ behält nur die Anweisungen der gewählten Datenbank und berechnet Anteile innerhalb dieser; „Gesamte Instanz“ zeigt alle Datenbanken des Hosts, Anteile bezogen auf die Instanz.",
+    "legacySnapshot": "Dieser Snapshot entstand vor der Zuordnung je Datenbank: er enthält instanzweite Zahlen ohne Datenbanknamen und lässt sich daher nicht einschränken."
   },
   "noData": "Keine Daten",
   "insufficientData": "Unzureichende Daten",
@@ -486,7 +498,8 @@
     "tree": "Sperrbaum",
     "table": "Alle Sperren (Tabelle)",
     "noActiveLocks": "Keine aktiven Sperren",
-    "blockedProcesses": "Blockierte Prozesse: {count}"
+    "blockedProcesses": "Blockierte Prozesse: {count}",
+    "foreignObjectHint": "Objekte anderer Datenbanken erscheinen als Kennung (OID): den Namen liefert nur der Katalog jener Datenbank, die Verbindung geht aber zur gewählten."
   },
   "queries": {
     "minDurationLabel": "Min. Dauer, ms ≥",

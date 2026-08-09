@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,12 +19,22 @@ import (
 	"github.com/dbulashev/dasha/internal/version"
 )
 
-const currentJSONVersion = 1
+// currentJSONVersion 2 stores one row per (queryid, database) with both share
+// sets; version 1 rows are instance-wide with no database attribution and can
+// only be read back as such.
+const (
+	currentJSONVersion = 2
+
+	// ScopedJSONVersion is the first json_version whose rows name their database.
+	ScopedJSONVersion = 2
+)
 
 // SnapshotListItem is a summary row returned by List.
 type SnapshotListItem struct {
 	ID             uuid.UUID
 	CreatedAt      time.Time
+	Database       string // database the snapshot was read through, not its content
+	Databases      []string
 	DashaVersion   string
 	JsonVersion    int
 	PgssStatsReset *time.Time
@@ -131,10 +143,10 @@ func (s *Storage) CreateSnapshot(
 	var id uuid.UUID
 
 	err = tx.QueryRow(ctx, `
-		INSERT INTO snapshots (cluster_name, instance, database, dasha_version, json_version, report_data, created_at, pgss_stats_reset, reason, trigger_context, locks_data)
-		VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10::jsonb, $11::jsonb)
+		INSERT INTO snapshots (cluster_name, instance, database, databases, dasha_version, json_version, report_data, created_at, pgss_stats_reset, reason, trigger_context, locks_data)
+		VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11::jsonb, $12::jsonb)
 		RETURNING id`,
-		clusterName, instance, database, version.GetBuildNumber(), currentJSONVersion, jsonbArg(data), now, opts.PgssStatsReset, reason, jsonbArg(triggerCtx), jsonbArg(locksData),
+		clusterName, instance, database, reportDatabases(reports), version.GetBuildNumber(), currentJSONVersion, jsonbArg(data), now, opts.PgssStatsReset, reason, jsonbArg(triggerCtx), jsonbArg(locksData),
 	).Scan(&id)
 	if err != nil {
 		return uuid.Nil, time.Time{}, fmt.Errorf("storage: insert snapshot: %w", err)
@@ -147,18 +159,35 @@ func (s *Storage) CreateSnapshot(
 	return id, now, nil
 }
 
-// ListSnapshots returns snapshot summaries for a given cluster/instance/database.
+// reportDatabases lists the databases represented in a report, sorted, so the
+// list endpoint can say what a snapshot covers without opening its jsonb.
+func reportDatabases(reports []dto.QueryReport) []string {
+	seen := make(map[string]struct{}, 4) //nolint:mnd
+
+	for _, r := range reports {
+		if r.Datname != "" {
+			seen[r.Datname] = struct{}{}
+		}
+	}
+
+	return slices.Sorted(maps.Keys(seen))
+}
+
+// ListSnapshots returns snapshot summaries for a given cluster/instance. The
+// listing is host-wide on purpose: a snapshot holds every database of the
+// instance, so one taken through "postgres" must be visible while browsing any
+// other database.
 func (s *Storage) ListSnapshots(
 	ctx context.Context,
-	clusterName, instance, database string,
+	clusterName, instance string,
 ) ([]SnapshotListItem, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, created_at, dasha_version, json_version, pgss_stats_reset, locks_data IS NOT NULL, reason
+		SELECT id, created_at, database, COALESCE(databases, '{}'), dasha_version, json_version, pgss_stats_reset, locks_data IS NOT NULL, reason
 		FROM snapshots
-		WHERE cluster_name = $1 AND instance = $2 AND database = $3
+		WHERE cluster_name = $1 AND instance = $2
 		ORDER BY created_at DESC
 		LIMIT 100`,
-		clusterName, instance, database,
+		clusterName, instance,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("storage: list snapshots: %w", err)
@@ -169,7 +198,7 @@ func (s *Storage) ListSnapshots(
 
 	for rows.Next() {
 		var item SnapshotListItem
-		if err := rows.Scan(&item.ID, &item.CreatedAt, &item.DashaVersion, &item.JsonVersion, &item.PgssStatsReset, &item.HasLocks, &item.Reason); err != nil {
+		if err := rows.Scan(&item.ID, &item.CreatedAt, &item.Database, &item.Databases, &item.DashaVersion, &item.JsonVersion, &item.PgssStatsReset, &item.HasLocks, &item.Reason); err != nil {
 			return nil, fmt.Errorf("storage: scan snapshot: %w", err)
 		}
 
@@ -179,22 +208,25 @@ func (s *Storage) ListSnapshots(
 	return items, rows.Err()
 }
 
-// GetSnapshot returns query report data from a stored snapshot.
-func (s *Storage) GetSnapshot(ctx context.Context, id uuid.UUID) ([]dto.QueryReport, error) {
+// GetSnapshot returns query report data from a stored snapshot along with its
+// json_version: version 1 carries no database attribution, so the caller must
+// serve it instance-wide rather than filtering it down to nothing.
+func (s *Storage) GetSnapshot(ctx context.Context, id uuid.UUID) ([]dto.QueryReport, int, error) {
 	var (
-		data      []byte
-		createdAt time.Time
+		data        []byte
+		createdAt   time.Time
+		jsonVersion int
 	)
 
 	err := s.pool.QueryRow(ctx,
-		`SELECT report_data, created_at FROM snapshots WHERE id = $1`, id,
-	).Scan(&data, &createdAt)
+		`SELECT report_data, created_at, json_version FROM snapshots WHERE id = $1`, id,
+	).Scan(&data, &createdAt, &jsonVersion)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, nil //nolint:nilnil
+			return nil, 0, nil
 		}
 
-		return nil, fmt.Errorf("storage: get snapshot: %w", err)
+		return nil, 0, fmt.Errorf("storage: get snapshot: %w", err)
 	}
 
 	type reportJSON struct {
@@ -204,7 +236,7 @@ func (s *Storage) GetSnapshot(ctx context.Context, id uuid.UUID) ([]dto.QueryRep
 
 	var items []reportJSON
 	if err := json.Unmarshal(data, &items); err != nil {
-		return nil, fmt.Errorf("storage: unmarshal report: %w", err)
+		return nil, 0, fmt.Errorf("storage: unmarshal report: %w", err)
 	}
 
 	// Collect unique hashes and resolve texts.
@@ -215,7 +247,7 @@ func (s *Storage) GetSnapshot(ctx context.Context, id uuid.UUID) ([]dto.QueryRep
 
 	textMap, err := s.resolveQueryTexts(ctx, hashes, createdAt)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	reports := make([]dto.QueryReport, 0, len(items))
@@ -231,7 +263,7 @@ func (s *Storage) GetSnapshot(ctx context.Context, id uuid.UUID) ([]dto.QueryRep
 		reports = append(reports, r)
 	}
 
-	return reports, nil
+	return reports, jsonVersion, nil
 }
 
 // GetSnapshotLocks returns the raw locks_data jsonb for a snapshot. found is

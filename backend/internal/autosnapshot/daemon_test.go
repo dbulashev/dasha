@@ -38,14 +38,19 @@ func (f *fakeRepo) GetInstanceInfo(context.Context, string, string) (dto.Instanc
 
 func (f *fakeRepo) GetQueriesReport(ctx context.Context, _, _, _ string, _ []string) ([]dto.QueryReport, error) {
 	if f.report == nil {
-		return nil, nil
+		// One row on purpose: an empty report is treated as "nothing to store".
+		return []dto.QueryReport{{QueryID: 1, Datname: "db1"}}, nil //nolint:exhaustruct
 	}
 
 	return f.report(ctx)
 }
 
-func (f *fakeRepo) GetQueriesBlocked(context.Context, string, string, string) ([]dto.QueryBlocked, error) {
+func (f *fakeRepo) GetQueriesBlocked(context.Context, string, string, string, string) ([]dto.QueryBlocked, error) {
 	return nil, nil
+}
+
+func (f *fakeRepo) PgssDatabase(_ context.Context, _, _, database string) (string, error) {
+	return database, nil
 }
 
 func (f *fakeRepo) GetPgssStatsResetTime(context.Context, string, string, string) (*dto.StatsResetTime, error) {
