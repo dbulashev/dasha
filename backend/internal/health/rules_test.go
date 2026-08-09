@@ -905,14 +905,24 @@ func TestEvaluate_SnapshotModeKeepsDatabaseOnSameRules(t *testing.T) {
 		got[r.RuleID] = r.Database
 	}
 
+	checked := 0
+
 	for rule := range metricsInstanceWideRules {
 		if _, ok := got[rule]; !ok {
 			continue // needs a signal this fixture does not carry
 		}
 
+		checked++
+
 		if got[rule] != "catalog_db" {
 			t.Errorf("rule %q in snapshot mode: expected database %q, got %q", rule, "catalog_db", got[rule])
 		}
+	}
+
+	// Without this the test passes vacuously the day the fixture stops firing
+	// any of them — which is exactly when the assertion would matter.
+	if checked == 0 {
+		t.Fatal("test sanity: the fixture fired none of the metrics-aggregate rules")
 	}
 }
 

@@ -478,7 +478,7 @@ type HealthScore struct {
 	// InRecovery True when the instance is a standby (pg_is_in_recovery() = true). When true, the maintenance category is dropped from the score and its weight is redistributed across the remaining categories — same handling as the replication category on instances without replicas.
 	InRecovery bool `json:"in_recovery"`
 
-	// MetricsDegraded True when source is "metrics" but no datasource series matched any selector for the target — the score is built from absent signals and may be understated. Check selector label matching at GET /api/common/health-score/datasource/status.
+	// MetricsDegraded True when source is "metrics" but no datasource series matched any selector for the target — the score is built from absent signals, which read as healthy, so it may be overstated and understate the problem. Check selector label matching at GET /api/common/health-score/datasource/status.
 	MetricsDegraded *bool   `json:"metrics_degraded,omitempty"`
 	Score           float64 `json:"score"`
 
