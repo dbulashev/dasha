@@ -174,7 +174,15 @@ horizon_metrics AS (
 per_table_metrics AS (
     SELECT
         COUNT(*) FILTER (
-            WHERE 'autovacuum_enabled=false' = ANY(COALESCE(reloptions, ARRAY[]::text[]))
+            WHERE EXISTS (
+                SELECT 1
+                FROM pg_options_to_table(COALESCE(reloptions, ARRAY[]::text[])) o
+                WHERE NOT CASE
+                    WHEN o.option_name = 'autovacuum_enabled'
+                    THEN o.option_value::boolean
+                    ELSE true
+                END
+            )
         )::int AS tables_with_autovacuum_off,
         COALESCE(MAX(age(relfrozenxid))::bigint, 0) AS max_relfrozenxid_age
     FROM pg_class

@@ -79,19 +79,21 @@ func (s *Service) Collector() *Collector {
 // CurrentRaw returns the instant signals as health.RawMetrics with the
 // regression ratios (latency, seq-scan) folded in against their seasonal
 // baselines — for the rules engine / recommendations.
-// The second return value is the number of catalog signals that actually matched
-// a live series — 0 means the target resolved but no selector matched anything
-// (likely a label-scheme mismatch), so the caller can flag the score as degraded.
-func (s *Service) CurrentRaw(ctx context.Context, cluster, instance string) (health.RawMetrics, int, error) {
+// The signals themselves come back alongside so the caller can tell which inputs
+// the datasource actually carried: absent ones keep ToRawMetrics' neutral seeds
+// (a healthy-looking value), and only presence distinguishes those from a real
+// reading. An empty Have means the target resolved but no selector matched
+// anything (likely a label-scheme mismatch).
+func (s *Service) CurrentRaw(ctx context.Context, cluster, instance string) (health.RawMetrics, Signals, error) {
 	sig, err := s.Collector().Instant(ctx, cluster, instance, time.Now())
 	if err != nil {
-		return health.RawMetrics{}, 0, err
+		return health.RawMetrics{}, Signals{}, err
 	}
 
 	lb, _ := s.signalBaseline(ctx, cluster, instance, SigLatencyMs).Value(sig.At)
 	sb, _ := s.signalBaseline(ctx, cluster, instance, SigSeqScanRate).Value(sig.At)
 
-	return rawWithRegression(sig, Baselines{Latency: lb, SeqScan: sb}), len(sig.Have), nil
+	return rawWithRegression(sig, Baselines{Latency: lb, SeqScan: sb}), sig, nil
 }
 
 // signalBaseline returns the per-(target, signal) seasonal baseline, refreshing

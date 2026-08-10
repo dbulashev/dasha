@@ -16,5 +16,7 @@ SELECT
     COALESCE(query, '') AS query
 FROM pg_stat_activity
 WHERE backend_xmin IS NOT NULL
-ORDER BY backend_xmin
+-- age(), not the bare column: ORDER BY would bind to the ::text output alias
+-- above and sort xids lexicographically.
+ORDER BY age(backend_xmin) DESC
 LIMIT $1 OFFSET $2

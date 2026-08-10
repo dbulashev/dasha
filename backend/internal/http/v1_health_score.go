@@ -9,6 +9,7 @@ import (
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/health"
+	"github.com/dbulashev/dasha/internal/metrics"
 	"github.com/dbulashev/dasha/internal/repository"
 )
 
@@ -232,13 +233,100 @@ func overlayCatalogFacts(raw *health.RawMetrics, m *dto.HealthScoreMetrics) {
 	raw.MaxLocksPerTransaction = m.MaxLocksPerTransaction
 }
 
+// overlaySignalGaps backfills, from the SQL snapshot, every field whose signal
+// the datasource did not carry. ToRawMetrics seeds absent inputs to a neutral
+// (healthy-reading) value — 100% cache hit, zero dead ratio, no wraparound age —
+// which is right while nothing better is known, but the snapshot read a few
+// lines up holds the real numbers. Without this, partial coverage scores green
+// and silently drops the matching rules: a target where only the node/pooler
+// role resolves still reports matched > 0, so the degraded flag never trips.
+func overlaySignalGaps(raw *health.RawMetrics, m *dto.HealthScoreMetrics, sig metrics.Signals) {
+	// The five below feed metricsInstanceWideRules, which drop the database
+	// attribution because a datasource series aggregates every database. The
+	// snapshot values are per-database (pg_statio_user_tables,
+	// pg_stat_user_tables, datfrozenxid of current_database()), so a rule fed
+	// from here must keep naming the database it was read from.
+	if !sig.Has(metrics.SigCacheHitRatio) {
+		raw.CacheHitRatio = m.CacheHitRatio
+		raw.MarkSnapshotBacked("low_cache_hit_ratio")
+	}
+
+	if !sig.Has(metrics.SigMaxDeadRatio) {
+		raw.MaxDeadRatio = m.MaxDeadRatio
+		raw.MarkSnapshotBacked("high_max_dead_ratio")
+	}
+
+	if !sig.Has(metrics.SigAvgDeadRatio) {
+		raw.AvgDeadRatio = m.AvgDeadRatio
+		raw.MarkSnapshotBacked("high_avg_dead_ratio")
+	}
+
+	if !sig.Has(metrics.SigHotUpdateRatio) {
+		raw.HotUpdateRatio = m.HotUpdateRatio
+		raw.MarkSnapshotBacked("low_hot_update_ratio")
+	}
+
+	if !sig.Has(metrics.SigXactsLeftWrap) {
+		raw.MaxXidAge = m.MaxXidAge
+		raw.MarkSnapshotBacked("xid_wraparound_risk")
+	}
+
+	if !sig.Has(metrics.SigDeadlocksTotal) {
+		raw.DeadlocksTotal = m.DeadlocksTotal
+	}
+
+	if !sig.Has(metrics.SigLocksNotGranted) {
+		raw.UngrantedLocks = m.UngrantedLocks
+	}
+
+	if !sig.Has(metrics.SigActiveLockWaiters) {
+		raw.ActiveLockWaiters = m.ActiveLockWaiters
+	}
+
+	if !sig.Has(metrics.SigTotalConns) {
+		raw.TotalConnections = m.TotalConnections
+	}
+
+	if !sig.Has(metrics.SigActiveConns) {
+		raw.ActiveConnections = m.ActiveConnections
+	}
+
+	if !sig.Has(metrics.SigIdleInTx) {
+		raw.IdleInTransaction = m.IdleInTransaction
+	}
+
+	if !sig.Has(metrics.SigMaxConns) {
+		raw.MaxConnections = m.MaxConnections
+	}
+
+	if !sig.Has(metrics.SigTimedCheckpoints) {
+		raw.TimedCheckpoints = m.TimedCheckpoints
+	}
+
+	if !sig.Has(metrics.SigRequestedCheckpoints) {
+		raw.RequestedCheckpoints = m.RequestedCheckpoints
+	}
+
+	// Replication is one fact split across two signals, and ToRawMetrics infers
+	// ReplicaCount from either — so the snapshot only wins when neither arrived,
+	// otherwise a lag-bytes-only datasource would lose its replica.
+	if !sig.Has(metrics.SigReplLagSeconds) && !sig.Has(metrics.SigReplLagBytes) {
+		raw.ReplicaCount = m.ReplicaCount
+		raw.MaxReplayLagSeconds = m.MaxReplayLagSeconds
+		raw.MaxLagBytes = m.MaxLagBytes
+		raw.DisconnectedReplicas = m.DisconnectedReplicas
+	}
+}
+
 // metricsRawWithCatalog returns the instant metrics-backed RawMetrics enriched
 // with the catalog overlay, or ok=false when the datasource is disabled,
 // unreachable, the target is unmapped, or the catalog snapshot cannot be read
 // (caller then falls back to the pure snapshot). The overlay is mandatory: a
 // metrics-only RawMetrics carries zero-valued catalog/GUC facts that the scorer
 // would misread as "autovacuum off" and similar, so a snapshot read failure
-// must sink the metrics result rather than emit a wrong-but-alive score.
+// must sink the metrics result rather than emit a wrong-but-alive score. The
+// same snapshot then backfills the signals the datasource did not carry, so
+// partial coverage scores off real numbers instead of neutral seeds.
 // The middle return value is the number of datasource signals that matched; 0
 // with ok=true means the target resolved but no selector matched a series, so
 // the score is metrics-backed yet effectively empty (caller flags it degraded).
@@ -247,7 +335,7 @@ func (s *Handlers) metricsRawWithCatalog(ctx context.Context, cluster, instance 
 		return health.RawMetrics{}, 0, false
 	}
 
-	raw, matched, err := s.metrics.CurrentRaw(ctx, cluster, instance)
+	raw, sig, err := s.metrics.CurrentRaw(ctx, cluster, instance)
 	if err != nil {
 		return health.RawMetrics{}, 0, false
 	}
@@ -263,8 +351,9 @@ func (s *Handlers) metricsRawWithCatalog(ctx context.Context, cluster, instance 
 	}
 
 	overlayCatalogFacts(&raw, m)
+	overlaySignalGaps(&raw, m, sig)
 
-	return raw, matched, true
+	return raw, len(sig.Have), true
 }
 
 func (s *Handlers) GetHealthScoreRecommendations(
