@@ -26,6 +26,12 @@ type RawMetrics struct {
 	// Catalog facts overlaid from the SQL snapshot keep theirs.
 	MetricsInstanceWide bool
 
+	// SnapshotBackedRules names the metricsInstanceWideRules whose input the
+	// datasource did not carry, so it was filled from the per-database SQL
+	// snapshot instead. Those values describe Database after all and keep their
+	// attribution even under MetricsInstanceWide. Fill via MarkSnapshotBacked.
+	SnapshotBackedRules map[string]bool
+
 	// Connections
 	TotalConnections  int
 	ActiveConnections int
@@ -107,6 +113,18 @@ type RawMetrics struct {
 	LatencyRegressionRatio float64 // current latency / seasonal baseline (0 = absent; >1 = regressed)
 	SeqScanRegressionRatio float64 // current seq-scan rate / seasonal baseline (0 = absent; >1 = regressed)
 	DiskUsedRatio          float64 // host disk used/total (0..1; 0 = absent; >=0.90 = critical)
+}
+
+// MarkSnapshotBacked records that these rules read a per-database SQL-snapshot
+// value rather than a datasource aggregate, so they keep Database attribution.
+func (m *RawMetrics) MarkSnapshotBacked(ruleIDs ...string) {
+	if m.SnapshotBackedRules == nil {
+		m.SnapshotBackedRules = make(map[string]bool, len(ruleIDs))
+	}
+
+	for _, id := range ruleIDs {
+		m.SnapshotBackedRules[id] = true
+	}
 }
 
 // CategoryResult holds the penalty calculation result for one category.

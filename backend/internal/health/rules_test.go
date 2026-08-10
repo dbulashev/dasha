@@ -996,3 +996,55 @@ func TestUnattributedRuleSets_MatchRegistry(t *testing.T) {
 		}
 	}
 }
+
+func TestEvaluate_MetricsModeKeepsDatabaseOnSnapshotBackedRules(t *testing.T) {
+	// Still metrics mode, but the datasource carried no series for these two
+	// signals, so the handler backfilled them from the SQL snapshot of
+	// Database. Those values are per-database facts after all — dropping the
+	// attribution would send the user looking for a cache-hit problem across
+	// the whole instance when it was read from one database.
+	m := metricsBackedRaw()
+	m.MarkSnapshotBacked("low_cache_hit_ratio", "xid_wraparound_risk")
+
+	got := make(map[string]string, len(Registry))
+	for _, r := range Evaluate(m, false) {
+		got[r.RuleID] = r.Database
+	}
+
+	want := map[string]string{
+		// Backfilled from the snapshot — attributed.
+		"low_cache_hit_ratio": "catalog_db",
+		"xid_wraparound_risk": "catalog_db",
+		// Still datasource aggregates — unattributed.
+		"high_max_dead_ratio":  "",
+		"high_avg_dead_ratio":  "",
+		"low_hot_update_ratio": "",
+	}
+
+	for rule, db := range want {
+		if _, ok := got[rule]; !ok {
+			t.Fatalf("test sanity: rule %q did not fire", rule)
+		}
+
+		if got[rule] != db {
+			t.Errorf("rule %q: expected database %q, got %q", rule, db, got[rule])
+		}
+	}
+}
+
+func TestMarkSnapshotBacked_AllocatesAndAccumulates(t *testing.T) {
+	var m RawMetrics // nil map — the handler marks rule by rule as it backfills
+
+	m.MarkSnapshotBacked("low_cache_hit_ratio")
+	m.MarkSnapshotBacked("high_max_dead_ratio", "xid_wraparound_risk")
+
+	for _, id := range []string{"low_cache_hit_ratio", "high_max_dead_ratio", "xid_wraparound_risk"} {
+		if !m.SnapshotBackedRules[id] {
+			t.Errorf("rule %q not marked", id)
+		}
+	}
+
+	if m.SnapshotBackedRules["low_hot_update_ratio"] {
+		t.Error("unmarked rule reads as snapshot-backed")
+	}
+}

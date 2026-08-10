@@ -182,13 +182,18 @@ horizon_metrics AS (
 per_table_metrics AS (
     SELECT
         -- reloptions keeps the spelling the user typed (off/0/f/no), so the
-        -- option has to be parsed, not string-matched.
+        -- option has to be parsed, not string-matched. CASE rather than a bare
+        -- AND: the cast must not reach other options (fillfactor=70 would
+        -- fail), and AND does not guarantee evaluation order.
         COUNT(*) FILTER (
             WHERE EXISTS (
                 SELECT 1
                 FROM pg_options_to_table(COALESCE(reloptions, ARRAY[]::text[])) o
-                WHERE o.option_name = 'autovacuum_enabled'
-                  AND NOT o.option_value::boolean
+                WHERE NOT CASE
+                    WHEN o.option_name = 'autovacuum_enabled'
+                    THEN o.option_value::boolean
+                    ELSE true
+                END
             )
         )::int AS tables_with_autovacuum_off,
         COALESCE(MAX(age(relfrozenxid))::bigint, 0) AS max_relfrozenxid_age

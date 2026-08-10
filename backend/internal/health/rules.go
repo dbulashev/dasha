@@ -135,6 +135,9 @@ var instanceOnlyCategories = map[Category]bool{
 // snapshot happened to be read from, which has nothing to do with the finding.
 // The same rules read per-database catalog values in snapshot mode and keep
 // their attribution there — hence the RawMetrics.MetricsInstanceWide guard.
+// A rule listed here still keeps its attribution when the datasource did not
+// carry the signal and the value came from the SQL snapshot after all; the
+// caller flags those via RawMetrics.MarkSnapshotBacked.
 //
 // Rules fed by facts overlayCatalogFacts writes back from the SQL snapshot
 // (bloat count, vacuum queue, newpage ratio, relfrozenxid, planner stats) are
@@ -235,7 +238,7 @@ func databaseOf(m RawMetrics, r Rule, hit *Hit, databaseScoped bool) string {
 		return ""
 	}
 
-	if m.MetricsInstanceWide && metricsInstanceWideRules[r.ID] {
+	if m.MetricsInstanceWide && metricsInstanceWideRules[r.ID] && !m.SnapshotBackedRules[r.ID] {
 		return ""
 	}
 

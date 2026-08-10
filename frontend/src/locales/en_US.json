@@ -1359,7 +1359,7 @@
         "title": "Tables with autovacuum disabled",
         "short": "Found {metric_value} tables with autovacuum_enabled=false in their storage parameters.",
         "detail": "This is rarely deliberate — it is usually a leftover from an old migration or experiment. Confirm that disabling it was justified.",
-        "sql": "SELECT relname, reloptions\nFROM pg_class\nWHERE 'autovacuum_enabled=false' = ANY(reloptions);"
+        "sql": "SELECT relname, reloptions\nFROM pg_class c\nWHERE c.reloptions IS NOT NULL\n  AND EXISTS (\n      SELECT 1\n      FROM pg_options_to_table(c.reloptions) o\n      WHERE NOT CASE\n          WHEN o.option_name = 'autovacuum_enabled'\n          THEN o.option_value::boolean\n          ELSE true\n      END\n  );"
       },
       "relfrozenxid_age_outlier": {
         "title": "Old table that has not been frozen",

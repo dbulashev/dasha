@@ -11,12 +11,17 @@ JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE c.relkind IN ('r', 'm', 't')
   AND c.reloptions IS NOT NULL
   -- reloptions keeps the spelling the user typed (off/0/f/no), so the option
-  -- has to be parsed, not string-matched.
+  -- has to be parsed, not string-matched. CASE rather than a bare AND: the cast
+  -- must not reach other options (fillfactor=70 would fail), and AND does not
+  -- guarantee evaluation order.
   AND EXISTS (
       SELECT 1
       FROM pg_options_to_table(c.reloptions) o
-      WHERE o.option_name = 'autovacuum_enabled'
-        AND NOT o.option_value::boolean
+      WHERE NOT CASE
+          WHEN o.option_name = 'autovacuum_enabled'
+          THEN o.option_value::boolean
+          ELSE true
+      END
   )
 ORDER BY n.nspname, c.relname
 LIMIT $1 OFFSET $2

@@ -241,24 +241,34 @@ func overlayCatalogFacts(raw *health.RawMetrics, m *dto.HealthScoreMetrics) {
 // and silently drops the matching rules: a target where only the node/pooler
 // role resolves still reports matched > 0, so the degraded flag never trips.
 func overlaySignalGaps(raw *health.RawMetrics, m *dto.HealthScoreMetrics, sig metrics.Signals) {
+	// The five below feed metricsInstanceWideRules, which drop the database
+	// attribution because a datasource series aggregates every database. The
+	// snapshot values are per-database (pg_statio_user_tables,
+	// pg_stat_user_tables, datfrozenxid of current_database()), so a rule fed
+	// from here must keep naming the database it was read from.
 	if !sig.Has(metrics.SigCacheHitRatio) {
 		raw.CacheHitRatio = m.CacheHitRatio
+		raw.MarkSnapshotBacked("low_cache_hit_ratio")
 	}
 
 	if !sig.Has(metrics.SigMaxDeadRatio) {
 		raw.MaxDeadRatio = m.MaxDeadRatio
+		raw.MarkSnapshotBacked("high_max_dead_ratio")
 	}
 
 	if !sig.Has(metrics.SigAvgDeadRatio) {
 		raw.AvgDeadRatio = m.AvgDeadRatio
+		raw.MarkSnapshotBacked("high_avg_dead_ratio")
 	}
 
 	if !sig.Has(metrics.SigHotUpdateRatio) {
 		raw.HotUpdateRatio = m.HotUpdateRatio
+		raw.MarkSnapshotBacked("low_hot_update_ratio")
 	}
 
 	if !sig.Has(metrics.SigXactsLeftWrap) {
 		raw.MaxXidAge = m.MaxXidAge
+		raw.MarkSnapshotBacked("xid_wraparound_risk")
 	}
 
 	if !sig.Has(metrics.SigDeadlocksTotal) {

@@ -177,8 +177,11 @@ per_table_metrics AS (
             WHERE EXISTS (
                 SELECT 1
                 FROM pg_options_to_table(COALESCE(reloptions, ARRAY[]::text[])) o
-                WHERE o.option_name = 'autovacuum_enabled'
-                  AND NOT o.option_value::boolean
+                WHERE NOT CASE
+                    WHEN o.option_name = 'autovacuum_enabled'
+                    THEN o.option_value::boolean
+                    ELSE true
+                END
             )
         )::int AS tables_with_autovacuum_off,
         COALESCE(MAX(age(relfrozenxid))::bigint, 0) AS max_relfrozenxid_age
