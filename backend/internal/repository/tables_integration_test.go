@@ -3,6 +3,7 @@
 package repository
 
 import (
+	"fmt"
 	"slices"
 	"testing"
 
@@ -49,12 +50,6 @@ func TestGetTablesTopKBySize(t *testing.T) {
 	assert.Positive(t, orders.NIdx, "orders has indexes")
 	assert.NotEmpty(t, orders.Bloat, "analyzed table should get a bloat estimate")
 
-	// The catalog-relpages prefilter must not drop the largest table when the limit is tight
-	single, err := p.getTablesTopKBySize(ctx, vNum, pool, 1, defaultPgStatsView)
-	require.NoError(t, err)
-	require.Len(t, single, 1)
-	assert.Equal(t, result[0].Table, single[0].Table)
-
 	// pg_locks spans the whole cluster and every database cloned from the fixture template
 	// shares its relation OIDs, so an AccessExclusiveLock taken elsewhere must not hide
 	// the table here — which is what made this test fail against a parallel locking test.
@@ -81,6 +76,28 @@ func TestGetTablesTopKBySize(t *testing.T) {
 			return tbl.Table == "public.orders"
 		})
 		assert.True(t, found, "a lock in another database must not hide public.orders")
+	})
+
+	// The fixture has fewer relations than the candidate floor, so the catalog prefilter
+	// never cuts anything — pad past it to check the exact-size step still ranks correctly.
+	t.Run("catalog prefilter binds", func(t *testing.T) {
+		padded := testinfra.IsolatePool(t)
+		pp := NewTestPgxPool(padded, zap.NewNop())
+
+		for i := range 60 {
+			_, err := padded.Exec(ctx, fmt.Sprintf("CREATE TABLE pad_%02d (id int)", i))
+			require.NoError(t, err)
+		}
+
+		top, err := pp.getTablesTopKBySize(ctx, vNum, padded, 10, defaultPgStatsView)
+		require.NoError(t, err)
+		require.NotEmpty(t, top)
+		assert.Equal(t, result[0].Table, top[0].Table)
+
+		single, err := pp.getTablesTopKBySize(ctx, vNum, padded, 1, defaultPgStatsView)
+		require.NoError(t, err)
+		require.Len(t, single, 1)
+		assert.Equal(t, result[0].Table, single[0].Table)
 	})
 }
 

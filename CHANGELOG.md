@@ -24,7 +24,6 @@
 
 ### Bug Fixes
 - **Fixed the timeout in the largest-tables report on databases with thousands of objects.**
-- **Fixed tables of the selected database disappearing from the largest-tables report during heavy operations in other databases of the cluster.**
 - **Snapshots are visible from every database of a host.** A snapshot holds the statistics of the whole instance, but was only listed while the database it happened to be taken through was selected — an auto-snapshot taken through `postgres` was invisible from the application database. The stored numbers now carry the database each statement belongs to, so a snapshot can be read either way, and the list shows which databases each one covers. Snapshots taken by earlier versions keep being shown instance-wide and cannot be compared against newer ones or against live statistics — the app says so instead of pairing them.
 - **Lock snapshots cover the whole host.** An activity spike is detected across the instance, but the contention captured with it was limited to one database, so a storm in a neighbouring one left no trace. Blocked sessions are now captured instance-wide and each names its database. Sessions of different databases can no longer be mistaken for a blocking pair.
 - **An auto-snapshot records the database its statistics were actually read through**, instead of the first one from the configuration, and is no longer stored at all when the extension is readable in none of them.
