@@ -14,6 +14,10 @@
 ![Vue](https://img.shields.io/badge/Vue-3.5-4FC08D)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14--18-336791)
 
+<p align="center">
+  <img src="assets/dasha-demo.gif" alt="Dasha — Home, Health Score, Query Stats, Query Report, Locks" width="900">
+</p>
+
 ## Возможности
 
 [Анализ запросов](doc/ru/features.md#анализ-запросов) ·
