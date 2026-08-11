@@ -22,8 +22,8 @@ make run-mcp
 ```bash
 make demo-lab          # Собрать и запустить (http://localhost:3000)
 make demo-lab-logs     # Просмотр логов
-make demo-lab-restart  # Пересобрать и перезапустить
-make demo-lab-down     # Остановить и очистить
+make demo-lab-restart  # Пересобрать и перезапустить (сначала `down -v` — тома удаляются)
+make demo-lab-down     # Остановить и удалить тома (хранилище снимков и данные PG теряются)
 ```
 
 Демо включает:
@@ -36,7 +36,7 @@ make demo-lab-down     # Остановить и очистить
 
 ## Структура проекта
 
-```
+```text
 ├── doc/swagger.yaml              # Спецификация OpenAPI 3.0 (источник истины)
 ├── doc/en/, doc/ru/              # Пользовательская документация (английская / русская)
 ├── backend/
@@ -99,10 +99,14 @@ make deps              # go mod tidy + download
 
 ## Пайплайн кодогенерации
 
-```
+```text
 doc/swagger.yaml
        │
        ├──> oapi-codegen ──> backend/gen/serverhttp/api.gen.go
+       │    (.oapi-codegen.yaml)
+       │
+       ├──> oapi-codegen ──> backend/gen/apiclient/    (API-клиент для dasha-mcp)
+       │    (.oapi-codegen.client.yaml)
        │
        └──> orval ──> frontend/src/api/gen/    (Vue Query хуки)
                     └> frontend/src/api/models/ (TypeScript-типы)
@@ -112,7 +116,7 @@ doc/swagger.yaml
 
 SQL-запросы находятся в `backend/internal/query/sql/<домен>/<запрос>/`. Версионные переопределения используют нумерованные директории:
 
-```
+```text
 sql/queries/running/
 ├── running.tmpl.sql          # Базовый шаблон (последняя версия PG)
 ├── 100000/running.tmpl.sql   # Для PG < 10

@@ -22,8 +22,8 @@ A full demo environment with multiple PostgreSQL clusters, streaming replication
 ```bash
 make demo-lab          # Build and start (http://localhost:3000)
 make demo-lab-logs     # Follow logs
-make demo-lab-restart  # Rebuild and restart
-make demo-lab-down     # Stop and clean up
+make demo-lab-restart  # Rebuild and restart (runs `down -v` first — volumes are dropped)
+make demo-lab-down     # Stop and remove volumes (snapshot storage and PG data are lost)
 ```
 
 The demo includes:
@@ -36,7 +36,7 @@ The demo includes:
 
 ## Project Structure
 
-```
+```text
 ├── doc/swagger.yaml              # OpenAPI 3.0 spec (source of truth)
 ├── doc/en/, doc/ru/              # User documentation (English / Russian)
 ├── backend/
@@ -99,10 +99,14 @@ make deps              # go mod tidy + download
 
 ## Code Generation Pipeline
 
-```
+```text
 doc/swagger.yaml
        │
        ├──> oapi-codegen ──> backend/gen/serverhttp/api.gen.go
+       │    (.oapi-codegen.yaml)
+       │
+       ├──> oapi-codegen ──> backend/gen/apiclient/    (API client used by dasha-mcp)
+       │    (.oapi-codegen.client.yaml)
        │
        └──> orval ──> frontend/src/api/gen/    (Vue Query hooks)
                     └> frontend/src/api/models/ (TypeScript types)
@@ -112,7 +116,7 @@ doc/swagger.yaml
 
 SQL queries live in `backend/internal/query/sql/<domain>/<query>/`. Version-specific overrides use numbered directories:
 
-```
+```text
 sql/queries/running/
 ├── running.tmpl.sql          # Base template (latest PG)
 ├── 100000/running.tmpl.sql   # For PG < 10

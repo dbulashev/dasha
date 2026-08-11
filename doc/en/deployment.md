@@ -238,6 +238,6 @@ ingress:
 - **Passwords via env** — `password_from_env` + ESO or existing Kubernetes Secret; `extraEnv` / `extraEnvFrom` for Secrets managed outside the chart
 - **Cloud SA keys** — per-folder `authorized_key.json` via ESO or existing Secret
 - **Frontend optional** — deploy backend only for API access
-- **Ingress / Gateway API** — single `/` rule routes to frontend (which proxies `/api/` and `/auth/` to backend); auto HTTP→HTTPS redirect when TLS is enabled; cert-manager support; mutually exclusive `gatewayAPI.enabled` for K8s Gateway API (`gateway.networking.k8s.io/v1`)
+- **Ingress / Gateway API** — single `/` rule routes to frontend (which proxies `/api/` and `/auth/` to backend); HTTP→HTTPS redirect when TLS is enabled — via nginx annotations for Ingress, via a redirect `HTTPRoute` for a chart-managed Gateway (on an existing Gateway it additionally needs `existingGateway.redirectSectionName`); cert-manager support; mutually exclusive `gatewayAPI.enabled` for K8s Gateway API (`gateway.networking.k8s.io/v1`)
 - **Security** — `podSecurityContext`, `securityContext`, separate settings for frontend/backend
 

@@ -6,7 +6,7 @@
 flowchart LR
     SPA["Vue 3 SPA (Vuetify)<br/>:3000"]
     LLM["AI assistant<br/>(MCP client)"]
-    MCP["dasha-mcp<br/>MCP server :8765"]
+    MCP["dasha-mcp<br/>MCP server<br/>(HTTP/SSE :8765)"]
     BE["Go backend (Echo)<br/>:8000"]
     AS["dasha autosnapshot<br/>daemon"]
     PG[("PostgreSQL clusters<br/>14 – 18")]

@@ -81,7 +81,8 @@ streaming replication, an OIDC provider and a load generator: [Demo Lab](doc/en/
 | [Development](doc/en/development.md) | Local run, demo lab, project layout, code generation, CI/CD |
 | [Health Score model](README-health-score.md) | Formula, weights, all rules and thresholds |
 
-Russian translation of the same documents: [doc/ru/](doc/ru/).
+Russian translation: [doc/ru/](doc/ru/) — except the Health Score model, which keeps its own
+root-level file, [README-health-score.ru.md](README-health-score.ru.md).
 
 ## Changelog
 

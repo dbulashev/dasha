@@ -82,7 +82,8 @@ docker compose up -d
 | [Разработка](doc/ru/development.md) | Локальный запуск, демо-лаборатория, структура проекта, кодогенерация, CI/CD |
 | [Модель Health Score](README-health-score.ru.md) | Формула, веса, все правила и пороги |
 
-Английская версия тех же документов: [doc/en/](doc/en/).
+Английская версия: [doc/en/](doc/en/) — кроме модели Health Score, у неё отдельный файл
+в корне: [README-health-score.md](README-health-score.md).
 
 ## История изменений
 

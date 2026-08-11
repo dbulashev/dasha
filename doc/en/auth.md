@@ -46,6 +46,8 @@ auth:
     burst: 20
 ```
 
+In any mode other than `none`, set `auth.require_https: true` in production: Dasha then rejects requests that arrive over plaintext HTTP (`X-Forwarded-Proto: https` from a TLS-terminating proxy counts as secure), and the backend logs a startup warning while the flag is off. It is left out of the examples above because it breaks a local `http://localhost` setup.
+
 Roles are extracted from the OIDC ID token claims at the path specified by `role_claim`. Supported roles: `admin` (full access) and `viewer` (read-only GET requests). If no known role is found, `viewer` is assigned by default.
 
 **Generating secrets**

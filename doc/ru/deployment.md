@@ -238,6 +238,6 @@ ingress:
 - **Пароли через env** — `password_from_env` + ESO или существующий Kubernetes Secret; `extraEnv` / `extraEnvFrom` для Secret'ов, которыми управляет не чарт
 - **Ключи сервисных аккаунтов** — отдельный `authorized_key.json` для каждого фолдера через ESO или существующий Secret
 - **Фронтенд опционален** — можно развернуть только бэкенд для доступа через API
-- **Ingress / Gateway API** — одно правило `/` на фронтенд (который проксирует `/api/` и `/auth/` на бэкенд); авто-редирект HTTP→HTTPS при включённом TLS; поддержка cert-manager; взаимоисключающий `gatewayAPI.enabled` для K8s Gateway API (`gateway.networking.k8s.io/v1`)
+- **Ingress / Gateway API** — одно правило `/` на фронтенд (который проксирует `/api/` и `/auth/` на бэкенд); редирект HTTP→HTTPS при включённом TLS — через аннотации nginx для Ingress и через отдельный `HTTPRoute` для Gateway, созданного чартом (на существующем Gateway дополнительно нужен `existingGateway.redirectSectionName`); поддержка cert-manager; взаимоисключающий `gatewayAPI.enabled` для K8s Gateway API (`gateway.networking.k8s.io/v1`)
 - **Безопасность** — `podSecurityContext`, `securityContext`, отдельные настройки для фронтенда и бэкенда
 
