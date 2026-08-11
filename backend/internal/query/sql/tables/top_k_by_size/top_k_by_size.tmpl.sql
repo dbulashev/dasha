@@ -1,23 +1,63 @@
 WITH locked_rels AS MATERIALIZED (
-    SELECT relation FROM pg_locks WHERE mode = 'AccessExclusiveLock' AND granted
+    SELECT relation FROM pg_locks
+    WHERE mode = 'AccessExclusiveLock' AND granted
+      AND database IN (0, (SELECT oid FROM pg_database WHERE datname = current_database()))
 ),
 constants AS (SELECT current_setting('block_size')::numeric bs, 23 hdr, 8 ma),
-     monitor_pg_columns as (SELECT table_schema, table_name
-                            FROM information_schema.columns),
-     monitor_pg_stats as (SELECT schemaname, tablename, attname, null_frac, avg_width, n_distinct
-                          FROM {{ .PgStatsView }}),
-     no_stats AS (SELECT table_schema,
-                         table_name,
-                         n_live_tup::numeric           est_rows,
-                         pg_table_size(relid)::numeric table_size
-                  FROM information_schema.columns
-                           JOIN pg_stat_user_tables psut ON table_schema = psut.schemaname AND table_name = psut.relname
-                           LEFT JOIN monitor_pg_stats s ON table_schema = s.schemaname AND table_name = s.tablename AND
-                                                           column_name = attname
-                  WHERE attname IS NULL
-                    AND table_schema NOT IN ('pg_catalog', 'information_schema')
-                    AND psut.relid NOT IN (SELECT relation FROM locked_rels)
-                  GROUP BY table_schema, table_name, relid, n_live_tup),
+     safe_tables AS MATERIALIZED (
+         SELECT c.oid, c.relname, c.relkind, c.relpages, c.reltuples, c.reltoastrelid, c.reloptions, ns.nspname
+         FROM pg_class c
+                  JOIN pg_catalog.pg_namespace ns ON ns.oid = c.relnamespace
+         WHERE c.relkind IN ('p', 'r', 'm')
+           AND NOT EXISTS (SELECT 1 FROM locked_rels l WHERE l.relation = c.oid)
+     ),
+     index_pages AS (
+         SELECT i.indrelid AS relid, sum(ic.relpages)::bigint AS pages
+         FROM pg_index i
+                  JOIN pg_class ic ON ic.oid = i.indexrelid
+         GROUP BY i.indrelid
+     ),
+     candidates AS (
+         SELECT s.*,
+                s.relpages + coalesce(t.relpages, 0) + coalesce(ti.pages, 0) + coalesce(ip.pages, 0) AS approx_pages
+         FROM safe_tables s
+                  LEFT JOIN pg_class t ON t.oid = s.reltoastrelid AND t.relkind = 't'
+                  LEFT JOIN index_pages ti ON ti.relid = s.reltoastrelid
+                  LEFT JOIN index_pages ip ON ip.relid = s.oid
+         ORDER BY approx_pages DESC
+         LIMIT greatest($1 * 4, 50)
+     ),
+     sized_candidates AS (
+         SELECT c.*, pg_total_relation_size(c.oid) AS total_bytes
+         FROM candidates c
+     ),
+     top_tables AS (
+         SELECT *
+         FROM sized_candidates
+         WHERE total_bytes > 500 * 2 ^ 10
+         ORDER BY total_bytes DESC
+         LIMIT $1
+     ),
+     top_columns AS (
+         SELECT t.oid, t.nspname AS table_schema, t.relname AS table_name, a.attname AS column_name
+         FROM top_tables t
+                  JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum > 0 AND NOT a.attisdropped
+     ),
+     top_stats AS (
+         SELECT s.schemaname, s.tablename, s.attname, s.null_frac, s.avg_width
+         FROM {{ .PgStatsView }} s
+                  JOIN top_tables t ON t.nspname = s.schemaname AND t.relname = s.tablename
+     ),
+     no_stats AS (SELECT c.table_schema,
+                         c.table_name,
+                         pg_table_size(c.oid)::numeric table_size
+                  FROM top_columns c
+                           JOIN pg_stat_user_tables psut ON psut.relid = c.oid
+                           LEFT JOIN top_stats s ON s.schemaname = c.table_schema AND s.tablename = c.table_name AND
+                                                    s.attname = c.column_name
+                  WHERE s.attname IS NULL
+                    AND c.table_schema NOT IN ('pg_catalog', 'information_schema')
+                  GROUP BY c.table_schema, c.table_name, c.oid),
      null_headers AS (SELECT hdr + 1 + sum(CASE WHEN null_frac <> 0 THEN 1 ELSE 0 END) / 8 nullhdr,
                              sum((1 - null_frac) * avg_width)                              datawidth,
                              max(null_frac)                                                maxfracsum,
@@ -26,15 +66,12 @@ constants AS (SELECT current_setting('block_size')::numeric bs, 23 hdr, 8 ma),
                              hdr,
                              ma,
                              bs
-                      FROM monitor_pg_stats
+                      FROM top_stats
                                CROSS JOIN constants
                                LEFT JOIN no_stats
                                          ON schemaname = no_stats.table_schema AND tablename = no_stats.table_name
                       WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
                         AND no_stats.table_name IS NULL
-                        AND EXISTS(SELECT 1
-                                   FROM monitor_pg_columns c
-                                   WHERE schemaname = c.table_schema AND tablename = c.table_name)
                       GROUP BY schemaname, tablename, hdr, ma, bs),
      data_headers AS (SELECT ma,
                              bs,
@@ -45,18 +82,17 @@ constants AS (SELECT current_setting('block_size')::numeric bs, 23 hdr, 8 ma),
                              maxfracsum *
                              (nullhdr + ma - CASE WHEN nullhdr % ma = 0 THEN ma ELSE nullhdr % ma END)            nullhdr2
                       FROM null_headers),
-     table_estimates AS (SELECT schemaname,
-                                tablename,
-                                bs,
-                                relpages * bs        table_bytes,
-                                ceil(reltuples * (datahdr + nullhdr2 + 4 + ma -
-                                                  CASE WHEN datahdr % ma = 0 THEN ma ELSE datahdr % ma END) /
-                                     (bs - 20)) * bs expected_bytes,
-                                reltoastrelid
-                         FROM data_headers
-                                  JOIN pg_class ON tablename = relname
-                                  JOIN pg_namespace ON relnamespace = pg_namespace.oid AND schemaname = nspname
-                         WHERE pg_class.relkind = 'r'),
+     table_estimates AS (SELECT dh.schemaname,
+                                dh.tablename,
+                                dh.bs,
+                                t.relpages * dh.bs                                            table_bytes,
+                                ceil(t.reltuples * (datahdr + nullhdr2 + 4 + dh.ma -
+                                                    CASE WHEN datahdr % dh.ma = 0 THEN dh.ma ELSE datahdr % dh.ma END) /
+                                     (dh.bs - 20)) * dh.bs                                    expected_bytes,
+                                t.reltoastrelid
+                         FROM data_headers dh
+                                  JOIN top_tables t ON t.nspname = dh.schemaname AND t.relname = dh.tablename
+                         WHERE t.relkind = 'r'),
      estimates_with_toast AS (SELECT schemaname,
                                      tablename,
                                      table_bytes + coalesce(toast.relpages, 0) * bs               table_bytes,
@@ -100,18 +136,11 @@ constants AS (SELECT current_setting('block_size')::numeric bs, 23 hdr, 8 ma),
                                table_bloat_pct,
                                pg_size_pretty(bloat_bytes) as bloat_size,
                                pg_size_pretty(table_bytes) as table_size
-                        FROM bloat_data),
-     safe_tables AS MATERIALIZED (
-         SELECT c.oid, c.relname, c.reltoastrelid, c.reloptions, ns.nspname
-         FROM pg_class c
-                  JOIN pg_catalog.pg_namespace ns ON ns.oid = c.relnamespace
-         WHERE c.relkind IN ('p', 'r', 'm')
-           AND c.oid NOT IN (SELECT relation FROM locked_rels)
-     )
+                        FROM bloat_data)
 SELECT c.nspname || '.' || c.relname                              AS table,
        (SELECT count(*) FROM pg_index i WHERE i.indrelid = c.oid) AS n_idx,
-       pg_total_relation_size(c.oid)                              AS total_bytes,
-       pg_size_pretty(pg_total_relation_size(c.oid))              AS total,
+       c.total_bytes                                              AS total_bytes,
+       pg_size_pretty(c.total_bytes)                              AS total,
        pg_size_pretty(pg_relation_size(c.reltoastrelid))          AS toast,
        pg_size_pretty(pg_indexes_size(c.oid))                     AS indexes,
        pg_size_pretty(pg_relation_size(c.oid, 'main'))            AS main,
@@ -136,9 +165,7 @@ SELECT c.nspname || '.' || c.relname                              AS table,
         WHERE s.relid = c.oid)                                    AS stat_info,
        bloat_size || '(' || ptb.table_bloat_pct || '%)'           as bloat,
        replace(translate(c.reloptions::text, '{}', ''), ',', ', ') as reloptions
-FROM safe_tables c
+FROM top_tables c
          LEFT JOIN pg_table_bloat ptb
                    ON ptb."database" = current_database() AND ptb."schema" = c.nspname AND ptb."table" = c.relname
-WHERE pg_total_relation_size(c.oid) > 500 * 2 ^ 10
-ORDER BY pg_total_relation_size(c.oid) DESC
-limit $1;
+ORDER BY c.total_bytes DESC;
