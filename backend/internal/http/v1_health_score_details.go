@@ -42,6 +42,7 @@ func (s *Handlers) GetHealthScoreDatabases(
 			Database:                 m.Database,
 			SizeBytes:                m.SizeBytes,
 			CacheHitRatio:            m.CacheHitRatio,
+			CacheSampleBlocks:        m.CacheSampleBlocks,
 			MaxDeadRatio:             m.MaxDeadRatio,
 			AvgDeadRatio:             m.AvgDeadRatio,
 			TablesHighBloat:          m.TablesHighBloat,

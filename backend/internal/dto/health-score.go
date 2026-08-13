@@ -58,7 +58,8 @@ type HealthScoreDatabaseMetrics struct {
 	SizeBytes int64
 
 	// Performance
-	CacheHitRatio float64
+	CacheHitRatio     float64
+	CacheSampleBlocks int64
 
 	// Storage
 	MaxDeadRatio    float64
@@ -100,6 +101,7 @@ type HealthScoreMetrics struct {
 
 	// Performance
 	CacheHitRatio        float64
+	CacheSampleBlocks    int64
 	TrackIoTimingEnabled bool
 
 	// Storage

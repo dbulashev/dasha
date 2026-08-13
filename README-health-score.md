@@ -55,7 +55,7 @@ Penalties grow smoothly with the metric. A **breakpoint** is the metric value at
 | connections    | `total / max_connections`           | 0.60 → 0.80 → 0.95+                             |
 | connections    | `idle_in_transaction` (count)       | linear 5 pts each, capped at 30                |
 | connections    | `longest_transaction_seconds`       | >300 s, capped at 20 pts                        |
-| performance    | `cache_hit_ratio` (%)               | ≥95 → ≥90 → ≥85 → below                         |
+| performance    | `cache_hit_ratio` (%)               | ≥95 → ≥90 → ≥85 → below (only at ≥50,000 blocks) |
 | performance    | `track_io_timing` off               | flat 5 pts (LOW)                               |
 | storage        | `max_dead_ratio` (%)                | ≤20 → 20–30 → >30                               |
 | storage        | `avg_dead_ratio` (%)                | >15 adds up to 30 pts                           |
@@ -100,7 +100,7 @@ Each bullet: what's measured / how it's computed, then LOW / MEDIUM / HIGH thres
 - `long_running_transaction` — `now() - xact_start` of the longest running transaction. Long transactions amplify bloat and prevent freezing. Thresholds ≥300 / ≥600 / ≥1800 seconds. Autovacuum workers are counted too: they are the ones that clean up bloat, so hours-long runs on a big table (or a freeze) are expected — `backend_type` tells them apart, and terminating one only makes it start over.
 
 ### Performance
-- `low_cache_hit_ratio` — `heap_blks_hit / (heap_blks_hit + heap_blks_read)` over `pg_statio_user_tables`, in %. Share of page reads served from `shared_buffers` rather than the OS / disk. Thresholds <95 / <90 / <85.
+- `low_cache_hit_ratio` — `heap_blks_hit / (heap_blks_hit + heap_blks_read)` over `pg_statio_user_tables`, in %. Share of page reads served from `shared_buffers` rather than the OS / disk. Thresholds <95 / <90 / <85. Not graded below 50,000 blocks of traffic: a database of a few small tables serves so few blocks that their first, cold reads alone drop the ratio.
 - `track_io_timing_disabled` — GUC `track_io_timing` is off, so `pg_stat_statements.*_blk_*_time` are always zero and slow-query I/O cannot be analysed. LOW.
 
 ### Storage

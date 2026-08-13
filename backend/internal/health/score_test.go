@@ -197,6 +197,13 @@ func TestPenaltyPerformance_LowCacheHit(t *testing.T) {
 	}
 }
 
+func TestPenaltyPerformance_TinyCacheSample(t *testing.T) {
+	m := RawMetrics{CacheHitRatio: 40, CacheSampleBlocks: 900}
+	if r := penaltyPerformance(m); r.Penalty != 0 {
+		t.Errorf("expected 0 penalty for a tiny block sample, got %v", r.Penalty)
+	}
+}
+
 func TestPenaltyStorage_Clean(t *testing.T) {
 	m := RawMetrics{MaxDeadRatio: 0, AvgDeadRatio: 0, TablesHighBloat: 0}
 	r := penaltyStorage(m)

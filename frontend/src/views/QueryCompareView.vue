@@ -26,12 +26,14 @@ import CompareCard from '@/components/queries/CompareCard.vue'
 import SqlDialog from '@/components/queries/SqlDialog.vue'
 import ScopeSwitch from '@/components/queries/ScopeSwitch.vue'
 import { useQueryScope } from '@/composables/useQueryScope'
+import { usePrefsStore } from '@/stores/prefs'
 
 const { clusterName, hostName, databaseName } = useClusterInfo()
 const { t } = useI18n()
 const { clearError, onError } = useViewError()
 const excludeUsersStore = useExcludeUsersStore()
 const { scope, hasScopeChoice } = useQueryScope()
+const prefs = usePrefsStore()
 
 const excludeUsers = ref<string[]>(
   clusterName.value ? excludeUsersStore.getExcludeUsers(clusterName.value) : [],
@@ -193,6 +195,16 @@ const sortedItems = computed(() => {
     const vb = (b.Left?.[field] as number | null | undefined) ?? (b.Right?.[field] as number | null | undefined) ?? 0
     return (vb as number) - (va as number)
   })
+})
+
+// A comparison covering a busy instance is well over a thousand cards; render
+// them in pages, the way the query report does.
+const visibleCount = ref(prefs.pageSize)
+
+const visibleItems = computed(() => sortedItems.value.slice(0, visibleCount.value))
+
+watch([sortBy, hideAbsentInA, hideAbsentInB, compareData, () => prefs.pageSize], () => {
+  visibleCount.value = prefs.pageSize
 })
 
 const totalCount = computed(() => compareData.value?.length ?? 0)
@@ -384,13 +396,18 @@ watch([selectedA, selectedB, excludeUsers, scope], () => {
     <v-progress-linear v-if="loading" indeterminate class="mb-4" />
     <template v-else-if="compareData && sortedItems.length">
       <CompareCard
-        v-for="item in sortedItems"
+        v-for="item in visibleItems"
         :key="`${item.QueryID}-${item.Datname ?? ''}`"
         :item="item"
         :show-database="effectiveScope === 'instance'"
         :sort-by="sortBy"
         @show-sql="showSqlDialog"
       />
+      <div v-if="visibleItems.length < sortedItems.length" class="d-flex justify-center">
+        <v-btn variant="text" size="small" @click="visibleCount += prefs.pageSize">
+          {{ t('report.showMore', { shown: visibleItems.length, total: sortedItems.length }) }}
+        </v-btn>
+      </div>
     </template>
     <div v-else-if="compareData && !sortedItems.length" class="text-medium-emphasis">
       {{ t('noData') }}

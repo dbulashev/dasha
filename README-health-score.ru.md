@@ -55,7 +55,7 @@ score = 100 − Σ (penalty_i × weight_i)
 | connections    | `total / max_connections`              | 0.60 → 0.80 → 0.95+                            |
 | connections    | `idle_in_transaction` (шт.)            | по 5 баллов за каждый, потолок 30             |
 | connections    | `longest_transaction_seconds`          | >300 с, потолок 20 баллов                     |
-| performance    | `cache_hit_ratio` (%)                  | ≥95 → ≥90 → ≥85 → ниже                        |
+| performance    | `cache_hit_ratio` (%)                  | ≥95 → ≥90 → ≥85 → ниже (только при ≥50 000 блоков) |
 | performance    | `track_io_timing` выключен             | фиксированные 5 баллов (LOW)                  |
 | storage        | `max_dead_ratio` (%)                   | ≤20 → 20–30 → >30                             |
 | storage        | `avg_dead_ratio` (%)                   | >15 — до 30 баллов                            |
@@ -100,7 +100,7 @@ score = 100 − Σ (penalty_i × weight_i)
 - `long_running_transaction` — `now() - xact_start` самой долгой транзакции. Длинные транзакции усиливают bloat и не дают замораживать строки. Пороги ≥300 / ≥600 / ≥1800 секунд. Процессы автовакуума тоже попадают в счёт: именно они убирают bloat, поэтому многочасовая работа на большой таблице (или заморозка) — норма; отличить их можно по `backend_type`, а прерывание только заставит начать заново.
 
 ### Performance
-- `low_cache_hit_ratio` — `heap_blks_hit / (heap_blks_hit + heap_blks_read)` по `pg_statio_user_tables`, в %. Доля чтений страниц из `shared_buffers`, а не с диска / ОС-кеша. Пороги <95 / <90 / <85.
+- `low_cache_hit_ratio` — `heap_blks_hit / (heap_blks_hit + heap_blks_read)` по `pg_statio_user_tables`, в %. Доля чтений страниц из `shared_buffers`, а не с диска / ОС-кеша. Пороги <95 / <90 / <85. При трафике меньше 50 000 блоков метрика не оценивается: база из нескольких маленьких таблиц читает так мало блоков, что первые же холодные чтения роняют показатель.
 - `track_io_timing_disabled` — GUC `track_io_timing` выключен, поэтому `pg_stat_statements.*_blk_*_time` всегда нули и I/O медленных запросов нельзя проанализировать. LOW.
 
 ### Storage

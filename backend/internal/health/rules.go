@@ -303,8 +303,12 @@ var Registry = []Rule{
 		},
 	},
 	{
-		ID: "low_cache_hit_ratio", Category: CategoryPerformance, RelatedRoute: "/indexes-usage",
+		ID: "low_cache_hit_ratio", Category: CategoryPerformance, RelatedRoute: "/tables",
 		Evaluate: func(m RawMetrics) *Hit {
+			if !cacheHitRatioMeaningful(m) {
+				return nil
+			}
+
 			r := m.CacheHitRatio
 
 			// Relaxed thresholds: classic 99/95/90 over-triggers on OLAP

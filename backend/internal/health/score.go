@@ -46,6 +46,7 @@ type RawMetrics struct {
 
 	// Performance
 	CacheHitRatio        float64
+	CacheSampleBlocks    int64
 	TrackIoTimingEnabled bool
 
 	// Storage
@@ -605,6 +606,18 @@ func penaltyConnections(m RawMetrics) CategoryResult {
 	}
 }
 
+// minCacheSampleBlocks is the block traffic below which the cache hit ratio is
+// noise: a database of a few tiny tables serves a handful of blocks, and their
+// first (cold) reads alone push the ratio far below any threshold.
+const minCacheSampleBlocks = 50_000
+
+// cacheHitRatioMeaningful reports whether the ratio rests on enough traffic to
+// grade. Zero blocks means the sample was not collected (metrics mode), which
+// keeps the pre-existing grading.
+func cacheHitRatioMeaningful(m RawMetrics) bool {
+	return m.CacheSampleBlocks == 0 || m.CacheSampleBlocks >= minCacheSampleBlocks
+}
+
 func penaltyPerformance(m RawMetrics) CategoryResult {
 	penalty := 0.0
 
@@ -612,6 +625,8 @@ func penaltyPerformance(m RawMetrics) CategoryResult {
 	// thresholds — OLAP workloads with cold cache shouldn't be penalised
 	// indiscriminately.
 	switch {
+	case !cacheHitRatioMeaningful(m):
+		penalty = 0
 	case m.CacheHitRatio >= 95:
 		penalty = 0
 	case m.CacheHitRatio >= 90:
@@ -624,13 +639,18 @@ func penaltyPerformance(m RawMetrics) CategoryResult {
 
 	penalty = math.Min(penalty, 100)
 
+	details := map[string]float64{"cache_hit_ratio": m.CacheHitRatio}
+	// Shown only when the sample is what kept the ratio ungraded, so a low ratio
+	// next to a clean score has its explanation on screen.
+	if !cacheHitRatioMeaningful(m) {
+		details["cache_sample_blocks"] = float64(m.CacheSampleBlocks)
+	}
+
 	return CategoryResult{
 		Name:    CategoryPerformance,
 		Weight:  weightPerformance,
 		Penalty: math.Round(penalty*10) / 10,
-		Details: map[string]float64{
-			"cache_hit_ratio": m.CacheHitRatio,
-		},
+		Details: details,
 	}
 }
 
