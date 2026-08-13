@@ -97,6 +97,7 @@ See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ## Contributors
 
+* [Anton Glushakov](https://github.com/glushakov)
 * [Mikhail Grigorev](https://github.com/cherts)
 * [Ilya Lukyanov](mailto:lukyanov1985@gmail.com)
 * [Roman Minebaev](https://github.com/minebaev)

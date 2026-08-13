@@ -48,7 +48,7 @@ const route = useRoute()
 const router = useRouter()
 
 import ClusterHostDbSelector from './components/ClusterHostDbSelector.vue'
-import HostRoleBadge from './components/HostRoleBadge.vue'
+import HostRoleLabel from './components/HostRoleLabel.vue'
 import LoginCard from './components/auth/LoginCard.vue'
 import UserMenu from './components/auth/UserMenu.vue'
 import SettingsDialog from './components/prefs/SettingsDialog.vue'
@@ -197,6 +197,7 @@ watch(() => route.path, () => {
           <span class="app-brand-name">Dasha</span>
           <v-divider vertical class="mx-2 app-brand-divider" />
           <span class="app-brand-sub">PostgreSQL Dashboard</span>
+          <HostRoleLabel />
         </v-toolbar-title>
         <cluster-host-db-selector class="ml-4 mr-2" />
         <template v-slot:append>
@@ -216,7 +217,6 @@ watch(() => route.path, () => {
       <v-navigation-drawer v-model="drawer"
         :location="$vuetify.display.mobile ? 'bottom' : undefined"
         >
-        <HostRoleBadge />
         <v-list nav>
           <v-list-item :title="t('Home')"  prepend-icon="mdi-sigma" link :to="mainLink"></v-list-item>
           <v-list-item v-if="authStore.isAdmin" :title="t('healthScore.page.menuItem')" prepend-icon="mdi-heart-pulse" link :to="healthScoreLink"></v-list-item>

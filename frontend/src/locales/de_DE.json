@@ -582,10 +582,7 @@
   "hostRole": {
     "primary": "Primär",
     "replica": "Replik",
-    "unknown": "Rolle unbekannt",
-    "primaryHint": "Dieser Host akzeptiert Schreibvorgänge",
-    "replicaHint": "Dieser Host ist im Recovery-Modus: nur lesend",
-    "unknownHint": "Die Rolle des Hosts konnte nicht ermittelt werden"
+    "unknown": "Rolle unbekannt"
   },
   "Common summary": "Allgemeine Übersicht",
   "home": {
