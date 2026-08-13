@@ -68,6 +68,9 @@ LOW ≥50%, MED ≥60%, HIGH ≥80%. Clients start queueing. First: `connections
 ### low_cache_hit_ratio
 Instance cache hit ratio. LOW <95%, MED <90%, HIGH <85% (relaxed on purpose:
 large sequential scans on OLAP make lower values normal).
+Skipped entirely below 50,000 blocks of read traffic — on a tiny database the
+ratio is noise. The floor needs the block count of the SQL snapshot; a metrics
+datasource reports the ratio alone, and there the rule fires as before.
 First: `top_queries` — find disk-heavy queries; consider shared_buffers (~25% RAM).
 
 ### track_io_timing_disabled

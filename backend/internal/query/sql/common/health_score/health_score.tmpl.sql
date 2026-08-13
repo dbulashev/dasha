@@ -45,7 +45,8 @@ performance_metrics AS (
                 2
             ),
             100
-        )::float8 AS cache_hit_ratio
+        )::float8 AS cache_hit_ratio,
+        COALESCE(sum(heap_blks_hit) + sum(heap_blks_read), 0)::bigint AS cache_sample_blocks
     FROM pg_statio_user_tables
 ),
 storage_metrics AS (
@@ -310,6 +311,7 @@ SELECT
     c.max_connections,
     -- performance
     p.cache_hit_ratio,
+    p.cache_sample_blocks,
     g.track_io_timing_enabled,
     -- storage
     s.max_dead_ratio,

@@ -162,6 +162,18 @@ func TestRule_LowCacheHitRatio(t *testing.T) {
 	}
 }
 
+func TestRule_LowCacheHitRatioNeedsSample(t *testing.T) {
+	tiny := RawMetrics{CacheHitRatio: 40, CacheSampleBlocks: 900}
+	if hit := findRule(t, "low_cache_hit_ratio").Evaluate(tiny); hit != nil {
+		t.Errorf("tiny block sample must not trigger, got %+v", hit)
+	}
+
+	busy := RawMetrics{CacheHitRatio: 40, CacheSampleBlocks: minCacheSampleBlocks}
+	if hit := findRule(t, "low_cache_hit_ratio").Evaluate(busy); hit == nil {
+		t.Error("sufficient block sample must still trigger")
+	}
+}
+
 func TestRule_ReplicationOnlyTriggersWithReplicas(t *testing.T) {
 	noRepl := RawMetrics{ReplicaCount: 0, MaxReplayLagSeconds: 60}
 	for _, rid := range []string{"replication_lag_time", "replication_lag_bytes"} {

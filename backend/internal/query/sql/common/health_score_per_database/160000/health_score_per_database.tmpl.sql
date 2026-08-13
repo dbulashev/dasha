@@ -7,7 +7,8 @@ WITH performance_metrics AS (
                 2
             ),
             100
-        )::float8 AS cache_hit_ratio
+        )::float8 AS cache_hit_ratio,
+        COALESCE(sum(heap_blks_hit) + sum(heap_blks_read), 0)::bigint AS cache_sample_blocks
     FROM pg_statio_user_tables
 ),
 storage_metrics AS (
@@ -95,6 +96,7 @@ SELECT
     current_database()::text AS database,
     pg_database_size(current_database())::bigint AS size_bytes,
     p.cache_hit_ratio,
+    p.cache_sample_blocks,
     s.max_dead_ratio,
     s.avg_dead_ratio,
     s.tables_high_bloat,

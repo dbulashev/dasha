@@ -9,7 +9,8 @@ type PerDBMetrics struct {
 	Database  string
 	SizeBytes int64
 
-	CacheHitRatio float64
+	CacheHitRatio     float64
+	CacheSampleBlocks int64
 
 	MaxDeadRatio       float64
 	AvgDeadRatio       float64
@@ -53,6 +54,7 @@ func ComputePerDB(metrics []PerDBMetrics, w Weights, inRecovery bool) []Database
 		raw := RawMetrics{
 			Database:                 m.Database,
 			CacheHitRatio:            m.CacheHitRatio,
+			CacheSampleBlocks:        m.CacheSampleBlocks,
 			MaxDeadRatio:             m.MaxDeadRatio,
 			AvgDeadRatio:             m.AvgDeadRatio,
 			TablesHighBloat:          m.TablesHighBloat,

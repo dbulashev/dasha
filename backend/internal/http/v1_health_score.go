@@ -146,6 +146,7 @@ func rawFromSnapshot(m *dto.HealthScoreMetrics) health.RawMetrics {
 		LongestTransactionDatabase: m.LongestTransactionDatabase,
 		MaxConnections:             m.MaxConnections,
 		CacheHitRatio:              m.CacheHitRatio,
+		CacheSampleBlocks:          m.CacheSampleBlocks,
 		TrackIoTimingEnabled:       m.TrackIoTimingEnabled,
 		MaxDeadRatio:               m.MaxDeadRatio,
 		AvgDeadRatio:               m.AvgDeadRatio,
@@ -248,6 +249,7 @@ func overlaySignalGaps(raw *health.RawMetrics, m *dto.HealthScoreMetrics, sig me
 	// from here must keep naming the database it was read from.
 	if !sig.Has(metrics.SigCacheHitRatio) {
 		raw.CacheHitRatio = m.CacheHitRatio
+		raw.CacheSampleBlocks = m.CacheSampleBlocks
 		raw.MarkSnapshotBacked("low_cache_hit_ratio")
 	}
 
