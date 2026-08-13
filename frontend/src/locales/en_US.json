@@ -619,10 +619,7 @@
   "hostRole": {
     "primary": "Primary",
     "replica": "Replica",
-    "unknown": "Unknown role",
-    "primaryHint": "This host accepts writes",
-    "replicaHint": "This host is in recovery: read-only",
-    "unknownHint": "Could not determine the host role"
+    "unknown": "Unknown role"
   },
   "Common summary": "Common summary",
   "home": {
