@@ -56,7 +56,12 @@ const {
 </script>
 
 <style scoped>
+/* The three fields share whatever the toolbar leaves after the brand and the
+   actions: 170px each when it fits, shrinking evenly instead of overflowing
+   (v-toolbar__content clips, so an overflow would eat the user menu). */
 .selector-field {
-  min-width: 170px;
+  flex: 1 1 170px;
+  min-width: 96px;
+  max-width: 170px;
 }
 </style>

@@ -34,7 +34,8 @@ const label = computed(() => {
 </script>
 
 <template>
-  <template v-if="host && !pending">
+  <!-- Hidden on phones: the toolbar there has no room beyond the brand and the selectors. -->
+  <template v-if="host && !pending && $vuetify.display.smAndUp">
     <v-divider vertical class="mx-2 host-role-divider" />
     <span class="host-role">
       {{ label }}<template v-if="version"> · {{ version }}</template>
@@ -48,11 +49,10 @@ const label = computed(() => {
   height: 20px;
 }
 
-/* Same type as the brand subtitle, one step further back in the hierarchy. */
+/* Size comes from .v-toolbar-title; only the weight and the fade set this
+   apart from the brand subtitle. */
 .host-role {
-  font-size: 1.25rem;
   font-weight: 300;
   opacity: 0.45;
-  white-space: nowrap;
 }
 </style>

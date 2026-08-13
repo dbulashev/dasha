@@ -195,8 +195,10 @@ watch(() => route.path, () => {
         <v-app-bar-nav-icon variant="text" @click.stop="drawer = !drawer" />
         <v-toolbar-title class="app-brand">
           <span class="app-brand-name">Dasha</span>
-          <v-divider vertical class="mx-2 app-brand-divider" />
-          <span class="app-brand-sub">PostgreSQL Dashboard</span>
+          <span class="d-none d-sm-inline">
+            <v-divider vertical class="mx-2 app-brand-divider" />
+            <span class="app-brand-sub">PostgreSQL Dashboard</span>
+          </span>
           <HostRoleLabel />
         </v-toolbar-title>
         <cluster-host-db-selector class="ml-4 mr-2" />
