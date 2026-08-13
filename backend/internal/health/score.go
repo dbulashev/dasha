@@ -612,8 +612,9 @@ func penaltyConnections(m RawMetrics) CategoryResult {
 const minCacheSampleBlocks = 50_000
 
 // cacheHitRatioMeaningful reports whether the ratio rests on enough traffic to
-// grade. Zero blocks means the sample was not collected (metrics mode), which
-// keeps the pre-existing grading.
+// grade. Only a non-zero sample below the floor is skipped: zero means no
+// sample was taken (metrics mode, where the datasource carries the ratio
+// alone), and an idle database reads no blocks but reports a ratio of 100.
 func cacheHitRatioMeaningful(m RawMetrics) bool {
 	return m.CacheSampleBlocks == 0 || m.CacheSampleBlocks >= minCacheSampleBlocks
 }
