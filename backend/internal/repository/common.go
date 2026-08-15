@@ -20,8 +20,10 @@ import (
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/hotobjects"
+	"github.com/dbulashev/dasha/internal/indexadvisor"
 	"github.com/dbulashev/dasha/internal/pkg/mapstruct"
 	"github.com/dbulashev/dasha/internal/schemalint"
+	"github.com/dbulashev/dasha/internal/sqlparse"
 )
 
 const (
@@ -111,6 +113,11 @@ type Repository interface {
 	GetMaintenanceAutovacuumSummary(ctx context.Context, clusterName, instanceName, databaseName string) (*dto.MaintenanceAutovacuumSummary, error)
 	GetHotSampleTables(ctx context.Context, clusterName, instanceName, databaseName string, schema, object *string) ([]hotobjects.AnchorRow, *time.Time, bool, error)
 	GetHotSampleIndexes(ctx context.Context, clusterName, instanceName, databaseName string, schema, object *string) ([]hotobjects.AnchorRow, *time.Time, bool, error)
+	GetIndexAdvisorReport(
+		ctx context.Context,
+		clusterName, instanceName, databaseName string,
+		excludeUsers []string,
+	) (indexadvisor.Report, error)
 	GetSchemaLintReport(ctx context.Context, clusterName, instanceName, databaseName string) (schemalint.Report, error)
 	GetSchemaLintSummary(ctx context.Context, clusterName, instanceName string) ([]schemalint.DatabaseSummary, error)
 	GetSequenceHeadroom(ctx context.Context, clusterName, instanceName, databaseName string) (float64, bool, error)
@@ -174,6 +181,9 @@ type PgxPool struct {
 	poolConfig            config.PoolConfig
 	schemaLintConfig      schemalint.Config
 	sequenceHeadroomCache sync.Map // cluster/instance/database → sequenceHeadroomEntry
+	indexAdvisorConfig    indexadvisor.Config
+	sqlParserOnce         sync.Once
+	sqlParser             sqlparse.Parser // built on first use, see indexAdvisorParser
 }
 
 func NewRepositoryPgxPool(
@@ -181,6 +191,7 @@ func NewRepositoryPgxPool(
 	pgStatsView, pgssResetFunc string,
 	poolCfg config.PoolConfig,
 	schemaLintCfg schemalint.Config,
+	indexAdvisorCfg indexadvisor.Config,
 	logger *zap.Logger,
 ) Repository {
 	return &PgxPool{
@@ -192,6 +203,7 @@ func NewRepositoryPgxPool(
 		pgssResetFuncConfig: pgssResetFunc,
 		poolConfig:          poolCfg,
 		schemaLintConfig:    schemaLintCfg,
+		indexAdvisorConfig:  indexAdvisorCfg,
 	}
 }
 

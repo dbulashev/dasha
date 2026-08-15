@@ -64,6 +64,7 @@ import type {
   GetHealthScoreXidWraparoundDatabasesParams,
   GetHotObjectHistoryParams,
   GetHotPercentileParams,
+  GetIndexesAdvisorParams,
   GetIndexesBloatParams,
   GetIndexesBtreeOnArrayParams,
   GetIndexesCachingParams,
@@ -140,6 +141,7 @@ import type {
   HotPercentile,
   HotReport,
   IncomparableSnapshotsResponse,
+  IndexAdvisorReport,
   IndexBloat,
   IndexBtreeOnArray,
   IndexCaching,
@@ -3875,6 +3877,115 @@ export function useGetFkTypeMismatch<
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetFkTypeMismatchQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Parses the top of pg_stat_statements for this database, extracts the columns each statement filters, joins, sorts and groups by, and proposes btree indexes that no existing index already covers. Every candidate names the statements it would serve and their share of execution time.
+The result is a heuristic and nothing here consulted the planner: planner_checked is false on every candidate, and a client must not present the weight as an expected speed-up. The suggested ddl is a proposal for the user to run — Dasha never executes DDL. Read not_parsed before concluding that a database needs no indexes: statements that could not be analyzed are counted there, and an empty candidate list beside a large not_parsed count is not a clean bill of health.
+Returns 404 when the index_advisor feature is disabled in the configuration, rather than an empty report that would be indistinguishable from "nothing to suggest".
+ * @summary Indexes the workload suggests are missing, with the statements behind each
+ */
+export type getIndexesAdvisorResponse200 = {
+  data: IndexAdvisorReport
+  status: 200
+}
+
+export type getIndexesAdvisorResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getIndexesAdvisorResponseSuccess = getIndexesAdvisorResponse200 & {
+  headers: Headers
+}
+export type getIndexesAdvisorResponseError = getIndexesAdvisorResponse404 & {
+  headers: Headers
+}
+
+export type getIndexesAdvisorResponse =
+  | getIndexesAdvisorResponseSuccess
+  | getIndexesAdvisorResponseError
+
+export const getGetIndexesAdvisorUrl = (params: GetIndexesAdvisorParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/indexes/advisor?${stringifiedParams}`
+    : `/api/indexes/advisor`
+}
+
+export const getIndexesAdvisor = async (
+  params: GetIndexesAdvisorParams,
+  options?: RequestInit,
+): Promise<getIndexesAdvisorResponse> => {
+  return customFetch<getIndexesAdvisorResponse>(getGetIndexesAdvisorUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetIndexesAdvisorQueryKey = (params?: MaybeRef<GetIndexesAdvisorParams>) => {
+  return ['api', 'indexes', 'advisor', ...(params ? [params] : [])] as const
+}
+
+export const getGetIndexesAdvisorQueryOptions = <
+  TData = Awaited<ReturnType<typeof getIndexesAdvisor>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetIndexesAdvisorParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesAdvisor>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetIndexesAdvisorQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getIndexesAdvisor>>> = ({ signal }) =>
+    getIndexesAdvisor(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getIndexesAdvisor>>,
+    TError,
+    TData
+  >
+}
+
+export type GetIndexesAdvisorQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getIndexesAdvisor>>
+>
+export type GetIndexesAdvisorQueryError = NotFoundResponse
+
+/**
+ * @summary Indexes the workload suggests are missing, with the statements behind each
+ */
+
+export function useGetIndexesAdvisor<
+  TData = Awaited<ReturnType<typeof getIndexesAdvisor>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetIndexesAdvisorParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getIndexesAdvisor>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetIndexesAdvisorQueryOptions(params, options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
 

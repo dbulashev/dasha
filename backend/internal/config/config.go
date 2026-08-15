@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-viper/mapstructure/v2"
 
+	"github.com/dbulashev/dasha/internal/indexadvisor"
 	"github.com/dbulashev/dasha/internal/metrics"
 	"github.com/dbulashev/dasha/internal/schemalint"
 )
@@ -354,6 +355,10 @@ type Config struct {
 	// SchemaLint tunes the schema checks: which run, which schemas to ignore,
 	// sequence thresholds and how long a report stays cached.
 	SchemaLint schemalint.Config `mapstructure:"schema_lint"`
+
+	// IndexAdvisor tunes the index candidate report: how much of the
+	// pg_stat_statements top is analyzed and what a candidate may look like.
+	IndexAdvisor indexadvisor.Config `mapstructure:"index_advisor"`
 }
 
 // PoolConfig tunes a pgx connection pool. Zero MaxConns/MaxConnIdleTime fall back

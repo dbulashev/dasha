@@ -61,6 +61,16 @@ const (
 	Override HealthScoreWeightsSource = "override"
 )
 
+// Defines values for IndexAdvisorWarningCode.
+const (
+	LowWeight             IndexAdvisorWarningCode = "low_weight"
+	OverlapsMissingSignal IndexAdvisorWarningCode = "overlaps_missing_signal"
+	PartitionRoot         IndexAdvisorWarningCode = "partition_root"
+	StatsMissing          IndexAdvisorWarningCode = "stats_missing"
+	WideIndex             IndexAdvisorWarningCode = "wide_index"
+	WriteHeavy            IndexAdvisorWarningCode = "write_heavy"
+)
+
 // Defines values for IndexVerdictReasonCode.
 const (
 	IndexVerdictReasonCodeFewScans          IndexVerdictReasonCode = "few_scans"
@@ -752,6 +762,112 @@ type HotSnapshotMeta struct {
 	// HostsMissing Hosts that could not be sampled — the snapshot is partial, their activity is absent from every number.
 	HostsMissing []string                 `json:"hosts_missing"`
 	Windows      map[string]HotHostWindow `json:"windows"`
+}
+
+// IndexAdvisorCandidate defines model for IndexAdvisorCandidate.
+type IndexAdvisorCandidate struct {
+	// Columns Key columns in order: equality predicates first, then at most one range predicate, then ordering columns when a range predicate did not already break the ordering.
+	Columns        []string                   `json:"columns"`
+	CoveredQueries []IndexAdvisorCoveredQuery `json:"covered_queries"`
+
+	// Ddl Statement suggested to the user. CONCURRENTLY unless the table is partitioned, where PostgreSQL rejects it. Dasha never executes DDL.
+	Ddl string `json:"ddl"`
+
+	// PlannerChecked False throughout this step. A client must carry the caveat: the recommendation is structural, derived from the statements and the catalog alone.
+	PlannerChecked bool   `json:"planner_checked"`
+	Schema         string `json:"schema"`
+
+	// Table Table the index belongs on. For a partitioned table this is always the root, whichever partition the statement named — PostgreSQL propagates the index down.
+	Table string `json:"table"`
+
+	// TableRows reltuples, summed over the partitions for a partitioned table.
+	TableRows int64 `json:"table_rows"`
+
+	// Warnings Reasons this candidate may be a bad idea despite ranking well.
+	Warnings []IndexAdvisorWarning `json:"warnings"`
+
+	// WeightPct Share of the analyzed execution time spent in the statements this candidate covers. It is the size of the problem, NOT a predicted gain — no planner has confirmed the index would be used at all.
+	WeightPct float64 `json:"weight_pct"`
+
+	// Writes What maintaining an index on this table would cost, from pg_stat_user_tables. Scans are the other side of the trade: they are what an index would serve.
+	Writes IndexAdvisorWrites `json:"writes"`
+}
+
+// IndexAdvisorCoveredQuery defines model for IndexAdvisorCoveredQuery.
+type IndexAdvisorCoveredQuery struct {
+	Calls int64 `json:"calls"`
+
+	// Fingerprint Hash of the statement structure, stable across constants and formatting.
+	Fingerprint string `json:"fingerprint"`
+
+	// Query Normalized statement text, sanitized.
+	Query string `json:"query"`
+
+	// QueryIds Every pg_stat_statements row folded into this unit. More than one means the same statement was recorded several times — different roles, or an extension that keys its view by plan as well.
+	QueryIds  []int64 `json:"query_ids"`
+	WeightPct float64 `json:"weight_pct"`
+}
+
+// IndexAdvisorNotParsed defines model for IndexAdvisorNotParsed.
+type IndexAdvisorNotParsed struct {
+	Count int `json:"count"`
+
+	// ReasonCode Codes from reading the workload — truncated (clipped by track_activity_query_size), too_long, parse_error, unsupported_syntax, insufficient_privilege, empty — and from analyzing it: unknown_relation, ambiguous_name (an unqualified name several schemas answer to; refused rather than guessed, since pg_stat_statements records no search_path), ambiguous_column, unknown_column, unsupported_type, table_too_small, already_indexed (an existing index already serves the statement — the healthy outcome), or_predicate, expression_predicate, no_indexable_predicate. Prose lives in the client.
+	ReasonCode string `json:"reason_code"`
+}
+
+// IndexAdvisorReport defines model for IndexAdvisorReport.
+type IndexAdvisorReport struct {
+	// Candidates Proposed indexes, heaviest share of execution time first.
+	Candidates []IndexAdvisorCandidate `json:"candidates"`
+	DurationMs int64                   `json:"duration_ms"`
+
+	// NotParsed Why part of the workload produced nothing, counted per reason. One entry per statement, so the counts sum to the number of statements that contributed no candidate. A client must show this next to the candidate list: an empty list with a large count here means the analysis fell short, not that the schema is in good shape.
+	NotParsed []IndexAdvisorNotParsed `json:"not_parsed"`
+	Summary   IndexAdvisorSummary     `json:"summary"`
+
+	// Total Candidates before pagination.
+	Total int `json:"total"`
+}
+
+// IndexAdvisorSummary defines model for IndexAdvisorSummary.
+type IndexAdvisorSummary struct {
+	// AnalyzedQueries Statements read and parsed.
+	AnalyzedQueries int `json:"analyzed_queries"`
+
+	// CatalogTruncated The catalog was read only in part, so a candidate may duplicate an index that was never read.
+	CatalogTruncated bool `json:"catalog_truncated"`
+
+	// CollapsedGroups Units of work left after folding statements by fingerprint.
+	CollapsedGroups int `json:"collapsed_groups"`
+
+	// CoveredTimePct Share of analyzed execution time the candidates touch. Statements covered twice count once — this is how much of the load is in scope, not how much would be saved.
+	CoveredTimePct float64 `json:"covered_time_pct"`
+	NotParsedCount int     `json:"not_parsed_count"`
+
+	// PgssAvailable False when pg_stat_statements could not be read at all, which is a different statement from having read it and found nothing.
+	PgssAvailable bool `json:"pgss_available"`
+}
+
+// IndexAdvisorWarning defines model for IndexAdvisorWarning.
+type IndexAdvisorWarning struct {
+	// Code write_heavy — the table is written far more than read, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. overlaps_missing_signal — the indexes/missing report is about this same table. partition_root — the table is partitioned: the DDL cannot use CONCURRENTLY and every partition pays for the index. stats_missing — no pg_stats row for the columns, so their order is the order the statement wrote them. wide_index — the statements asked for more columns than the key may hold.
+	Code IndexAdvisorWarningCode `json:"code"`
+
+	// Params Numbers the wording of this code quotes, keyed by name. Which keys are present depends on code; a client reads only the ones its phrasing needs.
+	Params *map[string]float64 `json:"params,omitempty"`
+}
+
+// IndexAdvisorWarningCode write_heavy — the table is written far more than read, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. overlaps_missing_signal — the indexes/missing report is about this same table. partition_root — the table is partitioned: the DDL cannot use CONCURRENTLY and every partition pays for the index. stats_missing — no pg_stats row for the columns, so their order is the order the statement wrote them. wide_index — the statements asked for more columns than the key may hold.
+type IndexAdvisorWarningCode string
+
+// IndexAdvisorWrites What maintaining an index on this table would cost, from pg_stat_user_tables. Scans are the other side of the trade: they are what an index would serve.
+type IndexAdvisorWrites struct {
+	Deleted  int64 `json:"deleted"`
+	IdxScans int64 `json:"idx_scans"`
+	Inserted int64 `json:"inserted"`
+	SeqScans int64 `json:"seq_scans"`
+	Updated  int64 `json:"updated"`
 }
 
 // IndexBloat defines model for IndexBloat.
@@ -2139,6 +2255,18 @@ type GetTablesHotParams struct {
 // GetTablesHotParamsClass defines parameters for GetTablesHot.
 type GetTablesHotParamsClass string
 
+// GetIndexesAdvisorParams defines parameters for GetIndexesAdvisor.
+type GetIndexesAdvisorParams struct {
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance    `form:"instance" json:"instance"`
+	Database    Database    `form:"database" json:"database"`
+
+	// ExcludeUsers Comma-separated usernames whose statements are left out of the analysis — the same mechanism the query report uses, for the service roles whose load says nothing about the application's indexing needs.
+	ExcludeUsers *[]string `form:"exclude_users,omitempty" json:"exclude_users,omitempty"`
+	Limit        *int      `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset       *int      `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
 // GetIndexesBloatParams defines parameters for GetIndexesBloat.
 type GetIndexesBloatParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
@@ -2894,6 +3022,9 @@ type ClientInterface interface {
 
 	// GetTablesHot request
 	GetTablesHot(ctx context.Context, params *GetTablesHotParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetIndexesAdvisor request
+	GetIndexesAdvisor(ctx context.Context, params *GetIndexesAdvisorParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetIndexesBloat request
 	GetIndexesBloat(ctx context.Context, params *GetIndexesBloatParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -3684,6 +3815,18 @@ func (c *Client) GetHotPercentile(ctx context.Context, params *GetHotPercentileP
 
 func (c *Client) GetTablesHot(ctx context.Context, params *GetTablesHotParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetTablesHotRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetIndexesAdvisor(ctx context.Context, params *GetIndexesAdvisorParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetIndexesAdvisorRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -7484,6 +7627,123 @@ func NewGetTablesHotRequest(server string, params *GetTablesHotParams) (*http.Re
 		if params.At != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "at", runtime.ParamLocationQuery, *params.At); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetIndexesAdvisorRequest generates requests for GetIndexesAdvisor
+func NewGetIndexesAdvisorRequest(server string, params *GetIndexesAdvisorParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/indexes/advisor")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, params.ClusterName); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "instance", runtime.ParamLocationQuery, params.Instance); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "database", runtime.ParamLocationQuery, params.Database); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.ExcludeUsers != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", false, "exclude_users", runtime.ParamLocationQuery, *params.ExcludeUsers); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -12567,6 +12827,9 @@ type ClientWithResponsesInterface interface {
 	// GetTablesHotWithResponse request
 	GetTablesHotWithResponse(ctx context.Context, params *GetTablesHotParams, reqEditors ...RequestEditorFn) (*GetTablesHotResponse, error)
 
+	// GetIndexesAdvisorWithResponse request
+	GetIndexesAdvisorWithResponse(ctx context.Context, params *GetIndexesAdvisorParams, reqEditors ...RequestEditorFn) (*GetIndexesAdvisorResponse, error)
+
 	// GetIndexesBloatWithResponse request
 	GetIndexesBloatWithResponse(ctx context.Context, params *GetIndexesBloatParams, reqEditors ...RequestEditorFn) (*GetIndexesBloatResponse, error)
 
@@ -13788,6 +14051,28 @@ func (r GetTablesHotResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetTablesHotResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetIndexesAdvisorResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *IndexAdvisorReport
+}
+
+// Status returns HTTPResponse.Status
+func (r GetIndexesAdvisorResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetIndexesAdvisorResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -15544,6 +15829,15 @@ func (c *ClientWithResponses) GetTablesHotWithResponse(ctx context.Context, para
 	return ParseGetTablesHotResponse(rsp)
 }
 
+// GetIndexesAdvisorWithResponse request returning *GetIndexesAdvisorResponse
+func (c *ClientWithResponses) GetIndexesAdvisorWithResponse(ctx context.Context, params *GetIndexesAdvisorParams, reqEditors ...RequestEditorFn) (*GetIndexesAdvisorResponse, error) {
+	rsp, err := c.GetIndexesAdvisor(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetIndexesAdvisorResponse(rsp)
+}
+
 // GetIndexesBloatWithResponse request returning *GetIndexesBloatResponse
 func (c *ClientWithResponses) GetIndexesBloatWithResponse(ctx context.Context, params *GetIndexesBloatParams, reqEditors ...RequestEditorFn) (*GetIndexesBloatResponse, error) {
 	rsp, err := c.GetIndexesBloat(ctx, params, reqEditors...)
@@ -17264,6 +17558,32 @@ func ParseGetTablesHotResponse(rsp *http.Response) (*GetTablesHotResponse, error
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest HotReport
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetIndexesAdvisorResponse parses an HTTP response from a GetIndexesAdvisorWithResponse call
+func ParseGetIndexesAdvisorResponse(rsp *http.Response) (*GetIndexesAdvisorResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetIndexesAdvisorResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest IndexAdvisorReport
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
