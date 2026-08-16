@@ -28,5 +28,8 @@ SELECT n.nspname AS schema,
 FROM rolled d
     JOIN pg_catalog.pg_class c ON c.oid = d.rel
     JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE c.relpersistence <> 't'
+  AND n.nspname NOT LIKE 'pg\_temp%'
+  AND n.nspname NOT LIKE 'pg\_toast\_temp%'
 ORDER BY n.nspname, c.relname
 LIMIT $1

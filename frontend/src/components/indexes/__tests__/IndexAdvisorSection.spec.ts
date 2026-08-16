@@ -34,6 +34,7 @@ vi.mock('@/composables/useViewError', () => ({
 }))
 
 import IndexAdvisorSection from '@/components/indexes/IndexAdvisorSection.vue'
+import { useExcludeUsersStore } from '@/stores/excludeUsers'
 
 // VDataTable measures itself through ResizeObserver, which jsdom does not have.
 globalThis.ResizeObserver = class {
@@ -56,6 +57,10 @@ function candidate(over: Partial<IndexAdvisorCandidate> = {}): IndexAdvisorCandi
       {
         // Beyond Number.MAX_SAFE_INTEGER: a queryid must survive as a string.
         query_ids: ['-5881493265671377279'],
+        query_id_by_host: {
+          host1: '-5881493265671377279',
+          host2: '-5881493265671377279',
+        },
         fingerprint: 'abc',
         query: 'SELECT 1',
         weight_pct: 31.4,
@@ -238,6 +243,22 @@ describe('IndexAdvisorSection', () => {
     expect(params).not.toHaveProperty('instance')
   })
 
+  // The list is shared with the query report, so it changes from another page —
+  // and it decides which statements the ranking ever sees.
+  it('reloads when the excluded users change while the section is open', async () => {
+    resolves(report())
+    await render()
+
+    const first = getIndexesAdvisor.mock.calls[0][0] as Record<string, unknown>
+    expect(first.exclude_users).toBeUndefined()
+
+    useExcludeUsersStore().setExcludeUsers('c1', ['telemetry'])
+    await flushPromises()
+
+    const last = getIndexesAdvisor.mock.calls.at(-1)![0] as Record<string, unknown>
+    expect(last.exclude_users).toEqual(['telemetry'])
+  })
+
   it('names the hosts a candidate list was built from', async () => {
     resolves(report({ candidates: [candidate()], total: 1 }))
     const wrapper = await render()
@@ -297,6 +318,7 @@ describe('IndexAdvisorSection', () => {
     // an instance whose pg_stat_statements has never seen this queryid.
     const c = candidate()
     c.covered_queries[0].hosts = ['replica-9']
+    c.covered_queries[0].query_id_by_host = { 'replica-9': '-5881493265671377279' }
     resolves(report({ candidates: [c], total: 1 }))
 
     const links = await expandedLinks(await render())
@@ -316,6 +338,27 @@ describe('IndexAdvisorSection', () => {
     // host1 is among the statement's hosts, so switching the user to host2 would
     // be a surprise with nothing to gain.
     expect(link).toContain('host1')
+  })
+
+  // Hosts and identifiers are folded into two independent lists, so the first of
+  // one and the first of the other can name a pair no instance ever reported —
+  // and the query report is per-instance, so the link would come back empty.
+  it('links the queryid the chosen host actually carries', async () => {
+    const c = candidate()
+    c.covered_queries[0].query_ids = ['111', '222']
+    c.covered_queries[0].hosts = ['replica-9', 'host1']
+    c.covered_queries[0].query_id_by_host = { 'replica-9': '111', host1: '222' }
+    resolves(report({ candidates: [c], total: 1 }))
+
+    const links = await expandedLinks(await render())
+    const link = links.find(l => l.includes('query-report'))
+
+    expect(link).toBeDefined()
+    // host1 is selected, and on host1 the statement is 222 — not the 111 that
+    // heads the identifier list.
+    expect(link).toContain('host1')
+    expect(link).toContain('222')
+    expect(link).not.toContain('111')
   })
 
   it('states that pg_stat_statements is missing instead of claiming a clean database', async () => {

@@ -10,11 +10,11 @@ FROM (
            sum(pss.total_exec_time)                                 AS total_exec_time,
            sum(pss.rows)                                            AS rows
     FROM {{ .Pgss }} pss
-        JOIN pg_catalog.pg_roles r ON r.oid = pss.userid
+        LEFT JOIN pg_catalog.pg_roles r ON r.oid = pss.userid
     WHERE pss.dbid = (SELECT d.oid FROM pg_catalog.pg_database d WHERE d.datname = current_database())
       AND pss.queryid IS NOT NULL
       AND pss.query IS NOT NULL
-      AND r.rolname != ALL($1::text[])
+      AND (r.rolname IS NULL OR r.rolname != ALL($1::text[]))
     GROUP BY pss.queryid
 ) s
 ORDER BY s.total_exec_time DESC

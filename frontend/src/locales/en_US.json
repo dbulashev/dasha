@@ -497,6 +497,7 @@
       "weight": "Share of load",
       "tableRows": "Rows in table",
       "ddl": "Suggested DDL",
+      "copyDdl": "Copy the DDL",
       "coveredQueries": "Covered statements",
       "writeCost": "Write cost: {inserted} inserts, {updated} updates, {deleted} deletes. Scans: {seq} sequential, {idx} index.",
       "warnings": {

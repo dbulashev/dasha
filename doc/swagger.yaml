@@ -3440,6 +3440,7 @@ components:
       type: object
       required:
         - query_ids
+        - query_id_by_host
         - fingerprint
         - query
         - weight_pct
@@ -3454,6 +3455,16 @@ components:
             by plan as well.
           type: array
           items:
+            type: string
+        query_id_by_host:
+          description: >-
+            The queryid this statement carries on each host it was read from, keyed by
+            host. query_ids and hosts are two separate lists once the rows are folded,
+            so a client that needs a queryid a given host will actually recognize — a
+            deep link into the per-instance query report — must read it from here
+            instead of pairing the two lists by position.
+          type: object
+          additionalProperties:
             type: string
         fingerprint:
           description: Hash of the statement structure, stable across constants and formatting.

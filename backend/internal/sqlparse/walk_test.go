@@ -227,6 +227,23 @@ func TestDescribeCorpus(t *testing.T) {
 			skipped: []string{ReasonOrPredicate},
 		},
 		{
+			// The direction of USING belongs to the operator it names, so nothing
+			// here knows which way the column is ordered.
+			name:   "order by using is not read as ascending",
+			sql:    `SELECT * FROM orders WHERE tenant_id = $1 ORDER BY created_at USING >`,
+			kind:   KindSelect,
+			tables: []string{"orders"},
+			usages: []string{"orders.tenant_id equality"},
+		},
+		{
+			// A subquery reads its own tables whichever side of the operator it sits on.
+			name:   "a subquery on the left of a comparison is analyzed too",
+			sql:    `SELECT * FROM orders WHERE (SELECT max(created_at) FROM customers WHERE country = $1) < orders.created_at`,
+			kind:   KindSelect,
+			tables: []string{"orders", "customers"},
+			usages: []string{"customers.country equality", "orders.created_at range"},
+		},
+		{
 			name: "set is utility",
 			sql:  `SET search_path TO $1`,
 			kind: KindUtility,

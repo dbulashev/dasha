@@ -144,8 +144,10 @@ func TestIndexAdvisorCatalog_ReadsSeededSchema(t *testing.T) {
 	// over rather than guessed through.
 	t.Run("a name two schemas share stays ambiguous", func(t *testing.T) {
 		keys := cat.ByName["orders"]
-		require.Len(t, keys, 2, "public.orders from the fixture and the seeded advisor_test.orders")
 		assert.Contains(t, keys, orders)
+		// The count is not the point and would follow whatever the fixture grows
+		// next; more than one schema answering to the name is.
+		assert.Greater(t, len(keys), 1, "public.orders from the fixture and the seeded advisor_test.orders")
 	})
 
 	t.Run("a name only one schema holds resolves", func(t *testing.T) {

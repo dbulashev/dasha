@@ -497,6 +497,7 @@
             "weight": "Доля нагрузки",
             "tableRows": "Строк в таблице",
             "ddl": "Предлагаемый DDL",
+            "copyDdl": "Скопировать DDL",
             "coveredQueries": "Покрытые запросы",
             "writeCost": "Цена записи: вставок {inserted}, обновлений {updated}, удалений {deleted}. Сканов: последовательных {seq}, индексных {idx}.",
             "warnings": {

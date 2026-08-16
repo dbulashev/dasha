@@ -2,8 +2,10 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
@@ -115,6 +117,15 @@ func (p *PgxPool) getQueryStatsReadable(
 
 	_, err = pool.Exec(ctx, qStr)
 	if err != nil {
+		// Only an answer from the server settles the question. A connection that
+		// died or a deadline that fired says nothing about the extension, and
+		// reporting that as "not readable" would state as fact something this
+		// probe never learned.
+		var pgErr *pgconn.PgError
+		if IsTimeout(err) || !errors.As(err, &pgErr) {
+			return false, fmt.Errorf("getQueryStatsReadable | %w", err)
+		}
+
 		// Not an error for the caller — the UI just reports "not readable" —
 		// but the actual reason (privileges, custom schema) is only visible here.
 		p.logger.Debug("pg_stat_statements is not readable", zap.Error(err))

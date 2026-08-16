@@ -562,6 +562,7 @@
       "weight": "Lastanteil",
       "tableRows": "Zeilen in der Tabelle",
       "ddl": "Vorgeschlagenes DDL",
+      "copyDdl": "DDL kopieren",
       "coveredQueries": "Abgedeckte Anweisungen",
       "writeCost": "Schreibkosten: {inserted} Einfügungen, {updated} Aktualisierungen, {deleted} Löschungen. Scans: {seq} sequenziell, {idx} über Index.",
       "warnings": {

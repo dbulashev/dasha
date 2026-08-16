@@ -1,6 +1,7 @@
 package indexadvisor
 
 import (
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -52,6 +53,7 @@ func entryOn(t *testing.T, host string, id int64, sql string, timeMs float64) Wo
 
 	e := entry(t, id, sql, timeMs)
 	e.Hosts = []string{host}
+	e.QueryIDByHost = map[string]int64{host: id}
 
 	return e
 }
@@ -738,6 +740,33 @@ func TestBuildSumsOneStatementAcrossHosts(t *testing.T) {
 
 	if !slices.Equal(rep.Summary.Hosts, want) {
 		t.Errorf("Summary.Hosts = %v, want %v", rep.Summary.Hosts, want)
+	}
+}
+
+// Same statement, different identifiers: hosts that resolve the name to different
+// relations — or run different major versions — jumble it to different queryids.
+// The folded lists can no longer say which host answered with which, so the pairing
+// is carried separately; a client that guesses it links a host to an identifier
+// that instance has never heard of.
+func TestBuildKeepsEachQueryIDWithItsHost(t *testing.T) {
+	const sql = `SELECT id FROM orders WHERE tenant_id = $1 AND customer_id = $2`
+
+	w := workloadOf(
+		entryOn(t, "replica-1", 111, sql, 600),
+		entryOn(t, "primary", 222, sql, 400),
+	)
+	w.Hosts = []string{"replica-1", "primary"}
+
+	covered := onlyCandidate(t, Build(w, ordersCatalog(), Config{})).Covered[0] //nolint:exhaustruct
+
+	want := map[string]int64{"replica-1": 111, "primary": 222}
+	if !maps.Equal(covered.QueryIDByHost, want) {
+		t.Errorf("QueryIDByHost = %v, want %v", covered.QueryIDByHost, want)
+	}
+
+	// The flat list stays what it was — both identifiers, for display.
+	if got := len(covered.QueryIDs); got != 2 {
+		t.Errorf("QueryIDs = %v, want both identifiers", covered.QueryIDs)
 	}
 }
 

@@ -497,6 +497,9 @@ func (b *builder) walkAExpr(e *pgast.A_Expr, sc *scope) {
 		}
 	}
 
+	// Both sides: a subquery reads its own tables whichever operand it is, and
+	// walking only the right one would make (SELECT ...) < x contribute nothing.
+	b.walkSubLinks(e.GetLexpr(), sc)
 	b.walkSubLinks(e.GetRexpr(), sc)
 }
 
@@ -539,6 +542,13 @@ func (b *builder) walkSort(items []*pgast.Node, sc *scope) {
 	for i, item := range items {
 		sb := item.GetSortBy()
 		if sb == nil {
+			continue
+		}
+
+		// USING names an operator, and which direction it sorts in is a property of
+		// that operator, not of the grammar. Reading it as ascending would put a
+		// column into the key on a claim about ordering nothing here checked.
+		if sb.GetSortbyDir() == pgast.SortByDir_SORTBY_USING {
 			continue
 		}
 

@@ -767,15 +767,19 @@ func (p *PgxPool) resolvePgStatsView(ctx context.Context, pool *pgxpool.Pool) st
 		return defaultPgStatsView
 	}
 
-	// Check if the view is accessible
+	// Check if the view is accessible, and that it carries every column the
+	// templates read from it — a view short of one would not fail here but in the
+	// middle of a page, where the fallback is no longer available.
 	checkCtx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	_, err := pool.Exec(checkCtx, "SELECT 1 FROM "+configured+" LIMIT 0")
+	_, err := pool.Exec(checkCtx,
+		"SELECT schemaname, tablename, attname, inherited, null_frac, n_distinct, avg_width FROM "+
+			configured+" LIMIT 0")
 
 	var result string
 	if err != nil {
-		p.logger.Warn("pg_stats_view not accessible, falling back to pg_catalog.pg_stats",
+		p.logger.Warn("pg_stats_view not usable, falling back to pg_catalog.pg_stats",
 			zap.String("pg_stats_view", configured),
 			zap.Error(err))
 

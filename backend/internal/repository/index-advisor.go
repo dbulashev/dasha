@@ -255,8 +255,15 @@ func (p *PgxPool) collectIndexAdvisorWorkload(
 ) (indexadvisor.Workload, error) {
 	// pg_stat_statements missing or unreadable is a state, not a failure — the
 	// same treatment the query pages give it. On a cluster it is also a state
-	// worth naming: the host is up, and its load is simply invisible to us.
-	if readable, _ := p.getQueryStatsReadable(ctx, vNum, pool); !readable {
+	// worth naming: the host is up, and its load is simply invisible to us. A
+	// probe that never reached the server is the other statement entirely, and
+	// the error carries it up to be reported as an unreachable host.
+	readable, err := p.getQueryStatsReadable(ctx, vNum, pool)
+	if err != nil {
+		return indexadvisor.Workload{}, fmt.Errorf("collectIndexAdvisorWorkload | %w", err)
+	}
+
+	if !readable {
 		return indexadvisor.Workload{NoStats: []string{host}}, nil
 	}
 
@@ -271,6 +278,14 @@ func (p *PgxPool) collectIndexAdvisorWorkload(
 	parser := p.indexAdvisorParser()
 
 	for _, row := range rows {
+		// The parser holds no context: it is a WASM module behind a semaphore, and
+		// a report whose deadline has passed would otherwise keep parsing rows for
+		// an answer nobody is waiting for — and hold the semaphore against the
+		// reports that still are.
+		if err := ctx.Err(); err != nil {
+			return indexadvisor.Workload{}, fmt.Errorf("collectIndexAdvisorWorkload | %w", err)
+		}
+
 		stmt, err := parser.Parse(row.query)
 		if err != nil {
 			out.CountNotParsed(sqlparse.ReasonOf(err))
@@ -279,14 +294,17 @@ func (p *PgxPool) collectIndexAdvisorWorkload(
 		}
 
 		out.Entries = append(out.Entries, indexadvisor.WorkloadEntry{
-			QueryIDs:    []int64{row.queryID},
-			Fingerprint: stmt.Fingerprint,
-			Query:       sanitize.SQL(row.query),
-			Calls:       row.calls,
-			TotalTimeMs: row.totalTimeMs,
-			Rows:        row.rows,
-			Stmt:        stmt,
-			Hosts:       []string{host},
+			QueryIDs: []int64{row.queryID},
+			// One row, one host: this is where the pairing is still known, and
+			// folding by fingerprint is what would otherwise lose it.
+			QueryIDByHost: map[string]int64{host: row.queryID},
+			Fingerprint:   stmt.Fingerprint,
+			Query:         sanitize.SQL(row.query),
+			Calls:         row.calls,
+			TotalTimeMs:   row.totalTimeMs,
+			Rows:          row.rows,
+			Stmt:          stmt,
+			Hosts:         []string{host},
 		})
 	}
 
@@ -362,7 +380,9 @@ func (p *PgxPool) readIndexAdvisorWorkloadRows(
 type indexAdvisorReader struct {
 	q    enums.Query
 	data query.TemplateData
-	scan func(rowScanner) error
+	// scan fills the catalog from one row and names the relation it belongs to,
+	// so a read stopped by the row cap can drop the relation it stopped inside.
+	scan func(rowScanner) (indexadvisor.RelKey, error)
 }
 
 // readIndexAdvisorSchema reads the structure a candidate is judged against:
@@ -381,16 +401,16 @@ func (p *PgxPool) readIndexAdvisorSchema(
 	return p.runIndexAdvisorReaders(ctx, pool, vNum, cat, []indexAdvisorReader{
 		{
 			q:    enums.QueryIndexAdvisorRelations,
-			scan: func(row rowScanner) error { return scanIndexAdvisorRelation(row, cat) },
+			scan: func(row rowScanner) (indexadvisor.RelKey, error) { return scanIndexAdvisorRelation(row, cat) },
 		},
 		{
 			q:    enums.QueryIndexAdvisorColumns,
 			data: struct{ PgStatsView string }{PgStatsView: pgStatsView},
-			scan: func(row rowScanner) error { return scanIndexAdvisorColumn(row, cat) },
+			scan: func(row rowScanner) (indexadvisor.RelKey, error) { return scanIndexAdvisorColumn(row, cat) },
 		},
 		{
 			q:    enums.QueryIndexAdvisorIndexes,
-			scan: func(row rowScanner) error { return scanIndexAdvisorIndex(row, cat) },
+			scan: func(row rowScanner) (indexadvisor.RelKey, error) { return scanIndexAdvisorIndex(row, cat) },
 		},
 	})
 }
@@ -408,7 +428,7 @@ func (p *PgxPool) readIndexAdvisorWrites(
 	return p.runIndexAdvisorReaders(ctx, pool, vNum, cat, []indexAdvisorReader{
 		{
 			q:    enums.QueryIndexAdvisorWrites,
-			scan: func(row rowScanner) error { return scanIndexAdvisorWrites(row, cat) },
+			scan: func(row rowScanner) (indexadvisor.RelKey, error) { return scanIndexAdvisorWrites(row, cat) },
 		},
 	})
 }
@@ -426,18 +446,27 @@ func (p *PgxPool) runIndexAdvisorReaders(
 			return fmt.Errorf("collectIndexAdvisorCatalog | %s | %w", r.q, err)
 		}
 
-		truncated, err := scanIndexAdvisorRows(ctx, pool, qStr, r.scan)
+		last, truncated, err := scanIndexAdvisorRows(ctx, pool, qStr, r.scan)
 		if err != nil {
 			return fmt.Errorf("collectIndexAdvisorCatalog | %s | %w", r.q, err)
 		}
 
-		cat.Truncated = cat.Truncated || truncated
+		if truncated {
+			// Every catalog query orders by relation, so the cap can only fall
+			// inside the last one read. Its rows are as far as the read got, not
+			// as far as the relation goes, and half an index list is exactly what
+			// makes a duplicate candidate look new — so that relation is dropped
+			// rather than kept in part.
+			cat.Forget(last)
+
+			cat.Truncated = true
+		}
 	}
 
 	return nil
 }
 
-func scanIndexAdvisorRelation(row rowScanner, cat *indexadvisor.Catalog) error {
+func scanIndexAdvisorRelation(row rowScanner, cat *indexadvisor.Catalog) (indexadvisor.RelKey, error) {
 	var (
 		rel                      indexadvisor.Relation
 		rootSchema, rootName     string
@@ -446,7 +475,7 @@ func scanIndexAdvisorRelation(row rowScanner, cat *indexadvisor.Catalog) error {
 
 	if err := row.Scan(&rel.Schema, &rel.Name, &rel.Kind, &rel.Rows, &rel.Pages,
 		&rootSchema, &rootName, &parentSchema, &parentName); err != nil {
-		return err
+		return indexadvisor.RelKey{}, err
 	}
 
 	if rootName != "" {
@@ -459,10 +488,10 @@ func scanIndexAdvisorRelation(row rowScanner, cat *indexadvisor.Catalog) error {
 
 	cat.AddRelation(rel)
 
-	return nil
+	return rel.RelKey, nil
 }
 
-func scanIndexAdvisorColumn(row rowScanner, cat *indexadvisor.Catalog) error {
+func scanIndexAdvisorColumn(row rowScanner, cat *indexadvisor.Catalog) (indexadvisor.RelKey, error) {
 	var (
 		key indexadvisor.RelKey
 		col indexadvisor.Column
@@ -470,15 +499,15 @@ func scanIndexAdvisorColumn(row rowScanner, cat *indexadvisor.Catalog) error {
 
 	if err := row.Scan(&key.Schema, &key.Name, &col.Name, &col.DataType,
 		&col.BtreeIndexable, &col.StatsKnown, &col.NDistinct, &col.NullFrac); err != nil {
-		return err
+		return indexadvisor.RelKey{}, err
 	}
 
 	cat.AddColumn(key, col)
 
-	return nil
+	return key, nil
 }
 
-func scanIndexAdvisorIndex(row rowScanner, cat *indexadvisor.Catalog) error {
+func scanIndexAdvisorIndex(row rowScanner, cat *indexadvisor.Catalog) (indexadvisor.RelKey, error) {
 	var (
 		key indexadvisor.RelKey
 		idx indexadvisor.Index
@@ -487,15 +516,15 @@ func scanIndexAdvisorIndex(row rowScanner, cat *indexadvisor.Catalog) error {
 	if err := row.Scan(&key.Schema, &key.Name, &idx.Name, &idx.Method,
 		&idx.Unique, &idx.Primary, &idx.Valid, &idx.Partial, &idx.Expression,
 		&idx.Columns); err != nil {
-		return err
+		return indexadvisor.RelKey{}, err
 	}
 
 	cat.AddIndex(key, idx)
 
-	return nil
+	return key, nil
 }
 
-func scanIndexAdvisorWrites(row rowScanner, cat *indexadvisor.Catalog) error {
+func scanIndexAdvisorWrites(row rowScanner, cat *indexadvisor.Catalog) (indexadvisor.RelKey, error) {
 	var (
 		key indexadvisor.RelKey
 		w   indexadvisor.Writes
@@ -503,43 +532,50 @@ func scanIndexAdvisorWrites(row rowScanner, cat *indexadvisor.Catalog) error {
 
 	if err := row.Scan(&key.Schema, &key.Name, &w.Inserted, &w.Updated, &w.Deleted,
 		&w.SeqScans, &w.IdxScans); err != nil {
-		return err
+		return indexadvisor.RelKey{}, err
 	}
 
 	cat.AddWrites(key, w)
 
-	return nil
+	return key, nil
 }
 
 // scanIndexAdvisorRows runs one catalog query and hands each row to scan. One row
-// over the cap reports the catalog as truncated rather than silently short.
+// over the cap reports the catalog as truncated rather than silently short, along
+// with the relation the last row read belonged to — the one the caller cannot
+// assume it read whole.
 func scanIndexAdvisorRows(
 	ctx context.Context,
 	pool *pgxpool.Pool,
 	qStr string,
-	scan func(rowScanner) error,
-) (bool, error) {
+	scan func(rowScanner) (indexadvisor.RelKey, error),
+) (indexadvisor.RelKey, bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, indexAdvisorQueryTimeout)
 	defer cancel()
 
 	rows, err := pool.Query(ctx, qStr, indexAdvisorMaxCatalogRows+1)
 	if err != nil {
-		return false, err
+		return indexadvisor.RelKey{}, false, err
 	}
 	defer rows.Close()
+
+	var last indexadvisor.RelKey
 
 	count := 0
 
 	for rows.Next() {
 		count++
 		if count > indexAdvisorMaxCatalogRows {
-			return true, nil
+			return last, true, nil
 		}
 
-		if err := scan(rows); err != nil {
-			return false, err
+		key, err := scan(rows)
+		if err != nil {
+			return indexadvisor.RelKey{}, false, err
 		}
+
+		last = key
 	}
 
-	return false, rows.Err()
+	return indexadvisor.RelKey{}, false, rows.Err()
 }

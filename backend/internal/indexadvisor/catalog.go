@@ -6,7 +6,11 @@
 // decisions testable without a database.
 package indexadvisor
 
-import "github.com/dbulashev/dasha/internal/sqlparse"
+import (
+	"slices"
+
+	"github.com/dbulashev/dasha/internal/sqlparse"
+)
 
 // RelKey identifies a relation inside one database.
 type RelKey struct {
@@ -143,6 +147,26 @@ func (c *Catalog) AddWrites(key RelKey, w Writes) {
 	c.Writes[key] = cur
 }
 
+// Forget removes every trace of a relation, which is what a row cap leaves the
+// caller to do. A relation read in half is worse than one never read: the
+// missing half of its index list makes a candidate duplicating an index that
+// exists look new, and only dropping the whole relation avoids that.
+func (c *Catalog) Forget(key RelKey) {
+	delete(c.Relations, key)
+	delete(c.Columns, key)
+	delete(c.Indexes, key)
+	delete(c.Writes, key)
+
+	kept := slices.DeleteFunc(c.ByName[key.Name], func(k RelKey) bool { return k == key })
+	if len(kept) == 0 {
+		delete(c.ByName, key.Name)
+
+		return
+	}
+
+	c.ByName[key.Name] = kept
+}
+
 // WorkloadEntry is one pg_stat_statements row, parsed. Several rows collapse into
 // one entry by fingerprint later; the collector produces them one to one.
 //
@@ -150,13 +174,19 @@ func (c *Catalog) AddWrites(key RelKey, w Writes) {
 // numbers: the same entries can be filled from stored snapshots when the workload
 // stops coming from the live view.
 type WorkloadEntry struct {
-	QueryIDs    []int64
-	Fingerprint string
-	Query       string // sanitized, safe to return to a client
-	Calls       int64
-	TotalTimeMs float64
-	Rows        int64
-	Stmt        sqlparse.Statement
+	QueryIDs []int64
+	// QueryIDByHost keeps each queryid with the host it was actually read on.
+	// QueryIDs and Hosts are two deduplicated lists after folding, and taking one
+	// from each is a guess: a cluster whose hosts resolve the same statement to
+	// different queryids is exactly where that guess names a pair that exists
+	// nowhere, and a deep link built from it opens an empty report.
+	QueryIDByHost map[string]int64
+	Fingerprint   string
+	Query         string // sanitized, safe to return to a client
+	Calls         int64
+	TotalTimeMs   float64
+	Rows          int64
+	Stmt          sqlparse.Statement
 	// Hosts are the instances of the cluster this statement was read from. It is
 	// a list because the same statement usually runs on several of them, and
 	// which ones is the answer to "who would this index actually serve".

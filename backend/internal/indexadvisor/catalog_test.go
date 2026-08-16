@@ -40,6 +40,60 @@ func TestCatalogByNameIgnoresRepeatedRelations(t *testing.T) {
 	}
 }
 
+// A row cap can stop inside a relation, and what is left of it is not a smaller
+// truth but a wrong one: half an index list is what makes a candidate that
+// duplicates an existing index look new.
+func TestCatalogForgetDropsEveryTraceOfARelation(t *testing.T) {
+	cat := NewCatalog()
+	cut := RelKey{Schema: "public", Name: "orders"}
+	kept := RelKey{Schema: "billing", Name: "orders"}
+
+	for _, key := range []RelKey{cut, kept} {
+		cat.AddRelation(Relation{RelKey: key, Kind: "r", Rows: 10})
+		cat.AddColumn(key, Column{Name: "id", StatsKnown: true})
+		cat.AddIndex(key, Index{Name: key.Name + "_pkey", Columns: []string{"id"}})
+		cat.AddWrites(key, Writes{Inserted: 1})
+	}
+
+	cat.Forget(cut)
+
+	if _, ok := cat.Relations[cut]; ok {
+		t.Error("a relation read in part must not stay in the catalog")
+	}
+
+	if len(cat.Columns[cut]) != 0 || len(cat.Indexes[cut]) != 0 {
+		t.Error("the columns and indexes of a forgotten relation must go with it")
+	}
+
+	if _, ok := cat.Writes[cut]; ok {
+		t.Error("the write counters of a forgotten relation must go with it")
+	}
+
+	// The name is shared, so forgetting one schema's table must leave the other
+	// resolvable rather than take the name down with it.
+	if got := cat.ByName["orders"]; !slices.Equal(got, []RelKey{kept}) {
+		t.Errorf("ByName[orders] = %v, want only %v", got, kept)
+	}
+
+	if _, ok := cat.Relations[kept]; !ok {
+		t.Error("forgetting one relation must not touch another")
+	}
+}
+
+// The last relation of a name goes with it: a name mapping to nothing would make
+// every lookup answer "known, but empty".
+func TestCatalogForgetDropsTheNameWithItsLastRelation(t *testing.T) {
+	cat := NewCatalog()
+	key := RelKey{Schema: "public", Name: "orders"}
+
+	cat.AddRelation(Relation{RelKey: key, Kind: "r"})
+	cat.Forget(key)
+
+	if _, ok := cat.ByName["orders"]; ok {
+		t.Error("a name with no relations left must be gone from ByName")
+	}
+}
+
 func TestRelationIsPartition(t *testing.T) {
 	part := Relation{
 		RelKey: RelKey{Schema: "public", Name: "events_01"},

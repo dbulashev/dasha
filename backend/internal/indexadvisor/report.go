@@ -72,11 +72,16 @@ type Warning struct {
 // CoveredQuery is one statement a candidate would serve. It carries enough for
 // the user to check the recommendation against the query itself.
 type CoveredQuery struct {
-	QueryIDs    []int64
-	Fingerprint string
-	Query       string // sanitized
-	WeightPct   float64
-	Calls       int64
+	QueryIDs []int64
+	// QueryIDByHost names the queryid each host carries for this statement. A
+	// client deep-linking into the query report needs a pair that exists: the
+	// report is cluster-wide, the query report is per-instance, and picking a
+	// host from one list and an identifier from the other pairs them by accident.
+	QueryIDByHost map[string]int64
+	Fingerprint   string
+	Query         string // sanitized
+	WeightPct     float64
+	Calls         int64
 	// Hosts are the instances the statement was actually seen on. A candidate
 	// whose statements run only on the replicas is still worth creating — the
 	// index is physically replicated — but the user has to be able to see that

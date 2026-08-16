@@ -806,6 +806,9 @@ type IndexAdvisorCoveredQuery struct {
 	// Query Normalized statement text, sanitized.
 	Query string `json:"query"`
 
+	// QueryIdByHost The queryid this statement carries on each host it was read from, keyed by host. query_ids and hosts are two separate lists once the rows are folded, so a client that needs a queryid a given host will actually recognize — a deep link into the per-instance query report — must read it from here instead of pairing the two lists by position.
+	QueryIdByHost map[string]string `json:"query_id_by_host"`
+
 	// QueryIds Every pg_stat_statements row folded into this unit, as strings to preserve int64 precision in JavaScript. More than one means the same statement was recorded several times — different roles, or an extension that keys its view by plan as well.
 	QueryIds  []string `json:"query_ids"`
 	WeightPct float64  `json:"weight_pct"`

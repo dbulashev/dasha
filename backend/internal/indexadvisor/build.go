@@ -1,6 +1,7 @@
 package indexadvisor
 
 import (
+	"maps"
 	"slices"
 	"sort"
 	"strings"
@@ -107,6 +108,7 @@ func collapse(entries []WorkloadEntry) []WorkloadEntry {
 		if !ok || e.Fingerprint == "" {
 			e.QueryIDs = slices.Clone(e.QueryIDs)
 			e.Hosts = slices.Clone(e.Hosts)
+			e.QueryIDByHost = maps.Clone(e.QueryIDByHost)
 			index[e.Fingerprint] = len(out)
 
 			out = append(out, e)
@@ -127,6 +129,21 @@ func collapse(entries []WorkloadEntry) []WorkloadEntry {
 
 		for _, h := range e.Hosts {
 			g.Hosts = appendUnique(g.Hosts, h)
+		}
+
+		// The pairing survives the fold, which is the whole reason it is carried:
+		// after this the two lists above can no longer say which host answered
+		// with which identifier. The first row read on a host wins — a host can
+		// hold two statements of one fingerprint, and either identifier is a real
+		// answer for it.
+		if len(e.QueryIDByHost) > 0 && g.QueryIDByHost == nil {
+			g.QueryIDByHost = make(map[string]int64, len(e.QueryIDByHost))
+		}
+
+		for h, id := range e.QueryIDByHost {
+			if _, seen := g.QueryIDByHost[h]; !seen {
+				g.QueryIDByHost[h] = id
+			}
 		}
 
 		// Folded rows can carry different spellings of the same statement: pg_stat_statements
@@ -562,20 +579,15 @@ func (b *builder) orderEquality(names []string, cols map[string]Column, rows int
 		seq      int
 	}
 
-	items := make([]item, 0, len(names))
-	statsMissing := false
-
-	for i, name := range names {
-		c, known := cols[name]
-		if !known || !c.StatsKnown {
-			statsMissing = true
+	for _, name := range names {
+		if c, known := cols[name]; !known || !c.StatsKnown {
+			return slices.Clone(names), true
 		}
-
-		items = append(items, item{name: name, distinct: distinctCount(c, rows), seq: i})
 	}
 
-	if statsMissing {
-		return slices.Clone(names), true
+	items := make([]item, 0, len(names))
+	for i, name := range names {
+		items = append(items, item{name: name, distinct: distinctCount(cols[name], rows), seq: i})
 	}
 
 	sort.SliceStable(items, func(i, j int) bool {
@@ -665,12 +677,13 @@ func (b *builder) attach(d *draft, e WorkloadEntry) {
 	}
 
 	target.covered[e.Fingerprint] = CoveredQuery{
-		QueryIDs:    e.QueryIDs,
-		Fingerprint: e.Fingerprint,
-		Query:       e.Query,
-		WeightPct:   b.weight(e),
-		Calls:       e.Calls,
-		Hosts:       sortedHosts(e.Hosts),
+		QueryIDs:      e.QueryIDs,
+		QueryIDByHost: e.QueryIDByHost,
+		Fingerprint:   e.Fingerprint,
+		Query:         e.Query,
+		WeightPct:     b.weight(e),
+		Calls:         e.Calls,
+		Hosts:         sortedHosts(e.Hosts),
 	}
 	target.order = append(target.order, e.Fingerprint)
 }

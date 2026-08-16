@@ -44,14 +44,19 @@ const unavailable = ref(false)
 // The report is slow, so switching database leaves an older request in flight.
 let reqId = 0
 
+// Same exclusion list the query report uses — same pg_stat_statements. It lives
+// in a store the two pages share, so it can change while this section is mounted.
+const excludedUsers = computed(() =>
+  clusterName.value ? excludeUsersStore.getExcludeUsers(clusterName.value) : [],
+)
+
 async function load(p = 1) {
   if (!clusterName.value || !databaseName.value) return
   const myId = ++reqId
   loading.value = true
   try {
     const pageSize = prefs.pageSize
-    // Same exclusion list the query report uses — same pg_stat_statements.
-    const excluded = excludeUsersStore.getExcludeUsers(clusterName.value)
+    const excluded = excludedUsers.value
     // No instance: pg_stat_statements is per-host and not replicated, so the
     // endpoint reads every host of the cluster and ranks over their combined load.
     const res = await getIndexesAdvisor({
@@ -89,9 +94,11 @@ async function load(p = 1) {
 }
 
 // hostName is deliberately absent: the report covers the whole cluster, and
-// reloading it when the user switches host would refetch the same answer.
+// reloading it when the user switches host would refetch the same answer. The
+// exclusion list is watched by value: excluding a user changes which statements
+// the ranking sees, so keeping the old answer on screen would misattribute it.
 watch(
-  [clusterName, databaseName, () => prefs.pageSize],
+  [clusterName, databaseName, () => prefs.pageSize, () => excludedUsers.value.join('\n')],
   () => load(),
   { immediate: true },
 )
@@ -204,16 +211,20 @@ function queryHost(q: IndexAdvisorCoveredQuery): string | undefined {
 }
 
 // queryid, not search: the report is the top of each metric, and a covered
-// statement usually leads none of them.
+// statement usually leads none of them. Host and queryid have to come from the
+// same observation — the two lists are folded independently, so the first of one
+// and the first of the other can name a pair no instance ever reported.
 function queryLink(q: IndexAdvisorCoveredQuery) {
   const host = queryHost(q)
+  const byHost = q.query_id_by_host ?? {}
+  const queryid = (host ? byHost[host] : undefined) ?? q.query_ids[0]
   return {
     name: 'query-report',
     params: { clustername: clusterName.value ?? '' },
     query: {
       ...(host ? { host } : {}),
       ...(databaseName.value ? { db: databaseName.value } : {}),
-      queryid: q.query_ids[0],
+      queryid,
     },
   }
 }
@@ -339,7 +350,13 @@ function showSql(q: IndexAdvisorCoveredQuery) {
             <td :colspan="columns.length" class="py-3">
               <div class="d-flex align-center ga-2 mb-1">
                 <span class="text-caption font-weight-medium">{{ t('indexes.advisor.ddl') }}</span>
-                <v-btn icon="mdi-content-copy" variant="text" size="x-small" @click="copyToClipboard(item.ddl)" />
+                <v-btn
+                  icon="mdi-content-copy"
+                  variant="text"
+                  size="x-small"
+                  :aria-label="t('indexes.advisor.copyDdl')"
+                  @click="copyToClipboard(item.ddl)"
+                />
               </div>
               <pre class="sql-highlight sql-code text-mono text-body-2 mb-3" v-html="highlightSql(item.ddl)"></pre>
 

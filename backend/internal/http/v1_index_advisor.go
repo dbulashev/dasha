@@ -94,13 +94,21 @@ func indexAdvisorCovered(q indexadvisor.CoveredQuery) serverhttp.IndexAdvisorCov
 		ids = append(ids, strconv.FormatInt(id, 10))
 	}
 
+	// Same reason as the list above: a queryid past 2^53 loses digits the moment
+	// a browser parses it as a number.
+	byHost := make(map[string]string, len(q.QueryIDByHost))
+	for host, id := range q.QueryIDByHost {
+		byHost[host] = strconv.FormatInt(id, 10)
+	}
+
 	return serverhttp.IndexAdvisorCoveredQuery{
-		QueryIds:    ids,
-		Fingerprint: q.Fingerprint,
-		Query:       q.Query,
-		WeightPct:   q.WeightPct,
-		Calls:       q.Calls,
-		Hosts:       emptyIfNil(q.Hosts),
+		QueryIds:      ids,
+		QueryIdByHost: byHost,
+		Fingerprint:   q.Fingerprint,
+		Query:         q.Query,
+		WeightPct:     q.WeightPct,
+		Calls:         q.Calls,
+		Hosts:         emptyIfNil(q.Hosts),
 	}
 }
 
