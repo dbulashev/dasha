@@ -6,8 +6,8 @@
  */
 
 export interface IndexAdvisorCoveredQuery {
-  /** Every pg_stat_statements row folded into this unit. More than one means the same statement was recorded several times — different roles, or an extension that keys its view by plan as well. */
-  query_ids: number[]
+  /** Every pg_stat_statements row folded into this unit, as strings to preserve int64 precision in JavaScript. More than one means the same statement was recorded several times — different roles, or an extension that keys its view by plan as well. */
+  query_ids: string[]
   /** Hash of the statement structure, stable across constants and formatting. */
   fingerprint: string
   /** Normalized statement text, sanitized. */

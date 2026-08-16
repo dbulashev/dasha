@@ -6,7 +6,7 @@
  */
 
 export interface IndexAdvisorNotParsed {
-  /** Codes from reading the workload — truncated (clipped by track_activity_query_size), too_long, parse_error, unsupported_syntax, insufficient_privilege, empty — and from analyzing it: unknown_relation, ambiguous_name (an unqualified name several schemas answer to; refused rather than guessed, since pg_stat_statements records no search_path), ambiguous_column, unknown_column, unsupported_type, table_too_small, already_indexed (an existing index already serves the statement — the healthy outcome), or_predicate, expression_predicate, no_indexable_predicate. Prose lives in the client. */
+  /** Codes from reading the workload — truncated (clipped by track_activity_query_size), too_long, parse_error, unsupported_syntax, insufficient_privilege, empty — and from analyzing it: unknown_relation, system_relation (a system catalog or a monitoring view, not an application table; a monitoring tool's own polling lands here and is not a gap in the analysis), ambiguous_name (an unqualified name several schemas answer to; refused rather than guessed, since pg_stat_statements records no search_path), ambiguous_column, unknown_column, unsupported_type, table_too_small, already_indexed (an existing index already serves the statement — the healthy outcome), or_predicate, expression_predicate, no_indexable_predicate. Prose lives in the client. */
   reason_code: string
   count: number
 }

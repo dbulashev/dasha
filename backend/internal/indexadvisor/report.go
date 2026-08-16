@@ -25,13 +25,16 @@ const (
 	WarnStatsMissing = "stats_missing"
 	// WarnWideIndex: the statement asked for more columns than the key may hold.
 	WarnWideIndex = "wide_index"
+	// WarnMatview: a plain REFRESH rebuilds every index on a materialized view,
+	// while REFRESH CONCURRENTLY needs a unique one to exist at all.
+	WarnMatview = "matview"
 )
 
 // Params keys. They are passed to i18n as-is, so they are part of the contract
 // with the locale files.
 const (
-	ParamWrites     = "writes"
-	ParamScans      = "scans"
+	ParamWriteCalls = "write_calls"
+	ParamReadCalls  = "read_calls"
 	ParamWeightPct  = "weight_pct"
 	ParamColumns    = "columns"
 	ParamRequested  = "requested"
@@ -44,6 +47,9 @@ const (
 const (
 	// ReasonUnknownRelation: the statement names a table the catalog does not have.
 	ReasonUnknownRelation = "unknown_relation"
+	// ReasonSystemRelation: a system catalog or a monitoring view, not an
+	// application table. Dasha's own polling lands here.
+	ReasonSystemRelation = "system_relation"
 	// ReasonAmbiguousName: an unqualified name several schemas answer to. Refusing
 	// beats guessing — pg_stat_statements does not record a search_path.
 	ReasonAmbiguousName = "ambiguous_name"

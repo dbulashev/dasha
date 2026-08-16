@@ -351,7 +351,7 @@ func TestGetQueriesReport(t *testing.T) {
 
 	require.NoError(t, pool.QueryRow(ctx, "SELECT count(*) FROM generate_series(1, 1000)").Scan(&marker))
 
-	result, err := p.getQueriesReport(ctx, vNum, pool, []string{})
+	result, err := p.getQueriesReport(ctx, vNum, pool, []string{}, nil)
 	require.NoError(t, err)
 	assert.NotEmpty(t, result, "should return query report (fixture generates pg_stat_statements data)")
 

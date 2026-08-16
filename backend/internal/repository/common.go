@@ -125,7 +125,7 @@ type Repository interface {
 	GetQueriesRunning(ctx context.Context, clusterName, instanceName, databaseName string, minDuration int, queryFilter *string, queryFilterMode string, username *string) ([]dto.QueryRunning, error)
 	GetQueriesTop10ByTime(ctx context.Context, clusterName, instanceName, databaseName, scope string) ([]dto.QueryTop10ByTime, error)
 	GetQueriesTop10ByWal(ctx context.Context, clusterName, instanceName, databaseName, scope string) ([]dto.QueryTop10ByWal, error)
-	GetQueriesReport(ctx context.Context, clusterName, instanceName, databaseName string, excludeUsers []string) ([]dto.QueryReport, error)
+	GetQueriesReport(ctx context.Context, clusterName, instanceName, databaseName string, excludeUsers []string, queryID *int64) ([]dto.QueryReport, error)
 	GetQueriesTop10Chart(ctx context.Context, clusterName, instanceName, databaseName, scope string) ([]dto.QueryTop10ChartItem, error)
 	PgssDatabase(ctx context.Context, clusterName, instanceName, databaseName string) (string, error)
 	GetQueryStatsStatus(ctx context.Context, clusterName, instanceName, databaseName string) (dto.QueryStatsStatus, error)

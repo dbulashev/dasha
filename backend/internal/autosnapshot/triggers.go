@@ -327,7 +327,7 @@ func (d *Daemon) takeSnapshot(
 	trigCtx map[string]any,
 	bgPeak *BackgroundPeak,
 ) error {
-	reports, err := d.repo.GetQueriesReport(ctx, string(cl.Name), instance, database, nil)
+	reports, err := d.repo.GetQueriesReport(ctx, string(cl.Name), instance, database, nil, nil)
 	if err != nil {
 		d.insertEvent(ctx, TriggerEvent{
 			ClusterName:    string(cl.Name),

@@ -3,6 +3,7 @@ package indexadvisor
 import (
 	"slices"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/dbulashev/dasha/internal/sqlparse"
@@ -14,10 +15,10 @@ import (
 const (
 	// lowWeightPct is where a candidate stops being worth acting on first.
 	lowWeightPct = 1.0
-	// writeHeavyRatio and writeHeavyMinWrites decide when maintenance is likely
+	// writeHeavyRatio and writeHeavyMinCalls decide when maintenance is likely
 	// to outweigh the reads — see writeHeavy.
-	writeHeavyRatio     = 10.0
-	writeHeavyMinWrites = 10000
+	writeHeavyRatio    = 10.0
+	writeHeavyMinCalls = 1000
 	// The indexes/missing signal's own thresholds, repeated so a candidate can
 	// tell when the two signals are about the same table.
 	missingSignalIdxPct  = 95.0
@@ -26,6 +27,8 @@ const (
 	btreeMethod = "btree"
 	// partitionedKind is the relkind of a partitioned table.
 	partitionedKind = "p"
+	// matviewKind is the relkind of a materialized view.
+	matviewKind = "m"
 )
 
 // Build turns one database's workload and catalog into ranked index candidates.
@@ -42,13 +45,17 @@ func Build(w Workload, cat Catalog, cfg Config) Report {
 	groups := collapse(w.Entries)
 
 	b := &builder{
-		cat:       cat,
-		cfg:       cfg,
-		totalTime: totalTime(groups),
-		drafts:    make(map[RelKey][]*draft),
-		skipped:   make(map[string]int, len(w.NotParsed)),
-		columnsBy: make(map[RelKey]map[string]Column),
+		cat:        cat,
+		cfg:        cfg,
+		drafts:     make(map[RelKey][]*draft),
+		skipped:    make(map[string]int, len(w.NotParsed)),
+		columnsBy:  make(map[RelKey]map[string]Column),
+		writeCalls: make(map[RelKey]int64),
 	}
+
+	// Both need the catalog, so they run on the built builder.
+	b.totalTime = b.workloadTime(groups)
+	b.collectWrites(groups)
 
 	// The collector's own failures and the ones found here share a tally: from
 	// the user's side both answer the same question — why is this list short.
@@ -111,13 +118,68 @@ func collapse(entries []WorkloadEntry) []WorkloadEntry {
 	return out
 }
 
-func totalTime(entries []WorkloadEntry) float64 {
+// workloadTime is the denominator of every weight. Monitoring is left out of it:
+// on a polled database it is most of pg_stat_statements.
+func (b *builder) workloadTime(entries []WorkloadEntry) float64 {
 	var sum float64
+
 	for _, e := range entries {
+		if b.systemOnly(e.Stmt) {
+			continue
+		}
+
 		sum += e.TotalTimeMs
 	}
 
 	return sum
+}
+
+// collectWrites reads INSERTs too: they yield no candidate but price every one.
+func (b *builder) collectWrites(entries []WorkloadEntry) {
+	for _, e := range entries {
+		for _, r := range e.Stmt.Written {
+			key, why := b.resolveRef(r)
+			if why != "" {
+				continue
+			}
+
+			b.writeCalls[key] += e.Calls
+		}
+	}
+}
+
+// systemOnly is false for a catalog joined to a real table: that still says how
+// the table is queried.
+func (b *builder) systemOnly(stmt sqlparse.Statement) bool {
+	if len(stmt.Tables) == 0 {
+		return false
+	}
+
+	for _, r := range stmt.Tables {
+		if _, why := b.resolveRef(r); why != ReasonSystemRelation {
+			return false
+		}
+	}
+
+	return true
+}
+
+// isSystemRef: the catalog scan returns every ordinary table in every user
+// schema, so a pg_-prefixed name it missed is a catalog or a monitoring view.
+func isSystemRef(r sqlparse.Ref) bool {
+	if r.Schema == "information_schema" || strings.HasPrefix(r.Schema, "pg_") {
+		return true
+	}
+
+	return strings.HasPrefix(r.Name, "pg_")
+}
+
+func unknownReason(r sqlparse.Ref) string {
+	if isSystemRef(r) {
+		return ReasonSystemRelation
+	}
+
+	return ReasonUnknownRelation
 }
 
 func sumCounts(counts map[string]int) int {
@@ -148,6 +210,8 @@ type builder struct {
 	drafts    map[RelKey][]*draft
 	skipped   map[string]int
 	columnsBy map[RelKey]map[string]Column
+	// writeCalls covers the same window as the reads, unlike Catalog.Writes.
+	writeCalls map[RelKey]int64
 }
 
 // addStatement adds whatever one statement is worth. The returned code is the
@@ -252,7 +316,7 @@ func (b *builder) resolveRef(r sqlparse.Ref) (RelKey, string) {
 
 		switch len(keys) {
 		case 0:
-			return RelKey{}, ReasonUnknownRelation
+			return RelKey{}, unknownReason(r)
 		case 1:
 			key = keys[0]
 		default:
@@ -262,7 +326,7 @@ func (b *builder) resolveRef(r sqlparse.Ref) (RelKey, string) {
 
 	rel, ok := b.cat.Relations[key]
 	if !ok {
-		return RelKey{}, ReasonUnknownRelation
+		return RelKey{}, unknownReason(r)
 	}
 
 	// An index belongs on the partitioned root, whichever partition the statement
@@ -683,11 +747,13 @@ func (b *builder) candidate(key RelKey, d *draft) Candidate {
 
 	covered := make([]CoveredQuery, 0, len(d.order))
 	weight := 0.0
+	readCalls := int64(0)
 
 	for _, fp := range d.order {
 		q := d.covered[fp]
 		covered = append(covered, q)
 		weight += q.WeightPct
+		readCalls += q.Calls
 	}
 
 	sort.SliceStable(covered, func(i, j int) bool {
@@ -695,6 +761,7 @@ func (b *builder) candidate(key RelKey, d *draft) Candidate {
 	})
 
 	partitioned := rel.Kind == partitionedKind
+	t := trade{writeCalls: b.writeCalls[key], readCalls: readCalls}
 
 	return Candidate{
 		Schema:         key.Schema,
@@ -705,12 +772,18 @@ func (b *builder) candidate(key RelKey, d *draft) Candidate {
 		Covered:        covered,
 		TableRows:      rel.Rows,
 		Writes:         writes,
-		Warnings:       warningsFor(d, partitioned, writes, weight),
+		Warnings:       warningsFor(d, rel.Kind, writes, weight, t),
 		PlannerChecked: false,
 	}
 }
 
-func warningsFor(d *draft, partitioned bool, w Writes, weight float64) []Warning {
+// trade is the write and read calls a candidate is weighed between.
+type trade struct {
+	writeCalls int64
+	readCalls  int64
+}
+
+func warningsFor(d *draft, kind string, w Writes, weight float64, t trade) []Warning {
 	var out []Warning
 
 	if d.statsMissing {
@@ -724,14 +797,18 @@ func warningsFor(d *draft, partitioned bool, w Writes, weight float64) []Warning
 		}})
 	}
 
-	if partitioned {
+	if kind == partitionedKind {
 		out = append(out, Warning{Code: WarnPartitionRoot, Params: nil})
 	}
 
-	if writes := w.Inserted + w.Updated + w.Deleted; writeHeavy(w) {
+	if kind == matviewKind {
+		out = append(out, Warning{Code: WarnMatview, Params: nil})
+	}
+
+	if writeHeavy(t) {
 		out = append(out, Warning{Code: WarnWriteHeavy, Params: map[string]float64{
-			ParamWrites: float64(writes),
-			ParamScans:  float64(w.SeqScans + w.IdxScans),
+			ParamWriteCalls: float64(t.writeCalls),
+			ParamReadCalls:  float64(t.readCalls),
 		}})
 	}
 
@@ -751,19 +828,15 @@ func warningsFor(d *draft, partitioned bool, w Writes, weight float64) []Warning
 	return out
 }
 
-// writeHeavy is a judgement, not a measurement. Index maintenance is paid per
-// written tuple and the benefit per scan, and the two are not in the same unit —
-// so the ratio is set high enough that only a table that is overwhelmingly a
-// write target trips it, with an absolute floor so a small, quiet table cannot.
-func writeHeavy(w Writes) bool {
-	written := w.Inserted + w.Updated + w.Deleted
-	if written < writeHeavyMinWrites {
+// writeHeavy weighs both sides over the same pg_stat_statements window.
+// pg_stat_user_tables cannot: its counters carry the one-time load that filled
+// the table, which outweighs every read since.
+func writeHeavy(t trade) bool {
+	if t.writeCalls < writeHeavyMinCalls {
 		return false
 	}
 
-	scans := w.SeqScans + w.IdxScans
-
-	return float64(written) > writeHeavyRatio*float64(max(scans, 1))
+	return float64(t.writeCalls) > writeHeavyRatio*float64(max(t.readCalls, 1))
 }
 
 // matchesMissingSignal repeats the thresholds of the indexes/missing report, so

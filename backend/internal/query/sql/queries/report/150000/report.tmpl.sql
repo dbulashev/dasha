@@ -100,7 +100,8 @@ WITH stst as (
              ROW_NUMBER() OVER (PARTITION BY dbid ORDER BY shared_blks_dirtied DESC) <= 10 OR
              ROW_NUMBER() OVER (PARTITION BY dbid ORDER BY shared_blks_written DESC) <= 10 OR
              ROW_NUMBER() OVER (PARTITION BY dbid ORDER BY wal_bytes DESC) <= 10 OR
-             ROW_NUMBER() OVER (PARTITION BY dbid ORDER BY temp_blks DESC) <= 10
+             ROW_NUMBER() OVER (PARTITION BY dbid ORDER BY temp_blks DESC) <= 10 OR
+             ($2::bigint IS NOT NULL AND queryid = $2::bigint)
                  AS visible
          FROM stst__
      )

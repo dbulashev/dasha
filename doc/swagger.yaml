@@ -1929,6 +1929,15 @@ paths:
           style: form
           explode: false
           description: Comma-separated list of usernames to exclude from the report
+        - in: query
+          name: queryid
+          schema:
+            type: string
+          description: >-
+            Include this statement in the response whatever it ranks. The report is
+            otherwise the top of each metric, so a deep link to a statement that leads
+            none of them would resolve to nothing. As a string, to preserve int64
+            precision in JavaScript.
       responses:
         '200':
           description: Success
@@ -3417,13 +3426,13 @@ components:
       properties:
         query_ids:
           description: >-
-            Every pg_stat_statements row folded into this unit. More than one means the
-            same statement was recorded several times — different roles, or an extension
-            that keys its view by plan as well.
+            Every pg_stat_statements row folded into this unit, as strings to preserve
+            int64 precision in JavaScript. More than one means the same statement was
+            recorded several times — different roles, or an extension that keys its view
+            by plan as well.
           type: array
           items:
-            type: integer
-            format: int64
+            type: string
         fingerprint:
           description: Hash of the statement structure, stable across constants and formatting.
           type: string
@@ -3472,13 +3481,17 @@ components:
       properties:
         code:
           description: >-
-            write_heavy — the table is written far more than read, so the index may cost
-            more than it saves. low_weight — the covered statements are a marginal share of
+            write_heavy — the analyzed workload writes the table far more often than it
+            runs the statements the index would serve, so the index may cost more than it
+            saves. low_weight — the covered statements are a marginal share of
             the load. overlaps_missing_signal — the indexes/missing report is about this
             same table. partition_root — the table is partitioned: the DDL cannot use
             CONCURRENTLY and every partition pays for the index. stats_missing — no pg_stats
             row for the columns, so their order is the order the statement wrote them.
             wide_index — the statements asked for more columns than the key may hold.
+            matview — the relation is a materialized view: a plain REFRESH rewrites it
+            and rebuilds every index on it, while REFRESH CONCURRENTLY requires at least
+            one unique index to exist.
           type: string
           enum:
             - write_heavy
@@ -3487,6 +3500,7 @@ components:
             - partition_root
             - stats_missing
             - wide_index
+            - matview
         params:
           description: >-
             Numbers the wording of this code quotes, keyed by name. Which keys are present
@@ -3507,8 +3521,11 @@ components:
             Codes from reading the workload — truncated (clipped by
             track_activity_query_size), too_long, parse_error, unsupported_syntax,
             insufficient_privilege, empty — and from analyzing it: unknown_relation,
-            ambiguous_name (an unqualified name several schemas answer to; refused rather
-            than guessed, since pg_stat_statements records no search_path), ambiguous_column,
+            system_relation (a system catalog or a monitoring view, not an application
+            table; a monitoring tool's own polling lands here and is not a gap in the
+            analysis), ambiguous_name (an unqualified name several schemas answer to;
+            refused rather than guessed, since pg_stat_statements records no search_path),
+            ambiguous_column,
             unknown_column, unsupported_type, table_too_small, already_indexed (an existing
             index already serves the statement — the healthy outcome), or_predicate,
             expression_predicate, no_indexable_predicate. Prose lives in the client.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/dbulashev/dasha/gen/serverhttp"
 	"github.com/dbulashev/dasha/internal/indexadvisor"
@@ -84,8 +85,13 @@ func indexAdvisorCandidate(c indexadvisor.Candidate) serverhttp.IndexAdvisorCand
 }
 
 func indexAdvisorCovered(q indexadvisor.CoveredQuery) serverhttp.IndexAdvisorCoveredQuery {
+	ids := make([]string, 0, len(q.QueryIDs))
+	for _, id := range q.QueryIDs {
+		ids = append(ids, strconv.FormatInt(id, 10))
+	}
+
 	return serverhttp.IndexAdvisorCoveredQuery{
-		QueryIds:    q.QueryIDs,
+		QueryIds:    ids,
 		Fingerprint: q.Fingerprint,
 		Query:       q.Query,
 		WeightPct:   q.WeightPct,

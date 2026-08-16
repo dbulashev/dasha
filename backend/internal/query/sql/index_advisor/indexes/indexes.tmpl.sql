@@ -19,7 +19,7 @@ FROM pg_catalog.pg_index i
     JOIN pg_catalog.pg_class ic ON ic.oid = i.indexrelid
     JOIN pg_catalog.pg_am am ON am.oid = ic.relam
     JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-WHERE c.relkind IN ('r', 'p')
+WHERE c.relkind IN ('r', 'p', 'm')
   AND c.relpersistence <> 't'
   AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
   AND n.nspname NOT LIKE 'pg\_temp%'

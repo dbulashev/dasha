@@ -9,6 +9,8 @@ export default mergeConfig(
       environment: 'jsdom',
       exclude: [...configDefaults.exclude, 'e2e/**'],
       root: fileURLToPath(new URL('./', import.meta.url)),
+      // Vuetify side-imports CSS; externalized, Node's loader refuses the .css.
+      server: { deps: { inline: ['vuetify'] } },
     },
   }),
 )

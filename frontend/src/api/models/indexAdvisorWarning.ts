@@ -8,7 +8,7 @@ import type { IndexAdvisorWarningCode } from './indexAdvisorWarningCode'
 import type { IndexAdvisorWarningParams } from './indexAdvisorWarningParams'
 
 export interface IndexAdvisorWarning {
-  /** write_heavy — the table is written far more than read, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. overlaps_missing_signal — the indexes/missing report is about this same table. partition_root — the table is partitioned: the DDL cannot use CONCURRENTLY and every partition pays for the index. stats_missing — no pg_stats row for the columns, so their order is the order the statement wrote them. wide_index — the statements asked for more columns than the key may hold. */
+  /** write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. overlaps_missing_signal — the indexes/missing report is about this same table. partition_root — the table is partitioned: the DDL cannot use CONCURRENTLY and every partition pays for the index. stats_missing — no pg_stats row for the columns, so their order is the order the statement wrote them. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires at least one unique index to exist. */
   code: IndexAdvisorWarningCode
   /** Numbers the wording of this code quotes, keyed by name. Which keys are present depends on code; a client reads only the ones its phrasing needs. */
   params?: IndexAdvisorWarningParams

@@ -11,7 +11,7 @@ WITH cols AS (
         JOIN pg_catalog.pg_type t ON t.oid = a.atttypid
     WHERE a.attnum > 0
       AND NOT a.attisdropped
-      AND c.relkind IN ('r', 'p')
+      AND c.relkind IN ('r', 'p', 'm')
       AND c.relpersistence <> 't'
       AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
       AND n.nspname NOT LIKE 'pg\_temp%'

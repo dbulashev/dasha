@@ -111,7 +111,11 @@ psql -h pg18-master -U demo -d demo -c \
 psql -h pg17-master -U demo -d demo -c \
   "ALTER TABLE customer_profiles SET (autovacuum_enabled = false);" 2>/dev/null || true
 
+cycle=0
+
 while true; do
+  cycle=$((cycle + 1))
+
   # 1. Dead rows generation (visible in Maintenance Info)
   psql -h pg17-master -U demo -d demo -c "
     DELETE FROM deadrows_test WHERE id IN (SELECT id FROM deadrows_test ORDER BY random() LIMIT 50);
@@ -149,6 +153,9 @@ while true; do
     SELECT user_id, count(*) FROM orders GROUP BY user_id ORDER BY count(*) DESC LIMIT 10;
     SELECT * FROM products p JOIN categories c ON c.id = p.category_id LIMIT 5;
     SELECT * FROM events WHERE event_date > '2025-06-01' LIMIT 10;
+    SELECT s.channel, count(*), avg(e.latency_ms) FROM sessions s
+        JOIN session_events e ON e.session_id = s.id
+        WHERE e.status = 'failed' GROUP BY s.channel;
 SQL
 
   psql -h pg18-master -U demo -d demo <<'SQL'
@@ -156,6 +163,12 @@ SQL
     SELECT status, count(*), avg(amount) FROM orders GROUP BY status;
     SELECT * FROM orders WHERE amount > 9000 ORDER BY created_at DESC LIMIT 20;
     SELECT * FROM customer_profiles WHERE bio IS NOT NULL ORDER BY random() LIMIT 5;
+    SELECT s.channel, count(*), avg(e.latency_ms) FROM sessions s
+        JOIN session_events e ON e.session_id = s.id
+        WHERE e.status = 'failed' GROUP BY s.channel;
+    SELECT count(*) FROM session_events e
+        JOIN sessions s ON s.id = e.session_id
+        WHERE e.status = 'timeout' AND s.channel = 'web';
 SQL
 
   # 5b. Queries on pg18-standalone, whose pg_stat_statements lives in schema
@@ -196,6 +209,24 @@ SQL
     SELECT metric_date, count(*), avg(value) FROM metrics GROUP BY metric_date;
     SELECT count(*) FROM metrics WHERE bucket BETWEEN 1 AND 300;
   "
+
+  # 7. Materialized view report: filters on columns its unique index does not
+  #    cover, so the advisor has a matview candidate to propose.
+  for host in pg18-master pg17-master; do
+    psql -h "$host" -U demo -d demo <<'SQL'
+    SELECT session_id, event_count FROM mv_session_stats
+      WHERE status = 'failed' AND event_count > 5
+      ORDER BY event_count DESC LIMIT 20;
+SQL
+  done
+
+  # Refreshed on its own rhythm — that is the cost an index on a matview carries.
+  if [ $((cycle % 10)) -eq 0 ]; then
+    for host in pg18-master pg17-master; do
+      psql -h "$host" -U demo -d demo -c \
+        "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_session_stats;"
+    done
+  fi
 
   echo "[$(date)] Workload cycle completed"
   sleep 15

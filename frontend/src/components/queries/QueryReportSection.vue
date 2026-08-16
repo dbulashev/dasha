@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { useRoute } from 'vue-router'
 import { getDatabaseUsers, getQueriesReport } from '@/api/gen/default/default'
 import type { QueryReport } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
@@ -18,6 +19,7 @@ const props = defineProps<{
 }>()
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
+const route = useRoute()
 const { t } = useI18n()
 const { onError } = useViewError()
 const excludeUsersStore = useExcludeUsersStore()
@@ -83,6 +85,10 @@ const { items: availableUsers } = useApiLoader<string[]>(
   },
 )
 
+// A deep link names one statement; the API is asked for it explicitly because the
+// report is otherwise the top of each metric, and the filter narrows the page to it.
+const linkedQueryId = route.query.queryid ? String(route.query.queryid) : ''
+
 const isSnapshot = computed(() => props.snapshotData != null)
 
 const { items: liveItems, loading } = useApiLoader<QueryReport[]>(
@@ -92,6 +98,7 @@ const { items: liveItems, loading } = useApiLoader<QueryReport[]>(
     database: databaseName.value ?? undefined,
     scope: scope.value,
     exclude_users: excludeUsers.value.length ? excludeUsers.value : undefined,
+    queryid: linkedQueryId || undefined,
   }),
   {
     deps: [clusterName, hostName, databaseName, scope, excludeUsers, isSnapshot],
@@ -102,7 +109,7 @@ const { items: liveItems, loading } = useApiLoader<QueryReport[]>(
 
 const items = computed(() => isSnapshot.value ? (props.snapshotData ?? []) : liveItems.value)
 
-const search = ref<string | null>('')
+const search = ref<string | null>(linkedQueryId)
 const debouncedSearch = useDebouncedRef(search, 200)
 
 // Instance scope returns the top of every database, which on a host with many

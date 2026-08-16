@@ -20,7 +20,7 @@ type Repo interface {
 	GetActiveConnectionCount(ctx context.Context, clusterName, instanceName string) (int, error)
 	GetBlockedSessionCount(ctx context.Context, clusterName, instanceName, databaseName string) (int, error)
 	GetInstanceInfo(ctx context.Context, clusterName, instanceName string) (dto.InstanceInfo, error)
-	GetQueriesReport(ctx context.Context, clusterName, instanceName, databaseName string, excludeUsers []string) ([]dto.QueryReport, error)
+	GetQueriesReport(ctx context.Context, clusterName, instanceName, databaseName string, excludeUsers []string, queryID *int64) ([]dto.QueryReport, error)
 	GetQueriesBlocked(ctx context.Context, clusterName, instanceName, databaseName, scope string) ([]dto.QueryBlocked, error)
 	PgssDatabase(ctx context.Context, clusterName, instanceName, databaseName string) (string, error)
 	GetPgssStatsResetTime(ctx context.Context, clusterName, instanceName, databaseName string) (*dto.StatsResetTime, error)

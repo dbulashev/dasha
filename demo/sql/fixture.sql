@@ -405,6 +405,55 @@ SELECT i, gen_random_uuid()::text, '2026-01-01'::date + (random()*80)::int
 FROM generate_series(1, 3000) i;
 
 -- =============================================
+-- Index advisor: join column + filter column on one unindexed table.
+-- session_events has only its primary key, so the reports below seq-scan all
+-- 60 000 rows. The advisor must propose session_events (session_id, status) —
+-- session_id first, it is the more selective of the two.
+-- =============================================
+CREATE TABLE sessions (
+    id bigserial PRIMARY KEY,
+    user_id integer NOT NULL,
+    channel text NOT NULL,
+    started_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE session_events (
+    id bigserial PRIMARY KEY,
+    session_id bigint NOT NULL,
+    status text NOT NULL,
+    latency_ms integer NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
+);
+
+INSERT INTO sessions (user_id, channel, started_at)
+SELECT (random() * 5000)::int,
+       (ARRAY['web', 'ios', 'android', 'partner'])[1 + (random() * 3)::int],
+       now() - (random() * 30) * interval '1 day'
+FROM generate_series(1, 5000);
+
+INSERT INTO session_events (session_id, status, latency_ms, created_at)
+SELECT (random() * 4999)::int + 1,
+       (ARRAY['ok', 'failed', 'timeout'])[1 + (random() * 2)::int],
+       (random() * 5000)::int,
+       now() - (random() * 30) * interval '1 day'
+FROM generate_series(1, 60000);
+
+-- Aggregate per (session, status): ~15 000 rows, above the advisor's size
+-- threshold. The unique index is what lets REFRESH run CONCURRENTLY; the
+-- advisor must still propose (status, event_count) for the report below and
+-- warn that a plain REFRESH rebuilds both.
+CREATE MATERIALIZED VIEW mv_session_stats AS
+SELECT e.session_id,
+       e.status,
+       count(*)          AS event_count,
+       avg(e.latency_ms) AS avg_latency_ms,
+       max(e.created_at) AS last_seen
+FROM session_events e
+GROUP BY e.session_id, e.status;
+
+CREATE UNIQUE INDEX mv_session_stats_key ON mv_session_stats (session_id, status);
+
+-- =============================================
 -- Warm up stats
 -- =============================================
 SELECT count(*) FROM orders;
@@ -423,5 +472,11 @@ SELECT count(*) FROM hot_update_demo;
 SELECT * FROM mv_order_summary LIMIT 5;
 SELECT count(*) FROM sensor_readings WHERE sensor_id < 100;
 SELECT count(*) FROM metrics WHERE metric_date >= '2026-02-01';
+SELECT s.channel, count(*) FROM sessions s
+    JOIN session_events e ON e.session_id = s.id
+    WHERE e.status = 'failed' GROUP BY s.channel;
+SELECT session_id, event_count FROM mv_session_stats
+    WHERE status = 'failed' AND event_count > 5
+    ORDER BY event_count DESC LIMIT 20;
 
 ANALYZE;

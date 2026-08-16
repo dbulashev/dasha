@@ -27,7 +27,7 @@ FROM pg_catalog.pg_class c
     LEFT JOIN pg_catalog.pg_class rc ON rc.oid = r.root
     LEFT JOIN pg_catalog.pg_namespace rn ON rn.oid = rc.relnamespace
     LEFT JOIN root_rows rr ON rr.rel = c.oid
-WHERE c.relkind IN ('r', 'p')
+WHERE c.relkind IN ('r', 'p', 'm')
   AND c.relpersistence <> 't'
   AND n.nspname NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
   AND n.nspname NOT LIKE 'pg\_temp%'

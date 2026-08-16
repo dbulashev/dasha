@@ -36,7 +36,7 @@ func (f *fakeRepo) GetInstanceInfo(context.Context, string, string) (dto.Instanc
 	return dto.InstanceInfo{}, nil //nolint:exhaustruct
 }
 
-func (f *fakeRepo) GetQueriesReport(ctx context.Context, _, _, _ string, _ []string) ([]dto.QueryReport, error) {
+func (f *fakeRepo) GetQueriesReport(ctx context.Context, _, _, _ string, _ []string, _ *int64) ([]dto.QueryReport, error) {
 	if f.report == nil {
 		// One row on purpose: an empty report is treated as "nothing to store".
 		return []dto.QueryReport{{QueryID: 1, Datname: "db1"}}, nil //nolint:exhaustruct

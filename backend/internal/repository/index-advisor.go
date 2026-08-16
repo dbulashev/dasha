@@ -35,6 +35,9 @@ func (p *PgxPool) GetIndexAdvisorReport(
 	clusterName, instanceName, databaseName string,
 	excludeUsers []string,
 ) (indexadvisor.Report, error) {
+	// Build times only itself; the cost is the catalog reads and the parsing here.
+	started := time.Now()
+
 	cfg := p.indexAdvisorConfig.WithDefaults()
 
 	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
@@ -59,7 +62,10 @@ func (p *PgxPool) GetIndexAdvisorReport(
 	// answer that is already known — but the report is still built, because the
 	// reasons the workload yielded nothing are the whole point of it.
 	if len(workload.Entries) == 0 {
-		return indexadvisor.Build(workload, indexadvisor.NewCatalog(), p.indexAdvisorConfig), nil
+		rep := indexadvisor.Build(workload, indexadvisor.NewCatalog(), p.indexAdvisorConfig)
+		rep.DurationMs = time.Since(started).Milliseconds()
+
+		return rep, nil
 	}
 
 	cat, err := p.collectIndexAdvisorCatalog(ctx, pool, vNum)
@@ -67,7 +73,10 @@ func (p *PgxPool) GetIndexAdvisorReport(
 		return indexadvisor.Report{}, fmt.Errorf("GetIndexAdvisorReport | %w", err)
 	}
 
-	return indexadvisor.Build(workload, cat, p.indexAdvisorConfig), nil
+	rep := indexadvisor.Build(workload, cat, p.indexAdvisorConfig)
+	rep.DurationMs = time.Since(started).Milliseconds()
+
+	return rep, nil
 }
 
 // indexAdvisorParser builds the SQL parser on first use, not at startup: it

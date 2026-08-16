@@ -25,11 +25,11 @@ type lru struct {
 	items map[cacheKey]*list.Element
 }
 
-func newLRU(max int) *lru {
+func newLRU(size int) *lru {
 	return &lru{
-		max:   max,
+		max:   size,
 		order: list.New(),
-		items: make(map[cacheKey]*list.Element, max),
+		items: make(map[cacheKey]*list.Element, size),
 	}
 }
 

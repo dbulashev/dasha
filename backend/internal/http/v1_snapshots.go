@@ -35,7 +35,7 @@ func (s *Handlers) PostSnapshot(
 		return serverhttp.PostSnapshot501Response{}, nil
 	}
 
-	reports, err := s.repo.GetQueriesReport(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, nil)
+	reports, err := s.repo.GetQueriesReport(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, nil, nil)
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.PostSnapshot404Response{}, nil
 	}

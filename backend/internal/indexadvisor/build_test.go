@@ -22,6 +22,12 @@ const (
 func entry(t *testing.T, id int64, sql string, timeMs float64) WorkloadEntry {
 	t.Helper()
 
+	return entryCalls(t, id, sql, timeMs, 100)
+}
+
+func entryCalls(t *testing.T, id int64, sql string, timeMs float64, calls int64) WorkloadEntry {
+	t.Helper()
+
 	stmt, err := testParser.Parse(sql)
 	if err != nil {
 		t.Fatalf("parse %q: %v", sql, err)
@@ -31,7 +37,7 @@ func entry(t *testing.T, id int64, sql string, timeMs float64) WorkloadEntry {
 		QueryIDs:    []int64{id},
 		Fingerprint: stmt.Fingerprint,
 		Query:       sql,
-		Calls:       100,
+		Calls:       calls,
 		TotalTimeMs: timeMs,
 		Rows:        100,
 		Stmt:        stmt,
@@ -509,19 +515,84 @@ func TestBuildSkipsColumnsWithoutBtreeSupport(t *testing.T) {
 }
 
 func TestBuildWarnsOnWriteHeavyTables(t *testing.T) {
+	w := workloadOf(
+		entry(t, 1, `SELECT * FROM orders WHERE tenant_id = $1`, 1000),
+		entryCalls(t, 2, `UPDATE orders SET status = $1 WHERE id = $2`, 500, 20_000),
+	)
+
+	cand := onlyCandidate(t, Build(w, ordersCatalog(), Config{})) //nolint:exhaustruct
+	if !hasWarning(cand, WarnWriteHeavy) {
+		t.Error("20 000 updates against 100 reads must warn")
+	}
+}
+
+// The lifetime counters carry the bulk load that filled the table; the workload
+// writes it once. That is not a write-heavy table.
+func TestBuildDoesNotCallASeededTableWriteHeavy(t *testing.T) {
+	cat := ordersCatalog()
+
+	cat.SetWrites(RelKey{Schema: testSchema, Name: "orders"}, Writes{
+		Inserted: 5_000_000, Updated: 0, Deleted: 0,
+		SeqScans: 10, IdxScans: 100, LiveTuples: testRows,
+	})
+
+	w := workloadOf(
+		entry(t, 1, `SELECT * FROM orders WHERE tenant_id = $1`, 1000),
+		entryCalls(t, 2, `INSERT INTO orders (tenant_id, status) SELECT $1, $2`, 5000, 1),
+	)
+
+	cand := onlyCandidate(t, Build(w, cat, Config{})) //nolint:exhaustruct
+	if hasWarning(cand, WarnWriteHeavy) {
+		t.Error("one bulk load is not a write-heavy table")
+	}
+}
+
+// A materialized view takes indexes like a table, but REFRESH rebuilds them, and
+// the workload cannot show that: REFRESH is a utility statement.
+func TestBuildWarnsOnMaterializedViews(t *testing.T) {
 	cat := ordersCatalog()
 	orders := RelKey{Schema: testSchema, Name: "orders"}
 
-	cat.SetWrites(orders, Writes{
-		Inserted: 5_000_000, Updated: 1_000_000, Deleted: 0,
-		SeqScans: 10, IdxScans: 100, LiveTuples: testRows,
-	})
+	rel := cat.Relations[orders]
+	rel.Kind = matviewKind
+	cat.AddRelation(rel)
 
 	w := workloadOf(entry(t, 1, `SELECT * FROM orders WHERE tenant_id = $1`, 1000))
 
 	cand := onlyCandidate(t, Build(w, cat, Config{})) //nolint:exhaustruct
-	if !hasWarning(cand, WarnWriteHeavy) {
-		t.Error("a table written millions of times and scanned a hundred must warn")
+	if !hasWarning(cand, WarnMatview) {
+		t.Error("an index on a matview is rebuilt by every plain REFRESH")
+	}
+}
+
+func TestBuildSeparatesCatalogQueriesFromMissingTables(t *testing.T) {
+	w := workloadOf(
+		entry(t, 1, `SELECT * FROM orders WHERE tenant_id = $1`, 100),
+		entry(t, 2, `SELECT count(*) FROM pg_stat_activity WHERE state = $1`, 9900),
+	)
+
+	rep := Build(w, ordersCatalog(), Config{}) //nolint:exhaustruct
+
+	if got := reasonCount(rep, ReasonSystemRelation); got != 1 {
+		t.Errorf("system_relation = %d, want 1", got)
+	}
+
+	if got := reasonCount(rep, ReasonUnknownRelation); got != 0 {
+		t.Errorf("unknown_relation = %d, want 0: a catalog is not a missing table", got)
+	}
+}
+
+// Monitoring left in the denominator would shrink the one application statement
+// here to 1%.
+func TestBuildKeepsMonitoringOutOfTheWeights(t *testing.T) {
+	w := workloadOf(
+		entry(t, 1, `SELECT * FROM orders WHERE tenant_id = $1`, 100),
+		entry(t, 2, `SELECT count(*) FROM pg_stat_activity WHERE state = $1`, 9900),
+	)
+
+	cand := onlyCandidate(t, Build(w, ordersCatalog(), Config{})) //nolint:exhaustruct
+	if cand.WeightPct < 99.9 {
+		t.Errorf("weight = %.2f, want 100", cand.WeightPct)
 	}
 }
 

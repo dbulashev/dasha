@@ -64,6 +64,7 @@ const (
 // Defines values for IndexAdvisorWarningCode.
 const (
 	LowWeight             IndexAdvisorWarningCode = "low_weight"
+	Matview               IndexAdvisorWarningCode = "matview"
 	OverlapsMissingSignal IndexAdvisorWarningCode = "overlaps_missing_signal"
 	PartitionRoot         IndexAdvisorWarningCode = "partition_root"
 	StatsMissing          IndexAdvisorWarningCode = "stats_missing"
@@ -803,16 +804,16 @@ type IndexAdvisorCoveredQuery struct {
 	// Query Normalized statement text, sanitized.
 	Query string `json:"query"`
 
-	// QueryIds Every pg_stat_statements row folded into this unit. More than one means the same statement was recorded several times — different roles, or an extension that keys its view by plan as well.
-	QueryIds  []int64 `json:"query_ids"`
-	WeightPct float64 `json:"weight_pct"`
+	// QueryIds Every pg_stat_statements row folded into this unit, as strings to preserve int64 precision in JavaScript. More than one means the same statement was recorded several times — different roles, or an extension that keys its view by plan as well.
+	QueryIds  []string `json:"query_ids"`
+	WeightPct float64  `json:"weight_pct"`
 }
 
 // IndexAdvisorNotParsed defines model for IndexAdvisorNotParsed.
 type IndexAdvisorNotParsed struct {
 	Count int `json:"count"`
 
-	// ReasonCode Codes from reading the workload — truncated (clipped by track_activity_query_size), too_long, parse_error, unsupported_syntax, insufficient_privilege, empty — and from analyzing it: unknown_relation, ambiguous_name (an unqualified name several schemas answer to; refused rather than guessed, since pg_stat_statements records no search_path), ambiguous_column, unknown_column, unsupported_type, table_too_small, already_indexed (an existing index already serves the statement — the healthy outcome), or_predicate, expression_predicate, no_indexable_predicate. Prose lives in the client.
+	// ReasonCode Codes from reading the workload — truncated (clipped by track_activity_query_size), too_long, parse_error, unsupported_syntax, insufficient_privilege, empty — and from analyzing it: unknown_relation, system_relation (a system catalog or a monitoring view, not an application table; a monitoring tool's own polling lands here and is not a gap in the analysis), ambiguous_name (an unqualified name several schemas answer to; refused rather than guessed, since pg_stat_statements records no search_path), ambiguous_column, unknown_column, unsupported_type, table_too_small, already_indexed (an existing index already serves the statement — the healthy outcome), or_predicate, expression_predicate, no_indexable_predicate. Prose lives in the client.
 	ReasonCode string `json:"reason_code"`
 }
 
@@ -851,14 +852,14 @@ type IndexAdvisorSummary struct {
 
 // IndexAdvisorWarning defines model for IndexAdvisorWarning.
 type IndexAdvisorWarning struct {
-	// Code write_heavy — the table is written far more than read, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. overlaps_missing_signal — the indexes/missing report is about this same table. partition_root — the table is partitioned: the DDL cannot use CONCURRENTLY and every partition pays for the index. stats_missing — no pg_stats row for the columns, so their order is the order the statement wrote them. wide_index — the statements asked for more columns than the key may hold.
+	// Code write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. overlaps_missing_signal — the indexes/missing report is about this same table. partition_root — the table is partitioned: the DDL cannot use CONCURRENTLY and every partition pays for the index. stats_missing — no pg_stats row for the columns, so their order is the order the statement wrote them. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires at least one unique index to exist.
 	Code IndexAdvisorWarningCode `json:"code"`
 
 	// Params Numbers the wording of this code quotes, keyed by name. Which keys are present depends on code; a client reads only the ones its phrasing needs.
 	Params *map[string]float64 `json:"params,omitempty"`
 }
 
-// IndexAdvisorWarningCode write_heavy — the table is written far more than read, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. overlaps_missing_signal — the indexes/missing report is about this same table. partition_root — the table is partitioned: the DDL cannot use CONCURRENTLY and every partition pays for the index. stats_missing — no pg_stats row for the columns, so their order is the order the statement wrote them. wide_index — the statements asked for more columns than the key may hold.
+// IndexAdvisorWarningCode write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. overlaps_missing_signal — the indexes/missing report is about this same table. partition_root — the table is partitioned: the DDL cannot use CONCURRENTLY and every partition pays for the index. stats_missing — no pg_stats row for the columns, so their order is the order the statement wrote them. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires at least one unique index to exist.
 type IndexAdvisorWarningCode string
 
 // IndexAdvisorWrites What maintaining an index on this table would cost, from pg_stat_user_tables. Scans are the other side of the trade: they are what an index would serve.
@@ -2519,6 +2520,9 @@ type GetQueriesReportParams struct {
 
 	// ExcludeUsers Comma-separated list of usernames to exclude from the report
 	ExcludeUsers *[]string `form:"exclude_users,omitempty" json:"exclude_users,omitempty"`
+
+	// Queryid Include this statement in the response whatever it ranks. The report is otherwise the top of each metric, so a deep link to a statement that leads none of them would resolve to nothing. As a string, to preserve int64 precision in JavaScript.
+	Queryid *string `form:"queryid,omitempty" json:"queryid,omitempty"`
 }
 
 // PostQueriesResetStatsParams defines parameters for PostQueriesResetStats.
@@ -10180,6 +10184,22 @@ func NewGetQueriesReportRequest(server string, params *GetQueriesReportParams) (
 		if params.ExcludeUsers != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", false, "exclude_users", runtime.ParamLocationQuery, *params.ExcludeUsers); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Queryid != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "queryid", runtime.ParamLocationQuery, *params.Queryid); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err

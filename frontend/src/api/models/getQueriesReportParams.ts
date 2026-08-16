@@ -26,4 +26,8 @@ export type GetQueriesReportParams = {
    * Comma-separated list of usernames to exclude from the report
    */
   exclude_users?: string[]
+  /**
+   * Include this statement in the response whatever it ranks. The report is otherwise the top of each metric, so a deep link to a statement that leads none of them would resolve to nothing. As a string, to preserve int64 precision in JavaScript.
+   */
+  queryid?: string
 }

@@ -19,7 +19,7 @@ func (k RelKey) String() string { return k.Schema + "." + k.Name }
 // Relation is a table a candidate could be built on.
 type Relation struct {
 	RelKey
-	// Kind is the relkind: 'r' for an ordinary table, 'p' for a partitioned one.
+	// Kind is the relkind: 'r' ordinary, 'p' partitioned, 'm' materialized view.
 	Kind string
 	// Rows is reltuples, summed over the partitions for a partitioned root — a
 	// root's own reltuples is zero, and judging it by that would exempt every
