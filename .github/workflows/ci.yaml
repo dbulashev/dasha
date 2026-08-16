@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.26.5"
+          go-version: "1.26.6"
           cache-dependency-path: backend/go.sum
       - name: Install linters
         run: |
@@ -48,7 +48,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.26.5"
+          go-version: "1.26.6"
           cache-dependency-path: backend/go.sum
       - run: cd backend && go test ./internal/...
 
@@ -58,7 +58,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.26.5"
+          go-version: "1.26.6"
           cache-dependency-path: backend/go.sum
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
@@ -109,7 +109,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.26.5"
+          go-version: "1.26.6"
           cache-dependency-path: backend/go.sum
       - name: Integration tests (PG ${{ matrix.pg-version }})
         run: |
@@ -254,7 +254,7 @@ jobs:
   #         persist-credentials: false # the scanner only reads history, it never pushes
   #     - uses: actions/setup-go@v7
   #       with:
-  #         go-version: "1.26.5"
+  #         go-version: "1.26.6"
   #         cache-dependency-path: backend/go.sum
   #     # Without a report Sonar reads coverage as 0% and the Quality Gate fails on
   #     # every pull request that adds code. Integration tests are included because
@@ -281,7 +281,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.26.5"
+          go-version: "1.26.6"
           cache-dependency-path: backend/go.sum
       - run: cd backend && go build ./cmd/...
       # ./cmd/... already compiles the MCP binary, but release ships it from

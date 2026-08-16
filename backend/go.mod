@@ -1,6 +1,6 @@
 module github.com/dbulashev/dasha
 
-go 1.26.5
+go 1.26.6
 
 require (
 	github.com/casbin/casbin/v2 v2.135.0
