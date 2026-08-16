@@ -55,7 +55,7 @@ func TestExtensionSchemaResolution(t *testing.T) {
 	_, err = p.getQueriesTop10Chart(ctx, vNum, pool, nil)
 	require.NoError(t, err, "top chart")
 
-	_, err = p.getQueriesReport(ctx, vNum, pool, []string{})
+	_, err = p.getQueriesReport(ctx, vNum, pool, []string{}, nil)
 	require.NoError(t, err, "report")
 
 	if vNum >= 140000 {

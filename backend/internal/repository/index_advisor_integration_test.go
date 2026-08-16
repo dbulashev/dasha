@@ -98,7 +98,7 @@ func TestIndexAdvisorCatalog_ReadsSeededSchema(t *testing.T) {
 
 	seedIndexAdvisorSchema(ctx, t, pool)
 
-	cat, err := p.collectIndexAdvisorCatalog(ctx, pool, vNum)
+	cat, err := p.collectIndexAdvisorClusterCatalog(ctx, oneHostCluster(pool, vNum))
 	require.NoError(t, err)
 	assert.False(t, cat.Truncated, "the seeded schema is far below the row cap")
 
@@ -210,12 +210,12 @@ func TestIndexAdvisorCatalog_ReadsSeededSchema(t *testing.T) {
 		// Table counters reach pg_stat_user_tables asynchronously — a backend
 		// flushes its pending statistics about a second after the transaction, and
 		// the backend holding them is not necessarily the one this pool answers
-		// on. So the catalog is re-read until they land rather than once.
+		// on. So they are re-read until they land rather than once.
 		var w indexadvisor.Writes
 
 		require.Eventually(t, func() bool {
-			fresh, err := p.collectIndexAdvisorCatalog(ctx, pool, vNum)
-			if err != nil {
+			fresh := indexadvisor.NewCatalog()
+			if err := p.readIndexAdvisorWrites(ctx, pool, vNum, &fresh); err != nil {
 				return false
 			}
 
@@ -224,7 +224,7 @@ func TestIndexAdvisorCatalog_ReadsSeededSchema(t *testing.T) {
 			return w.Inserted > 0
 		}, 10*time.Second, 250*time.Millisecond, "insert counters must reach pg_stat_user_tables")
 
-		assert.Positive(t, w.LiveTuples)
+		assert.Positive(t, w.SeqScans+w.IdxScans, "the seeded reads must be counted too")
 	})
 }
 
@@ -304,6 +304,16 @@ func TestIndexAdvisor_EndToEndAgainstRealSchema(t *testing.T) {
 	})
 }
 
+// testAdvisorHost names the single instance a test container is, so the host
+// attribution the report carries can be asserted on.
+const testAdvisorHost = "test-host"
+
+// oneHostCluster is the cluster a test container amounts to: the cluster-wide
+// readers take a list of hosts, and here the list has one entry.
+func oneHostCluster(pool *pgxpool.Pool, vNum int) []indexAdvisorHost {
+	return []indexAdvisorHost{{host: testAdvisorHost, pool: pool, vNum: vNum}}
+}
+
 func buildIndexAdvisorReport(
 	ctx context.Context,
 	t *testing.T,
@@ -314,10 +324,10 @@ func buildIndexAdvisorReport(
 ) indexadvisor.Report {
 	t.Helper()
 
-	w, err := p.collectIndexAdvisorWorkload(ctx, pool, vNum, nil)
+	w, err := p.collectIndexAdvisorWorkload(ctx, pool, testAdvisorHost, vNum, nil)
 	require.NoError(t, err)
 
-	cat, err := p.collectIndexAdvisorCatalog(ctx, pool, vNum)
+	cat, err := p.collectIndexAdvisorClusterCatalog(ctx, oneHostCluster(pool, vNum))
 	require.NoError(t, err)
 
 	return indexadvisor.Build(w, cat, cfg)
@@ -363,11 +373,12 @@ func TestIndexAdvisorWorkload_ParsesLiveStatements(t *testing.T) {
 		}
 	}
 
-	w, err := p.collectIndexAdvisorWorkload(ctx, pool, vNum, nil)
+	w, err := p.collectIndexAdvisorWorkload(ctx, pool, testAdvisorHost, vNum, nil)
 	require.NoError(t, err)
 	require.True(t, w.Available, "pg_stat_statements is installed in the fixture")
 	assert.Positive(t, w.Collected)
 	require.NotEmpty(t, w.Entries)
+	assert.Equal(t, []string{testAdvisorHost}, w.Hosts, "the workload must name the host it came from")
 
 	t.Run("statements of this database are parsed into usages", func(t *testing.T) {
 		var found *indexadvisor.WorkloadEntry
@@ -386,6 +397,9 @@ func TestIndexAdvisorWorkload_ParsesLiveStatements(t *testing.T) {
 		assert.NotEmpty(t, found.Fingerprint)
 		assert.Positive(t, found.Calls)
 		assert.NotEmpty(t, found.QueryIDs)
+		// Attribution is per entry, not per read: entries from several hosts are
+		// merged into one workload, and afterwards only this says where each ran.
+		assert.Equal(t, []string{testAdvisorHost}, found.Hosts)
 	})
 
 	t.Run("update reports its write target", func(t *testing.T) {

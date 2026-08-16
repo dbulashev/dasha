@@ -14,9 +14,6 @@ const (
 	WarnWriteHeavy = "write_heavy"
 	// WarnLowWeight: the covered statements are a marginal share of the load.
 	WarnLowWeight = "low_weight"
-	// WarnOverlapsMissingSignal: the same table is already reported by the
-	// indexes/missing signal — one object, not two independent findings.
-	WarnOverlapsMissingSignal = "overlaps_missing_signal"
 	// WarnPartitionRoot: the candidate is on a partitioned table, where the DDL
 	// cannot use CONCURRENTLY and every partition pays for the index.
 	WarnPartitionRoot = "partition_root"
@@ -38,8 +35,6 @@ const (
 	ParamWeightPct  = "weight_pct"
 	ParamColumns    = "columns"
 	ParamRequested  = "requested"
-	ParamRows       = "rows"
-	ParamIdxScanPct = "idx_scan_pct"
 )
 
 // Reasons a statement contributed no candidate. The collector's own codes
@@ -84,6 +79,11 @@ type CoveredQuery struct {
 	Query       string // sanitized
 	WeightPct   float64
 	Calls       int64
+	// Hosts are the instances the statement was actually seen on. A candidate
+	// whose statements run only on the replicas is still worth creating — the
+	// index is physically replicated — but the user has to be able to see that
+	// the primary is not where the win lands.
+	Hosts []string
 }
 
 // Candidate is one proposed index.
@@ -124,14 +124,24 @@ type Summary struct {
 	// CatalogTruncated says the catalog was read only in part, which can make a
 	// candidate that duplicates an unread index look new.
 	CatalogTruncated bool
+	// Hosts are the instances whose workload this report was built from, sorted.
+	Hosts []string
+	// HostsWithoutStats are the instances that answered but have no readable
+	// pg_stat_statements, so nothing they run reached this report.
+	HostsWithoutStats []string
 }
 
-// Report is the whole answer for one database.
+// Report is the whole answer for one database, over every host of the cluster.
 type Report struct {
 	Candidates []Candidate
 	NotParsed  []NotParsed
 	Summary    Summary
-	DurationMs int64
+	// UnreachableHosts are the instances that could not be read. They matter to
+	// how the report should be read: pg_stat_statements is per-instance, so an
+	// unread host is workload the advisor never saw, and the candidate list is
+	// incomplete by exactly that much rather than merely shorter.
+	UnreachableHosts []string
+	DurationMs       int64
 }
 
 // ddlFor renders the statement the user is invited to run.

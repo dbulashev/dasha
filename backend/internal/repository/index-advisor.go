@@ -3,10 +3,13 @@ package repository
 import (
 	"context"
 	"fmt"
+	"sort"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.uber.org/zap"
 
 	"github.com/dbulashev/dasha/internal/enums"
 	"github.com/dbulashev/dasha/internal/indexadvisor"
@@ -25,14 +28,22 @@ const (
 	indexAdvisorMaxCatalogRows = 100000
 )
 
-// GetIndexAdvisorReport assembles the index candidate report for one database.
+// GetIndexAdvisorReport assembles the index candidate report for one database
+// across EVERY host of the cluster.
+//
+// It takes no instance on purpose. pg_stat_statements is per-instance and is not
+// replicated, so a statement that never runs on the primary can be the entire
+// read workload of a replica — and asking only the primary would answer "this
+// database needs no index" about a load it never saw. Indexes, by contrast, are
+// physically replicated: one CREATE INDEX on the primary serves every host, so
+// the candidate list is rightly built from the cluster's load as a whole.
 //
 // Never cached: the page is opened deliberately, usually right after changing
 // something, and a stale answer there is worse than the work it saves. What is
 // cached is the parse of each statement, which is where the time actually goes.
 func (p *PgxPool) GetIndexAdvisorReport(
 	ctx context.Context,
-	clusterName, instanceName, databaseName string,
+	clusterName, databaseName string,
 	excludeUsers []string,
 ) (indexadvisor.Report, error) {
 	// Build times only itself; the cost is the catalog reads and the parsing here.
@@ -43,20 +54,12 @@ func (p *PgxPool) GetIndexAdvisorReport(
 	ctx, cancel := context.WithTimeout(ctx, cfg.Timeout)
 	defer cancel()
 
-	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
+	hostPools, err := p.getHostPoolsByClusterAndDatabase(ctx, clusterName, databaseName)
 	if err != nil {
 		return indexadvisor.Report{}, fmt.Errorf("GetIndexAdvisorReport | %w", err)
 	}
 
-	vNum, err := p.getServerVersionNum(ctx, pool)
-	if err != nil {
-		return indexadvisor.Report{}, fmt.Errorf("GetIndexAdvisorReport | get server version | %w", err)
-	}
-
-	workload, err := p.collectIndexAdvisorWorkload(ctx, pool, vNum, excludeUsers)
-	if err != nil {
-		return indexadvisor.Report{}, fmt.Errorf("GetIndexAdvisorReport | %w", err)
-	}
+	workload, reached := p.collectIndexAdvisorClusterWorkload(ctx, hostPools, excludeUsers)
 
 	// With nothing to judge, reading the catalog would be a full scan of it for an
 	// answer that is already known — but the report is still built, because the
@@ -68,7 +71,7 @@ func (p *PgxPool) GetIndexAdvisorReport(
 		return rep, nil
 	}
 
-	cat, err := p.collectIndexAdvisorCatalog(ctx, pool, vNum)
+	cat, err := p.collectIndexAdvisorClusterCatalog(ctx, reached)
 	if err != nil {
 		return indexadvisor.Report{}, fmt.Errorf("GetIndexAdvisorReport | %w", err)
 	}
@@ -77,6 +80,146 @@ func (p *PgxPool) GetIndexAdvisorReport(
 	rep.DurationMs = time.Since(started).Milliseconds()
 
 	return rep, nil
+}
+
+// indexAdvisorHost is a host that answered, kept with the version its queries
+// were built for so the catalog pass does not ask twice.
+type indexAdvisorHost struct {
+	host string
+	pool *pgxpool.Pool
+	vNum int
+}
+
+// collectIndexAdvisorClusterWorkload reads every host in parallel and folds the
+// results into one workload.
+//
+// A host that fails is REPORTED, not skipped, and the report carries the list:
+// the candidates it would have produced are missing from an answer that otherwise
+// looks complete, and only the caller can decide whether to act on a partial one.
+// Hosts are read concurrently because they are independent and the slowest one
+// otherwise sets the latency of the whole report.
+func (p *PgxPool) collectIndexAdvisorClusterWorkload(
+	ctx context.Context,
+	hostPools []hostPool,
+	excludeUsers []string,
+) (indexadvisor.Workload, []indexAdvisorHost) {
+	type hostResult struct {
+		host     string
+		pool     *pgxpool.Pool
+		vNum     int
+		workload indexadvisor.Workload
+		err      error
+	}
+
+	resultsCh := make(chan hostResult, len(hostPools))
+
+	var wg sync.WaitGroup
+
+	for _, hp := range hostPools {
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+
+			vNum, err := p.getServerVersionNum(ctx, hp.Pool)
+			if err != nil {
+				resultsCh <- hostResult{host: hp.Host, err: err} //nolint:exhaustruct
+
+				return
+			}
+
+			w, err := p.collectIndexAdvisorWorkload(ctx, hp.Pool, hp.Host, vNum, excludeUsers)
+			resultsCh <- hostResult{host: hp.Host, pool: hp.Pool, vNum: vNum, workload: w, err: err}
+		}()
+	}
+
+	wg.Wait()
+	close(resultsCh)
+
+	var (
+		out     indexadvisor.Workload
+		reached []indexAdvisorHost
+	)
+
+	for r := range resultsCh {
+		if r.err != nil {
+			p.logger.Warn("index advisor workload on host",
+				zap.String("host", r.host), zap.Error(r.err))
+
+			out.Unreachable = append(out.Unreachable, r.host)
+
+			continue
+		}
+
+		out.Merge(r.workload)
+		reached = append(reached, indexAdvisorHost{host: r.host, pool: r.pool, vNum: r.vNum})
+	}
+
+	// Goroutines finish in any order, and the catalog host is picked by position.
+	sort.Slice(reached, func(i, j int) bool { return reached[i].host < reached[j].host })
+
+	return out, reached
+}
+
+// collectIndexAdvisorClusterCatalog reads the schema once and the activity
+// counters everywhere.
+//
+// The split follows what replication does: relations, columns and indexes are
+// byte-identical on a physical replica, so reading them on more than one host
+// would cost N catalog scans for one answer. pg_stat_user_tables is the opposite
+// — it is per-instance and not replicated, and a table read entirely on a replica
+// shows no scans at all on the primary — so its counters are summed over every
+// host that answered.
+func (p *PgxPool) collectIndexAdvisorClusterCatalog(
+	ctx context.Context,
+	hosts []indexAdvisorHost,
+) (indexadvisor.Catalog, error) {
+	cat, err := p.readIndexAdvisorSchemaFromAny(ctx, hosts)
+	if err != nil {
+		return cat, err
+	}
+
+	for _, h := range hosts {
+		// Best effort: activity counters shape a warning, never whether a candidate
+		// exists, so a host that will not answer them costs precision, not the report.
+		if err := p.readIndexAdvisorWrites(ctx, h.pool, h.vNum, &cat); err != nil {
+			p.logger.Warn("index advisor table activity on host",
+				zap.String("host", h.host), zap.Error(err))
+		}
+	}
+
+	return cat, nil
+}
+
+// readIndexAdvisorSchemaFromAny reads the structure from the first host able to
+// answer. Every attempt fills a fresh catalog: a read that fails halfway leaves
+// half a schema behind, and appending the next host's rows onto it would double
+// every column and index the failed attempt did manage to read — which is the one
+// way this report can invent a duplicate index out of nothing.
+func (p *PgxPool) readIndexAdvisorSchemaFromAny(
+	ctx context.Context,
+	hosts []indexAdvisorHost,
+) (indexadvisor.Catalog, error) {
+	lastErr := ErrNotFound
+
+	for _, h := range hosts {
+		cat := indexadvisor.NewCatalog()
+
+		if err := p.readIndexAdvisorSchema(ctx, h.pool, h.vNum, &cat); err != nil {
+			lastErr = fmt.Errorf("host %s | %w", h.host, err)
+
+			// The schema is the same on every host, so one failure is not the end
+			// of the report — only every host failing is.
+			p.logger.Warn("index advisor catalog on host",
+				zap.String("host", h.host), zap.Error(err))
+
+			continue
+		}
+
+		return cat, nil
+	}
+
+	return indexadvisor.NewCatalog(), fmt.Errorf("collectIndexAdvisorCatalog | %w", lastErr)
 }
 
 // indexAdvisorParser builds the SQL parser on first use, not at startup: it
@@ -96,8 +239,8 @@ func (p *PgxPool) indexAdvisorParser() sqlparse.Parser {
 	return p.sqlParser
 }
 
-// collectIndexAdvisorWorkload reads the top of pg_stat_statements for the current
-// database and parses each statement.
+// collectIndexAdvisorWorkload reads the top of pg_stat_statements on one host for
+// the current database and parses each statement.
 //
 // A statement that cannot be parsed is counted by reason rather than dropped: an
 // empty candidate list next to fifty unparsed statements is not the same answer
@@ -106,13 +249,15 @@ func (p *PgxPool) indexAdvisorParser() sqlparse.Parser {
 func (p *PgxPool) collectIndexAdvisorWorkload(
 	ctx context.Context,
 	pool *pgxpool.Pool,
+	host string,
 	vNum int,
 	excludeUsers []string,
 ) (indexadvisor.Workload, error) {
 	// pg_stat_statements missing or unreadable is a state, not a failure — the
-	// same treatment the query pages give it.
+	// same treatment the query pages give it. On a cluster it is also a state
+	// worth naming: the host is up, and its load is simply invisible to us.
 	if readable, _ := p.getQueryStatsReadable(ctx, vNum, pool); !readable {
-		return indexadvisor.Workload{}, nil
+		return indexadvisor.Workload{NoStats: []string{host}}, nil
 	}
 
 	rows, err := p.readIndexAdvisorWorkloadRows(ctx, pool, vNum, excludeUsers)
@@ -122,7 +267,7 @@ func (p *PgxPool) collectIndexAdvisorWorkload(
 
 	// Parsing happens after the rows are read, not inside the cursor: half a
 	// second of WASM work must not hold a connection of a pool the pages share.
-	out := indexadvisor.Workload{Available: true, Collected: len(rows)}
+	out := indexadvisor.Workload{Available: true, Collected: len(rows), Hosts: []string{host}}
 	parser := p.indexAdvisorParser()
 
 	for _, row := range rows {
@@ -141,6 +286,7 @@ func (p *PgxPool) collectIndexAdvisorWorkload(
 			TotalTimeMs: row.totalTimeMs,
 			Rows:        row.rows,
 			Stmt:        stmt,
+			Hosts:       []string{host},
 		})
 	}
 
@@ -211,57 +357,84 @@ func (p *PgxPool) readIndexAdvisorWorkloadRows(
 	return out, nil
 }
 
-// collectIndexAdvisorCatalog reads the state of the database a candidate is
-// judged against. Sequential, like the schema checks: the pool has four
-// connections by default and is shared with the pages the user is looking at.
-func (p *PgxPool) collectIndexAdvisorCatalog(
+// indexAdvisorReader is one catalog query with the scanner that fills the catalog
+// from its rows.
+type indexAdvisorReader struct {
+	q    enums.Query
+	data query.TemplateData
+	scan func(rowScanner) error
+}
+
+// readIndexAdvisorSchema reads the structure a candidate is judged against:
+// what exists, what columns it has, and what is already indexed.
+//
+// Sequential, like the schema checks: the pool has four connections by default
+// and is shared with the pages the user is looking at.
+func (p *PgxPool) readIndexAdvisorSchema(
 	ctx context.Context,
 	pool *pgxpool.Pool,
 	vNum int,
-) (indexadvisor.Catalog, error) {
-	cat := indexadvisor.NewCatalog()
-
+	cat *indexadvisor.Catalog,
+) error {
 	pgStatsView := p.resolvePgStatsView(ctx, pool)
 
-	readers := []struct {
-		q    enums.Query
-		data query.TemplateData
-		scan func(rowScanner) error
-	}{
+	return p.runIndexAdvisorReaders(ctx, pool, vNum, cat, []indexAdvisorReader{
 		{
 			q:    enums.QueryIndexAdvisorRelations,
-			scan: func(row rowScanner) error { return scanIndexAdvisorRelation(row, &cat) },
+			scan: func(row rowScanner) error { return scanIndexAdvisorRelation(row, cat) },
 		},
 		{
 			q:    enums.QueryIndexAdvisorColumns,
 			data: struct{ PgStatsView string }{PgStatsView: pgStatsView},
-			scan: func(row rowScanner) error { return scanIndexAdvisorColumn(row, &cat) },
+			scan: func(row rowScanner) error { return scanIndexAdvisorColumn(row, cat) },
 		},
 		{
 			q:    enums.QueryIndexAdvisorIndexes,
-			scan: func(row rowScanner) error { return scanIndexAdvisorIndex(row, &cat) },
+			scan: func(row rowScanner) error { return scanIndexAdvisorIndex(row, cat) },
 		},
+	})
+}
+
+// readIndexAdvisorWrites adds one host's table activity to the catalog. It is
+// separate from the schema because it is the one part of the catalog that differs
+// per host: pg_stat_user_tables counters are not replicated, and they are summed
+// over the cluster rather than read once.
+func (p *PgxPool) readIndexAdvisorWrites(
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	vNum int,
+	cat *indexadvisor.Catalog,
+) error {
+	return p.runIndexAdvisorReaders(ctx, pool, vNum, cat, []indexAdvisorReader{
 		{
 			q:    enums.QueryIndexAdvisorWrites,
-			scan: func(row rowScanner) error { return scanIndexAdvisorWrites(row, &cat) },
+			scan: func(row rowScanner) error { return scanIndexAdvisorWrites(row, cat) },
 		},
-	}
+	})
+}
 
+func (p *PgxPool) runIndexAdvisorReaders(
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	vNum int,
+	cat *indexadvisor.Catalog,
+	readers []indexAdvisorReader,
+) error {
 	for _, r := range readers {
 		qStr, err := query.Get(vNum, r.q, r.data)
 		if err != nil {
-			return cat, fmt.Errorf("collectIndexAdvisorCatalog | %s | %w", r.q, err)
+			return fmt.Errorf("collectIndexAdvisorCatalog | %s | %w", r.q, err)
 		}
 
 		truncated, err := scanIndexAdvisorRows(ctx, pool, qStr, r.scan)
 		if err != nil {
-			return cat, fmt.Errorf("collectIndexAdvisorCatalog | %s | %w", r.q, err)
+			return fmt.Errorf("collectIndexAdvisorCatalog | %s | %w", r.q, err)
 		}
 
 		cat.Truncated = cat.Truncated || truncated
 	}
 
-	return cat, nil
+	return nil
 }
 
 func scanIndexAdvisorRelation(row rowScanner, cat *indexadvisor.Catalog) error {
@@ -324,11 +497,11 @@ func scanIndexAdvisorWrites(row rowScanner, cat *indexadvisor.Catalog) error {
 	)
 
 	if err := row.Scan(&key.Schema, &key.Name, &w.Inserted, &w.Updated, &w.Deleted,
-		&w.SeqScans, &w.IdxScans, &w.LiveTuples); err != nil {
+		&w.SeqScans, &w.IdxScans); err != nil {
 		return err
 	}
 
-	cat.SetWrites(key, w)
+	cat.AddWrites(key, w)
 
 	return nil
 }

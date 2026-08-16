@@ -6,7 +6,7 @@
  */
 
 /**
- * write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. overlaps_missing_signal — the indexes/missing report is about this same table. partition_root — the table is partitioned: the DDL cannot use CONCURRENTLY and every partition pays for the index. stats_missing — no pg_stats row for the columns, so their order is the order the statement wrote them. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires at least one unique index to exist.
+ * write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. partition_root — the table is partitioned: the DDL cannot use CONCURRENTLY and every partition pays for the index. stats_missing — no pg_stats row for the columns, so their order is the order the statement wrote them. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires at least one unique index to exist.
  */
 export type IndexAdvisorWarningCode =
   (typeof IndexAdvisorWarningCode)[keyof typeof IndexAdvisorWarningCode]
@@ -14,7 +14,6 @@ export type IndexAdvisorWarningCode =
 export const IndexAdvisorWarningCode = {
   write_heavy: 'write_heavy',
   low_weight: 'low_weight',
-  overlaps_missing_signal: 'overlaps_missing_signal',
   partition_root: 'partition_root',
   stats_missing: 'stats_missing',
   wide_index: 'wide_index',

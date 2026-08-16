@@ -6,7 +6,7 @@
  */
 
 export interface IndexAdvisorSummary {
-  /** False when pg_stat_statements could not be read at all, which is a different statement from having read it and found nothing. */
+  /** False when pg_stat_statements could not be read on any host of the cluster, which is a different statement from having read it and found nothing. */
   pgss_available: boolean
   /** Statements read and parsed. */
   analyzed_queries: number
@@ -17,4 +17,8 @@ export interface IndexAdvisorSummary {
   covered_time_pct: number
   /** The catalog was read only in part, so a candidate may duplicate an index that was never read. */
   catalog_truncated: boolean
+  /** Hosts of the cluster whose workload this report was built from. */
+  hosts: string[]
+  /** Hosts that answered but carry no readable pg_stat_statements. They are neither analyzed nor unreachable: the instance is up and whatever it runs is invisible here, which on a replica serving the reads is the opposite of idle. */
+  hosts_without_stats: string[]
 }

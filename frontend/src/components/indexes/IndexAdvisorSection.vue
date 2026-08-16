@@ -33,6 +33,7 @@ const prefs = usePrefsStore()
 const candidates = ref<IndexAdvisorCandidate[]>([])
 const notParsed = ref<IndexAdvisorNotParsed[]>([])
 const summary = ref<IndexAdvisorSummary | null>(null)
+const unreachableHosts = ref<string[]>([])
 const durationMs = ref(0)
 const loading = ref(false)
 const page = ref(1)
@@ -44,16 +45,17 @@ const unavailable = ref(false)
 let reqId = 0
 
 async function load(p = 1) {
-  if (!clusterName.value || !hostName.value || !databaseName.value) return
+  if (!clusterName.value || !databaseName.value) return
   const myId = ++reqId
   loading.value = true
   try {
     const pageSize = prefs.pageSize
     // Same exclusion list the query report uses — same pg_stat_statements.
     const excluded = excludeUsersStore.getExcludeUsers(clusterName.value)
+    // No instance: pg_stat_statements is per-host and not replicated, so the
+    // endpoint reads every host of the cluster and ranks over their combined load.
     const res = await getIndexesAdvisor({
       cluster_name: clusterName.value,
-      instance: hostName.value,
       database: databaseName.value,
       exclude_users: excluded.length ? excluded : undefined,
       limit: pageSize,
@@ -65,6 +67,7 @@ async function load(p = 1) {
     candidates.value = body?.candidates ?? []
     notParsed.value = body?.not_parsed ?? []
     summary.value = body?.summary ?? null
+    unreachableHosts.value = body?.unreachable_hosts ?? []
     durationMs.value = body?.duration_ms ?? 0
     page.value = p
     // total is what the ranking saw, before the page was cut.
@@ -79,13 +82,16 @@ async function load(p = 1) {
     candidates.value = []
     notParsed.value = []
     summary.value = null
+    unreachableHosts.value = []
   } finally {
     if (myId === reqId) loading.value = false
   }
 }
 
+// hostName is deliberately absent: the report covers the whole cluster, and
+// reloading it when the user switches host would refetch the same answer.
 watch(
-  [clusterName, hostName, databaseName, () => prefs.pageSize],
+  [clusterName, databaseName, () => prefs.pageSize],
   () => load(),
   { immediate: true },
 )
@@ -101,13 +107,11 @@ const headers = computed(() => [
   { title: t('indexes.advisor.columns'), key: 'columns', sortable: false },
   { title: t('indexes.advisor.weight'), key: 'weight_pct' },
   { title: t('indexes.advisor.tableRows'), key: 'table_rows' },
-  { title: t('indexes.advisor.warningsHeader'), key: 'warnings', sortable: false },
 ])
 
 const WARNING_COLOR: Record<string, string> = {
   write_heavy: 'warning',
   low_weight: 'grey',
-  overlaps_missing_signal: 'info',
   partition_root: 'info',
   stats_missing: 'warning',
   wide_index: 'warning',
@@ -127,14 +131,7 @@ function warningText(w: IndexAdvisorWarning): string {
     weight: fmtPct(p.weight_pct ?? 0, 2),
     columns: p.columns ?? 0,
     requested: p.requested ?? 0,
-    rows: fmtCompact(p.rows ?? 0),
-    idxScanPct: fmtPct(p.idx_scan_pct ?? 0),
   })
-}
-
-function warningLabel(w: IndexAdvisorWarning): string {
-  const key = `indexes.advisor.warningLabels.${w.code}`
-  return te(key) ? t(key) : w.code
 }
 
 function reasonText(n: IndexAdvisorNotParsed): string {
@@ -157,24 +154,63 @@ const hasRealGaps = computed(() =>
   notParsed.value.some(n => !BENIGN_REASONS.has(n.reason_code)),
 )
 
+// Which hosts the answer rests on. A cluster-wide report that quietly read one
+// host of three is a different answer from one that read all of them, and the
+// candidate list alone cannot show the difference.
+const analyzedHosts = computed(() => summary.value?.hosts ?? [])
+const hostsWithoutStats = computed(() => summary.value?.hosts_without_stats ?? [])
+
+const hostsText = computed(() => {
+  const hosts = analyzedHosts.value
+  if (!hosts.length) return ''
+  return t('indexes.advisor.hostsAnalyzed', { n: hosts.length, hosts: hosts.join(', ') })
+})
+
+// The headline: how much of the load the candidates touch, and how much of it
+// produced nothing. Everything else is evidence for these two numbers and lives
+// behind the toggle — an unfolded breakdown where eleven of fourteen entries are
+// Dasha's own monitoring queries buries the one line that is a real gap.
 const coverageText = computed(() => {
   const s = summary.value
   if (!s) return ''
-  return t('indexes.advisor.coverage', {
-    analyzed: fmtInt(s.analyzed_queries),
-    groups: fmtInt(s.collapsed_groups),
-    covered: fmtPct(s.covered_time_pct),
-  })
+  return t('indexes.advisor.coverage', { covered: fmtPct(s.covered_time_pct) })
 })
+
+// Collapsing is worth a word only when it collapsed something.
+const collapsedText = computed(() => {
+  const s = summary.value
+  if (!s || s.collapsed_groups >= s.analyzed_queries) return ''
+  return t('indexes.advisor.collapsed', { groups: fmtInt(s.collapsed_groups) })
+})
+
+const analyzedText = computed(() => {
+  const s = summary.value
+  if (!s) return ''
+  return t('indexes.advisor.analyzed', { analyzed: fmtInt(s.analyzed_queries) })
+})
+
+const detailsOpen = ref(false)
+
+// The report is cluster-wide, so a covered statement need not run on the host the
+// user has selected. Opening the query report there would ask an instance whose
+// pg_stat_statements has never seen this queryid, and the page would come back
+// empty for a statement the section just showed. Prefer the selected host when the
+// statement does run on it — least surprise — and otherwise take one it runs on.
+function queryHost(q: IndexAdvisorCoveredQuery): string | undefined {
+  const hosts = q.hosts ?? []
+  if (hostName.value && hosts.includes(hostName.value)) return hostName.value
+  return hosts[0] ?? hostName.value ?? undefined
+}
 
 // queryid, not search: the report is the top of each metric, and a covered
 // statement usually leads none of them.
 function queryLink(q: IndexAdvisorCoveredQuery) {
+  const host = queryHost(q)
   return {
     name: 'query-report',
     params: { clustername: clusterName.value ?? '' },
     query: {
-      ...(hostName.value ? { host: hostName.value } : {}),
+      ...(host ? { host } : {}),
       ...(databaseName.value ? { db: databaseName.value } : {}),
       queryid: q.query_ids[0],
     },
@@ -231,21 +267,42 @@ function showSql(q: IndexAdvisorCoveredQuery) {
         {{ t('indexes.advisor.catalogTruncated') }}
       </v-alert>
 
+      <v-alert v-if="unreachableHosts.length" type="warning" variant="tonal" density="compact" class="mb-3">
+        {{ t('indexes.advisor.unreachable', { hosts: unreachableHosts.join(', ') }) }}
+      </v-alert>
+
+      <v-alert v-if="hostsWithoutStats.length" type="warning" variant="tonal" density="compact" class="mb-3">
+        {{ t('indexes.advisor.hostsWithoutStats', { hosts: hostsWithoutStats.join(', ') }) }}
+      </v-alert>
+
       <template v-if="showCoverage">
-        <!-- Only an unread part of the workload is worth an alert. -->
-        <v-alert v-if="hasRealGaps" type="warning" variant="tonal" density="compact" class="mb-3">
-          <div>{{ coverageText }}</div>
-          <div class="mt-1">{{ t('indexes.advisor.notParsedCount', { n: fmtInt(notParsedTotal) }) }}</div>
-          <div v-for="n in notParsed" :key="n.reason_code" class="text-body-2 ml-2">
-            <span class="font-weight-medium">{{ fmtInt(n.count) }}</span> — {{ reasonText(n) }}
+        <!-- Two numbers stay visible whatever else is folded: how much of the load
+             the candidates touch, and how much of it yielded nothing. Hiding the
+             second one is what would let an empty list read as "all is well". -->
+        <v-alert
+          :type="hasRealGaps ? 'warning' : undefined"
+          :variant="hasRealGaps ? 'tonal' : 'text'"
+          :class="['mb-3', hasRealGaps ? '' : 'text-caption text-medium-emphasis pa-0']"
+          density="compact"
+        >
+          <div class="d-flex align-center ga-2 flex-wrap">
+            <span>{{ coverageText }}</span>
+            <span v-if="notParsedTotal">
+              {{ t('indexes.advisor.notParsedCount', { n: fmtInt(notParsedTotal) }) }}
+            </span>
+            <a href="#" class="text-decoration-none" @click.prevent="detailsOpen = !detailsOpen">
+              {{ t(detailsOpen ? 'indexes.advisor.detailsHide' : 'indexes.advisor.details') }}
+            </a>
+          </div>
+
+          <div v-if="detailsOpen" class="mt-1">
+            <div v-if="hostsText">{{ hostsText }}</div>
+            <div>{{ analyzedText }}<template v-if="collapsedText">; {{ collapsedText }}</template></div>
+            <div v-for="n in notParsed" :key="n.reason_code" class="ml-2">
+              {{ fmtInt(n.count) }} — {{ reasonText(n) }}
+            </div>
           </div>
         </v-alert>
-        <div v-else class="text-caption text-medium-emphasis mb-3">
-          <div>{{ coverageText }}</div>
-          <div v-for="n in notParsed" :key="n.reason_code" class="ml-2">
-            {{ fmtInt(n.count) }} — {{ reasonText(n) }}
-          </div>
-        </div>
       </template>
 
       <v-data-table
@@ -273,24 +330,9 @@ function showSql(q: IndexAdvisorCoveredQuery) {
               rounded
               style="min-width: 60px; max-width: 90px"
             />
-            <v-chip v-if="!item.planner_checked" size="x-small" variant="tonal" color="grey">
-              {{ t('indexes.advisor.heuristic') }}
-            </v-chip>
           </div>
         </template>
         <template #item.table_rows="{ value }">{{ fmtCompact(value) }}</template>
-        <template #item.warnings="{ item }">
-          <v-chip
-            v-for="w in item.warnings"
-            :key="w.code"
-            size="x-small"
-            variant="tonal"
-            class="mr-1"
-            :color="WARNING_COLOR[w.code]"
-          >
-            {{ warningLabel(w) }}
-          </v-chip>
-        </template>
         <template #expanded-row="{ columns, item }">
           <tr>
             <td :colspan="columns.length" class="py-3">
@@ -324,6 +366,7 @@ function showSql(q: IndexAdvisorCoveredQuery) {
                     <th>queryid</th>
                     <th>{{ t('indexes.advisor.weight') }}</th>
                     <th>{{ t('header.calls') }}</th>
+                    <th>{{ t('indexes.advisor.hostsHeader') }}</th>
                     <th>SQL</th>
                   </tr>
                 </thead>
@@ -337,6 +380,18 @@ function showSql(q: IndexAdvisorCoveredQuery) {
                     </td>
                     <td>{{ fmtPct(q.weight_pct) }}</td>
                     <td>{{ fmtCompact(q.calls) }}</td>
+                    <td>
+                      <v-chip
+                        v-for="h in q.hosts"
+                        :key="h"
+                        size="x-small"
+                        variant="tonal"
+                        class="mr-1"
+                      >
+                        {{ h }}
+                      </v-chip>
+                      <span v-if="!q.hosts?.length">—</span>
+                    </td>
                     <td>
                       <div class="d-flex align-center">
                         <code class="sql-highlight text-mono text-body-2 text-medium-emphasis" v-html="highlightSql(truncateSql(q.query))"></code>

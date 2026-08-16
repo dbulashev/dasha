@@ -3886,10 +3886,11 @@ export function useGetFkTypeMismatch<
 }
 
 /**
- * Parses the top of pg_stat_statements for this database, extracts the columns each statement filters, joins, sorts and groups by, and proposes btree indexes that no existing index already covers. Every candidate names the statements it would serve and their share of execution time.
-The result is a heuristic and nothing here consulted the planner: planner_checked is false on every candidate, and a client must not present the weight as an expected speed-up. The suggested ddl is a proposal for the user to run — Dasha never executes DDL. Read not_parsed before concluding that a database needs no indexes: statements that could not be analyzed are counted there, and an empty candidate list beside a large not_parsed count is not a clean bill of health.
+ * Parses the top of pg_stat_statements for this database on every host of the cluster, extracts the columns each statement filters, joins, sorts and groups by, and proposes btree indexes that no existing index already covers. Every candidate names the statements it would serve, their share of execution time, and the hosts they run on.
+It takes no instance: pg_stat_statements is per-host and is not replicated, so a statement that never runs on the primary can be the whole read workload of a replica, and a single-host answer would call a database well indexed for a load it never saw. Indexes are replicated, so one CREATE INDEX on the primary serves every host — which is why the candidates are ranked over the cluster's load as a whole.
+The result is a heuristic and nothing here consulted the planner: planner_checked is false on every candidate, and a client must not present the weight as an expected speed-up. The suggested ddl is a proposal for the user to run — Dasha never executes DDL. Read not_parsed and unreachable_hosts before concluding that a database needs no indexes: statements that could not be analyzed are counted in the first, hosts whose load was never read in the second, and an empty candidate list beside either is not a clean bill of health.
 Returns 404 when the index_advisor feature is disabled in the configuration, rather than an empty report that would be indistinguishable from "nothing to suggest".
- * @summary Indexes the workload suggests are missing, with the statements behind each
+ * @summary Indexes the cluster's workload suggests are missing, with the statements behind each
  */
 export type getIndexesAdvisorResponse200 = {
   data: IndexAdvisorReport
@@ -3972,7 +3973,7 @@ export type GetIndexesAdvisorQueryResult = NonNullable<
 export type GetIndexesAdvisorQueryError = NotFoundResponse
 
 /**
- * @summary Indexes the workload suggests are missing, with the statements behind each
+ * @summary Indexes the cluster's workload suggests are missing, with the statements behind each
  */
 
 export function useGetIndexesAdvisor<

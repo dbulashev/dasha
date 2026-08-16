@@ -69,15 +69,13 @@ type Index struct {
 }
 
 // Writes is the cost side of a candidate: every index has to be maintained by
-// each of these, and SeqScans/IdxScans/LiveTuples are what the indexes/missing
-// signal reads, so a candidate can say when it is talking about the same table.
+// each of these, and the scan counters say how the table is read today.
 type Writes struct {
-	Inserted   int64
-	Updated    int64
-	Deleted    int64
-	SeqScans   int64
-	IdxScans   int64
-	LiveTuples int64
+	Inserted int64
+	Updated  int64
+	Deleted  int64
+	SeqScans int64
+	IdxScans int64
 }
 
 // Catalog is the state of the database the advisor reasons against.
@@ -123,8 +121,21 @@ func (c *Catalog) AddIndex(key RelKey, idx Index) {
 	c.Indexes[key] = append(c.Indexes[key], idx)
 }
 
-func (c *Catalog) SetWrites(key RelKey, w Writes) {
-	c.Writes[key] = w
+// AddWrites folds one host's counters into the relation's cluster-wide total.
+//
+// Merging rather than replacing is what makes a multi-host read correct:
+// pg_stat_user_tables is per-instance and is not replicated, so a table read
+// entirely on a replica looks untouched on the primary.
+func (c *Catalog) AddWrites(key RelKey, w Writes) {
+	cur := c.Writes[key]
+
+	cur.Inserted += w.Inserted
+	cur.Updated += w.Updated
+	cur.Deleted += w.Deleted
+	cur.SeqScans += w.SeqScans
+	cur.IdxScans += w.IdxScans
+
+	c.Writes[key] = cur
 }
 
 // WorkloadEntry is one pg_stat_statements row, parsed. Several rows collapse into
@@ -141,6 +152,10 @@ type WorkloadEntry struct {
 	TotalTimeMs float64
 	Rows        int64
 	Stmt        sqlparse.Statement
+	// Hosts are the instances of the cluster this statement was read from. It is
+	// a list because the same statement usually runs on several of them, and
+	// which ones is the answer to "who would this index actually serve".
+	Hosts []string
 }
 
 // Workload is everything the collector managed to read and parse.
@@ -155,6 +170,17 @@ type Workload struct {
 	// Available is false when pg_stat_statements could not be read at all — a
 	// different statement from "read it, found nothing".
 	Available bool
+	// Hosts are the instances whose pg_stat_statements went into this workload.
+	Hosts []string
+	// NoStats are the instances that answered but carry no readable
+	// pg_stat_statements. Their load is invisible here, which is not the same as
+	// them being idle — on a replica serving all the reads it is the opposite.
+	NoStats []string
+	// Unreachable are the instances that could not be read. They are reported,
+	// never dropped: pg_stat_statements is not replicated, so a statement absent
+	// from the hosts that answered may be the whole load on the one that did not,
+	// and the missing index for it would silently never be proposed.
+	Unreachable []string
 }
 
 // CountNotParsed tallies one statement the collector could not use.
@@ -164,4 +190,27 @@ func (w *Workload) CountNotParsed(reason string) {
 	}
 
 	w.NotParsed[reason]++
+}
+
+// Merge folds one host's workload into the cluster-wide one.
+//
+// Entries are appended rather than combined here; folding them is collapse's job,
+// which already does it by fingerprint and so cannot tell a second host apart from
+// a second row on the same one. Available is an OR: one host with the extension
+// makes the report possible, and the hosts without it are not a failure to report.
+func (w *Workload) Merge(other Workload) {
+	w.Entries = append(w.Entries, other.Entries...)
+	w.Collected += other.Collected
+	w.Available = w.Available || other.Available
+	w.Hosts = append(w.Hosts, other.Hosts...)
+	w.NoStats = append(w.NoStats, other.NoStats...)
+	w.Unreachable = append(w.Unreachable, other.Unreachable...)
+
+	for code, n := range other.NotParsed {
+		if w.NotParsed == nil {
+			w.NotParsed = make(map[string]int, len(other.NotParsed))
+		}
+
+		w.NotParsed[code] += n
+	}
 }

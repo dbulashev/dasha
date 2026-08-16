@@ -15,7 +15,8 @@ import (
 
 const defaultIndexAdvisorLimit = 30
 
-// GetIndexesAdvisor serves the index candidate report for one database.
+// GetIndexesAdvisor serves the index candidate report for one database, built
+// from the workload of every host of the cluster.
 func (s *Handlers) GetIndexesAdvisor(
 	ctx context.Context,
 	req serverhttp.GetIndexesAdvisorRequestObject,
@@ -33,7 +34,7 @@ func (s *Handlers) GetIndexesAdvisor(
 	}
 
 	report, err := s.repo.GetIndexAdvisorReport(ctx,
-		req.Params.ClusterName, req.Params.Instance, req.Params.Database, excludeUsers)
+		req.Params.ClusterName, req.Params.Database, excludeUsers)
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.GetIndexesAdvisor404Response{}, nil
 	}
@@ -51,15 +52,18 @@ func (s *Handlers) GetIndexesAdvisor(
 		Candidates: mapstruct.SliceMap(pageOf(report.Candidates, limit, offset), indexAdvisorCandidate),
 		NotParsed:  mapstruct.SliceMap(report.NotParsed, indexAdvisorNotParsed),
 		Summary: serverhttp.IndexAdvisorSummary{
-			PgssAvailable:    report.Summary.PgssAvailable,
-			AnalyzedQueries:  report.Summary.AnalyzedQueries,
-			CollapsedGroups:  report.Summary.CollapsedGroups,
-			NotParsedCount:   report.Summary.NotParsedCount,
-			CoveredTimePct:   report.Summary.CoveredTimePct,
-			CatalogTruncated: report.Summary.CatalogTruncated,
+			PgssAvailable:     report.Summary.PgssAvailable,
+			AnalyzedQueries:   report.Summary.AnalyzedQueries,
+			CollapsedGroups:   report.Summary.CollapsedGroups,
+			NotParsedCount:    report.Summary.NotParsedCount,
+			CoveredTimePct:    report.Summary.CoveredTimePct,
+			CatalogTruncated:  report.Summary.CatalogTruncated,
+			Hosts:             emptyIfNil(report.Summary.Hosts),
+			HostsWithoutStats: emptyIfNil(report.Summary.HostsWithoutStats),
 		},
-		Total:      total,
-		DurationMs: report.DurationMs,
+		UnreachableHosts: emptyIfNil(report.UnreachableHosts),
+		Total:            total,
+		DurationMs:       report.DurationMs,
 	}, nil
 }
 
@@ -96,6 +100,7 @@ func indexAdvisorCovered(q indexadvisor.CoveredQuery) serverhttp.IndexAdvisorCov
 		Query:       q.Query,
 		WeightPct:   q.WeightPct,
 		Calls:       q.Calls,
+		Hosts:       emptyIfNil(q.Hosts),
 	}
 }
 

@@ -44,6 +44,18 @@ func entryCalls(t *testing.T, id int64, sql string, timeMs float64, calls int64)
 	}
 }
 
+// entryOn is the same statement as it arrives from one host of the cluster: the
+// text and the queryid are identical everywhere, only the counters and the host
+// differ.
+func entryOn(t *testing.T, host string, id int64, sql string, timeMs float64) WorkloadEntry {
+	t.Helper()
+
+	e := entry(t, id, sql, timeMs)
+	e.Hosts = []string{host}
+
+	return e
+}
+
 func workloadOf(entries ...WorkloadEntry) Workload {
 	return Workload{
 		Entries:   entries,
@@ -89,9 +101,9 @@ func ordersCatalog() Catalog {
 		Valid: true, Partial: false, Expression: false, Columns: []string{"id"},
 	})
 
-	cat.SetWrites(orders, Writes{
+	cat.AddWrites(orders, Writes{
 		Inserted: 1000, Updated: 100, Deleted: 0,
-		SeqScans: 500, IdxScans: 5000, LiveTuples: testRows,
+		SeqScans: 500, IdxScans: 5000,
 	})
 
 	return cat
@@ -531,9 +543,9 @@ func TestBuildWarnsOnWriteHeavyTables(t *testing.T) {
 func TestBuildDoesNotCallASeededTableWriteHeavy(t *testing.T) {
 	cat := ordersCatalog()
 
-	cat.SetWrites(RelKey{Schema: testSchema, Name: "orders"}, Writes{
+	cat.AddWrites(RelKey{Schema: testSchema, Name: "orders"}, Writes{
 		Inserted: 5_000_000, Updated: 0, Deleted: 0,
-		SeqScans: 10, IdxScans: 100, LiveTuples: testRows,
+		SeqScans: 10, IdxScans: 100,
 	})
 
 	w := workloadOf(
@@ -593,25 +605,6 @@ func TestBuildKeepsMonitoringOutOfTheWeights(t *testing.T) {
 	cand := onlyCandidate(t, Build(w, ordersCatalog(), Config{})) //nolint:exhaustruct
 	if cand.WeightPct < 99.9 {
 		t.Errorf("weight = %.2f, want 100", cand.WeightPct)
-	}
-}
-
-func TestBuildLinksToTheMissingSignal(t *testing.T) {
-	cat := ordersCatalog()
-	orders := RelKey{Schema: testSchema, Name: "orders"}
-
-	// The thresholds of indexes/missing: index scans present but below 95% of all
-	// scans, on a table of at least 10 000 live rows.
-	cat.SetWrites(orders, Writes{
-		Inserted: 100, Updated: 0, Deleted: 0,
-		SeqScans: 900, IdxScans: 100, LiveTuples: testRows,
-	})
-
-	w := workloadOf(entry(t, 1, `SELECT * FROM orders WHERE tenant_id = $1`, 1000))
-
-	cand := onlyCandidate(t, Build(w, cat, Config{})) //nolint:exhaustruct
-	if !hasWarning(cand, WarnOverlapsMissingSignal) {
-		t.Error("two signals about one table must not look independent")
 	}
 }
 
@@ -689,5 +682,88 @@ func TestBuildRanksByWeightAndCaps(t *testing.T) {
 	capped := Build(w, cat, Config{MaxCandidates: 1}) //nolint:exhaustruct
 	if len(capped.Candidates) != 1 {
 		t.Errorf("max_candidates=1 must cut the list to one, got %d", len(capped.Candidates))
+	}
+}
+
+// A statement running on three hosts is one statement with three sources, and the
+// candidate for it has to be weighed by what the cluster spends on it. Reading one
+// host would rank it a third as heavy, which is how the advisor comes to recommend
+// the wrong index first.
+func TestBuildSumsOneStatementAcrossHosts(t *testing.T) {
+	const sql = `SELECT id FROM orders WHERE tenant_id = $1 AND customer_id = $2`
+
+	w := workloadOf(
+		entryOn(t, "replica-1", 42, sql, 600),
+		entryOn(t, "primary", 42, sql, 300),
+		entryOn(t, "replica-2", 42, sql, 100),
+	)
+	w.Hosts = []string{"replica-1", "primary", "replica-2"}
+
+	rep := Build(w, ordersCatalog(), Config{}) //nolint:exhaustruct
+	cand := onlyCandidate(t, rep)
+
+	if len(cand.Covered) != 1 {
+		t.Fatalf("Covered = %d entries, want 1 — the same statement on three hosts is one unit of work", len(cand.Covered))
+	}
+
+	covered := cand.Covered[0]
+
+	want := []string{"primary", "replica-1", "replica-2"}
+	if !slices.Equal(covered.Hosts, want) {
+		t.Errorf("Hosts = %v, want %v — every host the statement was seen on, sorted", covered.Hosts, want)
+	}
+
+	if !slices.Equal(covered.QueryIDs, []int64{42}) {
+		t.Errorf("QueryIDs = %v, want [42] — queryid is derived from the parse tree and repeats on every host", covered.QueryIDs)
+	}
+
+	if covered.Calls != 300 {
+		t.Errorf("Calls = %d, want 300 — the calls of all three hosts", covered.Calls)
+	}
+
+	if cand.WeightPct != 100 {
+		t.Errorf("WeightPct = %v, want 100 — it is the only statement in the cluster", cand.WeightPct)
+	}
+
+	if !slices.Equal(rep.Summary.Hosts, want) {
+		t.Errorf("Summary.Hosts = %v, want %v", rep.Summary.Hosts, want)
+	}
+}
+
+// The fuller text wins the merge: track_activity_query_size is per-host, so the
+// same statement can arrive clipped on one host and whole on another.
+func TestBuildKeepsTheFullestStatementText(t *testing.T) {
+	const sql = `SELECT id FROM orders WHERE tenant_id = $1 AND customer_id = $2`
+
+	clipped := entryOn(t, "replica-1", 42, sql, 100)
+	clipped.Query = "SELECT id FROM orders WHERE tena"
+
+	w := workloadOf(clipped, entryOn(t, "primary", 42, sql, 100))
+
+	cand := onlyCandidate(t, Build(w, ordersCatalog(), Config{})) //nolint:exhaustruct
+	if got := cand.Covered[0].Query; got != sql {
+		t.Errorf("Query = %q, want the unclipped text %q", got, sql)
+	}
+}
+
+// An unread host is workload the advisor never saw, and the report has to say so:
+// the candidate list is incomplete by exactly that much, not merely shorter.
+func TestBuildReportsUnreachableHosts(t *testing.T) {
+	w := workloadOf(entryOn(t, "primary", 1,
+		`SELECT id FROM orders WHERE tenant_id = $1 AND customer_id = $2`, 1000))
+	w.Hosts = []string{"primary"}
+	w.Unreachable = []string{"replica-2", "replica-1"}
+	w.NoStats = []string{"replica-3"}
+
+	rep := Build(w, ordersCatalog(), Config{}) //nolint:exhaustruct
+
+	if want := []string{"replica-1", "replica-2"}; !slices.Equal(rep.UnreachableHosts, want) {
+		t.Errorf("UnreachableHosts = %v, want %v sorted", rep.UnreachableHosts, want)
+	}
+
+	// A host that answers but keeps no statistics is neither analyzed nor
+	// unreachable, and collapsing it into either would misstate what happened.
+	if want := []string{"replica-3"}; !slices.Equal(rep.Summary.HostsWithoutStats, want) {
+		t.Errorf("HostsWithoutStats = %v, want %v", rep.Summary.HostsWithoutStats, want)
 	}
 }

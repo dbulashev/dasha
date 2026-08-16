@@ -19,10 +19,6 @@ const (
 	// to outweigh the reads — see writeHeavy.
 	writeHeavyRatio    = 10.0
 	writeHeavyMinCalls = 1000
-	// The indexes/missing signal's own thresholds, repeated so a candidate can
-	// tell when the two signals are about the same table.
-	missingSignalIdxPct  = 95.0
-	missingSignalMinRows = 10000
 	// btreeMethod is the only access method this step proposes or compares against.
 	btreeMethod = "btree"
 	// partitionedKind is the relkind of a partitioned table.
@@ -75,13 +71,16 @@ func Build(w Workload, cat Catalog, cfg Config) Report {
 		Candidates: candidates,
 		NotParsed:  notParsedList(b.skipped),
 		Summary: Summary{
-			PgssAvailable:    w.Available,
-			AnalyzedQueries:  len(w.Entries),
-			CollapsedGroups:  len(groups),
-			NotParsedCount:   sumCounts(b.skipped),
-			CoveredTimePct:   coveredTimePct(candidates),
-			CatalogTruncated: cat.Truncated,
+			PgssAvailable:     w.Available,
+			AnalyzedQueries:   len(w.Entries),
+			CollapsedGroups:   len(groups),
+			NotParsedCount:    sumCounts(b.skipped),
+			CoveredTimePct:    coveredTimePct(candidates),
+			CatalogTruncated:  cat.Truncated,
+			Hosts:             sortedHosts(w.Hosts),
+			HostsWithoutStats: sortedHosts(w.NoStats),
 		},
+		UnreachableHosts: sortedHosts(w.Unreachable),
 	}
 
 	rep.DurationMs = time.Since(started).Milliseconds()
@@ -89,10 +88,15 @@ func Build(w Workload, cat Catalog, cfg Config) Report {
 	return rep
 }
 
-// collapse folds entries sharing a fingerprint into one unit of work. Two things
-// depend on it: a statement written twice with different constants must weigh
-// once, and pgpro_stats keys its view by planid as well, so the same statement
-// arrives as several rows there.
+// collapse folds entries sharing a fingerprint into one unit of work. Three
+// things depend on it: a statement written twice with different constants must
+// weigh once, pgpro_stats keys its view by planid as well, so the same statement
+// arrives as several rows there, and the same statement runs on every host of the
+// cluster — its weight is the load it puts on the cluster, not on one instance.
+//
+// Sums are what makes the cluster-wide reading right: a query costing 40 % of the
+// time on each of three replicas is 40 % of the cluster's time, not 120 % of one
+// host's, because the denominator is summed over the same hosts.
 func collapse(entries []WorkloadEntry) []WorkloadEntry {
 	out := make([]WorkloadEntry, 0, len(entries))
 	index := make(map[string]int, len(entries))
@@ -101,6 +105,7 @@ func collapse(entries []WorkloadEntry) []WorkloadEntry {
 		i, ok := index[e.Fingerprint]
 		if !ok || e.Fingerprint == "" {
 			e.QueryIDs = slices.Clone(e.QueryIDs)
+			e.Hosts = slices.Clone(e.Hosts)
 			index[e.Fingerprint] = len(out)
 
 			out = append(out, e)
@@ -109,7 +114,28 @@ func collapse(entries []WorkloadEntry) []WorkloadEntry {
 		}
 
 		g := &out[i]
-		g.QueryIDs = append(g.QueryIDs, e.QueryIDs...)
+
+		// Identifiers repeat across hosts: queryid is derived from the parse tree,
+		// so the same statement carries the same one on every instance, and listing
+		// it three times would only make the covered statement look ambiguous.
+		for _, id := range e.QueryIDs {
+			if !slices.Contains(g.QueryIDs, id) {
+				g.QueryIDs = append(g.QueryIDs, id)
+			}
+		}
+
+		for _, h := range e.Hosts {
+			g.Hosts = appendUnique(g.Hosts, h)
+		}
+
+		// Folded rows can carry different spellings of the same statement: pg_stat_statements
+		// normalizes, but not identically across server versions, and the hosts of a cluster
+		// need not run the same one. Keeping the longest makes the text shown deterministic
+		// rather than a function of which host answered first.
+		if len(e.Query) > len(g.Query) {
+			g.Query = e.Query
+		}
+
 		g.Calls += e.Calls
 		g.TotalTimeMs += e.TotalTimeMs
 		g.Rows += e.Rows
@@ -639,6 +665,7 @@ func (b *builder) attach(d *draft, e WorkloadEntry) {
 		Query:       e.Query,
 		WeightPct:   b.weight(e),
 		Calls:       e.Calls,
+		Hosts:       sortedHosts(e.Hosts),
 	}
 	target.order = append(target.order, e.Fingerprint)
 }
@@ -818,13 +845,6 @@ func warningsFor(d *draft, kind string, w Writes, weight float64, t trade) []War
 		}})
 	}
 
-	if matchesMissingSignal(w) {
-		out = append(out, Warning{Code: WarnOverlapsMissingSignal, Params: map[string]float64{
-			ParamIdxScanPct: idxScanPct(w),
-			ParamRows:       float64(w.LiveTuples),
-		}})
-	}
-
 	return out
 }
 
@@ -837,26 +857,6 @@ func writeHeavy(t trade) bool {
 	}
 
 	return float64(t.writeCalls) > writeHeavyRatio*float64(max(t.readCalls, 1))
-}
-
-// matchesMissingSignal repeats the thresholds of the indexes/missing report, so
-// that a candidate can point out when the two are talking about the same table
-// instead of looking like independent evidence.
-func matchesMissingSignal(w Writes) bool {
-	if w.IdxScans <= 0 || w.LiveTuples < missingSignalMinRows {
-		return false
-	}
-
-	return idxScanPct(w) < missingSignalIdxPct
-}
-
-func idxScanPct(w Writes) float64 {
-	scans := w.SeqScans + w.IdxScans
-	if scans == 0 {
-		return 0
-	}
-
-	return 100 * float64(w.IdxScans) / float64(scans)
 }
 
 // coveredTimePct is the share of analyzed time the candidates touch. Statements
@@ -878,6 +878,23 @@ func coveredTimePct(candidates []Candidate) float64 {
 	}
 
 	return total
+}
+
+// sortedHosts deduplicates and orders a host list. Hosts are read in parallel, so
+// without this the same report would render in a different order on every call.
+func sortedHosts(hosts []string) []string {
+	if len(hosts) == 0 {
+		return nil
+	}
+
+	out := make([]string, 0, len(hosts))
+	for _, h := range hosts {
+		out = appendUnique(out, h)
+	}
+
+	sort.Strings(out)
+
+	return out
 }
 
 func appendUnique(names []string, name string) []string {

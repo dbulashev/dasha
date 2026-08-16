@@ -13,8 +13,7 @@ rolled AS (
            sum(COALESCE(s.n_tup_upd, 0))::bigint    AS updated,
            sum(COALESCE(s.n_tup_del, 0))::bigint    AS deleted,
            sum(COALESCE(s.seq_scan, 0))::bigint     AS seq_scans,
-           sum(COALESCE(s.idx_scan, 0))::bigint     AS idx_scans,
-           sum(COALESCE(s.n_live_tup, 0))::bigint   AS live_tuples
+           sum(COALESCE(s.idx_scan, 0))::bigint     AS idx_scans
     FROM pg_catalog.pg_stat_user_tables s
         LEFT JOIN roots r ON r.rel = s.relid
     GROUP BY COALESCE(r.root, s.relid)
@@ -25,8 +24,7 @@ SELECT n.nspname AS schema,
        d.updated,
        d.deleted,
        d.seq_scans,
-       d.idx_scans,
-       d.live_tuples
+       d.idx_scans
 FROM rolled d
     JOIN pg_catalog.pg_class c ON c.oid = d.rel
     JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace

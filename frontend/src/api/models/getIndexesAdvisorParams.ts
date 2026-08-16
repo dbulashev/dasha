@@ -6,11 +6,9 @@
  */
 import type { ClusterNameParameter } from './clusterNameParameter'
 import type { DatabaseParameter } from './databaseParameter'
-import type { InstanceParameter } from './instanceParameter'
 
 export type GetIndexesAdvisorParams = {
   cluster_name: ClusterNameParameter
-  instance: InstanceParameter
   database: DatabaseParameter
   /**
    * Comma-separated usernames whose statements are left out of the analysis — the same mechanism the query report uses, for the service roles whose load says nothing about the application's indexing needs.

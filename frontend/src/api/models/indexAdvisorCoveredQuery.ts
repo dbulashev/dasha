@@ -14,4 +14,6 @@ export interface IndexAdvisorCoveredQuery {
   query: string
   weight_pct: number
   calls: number
+  /** Hosts of the cluster this statement was read from. A candidate whose statements run only on the replicas is still worth creating — the index is replicated — but the primary is not where the gain lands, and only this says so. */
+  hosts: string[]
 }

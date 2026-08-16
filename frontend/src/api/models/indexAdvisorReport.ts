@@ -14,6 +14,8 @@ export interface IndexAdvisorReport {
   /** Why part of the workload produced nothing, counted per reason. One entry per statement, so the counts sum to the number of statements that contributed no candidate. A client must show this next to the candidate list: an empty list with a large count here means the analysis fell short, not that the schema is in good shape. */
   not_parsed: IndexAdvisorNotParsed[]
   summary: IndexAdvisorSummary
+  /** Hosts of the cluster whose pg_stat_statements could not be read. Their load never entered the analysis, so the candidate list is incomplete by exactly that much — not merely shorter. A client must show this: statements running only on an unread host produce no candidate at all, and nothing else in the response says so. */
+  unreachable_hosts: string[]
   /** Candidates before pagination. */
   total: number
   duration_ms: number

@@ -60,6 +60,7 @@ function candidate(over: Partial<IndexAdvisorCandidate> = {}): IndexAdvisorCandi
         query: 'SELECT 1',
         weight_pct: 31.4,
         calls: 10,
+        hosts: ['host1', 'host2'],
       },
     ],
     table_rows: 1_000_000,
@@ -81,7 +82,10 @@ function report(over: Partial<IndexAdvisorReport> = {}): IndexAdvisorReport {
       not_parsed_count: 0,
       covered_time_pct: 0,
       catalog_truncated: false,
+      hosts: ['host1', 'host2'],
+      hosts_without_stats: [],
     },
+    unreachable_hosts: [],
     total: 0,
     duration_ms: 12,
     ...over,
@@ -96,7 +100,12 @@ async function render() {
   const wrapper = mount(IndexAdvisorSection, {
     global: {
       plugins: [vuetify, i18n],
-      stubs: { RouterLink: { template: '<a><slot /></a>' } },
+      stubs: {
+        RouterLink: {
+          props: ['to'],
+          template: '<a :data-to="JSON.stringify(to)"><slot /></a>',
+        },
+      },
     },
   })
   await flushPromises()
@@ -117,8 +126,9 @@ describe('IndexAdvisorSection', () => {
     expect(wrapper.text()).toContain('orders')
     expect(wrapper.text()).toContain('(customer_id, created_at)')
     expect(wrapper.text()).toContain('31.4%')
-    // planner_checked=false must stay visible as the heuristic caveat.
-    expect(wrapper.text()).toContain(enUS.indexes.advisor.heuristic)
+    // The heuristic caveat lives in the disclaimer, not on every row: in step 1
+    // planner_checked is false everywhere, so a per-row chip says nothing.
+    expect(wrapper.text()).toContain(enUS.indexes.advisor.disclaimer)
   })
 
   it('keeps a queryid past Number.MAX_SAFE_INTEGER intact', async () => {
@@ -140,7 +150,9 @@ describe('IndexAdvisorSection', () => {
     expect(wrapper.text()).toContain(enUS.indexes.advisor.noCandidates)
   })
 
-  it('shows the unparsed workload so an empty list cannot read as "all is well"', async () => {
+  // The count stays visible whatever is folded — hiding it is what would let an
+  // empty candidate list read as a clean bill of health (FR-4.8).
+  it('shows the unparsed count without being expanded', async () => {
     resolves(
       report({
         not_parsed: [{ reason_code: 'truncated', count: 7 }],
@@ -149,8 +161,24 @@ describe('IndexAdvisorSection', () => {
     )
     const wrapper = await render()
 
-    expect(wrapper.text()).toContain(enUS.indexes.advisor.notParsed.truncated)
     expect(wrapper.text()).toContain('7')
+    // The per-reason breakdown is evidence for that count, not the headline.
+    expect(wrapper.text()).not.toContain(enUS.indexes.advisor.notParsed.truncated)
+
+    await openDetails(wrapper)
+    expect(wrapper.text()).toContain(enUS.indexes.advisor.notParsed.truncated)
+  })
+
+  it('raises a warning only when the unread statements are a real gap', async () => {
+    resolves(
+      report({
+        not_parsed: [{ reason_code: 'truncated', count: 7 }],
+        summary: { ...report().summary, not_parsed_count: 7 },
+      }),
+    )
+    const wrapper = await render()
+
+    expect(wrapper.find('.v-alert.text-warning').exists()).toBe(true)
   })
 
   it('does not raise an alarm when the unread statements are only monitoring', async () => {
@@ -162,9 +190,13 @@ describe('IndexAdvisorSection', () => {
     )
     const wrapper = await render()
 
-    const alarm = enUS.indexes.advisor.notParsedCount.split('{n}')[1].trim()
+    // Dasha's own catalog queries are an outcome, not a gap: the count is still
+    // stated, but nothing here is worth a warning.
+    expect(wrapper.text()).toContain('26')
+    expect(wrapper.find('.v-alert.text-warning').exists()).toBe(false)
+
+    await openDetails(wrapper)
     expect(wrapper.text()).toContain(enUS.indexes.advisor.notParsed.system_relation)
-    expect(wrapper.text()).not.toContain(alarm)
   })
 
   it('falls back to the bare code when the backend grows a warning this build does not know', async () => {
@@ -176,8 +208,14 @@ describe('IndexAdvisorSection', () => {
     )
     const wrapper = await render()
 
-    expect(wrapper.text()).toContain('brand_new_code')
     expect(wrapper.text()).toContain('orders') // the row still rendered
+
+    // Warnings live only in the expanded row now — the column was dropped as a
+    // duplicate of what the expansion already spells out.
+    await wrapper.find('tbody tr button').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('brand_new_code')
   })
 
   it('hides itself when the advisor is disabled rather than reporting an error', async () => {
@@ -186,6 +224,98 @@ describe('IndexAdvisorSection', () => {
 
     expect(wrapper.find('.v-card').exists()).toBe(false)
     expect(onError).not.toHaveBeenCalled()
+  })
+
+  it('asks for the whole cluster, not the selected host', async () => {
+    resolves(report())
+    await render()
+
+    // An instance in the request would silently narrow the workload back to one
+    // host, which is the bug this endpoint exists to avoid.
+    const params = getIndexesAdvisor.mock.calls[0][0] as Record<string, unknown>
+    expect(params.cluster_name).toBe('c1')
+    expect(params.database).toBe('app')
+    expect(params).not.toHaveProperty('instance')
+  })
+
+  it('names the hosts a candidate list was built from', async () => {
+    resolves(report({ candidates: [candidate()], total: 1 }))
+    const wrapper = await render()
+
+    expect(wrapper.text()).toContain('host1, host2')
+  })
+
+  it('reports a host it could not read instead of returning a shorter list in silence', async () => {
+    resolves(report({ unreachable_hosts: ['replica-2'] }))
+    const wrapper = await render()
+
+    expect(wrapper.text()).toContain('replica-2')
+    expect(wrapper.text()).toContain(enUS.indexes.advisor.unreachable.split('{hosts}')[0].trim())
+  })
+
+  it('separates a host without pg_stat_statements from one that did not answer', async () => {
+    resolves(
+      report({
+        summary: { ...report().summary, hosts_without_stats: ['replica-3'] },
+      }),
+    )
+    const wrapper = await render()
+
+    expect(wrapper.text()).toContain('replica-3')
+    // Not the same statement as unreachable: the host is up, its load is invisible.
+    expect(wrapper.text()).not.toContain(enUS.indexes.advisor.unreachable.split('{hosts}')[0].trim())
+  })
+
+  it('shows which hosts a covered statement actually runs on', async () => {
+    resolves(report({ candidates: [candidate()], total: 1 }))
+    const wrapper = await render()
+
+    await wrapper.find('tbody tr button').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('host2')
+  })
+
+  async function openDetails(wrapper: Awaited<ReturnType<typeof render>>) {
+    const link = wrapper.findAll('a').find(a => a.text() === enUS.indexes.advisor.details)
+    if (!link) throw new Error('details toggle not rendered')
+    await link.trigger('click')
+    await flushPromises()
+  }
+
+  // Helper: the covered statements live in the expanded row, behind the only
+  // button a collapsed row has.
+  async function expandedLinks(wrapper: Awaited<ReturnType<typeof render>>) {
+    await wrapper.find('tbody tr button').trigger('click')
+    await flushPromises()
+
+    return wrapper.findAll('a[data-to]').map(a => a.attributes('data-to') ?? '')
+  }
+
+  it('opens the query report on a host the statement actually runs on', async () => {
+    // The statement runs nowhere near the selected host1: linking there would ask
+    // an instance whose pg_stat_statements has never seen this queryid.
+    const c = candidate()
+    c.covered_queries[0].hosts = ['replica-9']
+    resolves(report({ candidates: [c], total: 1 }))
+
+    const links = await expandedLinks(await render())
+    const link = links.find(l => l.includes('-5881493265671377279'))
+
+    expect(link).toBeDefined()
+    expect(link).toContain('replica-9')
+    expect(link).not.toContain('host1')
+  })
+
+  it('keeps the selected host when the statement runs there too', async () => {
+    resolves(report({ candidates: [candidate()], total: 1 }))
+
+    const links = await expandedLinks(await render())
+    const link = links.find(l => l.includes('-5881493265671377279'))
+
+    // host1 is among the statement's hosts, so switching the user to host2 would
+    // be a surprise with nothing to gain.
+    expect(link).toContain('host1')
   })
 
   it('states that pg_stat_statements is missing instead of claiming a clean database', async () => {

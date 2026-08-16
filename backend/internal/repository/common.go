@@ -113,9 +113,11 @@ type Repository interface {
 	GetMaintenanceAutovacuumSummary(ctx context.Context, clusterName, instanceName, databaseName string) (*dto.MaintenanceAutovacuumSummary, error)
 	GetHotSampleTables(ctx context.Context, clusterName, instanceName, databaseName string, schema, object *string) ([]hotobjects.AnchorRow, *time.Time, bool, error)
 	GetHotSampleIndexes(ctx context.Context, clusterName, instanceName, databaseName string, schema, object *string) ([]hotobjects.AnchorRow, *time.Time, bool, error)
+	// GetIndexAdvisorReport takes no instance: pg_stat_statements is per-host and
+	// not replicated, so the candidates are built from the whole cluster's load.
 	GetIndexAdvisorReport(
 		ctx context.Context,
-		clusterName, instanceName, databaseName string,
+		clusterName, databaseName string,
 		excludeUsers []string,
 	) (indexadvisor.Report, error)
 	GetSchemaLintReport(ctx context.Context, clusterName, instanceName, databaseName string) (schemalint.Report, error)

@@ -55,6 +55,16 @@ func paginationDefaults(limitPtr, offsetPtr *int, defaultLimit int) (int, int) {
 	return limit, offset
 }
 
+// emptyIfNil keeps a JSON array an array: a nil slice serializes as null, and a
+// client reading a list should not have to handle both spellings of "none".
+func emptyIfNil[T any](items []T) []T {
+	if items == nil {
+		return []T{}
+	}
+
+	return items
+}
+
 // pageOf cuts one page out of a slice, for endpoints that compute the whole
 // result before they can filter or count it and so cannot push LIMIT into SQL.
 func pageOf[T any](items []T, limit, offset int) []T {

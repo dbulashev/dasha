@@ -63,13 +63,12 @@ const (
 
 // Defines values for IndexAdvisorWarningCode.
 const (
-	LowWeight             IndexAdvisorWarningCode = "low_weight"
-	Matview               IndexAdvisorWarningCode = "matview"
-	OverlapsMissingSignal IndexAdvisorWarningCode = "overlaps_missing_signal"
-	PartitionRoot         IndexAdvisorWarningCode = "partition_root"
-	StatsMissing          IndexAdvisorWarningCode = "stats_missing"
-	WideIndex             IndexAdvisorWarningCode = "wide_index"
-	WriteHeavy            IndexAdvisorWarningCode = "write_heavy"
+	LowWeight     IndexAdvisorWarningCode = "low_weight"
+	Matview       IndexAdvisorWarningCode = "matview"
+	PartitionRoot IndexAdvisorWarningCode = "partition_root"
+	StatsMissing  IndexAdvisorWarningCode = "stats_missing"
+	WideIndex     IndexAdvisorWarningCode = "wide_index"
+	WriteHeavy    IndexAdvisorWarningCode = "write_heavy"
 )
 
 // Defines values for IndexVerdictReasonCode.
@@ -801,6 +800,9 @@ type IndexAdvisorCoveredQuery struct {
 	// Fingerprint Hash of the statement structure, stable across constants and formatting.
 	Fingerprint string `json:"fingerprint"`
 
+	// Hosts Hosts of the cluster this statement was read from. A candidate whose statements run only on the replicas is still worth creating — the index is replicated — but the primary is not where the gain lands, and only this says so.
+	Hosts []string `json:"hosts"`
+
 	// Query Normalized statement text, sanitized.
 	Query string `json:"query"`
 
@@ -829,6 +831,9 @@ type IndexAdvisorReport struct {
 
 	// Total Candidates before pagination.
 	Total int `json:"total"`
+
+	// UnreachableHosts Hosts of the cluster whose pg_stat_statements could not be read. Their load never entered the analysis, so the candidate list is incomplete by exactly that much — not merely shorter. A client must show this: statements running only on an unread host produce no candidate at all, and nothing else in the response says so.
+	UnreachableHosts []string `json:"unreachable_hosts"`
 }
 
 // IndexAdvisorSummary defines model for IndexAdvisorSummary.
@@ -844,22 +849,28 @@ type IndexAdvisorSummary struct {
 
 	// CoveredTimePct Share of analyzed execution time the candidates touch. Statements covered twice count once — this is how much of the load is in scope, not how much would be saved.
 	CoveredTimePct float64 `json:"covered_time_pct"`
-	NotParsedCount int     `json:"not_parsed_count"`
 
-	// PgssAvailable False when pg_stat_statements could not be read at all, which is a different statement from having read it and found nothing.
+	// Hosts Hosts of the cluster whose workload this report was built from.
+	Hosts []string `json:"hosts"`
+
+	// HostsWithoutStats Hosts that answered but carry no readable pg_stat_statements. They are neither analyzed nor unreachable: the instance is up and whatever it runs is invisible here, which on a replica serving the reads is the opposite of idle.
+	HostsWithoutStats []string `json:"hosts_without_stats"`
+	NotParsedCount    int      `json:"not_parsed_count"`
+
+	// PgssAvailable False when pg_stat_statements could not be read on any host of the cluster, which is a different statement from having read it and found nothing.
 	PgssAvailable bool `json:"pgss_available"`
 }
 
 // IndexAdvisorWarning defines model for IndexAdvisorWarning.
 type IndexAdvisorWarning struct {
-	// Code write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. overlaps_missing_signal — the indexes/missing report is about this same table. partition_root — the table is partitioned: the DDL cannot use CONCURRENTLY and every partition pays for the index. stats_missing — no pg_stats row for the columns, so their order is the order the statement wrote them. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires at least one unique index to exist.
+	// Code write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. partition_root — the table is partitioned: the DDL cannot use CONCURRENTLY and every partition pays for the index. stats_missing — no pg_stats row for the columns, so their order is the order the statement wrote them. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires at least one unique index to exist.
 	Code IndexAdvisorWarningCode `json:"code"`
 
 	// Params Numbers the wording of this code quotes, keyed by name. Which keys are present depends on code; a client reads only the ones its phrasing needs.
 	Params *map[string]float64 `json:"params,omitempty"`
 }
 
-// IndexAdvisorWarningCode write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. overlaps_missing_signal — the indexes/missing report is about this same table. partition_root — the table is partitioned: the DDL cannot use CONCURRENTLY and every partition pays for the index. stats_missing — no pg_stats row for the columns, so their order is the order the statement wrote them. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires at least one unique index to exist.
+// IndexAdvisorWarningCode write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. partition_root — the table is partitioned: the DDL cannot use CONCURRENTLY and every partition pays for the index. stats_missing — no pg_stats row for the columns, so their order is the order the statement wrote them. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires at least one unique index to exist.
 type IndexAdvisorWarningCode string
 
 // IndexAdvisorWrites What maintaining an index on this table would cost, from pg_stat_user_tables. Scans are the other side of the trade: they are what an index would serve.
@@ -2259,7 +2270,6 @@ type GetTablesHotParamsClass string
 // GetIndexesAdvisorParams defines parameters for GetIndexesAdvisor.
 type GetIndexesAdvisorParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
-	Instance    Instance    `form:"instance" json:"instance"`
 	Database    Database    `form:"database" json:"database"`
 
 	// ExcludeUsers Comma-separated usernames whose statements are left out of the analysis — the same mechanism the query report uses, for the service roles whose load says nothing about the application's indexing needs.
@@ -7710,18 +7720,6 @@ func NewGetIndexesAdvisorRequest(server string, params *GetIndexesAdvisorParams)
 		queryValues := queryURL.Query()
 
 		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, params.ClusterName); err != nil {
-			return nil, err
-		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
-			return nil, err
-		} else {
-			for k, v := range parsed {
-				for _, v2 := range v {
-					queryValues.Add(k, v2)
-				}
-			}
-		}
-
-		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "instance", runtime.ParamLocationQuery, params.Instance); err != nil {
 			return nil, err
 		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 			return nil, err
