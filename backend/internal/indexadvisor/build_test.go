@@ -621,7 +621,7 @@ func TestBuildKeepsMonitoringOutOfTheWeights(t *testing.T) {
 	}
 }
 
-// FR-4.8: what the collector could not parse stays in the report, or an empty
+// what the collector could not parse stays in the report, or an empty
 // candidate list would read as a clean bill of health.
 func TestBuildKeepsCollectorFailures(t *testing.T) {
 	w := workloadOf(entry(t, 1, `SELECT * FROM orders WHERE tenant_id = $1`, 1000))

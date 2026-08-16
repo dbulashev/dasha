@@ -70,7 +70,7 @@ func TestParseTreatsTruncationMarkAsTruncated(t *testing.T) {
 	}
 }
 
-// FR-2.1: statements differing only in constants and formatting collapse into one
+// statements differing only in constants and formatting collapse into one
 // workload entry, which is also what removes the pgpro_stats planid duplicates.
 func TestFingerprintIgnoresConstantsAndFormatting(t *testing.T) {
 	p := New(Config{})
@@ -159,7 +159,7 @@ func TestParseCachesFailures(t *testing.T) {
 	}
 }
 
-// NFR-3/R-6: a report parses its whole top at once, so the parser is used from
+// a report parses its whole top at once, so the parser is used from
 // several goroutines. Run with -race.
 //
 // MaxParallel stays at 2: every slot beyond the first makes the library compile
