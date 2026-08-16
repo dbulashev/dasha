@@ -439,17 +439,22 @@ func (p *PgxPool) runIndexAdvisorReaders(
 
 func scanIndexAdvisorRelation(row rowScanner, cat *indexadvisor.Catalog) error {
 	var (
-		rel                  indexadvisor.Relation
-		rootSchema, rootName string
+		rel                      indexadvisor.Relation
+		rootSchema, rootName     string
+		parentSchema, parentName string
 	)
 
 	if err := row.Scan(&rel.Schema, &rel.Name, &rel.Kind, &rel.Rows, &rel.Pages,
-		&rootSchema, &rootName); err != nil {
+		&rootSchema, &rootName, &parentSchema, &parentName); err != nil {
 		return err
 	}
 
 	if rootName != "" {
 		rel.Root = indexadvisor.RelKey{Schema: rootSchema, Name: rootName}
+	}
+
+	if parentName != "" {
+		rel.Parent = indexadvisor.RelKey{Schema: parentSchema, Name: parentName}
 	}
 
 	cat.AddRelation(rel)

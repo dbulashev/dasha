@@ -770,7 +770,7 @@ type IndexAdvisorCandidate struct {
 	Columns        []string                   `json:"columns"`
 	CoveredQueries []IndexAdvisorCoveredQuery `json:"covered_queries"`
 
-	// Ddl Statement suggested to the user. CONCURRENTLY unless the table is partitioned, where PostgreSQL rejects it. Dasha never executes DDL.
+	// Ddl Statement suggested to the user, or a short script when the table is partitioned: PostgreSQL rejects CREATE INDEX CONCURRENTLY on a partitioned table, so the script creates the root index with ON ONLY — invalid and holding no lock — then builds an index on every partition concurrently and attaches each one, which turns the root index valid with the last. The statements go one at a time, as psql sends them: CREATE INDEX CONCURRENTLY cannot run inside a transaction block. Dasha never executes DDL.
 	Ddl string `json:"ddl"`
 
 	// PlannerChecked False throughout this step. A client must carry the caveat: the recommendation is structural, derived from the statements and the catalog alone.
@@ -863,14 +863,14 @@ type IndexAdvisorSummary struct {
 
 // IndexAdvisorWarning defines model for IndexAdvisorWarning.
 type IndexAdvisorWarning struct {
-	// Code write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. partition_root — the table is partitioned: the DDL cannot use CONCURRENTLY and every partition pays for the index. stats_missing — no pg_stats row for the columns, so their order is the order the statement wrote them. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires at least one unique index to exist.
+	// Code write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. partition_root — the table is partitioned: the root index cannot be built with CONCURRENTLY, so the DDL goes through ON ONLY plus a concurrent build and an ATTACH per partition, and every partition pays for the index; params.partitions counts them. stats_missing — no pg_stats row for the columns, so their order is the order the statement wrote them. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires at least one unique index to exist.
 	Code IndexAdvisorWarningCode `json:"code"`
 
 	// Params Numbers the wording of this code quotes, keyed by name. Which keys are present depends on code; a client reads only the ones its phrasing needs.
 	Params *map[string]float64 `json:"params,omitempty"`
 }
 
-// IndexAdvisorWarningCode write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. partition_root — the table is partitioned: the DDL cannot use CONCURRENTLY and every partition pays for the index. stats_missing — no pg_stats row for the columns, so their order is the order the statement wrote them. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires at least one unique index to exist.
+// IndexAdvisorWarningCode write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. partition_root — the table is partitioned: the root index cannot be built with CONCURRENTLY, so the DDL goes through ON ONLY plus a concurrent build and an ATTACH per partition, and every partition pays for the index; params.partitions counts them. stats_missing — no pg_stats row for the columns, so their order is the order the statement wrote them. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires at least one unique index to exist.
 type IndexAdvisorWarningCode string
 
 // IndexAdvisorWrites What maintaining an index on this table would cost, from pg_stat_user_tables. Scans are the other side of the trade: they are what an index would serve.

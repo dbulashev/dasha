@@ -129,14 +129,16 @@ func reasonCount(rep Report, code string) int {
 	return 0
 }
 
-func hasWarning(c Candidate, code string) bool {
+func hasWarning(c Candidate, code string) bool { return warningOf(c, code).Code != "" }
+
+func warningOf(c Candidate, code string) Warning {
 	for _, w := range c.Warnings {
 		if w.Code == code {
-			return true
+			return w
 		}
 	}
 
-	return false
+	return Warning{Code: "", Params: nil}
 }
 
 func TestBuildOrdersEqualityColumnsBySelectivity(t *testing.T) {
@@ -365,8 +367,8 @@ func TestBuildRollsPartitionUpToItsRoot(t *testing.T) {
 	root := RelKey{Schema: testSchema, Name: "events"}
 	part := RelKey{Schema: testSchema, Name: "events_01"}
 
-	cat.AddRelation(Relation{RelKey: root, Kind: "p", Rows: testRows, Pages: 0, Root: RelKey{}})
-	cat.AddRelation(Relation{RelKey: part, Kind: "r", Rows: testRows / 2, Pages: 100, Root: root})
+	cat.AddRelation(Relation{RelKey: root, Kind: "p", Rows: testRows, Pages: 0, Root: RelKey{}, Parent: RelKey{}})
+	cat.AddRelation(Relation{RelKey: part, Kind: "r", Rows: testRows / 2, Pages: 100, Root: root, Parent: root})
 
 	for _, key := range []RelKey{root, part} {
 		cat.AddColumn(key, col("tenant_id", "integer", 50))
@@ -385,10 +387,19 @@ func TestBuildRollsPartitionUpToItsRoot(t *testing.T) {
 		t.Error("a candidate on a partitioned root must carry partition_root")
 	}
 
-	// PostgreSQL rejects CREATE INDEX CONCURRENTLY on a partitioned table, and a
-	// DDL that cannot run is worse advice than a slower one.
-	if strings.Contains(cand.DDL, "CONCURRENTLY") {
-		t.Errorf("DDL = %q, must not offer CONCURRENTLY on a partitioned table", cand.DDL)
+	// PostgreSQL rejects CREATE INDEX CONCURRENTLY on a partitioned table, so the
+	// root index is built invalid and the partitions are attached to it — the
+	// shape of the script is ddl_test's subject, here it only has to be that one.
+	if !strings.Contains(cand.DDL, `CREATE INDEX "events_tenant_id_idx" ON ONLY "public"."events"`) {
+		t.Errorf("DDL = %q, want an ON ONLY root index", cand.DDL)
+	}
+
+	if !strings.Contains(cand.DDL, `ATTACH PARTITION "public"."events_01_tenant_id_idx"`) {
+		t.Errorf("DDL = %q, want the partition attached", cand.DDL)
+	}
+
+	if got := warningOf(cand, WarnPartitionRoot).Params[ParamPartitions]; got != 1 {
+		t.Errorf("partition_root counts %v partitions, want 1", got)
 	}
 }
 

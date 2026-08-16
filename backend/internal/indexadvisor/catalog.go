@@ -30,6 +30,11 @@ type Relation struct {
 	// partition. An index belongs on the root, not on the partition a statement
 	// happened to name.
 	Root RelKey
+	// Parent is the relation this one is a direct partition of, which equals Root
+	// only in a single-level tree. The suggested DDL attaches an index level by
+	// level, and the levels between a partition and its root are not derivable
+	// from Root alone.
+	Parent RelKey
 }
 
 // IsPartition reports whether the relation rolls up to a partitioned root.

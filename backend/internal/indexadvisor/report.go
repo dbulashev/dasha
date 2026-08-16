@@ -1,9 +1,6 @@
 package indexadvisor
 
-import (
-	"sort"
-	"strings"
-)
+import "sort"
 
 // Warning codes. Every one of them is a reason a candidate might be a bad idea
 // despite ranking well — the prose lives in the frontend i18n bundle and in the
@@ -14,8 +11,8 @@ const (
 	WarnWriteHeavy = "write_heavy"
 	// WarnLowWeight: the covered statements are a marginal share of the load.
 	WarnLowWeight = "low_weight"
-	// WarnPartitionRoot: the candidate is on a partitioned table, where the DDL
-	// cannot use CONCURRENTLY and every partition pays for the index.
+	// WarnPartitionRoot: the candidate is on a partitioned table, where the root
+	// index cannot be built with CONCURRENTLY and every partition pays for it.
 	WarnPartitionRoot = "partition_root"
 	// WarnStatsMissing: no pg_stats row for the columns, so their order in the
 	// key is the order the statement wrote them, not the selective one.
@@ -35,6 +32,7 @@ const (
 	ParamWeightPct  = "weight_pct"
 	ParamColumns    = "columns"
 	ParamRequested  = "requested"
+	ParamPartitions = "partitions"
 )
 
 // Reasons a statement contributed no candidate. The collector's own codes
@@ -91,7 +89,8 @@ type Candidate struct {
 	Schema  string
 	Table   string
 	Columns []string
-	// DDL is a suggestion for the user to run. Dasha never executes DDL.
+	// DDL is a suggestion for the user to run — one statement, or the script a
+	// partitioned table needs. Dasha never executes DDL.
 	DDL string
 	// WeightPct is the share of the analyzed execution time spent in the
 	// statements this candidate covers. It is not a predicted gain: nothing here
@@ -142,36 +141,6 @@ type Report struct {
 	// incomplete by exactly that much rather than merely shorter.
 	UnreachableHosts []string
 	DurationMs       int64
-}
-
-// ddlFor renders the statement the user is invited to run.
-//
-// CONCURRENTLY is the default because the alternative locks the table against
-// writes for the duration of the build. It is dropped for a partitioned table:
-// PostgreSQL rejects CREATE INDEX CONCURRENTLY there outright, and a DDL that
-// cannot run is worse than a slower one — the partition_root warning is what
-// explains the difference.
-func ddlFor(key RelKey, columns []string, partitioned bool) string {
-	quoted := make([]string, 0, len(columns))
-	for _, c := range columns {
-		quoted = append(quoted, quoteIdent(c))
-	}
-
-	concurrently := " CONCURRENTLY"
-	if partitioned {
-		concurrently = ""
-	}
-
-	return "CREATE INDEX" + concurrently + " ON " +
-		quoteIdent(key.Schema) + "." + quoteIdent(key.Name) +
-		" (" + strings.Join(quoted, ", ") + ");"
-}
-
-// quoteIdent always quotes. An unquoted identifier would be folded to lower case
-// and would break on a keyword, and this string is handed to a human to run
-// against production — pg_dump quotes everything for the same reason.
-func quoteIdent(s string) string {
-	return `"` + strings.ReplaceAll(s, `"`, `""`) + `"`
 }
 
 // notParsedList turns the tally into a stable, sorted list: most frequent first,

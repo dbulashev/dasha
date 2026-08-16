@@ -43,6 +43,7 @@ func Build(w Workload, cat Catalog, cfg Config) Report {
 	b := &builder{
 		cat:        cat,
 		cfg:        cfg,
+		ddl:        newDDLScope(cat),
 		drafts:     make(map[RelKey][]*draft),
 		skipped:    make(map[string]int, len(w.NotParsed)),
 		columnsBy:  make(map[RelKey]map[string]Column),
@@ -230,8 +231,12 @@ type draft struct {
 }
 
 type builder struct {
-	cat       Catalog
-	cfg       Config
+	cat Catalog
+	cfg Config
+	// ddl carries the partition tree and the names already used, and hands out the
+	// index names the ATTACH of a partitioned candidate has to spell out — so it
+	// is per report, and shared by every candidate of it.
+	ddl       *ddlScope
 	totalTime float64
 	drafts    map[RelKey][]*draft
 	skipped   map[string]int
@@ -787,19 +792,23 @@ func (b *builder) candidate(key RelKey, d *draft) Candidate {
 		return covered[i].WeightPct > covered[j].WeightPct
 	})
 
-	partitioned := rel.Kind == partitionedKind
 	t := trade{writeCalls: b.writeCalls[key], readCalls: readCalls}
+
+	partitions := 0
+	if rel.Kind == partitionedKind {
+		partitions = b.ddl.leaves(key)
+	}
 
 	return Candidate{
 		Schema:         key.Schema,
 		Table:          key.Name,
 		Columns:        d.columns,
-		DDL:            ddlFor(key, d.columns, partitioned),
+		DDL:            ddlFor(key, d.columns, b.ddl),
 		WeightPct:      weight,
 		Covered:        covered,
 		TableRows:      rel.Rows,
 		Writes:         writes,
-		Warnings:       warningsFor(d, rel.Kind, writes, weight, t),
+		Warnings:       warningsFor(d, rel.Kind, writes, weight, t, partitions),
 		PlannerChecked: false,
 	}
 }
@@ -810,7 +819,7 @@ type trade struct {
 	readCalls  int64
 }
 
-func warningsFor(d *draft, kind string, w Writes, weight float64, t trade) []Warning {
+func warningsFor(d *draft, kind string, w Writes, weight float64, t trade, partitions int) []Warning {
 	var out []Warning
 
 	if d.statsMissing {
@@ -825,7 +834,9 @@ func warningsFor(d *draft, kind string, w Writes, weight float64, t trade) []War
 	}
 
 	if kind == partitionedKind {
-		out = append(out, Warning{Code: WarnPartitionRoot, Params: nil})
+		out = append(out, Warning{Code: WarnPartitionRoot, Params: map[string]float64{
+			ParamPartitions: float64(partitions),
+		}})
 	}
 
 	if kind == matviewKind {

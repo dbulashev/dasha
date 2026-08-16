@@ -131,6 +131,7 @@ function warningText(w: IndexAdvisorWarning): string {
     weight: fmtPct(p.weight_pct ?? 0, 2),
     columns: p.columns ?? 0,
     requested: p.requested ?? 0,
+    partitions: p.partitions ?? 0,
   })
 }
 

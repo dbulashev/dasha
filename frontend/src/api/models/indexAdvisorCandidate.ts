@@ -14,7 +14,7 @@ export interface IndexAdvisorCandidate {
   table: string
   /** Key columns in order: equality predicates first, then at most one range predicate, then ordering columns when a range predicate did not already break the ordering. */
   columns: string[]
-  /** Statement suggested to the user. CONCURRENTLY unless the table is partitioned, where PostgreSQL rejects it. Dasha never executes DDL. */
+  /** Statement suggested to the user, or a short script when the table is partitioned: PostgreSQL rejects CREATE INDEX CONCURRENTLY on a partitioned table, so the script creates the root index with ON ONLY — invalid and holding no lock — then builds an index on every partition concurrently and attaches each one, which turns the root index valid with the last. The statements go one at a time, as psql sends them: CREATE INDEX CONCURRENTLY cannot run inside a transaction block. Dasha never executes DDL. */
   ddl: string
   /** Share of the analyzed execution time spent in the statements this candidate covers. It is the size of the problem, NOT a predicted gain — no planner has confirmed the index would be used at all. */
   weight_pct: number

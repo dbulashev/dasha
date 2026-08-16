@@ -5,6 +5,7 @@ package repository
 import (
 	"context"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -125,6 +126,9 @@ func TestIndexAdvisorCatalog_ReadsSeededSchema(t *testing.T) {
 		part, ok := cat.Relations[events01]
 		require.True(t, ok)
 		assert.Equal(t, events, part.Root, "a partition must point at its root")
+		// The DDL attaches an index level by level, and only Parent says which
+		// level that is once a tree is deeper than one.
+		assert.Equal(t, events, part.Parent, "a partition must point at the level above it")
 	})
 
 	t.Run("temporary tables are invisible", func(t *testing.T) {
@@ -302,6 +306,68 @@ func TestIndexAdvisor_EndToEndAgainstRealSchema(t *testing.T) {
 		_, still := findCandidate(after, "advisor_test", "orders", []string{"customer_id", "tenant_id"})
 		assert.False(t, still, "the index now exists; proposing it again would be a duplicate")
 	})
+}
+
+// The DDL of a partitioned table is a script rather than a statement: PostgreSQL
+// rejects CREATE INDEX CONCURRENTLY on the root, so the advisor proposes an
+// ON ONLY root index, a concurrent build per partition and an ATTACH each. Here
+// it runs the way psql sends it — statement by statement — and the duplicate
+// check answers whether the root index came out valid: an invalid one covers
+// nothing, and the candidate would come back.
+func TestIndexAdvisor_PartitionedDDLRunsAndSettlesTheCandidate(t *testing.T) {
+	t.Parallel()
+
+	pool := testinfra.IsolatePool(t)
+	p := NewTestPgxPool(pool, zap.NewNop())
+	ctx := t.Context()
+
+	vNum, err := p.getServerVersionNum(ctx, pool)
+	require.NoError(t, err)
+
+	seedIndexAdvisorSchema(ctx, t, pool)
+
+	for range 3 {
+		_, err := pool.Exec(ctx, `SELECT id FROM advisor_test.events WHERE tenant_id = 3`)
+		require.NoError(t, err)
+	}
+
+	cfg := indexadvisor.Config{MinTableRows: 100} //nolint:exhaustruct
+
+	report := buildIndexAdvisorReport(ctx, t, p, pool, vNum, cfg)
+
+	cand, ok := findCandidate(report, "advisor_test", "events", []string{"tenant_id"})
+	require.True(t, ok, "the partitioned root must yield a candidate: %+v", report.Candidates)
+
+	require.Contains(t, cand.DDL, "ON ONLY", "the root index has to be built invalid")
+	require.Contains(t, cand.DDL, "ATTACH PARTITION", "every partition has to be attached")
+
+	for _, stmt := range ddlStatements(cand.DDL) {
+		_, err := pool.Exec(ctx, stmt)
+		require.NoError(t, err, "the suggested script must run statement by statement: %s", stmt)
+	}
+
+	after := buildIndexAdvisorReport(ctx, t, p, pool, vNum, cfg)
+
+	_, still := findCandidate(after, "advisor_test", "events", []string{"tenant_id"})
+	assert.False(t, still, "the root index turns valid with the last ATTACH, so it now covers the candidate")
+}
+
+// ddlStatements splits the script the way psql sends it. CREATE INDEX
+// CONCURRENTLY cannot run inside a transaction block, and a multi-statement Exec
+// is one — so the statements have to go one at a time.
+func ddlStatements(ddl string) []string {
+	var out []string
+
+	for _, line := range strings.Split(ddl, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "--") {
+			continue
+		}
+
+		out = append(out, line)
+	}
+
+	return out
 }
 
 // testAdvisorHost names the single instance a test container is, so the host
