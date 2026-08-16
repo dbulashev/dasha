@@ -21,6 +21,7 @@ func (emptyReportRepo) GetQueriesReport(
 	context.Context,
 	string, string, string,
 	[]string,
+	*int64,
 ) ([]dto.QueryReport, error) {
 	return nil, nil
 }

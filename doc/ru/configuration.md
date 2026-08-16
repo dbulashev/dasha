@@ -16,6 +16,8 @@
 ```yaml
 debug: false
 # pg_stats_view: monitoring.pg_stats  # кастомная view, если у пользователя нет доступа к pg_catalog.pg_stats
+# view должна содержать schemaname, tablename, attname, inherited, null_frac, n_distinct, avg_width;
+# иначе Dasha пишет предупреждение и использует pg_catalog.pg_stats
 clusters:
   - name: production
     username: monitoring_user

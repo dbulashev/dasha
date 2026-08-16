@@ -18,6 +18,7 @@
 - Invalid / not ready indexes
 - Three similarity detection algorithms
 - Unused indexes (cross-host analysis), usage statistics, cache hit rate
+- **Index recommendations**: parses the statements of `pg_stat_statements` across every cluster host with a real PostgreSQL parser and proposes the btree indexes that are missing — the columns, the key order and a ready `CREATE INDEX` (for a partitioned table, the `ON ONLY` + `CONCURRENTLY` + `ATTACH PARTITION` script), the share of load behind each candidate, the write cost of the table and the statements the candidate covers; a candidate an existing index already covers as a prefix is dropped, and statements that yielded nothing are listed with the reason. Dasha never executes DDL — the recommendation is a heuristic you check and run yourself
 - **Hot indexes**: which indexes do the actual work — scheduled activity delta snapshots (reads / physical I/O) summed across every cluster host; the natural complement of the unused-index analysis
 
 ## Table Analysis

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Features
+- **Index recommendations**, a new panel on the Indexes page: reads the statements of every cluster host and proposes the btree indexes that are missing — columns, key order and a ready `CREATE INDEX`, with the statements behind each candidate. What an existing index already covers is dropped; statements that gave nothing are listed with the reason.
+
 ## v1.6.0
 
 ### Features

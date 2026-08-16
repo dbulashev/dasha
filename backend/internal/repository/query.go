@@ -178,6 +178,7 @@ func (p *PgxPool) GetQueriesReport(
 	instanceName,
 	databaseName string,
 	excludeUsers []string,
+	queryID *int64,
 ) ([]dto.QueryReport, error) {
 	pool, err := p.pgssPool(ctx, clusterName, instanceName, databaseName)
 	if err != nil {
@@ -197,7 +198,7 @@ func (p *PgxPool) GetQueriesReport(
 		excludeUsers = []string{}
 	}
 
-	ret, err := p.getQueriesReport(ctx, vNum, pool, excludeUsers)
+	ret, err := p.getQueriesReport(ctx, vNum, pool, excludeUsers, queryID)
 	if err != nil {
 		return nil, fmt.Errorf("getQueriesReport | %w", err)
 	}
@@ -492,6 +493,7 @@ func (p *PgxPool) getQueriesReport(
 	serverVersion int,
 	pool *pgxpool.Pool,
 	excludeUsers []string,
+	queryID *int64,
 ) ([]dto.QueryReport, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
@@ -501,7 +503,7 @@ func (p *PgxPool) getQueriesReport(
 		return nil, fmt.Errorf("getQueriesReport | %w", err)
 	}
 
-	rows, err := pool.Query(ctx, qStr, excludeUsers)
+	rows, err := pool.Query(ctx, qStr, excludeUsers, queryID)
 	if err != nil {
 		return nil, fmt.Errorf("getQueriesReport | %w", err)
 	}

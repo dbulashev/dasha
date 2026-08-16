@@ -36,6 +36,11 @@ package enums
 //	fks/type_mismatch
 //	hot/sample_indexes
 //	hot/sample_tables
+//	index_advisor/columns
+//	index_advisor/indexes
+//	index_advisor/relations
+//	index_advisor/workload
+//	index_advisor/writes
 //	indexes/all_scans
 //	indexes/bloat
 //	indexes/btree_on_array

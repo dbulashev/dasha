@@ -750,6 +750,68 @@ paths:
                   $ref: '#/components/schemas/FkTypeMismatch'
         '404':
           $ref: '#/components/responses/NotFound'
+  /api/indexes/advisor:
+    get:
+      operationId: getIndexesAdvisor
+      summary: Indexes the cluster's workload suggests are missing, with the statements behind each
+      description: >-
+        Parses the top of pg_stat_statements for this database on every host of the cluster,
+        extracts the columns each statement filters, joins, sorts and groups by, and proposes
+        btree indexes that no existing index already covers. Every candidate names the
+        statements it would serve, their share of execution time, and the hosts they run on.
+
+        It takes no instance: pg_stat_statements is per-host and is not replicated, so a
+        statement that never runs on the primary can be the whole read workload of a replica,
+        and a single-host answer would call a database well indexed for a load it never saw.
+        Indexes are replicated, so one CREATE INDEX on the primary serves every host — which
+        is why the candidates are ranked over the cluster's load as a whole.
+
+        The result is a heuristic and nothing here consulted the planner: planner_checked
+        is false on every candidate, and a client must not present the weight as an expected
+        speed-up. The suggested ddl is a proposal for the user to run — Dasha never executes
+        DDL. Read not_parsed and unreachable_hosts before concluding that a database needs no
+        indexes: statements that could not be analyzed are counted in the first, hosts whose
+        load was never read in the second, and an empty candidate list beside either is not a
+        clean bill of health.
+
+        Returns 404 when the index_advisor feature is disabled in the configuration, rather
+        than an empty report that would be indistinguishable from "nothing to suggest".
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Database'
+        - in: query
+          name: exclude_users
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: false
+          description: >-
+            Comma-separated usernames whose statements are left out of the analysis —
+            the same mechanism the query report uses, for the service roles whose load
+            says nothing about the application's indexing needs.
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 30
+          required: false
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+          required: false
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndexAdvisorReport'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /api/indexes/bloat:
     get:
       operationId: getIndexesBloat
@@ -1873,6 +1935,15 @@ paths:
           style: form
           explode: false
           description: Comma-separated list of usernames to exclude from the report
+        - in: query
+          name: queryid
+          schema:
+            type: string
+          description: >-
+            Include this statement in the response whatever it ranks. The report is
+            otherwise the top of each metric, so a deep link to a statement that leads
+            none of them would resolve to nothing. As a string, to preserve int64
+            precision in JavaScript.
       responses:
         '200':
           description: Success
@@ -3254,6 +3325,304 @@ components:
           type: string
         Definition:
           type: string
+
+    IndexAdvisorReport:
+      type: object
+      required:
+        - candidates
+        - not_parsed
+        - summary
+        - unreachable_hosts
+        - total
+        - duration_ms
+      properties:
+        candidates:
+          description: Proposed indexes, heaviest share of execution time first.
+          type: array
+          items:
+            $ref: '#/components/schemas/IndexAdvisorCandidate'
+        not_parsed:
+          description: >-
+            Why part of the workload produced nothing, counted per reason. One entry per
+            statement, so the counts sum to the number of statements that contributed no
+            candidate. A client must show this next to the candidate list: an empty list
+            with a large count here means the analysis fell short, not that the schema is
+            in good shape.
+          type: array
+          items:
+            $ref: '#/components/schemas/IndexAdvisorNotParsed'
+        summary:
+          $ref: '#/components/schemas/IndexAdvisorSummary'
+        unreachable_hosts:
+          description: >-
+            Hosts of the cluster whose pg_stat_statements could not be read. Their load never
+            entered the analysis, so the candidate list is incomplete by exactly that much —
+            not merely shorter. A client must show this: statements running only on an unread
+            host produce no candidate at all, and nothing else in the response says so.
+          type: array
+          items:
+            type: string
+        total:
+          description: Candidates before pagination.
+          type: integer
+        duration_ms:
+          type: integer
+          format: int64
+
+    IndexAdvisorCandidate:
+      type: object
+      required:
+        - schema
+        - table
+        - columns
+        - ddl
+        - weight_pct
+        - covered_queries
+        - table_rows
+        - writes
+        - warnings
+        - planner_checked
+      properties:
+        schema:
+          type: string
+        table:
+          description: >-
+            Table the index belongs on. For a partitioned table this is always the root,
+            whichever partition the statement named — PostgreSQL propagates the index down.
+          type: string
+        columns:
+          description: >-
+            Key columns in order: equality predicates first, then at most one range
+            predicate, then ordering columns when a range predicate did not already break
+            the ordering.
+          type: array
+          items:
+            type: string
+        ddl:
+          description: >-
+            Statement suggested to the user, or a short script when the table is
+            partitioned: PostgreSQL rejects CREATE INDEX CONCURRENTLY on a partitioned
+            table, so the script creates the root index with ON ONLY — invalid and
+            holding no lock — then builds an index on every partition concurrently and
+            attaches each one, which turns the root index valid with the last. The
+            statements go one at a time, as psql sends them: CREATE INDEX CONCURRENTLY
+            cannot run inside a transaction block. Dasha never executes DDL.
+          type: string
+        weight_pct:
+          description: >-
+            Share of the analyzed execution time spent in the statements this candidate
+            covers. It is the size of the problem, NOT a predicted gain — no planner has
+            confirmed the index would be used at all.
+          type: number
+          format: double
+        covered_queries:
+          type: array
+          items:
+            $ref: '#/components/schemas/IndexAdvisorCoveredQuery'
+        table_rows:
+          description: reltuples, summed over the partitions for a partitioned table.
+          type: integer
+          format: int64
+        writes:
+          $ref: '#/components/schemas/IndexAdvisorWrites'
+        warnings:
+          description: Reasons this candidate may be a bad idea despite ranking well.
+          type: array
+          items:
+            $ref: '#/components/schemas/IndexAdvisorWarning'
+        planner_checked:
+          description: >-
+            False throughout this step. A client must carry the caveat: the recommendation
+            is structural, derived from the statements and the catalog alone.
+          type: boolean
+
+    IndexAdvisorCoveredQuery:
+      type: object
+      required:
+        - query_ids
+        - query_id_by_host
+        - fingerprint
+        - query
+        - weight_pct
+        - calls
+        - hosts
+      properties:
+        query_ids:
+          description: >-
+            Every pg_stat_statements row folded into this unit, as strings to preserve
+            int64 precision in JavaScript. More than one means the same statement was
+            recorded several times — different roles, or an extension that keys its view
+            by plan as well.
+          type: array
+          items:
+            type: string
+        query_id_by_host:
+          description: >-
+            The queryid this statement carries on each host it was read from, keyed by
+            host. query_ids and hosts are two separate lists once the rows are folded,
+            so a client that needs a queryid a given host will actually recognize — a
+            deep link into the per-instance query report — must read it from here
+            instead of pairing the two lists by position.
+          type: object
+          additionalProperties:
+            type: string
+        fingerprint:
+          description: Hash of the statement structure, stable across constants and formatting.
+          type: string
+        query:
+          description: Normalized statement text, sanitized.
+          type: string
+        weight_pct:
+          type: number
+          format: double
+        calls:
+          type: integer
+          format: int64
+        hosts:
+          description: >-
+            Hosts of the cluster this statement was read from. A candidate whose statements
+            run only on the replicas is still worth creating — the index is replicated — but
+            the primary is not where the gain lands, and only this says so.
+          type: array
+          items:
+            type: string
+
+    IndexAdvisorWrites:
+      description: >-
+        What maintaining an index on this table would cost, from pg_stat_user_tables.
+        Scans are the other side of the trade: they are what an index would serve.
+      type: object
+      required:
+        - inserted
+        - updated
+        - deleted
+        - seq_scans
+        - idx_scans
+      properties:
+        inserted:
+          type: integer
+          format: int64
+        updated:
+          type: integer
+          format: int64
+        deleted:
+          type: integer
+          format: int64
+        seq_scans:
+          type: integer
+          format: int64
+        idx_scans:
+          type: integer
+          format: int64
+
+    IndexAdvisorWarning:
+      type: object
+      required:
+        - code
+      properties:
+        code:
+          description: >-
+            write_heavy — the analyzed workload writes the table far more often than it
+            runs the statements the index would serve, so the index may cost more than it
+            saves. low_weight — the covered statements are a marginal share of
+            the load. partition_root — the table is partitioned: the root index cannot be
+            built with CONCURRENTLY, so the DDL goes through ON ONLY plus a concurrent
+            build and an ATTACH per partition, and every partition pays for the index;
+            params.partitions counts them. stats_missing — no pg_stats
+            row for the columns, so their order is the order the statement wrote them.
+            wide_index — the statements asked for more columns than the key may hold.
+            matview — the relation is a materialized view: a plain REFRESH rewrites it
+            and rebuilds every index on it, while REFRESH CONCURRENTLY requires at least
+            one unique index to exist.
+          type: string
+          enum:
+            - write_heavy
+            - low_weight
+            - partition_root
+            - stats_missing
+            - wide_index
+            - matview
+        params:
+          description: >-
+            Numbers the wording of this code quotes, keyed by name. Which keys are present
+            depends on code; a client reads only the ones its phrasing needs.
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+
+    IndexAdvisorNotParsed:
+      type: object
+      required:
+        - reason_code
+        - count
+      properties:
+        reason_code:
+          description: >-
+            Codes from reading the workload — truncated (clipped by
+            track_activity_query_size), too_long, parse_error, unsupported_syntax,
+            insufficient_privilege, empty — and from analyzing it: unknown_relation,
+            system_relation (a system catalog or a monitoring view, not an application
+            table; a monitoring tool's own polling lands here and is not a gap in the
+            analysis), ambiguous_name (an unqualified name several schemas answer to;
+            refused rather than guessed, since pg_stat_statements records no search_path),
+            ambiguous_column,
+            unknown_column, unsupported_type, table_too_small, already_indexed (an existing
+            index already serves the statement — the healthy outcome), or_predicate,
+            expression_predicate, no_indexable_predicate. Prose lives in the client.
+          type: string
+        count:
+          type: integer
+
+    IndexAdvisorSummary:
+      type: object
+      required:
+        - pgss_available
+        - analyzed_queries
+        - collapsed_groups
+        - not_parsed_count
+        - covered_time_pct
+        - catalog_truncated
+        - hosts
+        - hosts_without_stats
+      properties:
+        pgss_available:
+          description: >-
+            False when pg_stat_statements could not be read on any host of the cluster, which
+            is a different statement from having read it and found nothing.
+          type: boolean
+        analyzed_queries:
+          description: Statements read and parsed.
+          type: integer
+        collapsed_groups:
+          description: Units of work left after folding statements by fingerprint.
+          type: integer
+        not_parsed_count:
+          type: integer
+        covered_time_pct:
+          description: >-
+            Share of analyzed execution time the candidates touch. Statements covered twice
+            count once — this is how much of the load is in scope, not how much would be saved.
+          type: number
+          format: double
+        catalog_truncated:
+          description: >-
+            The catalog was read only in part, so a candidate may duplicate an index that
+            was never read.
+          type: boolean
+        hosts:
+          description: Hosts of the cluster whose workload this report was built from.
+          type: array
+          items:
+            type: string
+        hosts_without_stats:
+          description: >-
+            Hosts that answered but carry no readable pg_stat_statements. They are neither
+            analyzed nor unreachable: the instance is up and whatever it runs is invisible
+            here, which on a replica serving the reads is the opposite of idle.
+          type: array
+          items:
+            type: string
 
     IndexBloat:
       type: object

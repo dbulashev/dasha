@@ -20,8 +20,10 @@ import (
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/hotobjects"
+	"github.com/dbulashev/dasha/internal/indexadvisor"
 	"github.com/dbulashev/dasha/internal/pkg/mapstruct"
 	"github.com/dbulashev/dasha/internal/schemalint"
+	"github.com/dbulashev/dasha/internal/sqlparse"
 )
 
 const (
@@ -111,6 +113,13 @@ type Repository interface {
 	GetMaintenanceAutovacuumSummary(ctx context.Context, clusterName, instanceName, databaseName string) (*dto.MaintenanceAutovacuumSummary, error)
 	GetHotSampleTables(ctx context.Context, clusterName, instanceName, databaseName string, schema, object *string) ([]hotobjects.AnchorRow, *time.Time, bool, error)
 	GetHotSampleIndexes(ctx context.Context, clusterName, instanceName, databaseName string, schema, object *string) ([]hotobjects.AnchorRow, *time.Time, bool, error)
+	// GetIndexAdvisorReport takes no instance: pg_stat_statements is per-host and
+	// not replicated, so the candidates are built from the whole cluster's load.
+	GetIndexAdvisorReport(
+		ctx context.Context,
+		clusterName, databaseName string,
+		excludeUsers []string,
+	) (indexadvisor.Report, error)
 	GetSchemaLintReport(ctx context.Context, clusterName, instanceName, databaseName string) (schemalint.Report, error)
 	GetSchemaLintSummary(ctx context.Context, clusterName, instanceName string) ([]schemalint.DatabaseSummary, error)
 	GetSequenceHeadroom(ctx context.Context, clusterName, instanceName, databaseName string) (float64, bool, error)
@@ -118,7 +127,7 @@ type Repository interface {
 	GetQueriesRunning(ctx context.Context, clusterName, instanceName, databaseName string, minDuration int, queryFilter *string, queryFilterMode string, username *string) ([]dto.QueryRunning, error)
 	GetQueriesTop10ByTime(ctx context.Context, clusterName, instanceName, databaseName, scope string) ([]dto.QueryTop10ByTime, error)
 	GetQueriesTop10ByWal(ctx context.Context, clusterName, instanceName, databaseName, scope string) ([]dto.QueryTop10ByWal, error)
-	GetQueriesReport(ctx context.Context, clusterName, instanceName, databaseName string, excludeUsers []string) ([]dto.QueryReport, error)
+	GetQueriesReport(ctx context.Context, clusterName, instanceName, databaseName string, excludeUsers []string, queryID *int64) ([]dto.QueryReport, error)
 	GetQueriesTop10Chart(ctx context.Context, clusterName, instanceName, databaseName, scope string) ([]dto.QueryTop10ChartItem, error)
 	PgssDatabase(ctx context.Context, clusterName, instanceName, databaseName string) (string, error)
 	GetQueryStatsStatus(ctx context.Context, clusterName, instanceName, databaseName string) (dto.QueryStatsStatus, error)
@@ -174,6 +183,9 @@ type PgxPool struct {
 	poolConfig            config.PoolConfig
 	schemaLintConfig      schemalint.Config
 	sequenceHeadroomCache sync.Map // cluster/instance/database → sequenceHeadroomEntry
+	indexAdvisorConfig    indexadvisor.Config
+	sqlParserOnce         sync.Once
+	sqlParser             sqlparse.Parser // built on first use, see indexAdvisorParser
 }
 
 func NewRepositoryPgxPool(
@@ -181,6 +193,7 @@ func NewRepositoryPgxPool(
 	pgStatsView, pgssResetFunc string,
 	poolCfg config.PoolConfig,
 	schemaLintCfg schemalint.Config,
+	indexAdvisorCfg indexadvisor.Config,
 	logger *zap.Logger,
 ) Repository {
 	return &PgxPool{
@@ -192,6 +205,7 @@ func NewRepositoryPgxPool(
 		pgssResetFuncConfig: pgssResetFunc,
 		poolConfig:          poolCfg,
 		schemaLintConfig:    schemaLintCfg,
+		indexAdvisorConfig:  indexAdvisorCfg,
 	}
 }
 
@@ -753,15 +767,19 @@ func (p *PgxPool) resolvePgStatsView(ctx context.Context, pool *pgxpool.Pool) st
 		return defaultPgStatsView
 	}
 
-	// Check if the view is accessible
+	// Check if the view is accessible, and that it carries every column the
+	// templates read from it — a view short of one would not fail here but in the
+	// middle of a page, where the fallback is no longer available.
 	checkCtx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	_, err := pool.Exec(checkCtx, "SELECT 1 FROM "+configured+" LIMIT 0")
+	_, err := pool.Exec(checkCtx,
+		"SELECT schemaname, tablename, attname, inherited, null_frac, n_distinct, avg_width FROM "+
+			configured+" LIMIT 0")
 
 	var result string
 	if err != nil {
-		p.logger.Warn("pg_stats_view not accessible, falling back to pg_catalog.pg_stats",
+		p.logger.Warn("pg_stats_view not usable, falling back to pg_catalog.pg_stats",
 			zap.String("pg_stats_view", configured),
 			zap.Error(err))
 

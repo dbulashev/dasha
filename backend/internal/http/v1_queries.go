@@ -253,6 +253,21 @@ func (s *Handlers) GetQueriesTop10Chart(
 	return ret, nil
 }
 
+// parseQueryID: an unparseable id is treated as absent, since it only widens the
+// report and a 400 would break a link for no gain.
+func parseQueryID(raw *string) *int64 {
+	if raw == nil || *raw == "" {
+		return nil
+	}
+
+	id, err := strconv.ParseInt(*raw, 10, 64)
+	if err != nil {
+		return nil
+	}
+
+	return &id
+}
+
 func (s *Handlers) GetQueriesReport(
 	ctx context.Context,
 	req serverhttp.GetQueriesReportRequestObject,
@@ -265,7 +280,7 @@ func (s *Handlers) GetQueriesReport(
 	database := deref(req.Params.Database)
 
 	queries, err := s.repo.GetQueriesReport(ctx, req.Params.ClusterName, req.Params.Instance,
-		database, excludeUsers)
+		database, excludeUsers, parseQueryID(req.Params.Queryid))
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.GetQueriesReport404Response{}, nil
 	}
@@ -342,7 +357,7 @@ func (s *Handlers) GetQueriesCompare(
 		}
 
 		reportsB, err = s.repo.GetQueriesReport(ctx, req.Params.ClusterName, req.Params.Instance,
-			req.Params.Database, excludeUsers)
+			req.Params.Database, excludeUsers, nil)
 		if errors.Is(err, repository.ErrNotFound) {
 			return serverhttp.GetQueriesCompare404Response{}, nil
 		}
