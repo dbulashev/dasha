@@ -35,7 +35,7 @@ func (p *PgxPool) GetTablesTopKBySize(
 
 	pgStatsView := p.resolvePgStatsView(ctx, pool)
 
-	ret, err := p.getTablesTopKBySize(ctx, vNum, pool, limit, pgStatsView)
+	ret, err := p.getTablesTopKBySize(ctx, vNum, pool, limit, pgStatsView.Name)
 	if err != nil {
 		return nil, fmt.Errorf("getTablesTopKBySize | %w", err)
 	}

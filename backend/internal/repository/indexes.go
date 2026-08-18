@@ -35,7 +35,7 @@ func (p *PgxPool) GetIndexesBloat(
 
 	pgStatsView := p.resolvePgStatsView(ctx, pool)
 
-	ret, err := p.getIndexesBloat(ctx, vNum, pool, limit, offset, pgStatsView)
+	ret, err := p.getIndexesBloat(ctx, vNum, pool, limit, offset, pgStatsView.Name)
 	if err != nil {
 		return nil, fmt.Errorf("getIndexesBloat | %w", err)
 	}

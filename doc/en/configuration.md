@@ -16,8 +16,10 @@ Create `dasha.yaml` (searched in `.`, `$HOME/.dasha/`, `/etc/dasha/`):
 ```yaml
 debug: false
 # pg_stats_view: monitoring.pg_stats  # custom view when user lacks pg_catalog.pg_stats access
-# the view must expose schemaname, tablename, attname, inherited, null_frac, n_distinct, avg_width;
-# otherwise Dasha logs a warning and falls back to pg_catalog.pg_stats
+# the view must expose schemaname, tablename, attname, null_frac, n_distinct, avg_width;
+# otherwise Dasha logs a warning and falls back to pg_catalog.pg_stats.
+# inherited is optional: without it index recommendations still work, they just cannot
+# prefer the inherited statistics of a partitioned table
 clusters:
   - name: production
     username: monitoring_user

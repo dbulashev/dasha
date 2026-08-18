@@ -44,7 +44,7 @@ func (p *PgxPool) GetTablesDescribe(
 
 	pgStatsView := p.resolvePgStatsView(ctx, pool)
 
-	columns, err := p.getTablesDescribeColumns(ctx, vNum, pool, schemaName, tableName, pgStatsView)
+	columns, err := p.getTablesDescribeColumns(ctx, vNum, pool, schemaName, tableName, pgStatsView.Name)
 	if err != nil {
 		return nil, fmt.Errorf("getTablesDescribeColumns | %w", err)
 	}
@@ -589,7 +589,7 @@ func (p *PgxPool) GetTablesDescribeRowEstimate(
 	pgStatsView := p.resolvePgStatsView(ctx, pool)
 
 	qStr, err := query.Get(vNum, enums.QueryTablesDescribeRowEstimate,
-		struct{ PgStatsView string }{PgStatsView: pgStatsView})
+		struct{ PgStatsView string }{PgStatsView: pgStatsView.Name})
 	if err != nil {
 		return nil, fmt.Errorf("query.Get | %w", err)
 	}

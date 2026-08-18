@@ -404,8 +404,11 @@ func (p *PgxPool) readIndexAdvisorSchema(
 			scan: func(row rowScanner) (indexadvisor.RelKey, error) { return scanIndexAdvisorRelation(row, cat) },
 		},
 		{
-			q:    enums.QueryIndexAdvisorColumns,
-			data: struct{ PgStatsView string }{PgStatsView: pgStatsView},
+			q: enums.QueryIndexAdvisorColumns,
+			data: struct {
+				PgStatsView         string
+				PgStatsHasInherited bool
+			}{PgStatsView: pgStatsView.Name, PgStatsHasInherited: pgStatsView.HasInherited},
 			scan: func(row rowScanner) (indexadvisor.RelKey, error) { return scanIndexAdvisorColumn(row, cat) },
 		},
 		{
