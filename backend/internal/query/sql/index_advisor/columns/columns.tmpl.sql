@@ -45,7 +45,9 @@ FROM cols
         WHERE s.schemaname = cols.schema
           AND s.tablename = cols.name
           AND s.attname = cols.column_name
+{{- if .PgStatsHasInherited }}
         ORDER BY s.inherited DESC
+{{- end }}
         LIMIT 1
     ) st ON true
 ORDER BY cols.schema, cols.name, cols.attnum

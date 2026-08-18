@@ -747,12 +747,23 @@ func (p *PgxPool) pgstattupleTemplateData(ctx context.Context, pool *pgxpool.Poo
 	}
 }
 
+// pgStatsViewInfo is the resolved pg_stats view: the name the templates read from,
+// and whether it exposes `inherited`. A custom view need not carry that column —
+// only the index advisor reads it — so its absence degrades one query instead of
+// costing the whole view.
+type pgStatsViewInfo struct {
+	Name         string
+	HasInherited bool
+}
+
+var defaultPgStatsViewInfo = pgStatsViewInfo{Name: defaultPgStatsView, HasInherited: true}
+
 // resolvePgStatsView checks whether the globally configured pg_stats view is accessible
-// on the given pool and returns the view name to use in SQL templates.
+// on the given pool and returns the view to use in SQL templates.
 // Results are cached per pool.
-func (p *PgxPool) resolvePgStatsView(ctx context.Context, pool *pgxpool.Pool) string {
+func (p *PgxPool) resolvePgStatsView(ctx context.Context, pool *pgxpool.Pool) pgStatsViewInfo {
 	if v, ok := p.resolvedPgStatsView.Load(pool); ok {
-		return v.(string)
+		return v.(pgStatsViewInfo)
 	}
 
 	configured := p.pgStatsViewConfig
@@ -762,33 +773,35 @@ func (p *PgxPool) resolvePgStatsView(ctx context.Context, pool *pgxpool.Pool) st
 				zap.String("pg_stats_view", configured))
 		}
 
-		p.resolvedPgStatsView.Store(pool, defaultPgStatsView)
+		p.resolvedPgStatsView.Store(pool, defaultPgStatsViewInfo)
 
-		return defaultPgStatsView
+		return defaultPgStatsViewInfo
 	}
 
-	// Check if the view is accessible, and that it carries every column the
-	// templates read from it — a view short of one would not fail here but in the
+	// Check if the view is accessible, and that it carries the columns every
+	// template reads from it — a view short of one would not fail here but in the
 	// middle of a page, where the fallback is no longer available.
 	checkCtx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	_, err := pool.Exec(checkCtx,
-		"SELECT schemaname, tablename, attname, inherited, null_frac, n_distinct, avg_width FROM "+
-			configured+" LIMIT 0")
+	result := defaultPgStatsViewInfo
 
-	var result string
+	_, err := pool.Exec(checkCtx,
+		"SELECT schemaname, tablename, attname, null_frac, n_distinct, avg_width FROM "+
+			configured+" LIMIT 0")
 	if err != nil {
 		p.logger.Warn("pg_stats_view not usable, falling back to pg_catalog.pg_stats",
 			zap.String("pg_stats_view", configured),
 			zap.Error(err))
-
-		result = defaultPgStatsView
 	} else {
-		p.logger.Debug("using custom pg_stats_view",
-			zap.String("pg_stats_view", configured))
+		// `inherited` is probed apart from the required set: the index advisor uses
+		// it to prefer the inherited row of a partitioned table, and does without it.
+		_, errInherited := pool.Exec(checkCtx, "SELECT inherited FROM "+configured+" LIMIT 0")
+		result = pgStatsViewInfo{Name: configured, HasInherited: errInherited == nil}
 
-		result = configured
+		p.logger.Debug("using custom pg_stats_view",
+			zap.String("pg_stats_view", configured),
+			zap.Bool("has_inherited", result.HasInherited))
 	}
 
 	p.resolvedPgStatsView.Store(pool, result)

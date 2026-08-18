@@ -16,8 +16,10 @@
 ```yaml
 debug: false
 # pg_stats_view: monitoring.pg_stats  # кастомная view, если у пользователя нет доступа к pg_catalog.pg_stats
-# view должна содержать schemaname, tablename, attname, inherited, null_frac, n_distinct, avg_width;
-# иначе Dasha пишет предупреждение и использует pg_catalog.pg_stats
+# view должна содержать schemaname, tablename, attname, null_frac, n_distinct, avg_width;
+# иначе Dasha пишет предупреждение и использует pg_catalog.pg_stats.
+# inherited необязателен: без него рекомендации по индексам работают, но не смогут
+# предпочесть наследуемую статистику партиционированной таблицы
 clusters:
   - name: production
     username: monitoring_user
