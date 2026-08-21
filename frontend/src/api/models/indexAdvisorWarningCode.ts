@@ -6,7 +6,7 @@
  */
 
 /**
- * write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. partition_root — the table is partitioned: the root index cannot be built with CONCURRENTLY, so the DDL goes through ON ONLY plus a concurrent build and an ATTACH per partition, and every partition pays for the index; params.partitions counts them. stats_missing — no pg_stats row for the columns, so their order is the order the statement wrote them. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires at least one unique index to exist.
+ * write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. partition_root — the table is partitioned: the root index cannot be built with CONCURRENTLY, so the DDL goes through ON ONLY plus a concurrent build and an ATTACH per partition, and every partition pays for the index; params.partitions counts them. stats_missing — no pg_stats row for some of the columns, so their order is the order the statement wrote them and an IS NULL filter may have been left out of the index. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires at least one unique index to exist. similar_index — an existing index already holds every column of the candidate, in another order or behind other columns; it does not serve the statements, but names lists it so the reader can decide between a new index and a rewritten one. many_indexes — the table already carries params.indexes indexes, so one more is unlikely to be the best trade available.
  */
 export type IndexAdvisorWarningCode =
   (typeof IndexAdvisorWarningCode)[keyof typeof IndexAdvisorWarningCode]
@@ -18,4 +18,6 @@ export const IndexAdvisorWarningCode = {
   stats_missing: 'stats_missing',
   wide_index: 'wide_index',
   matview: 'matview',
+  similar_index: 'similar_index',
+  many_indexes: 'many_indexes',
 } as const

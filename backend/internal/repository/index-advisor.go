@@ -512,14 +512,19 @@ func scanIndexAdvisorColumn(row rowScanner, cat *indexadvisor.Catalog) (indexadv
 
 func scanIndexAdvisorIndex(row rowScanner, cat *indexadvisor.Catalog) (indexadvisor.RelKey, error) {
 	var (
-		key indexadvisor.RelKey
-		idx indexadvisor.Index
+		key       indexadvisor.RelKey
+		idx       indexadvisor.Index
+		predicate *string
 	)
 
 	if err := row.Scan(&key.Schema, &key.Name, &idx.Name, &idx.Method,
 		&idx.Unique, &idx.Primary, &idx.Valid, &idx.Partial, &idx.Expression,
-		&idx.Columns); err != nil {
+		&idx.Columns, &predicate); err != nil {
 		return indexadvisor.RelKey{}, err
+	}
+
+	if predicate != nil {
+		idx.NullPredicate = indexadvisor.NullPredicateColumns(*predicate)
 	}
 
 	cat.AddIndex(key, idx)

@@ -72,6 +72,7 @@ func indexAdvisorCandidate(c indexadvisor.Candidate) serverhttp.IndexAdvisorCand
 		Schema:         c.Schema,
 		Table:          c.Table,
 		Columns:        c.Columns,
+		Predicate:      c.Predicate,
 		Ddl:            c.DDL,
 		WeightPct:      c.WeightPct,
 		CoveredQueries: mapstruct.SliceMap(c.Covered, indexAdvisorCovered),
@@ -116,12 +117,17 @@ func indexAdvisorWarning(w indexadvisor.Warning) serverhttp.IndexAdvisorWarning 
 	out := serverhttp.IndexAdvisorWarning{
 		Code:   serverhttp.IndexAdvisorWarningCode(w.Code),
 		Params: nil,
+		Names:  nil,
 	}
 
 	// params is optional, and a warning that quotes no numbers leaves it absent
 	// rather than serializing an empty object.
 	if len(w.Params) > 0 {
 		out.Params = shortcut.Ptr(w.Params)
+	}
+
+	if len(w.Names) > 0 {
+		out.Names = shortcut.Ptr(w.Names)
 	}
 
 	return out

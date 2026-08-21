@@ -64,8 +64,10 @@ const (
 // Defines values for IndexAdvisorWarningCode.
 const (
 	LowWeight     IndexAdvisorWarningCode = "low_weight"
+	ManyIndexes   IndexAdvisorWarningCode = "many_indexes"
 	Matview       IndexAdvisorWarningCode = "matview"
 	PartitionRoot IndexAdvisorWarningCode = "partition_root"
+	SimilarIndex  IndexAdvisorWarningCode = "similar_index"
 	StatsMissing  IndexAdvisorWarningCode = "stats_missing"
 	WideIndex     IndexAdvisorWarningCode = "wide_index"
 	WriteHeavy    IndexAdvisorWarningCode = "write_heavy"
@@ -774,8 +776,11 @@ type IndexAdvisorCandidate struct {
 	Ddl string `json:"ddl"`
 
 	// PlannerChecked False throughout this step. A client must carry the caveat: the recommendation is structural, derived from the statements and the catalog alone.
-	PlannerChecked bool   `json:"planner_checked"`
-	Schema         string `json:"schema"`
+	PlannerChecked bool `json:"planner_checked"`
+
+	// Predicate WHERE clause of a partial candidate, already quoted and ready to read, empty for a plain index. An IS NULL predicate lands here rather than in columns: its selectivity is null_frac, so on a soft-delete column it excludes almost nothing and belongs in neither, while on a rare flag it makes a small index over exactly the rows the statements read.
+	Predicate string `json:"predicate"`
+	Schema    string `json:"schema"`
 
 	// Table Table the index belongs on. For a partitioned table this is always the root, whichever partition the statement named — PostgreSQL propagates the index down.
 	Table string `json:"table"`
@@ -866,14 +871,17 @@ type IndexAdvisorSummary struct {
 
 // IndexAdvisorWarning defines model for IndexAdvisorWarning.
 type IndexAdvisorWarning struct {
-	// Code write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. partition_root — the table is partitioned: the root index cannot be built with CONCURRENTLY, so the DDL goes through ON ONLY plus a concurrent build and an ATTACH per partition, and every partition pays for the index; params.partitions counts them. stats_missing — no pg_stats row for the columns, so their order is the order the statement wrote them. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires at least one unique index to exist.
+	// Code write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. partition_root — the table is partitioned: the root index cannot be built with CONCURRENTLY, so the DDL goes through ON ONLY plus a concurrent build and an ATTACH per partition, and every partition pays for the index; params.partitions counts them. stats_missing — no pg_stats row for some of the columns, so their order is the order the statement wrote them and an IS NULL filter may have been left out of the index. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires at least one unique index to exist. similar_index — an existing index already holds every column of the candidate, in another order or behind other columns; it does not serve the statements, but names lists it so the reader can decide between a new index and a rewritten one. many_indexes — the table already carries params.indexes indexes, so one more is unlikely to be the best trade available.
 	Code IndexAdvisorWarningCode `json:"code"`
+
+	// Names Objects the wording of this code quotes — existing index names, for the codes that point at one. Absent when the code names nothing.
+	Names *[]string `json:"names,omitempty"`
 
 	// Params Numbers the wording of this code quotes, keyed by name. Which keys are present depends on code; a client reads only the ones its phrasing needs.
 	Params *map[string]float64 `json:"params,omitempty"`
 }
 
-// IndexAdvisorWarningCode write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. partition_root — the table is partitioned: the root index cannot be built with CONCURRENTLY, so the DDL goes through ON ONLY plus a concurrent build and an ATTACH per partition, and every partition pays for the index; params.partitions counts them. stats_missing — no pg_stats row for the columns, so their order is the order the statement wrote them. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires at least one unique index to exist.
+// IndexAdvisorWarningCode write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. partition_root — the table is partitioned: the root index cannot be built with CONCURRENTLY, so the DDL goes through ON ONLY plus a concurrent build and an ATTACH per partition, and every partition pays for the index; params.partitions counts them. stats_missing — no pg_stats row for some of the columns, so their order is the order the statement wrote them and an IS NULL filter may have been left out of the index. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires at least one unique index to exist. similar_index — an existing index already holds every column of the candidate, in another order or behind other columns; it does not serve the statements, but names lists it so the reader can decide between a new index and a rewritten one. many_indexes — the table already carries params.indexes indexes, so one more is unlikely to be the best trade available.
 type IndexAdvisorWarningCode string
 
 // IndexAdvisorWrites What maintaining an index on this table would cost, from pg_stat_user_tables. Scans are the other side of the trade: they are what an index would serve.

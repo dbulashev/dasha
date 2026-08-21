@@ -104,8 +104,10 @@ watch(
 )
 
 // One table can carry several candidates, so the columns belong in the key.
+// JSON.stringify rather than join: an identifier may itself hold a comma, and two
+// rows sharing a key would share expansion state.
 function rowKey(item: IndexAdvisorCandidate) {
-  return `${item.schema}.${item.table}(${item.columns.join(',')})`
+  return JSON.stringify([item.schema, item.table, item.columns, item.predicate])
 }
 
 const headers = computed(() => [
@@ -123,6 +125,8 @@ const WARNING_COLOR: Record<string, string> = {
   stats_missing: 'warning',
   wide_index: 'warning',
   matview: 'info',
+  similar_index: 'warning',
+  many_indexes: 'warning',
 }
 
 // Every code gets every parameter — vue-i18n drops the ones its phrasing omits.
@@ -139,6 +143,8 @@ function warningText(w: IndexAdvisorWarning): string {
     columns: p.columns ?? 0,
     requested: p.requested ?? 0,
     partitions: p.partitions ?? 0,
+    indexes: p.indexes ?? 0,
+    names: (w.names ?? []).join(', '),
   })
 }
 
@@ -331,6 +337,7 @@ function showSql(q: IndexAdvisorCoveredQuery) {
         </template>
         <template #item.columns="{ item }">
           <span class="text-mono">({{ item.columns.join(', ') }})</span>
+          <span v-if="item.predicate" class="text-mono text-medium-emphasis"> WHERE {{ item.predicate }}</span>
         </template>
         <template #item.weight_pct="{ item }">
           <div class="d-flex align-center ga-2">

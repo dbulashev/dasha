@@ -101,8 +101,8 @@ func (s *ddlScope) reserve(rel RelKey, columns []string) RelKey {
 // takes the way round the manual prescribes: an ON ONLY index on the root, which
 // is created invalid and locks nothing, then a concurrent build on every
 // partition and an ATTACH each. The root index turns valid with the last one.
-func ddlFor(key RelKey, columns []string, s *ddlScope) string {
-	cols := columnList(columns)
+func ddlFor(key RelKey, columns, predicate []string, s *ddlScope) string {
+	cols := columnList(columns) + whereClause(predicate)
 
 	if s.kinds[key] != partitionedKind {
 		return "CREATE INDEX CONCURRENTLY ON " + key.quoted() + " " + cols + ";"
@@ -115,6 +115,23 @@ func ddlFor(key RelKey, columns []string, s *ddlScope) string {
 	}
 
 	return partitionDDL(key, columns, cols, s)
+}
+
+func whereClause(predicate []string) string {
+	if len(predicate) == 0 {
+		return ""
+	}
+
+	return " WHERE " + predicateSQL(predicate)
+}
+
+func predicateSQL(predicate []string) string {
+	tests := make([]string, 0, len(predicate))
+	for _, c := range predicate {
+		tests = append(tests, quoteIdent(c)+" IS NULL")
+	}
+
+	return strings.Join(tests, " AND ")
 }
 
 func partitionDDL(root RelKey, columns []string, cols string, s *ddlScope) string {

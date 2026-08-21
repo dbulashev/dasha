@@ -511,7 +511,7 @@ func (b *builder) walkNullTest(t *pgast.NullTest, sc *scope) {
 	}
 
 	if column, ok := columnOf(t.GetArg()); ok {
-		b.addUsage(sc, column, RoleEquality, false, 0)
+		b.addUsage(sc, column, RoleIsNull, false, 0)
 	}
 }
 

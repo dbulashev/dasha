@@ -3,6 +3,7 @@ package indexadvisor
 import (
 	"maps"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -68,14 +69,29 @@ func workloadOf(entries ...WorkloadEntry) Workload {
 }
 
 func col(name, dataType string, nDistinct float64) Column {
+	return colNull(name, dataType, nDistinct, 0)
+}
+
+func colNull(name, dataType string, nDistinct, nullFrac float64) Column {
 	return Column{
 		Name:           name,
 		DataType:       dataType,
 		BtreeIndexable: dataType != "json",
 		StatsKnown:     true,
 		NDistinct:      nDistinct,
-		NullFrac:       0,
+		NullFrac:       nullFrac,
 	}
+}
+
+// nullableOrders adds a soft-delete column (almost every row NULL) and a queue one.
+func nullableOrders() (Catalog, RelKey) {
+	cat := ordersCatalog()
+	orders := RelKey{Schema: testSchema, Name: "orders"}
+
+	cat.AddColumn(orders, colNull("deleted_at", "timestamp with time zone", 5000, 0.97))
+	cat.AddColumn(orders, colNull("processed_at", "timestamp with time zone", 5000, 0.02))
+
+	return cat, orders
 }
 
 // ordersCatalog is one busy table with a primary key and nothing else indexed.
@@ -140,7 +156,7 @@ func warningOf(c Candidate, code string) Warning {
 		}
 	}
 
-	return Warning{Code: "", Params: nil}
+	return Warning{Code: "", Params: nil, Names: nil}
 }
 
 func TestBuildOrdersEqualityColumnsBySelectivity(t *testing.T) {
@@ -211,6 +227,441 @@ func TestBuildSkipsWhatAnExistingIndexAlreadyCovers(t *testing.T) {
 	if got := reasonCount(rep, ReasonAlreadyIndexed); got != 1 {
 		t.Errorf("already_indexed = %d, want 1 — an empty list must say why", got)
 	}
+}
+
+// Equality on a unique key resolves the statement; the columns past it index nothing.
+func TestBuildSkipsWhatAUniqueIndexAlreadyResolves(t *testing.T) {
+	orders := RelKey{Schema: testSchema, Name: "orders"}
+
+	cases := []struct {
+		name  string
+		setup func(cat *Catalog)
+		sql   string
+	}{
+		{
+			name:  "soft delete past the primary key",
+			setup: func(cat *Catalog) { cat.AddColumn(orders, col("deleted_at", "timestamp with time zone", 500)) },
+			sql:   `UPDATE orders SET status = $1 WHERE id = $2 AND deleted_at IS NULL`,
+		},
+		{
+			name: "multi-column unique matched in any order",
+			setup: func(cat *Catalog) {
+				cat.AddIndex(orders, Index{
+					Name: "orders_tenant_customer_key", Method: "btree", Unique: true, Primary: false,
+					Valid: true, Partial: false, Expression: false,
+					Columns: []string{"tenant_id", "customer_id"},
+				})
+			},
+			sql: `SELECT * FROM orders WHERE customer_id = $1 AND tenant_id = $2 AND status = $3`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cat := ordersCatalog()
+			tc.setup(&cat)
+
+			rep := Build(workloadOf(entry(t, 1, tc.sql, 1000)), cat, Config{}) //nolint:exhaustruct
+
+			if len(rep.Candidates) != 0 {
+				t.Errorf("a unique index already reduces this to one row: %+v", rep.Candidates)
+			}
+
+			if got := reasonCount(rep, ReasonAlreadyIndexed); got != 1 {
+				t.Errorf("already_indexed = %d, want 1", got)
+			}
+		})
+	}
+}
+
+// Only part of the unique key is matched, so the scan still returns many rows.
+func TestBuildKeepsCandidateWhenUniqueKeyIsPartlyMatched(t *testing.T) {
+	cat := ordersCatalog()
+
+	cat.AddIndex(RelKey{Schema: testSchema, Name: "orders"}, Index{
+		Name: "orders_tenant_customer_key", Method: "btree", Unique: true, Primary: false,
+		Valid: true, Partial: false, Expression: false,
+		Columns: []string{"tenant_id", "customer_id"},
+	})
+
+	w := workloadOf(entry(t, 1, `SELECT * FROM orders WHERE tenant_id = $1 AND status = $2`, 1000))
+
+	cand := onlyCandidate(t, Build(w, cat, Config{})) //nolint:exhaustruct
+
+	want := []string{"tenant_id", "status"}
+	if !slices.Equal(cand.Columns, want) {
+		t.Errorf("columns = %v, want %v", cand.Columns, want)
+	}
+}
+
+// The prefix merge must not carry a statement resolved by the primary key into a
+// wider key: that is how a column no statement asked for ends up in the DDL.
+func TestBuildDoesNotMergePrimaryKeyLookupsIntoAWiderKey(t *testing.T) {
+	cat := ordersCatalog()
+	cat.AddColumn(RelKey{Schema: testSchema, Name: "orders"}, col("deleted_at", "timestamp with time zone", 500))
+
+	w := workloadOf(
+		entry(t, 1, `UPDATE orders SET status = $1 WHERE id = $2 AND deleted_at IS NULL`, 400),
+		entry(t, 2, `SELECT * FROM orders WHERE id = $1 AND deleted_at IS NULL AND tenant_id = $2`, 600),
+	)
+
+	rep := Build(w, cat, Config{}) //nolint:exhaustruct
+
+	if len(rep.Candidates) != 0 {
+		t.Errorf("both statements are point lookups on the primary key: %+v", rep.Candidates)
+	}
+}
+
+// Same one-row argument as a unique index, from statistics, on a table that has
+// no index enforcing it yet.
+func TestBuildStopsTheKeyAtAUniqueColumn(t *testing.T) {
+	sessions := RelKey{Schema: testSchema, Name: "sessions"}
+
+	cases := []struct {
+		name string
+		sql  string
+		want []string
+	}{
+		{
+			name: "equality on a unique column ends the key",
+			sql:  `SELECT * FROM sessions WHERE token = $1 AND tenant_id = $2`,
+			want: []string{"token"},
+		},
+		{
+			name: "a unique column that is only sorted on stays in the key",
+			sql:  `SELECT * FROM sessions WHERE tenant_id = $1 ORDER BY token`,
+			want: []string{"tenant_id", "token"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cat := NewCatalog()
+			cat.AddRelation(Relation{RelKey: sessions, Kind: "r", Rows: testRows, Pages: 500, Root: RelKey{}, Parent: RelKey{}})
+			cat.AddColumn(sessions, col("token", "text", -1))
+			cat.AddColumn(sessions, col("tenant_id", "integer", 50))
+
+			cand := onlyCandidate(t, Build(workloadOf(entry(t, 1, tc.sql, 1000)), cat, Config{})) //nolint:exhaustruct
+			if !slices.Equal(cand.Columns, tc.want) {
+				t.Errorf("columns = %v, want %v", cand.Columns, tc.want)
+			}
+		})
+	}
+}
+
+// On a rare flag IS NULL belongs in the predicate of a partial index, not in the key.
+func TestBuildTurnsIsNullIntoAPartialPredicate(t *testing.T) {
+	cat, _ := nullableOrders()
+
+	w := workloadOf(entry(t, 1,
+		`SELECT * FROM orders WHERE processed_at IS NULL AND tenant_id = $1`, 1000))
+
+	cand := onlyCandidate(t, Build(w, cat, Config{})) //nolint:exhaustruct
+
+	if !slices.Equal(cand.Columns, []string{"tenant_id"}) {
+		t.Errorf("columns = %v, want [tenant_id] — the IS NULL column is not part of the key", cand.Columns)
+	}
+
+	if cand.Predicate != `"processed_at" IS NULL` {
+		t.Errorf("Predicate = %q, want the IS NULL test", cand.Predicate)
+	}
+
+	want := `CREATE INDEX CONCURRENTLY ON "public"."orders" ("tenant_id") WHERE "processed_at" IS NULL;`
+	if cand.DDL != want {
+		t.Errorf("DDL = %q, want %q", cand.DDL, want)
+	}
+}
+
+// Almost every row passes deleted_at IS NULL, so neither the key nor a predicate wants it.
+func TestBuildKeepsASoftDeleteColumnOutOfTheIndex(t *testing.T) {
+	cat, _ := nullableOrders()
+
+	w := workloadOf(entry(t, 1,
+		`SELECT * FROM orders WHERE deleted_at IS NULL AND status = $1`, 1000))
+
+	cand := onlyCandidate(t, Build(w, cat, Config{})) //nolint:exhaustruct
+
+	if !slices.Equal(cand.Columns, []string{"status"}) {
+		t.Errorf("columns = %v, want [status] — 97%% of rows pass the IS NULL test", cand.Columns)
+	}
+
+	if cand.Predicate != "" {
+		t.Errorf("Predicate = %q, want none: a partial index over 97%% of the table is the whole table", cand.Predicate)
+	}
+}
+
+// Nothing to scan by leaves nothing to propose.
+func TestBuildDropsAStatementWithOnlyANullPredicate(t *testing.T) {
+	cat, _ := nullableOrders()
+
+	rep := Build(workloadOf(entry(t, 1,
+		`SELECT count(*) FROM orders WHERE processed_at IS NULL`, 1000)), cat, Config{}) //nolint:exhaustruct
+
+	if len(rep.Candidates) != 0 {
+		t.Errorf("no key column here: %+v", rep.Candidates)
+	}
+
+	if got := reasonCount(rep, ReasonNoIndexablePredicate); got != 1 {
+		t.Errorf("no_indexable_predicate = %d, want 1", got)
+	}
+}
+
+// An IS NULL that narrows nothing must not become a partial predicate: the index
+// would hold no row the planner can reach, or would pin a key column to one value.
+func TestBuildKeepsAnAntiJoinOutOfThePredicate(t *testing.T) {
+	cases := []struct {
+		name   string
+		column Column
+		sql    string
+	}{
+		{
+			name:   "the tested column holds no NULL",
+			column: col("order_id", "bigint", 5000),
+			sql:    `SELECT o.id FROM orders o LEFT JOIN shipments s ON s.order_id = o.id WHERE s.id IS NULL`,
+		},
+		{
+			name:   "the statement joins by the column it tests",
+			column: colNull("order_id", "bigint", 5000, 0.1),
+			sql:    `SELECT o.id FROM orders o LEFT JOIN shipments s ON s.order_id = o.id WHERE s.order_id IS NULL`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cat := ordersCatalog()
+			shipments := RelKey{Schema: testSchema, Name: "shipments"}
+
+			cat.AddRelation(Relation{RelKey: shipments, Kind: "r", Rows: testRows, Pages: 500, Root: RelKey{}, Parent: RelKey{}})
+			cat.AddColumn(shipments, col("id", "bigint", -1))
+			cat.AddColumn(shipments, tc.column)
+
+			cand := onlyCandidate(t, Build(workloadOf(entry(t, 1, tc.sql, 1000)), cat, Config{})) //nolint:exhaustruct
+
+			if cand.Table != "shipments" || !slices.Equal(cand.Columns, []string{"order_id"}) {
+				t.Errorf("candidate = %s%v, want shipments [order_id]", cand.Table, cand.Columns)
+			}
+
+			if cand.Predicate != "" {
+				t.Errorf("Predicate = %q, want none — an index over no rows is not an index", cand.Predicate)
+			}
+		})
+	}
+}
+
+// A predicate dropped for want of statistics leaves a wider index than asked for,
+// and the candidate has to admit it.
+func TestBuildWarnsWhenTheNullPredicateHasNoStats(t *testing.T) {
+	cat, orders := nullableOrders()
+
+	for i, c := range cat.Columns[orders] {
+		if c.Name == "processed_at" {
+			cat.Columns[orders][i].StatsKnown = false
+		}
+	}
+
+	w := workloadOf(entry(t, 1,
+		`SELECT * FROM orders WHERE processed_at IS NULL AND tenant_id = $1`, 1000))
+
+	cand := onlyCandidate(t, Build(w, cat, Config{})) //nolint:exhaustruct
+
+	if cand.Predicate != "" {
+		t.Errorf("Predicate = %q, want none: null_frac is unknown", cand.Predicate)
+	}
+
+	if !hasWarning(cand, WarnStatsMissing) {
+		t.Error("a predicate dropped for want of statistics must carry stats_missing")
+	}
+}
+
+func TestBuildComparesPartialCandidatesAgainstExistingIndexes(t *testing.T) {
+	const sql = `SELECT * FROM orders WHERE processed_at IS NULL AND tenant_id = $1`
+
+	cases := []struct {
+		name    string
+		index   Index
+		covered bool
+	}{
+		{
+			name: "a partial index with the same predicate covers",
+			index: Index{
+				Name: "orders_pending_idx", Method: "btree", Valid: true, Partial: true,
+				NullPredicate: []string{"processed_at"}, Columns: []string{"tenant_id"},
+				Unique: false, Primary: false, Expression: false,
+			},
+			covered: true,
+		},
+		{
+			name: "a plain index covers, holding every row the candidate would",
+			index: Index{
+				Name: "orders_tenant_idx", Method: "btree", Valid: true, Partial: false,
+				NullPredicate: nil, Columns: []string{"tenant_id"},
+				Unique: false, Primary: false, Expression: false,
+			},
+			covered: true,
+		},
+		{
+			name: "a partial index on another predicate does not",
+			index: Index{
+				Name: "orders_undeleted_idx", Method: "btree", Valid: true, Partial: true,
+				NullPredicate: []string{"deleted_at"}, Columns: []string{"tenant_id"},
+				Unique: false, Primary: false, Expression: false,
+			},
+			covered: false,
+		},
+		{
+			name: "a partial index whose predicate could not be read does not",
+			index: Index{
+				Name: "orders_open_idx", Method: "btree", Valid: true, Partial: true,
+				NullPredicate: nil, Columns: []string{"tenant_id"},
+				Unique: false, Primary: false, Expression: false,
+			},
+			covered: false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cat, orders := nullableOrders()
+			cat.AddIndex(orders, tc.index)
+
+			rep := Build(workloadOf(entry(t, 1, sql, 1000)), cat, Config{}) //nolint:exhaustruct
+
+			if tc.covered {
+				if len(rep.Candidates) != 0 {
+					t.Errorf("%s: %+v", tc.name, rep.Candidates)
+				}
+
+				if got := reasonCount(rep, ReasonAlreadyIndexed); got != 1 {
+					t.Errorf("already_indexed = %d, want 1", got)
+				}
+
+				return
+			}
+
+			cand := onlyCandidate(t, rep)
+			if cand.Predicate != `"processed_at" IS NULL` {
+				t.Errorf("Predicate = %q, want the candidate to survive intact", cand.Predicate)
+			}
+		})
+	}
+}
+
+// Different predicates index different rows: the prefix merge must leave both.
+func TestBuildKeepsPartialAndPlainCandidatesApart(t *testing.T) {
+	cat, _ := nullableOrders()
+
+	w := workloadOf(
+		entry(t, 1, `SELECT * FROM orders WHERE tenant_id = $1 AND processed_at IS NULL`, 400),
+		entry(t, 2, `SELECT * FROM orders WHERE tenant_id = $1 AND created_at > $2`, 600),
+	)
+
+	rep := Build(w, cat, Config{}) //nolint:exhaustruct
+
+	if len(rep.Candidates) != 2 {
+		t.Fatalf("want a partial and a plain candidate, got %d: %+v", len(rep.Candidates), rep.Candidates)
+	}
+
+	var partial, plain bool
+
+	for _, c := range rep.Candidates {
+		switch c.Predicate {
+		case `"processed_at" IS NULL`:
+			partial = slices.Equal(c.Columns, []string{"tenant_id"})
+		case "":
+			plain = slices.Equal(c.Columns, []string{"tenant_id", "created_at"})
+		}
+	}
+
+	if !partial || !plain {
+		t.Errorf("partial=%v plain=%v, want both shapes: %+v", partial, plain, rep.Candidates)
+	}
+}
+
+// The columns are there but behind another one, so the index serves nothing — worth
+// saying, since a rebuild may beat an addition.
+func TestBuildWarnsAboutIndexesHoldingTheSameColumns(t *testing.T) {
+	cat := ordersCatalog()
+
+	cat.AddIndex(RelKey{Schema: testSchema, Name: "orders"}, Index{
+		Name: "orders_status_created_tenant_idx", Method: "btree", Valid: true, Partial: false,
+		Columns: []string{"status", "created_at", "tenant_id"},
+		Unique:  false, Primary: false, Expression: false, NullPredicate: nil,
+	})
+
+	w := workloadOf(entry(t, 1, `SELECT * FROM orders WHERE tenant_id = $1 AND status = $2`, 1000))
+
+	cand := onlyCandidate(t, Build(w, cat, Config{})) //nolint:exhaustruct
+
+	warning := warningOf(cand, WarnSimilarIndex)
+	if !slices.Equal(warning.Names, []string{"orders_status_created_tenant_idx"}) {
+		t.Errorf("similar_index names = %v, want the existing index: %+v", warning.Names, cand.Warnings)
+	}
+}
+
+func TestBuildWarnsWhenTheTableIsAlreadyFullOfIndexes(t *testing.T) {
+	cat := ordersCatalog()
+	orders := RelKey{Schema: testSchema, Name: "orders"}
+
+	for i := range manyIndexesThreshold - 1 {
+		cat.AddIndex(orders, Index{
+			Name: "orders_payload_idx" + strconv.Itoa(i), Method: "btree", Valid: true,
+			Columns: []string{"payload"}, Partial: false,
+			Unique: false, Primary: false, Expression: false, NullPredicate: nil,
+		})
+	}
+
+	w := workloadOf(entry(t, 1, `SELECT * FROM orders WHERE tenant_id = $1`, 1000))
+
+	cand := onlyCandidate(t, Build(w, cat, Config{})) //nolint:exhaustruct
+
+	if got := warningOf(cand, WarnManyIndexes).Params[ParamIndexes]; got != manyIndexesThreshold {
+		t.Errorf("many_indexes counts %v indexes, want %d: %+v", got, manyIndexesThreshold, cand.Warnings)
+	}
+}
+
+// Equality on every column of the prefix reaches the same keys in any order, so a
+// permuted second index is a duplicate that only costs writes.
+func TestBuildComparesTheEqualityPrefixAsASet(t *testing.T) {
+	orders := RelKey{Schema: testSchema, Name: "orders"}
+
+	existing := Index{
+		Name: "orders_tenant_customer_idx", Method: "btree", Valid: true, Partial: false,
+		Columns: []string{"tenant_id", "customer_id"},
+		Unique:  false, Primary: false, Expression: false, NullPredicate: nil,
+	}
+
+	t.Run("the same columns in the other order are the same index", func(t *testing.T) {
+		cat := ordersCatalog()
+		cat.AddIndex(orders, existing)
+
+		// customer_id is the more selective column, so the key comes out reversed.
+		rep := Build(workloadOf(entry(t, 1,
+			`SELECT * FROM orders WHERE customer_id IN ($1, $2) AND tenant_id = $3`, 1000)),
+			cat, Config{}) //nolint:exhaustruct
+
+		if len(rep.Candidates) != 0 {
+			t.Errorf("equality on both columns is served either way round: %+v", rep.Candidates)
+		}
+
+		if got := reasonCount(rep, ReasonAlreadyIndexed); got != 1 {
+			t.Errorf("already_indexed = %d, want 1", got)
+		}
+	})
+
+	// An index ordered by customer_id cannot return rows ordered by created_at.
+	t.Run("the tail is still compared in order", func(t *testing.T) {
+		cat := ordersCatalog()
+		cat.AddIndex(orders, existing)
+
+		cand := onlyCandidate(t, Build(workloadOf(entry(t, 1,
+			`SELECT * FROM orders WHERE tenant_id = $1 ORDER BY created_at`, 1000)),
+			cat, Config{})) //nolint:exhaustruct
+
+		want := []string{"tenant_id", "created_at"}
+		if !slices.Equal(cand.Columns, want) {
+			t.Errorf("columns = %v, want %v", cand.Columns, want)
+		}
+	})
 }
 
 // A partial index answers a narrower question, so it cannot stand in for a plain
@@ -458,11 +909,11 @@ func TestBuildResolvesBareColumnsThroughTheCatalog(t *testing.T) {
 	customers := RelKey{Schema: testSchema, Name: "customers"}
 
 	cat.AddRelation(Relation{RelKey: customers, Kind: "r", Rows: testRows, Pages: 100, Root: RelKey{}})
-	cat.AddColumn(customers, col("id", "integer", -1))
+	cat.AddColumn(customers, col("account_id", "integer", 5000))
 	cat.AddColumn(customers, col("country", "text", 200))
 
 	w := workloadOf(entry(t, 1,
-		`SELECT o.id FROM orders o JOIN customers c ON c.id = o.customer_id WHERE country = $1`, 1000))
+		`SELECT o.id FROM orders o JOIN customers c ON c.account_id = o.customer_id WHERE country = $1`, 1000))
 
 	rep := Build(w, cat, Config{}) //nolint:exhaustruct
 

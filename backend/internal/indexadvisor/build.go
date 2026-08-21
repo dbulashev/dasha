@@ -22,6 +22,12 @@ const (
 	writeHeavyMinCalls = 1000
 	// btreeMethod is the only access method this step proposes or compares against.
 	btreeMethod = "btree"
+	// uniqueNDistinct: pg_stats writes -1 for a unique column (negative is a fraction).
+	uniqueNDistinct = -1.0
+	// nullPredicateMaxFrac is where IS NULL stops excluding anything worth an index.
+	nullPredicateMaxFrac = 0.5
+	// manyIndexesThreshold is when a table's index list is itself the finding.
+	manyIndexesThreshold = 10
 	// partitionedKind is the relkind of a partitioned table.
 	partitionedKind = "p"
 	// matviewKind is the relkind of a materialized view.
@@ -238,8 +244,10 @@ func sumCounts(counts map[string]int) int {
 // draft is a candidate under construction: the same columns on the same table
 // may be reached from several statements, and each adds its weight.
 type draft struct {
-	key          RelKey
-	columns      []string
+	key     RelKey
+	columns []string
+	// predicate are the IS NULL columns of a partial candidate, sorted.
+	predicate    []string
 	covered      map[string]CoveredQuery
 	order        []string // fingerprints in insertion order, for a stable output
 	statsMissing bool
@@ -470,22 +478,41 @@ func (b *builder) buildDraft(key RelKey, usages []sqlparse.Usage) (*draft, strin
 	}
 
 	cols := b.columns(key)
-	eq, rng, ordering := splitRoles(usages)
+	r := splitRoles(usages)
 
-	columns, statsMissing := b.orderEquality(eq, cols, rel.Rows)
+	// A column the statement also scans by stays in the key, where IS NULL is an
+	// indexable condition of its own; as a predicate it would pin that key column
+	// to one value. An anti-join writes both roles: it joins by a column and then
+	// tests the same column for NULL.
+	nulls := slices.DeleteFunc(slices.Clone(r.nulls), func(name string) bool {
+		return slices.Contains(r.equality, name) ||
+			slices.Contains(r.ranges, name) ||
+			slices.Contains(r.ordering, name)
+	})
+
+	predicate, predicateStats := selectivePredicate(nulls, cols)
+
+	if b.servedByUniqueIndex(key, r.equality, predicate) {
+		return nil, ReasonAlreadyIndexed
+	}
+
+	columns, statsMissing := b.orderEquality(r.equality, cols, rel.Rows)
+	statsMissing = statsMissing || predicateStats
 
 	// One range column at most, and everything after it in the key is unordered
 	// for the scan — which is why the ordering columns are only worth adding when
 	// there is no range predicate at all.
-	if len(rng) > 0 {
-		columns = appendUnique(columns, rng[0])
+	if len(r.ranges) > 0 {
+		columns = appendUnique(columns, r.ranges[0])
 	} else {
-		for _, name := range ordering {
+		for _, name := range r.ordering {
 			columns = appendUnique(columns, name)
 		}
 	}
 
 	columns, unindexable, unknown := filterIndexable(columns, cols)
+
+	// An IS NULL-only statement lands here: no key column, no candidate.
 	if len(columns) == 0 {
 		switch {
 		case unindexable:
@@ -497,18 +524,21 @@ func (b *builder) buildDraft(key RelKey, usages []sqlparse.Usage) (*draft, strin
 		}
 	}
 
+	columns = truncateAtUnique(columns, r.equality, cols)
+
 	requested := len(columns)
 	if len(columns) > b.cfg.MaxIndexColumns {
 		columns = columns[:b.cfg.MaxIndexColumns]
 	}
 
-	if b.coveredByExisting(key, columns) {
+	if b.coveredByExisting(key, columns, r.equality, predicate) {
 		return nil, ReasonAlreadyIndexed
 	}
 
 	return &draft{
 		key:          key,
 		columns:      columns,
+		predicate:    predicate,
 		covered:      make(map[string]CoveredQuery),
 		statsMissing: statsMissing,
 		wideIndex:    requested > len(columns),
@@ -516,12 +546,47 @@ func (b *builder) buildDraft(key RelKey, usages []sqlparse.Usage) (*draft, strin
 	}, ""
 }
 
-// splitRoles turns the column usages of one statement into three ordered, deduped
+// selectivePredicate keeps the IS NULL columns whose null_frac says the predicate
+// excludes rows, and reports whether one was dropped for want of statistics.
+//
+// null_frac = 0 is dropped as well: the table holds no NULL there — the column is
+// NOT NULL, or the test came from an outer join's null-extension rather than from
+// the table — and a partial index over no rows is one the planner cannot use.
+func selectivePredicate(nulls []string, cols map[string]Column) (predicate []string, statsMissing bool) {
+	for _, name := range nulls {
+		c, ok := cols[name]
+		if !ok {
+			continue
+		}
+
+		switch {
+		case !c.StatsKnown:
+			statsMissing = true
+		case c.NullFrac > 0 && c.NullFrac <= nullPredicateMaxFrac:
+			predicate = append(predicate, name)
+		}
+	}
+
+	sort.Strings(predicate)
+
+	return predicate, statsMissing
+}
+
+// roles is the column usages of one statement, grouped by what an index could do.
+type roles struct {
+	equality []string
+	ranges   []string
+	ordering []string
+	nulls    []string
+}
+
+// splitRoles turns the column usages of one statement into ordered, deduped
 // lists. Ordering columns are dropped when their directions disagree: this step
 // only proposes all-ascending keys, and such a key serves ORDER BY only when every
 // column sorts the same way (forwards or, scanned backwards, all reversed).
-func splitRoles(usages []sqlparse.Usage) (equality, ranges, ordering []string) {
+func splitRoles(usages []sqlparse.Usage) roles {
 	var (
+		r        roles
 		orderBy  []sqlparse.Usage
 		groupBy  []sqlparse.Usage
 		mixedDir bool
@@ -530,9 +595,11 @@ func splitRoles(usages []sqlparse.Usage) (equality, ranges, ordering []string) {
 	for _, u := range usages {
 		switch u.Role {
 		case sqlparse.RoleEquality, sqlparse.RoleJoin:
-			equality = appendUnique(equality, u.Column)
+			r.equality = appendUnique(r.equality, u.Column)
+		case sqlparse.RoleIsNull:
+			r.nulls = appendUnique(r.nulls, u.Column)
 		case sqlparse.RoleRange:
-			ranges = appendUnique(ranges, u.Column)
+			r.ranges = appendUnique(r.ranges, u.Column)
 		case sqlparse.RoleOrder:
 			orderBy = append(orderBy, u)
 		case sqlparse.RoleGroup:
@@ -556,14 +623,14 @@ func splitRoles(usages []sqlparse.Usage) (equality, ranges, ordering []string) {
 	}
 
 	if mixedDir {
-		return equality, ranges, nil
+		return r
 	}
 
 	for _, u := range sortSpec {
-		ordering = appendUnique(ordering, u.Column)
+		r.ordering = appendUnique(r.ordering, u.Column)
 	}
 
-	return equality, ranges, ordering
+	return r
 }
 
 // orderEquality puts the most selective column first, which is what makes the
@@ -637,22 +704,15 @@ func filterIndexable(columns []string, cols map[string]Column) (kept []string, u
 	return kept, unindexable, unknown
 }
 
-// coveredByExisting reports whether an index already answers the candidate.
-//
-// Partial and expression indexes never count: the first answers a narrower
-// question, the second a different one. An invalid index does not count either —
-// it serves no query, so a candidate repeating it is not a duplicate but the fix.
-func (b *builder) coveredByExisting(key RelKey, columns []string) bool {
+// coveredByExisting reports whether an index already answers the candidate. An
+// invalid one does not count: repeating it is the fix, not a duplicate.
+func (b *builder) coveredByExisting(key RelKey, columns, equality, predicate []string) bool {
 	for _, idx := range b.cat.Indexes[key] {
-		if idx.Method != btreeMethod || !idx.Valid || idx.Partial || idx.Expression {
+		if idx.Method != btreeMethod || !idx.Valid || idx.Expression {
 			continue
 		}
 
-		if len(idx.Columns) < len(columns) {
-			continue
-		}
-
-		if slices.Equal(idx.Columns[:len(columns)], columns) {
+		if holdsSameRows(idx, predicate) && coversKey(idx.Columns, columns, equality) {
 			return true
 		}
 	}
@@ -660,10 +720,105 @@ func (b *builder) coveredByExisting(key RelKey, columns []string) bool {
 	return false
 }
 
+// coversKey compares a candidate's key with an index's: the equality prefix as a
+// set (the descent costs the same in any order), the tail position by position.
+func coversKey(idxColumns, columns, equality []string) bool {
+	if len(idxColumns) < len(columns) {
+		return false
+	}
+
+	n := 0
+	for n < len(columns) && slices.Contains(equality, columns[n]) {
+		n++
+	}
+
+	if !sameColumns(idxColumns[:n], columns[:n]) {
+		return false
+	}
+
+	return slices.Equal(idxColumns[n:len(columns)], columns[n:])
+}
+
+func sameColumns(a, b []string) bool { return len(a) == len(b) && containsAll(a, b) }
+
+// holdsSameRows: a partial index serves the candidate only with the same predicate.
+func holdsSameRows(idx Index, predicate []string) bool {
+	if !idx.Partial {
+		return true
+	}
+
+	return len(idx.NullPredicate) > 0 && slices.Equal(idx.NullPredicate, predicate)
+}
+
+// servedByUniqueIndex: equality on the whole key of a unique index already resolves
+// the statement, so a wider candidate only moves a filter from the heap into it.
+func (b *builder) servedByUniqueIndex(key RelKey, equality, predicate []string) bool {
+	for _, idx := range b.cat.Indexes[key] {
+		if !idx.Unique || idx.Method != btreeMethod || !idx.Valid || idx.Expression {
+			continue
+		}
+
+		if !holdsSameRows(idx, predicate) {
+			continue
+		}
+
+		if len(idx.Columns) > 0 && containsAll(equality, idx.Columns) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// similarIndexes names indexes holding every column of the candidate behind other
+// columns: they do not serve it, but a rebuild may beat another index.
+func (b *builder) similarIndexes(key RelKey, columns []string) []string {
+	var out []string
+
+	for _, idx := range b.cat.Indexes[key] {
+		if idx.Method != btreeMethod || !idx.Valid || idx.Expression {
+			continue
+		}
+
+		if containsAll(idx.Columns, columns) {
+			out = append(out, idx.Name)
+		}
+	}
+
+	sort.Strings(out)
+
+	return out
+}
+
+func containsAll(haystack, names []string) bool {
+	for _, name := range names {
+		if !slices.Contains(haystack, name) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// truncateAtUnique cuts the key after an equality column the statistics call unique.
+func truncateAtUnique(columns, equality []string, cols map[string]Column) []string {
+	for i, name := range columns {
+		if !slices.Contains(equality, name) {
+			continue
+		}
+
+		if c, ok := cols[name]; ok && c.StatsKnown && c.NDistinct <= uniqueNDistinct {
+			return columns[:i+1]
+		}
+	}
+
+	return columns
+}
+
 // attach records the statement against its candidate, merging into an identical
 // one from another statement.
 func (b *builder) attach(d *draft, e WorkloadEntry) {
-	target := b.find(d.key, d.columns)
+	target := b.find(d.key, d.columns, d.predicate)
 	if target == nil {
 		b.drafts[d.key] = append(b.drafts[d.key], d)
 		target = d
@@ -688,9 +843,9 @@ func (b *builder) attach(d *draft, e WorkloadEntry) {
 	target.order = append(target.order, e.Fingerprint)
 }
 
-func (b *builder) find(key RelKey, columns []string) *draft {
+func (b *builder) find(key RelKey, columns, predicate []string) *draft {
 	for _, d := range b.drafts[key] {
-		if slices.Equal(d.columns, columns) {
+		if slices.Equal(d.columns, columns) && slices.Equal(d.predicate, predicate) {
 			return d
 		}
 	}
@@ -728,7 +883,11 @@ func (b *builder) candidates() []Candidate {
 			return out[i].Table < out[j].Table
 		}
 
-		return slices.Compare(out[i].Columns, out[j].Columns) < 0
+		if cmp := slices.Compare(out[i].Columns, out[j].Columns); cmp != 0 {
+			return cmp < 0
+		}
+
+		return out[i].Predicate < out[j].Predicate
 	})
 
 	if len(out) > b.cfg.MaxCandidates {
@@ -753,7 +912,8 @@ func mergePrefixes(drafts []*draft) []*draft {
 		merged := false
 
 		for _, k := range kept {
-			if !isPrefix(d.columns, k.columns) {
+			// Different predicates index different rows: not one index.
+			if !slices.Equal(d.predicate, k.predicate) || !isPrefix(d.columns, k.columns) {
 				continue
 			}
 
@@ -816,12 +976,13 @@ func (b *builder) candidate(key RelKey, d *draft) Candidate {
 		Schema:         key.Schema,
 		Table:          key.Name,
 		Columns:        d.columns,
-		DDL:            ddlFor(key, d.columns, b.ddl),
+		Predicate:      predicateSQL(d.predicate),
+		DDL:            ddlFor(key, d.columns, d.predicate, b.ddl),
 		WeightPct:      weight,
 		Covered:        covered,
 		TableRows:      rel.Rows,
 		Writes:         writes,
-		Warnings:       warningsFor(d, rel.Kind, writes, weight, t, partitions),
+		Warnings:       b.warningsFor(d, rel.Kind, writes, weight, t, partitions),
 		PlannerChecked: false,
 	}
 }
@@ -832,39 +993,53 @@ type trade struct {
 	readCalls  int64
 }
 
-func warningsFor(d *draft, kind string, w Writes, weight float64, t trade, partitions int) []Warning {
+func (b *builder) warningsFor(
+	d *draft, kind string, w Writes, weight float64, t trade, partitions int,
+) []Warning {
 	var out []Warning
 
+	if similar := b.similarIndexes(d.key, d.columns); len(similar) > 0 {
+		out = append(out, Warning{Code: WarnSimilarIndex, Params: nil, Names: similar})
+	}
+
+	if n := len(b.cat.Indexes[d.key]); n >= manyIndexesThreshold {
+		out = append(out, Warning{
+			Code:   WarnManyIndexes,
+			Params: map[string]float64{ParamIndexes: float64(n)},
+			Names:  nil,
+		})
+	}
+
 	if d.statsMissing {
-		out = append(out, Warning{Code: WarnStatsMissing, Params: nil})
+		out = append(out, Warning{Code: WarnStatsMissing, Params: nil, Names: nil})
 	}
 
 	if d.wideIndex {
-		out = append(out, Warning{Code: WarnWideIndex, Params: map[string]float64{
+		out = append(out, Warning{Code: WarnWideIndex, Names: nil, Params: map[string]float64{
 			ParamColumns:   float64(len(d.columns)),
 			ParamRequested: float64(d.requested),
 		}})
 	}
 
 	if kind == partitionedKind {
-		out = append(out, Warning{Code: WarnPartitionRoot, Params: map[string]float64{
+		out = append(out, Warning{Code: WarnPartitionRoot, Names: nil, Params: map[string]float64{
 			ParamPartitions: float64(partitions),
 		}})
 	}
 
 	if kind == matviewKind {
-		out = append(out, Warning{Code: WarnMatview, Params: nil})
+		out = append(out, Warning{Code: WarnMatview, Params: nil, Names: nil})
 	}
 
 	if writeHeavy(t) {
-		out = append(out, Warning{Code: WarnWriteHeavy, Params: map[string]float64{
+		out = append(out, Warning{Code: WarnWriteHeavy, Names: nil, Params: map[string]float64{
 			ParamWriteCalls: float64(t.writeCalls),
 			ParamReadCalls:  float64(t.readCalls),
 		}})
 	}
 
 	if weight < lowWeightPct {
-		out = append(out, Warning{Code: WarnLowWeight, Params: map[string]float64{
+		out = append(out, Warning{Code: WarnLowWeight, Names: nil, Params: map[string]float64{
 			ParamWeightPct: weight,
 		}})
 	}
