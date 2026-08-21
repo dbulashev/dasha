@@ -39,7 +39,7 @@ func TestDDLAttachesEveryPartitionConcurrently(t *testing.T) {
 		partRel("events_02", "r", root, root),
 	)
 
-	ddl := ddlFor(root, []string{"tenant_id"}, newDDLScope(cat))
+	ddl := ddlFor(root, []string{"tenant_id"}, nil, newDDLScope(cat))
 
 	// The root index is created invalid and turns valid with the last ATTACH:
 	// PostgreSQL rejects CREATE INDEX CONCURRENTLY on a partitioned table, and a
@@ -70,7 +70,7 @@ func TestDDLAttachesLevelByLevel(t *testing.T) {
 		partRel("events_2026_01", "r", mid, root),
 	)
 
-	ddl := ddlFor(root, []string{"tenant_id"}, newDDLScope(cat))
+	ddl := ddlFor(root, []string{"tenant_id"}, nil, newDDLScope(cat))
 
 	want := []string{
 		`CREATE INDEX "events_2026_tenant_id_idx" ON ONLY "public"."events_2026" ("tenant_id");`,
@@ -99,7 +99,7 @@ func TestDDLStopsListingPastTheCap(t *testing.T) {
 		rels = append(rels, partRel("events_"+strconv.Itoa(i), "r", root, root))
 	}
 
-	ddl := ddlFor(root, []string{"tenant_id"}, newDDLScope(catalogOf(rels...)))
+	ddl := ddlFor(root, []string{"tenant_id"}, nil, newDDLScope(catalogOf(rels...)))
 
 	if got := strings.Count(ddl, "CREATE INDEX CONCURRENTLY"); got != ddlMaxPartitions {
 		t.Errorf("%d concurrent builds listed, want the cap of %d", got, ddlMaxPartitions)
@@ -124,7 +124,7 @@ func TestDDLNamesAnIndexNothingElseAnswersTo(t *testing.T) {
 		Valid: true, Partial: true, Expression: false, Columns: []string{"tenant_id"},
 	})
 
-	ddl := ddlFor(root, []string{"tenant_id"}, newDDLScope(cat))
+	ddl := ddlFor(root, []string{"tenant_id"}, nil, newDDLScope(cat))
 
 	if !strings.Contains(ddl, `CREATE INDEX "events_tenant_id_idx1" ON ONLY`) {
 		t.Errorf("DDL reuses a name the schema already holds:\n%s", ddl)
@@ -135,7 +135,7 @@ func TestDDLNamesAnIndexNothingElseAnswersTo(t *testing.T) {
 // nothing and leaves no index invalid.
 func TestDDLOfAnEmptyPartitionTree(t *testing.T) {
 	root := relKey("events")
-	ddl := ddlFor(root, []string{"tenant_id"}, newDDLScope(catalogOf(partRel("events", "p", RelKey{}, RelKey{}))))
+	ddl := ddlFor(root, []string{"tenant_id"}, nil, newDDLScope(catalogOf(partRel("events", "p", RelKey{}, RelKey{}))))
 
 	if ddl != `CREATE INDEX ON "public"."events" ("tenant_id");` {
 		t.Errorf("DDL = %q, want the plain form", ddl)
@@ -157,5 +157,33 @@ func TestReserveKeepsNamesInsideNamedatalen(t *testing.T) {
 	// ATTACH point at the wrong index.
 	if first.Name == second.Name {
 		t.Errorf("both reservations returned %q", first.Name)
+	}
+}
+
+// Every statement of the script carries the predicate: ATTACH needs it to match.
+func TestDDLCarriesThePredicate(t *testing.T) {
+	plain := ddlFor(relKey("orders"), []string{"tenant_id"}, []string{"processed_at"},
+		newDDLScope(catalogOf(partRel("orders", "r", RelKey{}, RelKey{}))))
+
+	want := `CREATE INDEX CONCURRENTLY ON "public"."orders" ("tenant_id") WHERE "processed_at" IS NULL;`
+	if plain != want {
+		t.Errorf("DDL = %q, want %q", plain, want)
+	}
+
+	root := relKey("events")
+	cat := catalogOf(
+		partRel("events", "p", RelKey{}, RelKey{}),
+		partRel("events_01", "r", root, root),
+	)
+
+	script := ddlFor(root, []string{"tenant_id"}, []string{"closed_at", "processed_at"}, newDDLScope(cat))
+
+	for _, stmt := range []string{
+		`ON ONLY "public"."events" ("tenant_id") WHERE "closed_at" IS NULL AND "processed_at" IS NULL;`,
+		`ON "public"."events_01" ("tenant_id") WHERE "closed_at" IS NULL AND "processed_at" IS NULL;`,
+	} {
+		if !strings.Contains(script, stmt) {
+			t.Errorf("DDL missing %q:\n%s", stmt, script)
+		}
 	}
 }

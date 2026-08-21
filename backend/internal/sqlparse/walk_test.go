@@ -59,11 +59,11 @@ func TestDescribeCorpus(t *testing.T) {
 			usages: []string{"orders.amount range", "orders.created_at range"},
 		},
 		{
-			name:   "is null counts as equality, is not null does not",
+			name:   "is null gets its own role, is not null is dropped",
 			sql:    `SELECT * FROM orders WHERE deleted_at IS NULL AND tenant_id = $1 AND shipped_at IS NOT NULL`,
 			kind:   KindSelect,
 			tables: []string{"orders"},
-			usages: []string{"orders.deleted_at equality", "orders.tenant_id equality"},
+			usages: []string{"orders.deleted_at is_null", "orders.tenant_id equality"},
 		},
 		{
 			name:   "join on resolves both aliases",

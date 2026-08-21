@@ -38,6 +38,8 @@ const (
 	RoleJoin     Role = "join"
 	RoleOrder    Role = "order"
 	RoleGroup    Role = "group"
+	// RoleIsNull is apart from equality: its selectivity is null_frac, not 1/n_distinct.
+	RoleIsNull Role = "is_null"
 )
 
 // Ref is a table as the statement wrote it, before catalog resolution. Schema is

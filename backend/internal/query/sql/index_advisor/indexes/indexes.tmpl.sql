@@ -13,7 +13,8 @@ SELECT n.nspname                    AS schema,
                JOIN pg_catalog.pg_attribute a
                    ON a.attrelid = i.indrelid AND a.attnum = k.attnum
            WHERE k.ord <= i.indnkeyatts
-       ), ARRAY[]::text[])          AS key_columns
+       ), ARRAY[]::text[])          AS key_columns,
+       pg_catalog.pg_get_expr(i.indpred, i.indrelid) AS predicate
 FROM pg_catalog.pg_index i
     JOIN pg_catalog.pg_class c ON c.oid = i.indrelid
     JOIN pg_catalog.pg_class ic ON ic.oid = i.indexrelid

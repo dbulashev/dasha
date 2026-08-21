@@ -3,7 +3,7 @@
 ## Unreleased
 
 ### Features
-- **Index recommendations**, a new panel on the Indexes page: reads the statements of every cluster host and proposes the btree indexes that are missing — columns, key order and a ready `CREATE INDEX`, with the statements behind each candidate. What an existing index already covers is dropped; statements that gave nothing are listed with the reason.
+- **Index recommendations**, a new panel on the Indexes page: reads the statements of every cluster host and proposes the btree indexes that are missing — columns, key order and a ready `CREATE INDEX`, with the statements behind each candidate. What the existing indexes already serve is dropped, whatever order their columns sit in; statements that gave nothing are listed with the reason. An `IS NULL` filter on a column where NULLs are rare becomes the condition of a partial index instead of a key column. A candidate says when the table already holds its columns in another index, naming it, and when the table is carrying ten indexes already.
 
 ## v1.6.0
 

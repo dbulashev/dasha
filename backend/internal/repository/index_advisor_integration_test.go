@@ -35,13 +35,16 @@ func seedIndexAdvisorSchema(ctx context.Context, t *testing.T, pool *pgxpool.Poo
 		     customer_id int NOT NULL,
 		     status     varchar(32) NOT NULL,
 		     payload    json,
+		     processed_at timestamptz,
 		     created_at timestamptz NOT NULL DEFAULT now()
 		 )`,
 		`CREATE INDEX orders_tenant_created_idx ON advisor_test.orders (tenant_id, created_at)`,
 		`CREATE INDEX orders_open_idx ON advisor_test.orders (status) WHERE status = 'open'`,
+		`CREATE INDEX orders_pending_idx ON advisor_test.orders (tenant_id) WHERE processed_at IS NULL`,
 		`CREATE INDEX orders_lower_status_idx ON advisor_test.orders (lower(status))`,
-		`INSERT INTO advisor_test.orders (tenant_id, customer_id, status)
-		     SELECT g % 7, g % 500, CASE WHEN g % 3 = 0 THEN 'open' ELSE 'done' END
+		`INSERT INTO advisor_test.orders (tenant_id, customer_id, status, processed_at)
+		     SELECT g % 7, g % 500, CASE WHEN g % 3 = 0 THEN 'open' ELSE 'done' END,
+		            CASE WHEN g % 20 = 0 THEN NULL ELSE now() END
 		     FROM generate_series(1, 2000) g`,
 
 		`CREATE TABLE advisor_test.events (id bigint, tenant_id int, at date NOT NULL)
@@ -212,6 +215,18 @@ func TestIndexAdvisorCatalog_ReadsSeededSchema(t *testing.T) {
 		assert.True(t, expr.Expression, "an expression index must not count as covering")
 	})
 
+	// The shape the predicate parser expects has to be checked against a real server.
+	t.Run("an IS NULL predicate is read column by column", func(t *testing.T) {
+		pending, ok := findIndex(cat.Indexes[orders], "orders_pending_idx")
+		require.True(t, ok)
+		assert.True(t, pending.Partial)
+		assert.Equal(t, []string{"processed_at"}, pending.NullPredicate)
+
+		open, ok := findIndex(cat.Indexes[orders], "orders_open_idx")
+		require.True(t, ok)
+		assert.Empty(t, open.NullPredicate, "a comparison cannot be compared with a candidate's predicate")
+	})
+
 	t.Run("write activity is collected", func(t *testing.T) {
 		// Table counters reach pg_stat_user_tables asynchronously — a backend
 		// flushes its pending statistics about a second after the transaction, and
@@ -259,6 +274,8 @@ func TestIndexAdvisor_EndToEndAgainstRealSchema(t *testing.T) {
 		`SELECT status FROM advisor_test.orders WHERE id = 7`,
 		// Already served by orders_tenant_created_idx.
 		`SELECT id FROM advisor_test.orders WHERE tenant_id = 3 AND created_at > now()`,
+		// IS NULL belongs in the predicate of a partial candidate, not in the key.
+		`SELECT id FROM advisor_test.orders WHERE processed_at IS NULL AND customer_id = 42`,
 	}
 
 	for range 3 {
@@ -280,6 +297,14 @@ func TestIndexAdvisor_EndToEndAgainstRealSchema(t *testing.T) {
 	assert.False(t, cand.PlannerChecked)
 	assert.Positive(t, cand.WeightPct)
 	assert.NotEmpty(t, cand.Covered, "a candidate must name the statements behind it")
+
+	t.Run("an is null filter becomes a partial candidate", func(t *testing.T) {
+		partial, ok := findCandidate(report, "advisor_test", "orders", []string{"customer_id"})
+		require.True(t, ok, "the IS NULL statement must yield a partial candidate: %+v", report.Candidates)
+
+		assert.Equal(t, `"processed_at" IS NULL`, partial.Predicate)
+		assert.Contains(t, partial.DDL, `WHERE "processed_at" IS NULL`)
+	})
 
 	t.Run("statements an index already serves produce none", func(t *testing.T) {
 		for _, c := range report.Candidates {

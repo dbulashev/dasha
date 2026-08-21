@@ -51,6 +51,7 @@ function candidate(over: Partial<IndexAdvisorCandidate> = {}): IndexAdvisorCandi
     schema: 'public',
     table: 'orders',
     columns: ['customer_id', 'created_at'],
+    predicate: '',
     ddl: 'CREATE INDEX CONCURRENTLY ON public.orders (customer_id, created_at)',
     weight_pct: 31.4,
     covered_queries: [
@@ -134,6 +135,36 @@ describe('IndexAdvisorSection', () => {
     // The heuristic caveat lives in the disclaimer, not on every row: in step 1
     // planner_checked is false everywhere, so a per-row chip says nothing.
     expect(wrapper.text()).toContain(enUS.indexes.advisor.disclaimer)
+  })
+
+  it('shows the predicate of a partial candidate next to its key', async () => {
+    resolves(
+      report({
+        candidates: [candidate({ columns: ['tenant_id'], predicate: '"processed_at" IS NULL' })],
+        total: 1,
+      }),
+    )
+    const wrapper = await render()
+
+    expect(wrapper.text()).toContain('(tenant_id)')
+    expect(wrapper.text()).toContain('WHERE "processed_at" IS NULL')
+  })
+
+  it('names the existing indexes a similar_index warning points at', async () => {
+    resolves(
+      report({
+        candidates: [
+          candidate({ warnings: [{ code: 'similar_index', names: ['orders_status_tenant_idx'] }] }),
+        ],
+        total: 1,
+      }),
+    )
+    const wrapper = await render()
+
+    await wrapper.find('tbody tr button').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('orders_status_tenant_idx')
   })
 
   it('keeps a queryid past Number.MAX_SAFE_INTEGER intact', async () => {

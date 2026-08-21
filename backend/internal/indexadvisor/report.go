@@ -14,14 +14,19 @@ const (
 	// WarnPartitionRoot: the candidate is on a partitioned table, where the root
 	// index cannot be built with CONCURRENTLY and every partition pays for it.
 	WarnPartitionRoot = "partition_root"
-	// WarnStatsMissing: no pg_stats row for the columns, so their order in the
-	// key is the order the statement wrote them, not the selective one.
+	// WarnStatsMissing: no pg_stats row for some of the columns, so their order in
+	// the key is the order the statement wrote them rather than the selective one,
+	// and an IS NULL filter may have been left out of the index.
 	WarnStatsMissing = "stats_missing"
 	// WarnWideIndex: the statement asked for more columns than the key may hold.
 	WarnWideIndex = "wide_index"
 	// WarnMatview: a plain REFRESH rebuilds every index on a materialized view,
 	// while REFRESH CONCURRENTLY needs a unique one to exist at all.
 	WarnMatview = "matview"
+	// WarnSimilarIndex: an existing index already holds every column of the candidate.
+	WarnSimilarIndex = "similar_index"
+	// WarnManyIndexes: the table already carries enough indexes to weigh one more.
+	WarnManyIndexes = "many_indexes"
 )
 
 // Params keys. They are passed to i18n as-is, so they are part of the contract
@@ -33,6 +38,7 @@ const (
 	ParamColumns    = "columns"
 	ParamRequested  = "requested"
 	ParamPartitions = "partitions"
+	ParamIndexes    = "indexes"
 )
 
 // Reasons a statement contributed no candidate. The collector's own codes
@@ -67,6 +73,7 @@ const (
 type Warning struct {
 	Code   string
 	Params map[string]float64
+	Names  []string
 }
 
 // CoveredQuery is one statement a candidate would serve. It carries enough for
@@ -94,6 +101,8 @@ type Candidate struct {
 	Schema  string
 	Table   string
 	Columns []string
+	// Predicate is the WHERE clause of a partial candidate, quoted; empty for a plain one.
+	Predicate string
 	// DDL is a suggestion for the user to run — one statement, or the script a
 	// partitioned table needs. Dasha never executes DDL.
 	DDL string

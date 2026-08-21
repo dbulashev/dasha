@@ -68,10 +68,12 @@ type Index struct {
 	// query, so a candidate that repeats it is not a duplicate.
 	Primary bool
 	Valid   bool
-	// Partial and Expression indexes never count as covering a candidate: they
-	// answer a narrower question than a plain index on the same columns.
+	// Partial and Expression indexes answer a narrower question than a plain index on
+	// the same columns; a partial one still covers a candidate with the same predicate.
 	Partial    bool
 	Expression bool
+	// NullPredicate holds the columns of an "a IS NULL" predicate, sorted; nil otherwise.
+	NullPredicate []string
 	// Columns are the key columns in order, without the INCLUDE tail — which
 	// carries no ordering and so cannot serve a predicate.
 	Columns []string
