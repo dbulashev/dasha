@@ -3401,11 +3401,11 @@ components:
             type: string
         predicate:
           description: >-
-            WHERE clause of a partial candidate, already quoted and ready to read, empty
-            for a plain index. An IS NULL predicate lands here rather than in columns: its
-            selectivity is null_frac, so on a soft-delete column it excludes almost
-            nothing and belongs in neither, while on a rare flag it makes a small index
-            over exactly the rows the statements read.
+            Condition of a partial candidate, already quoted and ready to read, without
+            the WHERE keyword, empty for a plain index. An IS NULL predicate lands here
+            rather than in columns: its selectivity is null_frac, so on a soft-delete
+            column it excludes almost nothing and belongs in neither, while on a rare
+            flag it makes a small index over exactly the rows the statements read.
           type: string
         ddl:
           description: >-
@@ -3542,8 +3542,9 @@ components:
             IS NULL filter may have been left out of the index.
             wide_index — the statements asked for more columns than the key may hold.
             matview — the relation is a materialized view: a plain REFRESH rewrites it
-            and rebuilds every index on it, while REFRESH CONCURRENTLY requires at least
-            one unique index to exist. similar_index — an existing index already holds
+            and rebuilds every index on it, while REFRESH CONCURRENTLY requires a unique
+            index over plain column names covering every row, so a partial or expression
+            index does not enable it. similar_index — an existing index already holds
             every column of the candidate, in another order or behind other columns; it
             does not serve the statements, but names lists it so the reader can decide
             between a new index and a rewritten one. many_indexes — the table already

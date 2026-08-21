@@ -101,7 +101,8 @@ type Candidate struct {
 	Schema  string
 	Table   string
 	Columns []string
-	// Predicate is the WHERE clause of a partial candidate, quoted; empty for a plain one.
+	// Predicate is the condition of a partial candidate with identifiers quoted,
+	// without the WHERE keyword; empty for a plain one.
 	Predicate string
 	// DDL is a suggestion for the user to run — one statement, or the script a
 	// partitioned table needs. Dasha never executes DDL.

@@ -104,8 +104,10 @@ watch(
 )
 
 // One table can carry several candidates, so the columns belong in the key.
+// JSON.stringify rather than join: an identifier may itself hold a comma, and two
+// rows sharing a key would share expansion state.
 function rowKey(item: IndexAdvisorCandidate) {
-  return `${item.schema}.${item.table}(${item.columns.join(',')})${item.predicate}`
+  return JSON.stringify([item.schema, item.table, item.columns, item.predicate])
 }
 
 const headers = computed(() => [
