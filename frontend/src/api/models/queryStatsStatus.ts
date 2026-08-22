@@ -9,4 +9,6 @@ export interface QueryStatsStatus {
   Available: boolean
   Enabled: boolean
   Readable: boolean
+  /** Query-statistics extension this connection is read through: pg_stat_statements, or pgpro_stats on Postgres Pro. Always set — when neither is installed it names the one worth installing here. */
+  Source: string
 }

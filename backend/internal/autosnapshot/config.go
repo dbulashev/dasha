@@ -252,6 +252,7 @@ const LeaderLivenessThreshold = 30 * time.Second
 // Lives here (not in storage) to keep autosnapshot free of storage imports.
 type SnapshotOpts struct {
 	PgssStatsReset *time.Time
+	StatsSource    string
 	Reason         string
 	TriggerContext map[string]any
 	LocksData      *LockCapture

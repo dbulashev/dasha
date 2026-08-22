@@ -21,6 +21,7 @@ import type {
   InstanceInfo,
 } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
+import { DEFAULT_STATS_SOURCE } from '@/composables/useStatsSource'
 import { useViewError } from '@/composables/useViewError'
 import { assertOk } from '@/utils/api'
 import { getErrorMessage } from '@/utils/error'
@@ -161,6 +162,7 @@ async function loadDatabaseSize() {
 
 // --- pgss availability ---
 const pgssAvailable = ref(false)
+const statsSource = ref(DEFAULT_STATS_SOURCE)
 const pgssInfoSupported = computed(() => (instanceInfo.value?.VersionNum ?? 0) >= 140000)
 
 async function loadQueryStatsStatus() {
@@ -173,6 +175,7 @@ async function loadQueryStatsStatus() {
     })
     const s = assertOk<QueryStatsStatus>(response)
     pgssAvailable.value = !!(s?.Available && s?.Enabled && s?.Readable)
+    statsSource.value = s?.Source || DEFAULT_STATS_SOURCE
   } catch {
     pgssAvailable.value = false
   }
@@ -268,10 +271,10 @@ watch([clusterName, hostName, databaseName], () => load(), { immediate: true })
         {{ t('home.statsNeverReset') }}
       </v-chip>
       <v-chip v-if="pgssAvailable && pgssInfoSupported && formattedPgssStatsResetTime" variant="tonal" size="default" prepend-icon="mdi-clock-outline">
-        {{ t('home.pgssStatsResetAt') }}: {{ formattedPgssStatsResetTime }}
+        {{ t('home.pgssStatsResetAt', { ext: statsSource }) }}: {{ formattedPgssStatsResetTime }}
       </v-chip>
       <v-chip v-if="pgssAvailable && pgssInfoSupported && !statsResetTimeLoading && !pgssStatsResetTime" variant="tonal" size="default" prepend-icon="mdi-clock-outline">
-        {{ t('home.pgssStatsNeverReset') }}
+        {{ t('home.pgssStatsNeverReset', { ext: statsSource }) }}
       </v-chip>
     </v-card-text>
   </v-card>

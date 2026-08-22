@@ -14,7 +14,7 @@ export interface IndexAdvisorCandidate {
   table: string
   /** Key columns in order: equality predicates first, then at most one range predicate, then ordering columns when a range predicate did not already break the ordering. */
   columns: string[]
-  /** WHERE clause of a partial candidate, already quoted and ready to read, empty for a plain index. An IS NULL predicate lands here rather than in columns: its selectivity is null_frac, so on a soft-delete column it excludes almost nothing and belongs in neither, while on a rare flag it makes a small index over exactly the rows the statements read. */
+  /** Condition of a partial candidate, already quoted and ready to read, without the WHERE keyword, empty for a plain index. An IS NULL predicate lands here rather than in columns: its selectivity is null_frac, so on a soft-delete column it excludes almost nothing and belongs in neither, while on a rare flag it makes a small index over exactly the rows the statements read. */
   predicate: string
   /** Statement suggested to the user, or a short script when the table is partitioned: PostgreSQL rejects CREATE INDEX CONCURRENTLY on a partitioned table, so the script creates the root index with ON ONLY — invalid and holding no lock — then builds an index on every partition concurrently and attaches each one, which turns the root index valid with the last. The statements go one at a time, as psql sends them: CREATE INDEX CONCURRENTLY cannot run inside a transaction block. Dasha never executes DDL. */
   ddl: string

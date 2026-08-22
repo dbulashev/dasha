@@ -38,6 +38,7 @@ type SnapshotListItem struct {
 	DashaVersion   string
 	JsonVersion    int
 	PgssStatsReset *time.Time
+	StatsSource    *string // extension read through; nil when not recorded
 	HasLocks       bool
 	Reason         string // "manual" or "auto:<trigger_type>"
 }
@@ -143,10 +144,10 @@ func (s *Storage) CreateSnapshot(
 	var id uuid.UUID
 
 	err = tx.QueryRow(ctx, `
-		INSERT INTO snapshots (cluster_name, instance, database, databases, dasha_version, json_version, report_data, created_at, pgss_stats_reset, reason, trigger_context, locks_data)
-		VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11::jsonb, $12::jsonb)
+		INSERT INTO snapshots (cluster_name, instance, database, databases, dasha_version, json_version, report_data, created_at, pgss_stats_reset, reason, trigger_context, locks_data, stats_source)
+		VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11::jsonb, $12::jsonb, $13)
 		RETURNING id`,
-		clusterName, instance, database, reportDatabases(reports), version.GetBuildNumber(), currentJSONVersion, jsonbArg(data), now, opts.PgssStatsReset, reason, jsonbArg(triggerCtx), jsonbArg(locksData),
+		clusterName, instance, database, reportDatabases(reports), version.GetBuildNumber(), currentJSONVersion, jsonbArg(data), now, opts.PgssStatsReset, reason, jsonbArg(triggerCtx), jsonbArg(locksData), nullableText(opts.StatsSource),
 	).Scan(&id)
 	if err != nil {
 		return uuid.Nil, time.Time{}, fmt.Errorf("storage: insert snapshot: %w", err)
@@ -157,6 +158,14 @@ func (s *Storage) CreateSnapshot(
 	}
 
 	return id, now, nil
+}
+
+func nullableText(v string) any {
+	if v == "" {
+		return nil
+	}
+
+	return v
 }
 
 // reportDatabases lists the databases represented in a report, sorted, so the
@@ -182,7 +191,7 @@ func (s *Storage) ListSnapshots(
 	clusterName, instance string,
 ) ([]SnapshotListItem, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, created_at, database, COALESCE(databases, '{}'), dasha_version, json_version, pgss_stats_reset, locks_data IS NOT NULL, reason
+		SELECT id, created_at, database, COALESCE(databases, '{}'), dasha_version, json_version, pgss_stats_reset, locks_data IS NOT NULL, reason, stats_source
 		FROM snapshots
 		WHERE cluster_name = $1 AND instance = $2
 		ORDER BY created_at DESC
@@ -198,7 +207,7 @@ func (s *Storage) ListSnapshots(
 
 	for rows.Next() {
 		var item SnapshotListItem
-		if err := rows.Scan(&item.ID, &item.CreatedAt, &item.Database, &item.Databases, &item.DashaVersion, &item.JsonVersion, &item.PgssStatsReset, &item.HasLocks, &item.Reason); err != nil {
+		if err := rows.Scan(&item.ID, &item.CreatedAt, &item.Database, &item.Databases, &item.DashaVersion, &item.JsonVersion, &item.PgssStatsReset, &item.HasLocks, &item.Reason, &item.StatsSource); err != nil {
 			return nil, fmt.Errorf("storage: scan snapshot: %w", err)
 		}
 

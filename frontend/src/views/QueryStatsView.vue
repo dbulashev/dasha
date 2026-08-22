@@ -5,6 +5,7 @@ import { getQueryStatsStatus } from '@/api/gen/default/default'
 import type { QueryStatsStatus } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useViewError } from '@/composables/useViewError'
+import { DEFAULT_STATS_SOURCE } from '@/composables/useStatsSource'
 import { assertOk } from '@/utils/api'
 import QueryStatsChartSection from '@/components/queries/QueryStatsChartSection.vue'
 import IoCpuScatterSection from '@/components/queries/IoCpuScatterSection.vue'
@@ -28,9 +29,10 @@ const pgssUnavailable = computed(() => {
 const pgssWarningMessage = computed(() => {
   const s = queryStatsStatus.value
   if (!s) return ''
-  if (!s.Available) return t('pgssNotInstalled')
-  if (!s.Enabled) return t('pgssNotEnabled')
-  if (!s.Readable) return t('pgssNotReadable')
+  const ext = s.Source || DEFAULT_STATS_SOURCE
+  if (!s.Available) return t('pgssNotInstalled', { ext })
+  if (!s.Enabled) return t('pgssNotEnabled', { ext })
+  if (!s.Readable) return t('pgssNotReadable', { ext })
   return ''
 })
 

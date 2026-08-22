@@ -21,4 +21,10 @@ export interface SnapshotListItem {
   HasLocks?: boolean
   /** Why the snapshot was created: "manual" or "auto:<trigger_type>" */
   Reason?: string
+  /**
+     * Query-statistics extension the snapshot was read through (pg_stat_statements or pgpro_stats). Null for snapshots taken before this was recorded. The two number queryid differently, so snapshots from different sources are not comparable row by row.
+
+     * @nullable
+     */
+  StatsSource?: string | null
 }
