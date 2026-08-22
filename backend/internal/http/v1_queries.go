@@ -479,6 +479,7 @@ func (s *Handlers) GetQueryStatsStatus(
 		Available: status.Available,
 		Enabled:   status.Enabled,
 		Readable:  status.Readable,
+		Source:    status.Source,
 	}
 
 	return ret, nil

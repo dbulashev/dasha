@@ -70,6 +70,12 @@ func (s *Handlers) PostSnapshot(
 		pgssStatsReset = &resetTime.Time
 	}
 
+	// Best-effort, like the reset time above.
+	statsSource, err := s.repo.PgssSource(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
+	if err != nil {
+		statsSource = ""
+	}
+
 	var locks *autosnapshot.LockCapture
 	if req.Params.IncludeLocks != nil && *req.Params.IncludeLocks {
 		probeCount, probeInterval := 5, 500*time.Millisecond
@@ -90,6 +96,7 @@ func (s *Handlers) PostSnapshot(
 
 	id, createdAt, err := s.storage.CreateSnapshot(ctx, req.Params.ClusterName, req.Params.Instance, provenance, reports, storage.SnapshotOpts{
 		PgssStatsReset: pgssStatsReset,
+		StatsSource:    statsSource,
 		LocksData:      locks,
 	})
 	if err != nil {
@@ -128,6 +135,7 @@ func (s *Handlers) GetSnapshots(
 				PgssStatsReset: item.PgssStatsReset,
 				HasLocks:       shortcut.Ptr(item.HasLocks),
 				Reason:         shortcut.Ptr(item.Reason),
+				StatsSource:    item.StatsSource,
 			}
 		})
 

@@ -23,6 +23,7 @@ type Repo interface {
 	GetQueriesReport(ctx context.Context, clusterName, instanceName, databaseName string, excludeUsers []string, queryID *int64) ([]dto.QueryReport, error)
 	GetQueriesBlocked(ctx context.Context, clusterName, instanceName, databaseName, scope string) ([]dto.QueryBlocked, error)
 	PgssDatabase(ctx context.Context, clusterName, instanceName, databaseName string) (string, error)
+	PgssSource(ctx context.Context, clusterName, instanceName, databaseName string) (string, error)
 	GetPgssStatsResetTime(ctx context.Context, clusterName, instanceName, databaseName string) (*dto.StatsResetTime, error)
 	ResetQueryStats(ctx context.Context, clusterName, instanceName, databaseName string) error
 	GetHotSampleTables(ctx context.Context, clusterName, instanceName, databaseName string, schema, object *string) ([]hotobjects.AnchorRow, *time.Time, bool, error)

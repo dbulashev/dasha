@@ -6,7 +6,7 @@
 
 - Go 1.26+
 - Node.js 22+ и npm
-- PostgreSQL 14+ (целевые базы данных)
+- PostgreSQL 14+ (целевые базы данных); поддерживается Postgres Pro — вместо `pg_stat_statements` автоматически используется `pgpro_stats`
 - Docker и Docker Compose (для демо-лаборатории)
 
 ## Файл конфигурации

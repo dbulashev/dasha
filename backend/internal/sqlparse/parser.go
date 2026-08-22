@@ -179,7 +179,7 @@ func looksTruncated(sql string) bool {
 }
 
 // parseTree and fingerprint are the only calls into the WASM parser. Both recover:
-// a malformed statement must cost one query, not the whole report (NFR-7).
+// a malformed statement must cost one query, not the whole report.
 func (p *parser) parseTree(sql string) (tree *pgast.ParseResult, err error) {
 	p.sem <- struct{}{}
 	defer func() { <-p.sem }()

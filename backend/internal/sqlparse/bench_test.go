@@ -24,7 +24,7 @@ func workload(n int) []string {
 	return out
 }
 
-// BenchmarkParseUncached is the NFR-3 number: cost per statement once the module
+// BenchmarkParseUncached: cost per statement once the module
 // is up. CacheSize is 1 so every iteration is a genuine parse.
 //
 // It also reports the cold start, which is charged once per process and dwarfs
