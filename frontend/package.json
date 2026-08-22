@@ -35,7 +35,7 @@
     "@mdi/font": "^7.4.47",
     "@playwright/test": "^1.62.1",
     "@tsconfig/node22": "^22.0.6",
-    "@types/jsdom": "^28.0.3",
+    "@types/jsdom": "^30.0.0",
     "@types/node": "^26.2.0",
     "@vitejs/plugin-vue": "^6.0.1",
     "@vitejs/plugin-vue-jsx": "^5.1.1",
