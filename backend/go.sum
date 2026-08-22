@@ -243,8 +243,8 @@ github.com/wasilibs/go-pgquery v0.0.0-20260728010200-155ebad2880e h1:yWIo9Ibxg0q
 github.com/wasilibs/go-pgquery v0.0.0-20260728010200-155ebad2880e/go.mod h1:ZSyYLCRbk2xPqu7lgfrDSSHm+g/7Rxk6JK4KE2cxJ3s=
 github.com/wasilibs/wazero-helpers v0.0.0-20250123031827-cd30c44769bb h1:gQ+ZV4wJke/EBKYciZ2MshEouEHFuinB85dY3f5s1q8=
 github.com/wasilibs/wazero-helpers v0.0.0-20250123031827-cd30c44769bb/go.mod h1:jMeV4Vpbi8osrE/pKUxRZkVaA0EX7NZN0A9/oRzgpgY=
-github.com/yandex-cloud/go-genproto v0.111.0 h1:5IutBEQ6uMfTYTwJqVXRgGFSsXp1Pzf/M4cVLr93TRM=
-github.com/yandex-cloud/go-genproto v0.111.0/go.mod h1:0LDD/IZLIUIV4iPH+YcF+jysO3jkSvADFGm4dCAuwQo=
+github.com/yandex-cloud/go-genproto v0.113.0 h1:yzBf38keQhu2K7x+4XE+HUkuZRoTirkH9cHrRTMCpZg=
+github.com/yandex-cloud/go-genproto v0.113.0/go.mod h1:0LDD/IZLIUIV4iPH+YcF+jysO3jkSvADFGm4dCAuwQo=
 github.com/yandex-cloud/go-sdk v0.32.0 h1:+krs7xf7rPvuPcRITAnqovrKraj5S62VconSPjmAOo4=
 github.com/yandex-cloud/go-sdk v0.32.0/go.mod h1:YIEb0cQHowyOaIy7BAPUu2oejnoiu1q8z5Yk0KH+pxo=
 github.com/yosida95/uritemplate/v3 v3.0.2 h1:Ed3Oyj9yrmi9087+NczuL5BwkIc4wvTb5zIM+UJPGz4=
