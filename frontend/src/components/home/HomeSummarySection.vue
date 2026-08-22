@@ -165,8 +165,14 @@ const pgssAvailable = ref(false)
 const statsSource = ref(DEFAULT_STATS_SOURCE)
 const pgssInfoSupported = computed(() => (instanceInfo.value?.VersionNum ?? 0) >= 140000)
 
+// Guards against out-of-order responses: a reply for the host the user has
+// already left must not declare pgss available, or name its source, for the one
+// now on screen.
+let statusReqId = 0
+
 async function loadQueryStatsStatus() {
   if (!clusterName.value || !hostName.value || !databaseName.value) return
+  const myId = ++statusReqId
   try {
     const response = await getQueryStatsStatus({
       cluster_name: clusterName.value,
@@ -174,10 +180,13 @@ async function loadQueryStatsStatus() {
       database: databaseName.value,
     })
     const s = assertOk<QueryStatsStatus>(response)
+    if (myId !== statusReqId) return // superseded — leave state to the newer load
     pgssAvailable.value = !!(s?.Available && s?.Enabled && s?.Readable)
     statsSource.value = s?.Source || DEFAULT_STATS_SOURCE
   } catch {
+    if (myId !== statusReqId) return
     pgssAvailable.value = false
+    statsSource.value = DEFAULT_STATS_SOURCE
   }
 }
 
@@ -229,6 +238,9 @@ async function loadStatsResetTime() {
 
 // --- Load all ---
 async function load() {
+  statusReqId++ // whatever is in flight describes the previous host
+  pgssAvailable.value = false
+  statsSource.value = DEFAULT_STATS_SOURCE
   try {
     await Promise.allSettled([loadInstanceInfo(), loadQueryStatsStatus()])
     await Promise.allSettled([

@@ -14,8 +14,10 @@ const cacheTTL = 60_000
 const cache = new Map<string, { source: string; expires: number }>()
 const inFlight = new Map<string, Promise<string>>()
 
+// Structured, not joined: a cluster or database name may itself contain the
+// separator, and two different connections must never share a cache entry.
 function sourceKey(cluster: string, instance: string, database: string): string {
-  return `${cluster} ${instance} ${database}`
+  return JSON.stringify([cluster, instance, database])
 }
 
 function remember(key: string, source: string) {
