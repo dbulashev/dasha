@@ -26,6 +26,7 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 [Foreign Key Analysis](doc/en/features.md#foreign-key-analysis) ·
 [Maintenance & Vacuum](doc/en/features.md#maintenance--vacuum) ·
 [Connections & Locks](doc/en/features.md#connections--locks) ·
+[I/O](doc/en/features.md#io-pg_stat_io-postgresql-16) ·
 [Progress Tracking](doc/en/features.md#progress-tracking) ·
 [Settings Analysis](doc/en/features.md#settings-analysis) ·
 [Schema Checks](doc/en/features.md#schema-checks) ·

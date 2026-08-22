@@ -18,6 +18,8 @@ func validConfig() Config {
 		HotSchedule:          "0 3 * * *",
 		HotTopN:              100,
 		HotRetentionDays:     180,
+		IOSchedule:           "*/5 * * * *",
+		IORetentionDays:      30,
 		Defaults:             validDefaults(),
 	}
 }

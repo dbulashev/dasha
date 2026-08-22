@@ -2,10 +2,8 @@ package autosnapshot
 
 import (
 	"context"
-	"strings"
 	"time"
 
-	"github.com/robfig/cron/v3"
 	"go.uber.org/zap"
 
 	"github.com/dbulashev/dasha/internal/config"
@@ -23,7 +21,7 @@ func (d *Daemon) processHotSnapshots(ctx context.Context, cfg Config) {
 	// A 5-field cron covers both shapes users need: a fixed time of day
 	// ("0 3 * * *") and a frequency ("*/30 * * * *"). An unparsable value
 	// falls back to daily rather than silently disabling the capture.
-	sched, err := ParseHotSchedule(cfg.HotSchedule)
+	sched, err := ParseCronSchedule(cfg.HotSchedule)
 	if err != nil {
 		d.logger.Warn("hot: invalid schedule, falling back to daily",
 			zap.String("schedule", cfg.HotSchedule), zap.Error(err))
@@ -53,36 +51,13 @@ func (d *Daemon) processHotSnapshots(ctx context.Context, cfg Config) {
 
 			// No snapshot yet → capture immediately: the first run only seeds
 			// anchors, and the schedule takes over from there.
-			if t, ok := last[key]; ok && !hotDue(sched, t, now) {
+			if t, ok := last[key]; ok && !cronDue(sched, t, now) {
 				continue
 			}
 
 			d.takeHotSnapshotSafe(ctx, cfg, cl, string(db))
 		}
 	}
-}
-
-// ParseHotSchedule parses the cron spec pinned to UTC unless the user names a
-// zone explicitly. robfig/cron defaults a spec without a TZ prefix to the
-// process's time.Local — 03:00 would then mean whatever zone the backend
-// container happens to run in. UTC is the deterministic default; a local-time
-// schedule is spelled "CRON_TZ=Europe/Moscow 0 3 * * *".
-func ParseHotSchedule(spec string) (cron.Schedule, error) {
-	if !strings.HasPrefix(spec, "TZ=") && !strings.HasPrefix(spec, "CRON_TZ=") {
-		spec = "CRON_TZ=UTC " + spec
-	}
-
-	return cron.ParseStandard(spec)
-}
-
-// hotDue reports whether the schedule has fired between the last capture and
-// now (nil schedule = the daily fallback).
-func hotDue(sched cron.Schedule, last, now time.Time) bool {
-	if sched == nil {
-		return now.Sub(last) >= 24*time.Hour
-	}
-
-	return !now.Before(sched.Next(last))
 }
 
 // takeHotSnapshotSafe bounds one capture with the per-host budget and recovers

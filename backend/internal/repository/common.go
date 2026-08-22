@@ -24,6 +24,7 @@ import (
 	"github.com/dbulashev/dasha/internal/pkg/mapstruct"
 	"github.com/dbulashev/dasha/internal/schemalint"
 	"github.com/dbulashev/dasha/internal/sqlparse"
+	"github.com/dbulashev/dasha/internal/statio"
 )
 
 const (
@@ -113,6 +114,8 @@ type Repository interface {
 	GetMaintenanceAutovacuumSummary(ctx context.Context, clusterName, instanceName, databaseName string) (*dto.MaintenanceAutovacuumSummary, error)
 	GetHotSampleTables(ctx context.Context, clusterName, instanceName, databaseName string, schema, object *string) ([]hotobjects.AnchorRow, *time.Time, bool, error)
 	GetHotSampleIndexes(ctx context.Context, clusterName, instanceName, databaseName string, schema, object *string) ([]hotobjects.AnchorRow, *time.Time, bool, error)
+	// GetIOSample takes no database: pg_stat_io is instance-wide.
+	GetIOSample(ctx context.Context, clusterName, instanceName string) (*statio.Snapshot, error)
 	// GetIndexAdvisorReport takes no instance: pg_stat_statements is per-host and
 	// not replicated, so the candidates are built from the whole cluster's load.
 	GetIndexAdvisorReport(

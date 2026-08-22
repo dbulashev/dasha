@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### Features
+- **I/O**, a new page built on `pg_stat_io` (PostgreSQL 16 and newer): where the server's disk traffic actually goes, split by who caused it, what it touched and in which context — normal work, vacuum, or bulk operations like COPY and large sequential scans. Two modes share the page: history, drawn from snapshots the autosnapshot daemon takes from every host on its own schedule, and a live per-tick view that works even without snapshot storage. Cards summarise buffer-cache efficiency, what vacuum costs and what bulk operations cost; the full backend_type × object × context matrix sits below them. Where a statistics reset, a restart or a major upgrade broke the series, the chart shows a gap instead of a misleading zero. With `track_io_timing` off the timing mode is disabled and says why. The menu item is absent on older servers, which have no `pg_stat_io` at all.
 - **Index recommendations**, a new panel on the Indexes page: reads the statements of every cluster host and proposes the btree indexes that are missing — columns, key order and a ready `CREATE INDEX`, with the statements behind each candidate. What the existing indexes already serve is dropped, whatever order their columns sit in; statements that gave nothing are listed with the reason. An `IS NULL` filter on a column where NULLs are rare becomes the condition of a partial index instead of a key column. A candidate says when the table already holds its columns in another index, naming it, and when the table is carrying ten indexes already.
 
 ## v1.6.0

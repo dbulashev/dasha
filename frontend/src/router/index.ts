@@ -106,6 +106,11 @@ const router = createRouter({
       component: () => import('../views/ReplicationView.vue'),
     },
     {
+      path: '/io/:clustername?',
+      name: 'io',
+      component: () => import('../views/IOView.vue'),
+    },
+    {
       path: '/settings/:clustername?',
       name: 'settings',
       component: () => import('../views/SettingsView.vue'),

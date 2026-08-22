@@ -230,6 +230,14 @@
     "save": "Save",
     "saved": "Settings saved",
     "groupPgss": "Triggered query & lock snapshots (pg_stat_statements)",
+    "groupIo": "I/O snapshots (pg_stat_io)",
+    "io": {
+        "title": "I/O statistics",
+        "hint": "Raw cumulative pg_stat_io slices taken from every cluster host on a schedule. They feed the history of the I/O section; the deltas are computed on read.",
+        "fieldsHint": "Schedule — 5-field cron, UTC time (own zone: CRON_TZ=Europe/Moscow */5 * * * *). Hosts older than PostgreSQL 16 are skipped: they have no pg_stat_io.",
+        "schedule": "Schedule (cron)",
+        "retentionDays": "Retention, days"
+    },
     "groupHot": "Object activity snapshots (hot tables & indexes)",
     "saveInvalid": "Settings not saved: the server rejected the values — check the cron expression and numeric fields.",
     "overridden": "Overridden",
@@ -991,6 +999,85 @@
     }
   },
   "Maintenance": "Maintenance",
+  "io": {
+    "menu": "I/O",
+    "requiresVersion": "The I/O section reads pg_stat_io, which PostgreSQL provides from version 16 on. This host runs an older version.",
+    "waitingSecondTick": "Waiting for the second sample — a rate needs two.",
+    "partialIntervals": "Some intervals in this period are incomplete: a statistics reset, a restart or a major upgrade broke the series. They are drawn as gaps, not as zeros.",
+    "noData": "No I/O activity recorded for the current selection.",
+    "historyUnavailable": "Live mode only — snapshot storage is not configured",
+    "trackIoTimingOff": "track_io_timing is off on this host, so the server collects no I/O times. Turn it on to use the Time mode.",
+    "mode": {
+      "history": "History",
+      "live": "Live"
+    },
+    "metric": {
+      "count": "Count",
+      "time": "Time"
+    },
+    "range": {
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "filter": {
+      "chartObject": "Object (chart)",
+      "backendType": "Backend type",
+      "allBackendTypes": "All backend types",
+      "context": "Context",
+      "allContexts": "All contexts",
+      "showIdle": "Show idle rows"
+    },
+    "live": {
+      "pause": "Pause",
+      "resume": "Resume",
+      "resetBaseline": "Reset baseline",
+      "stopsIn": "stops in {time}",
+      "lastUpdate": "updated {at}"
+    },
+    "window": {
+      "label": "Window: {window}",
+      "hint": "The measured length of the interval every number covers. Incomplete intervals contribute neither values nor duration, so the window can be shorter than the period you selected.",
+      "seconds": "{n} s",
+      "minutes": "{n} min",
+      "hours": "{n} h"
+    },
+    "chart": {
+      "title": "I/O by context — {object}",
+      "hint": "Each context stacked over time. Values are normalized by the measured interval of every point, so a missed capture does not become a spike. A gap means the interval was incomplete.",
+      "perSecond": "operations / s",
+      "timeShare": "I/O time / wall time"
+    },
+    "cache": {
+      "title": "Buffer cache efficiency",
+      "hint": "hits / (hits + reads) over the window. Reads are the blocks the server had to ask the operating system for; whether they came from a disk or from the page cache is invisible here.",
+      "hits": "Hits",
+      "reads": "Reads",
+      "subtitle": "{hits} hits / {reads} reads",
+      "noAccess": "No buffer access in this window."
+    },
+    "vacuum": {
+      "title": "Vacuum I/O",
+      "hint": "The vacuum context: what autovacuum and manual VACUUM cost in buffer traffic. Vacuum works through a small ring buffer, so its hit ratio is normally well below the one client backends see.",
+      "idle": "No vacuum I/O in this window.",
+      "hitRatio": "Hit ratio in the vacuum context"
+    },
+    "bulk": {
+      "title": "Bulk operations",
+      "hint": "bulkread and bulkwrite: large sequential scans, COPY and CREATE TABLE AS. They run through a ring buffer too — reuses counts the buffers recycled inside it instead of evicting the rest of the cache.",
+      "idle": "No bulk I/O in this window.",
+      "contextIdle": "no activity"
+    },
+    "matrix": {
+      "title": "backend_type × object × context",
+      "hint": "The full matrix over the selected window. Share is this row's part of all the activity shown.",
+      "backendType": "Backend type",
+      "object": "Object",
+      "context": "Context",
+      "share": "Share"
+    }
+  },
   "hot": {
     "tablesTitle": "Hot tables",
     "indexesTitle": "Hot indexes",

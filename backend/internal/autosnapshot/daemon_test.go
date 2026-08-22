@@ -12,6 +12,7 @@ import (
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/hotobjects"
+	"github.com/dbulashev/dasha/internal/statio"
 )
 
 // fakeRepo scripts the two probes the tested paths touch; the rest are inert.
@@ -67,6 +68,10 @@ func (f *fakeRepo) GetHotSampleTables(context.Context, string, string, string, *
 
 func (f *fakeRepo) GetHotSampleIndexes(context.Context, string, string, string, *string, *string) ([]hotobjects.AnchorRow, *time.Time, bool, error) {
 	return nil, nil, false, nil
+}
+
+func (f *fakeRepo) GetIOSample(context.Context, string, string) (*statio.Snapshot, error) {
+	return nil, nil
 }
 
 func newTestDaemon(repo Repo, logger *zap.Logger) *Daemon {

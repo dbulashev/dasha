@@ -110,6 +110,7 @@ const fkAnalysisLink = computed(() => withQuery("fk-analysis"));
 const maintenanceLink = computed(() => withQuery("maintenance"));
 const schemaLintLink = computed(() => withQuery("schema-lint"));
 const replicationLink = computed(() => withQuery("replication"));
+const ioLink = computed(() => withQuery("io"));
 const settingsLink = computed(() => withQuery("settings"));
 const logsLink = computed(() => withQuery("logs"));
 const autoSnapshotLink = computed(() => withQuery("auto-snapshot"));
@@ -136,6 +137,12 @@ watch(
 
 const isReplica = computed(() =>
   instanceInfoStore.isReplica(currentCluster.value, currentHost.value),
+)
+
+// pg_stat_io exists from PostgreSQL 16 on; on older hosts the I/O page has no
+// subject at all, so the menu item is absent rather than empty.
+const ioVisible = computed(
+  () => (instanceInfoStore.known(currentCluster.value, currentHost.value)?.VersionNum ?? 0) >= 160000,
 )
 
 const primaryOnlyRoutes = ['/maintenance', '/schema-lint']
@@ -247,6 +254,7 @@ watch(() => route.path, () => {
           <v-list-item :title="t('Operation progress')" prepend-icon="mdi-progress-question" link :to="progressLink"></v-list-item>
           <v-list-item :title="t('FK Analysis')" prepend-icon="mdi-relation-many-to-many" link :to="fkAnalysisLink"></v-list-item>
           <v-list-item :title="t('Replication')" prepend-icon="mdi-database-sync-outline" link :to="replicationLink"></v-list-item>
+          <v-list-item v-if="ioVisible" :title="t('io.menu')" prepend-icon="mdi-harddisk" link :to="ioLink"></v-list-item>
           <v-list-item v-if="!isReplica" :title="t('Maintenance')" prepend-icon="mdi-wrench-outline" link :to="maintenanceLink"></v-list-item>
           <v-list-item v-if="!isReplica" :title="t('schemaLint.page.menuItem')" prepend-icon="mdi-clipboard-check-outline" link :to="schemaLintLink"></v-list-item>
           <v-list-item :title="t('Settings')" prepend-icon="mdi-database-settings-outline" link :to="settingsLink"></v-list-item>

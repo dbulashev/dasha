@@ -57,9 +57,14 @@ type Config struct {
 	HotSchedule      string
 	HotTopN          int `validate:"gte=1,lte=1000"`
 	HotRetentionDays int `validate:"gte=1"`
-	Defaults         TriggerDefaults
-	UpdatedAt        time.Time
-	UpdatedBy        *string
+	// pg_stat_io snapshots (plans/pg-stat-io-design.md). IOSchedule uses the
+	// same cron parser as HotSchedule.
+	IOEnabled       bool
+	IOSchedule      string
+	IORetentionDays int `validate:"gte=1"`
+	Defaults        TriggerDefaults
+	UpdatedAt       time.Time
+	UpdatedBy       *string
 }
 
 // ClusterOverride holds the raw jsonb of overrides for a cluster plus the

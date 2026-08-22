@@ -208,6 +208,14 @@
     "save": "Speichern",
     "saved": "Einstellungen gespeichert",
     "groupPgss": "Getriggerte Abfrage- und Sperren-Snapshots (pg_stat_statements)",
+    "groupIo": "I/O-Snapshots (pg_stat_io)",
+    "io": {
+        "title": "I/O-Statistik",
+        "hint": "Rohe kumulative pg_stat_io-Schnitte, planmäßig von jedem Cluster-Host erfasst. Sie speisen den Verlauf des I/O-Bereichs; die Deltas entstehen beim Lesen.",
+        "fieldsHint": "Zeitplan — 5-Feld-Cron, UTC-Zeit (eigene Zone: CRON_TZ=Europe/Moscow */5 * * * *). Hosts älter als PostgreSQL 16 werden übersprungen: sie haben kein pg_stat_io.",
+        "schedule": "Zeitplan (Cron)",
+        "retentionDays": "Aufbewahrung, Tage"
+    },
     "groupHot": "Objektaktivitäts-Snapshots (heiße Tabellen & Indizes)",
     "saveInvalid": "Einstellungen nicht gespeichert: der Server hat die Werte abgelehnt — Cron-Ausdruck und Zahlenfelder prüfen.",
     "overridden": "Überschrieben",
@@ -953,6 +961,85 @@
     }
   },
   "Maintenance": "Wartung",
+  "io": {
+    "menu": "I/O",
+    "requiresVersion": "Der I/O-Bereich liest pg_stat_io, das PostgreSQL erst ab Version 16 bereitstellt. Dieser Host läuft mit einer älteren Version.",
+    "waitingSecondTick": "Warte auf die zweite Messung — eine Rate braucht zwei.",
+    "partialIntervals": "Einige Intervalle dieses Zeitraums sind unvollständig: ein Statistik-Reset, ein Neustart oder ein Major-Upgrade hat die Reihe unterbrochen. Sie werden als Lücke gezeichnet, nicht als Null.",
+    "noData": "Für die aktuelle Auswahl wurde keine I/O-Aktivität erfasst.",
+    "historyUnavailable": "Nur Live-Modus — kein Snapshot-Speicher konfiguriert",
+    "trackIoTimingOff": "track_io_timing ist auf diesem Host aus, der Server erfasst also keine I/O-Zeiten. Schalten Sie es ein, um den Zeit-Modus zu nutzen.",
+    "mode": {
+      "history": "Verlauf",
+      "live": "Live"
+    },
+    "metric": {
+      "count": "Anzahl",
+      "time": "Zeit"
+    },
+    "range": {
+      "1h": "1 Std",
+      "6h": "6 Std",
+      "24h": "24 Std",
+      "7d": "7 T"
+    },
+    "filter": {
+      "chartObject": "Objekt (Diagramm)",
+      "backendType": "Prozesstyp",
+      "allBackendTypes": "Alle Prozesstypen",
+      "context": "Kontext",
+      "allContexts": "Alle Kontexte",
+      "showIdle": "Inaktive Zeilen anzeigen"
+    },
+    "live": {
+      "pause": "Pause",
+      "resume": "Fortsetzen",
+      "resetBaseline": "Basis zurücksetzen",
+      "stopsIn": "stoppt in {time}",
+      "lastUpdate": "aktualisiert {at}"
+    },
+    "window": {
+      "label": "Fenster: {window}",
+      "hint": "Die gemessene Länge des Intervalls, das jede Zahl abdeckt. Unvollständige Intervalle liefern weder Werte noch Dauer, das Fenster kann also kürzer sein als der gewählte Zeitraum.",
+      "seconds": "{n} s",
+      "minutes": "{n} Min",
+      "hours": "{n} Std"
+    },
+    "chart": {
+      "title": "I/O nach Kontext — {object}",
+      "hint": "Die Kontexte gestapelt über die Zeit. Die Werte sind auf die gemessene Dauer jedes Punkts normiert, eine ausgefallene Erfassung wird also nicht zur Spitze. Eine Lücke bedeutet ein unvollständiges Intervall.",
+      "perSecond": "Operationen / s",
+      "timeShare": "I/O-Zeit / verstrichene Zeit"
+    },
+    "cache": {
+      "title": "Effizienz des Puffer-Caches",
+      "hint": "hits / (hits + reads) über das Fenster. Reads sind Blöcke, die der Server beim Betriebssystem anfordern musste; ob sie von der Platte oder aus dem Page-Cache kamen, ist hier nicht sichtbar.",
+      "hits": "Treffer",
+      "reads": "Lesevorgänge",
+      "subtitle": "{hits} Treffer / {reads} Lesevorgänge",
+      "noAccess": "In diesem Fenster gab es keine Pufferzugriffe."
+    },
+    "vacuum": {
+      "title": "Vacuum-I/O",
+      "hint": "Der Kontext vacuum: was Autovacuum und manuelles VACUUM an Pufferverkehr kosten. Vacuum arbeitet über einen kleinen Ringpuffer, seine Trefferquote liegt deshalb normalerweise deutlich unter der der Client-Prozesse.",
+      "idle": "In diesem Fenster gab es kein Vacuum-I/O.",
+      "hitRatio": "Trefferquote im Kontext vacuum"
+    },
+    "bulk": {
+      "title": "Massenoperationen",
+      "hint": "bulkread und bulkwrite: große sequenzielle Scans, COPY und CREATE TABLE AS. Auch sie laufen über einen Ringpuffer — reuses zählt die darin wiederverwendeten Puffer, statt den übrigen Cache zu verdrängen.",
+      "idle": "In diesem Fenster gab es kein Massen-I/O.",
+      "contextIdle": "keine Aktivität"
+    },
+    "matrix": {
+      "title": "backend_type × object × context",
+      "hint": "Die vollständige Matrix über das gewählte Fenster. Anteil ist der Beitrag dieser Zeile zur gezeigten Aktivität.",
+      "backendType": "Prozesstyp",
+      "object": "Objekt",
+      "context": "Kontext",
+      "share": "Anteil"
+    }
+  },
   "hot": {
     "tablesTitle": "Heiße Tabellen",
     "indexesTitle": "Heiße Indizes",

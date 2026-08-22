@@ -47,6 +47,13 @@
 - Wait events grouped by type/event
 - Lock tree visualization
 
+## I/O (pg_stat_io, PostgreSQL 16+)
+- Server I/O split by backend type, object and context (`normal` / `vacuum` / `bulkread` / `bulkwrite`)
+- History from scheduled snapshots plus a live per-tick mode that needs no snapshot storage
+- Buffer-cache efficiency, vacuum cost and bulk-operation cost as summary cards
+- Count and Time metrics; the Time mode requires `track_io_timing = on`
+- Broken series (statistics reset, restart, major upgrade) are drawn as gaps, never as zeros
+
 ## Progress Tracking
 - ANALYZE, VACUUM, CLUSTER / VACUUM FULL, CREATE INDEX, BASE BACKUP
 
