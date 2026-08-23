@@ -51,7 +51,7 @@
 - Server I/O split by backend type, object and context (`normal` / `vacuum` / `bulkread` / `bulkwrite`)
 - History from scheduled snapshots plus a live mode polling every 3–30 s, or one snapshot per click, that needs no snapshot storage
 - shared_buffers efficiency, vacuum cost and bulk-operation cost as summary cards
-- Count and Time metrics; the Time mode requires `track_io_timing = on`
+- Count and Time metrics; the Time mode requires `track_io_timing = on`, and the WAL rows additionally require `track_wal_io_timing = on`
 - Broken series (statistics reset, restart, major upgrade) are drawn as gaps, never as zeros
 - Write-ahead log I/O (PostgreSQL 18) in both the chart and the breakdown
 

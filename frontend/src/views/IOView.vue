@@ -71,9 +71,9 @@ const {
   trackIoTiming: liveTrackIoTiming,
 } = useIoLive()
 
-// Bumped on every buffer drop: a poll of the previous host must not land in the
-// new baseline — the epoch check compares versions and stats_reset, which two
-// different servers can share.
+// Bumped on every buffer drop and every poll: neither a poll of the previous
+// host nor an earlier overlapping poll may land in the new baseline — the epoch
+// check compares versions and stats_reset, which two different servers can share.
 let liveId = 0
 
 // The toolbar sits above a long table; the FAB repeats its refresh so reading
@@ -175,7 +175,7 @@ async function loadHistory() {
 async function loadCurrent() {
   if (!clusterName.value || !hostName.value) return
 
-  const id = liveId
+  const id = ++liveId
   liveLoading.value = true
 
   try {
@@ -210,6 +210,9 @@ watch(
     if (cluster && host) instanceInfo.ensure(cluster, host)
 
     resetLive()
+    requestId++
+    history.value = null
+    matrix.value = null
     historyUnavailable.value = false
     unsupported.value = false
   },
