@@ -53,11 +53,12 @@ func (f *ioFakeClusters) UpdateSource(string, []config.Cluster) []string { retur
 
 func newIOTestDaemon(repo Repo, store Store, logger *zap.Logger) *Daemon {
 	return &Daemon{ //nolint:exhaustruct
-		repo:          repo,
-		store:         store,
-		logger:        logger,
-		hosts:         map[hostKey]*hostState{},
-		lastIOAttempt: map[hostKey]time.Time{},
+		repo:           repo,
+		store:          store,
+		logger:         logger,
+		hosts:          map[hostKey]*hostState{},
+		lastHotAttempt: map[string]time.Time{},
+		lastIOAttempt:  map[string]time.Time{},
 	}
 }
 

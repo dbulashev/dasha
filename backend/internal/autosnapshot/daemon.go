@@ -71,7 +71,8 @@ type Daemon struct {
 	mu               sync.Mutex
 	hosts            map[hostKey]*hostState
 	lastAuto         map[hostKey]time.Time
-	lastIOAttempt    map[hostKey]time.Time
+	lastHotAttempt   map[string]time.Time
+	lastIOAttempt    map[string]time.Time
 	lastRetry        time.Time
 	lastHotRetention time.Time
 	lastIORetention  time.Time
@@ -233,7 +234,8 @@ func NewDaemon(
 		logger:         logger,
 		leaderElection: leaderElection,
 		hosts:          map[hostKey]*hostState{},
-		lastIOAttempt:  map[hostKey]time.Time{},
+		lastHotAttempt: map[string]time.Time{},
+		lastIOAttempt:  map[string]time.Time{},
 	}
 }
 

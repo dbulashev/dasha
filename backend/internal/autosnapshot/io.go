@@ -5,7 +5,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/robfig/cron/v3"
 	"go.uber.org/zap"
 
 	"github.com/dbulashev/dasha/internal/config"
@@ -51,43 +50,15 @@ func (d *Daemon) processIOSnapshots(ctx context.Context, cfg Config) {
 	for _, cl := range cls {
 		for _, h := range cl.Hosts {
 			host := string(h)
+			key := string(cl.Name) + "/" + host
 
-			if !d.ioDue(sched, last, string(cl.Name), host, now) {
+			if !d.dueForCapture(d.lastIOAttempt, sched, last, key, now) {
 				continue
 			}
 
 			d.takeIOSnapshotSafe(ctx, cl, host)
 		}
 	}
-}
-
-// ioDue reports whether the host is due for a capture, recording the attempt.
-// A host with no stored snapshot is judged by its last attempt instead — one
-// that never yields a snapshot (PostgreSQL below 16, unreachable) would
-// otherwise be probed on every daemon tick instead of once per schedule tick.
-func (d *Daemon) ioDue(
-	sched cron.Schedule,
-	last map[string]time.Time,
-	cluster, host string,
-	now time.Time,
-) bool {
-	key := hostKey{Cluster: cluster, Instance: host}
-
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	t, ok := last[cluster+"/"+host]
-	if !ok {
-		t, ok = d.lastIOAttempt[key]
-	}
-
-	if ok && !cronDue(sched, t, now) {
-		return false
-	}
-
-	d.lastIOAttempt[key] = now
-
-	return true
 }
 
 // takeIOSnapshotSafe bounds one capture with the per-host budget and recovers

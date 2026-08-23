@@ -32,6 +32,29 @@ func TestCronDue(t *testing.T) {
 	assert.True(t, cronDue(nil, at(2, 0), at(2, 0).Add(24*time.Hour)))
 }
 
+func TestDueForCapture(t *testing.T) {
+	at := func(h, m int) time.Time {
+		return time.Date(2026, 7, 19, h, m, 0, 0, time.UTC)
+	}
+
+	sched, err := ParseCronSchedule("*/5 * * * *")
+	require.NoError(t, err)
+
+	d := &Daemon{} //nolint:exhaustruct
+	attempts := map[string]time.Time{}
+	last := map[string]time.Time{"c1/db1": at(3, 0)}
+
+	// A stored snapshot still governs.
+	assert.False(t, d.dueForCapture(attempts, sched, last, "c1/db1", at(3, 2)))
+	assert.True(t, d.dueForCapture(attempts, sched, last, "c1/db1", at(3, 5)))
+
+	// Without one the first attempt fires, and the next waits for the schedule
+	// instead of repeating on every tick.
+	assert.True(t, d.dueForCapture(attempts, sched, last, "c1/db2", at(3, 6)))
+	assert.False(t, d.dueForCapture(attempts, sched, last, "c1/db2", at(3, 7)))
+	assert.True(t, d.dueForCapture(attempts, sched, last, "c1/db2", at(3, 10)))
+}
+
 func TestParseCronSchedule_Timezone(t *testing.T) {
 	// Bare specs are pinned to UTC regardless of the process's local zone:
 	// "0 3 * * *" fires at 03:00 UTC even when last is expressed in another zone.

@@ -49,10 +49,11 @@
 
 ## I/O (pg_stat_io, PostgreSQL 16+)
 - Server I/O split by backend type, object and context (`normal` / `vacuum` / `bulkread` / `bulkwrite`)
-- History from scheduled snapshots plus a live per-tick mode that needs no snapshot storage
-- Buffer-cache efficiency, vacuum cost and bulk-operation cost as summary cards
+- History from scheduled snapshots plus a live mode polling every 3–30 s, or one snapshot per click, that needs no snapshot storage
+- shared_buffers efficiency, vacuum cost and bulk-operation cost as summary cards
 - Count and Time metrics; the Time mode requires `track_io_timing = on`
 - Broken series (statistics reset, restart, major upgrade) are drawn as gaps, never as zeros
+- Write-ahead log I/O (PostgreSQL 18) in both the chart and the breakdown
 
 ## Progress Tracking
 - ANALYZE, VACUUM, CLUSTER / VACUUM FULL, CREATE INDEX, BASE BACKUP
@@ -63,6 +64,7 @@
 - `huge_pages`, TOAST/WAL compression algorithm checks
 - Checkpoint ratio analysis (`checkpoint_req` vs `checkpoint_timed`)
 - Autovacuum and autoanalyze configuration review
+- `track_wal_io_timing` left off
 
 ## Schema Checks
 - 17 structural checks: a sequence running out of values, a table without a primary key or without any unique key, an `UNLOGGED` relation or sequence, a schema `PUBLIC` may create objects in (CVE-2018-1058), a UUID kept as `varchar`, a relation with no columns left, a reserved keyword or a quoting-unsafe character in an object name, tables outside any foreign key

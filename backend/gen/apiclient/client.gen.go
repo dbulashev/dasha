@@ -2507,8 +2507,10 @@ type GetIOCurrentParams struct {
 type GetIOHistoryParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
 	Instance    Instance    `form:"instance" json:"instance"`
-	From        time.Time   `form:"from" json:"from"`
-	To          time.Time   `form:"to" json:"to"`
+
+	// From Start of the period. A window longer than 31 days is trimmed to the 31 days ending at `to`.
+	From time.Time `form:"from" json:"from"`
+	To   time.Time `form:"to" json:"to"`
 
 	// GroupBy Dimensions each series keeps; the rest are summed over.
 	GroupBy *GetIOHistoryParamsGroupBy `form:"group_by,omitempty" json:"group_by,omitempty"`

@@ -49,9 +49,7 @@ func (d *Daemon) processHotSnapshots(ctx context.Context, cfg Config) {
 		for _, db := range cl.Databases {
 			key := string(cl.Name) + "/" + string(db)
 
-			// No snapshot yet → capture immediately: the first run only seeds
-			// anchors, and the schedule takes over from there.
-			if t, ok := last[key]; ok && !cronDue(sched, t, now) {
+			if !d.dueForCapture(d.lastHotAttempt, sched, last, key, now) {
 				continue
 			}
 

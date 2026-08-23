@@ -44,15 +44,20 @@ const idle = computed(() => metrics.value.every((m) => m.value === 0))
 </script>
 
 <template>
-  <v-card class="mb-4 h-100">
+  <v-card class="h-100">
     <v-card-title class="d-flex align-center ga-1">
-      <v-icon start icon="mdi-broom" />
-      {{ t('io.vacuum.title') }}
-      <v-icon size="small" icon="mdi-help-circle-outline" class="ms-1 text-medium-emphasis">
-        <v-tooltip activator="parent" location="bottom" max-width="360">
-          {{ t('io.vacuum.hint') }}
-        </v-tooltip>
-      </v-icon>
+      <v-icon start icon="mdi-broom" class="flex-shrink-0" />
+      <span class="text-wrap">{{ t('io.vacuum.title') }}</span>
+      <v-tooltip :text="t('io.vacuum.hint')" location="bottom" max-width="360">
+        <template #activator="{ props: tip }">
+          <v-icon
+            v-bind="tip"
+            size="small"
+            icon="mdi-help-circle-outline"
+            class="ms-1 flex-shrink-0 text-medium-emphasis"
+          />
+        </template>
+      </v-tooltip>
     </v-card-title>
     <v-card-text>
       <v-alert v-if="idle" type="info" variant="tonal" density="compact">

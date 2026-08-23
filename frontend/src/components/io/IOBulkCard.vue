@@ -45,15 +45,20 @@ const allIdle = computed(() => sections.value.every((s) => s.idle))
 </script>
 
 <template>
-  <v-card class="mb-4 h-100">
+  <v-card class="h-100">
     <v-card-title class="d-flex align-center ga-1">
-      <v-icon start icon="mdi-tray-arrow-down" />
-      {{ t('io.bulk.title') }}
-      <v-icon size="small" icon="mdi-help-circle-outline" class="ms-1 text-medium-emphasis">
-        <v-tooltip activator="parent" location="bottom" max-width="360">
-          {{ t('io.bulk.hint') }}
-        </v-tooltip>
-      </v-icon>
+      <v-icon start icon="mdi-tray-arrow-down" class="flex-shrink-0" />
+      <span class="text-wrap">{{ t('io.bulk.title') }}</span>
+      <v-tooltip :text="t('io.bulk.hint')" location="bottom" max-width="360">
+        <template #activator="{ props: tip }">
+          <v-icon
+            v-bind="tip"
+            size="small"
+            icon="mdi-help-circle-outline"
+            class="ms-1 flex-shrink-0 text-medium-emphasis"
+          />
+        </template>
+      </v-tooltip>
     </v-card-title>
     <v-card-text>
       <v-alert v-if="allIdle" type="info" variant="tonal" density="compact">

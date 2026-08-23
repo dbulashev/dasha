@@ -52,3 +52,6 @@ UNION ALL
 SELECT 'highMaxwrittenClean', jsonb_build_object('value', (maxwritten_clean / GREATEST(DATE_PART('day', now() - stats_reset)::integer, 1))::text)
   FROM pg_stat_bgwriter
   WHERE maxwritten_clean / GREATEST(DATE_PART('day', now() - stats_reset)::integer, 1) > 1000
+UNION ALL
+SELECT 'walIoTimingOff', jsonb_build_object('value', setting)
+  FROM pg_catalog.pg_settings WHERE name = 'track_wal_io_timing' AND setting <> 'on'

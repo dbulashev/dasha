@@ -11,6 +11,9 @@ import type { InstanceParameter } from './instanceParameter'
 export type GetIOHistoryParams = {
   cluster_name: ClusterNameParameter
   instance: InstanceParameter
+  /**
+   * Start of the period. A window longer than 31 days is trimmed to the 31 days ending at `to`.
+   */
   from: string
   to: string
   /**

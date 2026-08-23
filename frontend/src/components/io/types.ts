@@ -1,4 +1,4 @@
-import { fmtCompact, fmtPct } from '@/utils/format'
+import { fmtCompact, fmtScaled, pickTimeScale } from '@/utils/format'
 
 export type MetricMode = 'count' | 'time'
 
@@ -25,19 +25,77 @@ export const TIME_METRICS = [
 
 export const BYTE_METRICS = ['read_bytes', 'write_bytes', 'extend_bytes'] as const
 
-// v1 shows buffered relation I/O only. PostgreSQL 18 adds WAL rows to the same
-// view; they belong on a card of their own, not mixed into these totals.
-export const VISIBLE_OBJECTS = ['relation', 'temp relation']
+// PostgreSQL 18 adds the WAL rows; they share the view but not the buffer
+// cache, so the cards above the matrix stay on the relation objects.
+export const VISIBLE_OBJECTS = ['relation', 'temp relation', 'wal']
+
+export const BUFFER_OBJECTS = ['relation', 'temp relation']
 
 export const CONTEXTS = ['normal', 'vacuum', 'bulkread', 'bulkwrite'] as const
 
-// Stable per-context colours, reused by every chart and card on the page.
-export const CONTEXT_COLORS: Record<string, string> = {
-  normal: '#2196F3',
-  vacuum: '#FF9800',
-  bulkread: '#4CAF50',
-  bulkwrite: '#9C27B0',
-  init: '#607D8B',
+// Categorical slots as [light, dark]; the dark step is picked for the dark
+// surface, not derived from the light one. Validated for colour-vision
+// deficiency: the four context hues clear the all-pairs floors in both modes,
+// the eight-slot order clears the adjacent-pair floors used by a stacked chart.
+const SERIES_SLOTS: readonly (readonly [string, string])[] = [
+  ['#2a78d6', '#3987e5'],
+  ['#eb6834', '#d95926'],
+  ['#1baf7a', '#199e70'],
+  ['#eda100', '#c98500'],
+  ['#e87ba4', '#d55181'],
+  ['#008300', '#008300'],
+  ['#4a3aa7', '#9085e9'],
+  ['#e34948', '#e66767'],
+]
+
+const NEUTRAL_SLOT: readonly [string, string] = ['#6d6c66', '#a8a79c']
+
+// Colour follows the entity, not its rank: a filtered chart must not repaint
+// the series that survived.
+const CONTEXT_SLOTS: Record<string, readonly [string, string]> = {
+  normal: SERIES_SLOTS[0],
+  vacuum: SERIES_SLOTS[3],
+  bulkread: SERIES_SLOTS[4],
+  bulkwrite: SERIES_SLOTS[5],
+  init: NEUTRAL_SLOT,
+}
+
+// The backend types pg_stat_io reports; anything outside this list folds into
+// one neutral "other" series rather than inventing a ninth hue.
+const BACKEND_TYPE_SLOTS: Record<string, number> = {
+  'client backend': 0,
+  'autovacuum worker': 1,
+  // PostgreSQL 18 moves much of the reading into these.
+  'io worker': 2,
+  checkpointer: 3,
+  'background writer': 4,
+  'background worker': 5,
+  startup: 6,
+  walsender: 7,
+}
+
+export function paletteColor(index: number, dark: boolean): string {
+  return (SERIES_SLOTS[index] ?? NEUTRAL_SLOT)[dark ? 1 : 0]
+}
+
+export function contextColor(context: string, dark: boolean): string {
+  return (CONTEXT_SLOTS[context] ?? NEUTRAL_SLOT)[dark ? 1 : 0]
+}
+
+export function backendTypeColor(backendType: string, dark: boolean): string | null {
+  const slot = BACKEND_TYPE_SLOTS[backendType]
+  return slot === undefined ? null : paletteColor(slot, dark)
+}
+
+export function neutralColor(dark: boolean): string {
+  return NEUTRAL_SLOT[dark ? 1 : 0]
+}
+
+/** Sequential ramp on one hue: transparent for idle, saturated for the peak. */
+export function heatColor(intensity: number, dark: boolean): string {
+  const rgb = dark ? '57, 135, 229' : '42, 120, 214'
+  const clamped = Math.min(1, Math.max(0, intensity))
+  return `rgba(${rgb}, ${(0.06 + 0.34 * clamped).toFixed(3)})`
 }
 
 /** One cell of the matrix over the selected window. */
@@ -85,19 +143,29 @@ export function hitRatio(rows: MatrixRow[]): number | null {
   return total > 0 ? hits / total : null
 }
 
-/**
- * Share of the window spent inside an I/O call. pg_stat_io times are in
- * milliseconds and are summed across backends, so this can legitimately exceed
- * 1 — it is concurrency, not a percentage of wall clock.
- */
-export function timeShare(ms: number, seconds: number): number | null {
-  return seconds > 0 ? ms / (seconds * 1000) : null
+// Suffixes for the units pickTimeScale returns; they sit next to raw
+// pg_stat_io column names, so they stay English like the labels around them.
+const TIME_UNITS: Record<string, string> = {
+  us: 'µs',
+  ms: 'ms',
+  sec: 's',
+  min: 'min',
+  h: 'h',
 }
 
+/**
+ * Rate over the window: operations per second, or milliseconds of I/O per
+ * second of observation. The time rate can exceed one second per second — the
+ * counters are summed across backends, so it is concurrency, not wall clock.
+ */
 export function fmtMetricRate(value: number, seconds: number, mode: MetricMode): string {
   if (seconds <= 0) return '—'
-  if (mode === 'count') return `${fmtCompact(value / seconds)}/s`
-  return fmtPct(timeShare(value, seconds)! * 100)
+
+  const perSecond = value / seconds
+  if (mode === 'count') return `${fmtCompact(perSecond)}/s`
+
+  const scale = pickTimeScale(perSecond)
+  return `${fmtScaled(perSecond, scale)} ${TIME_UNITS[scale.unit]}/s`
 }
 
 export function fmtMetricTotal(value: number, mode: MetricMode): string {
