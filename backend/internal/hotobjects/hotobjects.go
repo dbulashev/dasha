@@ -2,7 +2,6 @@
 // feature: daily per-host delta snapshots stored as an exact top-N per metric
 // class plus a histogram of the tail — the same trick PostgreSQL statistics
 // use (MCV list + histogram) applied to activity counters.
-// See plans/hot-objects.md and plans/hot-objects-design.md.
 package hotobjects
 
 import (

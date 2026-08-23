@@ -11,8 +11,8 @@ import (
 )
 
 // processHotSnapshots runs one hot-objects sweep: every cluster×database whose
-// cron schedule has fired since its last capture gets a fresh delta snapshot
-// (plans/hot-objects-design.md). Runs on the leader inside the daemon loop.
+// cron schedule has fired since its last capture gets a fresh delta snapshot.
+// Runs on the leader inside the daemon loop.
 func (d *Daemon) processHotSnapshots(ctx context.Context, cfg Config) {
 	if !cfg.HotEnabled {
 		return

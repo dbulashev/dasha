@@ -12,8 +12,8 @@ import (
 )
 
 // processIOSnapshots runs one pg_stat_io sweep: every cluster×host whose cron
-// schedule has fired since its last capture gets a fresh raw cumulative slice
-// (plans/pg-stat-io-design.md). Runs on the leader inside the daemon loop.
+// schedule has fired since its last capture gets a fresh raw cumulative slice.
+// Runs on the leader inside the daemon loop.
 //
 // Unlike hot-objects there is no anchor to seed: the previous snapshot is the
 // baseline, so the very first capture is already a full point of the series —

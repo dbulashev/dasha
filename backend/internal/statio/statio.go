@@ -1,7 +1,6 @@
 // Package statio is the domain model of the I/O section: raw cumulative
 // pg_stat_io slices captured per host, the deltas between adjacent captures,
 // and their aggregation into a bounded number of chart points.
-// See plans/pg-stat-io.md and plans/pg-stat-io-design.md.
 package statio
 
 import (
