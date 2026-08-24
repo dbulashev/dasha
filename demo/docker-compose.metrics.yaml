@@ -44,9 +44,7 @@ services:
     restart: unless-stopped
 
   pgscv:
-    build:
-      context: https://github.com/CHERTS/pgscv.git#v0.15.2
-    image: dasha/pgscv:local
+    image: cherts/pgscv:v0.15.3
     container_name: dasha-pgscv
     privileged: true # system collector needs host visibility
     command:
