@@ -47,7 +47,7 @@ var CoreSignals = []SignalKind{
 	SigMaxBloatRatio, SigSeqExhaustionMax, SigTypeExhaustionMax,
 	SigLatencyMs, SigSeqScanRate,
 	SigLoadAvg15, SigNumVCPU, SigDiskUsedRatio,
-	SigPoolerClients, SigPoolerServers, SigPoolerPoolSize,
+	SigPoolerServers, SigPoolerPoolSize,
 }
 
 // signalRole maps a signal to the provider-role that serves it.
