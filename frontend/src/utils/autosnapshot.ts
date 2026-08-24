@@ -27,3 +27,15 @@ export function snapshotCovers(databases: string[] | null | undefined, database:
   if (!database || !databases || databases.length === 0) return true
   return databases.includes(database)
 }
+
+// Names the extension a snapshot was read through, only when it is not the
+// current one. An unknown current source names nothing: it is not evidence of
+// a mismatch.
+export function foreignStatsSource(
+  snapshotSource: string | null | undefined,
+  current: string | null | undefined,
+): string {
+  if (!current || !snapshotSource || snapshotSource === current) return ''
+
+  return snapshotSource
+}

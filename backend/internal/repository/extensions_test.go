@@ -30,7 +30,7 @@ func TestQualify(t *testing.T) {
 		{
 			name:   "reset function is qualified the same way",
 			schema: `"monitoring"`,
-			object: defaultPgssResetFunc,
+			object: statsSourceDefs[0].Reset,
 			want:   `"monitoring".pg_stat_statements_reset`,
 		},
 	}

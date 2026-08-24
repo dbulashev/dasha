@@ -15,10 +15,11 @@ import type { StatsResetTime } from '@/api/models/index'
 import type { QueryStatsStatus, SnapshotListItem, QueryReport } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useViewError } from '@/composables/useViewError'
+import { DEFAULT_STATS_SOURCE } from '@/composables/useStatsSource'
 import { useAuthStore } from '@/stores/auth'
 import { assertOk } from '@/utils/api'
 import { fmtWindow, fmtDateTime } from '@/utils/format'
-import { snapshotReasonI18nKey, snapshotCoverage, snapshotCovers } from '@/utils/autosnapshot'
+import { snapshotReasonI18nKey, snapshotCoverage, snapshotCovers, foreignStatsSource } from '@/utils/autosnapshot'
 import QueryReportSection from '@/components/queries/QueryReportSection.vue'
 import LockSnapshotDialog from '@/components/queries/LockSnapshotDialog.vue'
 import ScopeSwitch from '@/components/queries/ScopeSwitch.vue'
@@ -39,12 +40,17 @@ const pgssUnavailable = computed(() => {
   return !queryStatsStatus.value.Available || !queryStatsStatus.value.Enabled || !queryStatsStatus.value.Readable
 })
 
+const currentStatsSource = computed(() => queryStatsStatus.value?.Source ?? '')
+
+const statsSourceName = computed(() => currentStatsSource.value || DEFAULT_STATS_SOURCE)
+
 const pgssWarningMessage = computed(() => {
   const s = queryStatsStatus.value
   if (!s) return ''
-  if (!s.Available) return t('pgssNotInstalled')
-  if (!s.Enabled) return t('pgssNotEnabled')
-  if (!s.Readable) return t('pgssNotReadable')
+  const ext = s.Source || DEFAULT_STATS_SOURCE
+  if (!s.Available) return t('pgssNotInstalled', { ext })
+  if (!s.Enabled) return t('pgssNotEnabled', { ext })
+  if (!s.Readable) return t('pgssNotReadable', { ext })
   return ''
 })
 
@@ -75,7 +81,7 @@ async function doReset() {
       database: databaseName.value,
     })
     if (res.status === 204) {
-      resetSnackbarMsg.value = t('resetQueryStatsSuccess')
+      resetSnackbarMsg.value = t('resetQueryStatsSuccess', { ext: statsSourceName.value })
       resetSnackbarColor.value = 'success'
       // The reset moved the pgss window start; refetch it so the live window
       // is not computed from the pre-reset timestamp.
@@ -119,13 +125,19 @@ const snapshotIdsSet = computed(() => new Set(snapshotsList.value.map(s => s.Id)
 
 const snapshotSelectItems = computed(() => {
   const live = { value: null as string | null, title: t('snapshotLiveData'), subtitle: '' }
-  const items = snapshotsList.value.map(s => ({
-    value: s.Id,
-    title: `${fmtDateTime(s.CreatedAt)} · ${t(snapshotReasonI18nKey(s.Reason), s.Reason ?? 'manual')}`,
-    // Snapshots are host-wide; the coverage line is what says whether the
-    // database being browsed is inside a given one.
-    subtitle: snapshotCoverage(s.Databases) || t('snapshotNoAttribution'),
-  }))
+  const items = snapshotsList.value.map((s) => {
+    const foreign = foreignStatsSource(s.StatsSource, currentStatsSource.value)
+
+    return {
+      value: s.Id,
+      title: `${fmtDateTime(s.CreatedAt)} · ${t(snapshotReasonI18nKey(s.Reason), s.Reason ?? 'manual')}`,
+      // Snapshots are host-wide; the coverage line is what says whether the
+      // database being browsed is inside a given one.
+      subtitle: [snapshotCoverage(s.Databases) || t('snapshotNoAttribution'), foreign]
+        .filter(Boolean)
+        .join(' · '),
+    }
+  })
   return [live, ...items]
 })
 
@@ -355,7 +367,7 @@ watch([clusterName, hostName, databaseName], async () => {
       style="max-width: 300px;"
     />
     <ScopeSwitch :force-instance="legacySnapshot" />
-    <v-tooltip v-if="statsWindowText" :text="t('compare.statsWindowHint')" location="bottom" max-width="420">
+    <v-tooltip v-if="statsWindowText" :text="t('compare.statsWindowHint', { ext: statsSourceName })" location="bottom" max-width="420">
       <template #activator="{ props: tp }">
         <span v-bind="tp" class="text-caption text-medium-emphasis d-inline-flex align-center ga-1">
           <v-icon size="small">mdi-timer-sand</v-icon>
@@ -416,7 +428,7 @@ watch([clusterName, hostName, databaseName], async () => {
 
   <v-dialog v-model="resetConfirmDialog" max-width="420">
     <v-card>
-      <v-card-text>{{ t('resetQueryStatsConfirm') }}</v-card-text>
+      <v-card-text>{{ t('resetQueryStatsConfirm', { ext: statsSourceName }) }}</v-card-text>
       <v-card-actions>
         <v-spacer />
         <v-btn @click="resetConfirmDialog = false">{{ t('Cancel') }}</v-btn>

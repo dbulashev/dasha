@@ -6,7 +6,7 @@
 - Top-10 queries by execution time and WAL volume
 - Comprehensive query report (rows, calls, planning/execution time, cache hit ratio, WAL, temp buffers, contribution %)
 - Running and blocked queries monitoring
-- `pg_stat_statements` status and reset time tracking
+- `pg_stat_statements` status and reset time tracking — on Postgres Pro clusters `pgpro_stats` is detected and used instead, with no configuration
 - **pgss snapshots**: save point-in-time snapshots to a dedicated storage database, view and share via URL
 - **Snapshot comparison**: side-by-side diff of two snapshots or one snapshot vs live data, sortable by any metric
 - **Auto-snapshots**: separate `dasha autosnapshot` daemon creates snapshots automatically on activity spikes (sliding-window avg on `pg_stat_activity`) or master↔replica role changes; configurable per cluster via UI, retention by total size

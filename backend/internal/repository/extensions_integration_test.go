@@ -12,10 +12,9 @@ import (
 	"github.com/dbulashev/dasha/internal/testinfra"
 )
 
-// TestExtensionSchemaResolution moves both extensions off the search_path, the
-// layout of "CREATE EXTENSION … SCHEMA ext" installations, and checks that every
-// query built on them keeps working — the failure mode was
-// `relation "pg_stat_statements" does not exist`.
+// TestExtensionSchemaResolution moves both extensions off the search_path — the
+// layout of "CREATE EXTENSION … SCHEMA ext" installations — and checks that every
+// query built on them keeps working.
 func TestExtensionSchemaResolution(t *testing.T) {
 	t.Parallel()
 	pool := testinfra.IsolatePool(t)
@@ -41,6 +40,10 @@ func TestExtensionSchemaResolution(t *testing.T) {
 
 	assert.Equal(t, `"ext"`, p.extensionSchema(ctx, pool, extPgss))
 	assert.Equal(t, `"ext"`, p.extensionSchema(ctx, pool, extPgstattuple))
+
+	src := p.statsSource(ctx, pool)
+	assert.Equal(t, "pg_stat_statements", src.Name())
+	assert.Equal(t, `"ext".pg_stat_statements`, src.Relation())
 
 	readable, err := p.getQueryStatsReadable(ctx, vNum, pool)
 	require.NoError(t, err)

@@ -5,6 +5,7 @@ import { getQueryStatsStatus } from '@/api/gen/default/default'
 import type { QueryStatsStatus } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useViewError } from '@/composables/useViewError'
+import { DEFAULT_STATS_SOURCE } from '@/composables/useStatsSource'
 import { assertOk } from '@/utils/api'
 import QueryStatsChartSection from '@/components/queries/QueryStatsChartSection.vue'
 import IoCpuScatterSection from '@/components/queries/IoCpuScatterSection.vue'
@@ -20,6 +21,10 @@ const { hasScopeChoice } = useQueryScope()
 
 const queryStatsStatus = ref<QueryStatsStatus | null>(null)
 
+// Guards against out-of-order responses: a reply for the host the user has
+// already left must not resurrect its warning on the one now on screen.
+let reqId = 0
+
 const pgssUnavailable = computed(() => {
   if (!queryStatsStatus.value) return false
   return !queryStatsStatus.value.Available || !queryStatsStatus.value.Enabled || !queryStatsStatus.value.Readable
@@ -28,28 +33,34 @@ const pgssUnavailable = computed(() => {
 const pgssWarningMessage = computed(() => {
   const s = queryStatsStatus.value
   if (!s) return ''
-  if (!s.Available) return t('pgssNotInstalled')
-  if (!s.Enabled) return t('pgssNotEnabled')
-  if (!s.Readable) return t('pgssNotReadable')
+  const ext = s.Source || DEFAULT_STATS_SOURCE
+  if (!s.Available) return t('pgssNotInstalled', { ext })
+  if (!s.Enabled) return t('pgssNotEnabled', { ext })
+  if (!s.Readable) return t('pgssNotReadable', { ext })
   return ''
 })
 
 async function loadQueryStatsStatus() {
   if (!clusterName.value || !hostName.value || !databaseName.value) return
+  const myId = ++reqId
   try {
     const response = await getQueryStatsStatus({
       cluster_name: clusterName.value,
       instance: hostName.value,
       database: databaseName.value,
     })
+    if (myId !== reqId) return // superseded — leave state to the newer load
     queryStatsStatus.value = assertOk<QueryStatsStatus>(response)
   } catch {
+    if (myId !== reqId) return
     queryStatsStatus.value = null
   }
 }
 
 watch([clusterName, hostName, databaseName], () => {
   clearError()
+  reqId++ // whatever is in flight describes the previous host
+  queryStatsStatus.value = null
   loadQueryStatsStatus()
 }, { immediate: true })
 </script>

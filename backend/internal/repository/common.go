@@ -130,6 +130,7 @@ type Repository interface {
 	GetQueriesReport(ctx context.Context, clusterName, instanceName, databaseName string, excludeUsers []string, queryID *int64) ([]dto.QueryReport, error)
 	GetQueriesTop10Chart(ctx context.Context, clusterName, instanceName, databaseName, scope string) ([]dto.QueryTop10ChartItem, error)
 	PgssDatabase(ctx context.Context, clusterName, instanceName, databaseName string) (string, error)
+	PgssSource(ctx context.Context, clusterName, instanceName, databaseName string) (string, error)
 	GetQueryStatsStatus(ctx context.Context, clusterName, instanceName, databaseName string) (dto.QueryStatsStatus, error)
 	ResetQueryStats(ctx context.Context, clusterName, instanceName, databaseName string) error
 	GetActiveConnectionCount(ctx context.Context, clusterName, instanceName string) (int, error)
@@ -158,8 +159,6 @@ type Repository interface {
 
 const defaultPgStatsView = "pg_catalog.pg_stats"
 
-const defaultPgssResetFunc = "pg_stat_statements_reset"
-
 // validPgIdentifier matches schema-qualified or plain SQL identifiers (no injection risk).
 var validPgIdentifier = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)?$`)
 
@@ -179,6 +178,7 @@ type PgxPool struct {
 	pgStatsViewConfig     string   // configured pg_stats_view from global config
 	resolvedPgStatsView   sync.Map // *pgxpool.Pool → string (resolved view name)
 	resolvedExtSchemas    sync.Map // extSchemaKey → string (quoted extension schema)
+	resolvedStatsSources  sync.Map // *pgxpool.Pool → statsSourceEntry
 	pgssResetFuncConfig   string   // configured pgss_reset_function from global config
 	poolConfig            config.PoolConfig
 	schemaLintConfig      schemalint.Config
@@ -209,27 +209,29 @@ func NewRepositoryPgxPool(
 	}
 }
 
-// pgssResetFunction returns the configured pgss reset function, or the extension's
-// own pg_stat_statements_reset when unset/invalid — qualified with the schema the
-// extension lives in, since that need not be on the search_path.
-// A configured name is validated against validPgIdentifier (no injection risk) and
-// used as written: it may carry its own schema (monitoring.reset_pgss), and without
-// one it is resolved through the search_path, as its author intended.
+// pgssResetFunction returns the configured reset function, or the one of the
+// extension this pool is read through, qualified with its schema — which need
+// not be on the search_path. A configured name is validated against
+// validPgIdentifier and used as written: it may carry a schema of its own.
 func (p *PgxPool) pgssResetFunction(ctx context.Context, pool *pgxpool.Pool) string {
-	fallback := func() string {
-		return qualify(p.extensionSchema(ctx, pool, extPgss), defaultPgssResetFunc)
-	}
+	return resetFunction(p.pgssResetFuncConfig, func() string {
+		return p.statsSource(ctx, pool).ResetFunc()
+	}, p.logger)
+}
 
-	f := strings.TrimSpace(p.pgssResetFuncConfig)
+func resetFunction(configured string, fallback func() string, logger *zap.Logger) string {
+	f := strings.TrimSpace(configured)
 	if f == "" {
 		return fallback()
 	}
 
 	if !validPgIdentifier.MatchString(f) {
-		p.logger.Warn("invalid pgss_reset_function, using default",
-			zap.String("configured", f), zap.String("default", defaultPgssResetFunc))
+		def := fallback()
 
-		return fallback()
+		logger.Warn("invalid pgss_reset_function, using default",
+			zap.String("configured", f), zap.String("default", def))
+
+		return def
 	}
 
 	return f
@@ -566,7 +568,8 @@ func (p *PgxPool) getPool(ctx context.Context, dsn string) (*pgxpool.Pool, error
 
 // Extensions whose objects the SQL templates address by name. Each is commonly
 // installed into a dedicated schema (CREATE EXTENSION … SCHEMA ext), which is
-// not on the default search_path.
+// not on the default search_path. Query statistics have their own resolver —
+// see statsSourceDefs.
 const (
 	extPgss        = "pg_stat_statements"
 	extPgstattuple = "pgstattuple"
@@ -644,6 +647,7 @@ func (p *PgxPool) extensionSchema(ctx context.Context, pool *pgxpool.Pool, ext s
 // ever reach again.
 func (p *PgxPool) forgetPool(pool *pgxpool.Pool) {
 	p.resolvedPgStatsView.Delete(pool)
+	p.resolvedStatsSources.Delete(pool)
 
 	p.resolvedExtSchemas.Range(func(k, _ any) bool {
 		if key, ok := k.(extSchemaKey); ok && key.pool == pool {
@@ -728,11 +732,11 @@ type pgssTemplateData struct {
 }
 
 func (p *PgxPool) pgssTemplateData(ctx context.Context, pool *pgxpool.Pool) pgssTemplateData {
-	schema := p.extensionSchema(ctx, pool, extPgss)
+	src := p.statsSource(ctx, pool)
 
 	return pgssTemplateData{
-		Pgss:     qualify(schema, "pg_stat_statements"),
-		PgssInfo: qualify(schema, "pg_stat_statements_info"),
+		Pgss:     src.Relation(),
+		PgssInfo: src.InfoRelation(),
 	}
 }
 

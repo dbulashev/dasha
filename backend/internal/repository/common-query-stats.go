@@ -14,6 +14,11 @@ import (
 	"github.com/dbulashev/dasha/internal/query"
 )
 
+// extensionTemplateData names one extension for the status probes.
+type extensionTemplateData struct {
+	Extension string
+}
+
 func (p *PgxPool) GetQueryStatsStatus(
 	ctx context.Context,
 	clusterName,
@@ -34,12 +39,14 @@ func (p *PgxPool) GetQueryStatsStatus(
 		return dto.QueryStatsStatus{}, fmt.Errorf("get server version | %w", err)
 	}
 
-	available, err := p.getQueryStatsAvailable(ctx, vNum, pool)
+	src := p.statsSource(ctx, pool)
+
+	available, name, err := p.getQueryStatsAvailable(ctx, vNum, pool, src)
 	if err != nil {
 		p.logger.Warn("failed to get query stats available", zap.Error(err))
 	}
 
-	enabled, err := p.getQueryStatsEnabled(ctx, vNum, pool)
+	enabled, err := p.getQueryStatsEnabled(ctx, vNum, pool, name)
 	if err != nil {
 		p.logger.Warn("failed to get query stats enabled", zap.Error(err))
 	}
@@ -53,18 +60,53 @@ func (p *PgxPool) GetQueryStatsStatus(
 		Available: available,
 		Enabled:   enabled,
 		Readable:  readable,
+		Source:    name,
 	}, nil
 }
 
+// getQueryStatsAvailable reports whether the extension can be installed here and
+// which one the messages should name. Absent a resolved source the candidates are
+// tried in recommendation order.
 func (p *PgxPool) getQueryStatsAvailable(
 	ctx context.Context,
 	serverVersion int,
 	pool *pgxpool.Pool,
+	src statsSource,
+) (bool, string, error) {
+	if src.Present() {
+		available, err := p.probeExtensionAvailable(ctx, serverVersion, pool, src.Name())
+
+		return available, src.Name(), err
+	}
+
+	var probeErr error
+
+	for _, def := range recommendedSourceOrder {
+		available, err := p.probeExtensionAvailable(ctx, serverVersion, pool, def.Ext)
+		if err != nil {
+			probeErr = errors.Join(probeErr, err)
+
+			continue
+		}
+
+		if available {
+			return true, def.Ext, nil
+		}
+	}
+
+	return false, src.Name(), probeErr
+}
+
+func (p *PgxPool) probeExtensionAvailable(
+	ctx context.Context,
+	serverVersion int,
+	pool *pgxpool.Pool,
+	extension string,
 ) (bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	qStr, err := query.Get(serverVersion, enums.QueryCommonQueryStatsAvailable, nil)
+	qStr, err := query.Get(serverVersion, enums.QueryCommonQueryStatsAvailable, extensionTemplateData{Extension: extension})
 	if err != nil {
 		return false, fmt.Errorf("getQueryStatsAvailable | %w", err)
 	}
@@ -83,11 +125,12 @@ func (p *PgxPool) getQueryStatsEnabled(
 	ctx context.Context,
 	serverVersion int,
 	pool *pgxpool.Pool,
+	extension string,
 ) (bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	qStr, err := query.Get(serverVersion, enums.QueryCommonQueryStatsEnabled, nil)
+	qStr, err := query.Get(serverVersion, enums.QueryCommonQueryStatsEnabled, extensionTemplateData{Extension: extension})
 	if err != nil {
 		return false, fmt.Errorf("getQueryStatsEnabled | %w", err)
 	}
@@ -117,18 +160,15 @@ func (p *PgxPool) getQueryStatsReadable(
 
 	_, err = pool.Exec(ctx, qStr)
 	if err != nil {
-		// Only an answer from the server settles the question. A connection that
-		// died or a deadline that fired says nothing about the extension, and
-		// reporting that as "not readable" would state as fact something this
-		// probe never learned.
+		// Only an answer from the server settles the question; a dead connection
+		// or an expired deadline is not one.
 		var pgErr *pgconn.PgError
 		if IsTimeout(err) || !errors.As(err, &pgErr) {
 			return false, fmt.Errorf("getQueryStatsReadable | %w", err)
 		}
 
-		// Not an error for the caller — the UI just reports "not readable" —
-		// but the actual reason (privileges, custom schema) is only visible here.
-		p.logger.Debug("pg_stat_statements is not readable", zap.Error(err))
+		// The reason (privileges, custom schema) is visible only here.
+		p.logger.Debug("query statistics view is not readable", zap.Error(err))
 
 		return false, nil
 	}

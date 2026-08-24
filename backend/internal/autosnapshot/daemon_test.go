@@ -53,6 +53,10 @@ func (f *fakeRepo) PgssDatabase(_ context.Context, _, _, database string) (strin
 	return database, nil
 }
 
+func (f *fakeRepo) PgssSource(context.Context, string, string, string) (string, error) {
+	return "pg_stat_statements", nil
+}
+
 func (f *fakeRepo) GetPgssStatsResetTime(context.Context, string, string, string) (*dto.StatsResetTime, error) {
 	return nil, nil
 }

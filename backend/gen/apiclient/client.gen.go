@@ -778,7 +778,7 @@ type IndexAdvisorCandidate struct {
 	// PlannerChecked False throughout this step. A client must carry the caveat: the recommendation is structural, derived from the statements and the catalog alone.
 	PlannerChecked bool `json:"planner_checked"`
 
-	// Predicate WHERE clause of a partial candidate, already quoted and ready to read, empty for a plain index. An IS NULL predicate lands here rather than in columns: its selectivity is null_frac, so on a soft-delete column it excludes almost nothing and belongs in neither, while on a rare flag it makes a small index over exactly the rows the statements read.
+	// Predicate Condition of a partial candidate, already quoted and ready to read, without the WHERE keyword, empty for a plain index. An IS NULL predicate lands here rather than in columns: its selectivity is null_frac, so on a soft-delete column it excludes almost nothing and belongs in neither, while on a rare flag it makes a small index over exactly the rows the statements read.
 	Predicate string `json:"predicate"`
 	Schema    string `json:"schema"`
 
@@ -871,7 +871,7 @@ type IndexAdvisorSummary struct {
 
 // IndexAdvisorWarning defines model for IndexAdvisorWarning.
 type IndexAdvisorWarning struct {
-	// Code write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. partition_root — the table is partitioned: the root index cannot be built with CONCURRENTLY, so the DDL goes through ON ONLY plus a concurrent build and an ATTACH per partition, and every partition pays for the index; params.partitions counts them. stats_missing — no pg_stats row for some of the columns, so their order is the order the statement wrote them and an IS NULL filter may have been left out of the index. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires at least one unique index to exist. similar_index — an existing index already holds every column of the candidate, in another order or behind other columns; it does not serve the statements, but names lists it so the reader can decide between a new index and a rewritten one. many_indexes — the table already carries params.indexes indexes, so one more is unlikely to be the best trade available.
+	// Code write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. partition_root — the table is partitioned: the root index cannot be built with CONCURRENTLY, so the DDL goes through ON ONLY plus a concurrent build and an ATTACH per partition, and every partition pays for the index; params.partitions counts them. stats_missing — no pg_stats row for some of the columns, so their order is the order the statement wrote them and an IS NULL filter may have been left out of the index. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires a unique index over plain column names covering every row, so a partial or expression index does not enable it. similar_index — an existing index already holds every column of the candidate, in another order or behind other columns; it does not serve the statements, but names lists it so the reader can decide between a new index and a rewritten one. many_indexes — the table already carries params.indexes indexes, so one more is unlikely to be the best trade available.
 	Code IndexAdvisorWarningCode `json:"code"`
 
 	// Names Objects the wording of this code quotes — existing index names, for the codes that point at one. Absent when the code names nothing.
@@ -881,7 +881,7 @@ type IndexAdvisorWarning struct {
 	Params *map[string]float64 `json:"params,omitempty"`
 }
 
-// IndexAdvisorWarningCode write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. partition_root — the table is partitioned: the root index cannot be built with CONCURRENTLY, so the DDL goes through ON ONLY plus a concurrent build and an ATTACH per partition, and every partition pays for the index; params.partitions counts them. stats_missing — no pg_stats row for some of the columns, so their order is the order the statement wrote them and an IS NULL filter may have been left out of the index. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires at least one unique index to exist. similar_index — an existing index already holds every column of the candidate, in another order or behind other columns; it does not serve the statements, but names lists it so the reader can decide between a new index and a rewritten one. many_indexes — the table already carries params.indexes indexes, so one more is unlikely to be the best trade available.
+// IndexAdvisorWarningCode write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. partition_root — the table is partitioned: the root index cannot be built with CONCURRENTLY, so the DDL goes through ON ONLY plus a concurrent build and an ATTACH per partition, and every partition pays for the index; params.partitions counts them. stats_missing — no pg_stats row for some of the columns, so their order is the order the statement wrote them and an IS NULL filter may have been left out of the index. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires a unique index over plain column names covering every row, so a partial or expression index does not enable it. similar_index — an existing index already holds every column of the candidate, in another order or behind other columns; it does not serve the statements, but names lists it so the reader can decide between a new index and a rewritten one. many_indexes — the table already carries params.indexes indexes, so one more is unlikely to be the best trade available.
 type IndexAdvisorWarningCode string
 
 // IndexAdvisorWrites What maintaining an index on this table would cost, from pg_stat_user_tables. Scans are the other side of the trade: they are what an index would serve.
@@ -1503,6 +1503,9 @@ type QueryStatsStatus struct {
 	Available bool `json:"Available"`
 	Enabled   bool `json:"Enabled"`
 	Readable  bool `json:"Readable"`
+
+	// Source Query-statistics extension this connection is read through: pg_stat_statements, or pgpro_stats on Postgres Pro. Always set — when neither is installed it names the one worth installing here.
+	Source string `json:"Source"`
 }
 
 // QueryTop10ByTime defines model for QueryTop10ByTime.
@@ -1782,6 +1785,9 @@ type SnapshotListItem struct {
 
 	// Reason Why the snapshot was created: "manual" or "auto:<trigger_type>"
 	Reason *string `json:"Reason,omitempty"`
+
+	// StatsSource Query-statistics extension the snapshot was read through (pg_stat_statements or pgpro_stats). Null for snapshots taken before this was recorded. The two number queryid differently, so snapshots from different sources are not comparable row by row.
+	StatsSource *string `json:"StatsSource"`
 }
 
 // SnapshotStatus defines model for SnapshotStatus.
