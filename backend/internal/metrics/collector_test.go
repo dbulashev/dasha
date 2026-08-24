@@ -6,6 +6,9 @@ import (
 	"time"
 )
 
+// sigUncatalogued has no catalog template under any provider.
+const sigUncatalogued SignalKind = "test_uncatalogued"
+
 // valueClient returns a fixed value for any non-empty expression.
 type valueClient struct{ v float64 }
 
@@ -40,7 +43,7 @@ func TestCollector_InstantCollectsCataloguedSignals(t *testing.T) {
 	co := newTestCollector(t, 42)
 
 	sig, err := co.Instant(context.Background(), "prod-mdb", "rc1a-abc.mdb.yandexcloud.net", time.Now(),
-		SigXactsLeftWrap, SigIOReadTime)
+		SigXactsLeftWrap, sigUncatalogued)
 	if err != nil {
 		t.Fatalf("Instant: %v", err)
 	}
@@ -50,9 +53,8 @@ func TestCollector_InstantCollectsCataloguedSignals(t *testing.T) {
 		t.Errorf("SigXactsLeftWrap: want present/42, got v=%v ok=%v", v, ok)
 	}
 
-	// io_read_time has no catalog template -> absent (graceful).
-	if _, ok := sig.Get(SigIOReadTime); ok {
-		t.Errorf("SigIOReadTime should be absent (uncatalogued), got present")
+	if _, ok := sig.Get(sigUncatalogued); ok {
+		t.Errorf("uncatalogued signal should be absent, got present")
 	}
 }
 
