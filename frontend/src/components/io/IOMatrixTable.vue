@@ -32,11 +32,9 @@ const OBJECT_BADGES: Record<string, { icon: string; hint: string }> = {
   wal: { icon: 'mdi-notebook-outline', hint: 'io.matrix.walObject' },
 }
 
-// Bytes are a second view of the same reads and writes; counting them into the
-// share would drown the operation counts they are derived from.
-// Share is weighted by the metrics on screen; visibility is not. A row can
-// carry I/O and no timings at all — WAL needs track_wal_io_timing of its own —
-// and must stay in the table when the Time mode is selected.
+// Bytes are a second view of the same reads and writes; the share must not
+// count them twice. Share follows the metrics on screen, visibility does not:
+// a WAL row can carry I/O and no timings (track_wal_io_timing is separate).
 const shareMetrics = computed(() => metrics.value.filter((m) => !isByteMetric(m)))
 
 interface Item extends Record<string, string | number> {
@@ -81,8 +79,7 @@ const items = computed<Item[]>(() => {
   return props.showIdle ? rows : rows.filter((r) => r.activity > 0)
 })
 
-// Peak per column: the heat of a cell says how it compares inside its own
-// metric, not against counters measured on a different scale.
+// Peak per column: a cell's heat compares inside its own metric, not across them.
 const peaks = computed(() => {
   const out = new Map<string, number>()
   for (const item of items.value) {
@@ -102,8 +99,7 @@ function heatProps(column: string) {
   }
 }
 
-// The three keys stay pinned while the metric columns scroll sideways; share
-// rides with them because it is read against the keys, not against a metric.
+// The three keys and share stay pinned while the metric columns scroll sideways.
 const headers = computed(() => [
   // Vuetify derives the sticky left offset from `width` alone, so a pinned
   // column without one lands on top of its neighbour.

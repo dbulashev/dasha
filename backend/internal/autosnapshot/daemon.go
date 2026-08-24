@@ -53,7 +53,7 @@ type Store interface {
 	DropHotPartitionsBefore(ctx context.Context, cutoff time.Time) error
 
 	LastIOSnapshotAt(ctx context.Context) (map[string]time.Time, error)
-	InsertIOSnapshot(ctx context.Context, clusterName, instance string, snap statio.Snapshot) (uuid.UUID, error)
+	InsertIOSnapshot(ctx context.Context, clusterName, instance string, snap statio.Snapshot) error
 	DropIOPartitionsBefore(ctx context.Context, cutoff time.Time) error
 }
 

@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
@@ -39,10 +38,10 @@ func (f *ioFakeStore) LastIOSnapshotAt(context.Context) (map[string]time.Time, e
 	return map[string]time.Time{}, nil
 }
 
-func (f *ioFakeStore) InsertIOSnapshot(_ context.Context, _, _ string, snap statio.Snapshot) (uuid.UUID, error) {
+func (f *ioFakeStore) InsertIOSnapshot(_ context.Context, _, _ string, snap statio.Snapshot) error {
 	f.inserted = append(f.inserted, snap)
 
-	return uuid.New(), nil
+	return nil
 }
 
 type ioFakeClusters struct{ cls []config.Cluster }

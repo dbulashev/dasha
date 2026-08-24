@@ -44,6 +44,24 @@ type Snapshot struct {
 	Rows          []Row
 }
 
+// Meta is one capture's header: what a read plan needs before any matrix body
+// is fetched.
+type Meta struct {
+	CapturedAt    time.Time
+	VersionNum    int
+	TrackIOTiming bool
+	StatsReset    *time.Time
+}
+
+func (s Snapshot) Meta() Meta {
+	return Meta{
+		CapturedAt:    s.CapturedAt,
+		VersionNum:    s.VersionNum,
+		TrackIOTiming: s.TrackIOTiming,
+		StatsReset:    s.StatsReset,
+	}
+}
+
 // Interval is the delta between two adjacent snapshots of one host.
 type Interval struct {
 	From     time.Time
@@ -62,10 +80,33 @@ type Bucket struct {
 	// Duration sums only the complete intervals — the denominator of any rate
 	// derived from Rows.
 	Duration time.Duration
-	// Partial marks a bucket that swallowed at least one incomplete interval:
-	// the consumer draws a gap, not a zero.
+	// Partial marks a bucket that could not measure all of its own span: the
+	// consumer draws a gap, not a zero.
 	Partial bool
 	Rows    []Row
+}
+
+// Span is a run of consecutive measurable captures inside one bucket, named by
+// its two ends. The counters are cumulative, so the run's total is the
+// difference of the ends and the captures between them are never read.
+type Span struct {
+	From time.Time
+	To   time.Time
+}
+
+// BucketPlan is one point of a series resolved from capture headers alone.
+type BucketPlan struct {
+	From     time.Time
+	To       time.Time
+	Duration time.Duration
+	Partial  bool
+	Spans    []Span
+}
+
+// Plan is the whole series of a history request: its buckets and, through them,
+// the only captures that have to be loaded.
+type Plan struct {
+	Buckets []BucketPlan
 }
 
 // byteCounters maps an operation counter to the byte counter derived from it on
@@ -118,7 +159,7 @@ func Delta(prev, cur Snapshot) (Interval, bool) {
 		Duration: cur.CapturedAt.Sub(prev.CapturedAt),
 	}
 
-	if iv.Duration <= 0 || !sameEpoch(prev, cur) {
+	if iv.Duration <= 0 || !sameEpoch(prev.Meta(), cur.Meta()) {
 		return iv, false
 	}
 
@@ -169,7 +210,7 @@ func Delta(prev, cur Snapshot) (Interval, bool) {
 // sameEpoch reports whether the two captures describe one continuous run of the
 // same server: a major upgrade changes both the columns and the row set, and
 // stats_reset marks a restart or pg_stat_reset_shared('io').
-func sameEpoch(prev, cur Snapshot) bool {
+func sameEpoch(prev, cur Meta) bool {
 	if prev.VersionNum/10000 != cur.VersionNum/10000 {
 		return false
 	}
@@ -184,25 +225,34 @@ func sameEpoch(prev, cur Snapshot) bool {
 	}
 }
 
-// Intervals measures every adjacent pair of a chronological snapshot slice.
-func Intervals(snaps []Snapshot) []Interval {
-	if len(snaps) < 2 {
+// metaIntervals measures every adjacent pair of a chronological header slice:
+// the bounds of each interval and whether it is measurable, without its values.
+func metaIntervals(metas []Meta) []Interval {
+	if len(metas) < 2 {
 		return nil
 	}
 
-	out := make([]Interval, 0, len(snaps)-1)
+	out := make([]Interval, 0, len(metas)-1)
 
-	for i := 1; i < len(snaps); i++ {
-		iv, _ := Delta(snaps[i-1], snaps[i])
+	for i := 1; i < len(metas); i++ {
+		prev, cur := metas[i-1], metas[i]
+
+		iv := Interval{
+			From:     prev.CapturedAt,
+			To:       cur.CapturedAt,
+			Duration: cur.CapturedAt.Sub(prev.CapturedAt),
+		}
+		iv.Complete = iv.Duration > 0 && sameEpoch(prev, cur)
+
 		out = append(out, iv)
 	}
 
 	return out
 }
 
-// Bucketize sums adjacent intervals into at most points buckets of equal
-// duration. Deltas are additive, so summing is the whole aggregation rule.
-func Bucketize(intervals []Interval, points int) []Bucket {
+// groupIntervals splits a chronological interval slice into at most points
+// contiguous groups of equal duration; a group with no interval is dropped.
+func groupIntervals(intervals []Interval, points int) [][]Interval {
 	if len(intervals) == 0 {
 		return nil
 	}
@@ -212,9 +262,9 @@ func Bucketize(intervals []Interval, points int) []Bucket {
 	}
 
 	if len(intervals) <= points {
-		out := make([]Bucket, 0, len(intervals))
-		for _, iv := range intervals {
-			out = append(out, bucketOf([]Interval{iv}))
+		out := make([][]Interval, 0, len(intervals))
+		for i := range intervals {
+			out = append(out, intervals[i:i+1])
 		}
 
 		return out
@@ -224,17 +274,17 @@ func Bucketize(intervals []Interval, points int) []Bucket {
 	span := intervals[len(intervals)-1].To.Sub(start)
 
 	if span <= 0 {
-		return []Bucket{bucketOf(intervals)}
+		return [][]Interval{intervals}
 	}
 
 	width := span / time.Duration(points)
 	groups := make([][]Interval, points)
 
 	for _, iv := range intervals {
-		// An interval lands in the bucket holding its midpoint. Its upper bound
-		// would sit exactly on a bucket edge whenever the capture schedule
+		// An interval lands in the group holding its midpoint. Its upper bound
+		// would sit exactly on a group edge whenever the capture schedule
 		// divides the span evenly, and every such interval would fall into the
-		// next bucket; the midpoint also places an over-long interval (a missed
+		// next group; the midpoint also places an over-long interval (a missed
 		// capture) where it actually spent its time.
 		idx := int(iv.From.Add(iv.To.Sub(iv.From)/2).Sub(start) / width)
 		if idx >= points {
@@ -248,42 +298,134 @@ func Bucketize(intervals []Interval, points int) []Bucket {
 		groups[idx] = append(groups[idx], iv)
 	}
 
-	out := make([]Bucket, 0, points)
+	out := make([][]Interval, 0, points)
 
 	for _, g := range groups {
 		if len(g) > 0 {
-			out = append(out, bucketOf(g))
+			out = append(out, g)
 		}
 	}
 
 	return out
 }
 
-// bucketOf folds one group of intervals into a point. Only complete intervals
-// contribute values and duration; the presence of an incomplete one is reported
-// as Partial rather than diluted into the sum.
-func bucketOf(group []Interval) Bucket {
-	b := Bucket{From: group[0].From, To: group[len(group)-1].To}
+// PlanBuckets lays out the series of a history request from capture headers
+// alone, so a month-wide window costs the same handful of matrix reads as an
+// hour-wide one.
+func PlanBuckets(metas []Meta, points int) Plan {
+	groups := groupIntervals(metaIntervals(metas), points)
 
-	acc := map[Key]map[string]int64{}
+	buckets := make([]BucketPlan, 0, len(groups))
+	for _, g := range groups {
+		buckets = append(buckets, planOf(g))
+	}
+
+	return Plan{Buckets: buckets}
+}
+
+// planOf folds one group of intervals into a point. Only measurable intervals
+// contribute duration; an unmeasurable one ends the current span and is
+// reported as Partial rather than diluted into the sum.
+func planOf(group []Interval) BucketPlan {
+	p := BucketPlan{From: group[0].From, To: group[len(group)-1].To}
+	openSpan := -1
 
 	for _, iv := range group {
 		if !iv.Complete {
-			b.Partial = true
+			p.Partial = true
+			openSpan = -1
 
 			continue
 		}
 
-		b.Duration += iv.Duration
+		p.Duration += iv.Duration
 
-		for _, r := range iv.Rows {
-			add(acc, r.Key, r.Values)
+		if openSpan >= 0 {
+			p.Spans[openSpan].To = iv.To
+
+			continue
+		}
+
+		p.Spans = append(p.Spans, Span{From: iv.From, To: iv.To})
+		openSpan = len(p.Spans) - 1
+	}
+
+	return p
+}
+
+// At lists every capture the plan has to load, chronologically and without
+// repeats: neighbouring buckets share the capture on their boundary.
+func (p Plan) At() []time.Time {
+	out := make([]time.Time, 0, len(p.Buckets)+1)
+	seen := make(map[int64]struct{}, len(p.Buckets)+1)
+
+	for _, b := range p.Buckets {
+		for _, s := range b.Spans {
+			for _, t := range []time.Time{s.From, s.To} {
+				if _, ok := seen[t.UnixNano()]; ok {
+					continue
+				}
+
+				seen[t.UnixNano()] = struct{}{}
+
+				out = append(out, t)
+			}
 		}
 	}
 
-	b.Rows = sortedRows(acc)
+	return out
+}
 
-	return b
+// Assemble fills a plan with the captures it asked for. A span whose ends turn
+// out not to be comparable — a reset the headers did not show — is dropped from
+// its bucket along with its duration, so the rates the bucket carries stay the
+// rates of what it actually measured.
+func (p Plan) Assemble(snaps []Snapshot) []Bucket {
+	byTime := make(map[int64]Snapshot, len(snaps))
+	for _, s := range snaps {
+		byTime[s.CapturedAt.UnixNano()] = s
+	}
+
+	out := make([]Bucket, 0, len(p.Buckets))
+
+	for _, bp := range p.Buckets {
+		b := Bucket{From: bp.From, To: bp.To, Duration: bp.Duration, Partial: bp.Partial}
+		acc := map[Key]map[string]int64{}
+
+		for _, s := range bp.Spans {
+			iv, ok := spanDelta(byTime, s)
+			if !ok {
+				b.Partial = true
+				b.Duration -= s.To.Sub(s.From)
+
+				continue
+			}
+
+			for _, r := range iv.Rows {
+				add(acc, r.Key, r.Values)
+			}
+		}
+
+		b.Rows = sortedRows(acc)
+
+		out = append(out, b)
+	}
+
+	return out
+}
+
+func spanDelta(byTime map[int64]Snapshot, s Span) (Interval, bool) {
+	from, ok := byTime[s.From.UnixNano()]
+	if !ok {
+		return Interval{}, false
+	}
+
+	to, ok := byTime[s.To.UnixNano()]
+	if !ok {
+		return Interval{}, false
+	}
+
+	return Delta(from, to)
 }
 
 // Filter narrows the matrix before grouping; an empty field matches everything.

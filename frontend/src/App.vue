@@ -10,6 +10,7 @@ import { useAutosnapshotStatusStore } from './stores/autosnapshotStatus'
 import { useI18n } from 'vue-i18n'
 import { AuthInfoMode } from '@/api/models'
 import { errorKey, type GlobalError } from './composables/useViewError'
+import { IO_MIN_VERSION_NUM } from '@/components/io/types'
 
 const { t } = useI18n()
 const themeStore = useThemeStore()
@@ -139,10 +140,11 @@ const isReplica = computed(() =>
   instanceInfoStore.isReplica(currentCluster.value, currentHost.value),
 )
 
-// pg_stat_io exists from PostgreSQL 16 on; on older hosts the I/O page has no
-// subject at all, so the menu item is absent rather than empty.
+// On a host without pg_stat_io the I/O page has no subject: no menu item at all.
 const ioVisible = computed(
-  () => (instanceInfoStore.known(currentCluster.value, currentHost.value)?.VersionNum ?? 0) >= 160000,
+  () =>
+    (instanceInfoStore.known(currentCluster.value, currentHost.value)?.VersionNum ?? 0) >=
+    IO_MIN_VERSION_NUM,
 )
 
 const primaryOnlyRoutes = ['/maintenance', '/schema-lint']

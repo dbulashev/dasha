@@ -101,7 +101,7 @@ func (d *Daemon) takeIOSnapshot(ctx context.Context, clusterName, host string) {
 		return
 	}
 
-	if _, err := d.store.InsertIOSnapshot(ctx, clusterName, host, *snap); err != nil {
+	if err := d.store.InsertIOSnapshot(ctx, clusterName, host, *snap); err != nil {
 		d.logger.Warn("io: store snapshot failed",
 			zap.String("cluster", clusterName), zap.String("host", host), zap.Error(err))
 

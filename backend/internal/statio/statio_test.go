@@ -149,26 +149,60 @@ func TestNormalizedKeepsNativeByteCounters(t *testing.T) {
 	}
 }
 
-func TestBucketizeSumsAdjacentIntervals(t *testing.T) {
-	var intervals []Interval
+// ioRun is a chronological run of captures one minute apart whose single
+// counter grows by step between them.
+func ioRun(n int, step int64, reset *time.Time) []Snapshot {
+	out := make([]Snapshot, 0, n)
 
-	for i := range 10 {
-		from := base.Add(time.Duration(i) * time.Minute)
-		intervals = append(intervals, Interval{
-			From:     from,
-			To:       from.Add(time.Minute),
-			Duration: time.Minute,
-			Complete: true,
-			Rows:     []Row{row("client backend", "relation", "normal", map[string]int64{"reads": 1})},
-		})
+	for i := range n {
+		out = append(out, snap(base.Add(time.Duration(i)*time.Minute), reset,
+			row("client backend", "relation", "normal", map[string]int64{"reads": int64(i) * step})))
 	}
 
-	buckets := Bucketize(intervals, 5)
-	if len(buckets) != 5 {
-		t.Fatalf("buckets = %d, want 5", len(buckets))
+	return out
+}
+
+func metasOf(snaps []Snapshot) []Meta {
+	out := make([]Meta, 0, len(snaps))
+	for _, s := range snaps {
+		out = append(out, s.Meta())
 	}
 
-	for _, b := range buckets {
+	return out
+}
+
+// loaded keeps only the captures the plan asked for — what the handler reads.
+func loaded(snaps []Snapshot, at []time.Time) []Snapshot {
+	want := make(map[int64]struct{}, len(at))
+	for _, t := range at {
+		want[t.UnixNano()] = struct{}{}
+	}
+
+	out := make([]Snapshot, 0, len(at))
+
+	for _, s := range snaps {
+		if _, ok := want[s.CapturedAt.UnixNano()]; ok {
+			out = append(out, s)
+		}
+	}
+
+	return out
+}
+
+func TestPlanBucketsReadsOnlyTheBucketEnds(t *testing.T) {
+	snaps := ioRun(11, 1, ptrTime(base.Add(-time.Hour)))
+	plan := PlanBuckets(metasOf(snaps), 5)
+
+	if len(plan.Buckets) != 5 {
+		t.Fatalf("buckets = %d, want 5", len(plan.Buckets))
+	}
+
+	at := plan.At()
+	if len(at) != 6 {
+		t.Fatalf("captures to load = %d of %d, want 6: neighbours share a boundary", len(at), len(snaps))
+	}
+
+	for _, b := range plan.Assemble(loaded(snaps, at)) {
 		if b.Partial {
 			t.Errorf("bucket %v..%v marked partial", b.From, b.To)
 		}
@@ -178,47 +212,91 @@ func TestBucketizeSumsAdjacentIntervals(t *testing.T) {
 		}
 
 		if got := b.Rows[0].Values["reads"]; got != 2 {
-			t.Errorf("bucket reads = %d, want 2", got)
+			t.Errorf("bucket reads = %d, want the two intervals it spans", got)
 		}
 	}
 }
 
-func TestBucketizeMarksPartialAndSumsOnlyCompleteIntervals(t *testing.T) {
-	intervals := []Interval{
-		{
-			From: base, To: base.Add(time.Minute), Duration: time.Minute, Complete: true,
-			Rows: []Row{row("client backend", "relation", "normal", map[string]int64{"reads": 5})},
-		},
-		{From: base.Add(time.Minute), To: base.Add(2 * time.Minute), Duration: time.Minute},
+func TestPlanBucketsBreaksTheSpanOnAnEpochChange(t *testing.T) {
+	snaps := ioRun(5, 10, ptrTime(base.Add(-time.Hour)))
+
+	after := ptrTime(base.Add(90 * time.Second))
+	for i := 2; i < len(snaps); i++ {
+		snaps[i].StatsReset = after
 	}
 
-	buckets := Bucketize(intervals, 1)
-	if len(buckets) != 1 {
-		t.Fatalf("buckets = %d, want 1", len(buckets))
+	plan := PlanBuckets(metasOf(snaps), 1)
+
+	if len(plan.Buckets) != 1 {
+		t.Fatalf("buckets = %d, want 1", len(plan.Buckets))
 	}
 
-	b := buckets[0]
-	if !b.Partial {
-		t.Error("a bucket holding an incomplete interval must be partial")
+	b := plan.Buckets[0]
+	if len(b.Spans) != 2 {
+		t.Fatalf("spans = %+v, want the reset to split the run in two", b.Spans)
 	}
 
-	if b.Duration != time.Minute {
-		t.Errorf("duration = %v, want only the complete interval's minute", b.Duration)
+	if !b.Partial || b.Duration != 3*time.Minute {
+		t.Errorf("partial = %v, duration = %v; want true and only the three measurable minutes", b.Partial, b.Duration)
 	}
 
-	if got := b.Rows[0].Values["reads"]; got != 5 {
-		t.Errorf("reads = %d, want 5", got)
+	at := plan.At()
+	if len(at) != 4 {
+		t.Fatalf("captures to load = %d, want 4: the capture inside the second span stays unread", len(at))
+	}
+
+	got := plan.Assemble(loaded(snaps, at))
+	if v := got[0].Rows[0].Values["reads"]; v != 30 {
+		t.Errorf("reads = %d, want 30: both spans, none of the gap", v)
 	}
 }
 
-func TestBucketizeKeepsIntervalsWhenFewerThanPoints(t *testing.T) {
-	intervals := []Interval{
-		{From: base, To: base.Add(time.Minute), Duration: time.Minute, Complete: true},
-		{From: base.Add(time.Minute), To: base.Add(2 * time.Minute), Duration: time.Minute, Complete: true},
+func TestPlanAssembleDropsASpanWhoseCountersRegressed(t *testing.T) {
+	reset := ptrTime(base)
+	r := func(v int64) Row { return row("client backend", "relation", "normal", map[string]int64{"reads": v}) }
+
+	// The headers show one continuous epoch; only the counters give the reset away.
+	snaps := []Snapshot{
+		snap(base, reset, r(10)),
+		snap(base.Add(time.Minute), reset, r(20)),
+		snap(base.Add(2*time.Minute), reset, r(5)),
 	}
 
-	if got := len(Bucketize(intervals, 200)); got != 2 {
-		t.Fatalf("buckets = %d, want one per interval", got)
+	plan := PlanBuckets(metasOf(snaps), 1)
+	b := plan.Assemble(loaded(snaps, plan.At()))[0]
+
+	if !b.Partial {
+		t.Error("a span that cannot be measured must mark its bucket partial")
+	}
+
+	if b.Duration != 0 {
+		t.Errorf("duration = %v, want the unmeasured span taken out of it", b.Duration)
+	}
+
+	if len(b.Rows) != 0 {
+		t.Errorf("rows = %+v, want none", b.Rows)
+	}
+}
+
+func TestPlanAssembleMeasuresEveryIntervalWhenTheyFitInThePoints(t *testing.T) {
+	reset := ptrTime(base)
+	r := func(v int64) Row { return row("client backend", "relation", "normal", map[string]int64{"reads": v}) }
+
+	snaps := []Snapshot{
+		snap(base, reset, r(1)),
+		snap(base.Add(time.Minute), reset, r(3)),
+		snap(base.Add(2*time.Minute), reset, r(6)),
+	}
+
+	plan := PlanBuckets(metasOf(snaps), 200)
+
+	got := plan.Assemble(loaded(snaps, plan.At()))
+	if len(got) != 2 {
+		t.Fatalf("buckets = %d, want one per interval", len(got))
+	}
+
+	if got[0].Rows[0].Values["reads"] != 2 || got[1].Rows[0].Values["reads"] != 3 {
+		t.Errorf("deltas = %d, %d; want 2, 3", got[0].Rows[0].Values["reads"], got[1].Rows[0].Values["reads"])
 	}
 }
 
@@ -258,24 +336,5 @@ func TestReduceGroupsAndFilters(t *testing.T) {
 	full := Reduce(rows, Filter{Context: "normal"}, GroupByFull)
 	if len(full) != 3 {
 		t.Errorf("full groups = %d, want 3", len(full))
-	}
-}
-
-func TestIntervalsPairsAdjacentSnapshots(t *testing.T) {
-	reset := ptrTime(base)
-	r := func(v int64) Row { return row("client backend", "relation", "normal", map[string]int64{"reads": v}) }
-
-	got := Intervals([]Snapshot{
-		snap(base, reset, r(1)),
-		snap(base.Add(time.Minute), reset, r(3)),
-		snap(base.Add(2*time.Minute), reset, r(6)),
-	})
-
-	if len(got) != 2 {
-		t.Fatalf("intervals = %d, want 2", len(got))
-	}
-
-	if got[0].Rows[0].Values["reads"] != 2 || got[1].Rows[0].Values["reads"] != 3 {
-		t.Errorf("deltas = %d, %d; want 2, 3", got[0].Rows[0].Values["reads"], got[1].Rows[0].Values["reads"])
 	}
 }

@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/dbulashev/dasha/internal/statio"
 )
 
@@ -27,9 +25,9 @@ func (s *Storage) InsertIOSnapshot(
 	ctx context.Context,
 	clusterName, instance string,
 	snap statio.Snapshot,
-) (uuid.UUID, error) {
+) error {
 	if err := s.ensureIOPartitions(ctx, snap.CapturedAt); err != nil {
-		return uuid.Nil, err
+		return err
 	}
 
 	rows := make([]ioRowJSON, 0, len(snap.Rows))
@@ -39,24 +37,21 @@ func (s *Storage) InsertIOSnapshot(
 
 	body, err := json.Marshal(rows)
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("storage: marshal io rows: %w", err)
+		return fmt.Errorf("storage: marshal io rows: %w", err)
 	}
 
-	var id uuid.UUID
-
-	err = s.pool.QueryRow(ctx, `
+	_, err = s.pool.Exec(ctx, `
 		INSERT INTO io_snapshot (cluster_name, instance, captured_at, version_num, op_bytes,
 		                         track_io_timing, stats_reset, rows)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
-		RETURNING id`,
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)`,
 		clusterName, instance, snap.CapturedAt, snap.VersionNum, snap.OpBytes,
 		snap.TrackIOTiming, snap.StatsReset, jsonbArg(body),
-	).Scan(&id)
+	)
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("storage: insert io snapshot: %w", err)
+		return fmt.Errorf("storage: insert io snapshot: %w", err)
 	}
 
-	return id, nil
+	return nil
 }
 
 // LastIOSnapshotAt returns the newest capture time per cluster/instance — the
@@ -89,17 +84,19 @@ func (s *Storage) LastIOSnapshotAt(ctx context.Context) (map[string]time.Time, e
 	return ret, rows.Err()
 }
 
-// GetIOSnapshots returns one host's snapshots covering [from, to], preceded by
-// the last snapshot before `from` — without it the first interval inside the
-// window would have no baseline and silently disappear.
-func (s *Storage) GetIOSnapshots(
+// GetIOSnapshotMetas returns the headers of one host's captures covering
+// [from, to], preceded by the last one before `from` — without it the first
+// interval inside the window would have no baseline and silently disappear.
+// The matrix bodies stay in the table: the headers alone lay out the series and
+// name the few captures worth reading whole.
+func (s *Storage) GetIOSnapshotMetas(
 	ctx context.Context,
 	clusterName, instance string,
 	from, to time.Time,
-) ([]statio.Snapshot, error) {
+) ([]statio.Meta, error) {
 	rows, err := s.pool.Query(ctx, `
 		(
-		    SELECT captured_at, version_num, op_bytes, track_io_timing, stats_reset, rows
+		    SELECT captured_at, version_num, track_io_timing, stats_reset
 		    FROM io_snapshot
 		    WHERE cluster_name = $1 AND instance = $2 AND captured_at < $3
 		    ORDER BY captured_at DESC
@@ -107,12 +104,51 @@ func (s *Storage) GetIOSnapshots(
 		)
 		UNION ALL
 		(
-		    SELECT captured_at, version_num, op_bytes, track_io_timing, stats_reset, rows
+		    SELECT captured_at, version_num, track_io_timing, stats_reset
 		    FROM io_snapshot
 		    WHERE cluster_name = $1 AND instance = $2 AND captured_at >= $3 AND captured_at <= $4
 		)
 		ORDER BY captured_at`,
 		clusterName, instance, from, to)
+	if err != nil {
+		return nil, fmt.Errorf("storage: get io snapshot metas: %w", err)
+	}
+	defer rows.Close()
+
+	var ret []statio.Meta
+
+	for rows.Next() {
+		var m statio.Meta
+
+		if err := rows.Scan(&m.CapturedAt, &m.VersionNum, &m.TrackIOTiming, &m.StatsReset); err != nil {
+			return nil, fmt.Errorf("storage: scan io snapshot meta: %w", err)
+		}
+
+		ret = append(ret, m)
+	}
+
+	return ret, rows.Err()
+}
+
+// GetIOSnapshotsAt loads the matrix bodies of the named captures. The bounds go
+// alongside the list so the planner can prune partitions.
+func (s *Storage) GetIOSnapshotsAt(
+	ctx context.Context,
+	clusterName, instance string,
+	at []time.Time,
+) ([]statio.Snapshot, error) {
+	if len(at) == 0 {
+		return nil, nil
+	}
+
+	rows, err := s.pool.Query(ctx, `
+		SELECT captured_at, version_num, op_bytes, track_io_timing, stats_reset, rows
+		FROM io_snapshot
+		WHERE cluster_name = $1 AND instance = $2
+		  AND captured_at >= $3 AND captured_at <= $4
+		  AND captured_at = ANY($5::timestamptz[])
+		ORDER BY captured_at`,
+		clusterName, instance, at[0], at[len(at)-1], at)
 	if err != nil {
 		return nil, fmt.Errorf("storage: get io snapshots: %w", err)
 	}

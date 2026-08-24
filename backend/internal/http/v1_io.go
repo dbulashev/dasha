@@ -15,9 +15,8 @@ const (
 	defaultIOPoints = 200
 	maxIOPoints     = 1000
 
-	// The whole window is loaded into memory, matrix included, so its length is
-	// capped: it covers the default 30-day retention and the UI never asks for
-	// more than a week.
+	// The matrix bodies of a window are read per bucket, but its capture
+	// headers are read whole — hence a cap on how long a window may be.
 	maxIOWindow = 31 * 24 * time.Hour
 )
 
@@ -53,7 +52,7 @@ func (s *Handlers) GetIOHistory(
 	cluster, instance := req.Params.ClusterName, req.Params.Instance
 	from, to := ioWindow(req.Params.From, req.Params.To)
 
-	snaps, err := s.storage.GetIOSnapshots(ctx, cluster, instance, from, to)
+	metas, err := s.storage.GetIOSnapshotMetas(ctx, cluster, instance, from, to)
 	if err != nil {
 		return nil, fmt.Errorf("GetIOHistory | %w", err)
 	}
@@ -63,22 +62,25 @@ func (s *Handlers) GetIOHistory(
 		return nil, fmt.Errorf("GetIOHistory | %w", err)
 	}
 
-	buckets := statio.Bucketize(statio.Intervals(snaps), ioPoints(req.Params.Points))
+	plan := statio.PlanBuckets(metas, ioPoints(req.Params.Points))
 
-	filter := statio.Filter{
-		BackendType: derefString(req.Params.BackendType),
-		Object:      derefString(req.Params.Object),
-		Context:     derefString(req.Params.Context),
+	var snaps []statio.Snapshot
+
+	if at := plan.At(); len(at) > 0 {
+		if snaps, err = s.storage.GetIOSnapshotsAt(ctx, cluster, instance, at); err != nil {
+			return nil, fmt.Errorf("GetIOHistory | %w", err)
+		}
 	}
 
-	groupBy := ""
-	if req.Params.GroupBy != nil {
-		groupBy = string(*req.Params.GroupBy)
+	filter := statio.Filter{
+		BackendType: deref(req.Params.BackendType),
+		Object:      deref(req.Params.Object),
+		Context:     deref(req.Params.Context),
 	}
 
 	out := serverhttp.IOHistory{
-		Meta:   ioHistoryMeta(instance, earliest, latest, snaps),
-		Series: ioSeries(buckets, filter, ioGroupBy(groupBy)),
+		Meta:   ioHistoryMeta(instance, earliest, latest, metas),
+		Series: ioSeries(plan.Assemble(snaps), filter, ioGroupBy(string(deref(req.Params.GroupBy)))),
 	}
 
 	return serverhttp.GetIOHistory200JSONResponse(out), nil
@@ -156,25 +158,25 @@ func ioSeriesKey(k statio.Key) serverhttp.IOSeriesKey {
 // ioHistoryMeta reports what the period itself says about its own readability:
 // where stored history begins and ends, and whether the timing setting or the
 // server version moved while it was being collected.
-func ioHistoryMeta(instance string, earliest, latest *time.Time, snaps []statio.Snapshot) serverhttp.IOHistoryMeta {
+func ioHistoryMeta(instance string, earliest, latest *time.Time, metas []statio.Meta) serverhttp.IOHistoryMeta {
 	meta := serverhttp.IOHistoryMeta{
 		Instance:   instance,
 		EarliestAt: earliest,
 		LatestAt:   latest,
 	}
 
-	if len(snaps) == 0 {
+	if len(metas) == 0 {
 		return meta
 	}
 
-	meta.TrackIoTiming = snaps[len(snaps)-1].TrackIOTiming
+	meta.TrackIoTiming = metas[len(metas)-1].TrackIOTiming
 
-	for _, s := range snaps[1:] {
-		if s.TrackIOTiming != snaps[0].TrackIOTiming {
+	for _, m := range metas[1:] {
+		if m.TrackIOTiming != metas[0].TrackIOTiming {
 			meta.TrackIoTimingChanged = true
 		}
 
-		if s.VersionNum/10000 != snaps[0].VersionNum/10000 {
+		if m.VersionNum/10000 != metas[0].VersionNum/10000 {
 			meta.VersionChanged = true
 		}
 	}
@@ -239,14 +241,6 @@ func ioPoints(p *int) int {
 
 	if *p > maxIOPoints {
 		return maxIOPoints
-	}
-
-	return *p
-}
-
-func derefString(p *string) string {
-	if p == nil {
-		return ""
 	}
 
 	return *p

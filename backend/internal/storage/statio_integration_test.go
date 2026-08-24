@@ -22,10 +22,8 @@ func newIOTestStorage(t *testing.T) *Storage {
 	pool := testinfra.IsolateEmptyPool(t)
 	ctx := t.Context()
 
-	for _, ddl := range []string{createIOSnapshotSQL, createIOSnapshotIdxSQL} {
-		_, err := pool.Exec(ctx, ddl)
-		require.NoError(t, err, "io DDL")
-	}
+	_, err := pool.Exec(ctx, createIOSnapshotSQL)
+	require.NoError(t, err, "io DDL")
 
 	s := &Storage{pool: pool, ddlPool: pool, logger: zap.NewNop()}
 
@@ -63,50 +61,100 @@ func TestIOSnapshotRoundTrip(t *testing.T) {
 	second := ioTestSnapshot(now.Add(-5*time.Minute), reset, 175)
 
 	for _, snap := range []statio.Snapshot{first, second} {
-		id, err := s.InsertIOSnapshot(ctx, "c1", "h1", snap)
-		require.NoError(t, err)
-		assert.NotEmpty(t, id)
+		require.NoError(t, s.InsertIOSnapshot(ctx, "c1", "h1", snap))
 	}
 
-	got, err := s.GetIOSnapshots(ctx, "c1", "h1", now.Add(-time.Hour), now)
+	metas, err := s.GetIOSnapshotMetas(ctx, "c1", "h1", now.Add(-time.Hour), now)
+	require.NoError(t, err)
+	require.Len(t, metas, 2)
+
+	assert.Equal(t, 170004, metas[0].VersionNum)
+	assert.True(t, metas[0].TrackIOTiming)
+	require.NotNil(t, metas[0].StatsReset)
+	assert.WithinDuration(t, reset, *metas[0].StatsReset, time.Second)
+
+	plan := statio.PlanBuckets(metas, 200)
+
+	got, err := s.GetIOSnapshotsAt(ctx, "c1", "h1", plan.At())
 	require.NoError(t, err)
 	require.Len(t, got, 2)
-
-	assert.Equal(t, 170004, got[0].VersionNum)
-	assert.True(t, got[0].TrackIOTiming)
 	require.NotNil(t, got[0].OpBytes)
 	assert.Equal(t, 8192, *got[0].OpBytes)
-	require.NotNil(t, got[0].StatsReset)
-	assert.WithinDuration(t, reset, *got[0].StatsReset, time.Second)
 	require.Len(t, got[0].Rows, 1)
 	assert.EqualValues(t, 100, got[0].Rows[0].Values["reads"])
 
-	intervals := statio.Intervals(got)
-	require.Len(t, intervals, 1)
-	assert.True(t, intervals[0].Complete)
-	assert.EqualValues(t, 75, intervals[0].Rows[0].Values["reads"])
+	buckets := plan.Assemble(got)
+	require.Len(t, buckets, 1)
+	assert.False(t, buckets[0].Partial)
+	assert.EqualValues(t, 75, buckets[0].Rows[0].Values["reads"])
 	// PG 16/17 report op_bytes rather than byte counters; the domain derives them.
-	assert.EqualValues(t, 75*8192, intervals[0].Rows[0].Values["read_bytes"])
+	assert.EqualValues(t, 75*8192, buckets[0].Rows[0].Values["read_bytes"])
 }
 
-// A window must start from the snapshot before it, otherwise its first interval
+// A window must start from the capture before it, otherwise its first interval
 // would have no baseline and vanish.
-func TestGetIOSnapshotsIncludesTheBaselineBeforeTheWindow(t *testing.T) {
+func TestGetIOSnapshotMetasIncludeTheBaselineBeforeTheWindow(t *testing.T) {
 	s := newIOTestStorage(t)
 	ctx := t.Context()
 
 	now := time.Now().UTC().Truncate(time.Second)
 	reset := now.Add(-24 * time.Hour)
 
-	_, err := s.InsertIOSnapshot(ctx, "c1", "h1", ioTestSnapshot(now.Add(-30*time.Minute), reset, 10))
-	require.NoError(t, err)
-	_, err = s.InsertIOSnapshot(ctx, "c1", "h1", ioTestSnapshot(now.Add(-5*time.Minute), reset, 20))
-	require.NoError(t, err)
+	require.NoError(t, s.InsertIOSnapshot(ctx, "c1", "h1", ioTestSnapshot(now.Add(-30*time.Minute), reset, 10)))
+	require.NoError(t, s.InsertIOSnapshot(ctx, "c1", "h1", ioTestSnapshot(now.Add(-5*time.Minute), reset, 20)))
 
-	got, err := s.GetIOSnapshots(ctx, "c1", "h1", now.Add(-10*time.Minute), now)
+	metas, err := s.GetIOSnapshotMetas(ctx, "c1", "h1", now.Add(-10*time.Minute), now)
 	require.NoError(t, err)
-	require.Len(t, got, 2, "the snapshot before the window is the window's baseline")
-	assert.True(t, got[0].CapturedAt.Before(now.Add(-10*time.Minute)))
+	require.Len(t, metas, 2, "the capture before the window is the window's baseline")
+	assert.True(t, metas[0].CapturedAt.Before(now.Add(-10*time.Minute)))
+}
+
+// A bucketed window reads the captures bounding its buckets and leaves the ones
+// between them in the table.
+func TestGetIOSnapshotsAtLoadsOnlyThePlannedCaptures(t *testing.T) {
+	s := newIOTestStorage(t)
+	ctx := t.Context()
+
+	now := time.Now().UTC().Truncate(time.Second)
+	reset := now.Add(-24 * time.Hour)
+
+	for i := range 11 {
+		at := now.Add(time.Duration(i-10) * time.Minute)
+		require.NoError(t, s.InsertIOSnapshot(ctx, "c1", "h1", ioTestSnapshot(at, reset, int64(i))))
+	}
+
+	metas, err := s.GetIOSnapshotMetas(ctx, "c1", "h1", now.Add(-time.Hour), now)
+	require.NoError(t, err)
+	require.Len(t, metas, 11)
+
+	plan := statio.PlanBuckets(metas, 5)
+
+	at := plan.At()
+	require.Len(t, at, 6)
+
+	got, err := s.GetIOSnapshotsAt(ctx, "c1", "h1", at)
+	require.NoError(t, err)
+	require.Len(t, got, 6)
+
+	buckets := plan.Assemble(got)
+	require.Len(t, buckets, 5)
+
+	for _, b := range buckets {
+		assert.False(t, b.Partial)
+		assert.EqualValues(t, 2, b.Rows[0].Values["reads"], "two one-minute intervals per bucket")
+	}
+}
+
+// One host cannot hold two captures at one instant — that is what the key says.
+func TestInsertIOSnapshotRejectsADuplicateCapture(t *testing.T) {
+	s := newIOTestStorage(t)
+	ctx := t.Context()
+
+	at := time.Now().UTC().Truncate(time.Second)
+	reset := at.Add(-time.Hour)
+
+	require.NoError(t, s.InsertIOSnapshot(ctx, "c1", "h1", ioTestSnapshot(at, reset, 1)))
+	require.Error(t, s.InsertIOSnapshot(ctx, "c1", "h1", ioTestSnapshot(at, reset, 2)))
 }
 
 func TestLastIOSnapshotAtAndRange(t *testing.T) {
@@ -119,12 +167,9 @@ func TestLastIOSnapshotAtAndRange(t *testing.T) {
 	oldest := now.Add(-20 * time.Minute)
 	newest := now.Add(-time.Minute)
 
-	_, err := s.InsertIOSnapshot(ctx, "c1", "h1", ioTestSnapshot(oldest, reset, 1))
-	require.NoError(t, err)
-	_, err = s.InsertIOSnapshot(ctx, "c1", "h1", ioTestSnapshot(newest, reset, 2))
-	require.NoError(t, err)
-	_, err = s.InsertIOSnapshot(ctx, "c1", "h2", ioTestSnapshot(newest, reset, 3))
-	require.NoError(t, err)
+	require.NoError(t, s.InsertIOSnapshot(ctx, "c1", "h1", ioTestSnapshot(oldest, reset, 1)))
+	require.NoError(t, s.InsertIOSnapshot(ctx, "c1", "h1", ioTestSnapshot(newest, reset, 2)))
+	require.NoError(t, s.InsertIOSnapshot(ctx, "c1", "h2", ioTestSnapshot(newest, reset, 3)))
 
 	last, err := s.LastIOSnapshotAt(ctx)
 	require.NoError(t, err)

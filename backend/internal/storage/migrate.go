@@ -265,11 +265,10 @@ ALTER TABLE autosnapshot_config_global DROP COLUMN IF EXISTS hot_interval`
 	// delta is the pairwise difference of two of them), and a row per
 	// combination would multiply a 5-minute schedule into tens of thousands of
 	// rows per host per day for no access path anyone uses.
-	// The columns beside it are read before the body is parsed: they decide
-	// whether the interval is measurable at all.
+	// The columns beside it are read on their own: they lay out the series and
+	// decide which bodies a request has to touch at all.
 	createIOSnapshotSQL = `
 CREATE TABLE IF NOT EXISTS io_snapshot (
-    id              uuid NOT NULL DEFAULT gen_random_uuid(),
     cluster_name    text NOT NULL,
     instance        text NOT NULL,
     captured_at     timestamptz NOT NULL DEFAULT now(),
@@ -278,12 +277,8 @@ CREATE TABLE IF NOT EXISTS io_snapshot (
     track_io_timing boolean NOT NULL,
     stats_reset     timestamptz,
     rows            jsonb NOT NULL,
-    CONSTRAINT io_snapshot_pkey PRIMARY KEY (id, captured_at)
+    CONSTRAINT io_snapshot_pkey PRIMARY KEY (cluster_name, instance, captured_at)
 ) PARTITION BY RANGE (captured_at)`
-
-	createIOSnapshotIdxSQL = `
-CREATE INDEX IF NOT EXISTS idx_io_snapshot_lookup
-    ON io_snapshot (cluster_name, instance, captured_at DESC)`
 
 	addAutosnapshotIOConfigSQL = `
 ALTER TABLE autosnapshot_config_global
@@ -369,7 +364,6 @@ func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
 		dropAutosnapshotHotIntervalSQL,
 		addSnapshotDatabasesSQL,
 		createIOSnapshotSQL,
-		createIOSnapshotIdxSQL,
 		addAutosnapshotIOConfigSQL,
 	} {
 		if _, err := s.ddlPool.Exec(ctx, ddl); err != nil {

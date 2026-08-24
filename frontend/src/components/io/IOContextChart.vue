@@ -27,8 +27,7 @@ const props = defineProps<{
   loading: boolean
 }>()
 
-// The series are grouped by context, so the chart draws one object at a time;
-// the selector belongs here, next to what it changes.
+// The series are grouped by context, so the chart draws one object at a time.
 const object = defineModel<string>('object', { required: true })
 const groupBy = defineModel<'context' | 'backend_type'>('groupBy', { required: true })
 
@@ -65,8 +64,7 @@ interface Series {
   data: (number | null)[]
 }
 
-// Counts become operations per second, times become milliseconds of I/O per
-// second of observation — both rates, never a bare counter.
+// Counts become operations per second, times milliseconds of I/O per second.
 const rawSeries = computed<Series[]>(() =>
   (props.history?.series ?? []).map((s) => {
     const label = (groupBy.value === 'context' ? s.key.context : s.key.backend_type) ?? '—'
@@ -87,9 +85,7 @@ const rawSeries = computed<Series[]>(() =>
   }),
 )
 
-// A backend type without a slot of its own folds into one neutral series
-// instead of getting an invented hue — but a lone one keeps its name, since
-// hiding a single series behind "other" only loses which one it was.
+// A backend type without a slot folds into "other"; a lone one keeps its name.
 const series = computed<Series[]>(() => {
   const named = rawSeries.value.filter((s) => s.color !== null)
   const rest = rawSeries.value.filter((s) => s.color === null)
@@ -137,8 +133,7 @@ const peak = computed(() =>
   ),
 )
 
-// Milliseconds per second is a small number for most workloads; the axis picks
-// the unit the way the IO/CPU scatter does instead of falling into exponents.
+// Milliseconds per second is a small number; the axis picks a unit, not exponents.
 const timeScale = computed(() => pickTimeScale(peak.value))
 
 const chartData = computed(() => {
@@ -169,8 +164,7 @@ const unitSuffix = computed(() =>
     : `${t(`time.${timeScale.value.unit}`)}/${t('time.sec')}`,
 )
 
-// The raw context name means little on its own; the tooltip spells it out.
-// Backend types already read as English words, so they are left alone.
+// Context names get a tooltip; backend types already read as English words.
 function seriesLabel(label: string): string {
   if (groupBy.value !== 'context') return label
   const key = `io.context.${label}`

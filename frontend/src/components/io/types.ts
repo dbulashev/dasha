@@ -2,8 +2,10 @@ import { fmtCompact, fmtScaled, pickTimeScale } from '@/utils/format'
 
 export type MetricMode = 'count' | 'time'
 
-// Raw pg_stat_io column names in display order. They are the labels too: the
-// audience reads them natively and they match the payload keys.
+// pg_stat_io was added in PostgreSQL 16.
+export const IO_MIN_VERSION_NUM = 160000
+
+// pg_stat_io column names in display order; they are the labels too.
 export const COUNT_METRICS = [
   'hits',
   'reads',
@@ -25,8 +27,7 @@ export const TIME_METRICS = [
 
 export const BYTE_METRICS = ['read_bytes', 'write_bytes', 'extend_bytes'] as const
 
-// PostgreSQL 18 adds the WAL rows; they share the view but not the buffer
-// cache, so the cards above the matrix stay on the relation objects.
+// PG 18 adds the WAL rows; they share the view but not the buffer cache.
 export const VISIBLE_OBJECTS = ['relation', 'temp relation', 'wal']
 
 export const BUFFER_OBJECTS = ['relation', 'temp relation']
@@ -34,9 +35,7 @@ export const BUFFER_OBJECTS = ['relation', 'temp relation']
 export const CONTEXTS = ['normal', 'vacuum', 'bulkread', 'bulkwrite'] as const
 
 // Categorical slots as [light, dark]; the dark step is picked for the dark
-// surface, not derived from the light one. Validated for colour-vision
-// deficiency: the four context hues clear the all-pairs floors in both modes,
-// the eight-slot order clears the adjacent-pair floors used by a stacked chart.
+// surface, not derived. Both orders are validated for colour-vision deficiency.
 const SERIES_SLOTS: readonly (readonly [string, string])[] = [
   ['#2a78d6', '#3987e5'],
   ['#eb6834', '#d95926'],
@@ -50,8 +49,7 @@ const SERIES_SLOTS: readonly (readonly [string, string])[] = [
 
 const NEUTRAL_SLOT: readonly [string, string] = ['#6d6c66', '#a8a79c']
 
-// Colour follows the entity, not its rank: a filtered chart must not repaint
-// the series that survived.
+// Colour follows the entity, not its rank: filtering must not repaint a series.
 const CONTEXT_SLOTS: Record<string, readonly [string, string]> = {
   normal: SERIES_SLOTS[0],
   vacuum: SERIES_SLOTS[3],
@@ -60,12 +58,11 @@ const CONTEXT_SLOTS: Record<string, readonly [string, string]> = {
   init: NEUTRAL_SLOT,
 }
 
-// The backend types pg_stat_io reports; anything outside this list folds into
-// one neutral "other" series rather than inventing a ninth hue.
+// Backend types with a hue of their own; anything else folds into one neutral series.
 const BACKEND_TYPE_SLOTS: Record<string, number> = {
   'client backend': 0,
   'autovacuum worker': 1,
-  // PostgreSQL 18 moves much of the reading into these.
+  // PG 18 moves much of the reading into these.
   'io worker': 2,
   checkpointer: 3,
   'background writer': 4,
@@ -91,14 +88,14 @@ export function neutralColor(dark: boolean): string {
   return NEUTRAL_SLOT[dark ? 1 : 0]
 }
 
-/** Sequential ramp on one hue: transparent for idle, saturated for the peak. */
+// Sequential ramp on one hue: transparent for idle, saturated for the peak.
 export function heatColor(intensity: number, dark: boolean): string {
   const rgb = dark ? '57, 135, 229' : '42, 120, 214'
   const clamped = Math.min(1, Math.max(0, intensity))
   return `rgba(${rgb}, ${(0.06 + 0.34 * clamped).toFixed(3)})`
 }
 
-/** One cell of the matrix over the selected window. */
+// One cell of the matrix over the selected window.
 export interface MatrixRow {
   backend_type: string
   object: string
@@ -106,9 +103,7 @@ export interface MatrixRow {
   values: Record<string, number>
 }
 
-// The byte counters ride along with the counts: PostgreSQL 18 reports them
-// directly and older versions derive them from op_bytes, so the difference
-// never reaches here.
+// Byte counters ride with the counts; the version difference is resolved in the backend.
 export function metricsFor(mode: MetricMode): readonly string[] {
   return mode === 'count' ? [...COUNT_METRICS, ...BYTE_METRICS] : TIME_METRICS
 }
@@ -135,7 +130,7 @@ export function sumBy(
   return out
 }
 
-/** hits / (hits + reads); null when the context saw no buffer access at all. */
+// hits / (hits + reads); null when the context saw no buffer access at all.
 export function hitRatio(rows: MatrixRow[]): number | null {
   const hits = sumValues(rows, 'hits')
   const reads = sumValues(rows, 'reads')
@@ -143,8 +138,7 @@ export function hitRatio(rows: MatrixRow[]): number | null {
   return total > 0 ? hits / total : null
 }
 
-// Suffixes for the units pickTimeScale returns; they sit next to raw
-// pg_stat_io column names, so they stay English like the labels around them.
+// Unit suffixes for pickTimeScale; English, like the column names beside them.
 const TIME_UNITS: Record<string, string> = {
   us: 'µs',
   ms: 'ms',
@@ -153,11 +147,8 @@ const TIME_UNITS: Record<string, string> = {
   h: 'h',
 }
 
-/**
- * Rate over the window: operations per second, or milliseconds of I/O per
- * second of observation. The time rate can exceed one second per second — the
- * counters are summed across backends, so it is concurrency, not wall clock.
- */
+// Rate over the window: operations per second, or milliseconds of I/O per second
+// observed. The time rate can exceed 1 s/s — counters are summed across backends.
 export function fmtMetricRate(value: number, seconds: number, mode: MetricMode): string {
   if (seconds <= 0) return '—'
 
