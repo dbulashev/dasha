@@ -44,7 +44,7 @@ var CoreSignals = []SignalKind{
 	SigReplLagSeconds, SigReplLagBytes,
 	SigTimedCheckpoints, SigRequestedCheckpoints, SigLocksNotGranted, SigActiveLockWaiters,
 	SigXactsLeftWrap, SigChecksumFailRate,
-	SigMaxBloatRatio, SigSeqExhaustionMax, SigTypeExhaustionMax,
+	SigSeqExhaustionMax,
 	SigLatencyMs, SigSeqScanRate,
 	SigLoadAvg15, SigNumVCPU, SigDiskUsedRatio,
 	SigPoolerServers, SigPoolerPoolSize,
