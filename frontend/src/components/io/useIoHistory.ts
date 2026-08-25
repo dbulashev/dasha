@@ -42,6 +42,7 @@ export function useIoHistory() {
     history.value = null
     matrix.value = null
     unavailable.value = false
+    loading.value = false
   }
 
   async function load(query: IoHistoryQuery) {

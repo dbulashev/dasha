@@ -55,6 +55,7 @@ export function useIoLive(source: {
     previous.value = null
     current.value = null
     unsupported.value = false
+    loading.value = false
   }
 
   async function load() {

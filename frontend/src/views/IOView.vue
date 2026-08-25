@@ -137,17 +137,20 @@ watch(
 // The store's `available` starts false and only becomes meaningful once the
 // status has actually been fetched — switching to live before that would strand
 // the user in live mode on every reload.
+function applySnapshotsStatus(available: boolean) {
+  if (!available && snapshotsStatus.cachedAt !== null) mode.value = 'live'
+}
+
+applySnapshotsStatus(snapshotsStatus.available)
+
+// Not immediate: the mode watcher below owns the initial load, this one only
+// reacts to a status that lands after it.
 watch(
   () => snapshotsStatus.available,
   (available) => {
-    if (available) {
-      if (!live.value) loadHistory()
-      return
-    }
-
-    if (snapshotsStatus.cachedAt !== null) mode.value = 'live'
+    applySnapshotsStatus(available)
+    if (available && !live.value) loadHistory()
   },
-  { immediate: true },
 )
 
 watch(
