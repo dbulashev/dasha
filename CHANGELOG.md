@@ -5,6 +5,7 @@
 ### Features
 - **I/O**, a new page built on `pg_stat_io` (PostgreSQL 16 and newer): server I/O by backend, object and context, with history from snapshots and a live mode polling every 3 to 30 seconds. Cards cover `shared_buffers` efficiency, vacuum cost and bulk-operation cost; PostgreSQL 18 adds write-ahead log I/O.
 - **Settings analysis** flags `track_wal_io_timing` left off.
+- **Query statistics work on Postgres Pro clusters.** Where `pg_stat_statements` cannot be loaded, Dasha reads `pgpro_stats` instead, with nothing to configure.
 - **Index recommendations**, a new panel on the Indexes page: reads the statements of every cluster host and proposes the btree indexes that are missing — columns, key order and a ready `CREATE INDEX`, with the statements behind each candidate. What the existing indexes already serve is dropped, whatever order their columns sit in; statements that gave nothing are listed with the reason. An `IS NULL` filter on a column where NULLs are rare becomes the condition of a partial index instead of a key column. A candidate says when the table already holds its columns in another index, naming it, and when the table is carrying ten indexes already.
 
 ## v1.6.0

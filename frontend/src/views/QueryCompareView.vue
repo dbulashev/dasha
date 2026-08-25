@@ -14,12 +14,13 @@ import type {
   StatsResetTime,
 } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
+import { DEFAULT_STATS_SOURCE, useStatsSource } from '@/composables/useStatsSource'
 import { useApiLoader } from '@/composables/useApiLoader'
 import { useViewError } from '@/composables/useViewError'
 import { useExcludeUsersStore } from '@/stores/excludeUsers'
 import { assertOk } from '@/utils/api'
 import { fmtWindow, fmtDateTime } from '@/utils/format'
-import { snapshotReasonI18nKey, snapshotCoverage } from '@/utils/autosnapshot'
+import { snapshotReasonI18nKey, snapshotCoverage, foreignStatsSource } from '@/utils/autosnapshot'
 import type { CompareSortKey } from '@/components/queries/compare-types'
 import { compareSortFieldMap } from '@/components/queries/compare-types'
 import CompareCard from '@/components/queries/CompareCard.vue'
@@ -29,6 +30,7 @@ import { useQueryScope } from '@/composables/useQueryScope'
 import { usePrefsStore } from '@/stores/prefs'
 
 const { clusterName, hostName, databaseName } = useClusterInfo()
+const { statsSource } = useStatsSource()
 const { t } = useI18n()
 const { clearError, onError } = useViewError()
 const excludeUsersStore = useExcludeUsersStore()
@@ -107,12 +109,33 @@ const mixedGenerations = computed(() =>
 // Two legacy sides still compare — instance-wide, the only reading they support.
 const legacyCompare = computed(() => !attributedA.value && !attributedB.value)
 
+const statsSourceName = computed(() => statsSource.value || DEFAULT_STATS_SOURCE)
+
+// The extension a side was read through; live data uses the current one, an
+// unrecorded source is left blank.
+const sideSource = (id: string | null) =>
+  id === null ? statsSource.value : snapshotsList.value.find(s => s.Id === id)?.StatsSource || ''
+
+// The two extensions number queryid differently: warned about, not refused —
+// each side's totals are still valid.
+const mixedSources = computed(() => {
+  const a = sideSource(selectedA.value)
+  const b = sideSource(selectedB.value)
+
+  return selectedA.value !== null && a !== '' && b !== '' && a !== b
+})
+
 const effectiveScope = computed(() => (legacyCompare.value ? 'instance' : scope.value))
 
 // Snapshots are host-wide, so each line says which databases it holds — and
 // which ones hold none, the sides that cannot be paired with the rest.
 const snapshotSubtitle = (s: SnapshotListItem) =>
-  snapshotCoverage(s.Databases) || t('snapshotNoAttribution')
+  [
+    snapshotCoverage(s.Databases) || t('snapshotNoAttribution'),
+    foreignStatsSource(s.StatsSource, statsSource.value),
+  ]
+    .filter(Boolean)
+    .join(' · ')
 
 const selectorAItems = computed(() =>
   snapshotsList.value.map(s => ({
@@ -324,7 +347,7 @@ watch([selectedA, selectedB, excludeUsers, scope], () => {
               hide-details
               style="max-width: 260px;"
             />
-            <v-tooltip v-if="statsWindowA && compareData" :text="t('compare.statsWindowHint')" location="bottom" max-width="420">
+            <v-tooltip v-if="statsWindowA && compareData" :text="t('compare.statsWindowHint', { ext: statsSourceName })" location="bottom" max-width="420">
               <template #activator="{ props: tp }">
                 <span v-bind="tp" class="text-caption text-medium-emphasis">{{ t('compare.statsWindow') }}: {{ statsWindowA }}</span>
               </template>
@@ -342,7 +365,7 @@ watch([selectedA, selectedB, excludeUsers, scope], () => {
               hide-details
               style="max-width: 260px;"
             />
-            <v-tooltip v-if="statsWindowB && compareData" :text="t('compare.statsWindowHint')" location="bottom" max-width="420">
+            <v-tooltip v-if="statsWindowB && compareData" :text="t('compare.statsWindowHint', { ext: statsSourceName })" location="bottom" max-width="420">
               <template #activator="{ props: tp }">
                 <span v-bind="tp" class="text-caption text-medium-emphasis">{{ t('compare.statsWindow') }}: {{ statsWindowB }}</span>
               </template>
@@ -391,6 +414,10 @@ watch([selectedA, selectedB, excludeUsers, scope], () => {
 
     <v-alert v-if="mixedGenerations" type="warning" class="mb-4">
       {{ t('compare.mixedGenerations') }}
+    </v-alert>
+
+    <v-alert v-if="mixedSources" type="warning" class="mb-4">
+      {{ t('compare.mixedSources', { a: sideSource(selectedA), b: sideSource(selectedB) }) }}
     </v-alert>
 
     <v-progress-linear v-if="loading" indeterminate class="mb-4" />

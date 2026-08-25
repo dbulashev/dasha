@@ -42,6 +42,10 @@ ALTER TABLE snapshots ADD COLUMN IF NOT EXISTS pgss_stats_reset timestamptz`
 	addSnapshotReasonSQL = `
 ALTER TABLE snapshots ADD COLUMN IF NOT EXISTS reason text NOT NULL DEFAULT 'manual'`
 
+	// Nullable, no default: NULL means "not recorded", not "pg_stat_statements".
+	addSnapshotStatsSourceSQL = `
+ALTER TABLE snapshots ADD COLUMN IF NOT EXISTS stats_source text`
+
 	addSnapshotTriggerContextSQL = `
 ALTER TABLE snapshots ADD COLUMN IF NOT EXISTS trigger_context jsonb`
 
@@ -337,6 +341,7 @@ func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
 		createSnapshotsIdxSQL,
 		addPgssStatsResetSQL,
 		addSnapshotReasonSQL,
+		addSnapshotStatsSourceSQL,
 		addSnapshotTriggerContextSQL,
 		createAutosnapshotConfigGlobalSQL,
 		seedAutosnapshotConfigGlobalSQL,

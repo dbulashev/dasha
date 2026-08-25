@@ -25,9 +25,13 @@ func TestGetQueryStatsAvailable(t *testing.T) {
 	vNum, err := p.getServerVersionNum(ctx, pool)
 	require.NoError(t, err)
 
-	available, err := p.getQueryStatsAvailable(ctx, vNum, pool)
+	src := p.statsSource(ctx, pool)
+	require.True(t, src.Present(), "pg_stat_statements should resolve as the source")
+
+	available, name, err := p.getQueryStatsAvailable(ctx, vNum, pool, src)
 	require.NoError(t, err)
 	assert.True(t, available, "pg_stat_statements should be available (shared_preload_libraries)")
+	assert.Equal(t, "pg_stat_statements", name)
 }
 
 func TestGetQueryStatsEnabled(t *testing.T) {
@@ -39,7 +43,7 @@ func TestGetQueryStatsEnabled(t *testing.T) {
 	vNum, err := p.getServerVersionNum(ctx, pool)
 	require.NoError(t, err)
 
-	enabled, err := p.getQueryStatsEnabled(ctx, vNum, pool)
+	enabled, err := p.getQueryStatsEnabled(ctx, vNum, pool, p.statsSource(ctx, pool).Name())
 	require.NoError(t, err)
 	assert.True(t, enabled, "pg_stat_statements should be enabled")
 }

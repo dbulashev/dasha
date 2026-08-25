@@ -70,9 +70,9 @@ func (p *PgxPool) pgssPool(
 	return item.pool, nil
 }
 
-// PgssDatabase reports which database pg_stat_statements is actually read
-// through — the provenance an auto-snapshot has to record, since the requested
-// database is only a preference (see pgssPool).
+// PgssDatabase reports which database the statistics are actually read through —
+// the provenance an auto-snapshot has to record, since the requested database is
+// only a preference (see pgssPool).
 func (p *PgxPool) PgssDatabase(
 	ctx context.Context,
 	clusterName,
@@ -87,10 +87,32 @@ func (p *PgxPool) PgssDatabase(
 	return string(item.Database), nil
 }
 
-// pgssPoolItem implements the choice behind pgssPool. Which extension version
-// each database carries is not weighed in: an instance whose databases disagree
-// about it is the DBA's to fix, and picking for them would only move the failure
-// somewhere less obvious.
+// PgssSource reports the extension the statistics are read through. Stored as
+// snapshot provenance: the two extensions compute queryid differently. Empty
+// when no source is resolved, so the snapshot records nothing rather than a guess.
+func (p *PgxPool) PgssSource(
+	ctx context.Context,
+	clusterName,
+	instanceName,
+	databaseName string,
+) (string, error) {
+	item, err := p.pgssPoolItem(ctx, clusterName, instanceName, databaseName)
+	if err != nil {
+		return "", fmt.Errorf("PgssSource | %w", err)
+	}
+
+	src := p.statsSource(ctx, item.pool)
+	if !src.Present() {
+		return "", nil
+	}
+
+	return src.Name(), nil
+}
+
+// pgssPoolItem implements the choice behind pgssPool: the first database
+// carrying either query-statistics extension. Neither the extension version nor
+// its readability is weighed in — an instance whose databases disagree is the
+// DBA's to fix, and probing every database would cost a query each.
 func (p *PgxPool) pgssPoolItem(
 	ctx context.Context,
 	clusterName,
@@ -120,22 +142,24 @@ func (p *PgxPool) pgssPoolItem(
 			return pgxPoolItem{}, fmt.Errorf("%w | %s/%s/%s", ErrNotFound, clusterName, instanceName, databaseName)
 		}
 
-		if p.extensionSchema(ctx, named.pool, extPgss) != "" {
+		if p.statsSource(ctx, named.pool).Present() {
 			return *named, nil
 		}
 	}
 
 	for i := range items {
-		if p.extensionSchema(ctx, items[i].pool, extPgss) == "" {
+		src := p.statsSource(ctx, items[i].pool)
+		if !src.Present() {
 			continue
 		}
 
 		if named != nil {
-			p.logger.Debug("pg_stat_statements missing in the requested database, reading through another one",
+			p.logger.Debug("query statistics extension missing in the requested database, reading through another one",
 				zap.String("cluster", clusterName),
 				zap.String("instance", instanceName),
 				zap.String("requested_database", databaseName),
-				zap.String("database", string(items[i].Database)))
+				zap.String("database", string(items[i].Database)),
+				zap.String("extension", src.Name()))
 		}
 
 		return items[i], nil

@@ -7,9 +7,7 @@ type SignalKind string
 
 const (
 	// performance
-	SigLatencyMs     SignalKind = "latency_ms"        // calls-weighted mean | pooler p95
-	SigIOReadTime    SignalKind = "io_read_time_rate" // pg_stat_io (PG16+)
-	SigIOWriteTime   SignalKind = "io_write_time_rate"
+	SigLatencyMs     SignalKind = "latency_ms"      // calls-weighted mean | pooler p95
 	SigCacheHitRatio SignalKind = "cache_hit_ratio" // secondary
 
 	// connections / saturation

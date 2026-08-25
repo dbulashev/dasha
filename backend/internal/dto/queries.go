@@ -70,10 +70,14 @@ type QueryTop10ChartItem struct {
 	Pct     float64
 }
 
+// QueryStatsStatus describes the query-statistics extension of one connection.
+// Source is always filled: with nothing installed it names the one worth
+// installing here.
 type QueryStatsStatus struct {
 	Available bool
 	Enabled   bool
 	Readable  bool
+	Source    string
 }
 
 // QueryReport is one aggregated pg_stat_statements entry of a single database.

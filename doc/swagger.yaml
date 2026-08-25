@@ -5401,6 +5401,7 @@ components:
         - Available
         - Enabled
         - Readable
+        - Source
       properties:
         Available:
           type: boolean
@@ -5408,6 +5409,13 @@ components:
           type: boolean
         Readable:
           type: boolean
+        Source:
+          type: string
+          description: >-
+            Query-statistics extension this connection is read through:
+            pg_stat_statements, or pgpro_stats on Postgres Pro. Always set —
+            when neither is installed it names the one worth installing here.
+          example: pg_stat_statements
 
     TableTopKBySize:
       type: object
@@ -6398,6 +6406,14 @@ components:
         Reason:
           type: string
           description: 'Why the snapshot was created: "manual" or "auto:<trigger_type>"'
+        StatsSource:
+          type: string
+          nullable: true
+          description: >
+            Query-statistics extension the snapshot was read through
+            (pg_stat_statements or pgpro_stats). Null for snapshots taken before
+            this was recorded. The two number queryid differently, so snapshots
+            from different sources are not comparable row by row.
 
     SnapshotCreated:
       type: object

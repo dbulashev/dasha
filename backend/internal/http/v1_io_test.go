@@ -123,12 +123,12 @@ func TestIOHistoryMetaReportsEpochShifts(t *testing.T) {
 	at := time.Date(2026, 8, 22, 3, 0, 0, 0, time.UTC)
 	earliest, latest := at.Add(-24*time.Hour), at
 
-	snaps := []statio.Snapshot{
+	metas := []statio.Meta{
 		{CapturedAt: at.Add(-2 * time.Minute), VersionNum: 170004, TrackIOTiming: false},
 		{CapturedAt: at.Add(-time.Minute), VersionNum: 180001, TrackIOTiming: true},
 	}
 
-	meta := ioHistoryMeta("h1", &earliest, &latest, snaps)
+	meta := ioHistoryMeta("h1", &earliest, &latest, metas)
 
 	if !meta.TrackIoTimingChanged {
 		t.Error("a toggled track_io_timing must be reported")

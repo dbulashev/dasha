@@ -352,7 +352,7 @@ func (d *Daemon) takeSnapshot(
 			TriggerType:    trigType,
 			Outcome:        OutcomeError,
 			TriggerContext: trigCtx,
-			ErrorMessage:   strPtr("empty report: pg_stat_statements is not readable in any database of the host"),
+			ErrorMessage:   strPtr("empty report: no query-statistics extension is readable in any database of the host"),
 		})
 
 		return errEmptyReport
@@ -381,6 +381,12 @@ func (d *Daemon) takeSnapshot(
 		pgssReset = &t.Time
 	}
 
+	// Best-effort, like the reset time above.
+	statsSource, err := d.repo.PgssSource(ctx, string(cl.Name), instance, database)
+	if err != nil {
+		d.logger.Warn("stats source lookup failed; snapshot stored unlabelled", zap.Error(err))
+	}
+
 	// Locks are captured only for activity spikes (contention correlates with load,
 	// not role changes). Best-effort: capture failure never fails the snapshot.
 	var locks *LockCapture
@@ -393,6 +399,7 @@ func (d *Daemon) takeSnapshot(
 
 	id, createdAt, err := d.store.CreateSnapshot(ctx, string(cl.Name), instance, provenance, reports, SnapshotOpts{
 		PgssStatsReset: pgssReset,
+		StatsSource:    statsSource,
 		Reason:         reason,
 		TriggerContext: trigCtx,
 		LocksData:      locks,
@@ -420,7 +427,7 @@ func (d *Daemon) takeSnapshot(
 
 	if cfg.ResetQueryStats {
 		if err := d.repo.ResetQueryStats(ctx, string(cl.Name), instance, provenance); err != nil {
-			d.logger.Warn("pg_stat_statements_reset failed after snapshot",
+			d.logger.Warn("query statistics reset failed after snapshot",
 				zap.String("cluster", string(cl.Name)),
 				zap.String("instance", instance),
 				zap.Error(err))

@@ -1597,6 +1597,9 @@ type QueryStatsStatus struct {
 	Available bool `json:"Available"`
 	Enabled   bool `json:"Enabled"`
 	Readable  bool `json:"Readable"`
+
+	// Source Query-statistics extension this connection is read through: pg_stat_statements, or pgpro_stats on Postgres Pro. Always set — when neither is installed it names the one worth installing here.
+	Source string `json:"Source"`
 }
 
 // QueryTop10ByTime defines model for QueryTop10ByTime.
@@ -1876,6 +1879,9 @@ type SnapshotListItem struct {
 
 	// Reason Why the snapshot was created: "manual" or "auto:<trigger_type>"
 	Reason *string `json:"Reason,omitempty"`
+
+	// StatsSource Query-statistics extension the snapshot was read through (pg_stat_statements or pgpro_stats). Null for snapshots taken before this was recorded. The two number queryid differently, so snapshots from different sources are not comparable row by row.
+	StatsSource *string `json:"StatsSource"`
 }
 
 // SnapshotStatus defines model for SnapshotStatus.

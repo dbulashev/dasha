@@ -129,6 +129,7 @@ var registry = []Check{
 	},
 	// The checks below already power pages of their own. The report reuses their
 	// queries rather than reimplementing the logic, so the two views cannot drift
+	// apart
 	{
 		Code:           CodeInvalidConstraint,
 		ObjectType:     ObjectTypeConstraint,
