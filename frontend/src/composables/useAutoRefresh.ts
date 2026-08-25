@@ -7,6 +7,13 @@ interface UseAutoRefreshOptions {
   onTick: () => void
 }
 
+export function formatRemaining(ms: number): string {
+  const totalSec = Math.ceil(ms / 1000)
+  const m = Math.floor(totalSec / 60)
+  const s = totalSec % 60
+  return `${m}:${s.toString().padStart(2, '0')}`
+}
+
 export function useAutoRefresh(options: UseAutoRefreshOptions) {
   const pollIntervalGetter = (): number => {
     const v = options.pollInterval
@@ -56,13 +63,6 @@ export function useAutoRefresh(options: UseAutoRefreshOptions) {
 
   function toggle() {
     if (active.value) { stop() } else { start() }
-  }
-
-  function formatRemaining(ms: number): string {
-    const totalSec = Math.ceil(ms / 1000)
-    const m = Math.floor(totalSec / 60)
-    const s = totalSec % 60
-    return `${m}:${s.toString().padStart(2, '0')}`
   }
 
   onBeforeUnmount(stop)

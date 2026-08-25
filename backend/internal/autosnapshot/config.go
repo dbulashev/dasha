@@ -50,16 +50,21 @@ type Config struct {
 	LockProbeCount       int           `validate:"gte=1,lte=20"`
 	LockProbeInterval    time.Duration `validate:"gte=100ms,lte=5s"`
 	ResetQueryStats      bool          // reset pg_stat_statements after each auto-snapshot
-	// Hot-objects delta snapshots (plans/hot-objects-design.md). HotSchedule
+	// Hot-objects delta snapshots. HotSchedule
 	// is a standard 5-field cron expression; parsed (and fallen back to daily
 	// on error) by the daemon, not the validator.
 	HotEnabled       bool
 	HotSchedule      string
 	HotTopN          int `validate:"gte=1,lte=1000"`
 	HotRetentionDays int `validate:"gte=1"`
-	Defaults         TriggerDefaults
-	UpdatedAt        time.Time
-	UpdatedBy        *string
+	// pg_stat_io snapshots. IOSchedule uses the
+	// same cron parser as HotSchedule.
+	IOEnabled       bool
+	IOSchedule      string
+	IORetentionDays int `validate:"gte=1"`
+	Defaults        TriggerDefaults
+	UpdatedAt       time.Time
+	UpdatedBy       *string
 }
 
 // ClusterOverride holds the raw jsonb of overrides for a cluster plus the

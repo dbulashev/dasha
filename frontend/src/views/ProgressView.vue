@@ -18,6 +18,7 @@ import type {
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useViewError } from '@/composables/useViewError'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
+import AutoRefreshControls from '@/components/AutoRefreshControls.vue'
 import { assertOk } from '@/utils/api'
 import { getErrorMessage } from '@/utils/error'
 import { fmtBytes } from '@/utils/format'
@@ -221,23 +222,12 @@ watch([clusterName, hostName], () => {
 
   <!-- Header with auto-refresh control -->
   <div class="d-flex align-center ga-3 mb-4">
-    <v-btn
-      :icon="autoRefresh.active.value ? 'mdi-stop' : 'mdi-play'"
-      :color="autoRefresh.active.value ? 'error' : 'success'"
-      variant="tonal"
-      size="small"
-      @click="autoRefresh.toggle"
-    />
-    <span v-if="autoRefresh.active.value" class="text-body-2 d-flex align-center ga-1">
-      <v-icon size="small" color="success" class="auto-refresh-icon">mdi-refresh</v-icon>
-      {{ autoRefresh.formatRemaining(autoRefresh.remaining.value) }}
-    </span>
-    <v-btn
-      icon="mdi-refresh"
-      variant="text"
-      size="small"
+    <AutoRefreshControls
+      :active="autoRefresh.active.value"
+      :remaining="autoRefresh.remaining.value"
       :loading="loading"
-      @click="loadEverything"
+      @toggle="autoRefresh.toggle"
+      @refresh="loadEverything"
     />
   </div>
 
@@ -261,12 +251,4 @@ watch([clusterName, hostName], () => {
 </template>
 
 <style scoped>
-.auto-refresh-icon {
-  animation: spin 2s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
 </style>

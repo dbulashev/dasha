@@ -10,6 +10,7 @@ import { useAutosnapshotStatusStore } from './stores/autosnapshotStatus'
 import { useI18n } from 'vue-i18n'
 import { AuthInfoMode } from '@/api/models'
 import { errorKey, type GlobalError } from './composables/useViewError'
+import { IO_MIN_VERSION_NUM } from '@/components/io/types'
 
 const { t } = useI18n()
 const themeStore = useThemeStore()
@@ -110,6 +111,7 @@ const fkAnalysisLink = computed(() => withQuery("fk-analysis"));
 const maintenanceLink = computed(() => withQuery("maintenance"));
 const schemaLintLink = computed(() => withQuery("schema-lint"));
 const replicationLink = computed(() => withQuery("replication"));
+const ioLink = computed(() => withQuery("io"));
 const settingsLink = computed(() => withQuery("settings"));
 const logsLink = computed(() => withQuery("logs"));
 const autoSnapshotLink = computed(() => withQuery("auto-snapshot"));
@@ -136,6 +138,13 @@ watch(
 
 const isReplica = computed(() =>
   instanceInfoStore.isReplica(currentCluster.value, currentHost.value),
+)
+
+// On a host without pg_stat_io the I/O page has no subject: no menu item at all.
+const ioVisible = computed(
+  () =>
+    (instanceInfoStore.known(currentCluster.value, currentHost.value)?.VersionNum ?? 0) >=
+    IO_MIN_VERSION_NUM,
 )
 
 const primaryOnlyRoutes = ['/maintenance', '/schema-lint']
@@ -247,6 +256,7 @@ watch(() => route.path, () => {
           <v-list-item :title="t('Operation progress')" prepend-icon="mdi-progress-question" link :to="progressLink"></v-list-item>
           <v-list-item :title="t('FK Analysis')" prepend-icon="mdi-relation-many-to-many" link :to="fkAnalysisLink"></v-list-item>
           <v-list-item :title="t('Replication')" prepend-icon="mdi-database-sync-outline" link :to="replicationLink"></v-list-item>
+          <v-list-item v-if="ioVisible" :title="t('io.menu')" prepend-icon="mdi-harddisk" link :to="ioLink"></v-list-item>
           <v-list-item v-if="!isReplica" :title="t('Maintenance')" prepend-icon="mdi-wrench-outline" link :to="maintenanceLink"></v-list-item>
           <v-list-item v-if="!isReplica" :title="t('schemaLint.page.menuItem')" prepend-icon="mdi-clipboard-check-outline" link :to="schemaLintLink"></v-list-item>
           <v-list-item :title="t('Settings')" prepend-icon="mdi-database-settings-outline" link :to="settingsLink"></v-list-item>

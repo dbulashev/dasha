@@ -209,6 +209,14 @@
     "save": "Speichern",
     "saved": "Einstellungen gespeichert",
     "groupPgss": "Getriggerte Abfrage- und Sperren-Snapshots (pg_stat_statements)",
+    "groupIo": "I/O-Snapshots (pg_stat_io)",
+    "io": {
+      "title": "I/O-Statistik",
+      "hint": "Rohe kumulative pg_stat_io-Schnitte, planmäßig von jedem Cluster-Host erfasst. Sie speisen den Verlauf des I/O-Bereichs; die Deltas entstehen beim Lesen.",
+      "fieldsHint": "Zeitplan — 5-Feld-Cron, UTC-Zeit (eigene Zone: CRON_TZ=Europe/Moscow */5 * * * *). Hosts älter als PostgreSQL 16 werden übersprungen: sie haben kein pg_stat_io.",
+      "schedule": "Zeitplan (Cron)",
+      "retentionDays": "Aufbewahrung, Tage"
+    },
     "groupHot": "Objektaktivitäts-Snapshots (heiße Tabellen & Indizes)",
     "saveInvalid": "Einstellungen nicht gespeichert: der Server hat die Werte abgelehnt — Cron-Ausdruck und Zahlenfelder prüfen.",
     "overridden": "Überschrieben",
@@ -509,11 +517,6 @@
     "queryFilterModeLike": "LIKE",
     "queryFilterModeNotLike": "NOT LIKE",
     "usernameLabel": "Benutzer",
-    "intervalLabel": "Intervall",
-    "intervalSec": "{n} s",
-    "playTooltip": "Auto-Aktualisierung aktivieren",
-    "stopTooltip": "Auto-Aktualisierung stoppen",
-    "refreshTooltip": "Jetzt aktualisieren",
     "clientLocal": "local",
     "waitUnnamed": "wartet (der Server benennt das Ereignis nicht)"
   },
@@ -843,7 +846,8 @@
       "tuneCostDelay": "autovacuum_vacuum_cost_delay zu hoch ({value} ms)",
       "tuneWorkMem": "autovacuum_work_mem zu klein (effektiver Wert: {value} kB, ≤ 64 MB)",
       "tooManyCheckpoints": "Zu viele erzwungene Checkpoints (req: {req}, timed: {timed}) — erhöhen Sie max_wal_size",
-      "highMaxwrittenClean": "Hoher maxwritten_clean-Wert ({value}) — erhöhen Sie bgwriter_lru_maxpages"
+      "highMaxwrittenClean": "Hoher maxwritten_clean-Wert ({value}) — erhöhen Sie bgwriter_lru_maxpages",
+      "walIoTimingOff": "track_wal_io_timing ist aus — WAL-I/O-Zeiten werden nicht erfasst"
     }
   },
   "describe": {
@@ -954,6 +958,95 @@
     }
   },
   "Maintenance": "Wartung",
+  "io": {
+    "menu": "I/O",
+    "requiresVersion": "Der I/O-Bereich liest pg_stat_io, das PostgreSQL erst ab Version 16 bereitstellt. Dieser Host läuft mit einer älteren Version.",
+    "waitingSecondTick": "Warte auf die zweite Messung — eine Rate braucht zwei.",
+    "partialIntervals": "Einige Intervalle dieses Zeitraums sind unvollständig: ein Statistik-Reset, ein Neustart oder ein Major-Upgrade hat die Reihe unterbrochen. Sie werden als Lücke gezeichnet, nicht als Null.",
+    "noData": "Für die aktuelle Auswahl wurde keine I/O-Aktivität erfasst.",
+    "historyUnavailable": "Nur Live-Modus — kein Snapshot-Speicher konfiguriert",
+    "trackIoTimingOff": "track_io_timing ist auf diesem Host aus — es werden keine I/O-Zeiten erfasst. Zum Nutzen des Zeit-Modus einschalten.",
+    "mode": {
+      "history": "Verlauf",
+      "live": "Live"
+    },
+    "metric": {
+      "count": "Anzahl",
+      "time": "Zeit"
+    },
+    "range": {
+      "1h": "1 Std",
+      "6h": "6 Std",
+      "24h": "24 Std",
+      "7d": "7 T"
+    },
+    "filter": {
+      "backendType": "Prozesstyp",
+      "allBackendTypes": "Alle Prozesstypen",
+      "context": "Kontext",
+      "allContexts": "Alle Kontexte",
+      "showIdle": "Inaktive Zeilen anzeigen"
+    },
+    "live": {
+      "lastUpdate": "aktualisiert {at}"
+    },
+    "window": {
+      "label": "Fenster: {window}",
+      "hint": "Die gemessene Länge des Intervalls, das die Zahlen abdecken. Unvollständige Intervalle zählen nicht mit, das Fenster kann kürzer als der gewählte Zeitraum sein.",
+      "seconds": "{n} s",
+      "minutes": "{n} Min",
+      "hours": "{n} Std"
+    },
+    "chart": {
+      "title": "I/O über die Zeit",
+      "hint": "Aufteilung nach Kontext oder Prozesstyp, gestapelt. Werte je Sekunde des gemessenen Intervalls. Eine Lücke ist ein unvollständiges Intervall.",
+      "perSecond": "Operationen / s",
+      "ioTimePerSecond": "I/O-Zeit ({unit} pro beobachteter Sekunde)",
+      "opsPerSecond": "Op./s",
+      "total": "gesamt",
+      "groupBy": {
+        "context": "Kontexte",
+        "backendType": "Prozesse"
+      },
+      "otherSeries": "andere ({n})"
+    },
+    "cache": {
+      "title": "shared_buffers-Effizienz",
+      "hint": "hits / (hits + reads) über das Fenster. Reads sind Blöcke, die beim Betriebssystem angefordert wurden; Platte oder Page-Cache ist hier nicht sichtbar.",
+      "hits": "Treffer",
+      "reads": "Lesevorgänge",
+      "subtitle": "{hits} Treffer / {reads} Lesevorgänge",
+      "noAccess": "In diesem Fenster gab es keine Pufferzugriffe."
+    },
+    "vacuum": {
+      "title": "Vacuum-I/O",
+      "hint": "Kontext vacuum: Pufferverkehr von Autovacuum und manuellem VACUUM. Vacuum läuft über einen Ringpuffer, seine Trefferquote liegt unter der der Client-Prozesse.",
+      "idle": "In diesem Fenster gab es kein Vacuum-I/O.",
+      "hitRatio": "Trefferquote im Kontext vacuum"
+    },
+    "bulk": {
+      "title": "Massenoperationen",
+      "hint": "bulkread und bulkwrite: sequenzielle Scans, COPY, CREATE TABLE AS. Laufen über einen Ringpuffer; reuses zählt darin wiederverwendete Puffer.",
+      "idle": "In diesem Fenster gab es kein Massen-I/O.",
+      "contextIdle": "keine Aktivität"
+    },
+    "matrix": {
+      "title": "I/O-Aufschlüsselung",
+      "hint": "Die Matrix über das gewählte Fenster. Anteil ist die Zählersumme der Zeile gegen die Summe über alle Zeilen, Byte-Spalten ausgenommen.",
+      "share": "Anteil",
+      "row": "Prozess und Kontext",
+      "tempObject": "temporäres Objekt (temp relation)",
+      "walObject": "Write-Ahead-Log (WAL)"
+    },
+    "context": {
+      "normal": "normale Zugriffe",
+      "vacuum": "Vacuum",
+      "bulkread": "Massenlesen",
+      "bulkwrite": "Massenschreiben",
+      "init": "Initialisierung"
+    },
+    "partialPoint": "unvollständiges Intervall"
+  },
   "hot": {
     "tablesTitle": "Heiße Tabellen",
     "indexesTitle": "Heiße Indizes",
@@ -1700,5 +1793,13 @@
       "skipped": "Nicht geprüft",
       "skippedHint": "So viele Prüfungen liefen in dieser Datenbank nicht. Die Nullen bedeuten ungeprüft, nicht sauber."
     }
+  },
+  "autoRefresh": {
+    "intervalLabel": "Intervall",
+    "intervalSec": "{n} s",
+    "manual": "manuell",
+    "play": "Auto-Aktualisierung starten",
+    "stop": "Auto-Aktualisierung stoppen",
+    "refresh": "Jetzt aktualisieren"
   }
 }

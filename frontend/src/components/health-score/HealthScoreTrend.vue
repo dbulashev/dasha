@@ -143,11 +143,16 @@ const chartOptions = computed(() => ({
     <v-card-title class="d-flex align-center ga-1 flex-wrap">
       <v-icon start icon="mdi-chart-line" />
       {{ t('healthScore.trend.title') }}
-      <v-icon size="small" icon="mdi-help-circle-outline" class="ms-1 text-medium-emphasis">
-        <v-tooltip activator="parent" location="bottom" max-width="360">
-          {{ t('healthScore.trend.baselineHelp') }}
-        </v-tooltip>
-      </v-icon>
+      <v-tooltip :text="t('healthScore.trend.baselineHelp')" location="bottom" max-width="360">
+        <template #activator="{ props: tip }">
+          <v-icon
+            v-bind="tip"
+            size="small"
+            icon="mdi-help-circle-outline"
+            class="ms-1 text-medium-emphasis"
+          />
+        </template>
+      </v-tooltip>
       <v-spacer />
       <v-btn-toggle v-model="selectedRange" density="compact" variant="outlined" mandatory>
         <v-btn value="24h" size="small">{{ t('healthScore.trend.range.24h') }}</v-btn>

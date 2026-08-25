@@ -321,6 +321,9 @@ func configToAPI(cfg autosnapshot.Config) serverhttp.AutoSnapshotConfig {
 		HotSchedule:          cfg.HotSchedule,
 		HotTopN:              cfg.HotTopN,
 		HotRetentionDays:     cfg.HotRetentionDays,
+		IOEnabled:            cfg.IOEnabled,
+		IOSchedule:           cfg.IOSchedule,
+		IORetentionDays:      cfg.IORetentionDays,
 		Defaults:             triggerDefaultsToAPI(cfg.Defaults),
 	}
 }
@@ -380,8 +383,12 @@ func configFromAPI(api serverhttp.AutoSnapshotConfig) (autosnapshot.Config, erro
 
 	// The struct validator cannot judge a cron expression; parse it here so an
 	// invalid schedule is a 400 instead of a daemon-side daily fallback.
-	if _, err := autosnapshot.ParseHotSchedule(api.HotSchedule); err != nil {
+	if _, err := autosnapshot.ParseCronSchedule(api.HotSchedule); err != nil {
 		return autosnapshot.Config{}, fmt.Errorf("hot_schedule: %w", err)
+	}
+
+	if _, err := autosnapshot.ParseCronSchedule(api.IOSchedule); err != nil {
+		return autosnapshot.Config{}, fmt.Errorf("io_schedule: %w", err)
 	}
 
 	return autosnapshot.Config{
@@ -399,6 +406,9 @@ func configFromAPI(api serverhttp.AutoSnapshotConfig) (autosnapshot.Config, erro
 		HotSchedule:          api.HotSchedule,
 		HotTopN:              api.HotTopN,
 		HotRetentionDays:     api.HotRetentionDays,
+		IOEnabled:            api.IOEnabled,
+		IOSchedule:           api.IOSchedule,
+		IORetentionDays:      api.IORetentionDays,
 		Defaults: autosnapshot.TriggerDefaults{
 			ActivitySpike: autosnapshot.ActivitySpikeTrigger{
 				Enabled:            api.Defaults.ActivitySpike.Enabled,

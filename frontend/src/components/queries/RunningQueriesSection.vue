@@ -6,6 +6,7 @@ import type { QueryRunning } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useApiLoader } from '@/composables/useApiLoader'
 import { useAutoRefresh } from '@/composables/useAutoRefresh'
+import AutoRefreshControls from '@/components/AutoRefreshControls.vue'
 import { useDebouncedRef } from '@/composables/useDebouncedRef'
 import { useViewError } from '@/composables/useViewError'
 import { useActiveQueriesStore } from '@/stores/activeQueries'
@@ -173,38 +174,14 @@ watch(intervalSec, () => autoRefresh.restart())
   <v-card class="mb-4">
     <v-card-title class="d-flex align-center ga-2 flex-wrap">
       <v-icon start icon="mdi-play-circle-outline" />{{ t('Live Queries') }}
-      <v-btn
-        :icon="autoRefresh.active.value ? 'mdi-stop' : 'mdi-play'"
-        :color="autoRefresh.active.value ? 'error' : 'success'"
-        :title="autoRefresh.active.value ? t('queries.stopTooltip') : t('queries.playTooltip')"
-        variant="tonal"
-        size="small"
-        @click="autoRefresh.toggle"
-      />
-      <span v-if="autoRefresh.active.value" class="text-body-2 d-flex align-center ga-1">
-        <v-icon size="small" color="success" class="auto-refresh-icon">mdi-refresh</v-icon>
-        {{ autoRefresh.formatRemaining(autoRefresh.remaining.value) }}
-      </span>
-      <v-select
-        v-model="intervalSec"
-        :items="intervalOptions"
-        :label="t('queries.intervalLabel')"
-        density="compact"
-        hide-details
-        style="max-width: 110px"
-      >
-        <template #selection="{ item }">{{ t('queries.intervalSec', { n: item.raw }) }}</template>
-        <template #item="{ item, props }">
-          <v-list-item v-bind="props" :title="t('queries.intervalSec', { n: item.raw })" />
-        </template>
-      </v-select>
-      <v-btn
-        icon="mdi-refresh"
-        :title="t('queries.refreshTooltip')"
-        variant="text"
-        size="small"
+      <AutoRefreshControls
+        v-model:interval-sec="intervalSec"
+        :active="autoRefresh.active.value"
+        :remaining="autoRefresh.remaining.value"
         :loading="loading"
-        @click="load"
+        :interval-options="intervalOptions"
+        @toggle="autoRefresh.toggle"
+        @refresh="load"
       />
       <v-spacer />
       <v-select
@@ -296,15 +273,6 @@ watch(intervalSec, () => autoRefresh.restart())
 </template>
 
 <style scoped>
-.auto-refresh-icon {
-  animation: spin 2s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
 .sql-truncate {
   white-space: nowrap;
   overflow: hidden;

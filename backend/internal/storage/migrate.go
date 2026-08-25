@@ -263,6 +263,32 @@ ALTER TABLE autosnapshot_config_global
 	// before the feature ever shipped).
 	dropAutosnapshotHotIntervalSQL = `
 ALTER TABLE autosnapshot_config_global DROP COLUMN IF EXISTS hot_interval`
+
+	// One row = one raw cumulative pg_stat_io slice of one host. The whole
+	// matrix goes into a single jsonb: a snapshot is only ever read whole (a
+	// delta is the pairwise difference of two of them), and a row per
+	// combination would multiply a 5-minute schedule into tens of thousands of
+	// rows per host per day for no access path anyone uses.
+	// The columns beside it are read on their own: they lay out the series and
+	// decide which bodies a request has to touch at all.
+	createIOSnapshotSQL = `
+CREATE TABLE IF NOT EXISTS io_snapshot (
+    cluster_name    text NOT NULL,
+    instance        text NOT NULL,
+    captured_at     timestamptz NOT NULL DEFAULT now(),
+    version_num     int  NOT NULL,
+    op_bytes        int,
+    track_io_timing boolean NOT NULL,
+    stats_reset     timestamptz,
+    rows            jsonb NOT NULL,
+    CONSTRAINT io_snapshot_pkey PRIMARY KEY (cluster_name, instance, captured_at)
+) PARTITION BY RANGE (captured_at)`
+
+	addAutosnapshotIOConfigSQL = `
+ALTER TABLE autosnapshot_config_global
+    ADD COLUMN IF NOT EXISTS io_enabled        boolean NOT NULL DEFAULT true,
+    ADD COLUMN IF NOT EXISTS io_schedule       text    NOT NULL DEFAULT '*/5 * * * *',
+    ADD COLUMN IF NOT EXISTS io_retention_days int     NOT NULL DEFAULT 30`
 )
 
 // partitionedTables lists the day-partitioned tables managed together —
@@ -274,6 +300,11 @@ var partitionedTables = []string{"snapshots", "query_texts", "trigger_events"}
 // the size-based pgss retention, which removes whole day-groups of
 // partitionedTables once RetentionBytes is exceeded.
 var hotPartitionedTables = []string{"hot_snapshot", "hot_top"}
+
+// ioPartitionedTables is a third partition group, for the same reason as the
+// hot one: pg_stat_io history is far denser and ages out much faster
+// (io_retention_days).
+var ioPartitionedTables = []string{"io_snapshot"}
 
 // Migrate creates parent tables and partitions for the next partitionDaysAhead days.
 func Migrate(ctx context.Context, cfg string, logger *zap.Logger) error {
@@ -337,6 +368,8 @@ func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
 		addAutosnapshotHotConfigSQL,
 		dropAutosnapshotHotIntervalSQL,
 		addSnapshotDatabasesSQL,
+		createIOSnapshotSQL,
+		addAutosnapshotIOConfigSQL,
 	} {
 		if _, err := s.ddlPool.Exec(ctx, ddl); err != nil {
 			return fmt.Errorf("storage: migrate: %w", err)
@@ -355,6 +388,10 @@ func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
 
 		if err := s.ensureHotPartitions(ctx, day); err != nil {
 			return fmt.Errorf("storage: create hot partition: %w", err)
+		}
+
+		if err := s.ensureIOPartitions(ctx, day); err != nil {
+			return fmt.Errorf("storage: create io partition: %w", err)
 		}
 	}
 
@@ -379,6 +416,27 @@ func (s *Storage) ensurePartitions(ctx context.Context, day time.Time) error {
 
 		if _, err := s.ddlPool.Exec(ctx, sql); err != nil {
 			return fmt.Errorf("partition %s_%s: %w", table, dayStr, err)
+		}
+	}
+
+	return nil
+}
+
+// ensureIOPartitions mirrors ensurePartitions for the pg_stat_io partition
+// group (separate retention lifecycle — see ioPartitionedTables).
+func (s *Storage) ensureIOPartitions(ctx context.Context, day time.Time) error {
+	dayStr := day.Format("20060102")
+	from := day.Format("2006-01-02")
+	to := day.AddDate(0, 0, 1).Format("2006-01-02")
+
+	for _, table := range ioPartitionedTables {
+		sql := fmt.Sprintf(
+			`CREATE TABLE IF NOT EXISTS %s_%s PARTITION OF %s FOR VALUES FROM ('%s') TO ('%s')`,
+			table, dayStr, table, from, to,
+		)
+
+		if _, err := s.ddlPool.Exec(ctx, sql); err != nil {
+			return fmt.Errorf("io partition %s_%s: %w", table, dayStr, err)
 		}
 	}
 

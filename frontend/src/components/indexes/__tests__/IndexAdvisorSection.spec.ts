@@ -187,7 +187,7 @@ describe('IndexAdvisorSection', () => {
   })
 
   // The count stays visible whatever is folded — hiding it is what would let an
-  // empty candidate list read as a clean bill of health (FR-4.8).
+  // empty candidate list read as a clean bill of health.
   it('shows the unparsed count without being expanded', async () => {
     resolves(
       report({

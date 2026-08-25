@@ -190,6 +190,13 @@ const (
 	Used             GetIndexesUnusedReportParamsVerdict = "used"
 )
 
+// Defines values for GetIOHistoryParamsGroupBy.
+const (
+	BackendType GetIOHistoryParamsGroupBy = "backend_type"
+	Context     GetIOHistoryParamsGroupBy = "context"
+	Full        GetIOHistoryParamsGroupBy = "full"
+)
+
 // Defines values for GetLogsParamsServiceType.
 const (
 	Pooler     GetLogsParamsServiceType = "pooler"
@@ -317,8 +324,17 @@ type AutoSnapshotConfig struct {
 	HotSchedule string `json:"HotSchedule"`
 
 	// HotTopN Exact top size stored per metric class; the tail is kept as a histogram
-	HotTopN        int `json:"HotTopN"`
-	LockProbeCount int `json:"LockProbeCount"`
+	HotTopN int `json:"HotTopN"`
+
+	// IOEnabled Capture pg_stat_io snapshots (the I/O section's history)
+	IOEnabled bool `json:"IOEnabled"`
+
+	// IORetentionDays Age-based retention of pg_stat_io snapshots, days
+	IORetentionDays int `json:"IORetentionDays"`
+
+	// IOSchedule Standard 5-field cron expression, UTC unless prefixed with CRON_TZ=<zone> (e.g. "*/5 * * * *")
+	IOSchedule     string `json:"IOSchedule"`
+	LockProbeCount int    `json:"LockProbeCount"`
 
 	// LockProbeInterval Go duration string between lock probes (e.g. "500ms")
 	LockProbeInterval string `json:"LockProbeInterval"`
@@ -764,6 +780,84 @@ type HotSnapshotMeta struct {
 	// HostsMissing Hosts that could not be sampled — the snapshot is partial, their activity is absent from every number.
 	HostsMissing []string                 `json:"hosts_missing"`
 	Windows      map[string]HotHostWindow `json:"windows"`
+}
+
+// IOHistory defines model for IOHistory.
+type IOHistory struct {
+	Meta   IOHistoryMeta `json:"meta"`
+	Series []IOSeries    `json:"series"`
+}
+
+// IOHistoryMeta defines model for IOHistoryMeta.
+type IOHistoryMeta struct {
+	// EarliestAt Oldest stored capture of this host — from when history exists at all.
+	EarliestAt *time.Time `json:"earliest_at"`
+	Instance   string     `json:"instance"`
+	LatestAt   *time.Time `json:"latest_at"`
+
+	// TrackIoTiming Value at the newest capture in the period.
+	TrackIoTiming bool `json:"track_io_timing"`
+
+	// TrackIoTimingChanged The setting was toggled inside the period, so I/O times cover only part of it.
+	TrackIoTimingChanged bool `json:"track_io_timing_changed"`
+
+	// VersionChanged The server was upgraded inside the period; the intervals spanning the upgrade are incomplete.
+	VersionChanged bool `json:"version_changed"`
+}
+
+// IOPoint defines model for IOPoint.
+type IOPoint struct {
+	// Complete False when a broken epoch fell into this bucket; draw a gap, not a zero.
+	Complete bool `json:"complete"`
+
+	// DurationSeconds Measured length of the summed intervals — the denominator for any rate. Zero when no interval in the bucket was complete.
+	DurationSeconds float64          `json:"duration_seconds"`
+	From            time.Time        `json:"from"`
+	To              time.Time        `json:"to"`
+	Values          map[string]int64 `json:"values"`
+}
+
+// IORow defines model for IORow.
+type IORow struct {
+	BackendType string `json:"backend_type"`
+	Context     string `json:"context"`
+	Object      string `json:"object"`
+
+	// Values Counters, plus I/O times in milliseconds when track_io_timing is on. Absent counters are the ones the server reports as NULL.
+	Values map[string]int64 `json:"values"`
+}
+
+// IOSeries defines model for IOSeries.
+type IOSeries struct {
+	// Key The dimensions this series keeps. The ones it was summed over are absent.
+	Key    IOSeriesKey `json:"key"`
+	Points []IOPoint   `json:"points"`
+}
+
+// IOSeriesKey The dimensions this series keeps. The ones it was summed over are absent.
+type IOSeriesKey struct {
+	BackendType *string `json:"backend_type,omitempty"`
+	Context     *string `json:"context,omitempty"`
+	Object      *string `json:"object,omitempty"`
+}
+
+// IOSnapshot defines model for IOSnapshot.
+type IOSnapshot struct {
+	CapturedAt time.Time `json:"captured_at"`
+	Instance   string    `json:"instance"`
+
+	// OpBytes Fixed operation size reported by PostgreSQL 16/17; null from 18 on, where the server reports byte counters directly.
+	OpBytes *int    `json:"op_bytes"`
+	Rows    []IORow `json:"rows"`
+
+	// StatsReset The pg_stat_io epoch; a change between two snapshots invalidates the interval between them.
+	StatsReset *time.Time `json:"stats_reset"`
+
+	// TrackIoTiming When false the server collects no I/O times and the Time metrics are absent.
+	TrackIoTiming bool `json:"track_io_timing"`
+
+	// VersionNum server_version_num at capture time — it decides how the counters are read.
+	VersionNum int `json:"version_num"`
 }
 
 // IndexAdvisorCandidate defines model for IndexAdvisorCandidate.
@@ -2409,6 +2503,40 @@ type GetIndexesUsageParams struct {
 	Offset      *int        `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
+// GetIOCurrentParams defines parameters for GetIOCurrent.
+type GetIOCurrentParams struct {
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance    `form:"instance" json:"instance"`
+}
+
+// GetIOHistoryParams defines parameters for GetIOHistory.
+type GetIOHistoryParams struct {
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance    `form:"instance" json:"instance"`
+
+	// From Start of the period. A window longer than 31 days is trimmed to the 31 days ending at `to`.
+	From time.Time `form:"from" json:"from"`
+	To   time.Time `form:"to" json:"to"`
+
+	// GroupBy Dimensions each series keeps; the rest are summed over.
+	GroupBy *GetIOHistoryParamsGroupBy `form:"group_by,omitempty" json:"group_by,omitempty"`
+
+	// Points Maximum number of points per series; adjacent intervals are summed to fit.
+	Points *int `form:"points,omitempty" json:"points,omitempty"`
+
+	// Context Keep only this pg_stat_io context (normal, vacuum, bulkread, bulkwrite, init).
+	Context *string `form:"context,omitempty" json:"context,omitempty"`
+
+	// BackendType Keep only this backend type.
+	BackendType *string `form:"backend_type,omitempty" json:"backend_type,omitempty"`
+
+	// Object Keep only this object (relation, temp relation, wal).
+	Object *string `form:"object,omitempty" json:"object,omitempty"`
+}
+
+// GetIOHistoryParamsGroupBy defines parameters for GetIOHistory.
+type GetIOHistoryParamsGroupBy string
+
 // GetLogsParams defines parameters for GetLogs.
 type GetLogsParams struct {
 	ClusterName ClusterName              `form:"cluster_name" json:"cluster_name"`
@@ -3095,6 +3223,12 @@ type ClientInterface interface {
 
 	// GetIndexesUsage request
 	GetIndexesUsage(ctx context.Context, params *GetIndexesUsageParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetIOCurrent request
+	GetIOCurrent(ctx context.Context, params *GetIOCurrentParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetIOHistory request
+	GetIOHistory(ctx context.Context, params *GetIOHistoryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetLogs request
 	GetLogs(ctx context.Context, params *GetLogsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -4014,6 +4148,30 @@ func (c *Client) GetIndexesUnusedReport(ctx context.Context, params *GetIndexesU
 
 func (c *Client) GetIndexesUsage(ctx context.Context, params *GetIndexesUsageParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetIndexesUsageRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetIOCurrent(ctx context.Context, params *GetIOCurrentParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetIOCurrentRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetIOHistory(ctx context.Context, params *GetIOHistoryParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetIOHistoryRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -8944,6 +9102,224 @@ func NewGetIndexesUsageRequest(server string, params *GetIndexesUsageParams) (*h
 	return req, nil
 }
 
+// NewGetIOCurrentRequest generates requests for GetIOCurrent
+func NewGetIOCurrentRequest(server string, params *GetIOCurrentParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/io/current")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, params.ClusterName); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "instance", runtime.ParamLocationQuery, params.Instance); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetIOHistoryRequest generates requests for GetIOHistory
+func NewGetIOHistoryRequest(server string, params *GetIOHistoryParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/io/history")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, params.ClusterName); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "instance", runtime.ParamLocationQuery, params.Instance); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "from", runtime.ParamLocationQuery, params.From); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "to", runtime.ParamLocationQuery, params.To); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.GroupBy != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "group_by", runtime.ParamLocationQuery, *params.GroupBy); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Points != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "points", runtime.ParamLocationQuery, *params.Points); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Context != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "context", runtime.ParamLocationQuery, *params.Context); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.BackendType != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "backend_type", runtime.ParamLocationQuery, *params.BackendType); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Object != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "object", runtime.ParamLocationQuery, *params.Object); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetLogsRequest generates requests for GetLogs
 func NewGetLogsRequest(server string, params *GetLogsParams) (*http.Request, error) {
 	var err error
@@ -12904,6 +13280,12 @@ type ClientWithResponsesInterface interface {
 	// GetIndexesUsageWithResponse request
 	GetIndexesUsageWithResponse(ctx context.Context, params *GetIndexesUsageParams, reqEditors ...RequestEditorFn) (*GetIndexesUsageResponse, error)
 
+	// GetIOCurrentWithResponse request
+	GetIOCurrentWithResponse(ctx context.Context, params *GetIOCurrentParams, reqEditors ...RequestEditorFn) (*GetIOCurrentResponse, error)
+
+	// GetIOHistoryWithResponse request
+	GetIOHistoryWithResponse(ctx context.Context, params *GetIOHistoryParams, reqEditors ...RequestEditorFn) (*GetIOHistoryResponse, error)
+
 	// GetLogsWithResponse request
 	GetLogsWithResponse(ctx context.Context, params *GetLogsParams, reqEditors ...RequestEditorFn) (*GetLogsResponse, error)
 
@@ -14394,6 +14776,50 @@ func (r GetIndexesUsageResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetIndexesUsageResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetIOCurrentResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *IOSnapshot
+}
+
+// Status returns HTTPResponse.Status
+func (r GetIOCurrentResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetIOCurrentResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetIOHistoryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *IOHistory
+}
+
+// Status returns HTTPResponse.Status
+func (r GetIOHistoryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetIOHistoryResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -15988,6 +16414,24 @@ func (c *ClientWithResponses) GetIndexesUsageWithResponse(ctx context.Context, p
 		return nil, err
 	}
 	return ParseGetIndexesUsageResponse(rsp)
+}
+
+// GetIOCurrentWithResponse request returning *GetIOCurrentResponse
+func (c *ClientWithResponses) GetIOCurrentWithResponse(ctx context.Context, params *GetIOCurrentParams, reqEditors ...RequestEditorFn) (*GetIOCurrentResponse, error) {
+	rsp, err := c.GetIOCurrent(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetIOCurrentResponse(rsp)
+}
+
+// GetIOHistoryWithResponse request returning *GetIOHistoryResponse
+func (c *ClientWithResponses) GetIOHistoryWithResponse(ctx context.Context, params *GetIOHistoryParams, reqEditors ...RequestEditorFn) (*GetIOHistoryResponse, error) {
+	rsp, err := c.GetIOHistory(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetIOHistoryResponse(rsp)
 }
 
 // GetLogsWithResponse request returning *GetLogsResponse
@@ -17957,6 +18401,58 @@ func ParseGetIndexesUsageResponse(rsp *http.Response) (*GetIndexesUsageResponse,
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest []IndexUsage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetIOCurrentResponse parses an HTTP response from a GetIOCurrentWithResponse call
+func ParseGetIOCurrentResponse(rsp *http.Response) (*GetIOCurrentResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetIOCurrentResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest IOSnapshot
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetIOHistoryResponse parses an HTTP response from a GetIOHistoryWithResponse call
+func ParseGetIOHistoryResponse(rsp *http.Response) (*GetIOHistoryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetIOHistoryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest IOHistory
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

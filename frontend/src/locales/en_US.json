@@ -231,6 +231,14 @@
     "save": "Save",
     "saved": "Settings saved",
     "groupPgss": "Triggered query & lock snapshots (pg_stat_statements)",
+    "groupIo": "I/O snapshots (pg_stat_io)",
+    "io": {
+      "title": "I/O statistics",
+      "hint": "Raw cumulative pg_stat_io slices taken from every cluster host on a schedule. They feed the history of the I/O section; the deltas are computed on read.",
+      "fieldsHint": "Schedule — 5-field cron, UTC time (own zone: CRON_TZ=Europe/Moscow */5 * * * *). Hosts older than PostgreSQL 16 are skipped: they have no pg_stat_io.",
+      "schedule": "Schedule (cron)",
+      "retentionDays": "Retention, days"
+    },
     "groupHot": "Object activity snapshots (hot tables & indexes)",
     "saveInvalid": "Settings not saved: the server rejected the values — check the cron expression and numeric fields.",
     "overridden": "Overridden",
@@ -444,11 +452,6 @@
     "queryFilterModeLike": "LIKE",
     "queryFilterModeNotLike": "NOT LIKE",
     "usernameLabel": "User",
-    "intervalLabel": "Interval",
-    "intervalSec": "{n} s",
-    "playTooltip": "Start auto-refresh",
-    "stopTooltip": "Stop auto-refresh",
-    "refreshTooltip": "Refresh now",
     "clientLocal": "local",
     "waitUnnamed": "waiting (the server does not name the event)"
   },
@@ -881,7 +884,8 @@
       "tuneCostDelay": "autovacuum_vacuum_cost_delay is too high ({value} ms)",
       "tuneWorkMem": "autovacuum_work_mem is too small (effective value: {value} kB, ≤ 64 MB)",
       "tooManyCheckpoints": "Too many forced checkpoints (req: {req}, timed: {timed}) — increase max_wal_size",
-      "highMaxwrittenClean": "maxwritten_clean is high ({value}) — increase bgwriter_lru_maxpages"
+      "highMaxwrittenClean": "maxwritten_clean is high ({value}) — increase bgwriter_lru_maxpages",
+      "walIoTimingOff": "track_wal_io_timing is off — WAL I/O times are not collected"
     }
   },
   "describe": {
@@ -992,6 +996,95 @@
     }
   },
   "Maintenance": "Maintenance",
+  "io": {
+    "menu": "I/O",
+    "requiresVersion": "The I/O section reads pg_stat_io, which PostgreSQL provides from version 16 on. This host runs an older version.",
+    "waitingSecondTick": "Waiting for the second sample — a rate needs two.",
+    "partialIntervals": "Some intervals in this period are incomplete: a statistics reset, a restart or a major upgrade broke the series. They are drawn as gaps, not as zeros.",
+    "noData": "No I/O activity recorded for the current selection.",
+    "historyUnavailable": "Live mode only — snapshot storage is not configured",
+    "trackIoTimingOff": "track_io_timing is off on this host — no I/O times are collected. Turn it on to use the Time mode.",
+    "mode": {
+      "history": "History",
+      "live": "Live"
+    },
+    "metric": {
+      "count": "Count",
+      "time": "Time"
+    },
+    "range": {
+      "1h": "1h",
+      "6h": "6h",
+      "24h": "24h",
+      "7d": "7d"
+    },
+    "filter": {
+      "backendType": "Backend type",
+      "allBackendTypes": "All backend types",
+      "context": "Context",
+      "allContexts": "All contexts",
+      "showIdle": "Show idle rows"
+    },
+    "live": {
+      "lastUpdate": "updated {at}"
+    },
+    "window": {
+      "label": "Window: {window}",
+      "hint": "The measured length of the interval the numbers cover. Incomplete intervals are excluded, so the window can be shorter than the selected period.",
+      "seconds": "{n} s",
+      "minutes": "{n} min",
+      "hours": "{n} h"
+    },
+    "chart": {
+      "title": "I/O over time",
+      "hint": "Breakdown by context or backend type, stacked. Values are per second of the measured interval. A gap is an incomplete interval.",
+      "perSecond": "operations / s",
+      "ioTimePerSecond": "I/O time ({unit} per second observed)",
+      "opsPerSecond": "ops/s",
+      "total": "total",
+      "groupBy": {
+        "context": "Contexts",
+        "backendType": "Backends"
+      },
+      "otherSeries": "other ({n})"
+    },
+    "cache": {
+      "title": "shared_buffers efficiency",
+      "hint": "hits / (hits + reads) over the window. Reads are blocks requested from the operating system; disk or page cache is not visible here.",
+      "hits": "Hits",
+      "reads": "Reads",
+      "subtitle": "{hits} hits / {reads} reads",
+      "noAccess": "No buffer access in this window."
+    },
+    "vacuum": {
+      "title": "Vacuum I/O",
+      "hint": "The vacuum context: buffer traffic of autovacuum and manual VACUUM. Vacuum works through a ring buffer, its hit ratio is below the client one.",
+      "idle": "No vacuum I/O in this window.",
+      "hitRatio": "Hit ratio in the vacuum context"
+    },
+    "bulk": {
+      "title": "Bulk operations",
+      "hint": "bulkread and bulkwrite: sequential scans, COPY, CREATE TABLE AS. They run through a ring buffer; reuses counts buffers recycled inside it.",
+      "idle": "No bulk I/O in this window.",
+      "contextIdle": "no activity"
+    },
+    "matrix": {
+      "title": "I/O breakdown",
+      "hint": "The matrix over the selected window. Share is a row’s counter sum against the sum over all rows, byte columns excluded.",
+      "share": "Share",
+      "row": "Backend and context",
+      "tempObject": "temporary object (temp relation)",
+      "walObject": "write-ahead log (WAL)"
+    },
+    "context": {
+      "normal": "regular access",
+      "vacuum": "vacuum",
+      "bulkread": "bulk read",
+      "bulkwrite": "bulk write",
+      "init": "init"
+    },
+    "partialPoint": "incomplete interval"
+  },
   "hot": {
     "tablesTitle": "Hot tables",
     "indexesTitle": "Hot indexes",
@@ -1738,5 +1831,13 @@
       "skipped": "Not checked",
       "skippedHint": "This many checks did not run in this database. The zero counts mean unchecked, not clean."
     }
+  },
+  "autoRefresh": {
+    "intervalLabel": "Interval",
+    "intervalSec": "{n} s",
+    "manual": "manual",
+    "play": "Start auto-refresh",
+    "stop": "Stop auto-refresh",
+    "refresh": "Refresh now"
   }
 }

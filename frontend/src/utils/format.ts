@@ -49,6 +49,7 @@ export function pickTimeScale(maxMs: number): TimeScale {
   if (abs >= 3600000) return { divisor: 3600000, unit: 'h' }
   if (abs >= 60000) return { divisor: 60000, unit: 'min' }
   if (abs >= 1000) return { divisor: 1000, unit: 'sec' }
+  if (abs > 0 && abs < 1) return { divisor: 0.001, unit: 'us' }
   return { divisor: 1, unit: 'ms' }
 }
 

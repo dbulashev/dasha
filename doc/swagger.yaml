@@ -1736,6 +1736,101 @@ paths:
         '501':
           description: Snapshot storage not configured
 
+  /api/io/current:
+    get:
+      operationId: getIOCurrent
+      summary: Current raw pg_stat_io slice of one host
+      description: >-
+        The cumulative counters exactly as the server reports them, plus what is
+        needed to interpret them: the stats epoch, track_io_timing, the server
+        version and — before PostgreSQL 18 — op_bytes. Nothing is derived here;
+        the live mode keeps the previous slice in the browser and shows the
+        difference between two ticks. pg_stat_io is instance-wide, so no
+        database narrows the answer.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IOSnapshot'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: The host runs PostgreSQL older than 16 and has no pg_stat_io
+
+  /api/io/history:
+    get:
+      operationId: getIOHistory
+      summary: Series of pg_stat_io deltas over a period
+      description: >-
+        Deltas between the stored snapshots of one host, thinned to at most
+        `points` buckets by summing adjacent intervals (deltas are additive).
+        Every point carries the actual length of the interval it covers and
+        whether that interval was complete: a stats reset, a restart or a major
+        upgrade breaks the epoch, and the affected point is reported as
+        incomplete rather than as a zero. Byte counters are present regardless
+        of server version — before PostgreSQL 18 they are derived from op_bytes.
+        The detail matrix is this endpoint with `group_by=full` and `points=1`.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - in: query
+          name: from
+          required: true
+          schema:
+            type: string
+            format: date-time
+          description: >-
+            Start of the period. A window longer than 31 days is trimmed to the
+            31 days ending at `to`.
+        - in: query
+          name: to
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: group_by
+          schema:
+            type: string
+            enum: [context, backend_type, full]
+            default: context
+          description: Dimensions each series keeps; the rest are summed over.
+        - in: query
+          name: points
+          schema:
+            type: integer
+            default: 200
+          description: Maximum number of points per series; adjacent intervals are summed to fit.
+        - in: query
+          name: context
+          schema:
+            type: string
+          description: Keep only this pg_stat_io context (normal, vacuum, bulkread, bulkwrite, init).
+        - in: query
+          name: backend_type
+          schema:
+            type: string
+          description: Keep only this backend type.
+        - in: query
+          name: object
+          schema:
+            type: string
+          description: Keep only this object (relation, temp relation, wal).
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IOHistory'
+        '501':
+          description: Snapshot storage not configured
+
   /api/maintenance/autovacuum-summary:
     get:
       operationId: getMaintenanceAutovacuumSummary
@@ -4306,6 +4401,155 @@ components:
           items:
             $ref: '#/components/schemas/HotEntry'
 
+    IORow:
+      type: object
+      required:
+        - backend_type
+        - object
+        - context
+        - values
+      properties:
+        backend_type:
+          type: string
+        object:
+          type: string
+        context:
+          type: string
+        values:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+          description: Counters, plus I/O times in milliseconds when track_io_timing is on. Absent counters are the ones the server reports as NULL.
+
+    IOSnapshot:
+      type: object
+      required:
+        - instance
+        - captured_at
+        - version_num
+        - track_io_timing
+        - rows
+      properties:
+        instance:
+          type: string
+        captured_at:
+          type: string
+          format: date-time
+        version_num:
+          type: integer
+          description: server_version_num at capture time — it decides how the counters are read.
+        op_bytes:
+          type: integer
+          nullable: true
+          description: Fixed operation size reported by PostgreSQL 16/17; null from 18 on, where the server reports byte counters directly.
+        track_io_timing:
+          type: boolean
+          description: When false the server collects no I/O times and the Time metrics are absent.
+        stats_reset:
+          type: string
+          format: date-time
+          nullable: true
+          description: The pg_stat_io epoch; a change between two snapshots invalidates the interval between them.
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/IORow'
+
+    IOSeriesKey:
+      type: object
+      description: The dimensions this series keeps. The ones it was summed over are absent.
+      properties:
+        backend_type:
+          type: string
+        object:
+          type: string
+        context:
+          type: string
+
+    IOPoint:
+      type: object
+      required:
+        - from
+        - to
+        - duration_seconds
+        - complete
+        - values
+      properties:
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        duration_seconds:
+          type: number
+          format: double
+          description: Measured length of the summed intervals — the denominator for any rate. Zero when no interval in the bucket was complete.
+        complete:
+          type: boolean
+          description: False when a broken epoch fell into this bucket; draw a gap, not a zero.
+        values:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+
+    IOSeries:
+      type: object
+      required:
+        - key
+        - points
+      properties:
+        key:
+          $ref: '#/components/schemas/IOSeriesKey'
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/IOPoint'
+
+    IOHistoryMeta:
+      type: object
+      required:
+        - instance
+        - track_io_timing
+        - track_io_timing_changed
+        - version_changed
+      properties:
+        instance:
+          type: string
+        earliest_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Oldest stored capture of this host — from when history exists at all.
+        latest_at:
+          type: string
+          format: date-time
+          nullable: true
+        track_io_timing:
+          type: boolean
+          description: Value at the newest capture in the period.
+        track_io_timing_changed:
+          type: boolean
+          description: The setting was toggled inside the period, so I/O times cover only part of it.
+        version_changed:
+          type: boolean
+          description: The server was upgraded inside the period; the intervals spanning the upgrade are incomplete.
+
+    IOHistory:
+      type: object
+      required:
+        - meta
+        - series
+      properties:
+        meta:
+          $ref: '#/components/schemas/IOHistoryMeta'
+        series:
+          type: array
+          items:
+            $ref: '#/components/schemas/IOSeries'
+
     HotObjectHistoryItem:
       type: object
       required:
@@ -6299,6 +6543,9 @@ components:
         - HotSchedule
         - HotTopN
         - HotRetentionDays
+        - IOEnabled
+        - IOSchedule
+        - IORetentionDays
         - Defaults
       properties:
         Enabled:
@@ -6339,6 +6586,15 @@ components:
         HotRetentionDays:
           type: integer
           description: Age-based retention of hot-objects snapshots, days
+        IOEnabled:
+          type: boolean
+          description: Capture pg_stat_io snapshots (the I/O section's history)
+        IOSchedule:
+          type: string
+          description: Standard 5-field cron expression, UTC unless prefixed with CRON_TZ=<zone> (e.g. "*/5 * * * *")
+        IORetentionDays:
+          type: integer
+          description: Age-based retention of pg_stat_io snapshots, days
         Defaults:
           $ref: '#/components/schemas/AutoSnapshotTriggerDefaults'
 

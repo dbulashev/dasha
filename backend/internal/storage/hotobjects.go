@@ -586,15 +586,21 @@ func (s *Storage) LastHotSnapshotAt(ctx context.Context) (map[string]time.Time, 
 // cutoff. The hot group has its own age-based retention, independent from the
 // size-based pgss retention.
 func (s *Storage) DropHotPartitionsBefore(ctx context.Context, cutoff time.Time) error {
+	return s.dropPartitionsBefore(ctx, hotPartitionedTables, cutoff)
+}
+
+// dropPartitionsBefore drops every day partition of the named parent tables
+// whose day is older than the cutoff.
+func (s *Storage) dropPartitionsBefore(ctx context.Context, parents []string, cutoff time.Time) error {
 	rows, err := s.pool.Query(ctx, `
 		SELECT c.relname
 		FROM pg_class c
 		JOIN pg_inherits i ON i.inhrelid = c.oid
 		JOIN pg_class p ON p.oid = i.inhparent
 		WHERE p.relname = ANY($1)`,
-		hotPartitionedTables)
+		parents)
 	if err != nil {
-		return fmt.Errorf("storage: list hot partitions: %w", err)
+		return fmt.Errorf("storage: list partitions: %w", err)
 	}
 	defer rows.Close()
 
@@ -603,14 +609,14 @@ func (s *Storage) DropHotPartitionsBefore(ctx context.Context, cutoff time.Time)
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
-			return fmt.Errorf("storage: scan hot partition: %w", err)
+			return fmt.Errorf("storage: scan partition: %w", err)
 		}
 
 		names = append(names, name)
 	}
 
 	if err := rows.Err(); err != nil {
-		return fmt.Errorf("storage: list hot partitions: %w", err)
+		return fmt.Errorf("storage: list partitions: %w", err)
 	}
 
 	cutoffDay := cutoff.UTC().Format("20060102")
@@ -628,7 +634,7 @@ func (s *Storage) DropHotPartitionsBefore(ctx context.Context, cutoff time.Time)
 		}
 
 		if _, err := s.ddlPool.Exec(ctx, fmt.Sprintf(`DROP TABLE IF EXISTS %q`, name)); err != nil {
-			return fmt.Errorf("storage: drop hot partition %s: %w", name, err)
+			return fmt.Errorf("storage: drop partition %s: %w", name, err)
 		}
 	}
 

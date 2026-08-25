@@ -1,0 +1,77 @@
+package autosnapshot
+
+import (
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestCronDue(t *testing.T) {
+	at := func(h, m int) time.Time {
+		return time.Date(2026, 7, 19, h, m, 0, 0, time.UTC)
+	}
+
+	daily, err := ParseCronSchedule("0 3 * * *")
+	require.NoError(t, err)
+
+	// Last capture 02:00 UTC → next firing 03:00 UTC.
+	assert.False(t, cronDue(daily, at(2, 0), at(2, 59)))
+	assert.True(t, cronDue(daily, at(2, 0), at(3, 0)))
+	assert.True(t, cronDue(daily, at(2, 0), at(15, 0)), "missed firings stay due until taken")
+
+	every5, err := ParseCronSchedule("*/5 * * * *")
+	require.NoError(t, err)
+
+	assert.False(t, cronDue(every5, at(12, 5), at(12, 9)))
+	assert.True(t, cronDue(every5, at(12, 5), at(12, 10)))
+
+	// nil schedule = daily fallback for an unparsable expression.
+	assert.False(t, cronDue(nil, at(2, 0), at(2, 0).Add(23*time.Hour)))
+	assert.True(t, cronDue(nil, at(2, 0), at(2, 0).Add(24*time.Hour)))
+}
+
+func TestDueForCapture(t *testing.T) {
+	at := func(h, m int) time.Time {
+		return time.Date(2026, 7, 19, h, m, 0, 0, time.UTC)
+	}
+
+	sched, err := ParseCronSchedule("*/5 * * * *")
+	require.NoError(t, err)
+
+	d := &Daemon{} //nolint:exhaustruct
+	attempts := map[string]time.Time{}
+	last := map[string]time.Time{"c1/db1": at(3, 0)}
+
+	// A stored snapshot still governs.
+	assert.False(t, d.dueForCapture(attempts, sched, last, "c1/db1", at(3, 2)))
+	assert.True(t, d.dueForCapture(attempts, sched, last, "c1/db1", at(3, 5)))
+
+	// Without one the first attempt fires, and the next waits for the schedule
+	// instead of repeating on every tick.
+	assert.True(t, d.dueForCapture(attempts, sched, last, "c1/db2", at(3, 6)))
+	assert.False(t, d.dueForCapture(attempts, sched, last, "c1/db2", at(3, 7)))
+	assert.True(t, d.dueForCapture(attempts, sched, last, "c1/db2", at(3, 10)))
+}
+
+func TestParseCronSchedule_Timezone(t *testing.T) {
+	// Bare specs are pinned to UTC regardless of the process's local zone:
+	// "0 3 * * *" fires at 03:00 UTC even when last is expressed in another zone.
+	utcDaily, err := ParseCronSchedule("0 3 * * *")
+	require.NoError(t, err)
+
+	msk := time.FixedZone("MSK", 3*3600)
+	lastMsk := time.Date(2026, 7, 19, 5, 0, 0, 0, msk) // 02:00 UTC
+
+	next := utcDaily.Next(lastMsk)
+	assert.Equal(t, time.Date(2026, 7, 19, 3, 0, 0, 0, time.UTC), next.UTC())
+
+	// An explicit CRON_TZ prefix is passed through untouched: 03:00 Moscow
+	// time is 00:00 UTC.
+	mskDaily, err := ParseCronSchedule("CRON_TZ=Europe/Moscow 0 3 * * *")
+	require.NoError(t, err)
+
+	next = mskDaily.Next(time.Date(2026, 7, 18, 23, 0, 0, 0, time.UTC))
+	assert.Equal(t, time.Date(2026, 7, 19, 0, 0, 0, 0, time.UTC), next.UTC())
+}

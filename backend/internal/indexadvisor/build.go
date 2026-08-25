@@ -982,7 +982,7 @@ func (b *builder) candidate(key RelKey, d *draft) Candidate {
 		Covered:        covered,
 		TableRows:      rel.Rows,
 		Writes:         writes,
-		Warnings:       b.warningsFor(d, rel.Kind, writes, weight, t, partitions),
+		Warnings:       b.warningsFor(d, rel.Kind, weight, t, partitions),
 		PlannerChecked: false,
 	}
 }
@@ -994,7 +994,7 @@ type trade struct {
 }
 
 func (b *builder) warningsFor(
-	d *draft, kind string, w Writes, weight float64, t trade, partitions int,
+	d *draft, kind string, weight float64, t trade, partitions int,
 ) []Warning {
 	var out []Warning
 

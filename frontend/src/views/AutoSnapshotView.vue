@@ -620,6 +620,49 @@ onMounted(() => {
                   </v-row>
                 </v-card-text>
               </v-card>
+
+              <v-divider class="my-4" />
+              <div class="text-overline text-medium-emphasis mb-1">{{ t('autosnapshot.groupIo') }}</div>
+
+              <v-card variant="outlined">
+                <v-card-title class="text-subtitle-1">{{ t('autosnapshot.io.title') }}</v-card-title>
+                <v-card-text>
+                  <div class="text-caption text-medium-emphasis mb-1">{{ t('autosnapshot.io.hint') }}</div>
+                  <div class="text-caption text-medium-emphasis mb-2">{{ t('autosnapshot.io.fieldsHint') }}</div>
+                  <v-row dense>
+                    <v-col cols="12" sm="6" md="4">
+                      <v-switch
+                        v-model="cfg.IOEnabled"
+                        :label="t('autosnapshot.enabled')"
+                        :disabled="!isAdmin"
+                        color="primary"
+                        density="compact"
+                        hide-details
+                      />
+                    </v-col>
+                    <v-col cols="12" sm="6" md="4">
+                      <v-text-field
+                        v-model="cfg.IOSchedule"
+                        :label="t('autosnapshot.io.schedule')"
+                        :disabled="!isAdmin || !cfg.IOEnabled"
+                        :rules="[cronRule]"
+                        density="compact"
+                        placeholder="*/5 * * * *"
+                      />
+                    </v-col>
+                    <v-col cols="12" sm="6" md="4">
+                      <v-text-field
+                        v-model.number="cfg.IORetentionDays"
+                        :label="t('autosnapshot.io.retentionDays')"
+                        :disabled="!isAdmin || !cfg.IOEnabled"
+                        :rules="[positiveRule]"
+                        type="number"
+                        density="compact"
+                      />
+                    </v-col>
+                  </v-row>
+                </v-card-text>
+              </v-card>
             </v-card-text>
           </v-card>
 

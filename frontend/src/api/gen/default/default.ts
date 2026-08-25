@@ -64,6 +64,8 @@ import type {
   GetHealthScoreXidWraparoundDatabasesParams,
   GetHotObjectHistoryParams,
   GetHotPercentileParams,
+  GetIOCurrentParams,
+  GetIOHistoryParams,
   GetIndexesAdvisorParams,
   GetIndexesBloatParams,
   GetIndexesBtreeOnArrayParams,
@@ -140,6 +142,8 @@ import type {
   HotObjectHistory,
   HotPercentile,
   HotReport,
+  IOHistory,
+  IOSnapshot,
   IncomparableSnapshotsResponse,
   IndexAdvisorReport,
   IndexBloat,
@@ -7191,6 +7195,210 @@ export function useGetHotPercentile<
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetHotPercentileQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * The cumulative counters exactly as the server reports them, plus what is needed to interpret them: the stats epoch, track_io_timing, the server version and — before PostgreSQL 18 — op_bytes. Nothing is derived here; the live mode keeps the previous slice in the browser and shows the difference between two ticks. pg_stat_io is instance-wide, so no database narrows the answer.
+ * @summary Current raw pg_stat_io slice of one host
+ */
+export type getIOCurrentResponse200 = {
+  data: IOSnapshot
+  status: 200
+}
+
+export type getIOCurrentResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getIOCurrentResponse501 = {
+  data: void
+  status: 501
+}
+
+export type getIOCurrentResponseSuccess = getIOCurrentResponse200 & {
+  headers: Headers
+}
+export type getIOCurrentResponseError = (getIOCurrentResponse404 | getIOCurrentResponse501) & {
+  headers: Headers
+}
+
+export type getIOCurrentResponse = getIOCurrentResponseSuccess | getIOCurrentResponseError
+
+export const getGetIOCurrentUrl = (params: GetIOCurrentParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0 ? `/api/io/current?${stringifiedParams}` : `/api/io/current`
+}
+
+export const getIOCurrent = async (
+  params: GetIOCurrentParams,
+  options?: RequestInit,
+): Promise<getIOCurrentResponse> => {
+  return customFetch<getIOCurrentResponse>(getGetIOCurrentUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetIOCurrentQueryKey = (params?: MaybeRef<GetIOCurrentParams>) => {
+  return ['api', 'io', 'current', ...(params ? [params] : [])] as const
+}
+
+export const getGetIOCurrentQueryOptions = <
+  TData = Awaited<ReturnType<typeof getIOCurrent>>,
+  TError = NotFoundResponse | void,
+>(
+  params: MaybeRef<GetIOCurrentParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getIOCurrent>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetIOCurrentQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getIOCurrent>>> = ({ signal }) =>
+    getIOCurrent(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getIOCurrent>>,
+    TError,
+    TData
+  >
+}
+
+export type GetIOCurrentQueryResult = NonNullable<Awaited<ReturnType<typeof getIOCurrent>>>
+export type GetIOCurrentQueryError = NotFoundResponse | void
+
+/**
+ * @summary Current raw pg_stat_io slice of one host
+ */
+
+export function useGetIOCurrent<
+  TData = Awaited<ReturnType<typeof getIOCurrent>>,
+  TError = NotFoundResponse | void,
+>(
+  params: MaybeRef<GetIOCurrentParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getIOCurrent>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetIOCurrentQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Deltas between the stored snapshots of one host, thinned to at most `points` buckets by summing adjacent intervals (deltas are additive). Every point carries the actual length of the interval it covers and whether that interval was complete: a stats reset, a restart or a major upgrade breaks the epoch, and the affected point is reported as incomplete rather than as a zero. Byte counters are present regardless of server version — before PostgreSQL 18 they are derived from op_bytes. The detail matrix is this endpoint with `group_by=full` and `points=1`.
+ * @summary Series of pg_stat_io deltas over a period
+ */
+export type getIOHistoryResponse200 = {
+  data: IOHistory
+  status: 200
+}
+
+export type getIOHistoryResponse501 = {
+  data: void
+  status: 501
+}
+
+export type getIOHistoryResponseSuccess = getIOHistoryResponse200 & {
+  headers: Headers
+}
+export type getIOHistoryResponseError = getIOHistoryResponse501 & {
+  headers: Headers
+}
+
+export type getIOHistoryResponse = getIOHistoryResponseSuccess | getIOHistoryResponseError
+
+export const getGetIOHistoryUrl = (params: GetIOHistoryParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0 ? `/api/io/history?${stringifiedParams}` : `/api/io/history`
+}
+
+export const getIOHistory = async (
+  params: GetIOHistoryParams,
+  options?: RequestInit,
+): Promise<getIOHistoryResponse> => {
+  return customFetch<getIOHistoryResponse>(getGetIOHistoryUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetIOHistoryQueryKey = (params?: MaybeRef<GetIOHistoryParams>) => {
+  return ['api', 'io', 'history', ...(params ? [params] : [])] as const
+}
+
+export const getGetIOHistoryQueryOptions = <
+  TData = Awaited<ReturnType<typeof getIOHistory>>,
+  TError = void,
+>(
+  params: MaybeRef<GetIOHistoryParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getIOHistory>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetIOHistoryQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getIOHistory>>> = ({ signal }) =>
+    getIOHistory(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getIOHistory>>,
+    TError,
+    TData
+  >
+}
+
+export type GetIOHistoryQueryResult = NonNullable<Awaited<ReturnType<typeof getIOHistory>>>
+export type GetIOHistoryQueryError = void
+
+/**
+ * @summary Series of pg_stat_io deltas over a period
+ */
+
+export function useGetIOHistory<TData = Awaited<ReturnType<typeof getIOHistory>>, TError = void>(
+  params: MaybeRef<GetIOHistoryParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getIOHistory>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetIOHistoryQueryOptions(params, options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
 
