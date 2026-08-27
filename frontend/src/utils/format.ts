@@ -81,6 +81,18 @@ export function fmtCompact(v: number | null | undefined): string {
   return fmtInt(v)
 }
 
+// Compact form for fractional values: k/M/B from 1000 up, at most one decimal.
+// fmtCompact's locale path renders 2312.393 as "2 312,393", which reads as millions.
+export function fmtCompactFloat(v: number | null | undefined): string {
+  if (v == null) return '—'
+  const abs = Math.abs(v)
+  if (abs >= 1e9) return trimZero((v / 1e9).toFixed(1)) + 'B'
+  if (abs >= 1e6) return trimZero((v / 1e6).toFixed(1)) + 'M'
+  if (abs >= 1e3) return trimZero((v / 1e3).toFixed(1)) + 'k'
+  if (abs >= 10) return String(Math.round(v))
+  return trimZero(v.toFixed(1))
+}
+
 function trimZero(s: string): string {
   return s.endsWith('.0') ? s.slice(0, -2) : s
 }

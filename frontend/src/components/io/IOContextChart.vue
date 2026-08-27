@@ -16,7 +16,7 @@ import { useI18n } from 'vue-i18n'
 import type { IOHistory } from '@/api/models/index'
 import { backendTypeColor, contextColor, neutralColor, type MetricMode } from './types'
 import { useThemeStore } from '@/stores/theme'
-import { fmtChartTime, fmtCompact, fmtScaled, pickTimeScale } from '@/utils/format'
+import { fmtChartTime, fmtCompactFloat, fmtScaled, pickTimeScale } from '@/utils/format'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, Legend)
 
@@ -119,19 +119,23 @@ const datasets = computed(() =>
     data: s.data,
     borderColor: s.color ?? neutralColor(isDark.value),
     backgroundColor: `${s.color ?? neutralColor(isDark.value)}55`,
-    fill: 'origin' as const,
+    fill: 'stack' as const,
     pointRadius: 0,
     borderWidth: 1.5,
     tension: 0.2,
   })),
 )
 
-const peak = computed(() =>
-  datasets.value.reduce(
-    (acc, d) => d.data.reduce((m: number, v) => (v !== null && v > m ? v : m), acc),
-    0,
-  ),
-)
+// Stacked: the axis reaches the summed height, not the tallest single series.
+const peak = computed(() => {
+  const totals: number[] = []
+  for (const d of datasets.value) {
+    d.data.forEach((v, i) => {
+      totals[i] = (totals[i] ?? 0) + (v ?? 0)
+    })
+  }
+  return totals.reduce((m, v) => (v > m ? v : m), 0)
+})
 
 // Milliseconds per second is a small number; the axis picks a unit, not exponents.
 const timeScale = computed(() => pickTimeScale(peak.value))
@@ -148,7 +152,7 @@ const chartData = computed(() => {
 
 function fmtValue(value: number): string {
   return props.metricMode === 'count'
-    ? fmtCompact(value)
+    ? fmtCompactFloat(value)
     : fmtScaled(value, timeScale.value)
 }
 
