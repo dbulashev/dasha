@@ -4,6 +4,7 @@ import { useI18n } from 'vue-i18n'
 
 import {
   COUNT_METRICS,
+  fmtIoTime,
   heatColor,
   isByteMetric,
   metricsFor,
@@ -123,7 +124,7 @@ const headers = computed(() => [
 function cell(metric: string, value: number): string {
   if (!value) return ''
   if (isByteMetric(metric)) return fmtBytes(value)
-  return props.metricMode === 'count' ? fmtCompact(value) : `${fmtCompact(value)} ms`
+  return props.metricMode === 'count' ? fmtCompact(value) : fmtIoTime(value)
 }
 </script>
 

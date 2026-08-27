@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { fmtWindow } from '@/utils/format'
+import { fmtCompactFloat, fmtWindow } from '@/utils/format'
 
 // Stand-in for vue-i18n's t: returns the last segment so assertions stay readable.
 const t = (key: string) => key.split('.').pop() as string
@@ -32,5 +32,23 @@ describe('fmtWindow', () => {
   // Arguments are (from, to): a reversed call must not silently render a span.
   it('marks a negative span instead of formatting it', () => {
     expect(fmtWindow('2026-08-03T00:00:00Z', from, t)).toBe('—')
+  })
+})
+
+describe('fmtCompactFloat', () => {
+  it('keeps fractional values compact instead of locale-grouping them', () => {
+    expect(fmtCompactFloat(2312.393)).toBe('2.3k')
+    expect(fmtCompactFloat(19500)).toBe('19.5k')
+    expect(fmtCompactFloat(2_400_000)).toBe('2.4M')
+  })
+
+  it('drops decimals once the integer part carries the magnitude', () => {
+    expect(fmtCompactFloat(12.4)).toBe('12')
+    expect(fmtCompactFloat(0.62)).toBe('0.6')
+    expect(fmtCompactFloat(0)).toBe('0')
+  })
+
+  it('returns the placeholder for a missing value', () => {
+    expect(fmtCompactFloat(null)).toBe('—')
   })
 })

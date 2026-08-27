@@ -1,4 +1,4 @@
-import { fmtCompact, fmtScaled, pickTimeScale } from '@/utils/format'
+import { fmtCompact, fmtCompactFloat, fmtScaled, pickTimeScale } from '@/utils/format'
 
 export type MetricMode = 'count' | 'time'
 
@@ -153,12 +153,18 @@ export function fmtMetricRate(value: number, seconds: number, mode: MetricMode):
   if (seconds <= 0) return '—'
 
   const perSecond = value / seconds
-  if (mode === 'count') return `${fmtCompact(perSecond)}/s`
+  if (mode === 'count') return `${fmtCompactFloat(perSecond)}/s`
 
   const scale = pickTimeScale(perSecond)
   return `${fmtScaled(perSecond, scale)} ${TIME_UNITS[scale.unit]}/s`
 }
 
+// A wide window puts I/O totals in the hours; the unit follows the magnitude.
+export function fmtIoTime(ms: number): string {
+  const scale = pickTimeScale(ms)
+  return `${fmtScaled(ms, scale)} ${TIME_UNITS[scale.unit]}`
+}
+
 export function fmtMetricTotal(value: number, mode: MetricMode): string {
-  return mode === 'count' ? fmtCompact(value) : `${fmtCompact(value)} ms`
+  return mode === 'count' ? fmtCompact(value) : fmtIoTime(value)
 }
