@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.7.1
 
 ### Features
 - **I/O**, a new page built on `pg_stat_io` (PostgreSQL 16 and newer): server I/O by backend, object and context, with history from snapshots and a live mode polling every 3 to 30 seconds. Cards cover `shared_buffers` efficiency, vacuum cost and bulk-operation cost; PostgreSQL 18 adds write-ahead log I/O.
