@@ -239,6 +239,33 @@ type searchLogsArgs struct {
 	PageToken   string   `json:"page_token,omitempty" jsonschema:"Cursor from a previous dedup=false result to fetch the next page"`
 }
 
+// pg_stat_io is instance-wide, so neither I/O tool takes a database: there is
+// nothing to narrow it to.
+type ioSummaryArgs struct {
+	Cluster     string `json:"cluster" jsonschema:"Dasha cluster name"`
+	Instance    string `json:"instance" jsonschema:"Dasha instance / host name"`
+	Since       string `json:"since,omitempty" jsonschema:"Look-back window ending now, e.g. '15m', '1h', '24h', '7d' (default '1h'); ignored when from/to are set"`
+	From        string `json:"from,omitempty" jsonschema:"Window start, RFC3339; set together with to"`
+	To          string `json:"to,omitempty" jsonschema:"Window end, RFC3339; set together with from"`
+	GroupBy     string `json:"group_by,omitempty" jsonschema:"Dimensions to keep: 'context' (default, cheapest answer to whose I/O), 'backend_type' or 'full' (backend_type x object x context)"`
+	Object      string `json:"object,omitempty" jsonschema:"Keep only this object: 'relation', 'temp relation' (work_mem spills) or 'wal'"`
+	BackendType string `json:"backend_type,omitempty" jsonschema:"Keep only this backend type, e.g. 'client backend', 'autovacuum worker', 'checkpointer'"`
+	Context     string `json:"context,omitempty" jsonschema:"Keep only this context: 'normal', 'vacuum', 'bulkread', 'bulkwrite' or 'init'"`
+	Top         int    `json:"top,omitempty" jsonschema:"Max rows to return, heaviest first (default 20, max 200); rows_total says how many were dropped"`
+}
+
+type ioTrendArgs struct {
+	Cluster     string `json:"cluster" jsonschema:"Dasha cluster name"`
+	Instance    string `json:"instance" jsonschema:"Dasha instance / host name"`
+	Since       string `json:"since,omitempty" jsonschema:"Look-back window ending now, e.g. '6h', '24h', '7d' (default '24h'); ignored when from/to are set"`
+	From        string `json:"from,omitempty" jsonschema:"Window start, RFC3339; set together with to"`
+	To          string `json:"to,omitempty" jsonschema:"Window end, RFC3339; set together with from"`
+	Points      int    `json:"points,omitempty" jsonschema:"Buckets per series (default 24 — a day by the hour over the default window, max 200); raise only when the shape matters more than the breakdown"`
+	Context     string `json:"context,omitempty" jsonschema:"Keep only this context: 'normal', 'vacuum', 'bulkread', 'bulkwrite' or 'init'"`
+	BackendType string `json:"backend_type,omitempty" jsonschema:"Keep only this backend type before grouping by context"`
+	Object      string `json:"object,omitempty" jsonschema:"Keep only this object: 'relation', 'temp relation' or 'wal'"`
+}
+
 func registerTools(s *mcp.Server, c *DashaClient) {
 	addTool(s, &mcp.Tool{
 		Name: "list_clusters",
@@ -658,6 +685,46 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 
 		return jsonResult(c.SearchLogs(ctx, params))
 	})
+
+	addTool(s, &mcp.Tool{
+		Name: "io_summary",
+		Description: "Break instance-wide physical I/O down over a time window: who read, wrote and extended, " +
+			"from the stored pg_stat_io snapshots. Answers what wait_events (who waits, not who causes it) and " +
+			"query_report (client backends only, pg_stat_statements only) cannot — autovacuum vs client load, " +
+			"the bulkread share (sequential scans bypassing the cache), extends (real file growth), fsyncs on a " +
+			"regular backend (the checkpointer is falling behind), 'temp relation' (instance-wide work_mem " +
+			"spills). group_by=context (default) is the cheapest answer to 'whose I/O'; 'full' breaks it down " +
+			"by backend_type x object x context and needs top. Requires PostgreSQL 16 or newer: older hosts have " +
+			"no pg_stat_io at all and come back empty with empty_reason='unsupported_version', which does NOT " +
+			"mean 'no I/O'. Every empty answer carries an empty_reason, and only 'no_io' means the instance was " +
+			"idle: 'no_snapshots_in_window', 'no_comparable_snapshots', 'window_after_history' and " +
+			"'no_io_matching_filter' all mean the question went unanswered — check totals and meta before " +
+			"reporting an all-clear. With track_io_timing off every time metric is zero by construction — a " +
+			"missing measurement, not a missing load; meta.track_io_timing says which, and avg_read_ms/" +
+			"avg_write_ms are absent rather than 0. A window longer than 31 days is cut back to it and flagged " +
+			"window_capped. pg_stat_io is instance-wide: there is no database parameter. A counter absent " +
+			"from values is zero. Needs snapshot storage (501 otherwise). " +
+			"Read dasha://kb/pg-stat-io before interpreting the numbers.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, a ioSummaryArgs) (*mcp.CallToolResult, any, error) {
+		return jsonResult(ioSummary(ctx, c, a))
+	})
+
+	addTool(s, &mcp.Tool{
+		Name: "io_trend",
+		Description: "Coarse time series of physical I/O per pg_stat_io context — when the load started and " +
+			"whether it lines up with the autovacuum window. Defaults to the last 24 hours in 24 buckets, " +
+			"grouped by context; use io_summary on the window this narrows down to find out who is behind one. " +
+			"A point covering a statistics reset, a restart or a major upgrade carries complete=false and a " +
+			"coverage_pct: its counters are real but measure only that share of the bucket's span, so it is not " +
+			"comparable with a complete point and a lower number there is not a drop in load (incomplete_points " +
+			"counts such buckets). An incomplete point with no values at all measured nothing. In a complete " +
+			"point an absent metric is zero. Same preconditions as io_summary, including empty_reason on an " +
+			"empty answer: PostgreSQL 16+, time metrics are zero unless track_io_timing is on, instance-wide " +
+			"(no database), snapshot storage required (501 otherwise). " +
+			"Read dasha://kb/pg-stat-io before interpreting the numbers.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, a ioTrendArgs) (*mcp.CallToolResult, any, error) {
+		return jsonResult(ioTrend(ctx, c, a))
+	})
 }
 
 // closedWorld marks the tools as not interacting with an open world of external
@@ -706,6 +773,58 @@ func trendWindow(rng string) (span time.Duration, step int) {
 	}
 }
 
+// resolveWindow maps the since / from+to argument pair every windowed tool
+// accepts onto an absolute window, defaulting to the last def. Returns a
+// non-empty message instead of a window when the arguments are invalid.
+func resolveWindow(since, from, to string, def time.Duration) (time.Time, time.Time, string) {
+	end := time.Now()
+	start := end.Add(-def)
+
+	switch {
+	case from != "" || to != "":
+		if from == "" || to == "" {
+			return time.Time{}, time.Time{}, "from and to must be set together (RFC3339)"
+		}
+
+		var err error
+		if start, err = time.Parse(time.RFC3339, from); err != nil {
+			return time.Time{}, time.Time{}, "from must be RFC3339 (e.g. 2026-07-10T12:00:00Z)"
+		}
+
+		if end, err = time.Parse(time.RFC3339, to); err != nil {
+			return time.Time{}, time.Time{}, "to must be RFC3339 (e.g. 2026-07-10T13:00:00Z)"
+		}
+
+		if !start.Before(end) {
+			return time.Time{}, time.Time{}, "from must be before to"
+		}
+	case since != "":
+		d, err := parseSince(since)
+		if err != nil || d <= 0 {
+			return time.Time{}, time.Time{}, "since must be a positive duration like '15m', '1h', '24h' or '7d'"
+		}
+
+		start = end.Add(-d)
+	}
+
+	return start, end, ""
+}
+
+// time.ParseDuration has no day unit; models write '7d'.
+func parseSince(since string) (time.Duration, error) {
+	days, ok := strings.CutSuffix(since, "d")
+	if !ok {
+		return time.ParseDuration(since)
+	}
+
+	n, err := strconv.Atoi(days)
+	if err != nil {
+		return 0, err
+	}
+
+	return time.Duration(n) * 24 * time.Hour, nil
+}
+
 // logsDefaultSince is the default look-back window for search_logs; a short
 // window keeps the upstream Yandex API scan (and the result) small.
 const logsDefaultSince = time.Hour
@@ -724,34 +843,9 @@ func logsParams(a searchLogsArgs) (*apiclient.GetLogsParams, string) {
 		return nil, "service_type must be 'postgresql' or 'pooler'"
 	}
 
-	to := time.Now()
-	from := to.Add(-logsDefaultSince)
-
-	switch {
-	case a.From != "" || a.To != "":
-		if a.From == "" || a.To == "" {
-			return nil, "from and to must be set together (RFC3339)"
-		}
-
-		var err error
-		if from, err = time.Parse(time.RFC3339, a.From); err != nil {
-			return nil, "from must be RFC3339 (e.g. 2026-07-10T12:00:00Z)"
-		}
-
-		if to, err = time.Parse(time.RFC3339, a.To); err != nil {
-			return nil, "to must be RFC3339 (e.g. 2026-07-10T13:00:00Z)"
-		}
-
-		if !from.Before(to) {
-			return nil, "from must be before to"
-		}
-	case a.Since != "":
-		d, err := time.ParseDuration(a.Since)
-		if err != nil || d <= 0 {
-			return nil, "since must be a positive duration like '15m', '1h' or '24h'"
-		}
-
-		from = to.Add(-d)
+	from, to, msg := resolveWindow(a.Since, a.From, a.To, logsDefaultSince)
+	if msg != "" {
+		return nil, msg
 	}
 
 	// Dedup defaults to on: grouped results are far smaller and usually enough.

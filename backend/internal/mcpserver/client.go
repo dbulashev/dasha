@@ -509,6 +509,45 @@ func (d *DashaClient) WaitEvents(ctx context.Context, cluster, instance string) 
 	return pick(r.JSON200, r.HTTPResponse, "wait_events")
 }
 
+// IOHistory returns the pg_stat_io deltas of one host over a period.
+func (d *DashaClient) IOHistory(ctx context.Context, params *apiclient.GetIOHistoryParams) (*apiclient.IOHistory, error) {
+	r, err := d.api.GetIOHistoryWithResponse(ctx, params, d.editor(ctx))
+	if err != nil {
+		return nil, wrapErr("io_history", err)
+	}
+
+	if r.JSON200 == nil && r.HTTPResponse != nil && r.HTTPResponse.StatusCode == http.StatusNotImplemented {
+		return nil, errors.New("dasha: I/O history needs snapshot storage, which this Dasha has not " +
+			"configured (501) — pg_stat_io history is unavailable on this deployment")
+	}
+
+	if r.JSON200 == nil {
+		return nil, statusError("io_history", r.HTTPResponse)
+	}
+
+	return r.JSON200, nil
+}
+
+// IOSupported probes the live route, which answers 501 below PostgreSQL 16.
+func (d *DashaClient) IOSupported(ctx context.Context, cluster, instance string) (bool, error) {
+	r, err := d.api.GetIOCurrentWithResponse(ctx, &apiclient.GetIOCurrentParams{
+		ClusterName: cluster, Instance: instance,
+	}, d.editor(ctx))
+	if err != nil {
+		return false, wrapErr("io_current", err)
+	}
+
+	if r.HTTPResponse != nil && r.HTTPResponse.StatusCode == http.StatusNotImplemented {
+		return false, nil
+	}
+
+	if r.JSON200 == nil {
+		return false, statusError("io_current", r.HTTPResponse)
+	}
+
+	return true, nil
+}
+
 // SchemaLint returns the structural defects of one database's schema: code,
 // level, object and the numbers behind each finding. Reads the system catalog
 // only. Optional level filter ("error", "warning", "notice") narrows the list

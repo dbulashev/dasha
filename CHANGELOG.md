@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.7.2
+
+### Features
+- **Two MCP tools for I/O**, `io_summary` and `io_trend`: an assistant can ask who is doing the reading and writing — client load, autovacuum or the checkpointer — and when it started, with a knowledge-base page on how to read the counters. An empty answer names its cause and a period broken by a statistics reset carries the part that was measured; needs PostgreSQL 16 or newer.
+
 ## v1.7.1
 
 ### Features

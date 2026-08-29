@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -239,4 +241,161 @@ func firstText(res *mcp.CallToolResult) string {
 	}
 
 	return ""
+}
+
+// TestE2E_IOTools drives both pg_stat_io tools over a real client session: the
+// tools are advertised, arguments reach the history endpoint, and the shaped
+// result comes back as readable JSON.
+func TestE2E_IOTools(t *testing.T) {
+	t.Parallel()
+
+	var (
+		mu        sync.Mutex
+		lastQuery string
+	)
+
+	query := func() string {
+		mu.Lock()
+		defer mu.Unlock()
+
+		return lastQuery
+	}
+
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/io/history" {
+			w.WriteHeader(http.StatusNotFound)
+
+			return
+		}
+
+		mu.Lock()
+		lastQuery = r.URL.RawQuery
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(ioHistoryJSON))
+	}))
+	defer backend.Close()
+
+	client, err := NewDashaClient(Config{DashaURL: backend.URL, Token: "t"}) //nolint:exhaustruct
+	if err != nil {
+		t.Fatalf("NewDashaClient: %v", err)
+	}
+
+	ctx := context.Background()
+	st, ct := mcp.NewInMemoryTransports()
+
+	ss, err := NewMCPServer(client, "test", "en").Connect(ctx, st, nil)
+	if err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	defer ss.Close()
+
+	c := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0"}, nil) //nolint:exhaustruct
+
+	cs, err := c.Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	defer cs.Close()
+
+	lt, err := cs.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatalf("ListTools: %v", err)
+	}
+
+	for _, want := range []string{"io_summary", "io_trend"} {
+		if !hasTool(lt.Tools, want) {
+			t.Errorf("tool %q not advertised", want)
+		}
+	}
+
+	res, err := cs.CallTool(ctx, &mcp.CallToolParams{ //nolint:exhaustruct
+		Name:      "io_summary",
+		Arguments: map[string]any{"cluster": "demo", "instance": "h1", "group_by": "full", "top": 5},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(io_summary): %v", err)
+	}
+
+	if res.IsError {
+		t.Fatalf("io_summary returned IsError: %s", firstText(res))
+	}
+
+	if got := firstText(res); !strings.Contains(got, `"ranked_by"`) || !strings.Contains(got, "vacuum") {
+		t.Errorf("result = %q, want a ranked table naming the vacuum context", got)
+	}
+
+	if q := query(); !strings.Contains(q, "group_by=full") || !strings.Contains(q, "points=1") {
+		t.Errorf("history query = %q, want group_by=full and points=1", q)
+	}
+
+	res, err = cs.CallTool(ctx, &mcp.CallToolParams{ //nolint:exhaustruct
+		Name:      "io_trend",
+		Arguments: map[string]any{"cluster": "demo", "instance": "h1", "since": "6h"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool(io_trend): %v", err)
+	}
+
+	if res.IsError {
+		t.Fatalf("io_trend returned IsError: %s", firstText(res))
+	}
+
+	if q := query(); !strings.Contains(q, "points=24") || !strings.Contains(q, "group_by=context") {
+		t.Errorf("history query = %q, want the trend defaults", q)
+	}
+}
+
+// TestE2E_IOToolsRejectBadArgs confirms local validation answers as a readable
+// isError result without ever reaching Dasha.
+func TestE2E_IOToolsRejectBadArgs(t *testing.T) {
+	t.Parallel()
+
+	var called atomic.Bool
+
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called.Store(true)
+
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	client, err := NewDashaClient(Config{DashaURL: backend.URL, Token: "t"}) //nolint:exhaustruct
+	if err != nil {
+		t.Fatalf("NewDashaClient: %v", err)
+	}
+
+	ctx := context.Background()
+	st, ct := mcp.NewInMemoryTransports()
+
+	ss, err := NewMCPServer(client, "test", "en").Connect(ctx, st, nil)
+	if err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	defer ss.Close()
+
+	c := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0"}, nil) //nolint:exhaustruct
+
+	cs, err := c.Connect(ctx, ct, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	defer cs.Close()
+
+	res, err := cs.CallTool(ctx, &mcp.CallToolParams{ //nolint:exhaustruct
+		Name:      "io_summary",
+		Arguments: map[string]any{"cluster": "demo", "instance": "h1", "group_by": "object"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+
+	if !res.IsError {
+		t.Errorf("an unknown group_by must be refused")
+	}
+
+	if called.Load() {
+		t.Errorf("invalid arguments must not reach Dasha")
+	}
 }
