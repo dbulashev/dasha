@@ -22,7 +22,7 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.44.0
 	github.com/wasilibs/go-pgquery v0.0.0-20260728010200-155ebad2880e
-	github.com/yandex-cloud/go-genproto v0.113.0
+	github.com/yandex-cloud/go-genproto v0.115.0
 	github.com/yandex-cloud/go-sdk v0.33.0
 	go.uber.org/zap v1.28.0
 	golang.org/x/oauth2 v0.36.0
