@@ -11,6 +11,7 @@ const props = defineProps<{
   backendTypes: string[]
   ranges: string[]
   trackIoTiming: boolean
+  trackWalIoTiming: boolean
   liveActive: boolean
   liveRemaining: number
   liveLoading: boolean
@@ -40,6 +41,13 @@ const backendTypeOptions = computed(() => [
   { value: null, title: t('io.filter.allBackendTypes') },
   ...props.backendTypes.map((b) => ({ value: b, title: b })),
 ])
+
+const timingHint = computed(() => {
+  if (!props.trackIoTiming && !props.trackWalIoTiming) return t('io.trackIoTimingOff')
+  if (!props.trackIoTiming) return t('io.trackIoTimingWalOnly')
+  if (!props.trackWalIoTiming) return t('io.trackWalIoTimingOff')
+  return null
+})
 
 const windowLabel = computed(() => {
   if (props.windowSeconds <= 0) return null
@@ -72,10 +80,10 @@ const windowLabel = computed(() => {
 
         <v-btn-toggle v-model="metricMode" density="compact" variant="outlined" mandatory>
           <v-btn value="count" size="small">{{ t('io.metric.count') }}</v-btn>
-          <v-btn value="time" size="small" :disabled="!trackIoTiming">
+          <v-btn value="time" size="small" :disabled="!trackIoTiming && !trackWalIoTiming">
             {{ t('io.metric.time') }}
-            <v-tooltip v-if="!trackIoTiming" activator="parent" location="bottom" max-width="320">
-              {{ t('io.trackIoTimingOff') }}
+            <v-tooltip v-if="timingHint" activator="parent" location="bottom" max-width="320">
+              {{ timingHint }}
             </v-tooltip>
           </v-btn>
         </v-btn-toggle>

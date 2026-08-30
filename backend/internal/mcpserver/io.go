@@ -250,6 +250,7 @@ func ioSummary(ctx context.Context, c *DashaClient, a ioSummaryArgs) (any, error
 			Requested: out.Requested,
 			Seen:      seen,
 			Measured:  window.DurationSeconds > 0,
+			Complete:  window.Complete,
 			Filtered:  req.Filtered,
 		})
 
@@ -429,6 +430,14 @@ func ioTrendParams(a ioTrendArgs) (ioRequest, string) {
 	}, ""
 }
 
+// Relation times answer to track_io_timing, the 'wal' object's to
+// track_wal_io_timing; the series are grouped by context, so either setting
+// alone can put real times in a bucket.
+func ioTimingMeasured(m apiclient.IOHistoryMeta) bool {
+	return m.TrackIoTiming || m.TrackIoTimingChanged ||
+		m.TrackWalIoTiming || m.TrackWalIoTimingChanged
+}
+
 type ioTrendScan struct {
 	Window     ioRange
 	Incomplete map[int64]bool
@@ -448,7 +457,7 @@ func ioTrend(ctx context.Context, c *DashaClient, a ioTrendArgs) (any, error) {
 	}
 
 	metrics := slices.Clone(ioTrendMetrics)
-	if hist.Meta.TrackIoTiming || hist.Meta.TrackIoTimingChanged {
+	if ioTimingMeasured(hist.Meta) {
 		metrics = append(metrics, ioTrendTimeMetrics...)
 	}
 
@@ -488,6 +497,7 @@ func ioTrend(ctx context.Context, c *DashaClient, a ioTrendArgs) (any, error) {
 			Requested: out.Requested,
 			Seen:      scan.Seen,
 			Measured:  scan.Measured,
+			Complete:  len(scan.Incomplete) == 0,
 			Filtered:  req.Filtered,
 		})
 
@@ -588,6 +598,7 @@ type ioEmptyInput struct {
 	Requested ioRange
 	Seen      int
 	Measured  bool
+	Complete  bool
 	Filtered  bool
 }
 
@@ -619,6 +630,8 @@ func ioEmptyReason(ctx context.Context, c *DashaClient, in ioEmptyInput) (string
 		return "no_snapshots_in_window", ""
 	case !in.Measured:
 		return "no_comparable_snapshots", ""
+	case !in.Complete:
+		return "no_io_in_measured_part", ""
 	}
 
 	return "no_io", ""

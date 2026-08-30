@@ -3,8 +3,9 @@ SELECT
     s.object,
     s.context,
     s.stats_reset,
-    current_setting('track_io_timing')::boolean  AS track_io_timing,
-    (SELECT max(op_bytes)::int FROM pg_stat_io)  AS op_bytes,
+    current_setting('track_io_timing')::boolean                            AS track_io_timing,
+    coalesce(current_setting('track_wal_io_timing', true)::boolean, false) AS track_wal_io_timing,
+    (SELECT max(op_bytes)::int FROM pg_stat_io)                            AS op_bytes,
     jsonb_strip_nulls(jsonb_build_object(
         'reads',          s.reads,
         'read_time',      round(s.read_time)::bigint,

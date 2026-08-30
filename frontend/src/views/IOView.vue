@@ -51,6 +51,7 @@ const {
   rows: liveRows,
   windowSeconds: liveWindowSeconds,
   trackIoTiming: liveTrackIoTiming,
+  trackWalIoTiming: liveTrackWalIoTiming,
   waiting: liveWaiting,
   lastAt: liveLastAt,
   loading: liveLoading,
@@ -71,6 +72,7 @@ const {
   backendTypes,
   windowSeconds,
   trackIoTiming,
+  trackWalIoTiming,
   partial,
   noData,
 } = useIoRows({
@@ -78,6 +80,7 @@ const {
   liveRows,
   liveWindowSeconds,
   liveTrackIoTiming,
+  liveTrackWalIoTiming,
   history,
   matrix,
   backendType: backendTypeFilter,
@@ -201,6 +204,7 @@ watch(availableObjects, (objects) => {
       :backend-types="backendTypes"
       :ranges="Object.keys(IO_RANGES)"
       :track-io-timing="trackIoTiming"
+      :track-wal-io-timing="trackWalIoTiming"
       :live-active="liveActive"
       :live-remaining="liveRemaining"
       :live-loading="liveLoading"

@@ -41,13 +41,21 @@ look at `checkpoint_timeout`, `max_wal_size` and checkpoint frequency via
 rather than being cut off in the tail.
 
 ### zero time is not fast
-With `track_io_timing` off, `read_time`, `write_time`, `extend_time`,
-`writeback_time` and `fsync_time` are zero by construction. Check
-`meta.track_io_timing` before drawing any latency conclusion;
-`meta.track_io_timing_changed` means the setting was toggled inside the window,
-so the times cover only part of it. The tools omit `avg_read_ms` /
+Two settings govern the time counters and move independently:
+`track_io_timing` covers relation and temp-relation I/O, `track_wal_io_timing`
+covers the `wal` object alone (PostgreSQL 18 and newer). Under whichever is
+off, `read_time`, `write_time`, `extend_time`, `writeback_time` and
+`fsync_time` are zero by construction. Check `meta.track_io_timing` before any
+conclusion about relation latency and `meta.track_wal_io_timing` before any
+about WAL; the matching `*_changed` flag means that setting was toggled inside
+the window, so its times cover only part of it. The tools omit `avg_read_ms` /
 `avg_write_ms` rather than report `0.00`, so an absent latency means
 "not measured", never "instant".
+
+`io_trend` groups by context, which puts WAL and relation rows in the same
+series, so it carries the time metrics when either setting is on: with only
+`track_wal_io_timing` on, the times in a bucket are WAL's alone. Separate them
+with `io_summary` at `group_by=full`, where `wal` is a row of its own.
 
 ## Contexts
 
@@ -90,17 +98,19 @@ true gap in the record.
 
 ## The window that was actually read
 
-`requested` is the window asked for, `window` the one the data covers; a
-difference between them is snapshot coverage, not load. A request longer than
-31 days is cut back to 31 and flagged `window_capped: true` — a conclusion of
-the form "nothing changed in the last 90 days" cannot be drawn from a capped
-window.
+`requested` is the window the tools read and `window` the one the data covers;
+a difference between them is snapshot coverage, not load. A request longer than
+31 days is cut back to 31 and flagged `window_capped: true`; `requested` then
+holds the capped range, not the range asked for, and the original ask is
+nowhere in the result. A conclusion of the form "nothing changed in the last 90
+days" cannot be drawn from a capped window.
 
 ## Empty results
 
 An empty result is not an answer until `empty_reason` says which one it is.
-Exactly one of these values means the instance was idle; the rest mean the
-question went unanswered:
+Only `no_io` means the instance was idle across the whole window,
+`no_io_in_measured_part` answers for part of it, and the rest mean the question
+went unanswered:
 
 - **unsupported_version** — the host runs PostgreSQL 15 or older and has no
   `pg_stat_io`. Nothing about its I/O can be read this way; fall back to
@@ -126,9 +136,19 @@ question went unanswered:
   validated, and `'autovacuum'` (the real value is `'autovacuum worker'`)
   silently matches nothing. Re-run without the filter before concluding
   anything.
-- **no_io** — snapshots cover the window, they are comparable, and there
-  genuinely was no physical I/O. This is the only one that is a real answer,
-  and even here `totals` may show heavy cache activity.
+- **no_io_in_measured_part** — comparable captures exist and show no I/O, but a
+  counter epoch broke inside the window, so part of it was never measured. The
+  quiet covers the measured part alone: `io_summary` reports it as
+  `window.complete: false`, `io_trend` as `incomplete_points` with a
+  `coverage_pct` per bucket. Not an all-clear for the window as asked.
+- **no_io** — snapshots cover the window, they are comparable, and none of the
+  counters the tool classifies moved. For `io_summary` that is every counter
+  except `hits`. `io_trend` classifies `reads`, `writes`, `extends` and their
+  byte and time counters only, so `fsyncs`, `evictions`, `reuses` and
+  `writebacks` may be non-zero behind an `io_trend` `no_io` — read `io_summary`
+  over the same window before calling the instance quiet. This is the only
+  value that is a full answer, and even here `totals` may show heavy cache
+  activity.
 
 ## Where to go next
 

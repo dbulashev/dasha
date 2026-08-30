@@ -48,12 +48,14 @@ func ioFakeAPI(t *testing.T, history string, ioStatus int) *DashaClient {
 func ioLiveMeta(earliest string) string {
 	return `"meta":{"instance":"h1","earliest_at":"` + earliest + `","latest_at":"` +
 		time.Now().UTC().Format(time.RFC3339) + `","track_io_timing":true,` +
-		`"track_io_timing_changed":false,"version_changed":false}`
+		`"track_io_timing_changed":false,"track_wal_io_timing":true,` +
+		`"track_wal_io_timing_changed":false,"version_changed":false}`
 }
 
 const ioHistoryJSON = `{
   "meta": {"instance":"h1","earliest_at":"2026-08-01T00:00:00Z","latest_at":"2026-08-29T10:00:00Z",
-           "track_io_timing":true,"track_io_timing_changed":false,"version_changed":false},
+           "track_io_timing":true,"track_io_timing_changed":false,
+           "track_wal_io_timing":true,"track_wal_io_timing_changed":false,"version_changed":false},
   "series": [
     {"key":{"context":"normal"},
      "points":[{"from":"2026-08-29T09:00:00Z","to":"2026-08-29T10:00:00Z","duration_seconds":3600,
@@ -206,6 +208,12 @@ func TestIOSummary_EmptyReason(t *testing.T) {
       "series":[{"key":{"context":"normal"},"points":[{"from":"2026-08-29T09:00:00Z",
       "to":"2026-08-29T10:00:00Z","duration_seconds":0,"complete":false,"values":{}}]}]}`
 
+	// A reset cut the window in half; the half that was measured saw no I/O.
+	partialIdle := `{` + ioLiveMeta("2026-08-01T00:00:00Z") + `,
+      "series":[{"key":{"context":"normal"},"points":[{"from":"2026-08-29T09:00:00Z",
+      "to":"2026-08-29T10:00:00Z","duration_seconds":1800,"complete":false,
+      "values":{"hits":10}}]}]}`
+
 	tests := []struct {
 		name     string
 		history  string
@@ -220,6 +228,7 @@ func TestIOSummary_EmptyReason(t *testing.T) {
 		{"no capture fell inside the window", gapHistory, http.StatusOK, "no_snapshots_in_window"},
 		{"every interval spans a reset", brokenEpoch, http.StatusOK, "no_comparable_snapshots"},
 		{"genuinely no physical I/O", idleOnly, http.StatusOK, "no_io"},
+		{"quiet only where it was measured", partialIdle, http.StatusOK, "no_io_in_measured_part"},
 	}
 
 	for _, tt := range tests {
@@ -280,7 +289,8 @@ func TestIOSummary_EmptyKeepsTotalsAndWindow(t *testing.T) {
 
 const ioTrendJSON = `{
   "meta": {"instance":"h1","earliest_at":"2026-08-01T00:00:00Z","latest_at":"2026-08-29T10:00:00Z",
-           "track_io_timing":true,"track_io_timing_changed":false,"version_changed":false},
+           "track_io_timing":true,"track_io_timing_changed":false,
+           "track_wal_io_timing":true,"track_wal_io_timing_changed":false,"version_changed":false},
   "series": [
     {"key":{"context":"vacuum"},
      "points":[
@@ -374,6 +384,35 @@ func TestIOTrend_TimeMetricsFollowTracking(t *testing.T) {
 
 	if slices.Contains(res2.Metrics, "read_time") {
 		t.Errorf("metrics = %v, must omit time metrics that are zero by construction", res2.Metrics)
+	}
+}
+
+// WAL times answer to their own GUC: track_io_timing off does not zero them.
+func TestIOTrend_WALTimingAloneKeepsTimeMetrics(t *testing.T) {
+	t.Parallel()
+
+	walOnly := `{"meta":{"instance":"h1","earliest_at":"2026-08-01T00:00:00Z",
+      "latest_at":"2026-08-29T10:00:00Z","track_io_timing":false,
+      "track_io_timing_changed":false,"track_wal_io_timing":true,
+      "track_wal_io_timing_changed":false,"version_changed":false},
+      "series":[{"key":{"context":"normal"},"points":[{"from":"2026-08-29T09:00:00Z",
+      "to":"2026-08-29T10:00:00Z","duration_seconds":3600,"complete":true,
+      "values":{"writes":40,"write_time":120}}]}]}`
+
+	got, _ := ioTrend(context.Background(), ioFakeAPI(t, walOnly, http.StatusOK),
+		ioTrendArgs{Cluster: "demo", Instance: "h1"}) //nolint:exhaustruct
+
+	res, ok := got.(ioTrendResult)
+	if !ok {
+		t.Fatalf("ioTrend returned %T", got)
+	}
+
+	if !slices.Contains(res.Metrics, "write_time") {
+		t.Errorf("metrics = %v, must keep time metrics when track_wal_io_timing is on", res.Metrics)
+	}
+
+	if len(res.Series) != 1 || res.Series[0].Points[0].Values["write_time"] != 120 {
+		t.Errorf("the WAL write_time must survive into the series: %+v", res.Series)
 	}
 }
 
@@ -510,6 +549,22 @@ func TestParseSince_AcceptsDays(t *testing.T) {
 	}
 }
 
+// A day count that overflows time.Duration must not wrap into a short window
+// that then slips past the 31-day cap.
+func TestParseSince_RejectsOverflowingDays(t *testing.T) {
+	t.Parallel()
+
+	for _, since := range []string{"106752d", "9223372036854775807d"} {
+		if d, err := parseSince(since); err == nil {
+			t.Errorf("parseSince(%s) = %v, want an error", since, d)
+		}
+	}
+
+	if _, _, _, msg := ioWindow("106752d", "", "", ioTrendDefaultSince); msg == "" {
+		t.Errorf("ioWindow must reject a day count it cannot represent")
+	}
+}
+
 func TestResolveWindow_DefaultIsPerTool(t *testing.T) {
 	t.Parallel()
 
@@ -626,5 +681,24 @@ func TestIOTrend_AllIncompleteIsNotNoIO(t *testing.T) {
 
 	if res.IncompletePoints != 2 {
 		t.Errorf("incomplete_points = %d, want 2", res.IncompletePoints)
+	}
+}
+
+// A gap in the record cannot carry an all-clear for the window as asked.
+func TestIOTrend_PartialWindowIsNotNoIO(t *testing.T) {
+	t.Parallel()
+
+	partial := `{` + ioLiveMeta("2026-08-01T00:00:00Z") + `,
+      "series":[{"key":{"context":"normal"},"points":[
+        {"from":"2026-08-29T08:00:00Z","to":"2026-08-29T09:00:00Z","duration_seconds":3600,
+         "complete":true,"values":{"hits":10}},
+        {"from":"2026-08-29T09:00:00Z","to":"2026-08-29T10:00:00Z","duration_seconds":1800,
+         "complete":false,"values":{"hits":10}}]}]}`
+
+	res := ioTrendOf(t, ioFakeAPI(t, partial, http.StatusOK),
+		ioTrendArgs{Cluster: "demo", Instance: "h1"}) //nolint:exhaustruct
+
+	if res.EmptyReason != "no_io_in_measured_part" {
+		t.Errorf("empty_reason = %q, want no_io_in_measured_part", res.EmptyReason)
 	}
 }

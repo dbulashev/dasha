@@ -170,10 +170,15 @@ func ioHistoryMeta(instance string, earliest, latest *time.Time, metas []statio.
 	}
 
 	meta.TrackIoTiming = metas[len(metas)-1].TrackIOTiming
+	meta.TrackWalIoTiming = metas[len(metas)-1].TrackWALIOTiming
 
 	for _, m := range metas[1:] {
 		if m.TrackIOTiming != metas[0].TrackIOTiming {
 			meta.TrackIoTimingChanged = true
+		}
+
+		if m.TrackWALIOTiming != metas[0].TrackWALIOTiming {
+			meta.TrackWalIoTimingChanged = true
 		}
 
 		if m.VersionNum/10000 != metas[0].VersionNum/10000 {
@@ -186,13 +191,14 @@ func ioHistoryMeta(instance string, earliest, latest *time.Time, metas []statio.
 
 func ioSnapshotToAPI(instance string, snap statio.Snapshot) serverhttp.IOSnapshot {
 	out := serverhttp.IOSnapshot{
-		Instance:      instance,
-		CapturedAt:    snap.CapturedAt,
-		VersionNum:    snap.VersionNum,
-		OpBytes:       snap.OpBytes,
-		TrackIoTiming: snap.TrackIOTiming,
-		StatsReset:    snap.StatsReset,
-		Rows:          make([]serverhttp.IORow, 0, len(snap.Rows)),
+		Instance:         instance,
+		CapturedAt:       snap.CapturedAt,
+		VersionNum:       snap.VersionNum,
+		OpBytes:          snap.OpBytes,
+		TrackIoTiming:    snap.TrackIOTiming,
+		TrackWalIoTiming: snap.TrackWALIOTiming,
+		StatsReset:       snap.StatsReset,
+		Rows:             make([]serverhttp.IORow, 0, len(snap.Rows)),
 	}
 
 	for _, r := range snap.Rows {

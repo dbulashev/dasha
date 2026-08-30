@@ -40,25 +40,30 @@ type Snapshot struct {
 	// byte counters instead and leave this nil.
 	OpBytes       *int
 	TrackIOTiming bool
-	StatsReset    *time.Time
-	Rows          []Row
+	// The 'wal' object rows (PostgreSQL 18 and newer) time themselves by this
+	// setting, not by TrackIOTiming.
+	TrackWALIOTiming bool
+	StatsReset       *time.Time
+	Rows             []Row
 }
 
 // Meta is one capture's header: what a read plan needs before any matrix body
 // is fetched.
 type Meta struct {
-	CapturedAt    time.Time
-	VersionNum    int
-	TrackIOTiming bool
-	StatsReset    *time.Time
+	CapturedAt       time.Time
+	VersionNum       int
+	TrackIOTiming    bool
+	TrackWALIOTiming bool
+	StatsReset       *time.Time
 }
 
 func (s Snapshot) Meta() Meta {
 	return Meta{
-		CapturedAt:    s.CapturedAt,
-		VersionNum:    s.VersionNum,
-		TrackIOTiming: s.TrackIOTiming,
-		StatsReset:    s.StatsReset,
+		CapturedAt:       s.CapturedAt,
+		VersionNum:       s.VersionNum,
+		TrackIOTiming:    s.TrackIOTiming,
+		TrackWALIOTiming: s.TrackWALIOTiming,
+		StatsReset:       s.StatsReset,
 	}
 }
 

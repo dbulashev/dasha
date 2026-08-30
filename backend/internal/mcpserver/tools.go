@@ -3,6 +3,8 @@ package mcpserver
 import (
 	"cmp"
 	"context"
+	"errors"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -697,11 +699,15 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			"by backend_type x object x context and needs top. Requires PostgreSQL 16 or newer: older hosts have " +
 			"no pg_stat_io at all and come back empty with empty_reason='unsupported_version', which does NOT " +
 			"mean 'no I/O'. Every empty answer carries an empty_reason, and only 'no_io' means the instance was " +
-			"idle: 'no_snapshots_in_window', 'no_comparable_snapshots', 'window_after_history' and " +
-			"'no_io_matching_filter' all mean the question went unanswered — check totals and meta before " +
-			"reporting an all-clear. With track_io_timing off every time metric is zero by construction — a " +
-			"missing measurement, not a missing load; meta.track_io_timing says which, and avg_read_ms/" +
-			"avg_write_ms are absent rather than 0. A window longer than 31 days is cut back to it and flagged " +
+			"idle across the whole window: 'no_io_in_measured_part' means a counter epoch broke inside it and " +
+			"the quiet covers the measured part alone, while 'no_snapshots_in_window', " +
+			"'no_comparable_snapshots', 'window_after_history' and 'no_io_matching_filter' all mean the " +
+			"question went unanswered — check totals and meta before reporting an all-clear. Time counters " +
+			"answer to two settings: track_io_timing for relation and temp relation rows, " +
+			"track_wal_io_timing for the 'wal' object (PostgreSQL 18+). Under whichever is off every time " +
+			"metric is zero by construction — a missing measurement, not a missing load; meta.track_io_timing " +
+			"and meta.track_wal_io_timing say which, and avg_read_ms/avg_write_ms are absent rather than 0. " +
+			"A window longer than 31 days is cut back to it and flagged " +
 			"window_capped. pg_stat_io is instance-wide: there is no database parameter. A counter absent " +
 			"from values is zero. Needs snapshot storage (501 otherwise). " +
 			"Read dasha://kb/pg-stat-io before interpreting the numbers.",
@@ -718,9 +724,14 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			"coverage_pct: its counters are real but measure only that share of the bucket's span, so it is not " +
 			"comparable with a complete point and a lower number there is not a drop in load (incomplete_points " +
 			"counts such buckets). An incomplete point with no values at all measured nothing. In a complete " +
-			"point an absent metric is zero. Same preconditions as io_summary, including empty_reason on an " +
-			"empty answer: PostgreSQL 16+, time metrics are zero unless track_io_timing is on, instance-wide " +
-			"(no database), snapshot storage required (501 otherwise). " +
+			"point an absent metric is zero. This series carries reads, writes, extends and their byte and " +
+			"time counters only, so its empty_reason='no_io' does not rule out fsyncs, evictions, reuses or " +
+			"writebacks — confirm with io_summary over the same window. Same preconditions as io_summary, " +
+			"including empty_reason on an empty answer: PostgreSQL 16+, instance-wide (no database), snapshot " +
+			"storage required (501 otherwise). Time metrics are carried when track_io_timing or " +
+			"track_wal_io_timing is on; grouping is by context, which merges WAL and relation rows, so with " +
+			"only track_wal_io_timing on a bucket's times are WAL's alone — read meta.track_io_timing and " +
+			"meta.track_wal_io_timing before attributing them, and split them with io_summary group_by=full. " +
 			"Read dasha://kb/pg-stat-io before interpreting the numbers.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a ioTrendArgs) (*mcp.CallToolResult, any, error) {
 		return jsonResult(ioTrend(ctx, c, a))
@@ -810,6 +821,8 @@ func resolveWindow(since, from, to string, def time.Duration) (time.Time, time.T
 	return start, end, ""
 }
 
+const maxSinceDays = int64(math.MaxInt64 / (24 * time.Hour))
+
 // time.ParseDuration has no day unit; models write '7d'.
 func parseSince(since string) (time.Duration, error) {
 	days, ok := strings.CutSuffix(since, "d")
@@ -817,9 +830,13 @@ func parseSince(since string) (time.Duration, error) {
 		return time.ParseDuration(since)
 	}
 
-	n, err := strconv.Atoi(days)
+	n, err := strconv.ParseInt(days, 10, 64)
 	if err != nil {
 		return 0, err
+	}
+
+	if n > maxSinceDays {
+		return 0, errors.New("day count out of range")
 	}
 
 	return time.Duration(n) * 24 * time.Hour, nil

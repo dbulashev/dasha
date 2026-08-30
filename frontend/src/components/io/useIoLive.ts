@@ -144,5 +144,6 @@ export function useIoLive(source: {
     waiting: computed(() => current.value !== null && previous.value === null),
     lastAt: computed(() => current.value?.captured_at ?? null),
     trackIoTiming: computed(() => current.value?.track_io_timing ?? true),
+    trackWalIoTiming: computed(() => current.value?.track_wal_io_timing ?? false),
   }
 }

@@ -801,6 +801,12 @@ type IOHistoryMeta struct {
 	// TrackIoTimingChanged The setting was toggled inside the period, so I/O times cover only part of it.
 	TrackIoTimingChanged bool `json:"track_io_timing_changed"`
 
+	// TrackWalIoTiming Value at the newest capture in the period. Governs the time counters of WAL rows (object 'wal', PostgreSQL 18 and newer) independently of track_io_timing.
+	TrackWalIoTiming bool `json:"track_wal_io_timing"`
+
+	// TrackWalIoTimingChanged The setting was toggled inside the period, so WAL times cover only part of it.
+	TrackWalIoTimingChanged bool `json:"track_wal_io_timing_changed"`
+
 	// VersionChanged The server was upgraded inside the period; the intervals spanning the upgrade are incomplete.
 	VersionChanged bool `json:"version_changed"`
 }
@@ -855,6 +861,9 @@ type IOSnapshot struct {
 
 	// TrackIoTiming When false the server collects no I/O times and the Time metrics are absent.
 	TrackIoTiming bool `json:"track_io_timing"`
+
+	// TrackWalIoTiming Governs the time counters of WAL rows (object 'wal', PostgreSQL 18 and newer) independently of track_io_timing.
+	TrackWalIoTiming bool `json:"track_wal_io_timing"`
 
 	// VersionNum server_version_num at capture time — it decides how the counters are read.
 	VersionNum int `json:"version_num"`

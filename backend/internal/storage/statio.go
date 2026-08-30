@@ -42,10 +42,10 @@ func (s *Storage) InsertIOSnapshot(
 
 	_, err = s.pool.Exec(ctx, `
 		INSERT INTO io_snapshot (cluster_name, instance, captured_at, version_num, op_bytes,
-		                         track_io_timing, stats_reset, rows)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)`,
+		                         track_io_timing, track_wal_io_timing, stats_reset, rows)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb)`,
 		clusterName, instance, snap.CapturedAt, snap.VersionNum, snap.OpBytes,
-		snap.TrackIOTiming, snap.StatsReset, jsonbArg(body),
+		snap.TrackIOTiming, snap.TrackWALIOTiming, snap.StatsReset, jsonbArg(body),
 	)
 	if err != nil {
 		return fmt.Errorf("storage: insert io snapshot: %w", err)
@@ -96,7 +96,7 @@ func (s *Storage) GetIOSnapshotMetas(
 ) ([]statio.Meta, error) {
 	rows, err := s.pool.Query(ctx, `
 		(
-		    SELECT captured_at, version_num, track_io_timing, stats_reset
+		    SELECT captured_at, version_num, track_io_timing, track_wal_io_timing, stats_reset
 		    FROM io_snapshot
 		    WHERE cluster_name = $1 AND instance = $2 AND captured_at < $3
 		    ORDER BY captured_at DESC
@@ -104,7 +104,7 @@ func (s *Storage) GetIOSnapshotMetas(
 		)
 		UNION ALL
 		(
-		    SELECT captured_at, version_num, track_io_timing, stats_reset
+		    SELECT captured_at, version_num, track_io_timing, track_wal_io_timing, stats_reset
 		    FROM io_snapshot
 		    WHERE cluster_name = $1 AND instance = $2 AND captured_at >= $3 AND captured_at <= $4
 		)
@@ -120,7 +120,8 @@ func (s *Storage) GetIOSnapshotMetas(
 	for rows.Next() {
 		var m statio.Meta
 
-		if err := rows.Scan(&m.CapturedAt, &m.VersionNum, &m.TrackIOTiming, &m.StatsReset); err != nil {
+		if err := rows.Scan(&m.CapturedAt, &m.VersionNum, &m.TrackIOTiming,
+			&m.TrackWALIOTiming, &m.StatsReset); err != nil {
 			return nil, fmt.Errorf("storage: scan io snapshot meta: %w", err)
 		}
 
@@ -142,7 +143,7 @@ func (s *Storage) GetIOSnapshotsAt(
 	}
 
 	rows, err := s.pool.Query(ctx, `
-		SELECT captured_at, version_num, op_bytes, track_io_timing, stats_reset, rows
+		SELECT captured_at, version_num, op_bytes, track_io_timing, track_wal_io_timing, stats_reset, rows
 		FROM io_snapshot
 		WHERE cluster_name = $1 AND instance = $2
 		  AND captured_at >= $3 AND captured_at <= $4
@@ -163,7 +164,7 @@ func (s *Storage) GetIOSnapshotsAt(
 		)
 
 		if err := rows.Scan(&snap.CapturedAt, &snap.VersionNum, &snap.OpBytes,
-			&snap.TrackIOTiming, &snap.StatsReset, &body); err != nil {
+			&snap.TrackIOTiming, &snap.TrackWALIOTiming, &snap.StatsReset, &body); err != nil {
 			return nil, fmt.Errorf("storage: scan io snapshot: %w", err)
 		}
 

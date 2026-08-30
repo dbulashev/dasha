@@ -273,16 +273,21 @@ ALTER TABLE autosnapshot_config_global DROP COLUMN IF EXISTS hot_interval`
 	// decide which bodies a request has to touch at all.
 	createIOSnapshotSQL = `
 CREATE TABLE IF NOT EXISTS io_snapshot (
-    cluster_name    text NOT NULL,
-    instance        text NOT NULL,
-    captured_at     timestamptz NOT NULL DEFAULT now(),
-    version_num     int  NOT NULL,
-    op_bytes        int,
-    track_io_timing boolean NOT NULL,
-    stats_reset     timestamptz,
-    rows            jsonb NOT NULL,
+    cluster_name        text NOT NULL,
+    instance            text NOT NULL,
+    captured_at         timestamptz NOT NULL DEFAULT now(),
+    version_num         int  NOT NULL,
+    op_bytes            int,
+    track_io_timing     boolean NOT NULL,
+    track_wal_io_timing boolean NOT NULL DEFAULT false,
+    stats_reset         timestamptz,
+    rows                jsonb NOT NULL,
     CONSTRAINT io_snapshot_pkey PRIMARY KEY (cluster_name, instance, captured_at)
 ) PARTITION BY RANGE (captured_at)`
+
+	addIOSnapshotWALTimingSQL = `
+ALTER TABLE io_snapshot
+    ADD COLUMN IF NOT EXISTS track_wal_io_timing boolean NOT NULL DEFAULT false`
 
 	addAutosnapshotIOConfigSQL = `
 ALTER TABLE autosnapshot_config_global
@@ -369,6 +374,7 @@ func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
 		dropAutosnapshotHotIntervalSQL,
 		addSnapshotDatabasesSQL,
 		createIOSnapshotSQL,
+		addIOSnapshotWALTimingSQL,
 		addAutosnapshotIOConfigSQL,
 	} {
 		if _, err := s.ddlPool.Exec(ctx, ddl); err != nil {

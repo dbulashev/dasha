@@ -36,11 +36,12 @@ func ioTestSnapshot(at time.Time, reset time.Time, reads int64) statio.Snapshot 
 	opBytes := 8192
 
 	return statio.Snapshot{
-		CapturedAt:    at,
-		VersionNum:    170004,
-		OpBytes:       &opBytes,
-		TrackIOTiming: true,
-		StatsReset:    &reset,
+		CapturedAt:       at,
+		VersionNum:       170004,
+		OpBytes:          &opBytes,
+		TrackIOTiming:    true,
+		TrackWALIOTiming: true,
+		StatsReset:       &reset,
 		Rows: []statio.Row{
 			{
 				Key:    statio.Key{BackendType: "client backend", Object: "relation", Context: "normal"},
@@ -70,6 +71,7 @@ func TestIOSnapshotRoundTrip(t *testing.T) {
 
 	assert.Equal(t, 170004, metas[0].VersionNum)
 	assert.True(t, metas[0].TrackIOTiming)
+	assert.True(t, metas[0].TrackWALIOTiming)
 	require.NotNil(t, metas[0].StatsReset)
 	assert.WithinDuration(t, reset, *metas[0].StatsReset, time.Second)
 

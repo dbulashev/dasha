@@ -18,6 +18,8 @@ export interface IOSnapshot {
   op_bytes?: number | null
   /** When false the server collects no I/O times and the Time metrics are absent. */
   track_io_timing: boolean
+  /** Governs the time counters of WAL rows (object 'wal', PostgreSQL 18 and newer) independently of track_io_timing. */
+  track_wal_io_timing: boolean
   /**
    * The pg_stat_io epoch; a change between two snapshots invalidates the interval between them.
    * @nullable

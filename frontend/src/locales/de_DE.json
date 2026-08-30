@@ -965,7 +965,9 @@
     "partialIntervals": "Einige Intervalle dieses Zeitraums sind unvollständig: ein Statistik-Reset, ein Neustart oder ein Major-Upgrade hat die Reihe unterbrochen. Sie werden als Lücke gezeichnet, nicht als Null.",
     "noData": "Für die aktuelle Auswahl wurde keine I/O-Aktivität erfasst.",
     "historyUnavailable": "Nur Live-Modus — kein Snapshot-Speicher konfiguriert",
-    "trackIoTimingOff": "track_io_timing ist auf diesem Host aus — es werden keine I/O-Zeiten erfasst. Zum Nutzen des Zeit-Modus einschalten.",
+    "trackIoTimingOff": "track_io_timing und track_wal_io_timing sind auf diesem Host aus — es werden keine I/O-Zeiten erfasst.",
+    "trackIoTimingWalOnly": "track_io_timing ist aus — Zeiten liegen nur für Write-Ahead-Log-Zeilen vor.",
+    "trackWalIoTimingOff": "track_wal_io_timing ist aus — Write-Ahead-Log-Zeilen haben keine Zeiten.",
     "mode": {
       "history": "Verlauf",
       "live": "Live"
