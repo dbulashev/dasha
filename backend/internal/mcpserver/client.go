@@ -30,14 +30,14 @@ type DashaClient struct {
 func NewDashaClient(cfg Config) (*DashaClient, error) {
 	cfg = cfg.withDefaults()
 
-	hc := &http.Client{Timeout: cfg.Timeout} //nolint:exhaustruct
+	hc := &http.Client{Timeout: cfg.Timeout, CheckRedirect: refuseCrossOriginRedirect} //nolint:exhaustruct
 
 	api, err := apiclient.NewClientWithResponses(cfg.DashaURL, apiclient.WithHTTPClient(hc))
 	if err != nil {
 		return nil, fmt.Errorf("mcp: build dasha client: %w", err)
 	}
 
-	slowHC := &http.Client{Timeout: cfg.SlowTimeout} //nolint:exhaustruct
+	slowHC := &http.Client{Timeout: cfg.SlowTimeout, CheckRedirect: refuseCrossOriginRedirect} //nolint:exhaustruct
 
 	slowAPI, err := apiclient.NewClientWithResponses(cfg.DashaURL, apiclient.WithHTTPClient(slowHC))
 	if err != nil {
@@ -45,6 +45,24 @@ func NewDashaClient(cfg Config) (*DashaClient, error) {
 	}
 
 	return &DashaClient{api: api, slowAPI: slowAPI, token: cfg.Token, logger: cfg.Logger}, nil
+}
+
+// refuseCrossOriginRedirect stops a redirect that leaves the origin of the
+// original request: net/http strips only Authorization and Cookie across
+// origins, so X-API-Key would otherwise be replayed to the host the redirect
+// names.
+func refuseCrossOriginRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) == 0 {
+		return nil
+	}
+
+	orig := via[0].URL
+	if req.URL.Scheme != orig.Scheme || req.URL.Host != orig.Host {
+		return fmt.Errorf("mcp: refusing redirect to %s://%s: it would carry X-API-Key off %s://%s",
+			req.URL.Scheme, req.URL.Host, orig.Scheme, orig.Host)
+	}
+
+	return nil
 }
 
 // withToken returns a shallow copy bound to a specific token, sharing the
