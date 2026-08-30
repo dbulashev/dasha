@@ -126,12 +126,21 @@ func (p *parser) parseUncached(sql string) (Statement, error) {
 		return Statement{}, err
 	}
 
-	tree, err := p.parseTree(sql)
+	text := sql
+
+	tree, err := p.parseTree(text)
+	if err != nil {
+		if fixed := RestoreParamCasts(sql); fixed != sql {
+			text = fixed
+			tree, err = p.parseTree(text)
+		}
+	}
+
 	if err != nil {
 		return Statement{}, reason(ReasonParseError, err)
 	}
 
-	fp, err := p.fingerprint(sql)
+	fp, err := p.fingerprint(text)
 	if err != nil {
 		return Statement{}, reason(ReasonParseError, err)
 	}
@@ -167,6 +176,12 @@ func (p *parser) Fingerprint(sql string) (string, error) {
 	}
 
 	fp, err := p.fingerprint(sql)
+	if err != nil {
+		if fixed := RestoreParamCasts(sql); fixed != sql {
+			fp, err = p.fingerprint(fixed)
+		}
+	}
+
 	if err != nil {
 		return "", reason(ReasonParseError, err)
 	}

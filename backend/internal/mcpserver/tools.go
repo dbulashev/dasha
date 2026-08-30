@@ -202,6 +202,7 @@ type queryReportArgs struct {
 	Cluster      string   `json:"cluster" jsonschema:"Dasha cluster name"`
 	Instance     string   `json:"instance" jsonschema:"Dasha instance / host name"`
 	Database     string   `json:"database,omitempty" jsonschema:"Optional: database name; omit for the whole instance"`
+	Queryid      string   `json:"queryid,omitempty" jsonschema:"Optional: pg_stat_statements queryid to include whatever it ranks; the report otherwise holds only the top of each metric"`
 	ExcludeUsers []string `json:"exclude_users,omitempty" jsonschema:"Optional: usernames to exclude (e.g. monitoring/replication roles)"`
 }
 
@@ -356,7 +357,9 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 		Description: "List the top queries for a cluster/instance, ranked by total execution time " +
 			"(by='time', default) or WAL volume (by='wal'). Pass database to rank inside one database; " +
 			"without it the ranking covers every database of the host and each entry names its own " +
-			"('datname'). Requires pg_stat_statements.",
+			"('datname'). 'QueryTrunc' holds the first 48 characters of the statement (64 for by='wal'), " +
+			"never the whole one: to read or quote the statement call query_report with the row's " +
+			"'QueryID' and 'Datname'. Requires pg_stat_statements.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a topQueriesArgs) (*mcp.CallToolResult, any, error) {
 		switch a.By {
 		case "", "time":
@@ -605,9 +608,13 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			"rows, I/O). Every row names its database in 'datname' and is ranked within it, so a queryid " +
 			"identifies a statement only together with that name. Pass database to keep only that one — " +
 			"percentages are then shares of it, otherwise shares of the whole instance. Pass exclude_users " +
-			"to drop noise from monitoring/replication roles. Requires pg_stat_statements.",
+			"to drop noise from monitoring/replication roles. This is the source of statement text: 'Query' " +
+			"is the whole statement as pg_stat_statements stored it, clipped only by the server's " +
+			"track_activity_query_size (a text cut there ends in '...'), unlike the 48-character 'QueryTrunc' " +
+			"of top_queries. Rows are the top of each metric per database, so pass queryid to pull in a " +
+			"statement that leads none of them. Requires pg_stat_statements.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a queryReportArgs) (*mcp.CallToolResult, any, error) {
-		return jsonResult(c.QueryReport(ctx, a.Cluster, a.Instance, a.Database, a.ExcludeUsers))
+		return jsonResult(c.QueryReport(ctx, a.Cluster, a.Instance, a.Database, a.Queryid, a.ExcludeUsers))
 	})
 
 	addTool(s, &mcp.Tool{
