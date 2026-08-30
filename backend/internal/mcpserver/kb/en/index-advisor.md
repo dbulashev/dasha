@@ -183,11 +183,12 @@ statistics. Recheck it after `ANALYZE`.
   `CREATE`. Only `verdict='drop_candidate'` justifies a `DROP`.
 - `describe_table` on the candidate's table — how many indexes it already
   carries, its size, the HOT share a new index would reduce.
-- `query_report` on a host from `query_id_by_host` — the statement's own numbers
-  on the host that recognizes that queryid. A statement carries a different
+- `query_report` on a host from `query_id_by_host`, passing that queryid — the
+  statement's own numbers and its whole text. A statement carries a different
   queryid on each host, so the keyed map is the only safe source for a
-  drill-down.
+  drill-down; the queryid also pulls the row in when it tops no metric.
 - `index_advisor` with `include_queries=true` — the normalized statement text,
-  clipped, when the fingerprint is not enough.
+  clipped at 1000 bytes, when the fingerprint is enough to identify it but not
+  to read it.
 - `hot_tables` / `hot_indexes` — what the table's real activity looks like
   before adding write cost to it.

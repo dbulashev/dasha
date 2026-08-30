@@ -670,9 +670,15 @@ func (d *DashaClient) SchemaLintSummary(ctx context.Context, cluster, instance s
 
 // QueryReport returns the full pg_stat_statements report for an instance,
 // optionally excluding the given usernames (e.g. monitoring/replication roles).
-func (d *DashaClient) QueryReport(ctx context.Context, cluster, instance, database string, excludeUsers []string) (any, error) {
+// A named queryID joins the response even when it tops no metric.
+func (d *DashaClient) QueryReport(
+	ctx context.Context,
+	cluster, instance, database, queryID string,
+	excludeUsers []string,
+) (any, error) {
 	r, err := d.api.GetQueriesReportWithResponse(ctx, &apiclient.GetQueriesReportParams{
-		ClusterName: cluster, Instance: instance, Database: opt(database), ExcludeUsers: optStrings(excludeUsers),
+		ClusterName: cluster, Instance: instance, Database: opt(database),
+		Queryid: opt(queryID), ExcludeUsers: optStrings(excludeUsers),
 	}, d.editor(ctx))
 	if err != nil {
 		return nil, wrapErr("query_report", err)
