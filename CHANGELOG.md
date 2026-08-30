@@ -3,6 +3,7 @@
 ## v1.7.2
 
 ### Features
+- **The MCP server proposes indexes to create**, `index_advisor`: the statements of every cluster host are read and the missing btree indexes come back with ready DDL, the statements behind each one and the share of workload time they hold, with a knowledge-base page on how to read them. Warnings say when a similar index already exists or the table is written far more often than read, and an incomplete analysis is marked as such instead of passing for a well-indexed database.
 - **Two MCP tools for I/O**, `io_summary` and `io_trend`: an assistant can ask who is doing the reading and writing — client load, autovacuum or the checkpointer — and when it started, with a knowledge-base page on how to read the counters. An empty answer names its cause and a period broken by a statistics reset carries the part that was measured. Write-ahead log I/O times follow `track_wal_io_timing`, so they are read even where `track_io_timing` is off; needs PostgreSQL 16 or newer.
 
 ## v1.7.1

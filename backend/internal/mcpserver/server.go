@@ -115,7 +115,7 @@ func loggingMiddleware(logger *zap.Logger) mcp.Middleware {
 func resultErrText(r *mcp.CallToolResult) string {
 	for _, c := range r.Content {
 		if t, ok := c.(*mcp.TextContent); ok {
-			return clip(t.Text)
+			return clipTo(t.Text, maxLogFieldBytes)
 		}
 	}
 

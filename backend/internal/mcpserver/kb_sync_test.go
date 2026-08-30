@@ -1,7 +1,7 @@
 package mcpserver
 
-// Importing internal/health is allowed only here: a _test.go import is never
-// linked into cmd/dasha-mcp. Threshold values inside rule closures stay
+// Importing the backend's own packages is allowed only here: a _test.go import
+// is never linked into cmd/dasha-mcp. Threshold values inside rule closures stay
 // unchecked — changing them must touch kb too.
 
 import (
@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/dbulashev/dasha/internal/health"
+	"github.com/dbulashev/dasha/internal/indexadvisor"
+	"github.com/dbulashev/dasha/internal/sqlparse"
 )
 
 // maxKBFileBytes caps one knowledge-base file so reading a resource cannot
@@ -170,4 +172,39 @@ func headingLevels(t *testing.T, path string) []int {
 	}
 
 	return levels
+}
+
+// TestAdvisorReasons_Classified keeps the not_parsed classification in lockstep
+// with the codes the backend emits. A renamed or removed constant breaks the
+// build here; a changed value falls out of the map. A code that appears later is
+// covered by the default (unknown = a gap), which is why only removal and
+// renaming need catching.
+//
+// unsupported_syntax is absent: doc/swagger.yaml lists it, but no constant in
+// either package produces it.
+func TestAdvisorReasons_Classified(t *testing.T) {
+	t.Parallel()
+
+	for _, code := range []string{
+		indexadvisor.ReasonUnknownRelation,
+		indexadvisor.ReasonSystemRelation,
+		indexadvisor.ReasonAmbiguousName,
+		indexadvisor.ReasonAmbiguousColumn,
+		indexadvisor.ReasonUnknownColumn,
+		indexadvisor.ReasonUnsupportedType,
+		indexadvisor.ReasonTableTooSmall,
+		indexadvisor.ReasonAlreadyIndexed,
+		indexadvisor.ReasonNoIndexablePredicate,
+		sqlparse.ReasonEmpty,
+		sqlparse.ReasonTooLong,
+		sqlparse.ReasonTruncated,
+		sqlparse.ReasonInsufficientPrivilege,
+		sqlparse.ReasonParseError,
+		sqlparse.ReasonExpressionPredicate,
+		sqlparse.ReasonOrPredicate,
+	} {
+		if _, known := advisorReasonGap[code]; !known {
+			t.Errorf("not_parsed code %q is in neither list of advisorReasonGap — renamed, or a new code?", code)
+		}
+	}
 }

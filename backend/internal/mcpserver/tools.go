@@ -41,6 +41,16 @@ type unusedIndexReportArgs struct {
 	Limit    int    `json:"limit,omitempty" jsonschema:"Max indexes to return, largest first (default 30)"`
 }
 
+// indexAdvisorArgs takes no instance on purpose: pg_stat_statements is per-host
+// and is not replicated, while the index the report proposes is.
+type indexAdvisorArgs struct {
+	Cluster        string   `json:"cluster" jsonschema:"Dasha cluster name"`
+	Database       string   `json:"database" jsonschema:"Database to analyse"`
+	ExcludeUsers   []string `json:"exclude_users,omitempty" jsonschema:"Usernames whose statements are left out of the analysis — service roles whose load says nothing about the application's indexing needs"`
+	Limit          int      `json:"limit,omitempty" jsonschema:"Max candidates to return, heaviest first (default 10, capped at 30). candidates_total says how many the ranking saw"`
+	IncludeQueries bool     `json:"include_queries,omitempty" jsonschema:"Include the normalized text of the covered statements (clipped). Off by default: fingerprints and per-host queryids are enough to identify them"`
+}
+
 // hotArgs takes no instance on purpose: the stored snapshot already sums every
 // host of the cluster (activity counters are not replicated).
 type hotArgs struct {
@@ -402,6 +412,44 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			"its HINT points at the parent, which would strip the index off EVERY partition.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a unusedIndexReportArgs) (*mcp.CallToolResult, any, error) {
 		return jsonResult(c.UnusedIndexReport(ctx, a.Cluster, a.Database, a.Limit))
+	})
+
+	addTool(s, &mcp.Tool{
+		Name: "index_advisor",
+		Description: "Index candidates for one database, derived from the cluster's real workload: the top of " +
+			"pg_stat_statements is parsed on EVERY host, the columns each statement filters, joins, sorts and " +
+			"groups by are extracted, and btree indexes that no existing index already covers are proposed — " +
+			"each with ready DDL and the statements behind it. Use this, NOT list_indexes(kind='missing'), to " +
+			"answer \"which index should I create\": that one reads no queries and ignores the indexes a table " +
+			"already has. " +
+			"No planner was consulted: planner_checked is false, and weight_pct is the SIZE OF THE PROBLEM — the " +
+			"share of analyzed execution time the covered statements hold — never a predicted gain. \"This index " +
+			"speeds the query up by 31%\" is a claim this data cannot support; say the statements it would serve " +
+			"hold 31% of the analyzed time instead. " +
+			"Read warnings BEFORE recommending, not after: write_heavy (the table is written far more often than " +
+			"the covered statements run — the index may cost more than it saves), similar_index (an existing " +
+			"index already holds every column of the candidate in another order; names lists it — the answer may " +
+			"be rewriting that index rather than adding one), many_indexes, matview, partition_root (the ddl is " +
+			"then a multi-statement script: CREATE INDEX CONCURRENTLY runs in no transaction block and cannot " +
+			"build a partitioned table's root index directly — hand over every statement, in order). " +
+			"An empty candidate list is NOT a clean bill of health while gaps is non-empty: part of the workload " +
+			"was never analyzed, and summary (covered_time_pct, not_parsed_count, hosts_without_stats) says how " +
+			"much. Report that instead of \"the database is well indexed\". " +
+			"Takes no instance by design: pg_stat_statements is per-host and is not replicated, so a single-host " +
+			"answer would call a database well indexed for a load it never saw. Indexes ARE replicated — one " +
+			"CREATE INDEX on the primary serves every host. " +
+			"covered_queries carries fingerprints, call counts and the per-host queryid, not the statement text: " +
+			"set include_queries=true for the text (clipped), or feed query_id_by_host into query_report on that " +
+			"host. " +
+			"A 404 means the cluster/database is unknown OR the index_advisor feature is disabled in Dasha's " +
+			"configuration — never \"nothing to suggest\". The report is built on demand and never cached; on a " +
+			"large workload the call takes tens of seconds. " +
+			"Dasha NEVER executes DDL. The ddl is a proposal for a human to run, after checking " +
+			"unused_index_report on the same database — a new index laid on top of redundant ones nobody removed " +
+			"is not an improvement. " +
+			"Read dasha://kb/index-advisor before interpreting the numbers.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, a indexAdvisorArgs) (*mcp.CallToolResult, any, error) {
+		return jsonResult(indexAdvisor(ctx, c, a))
 	})
 
 	addTool(s, &mcp.Tool{

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -17,23 +18,51 @@ import (
 // DashaClient is a thin, identity-passthrough wrapper over the generated Dasha
 // API client: every call forwards the caller's token as the X-API-Key header.
 type DashaClient struct {
-	api    *apiclient.ClientWithResponses
-	token  string // the identity bound to this client (stdio default, or per-request via withToken)
-	logger *zap.Logger
+	api   *apiclient.ClientWithResponses
+	token string // the identity bound to this client (stdio default, or per-request via withToken)
+	// slowAPI carries the same identity on a longer deadline, for the reports
+	// Dasha builds on demand (index_advisor) rather than serving from a cache.
+	slowAPI *apiclient.ClientWithResponses
+	logger  *zap.Logger
 }
 
 // NewDashaClient builds a client against the configured Dasha API.
 func NewDashaClient(cfg Config) (*DashaClient, error) {
 	cfg = cfg.withDefaults()
 
-	hc := &http.Client{Timeout: cfg.Timeout} //nolint:exhaustruct
+	hc := &http.Client{Timeout: cfg.Timeout, CheckRedirect: refuseCrossOriginRedirect} //nolint:exhaustruct
 
 	api, err := apiclient.NewClientWithResponses(cfg.DashaURL, apiclient.WithHTTPClient(hc))
 	if err != nil {
 		return nil, fmt.Errorf("mcp: build dasha client: %w", err)
 	}
 
-	return &DashaClient{api: api, token: cfg.Token, logger: cfg.Logger}, nil
+	slowHC := &http.Client{Timeout: cfg.SlowTimeout, CheckRedirect: refuseCrossOriginRedirect} //nolint:exhaustruct
+
+	slowAPI, err := apiclient.NewClientWithResponses(cfg.DashaURL, apiclient.WithHTTPClient(slowHC))
+	if err != nil {
+		return nil, fmt.Errorf("mcp: build dasha client: %w", err)
+	}
+
+	return &DashaClient{api: api, slowAPI: slowAPI, token: cfg.Token, logger: cfg.Logger}, nil
+}
+
+// refuseCrossOriginRedirect stops a redirect that leaves the origin of the
+// original request: net/http strips only Authorization and Cookie across
+// origins, so X-API-Key would otherwise be replayed to the host the redirect
+// names.
+func refuseCrossOriginRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) == 0 {
+		return nil
+	}
+
+	orig := via[0].URL
+	if req.URL.Scheme != orig.Scheme || req.URL.Host != orig.Host {
+		return fmt.Errorf("mcp: refusing redirect to %s://%s: it would carry X-API-Key off %s://%s",
+			req.URL.Scheme, req.URL.Host, orig.Scheme, orig.Host)
+	}
+
+	return nil
 }
 
 // withToken returns a shallow copy bound to a specific token, sharing the
@@ -343,6 +372,62 @@ func (d *DashaClient) UnusedIndexReport(ctx context.Context, cluster, database s
 	}
 
 	return pick(r.JSON200, r.HTTPResponse, "unused_index_report")
+}
+
+// IndexAdvisor returns the index candidates for one database, derived from the
+// workload of every host of the cluster. Takes no instance: pg_stat_statements
+// is per-host and is not replicated, so a single-host answer would rank the
+// candidates against a load it never saw. It runs on the slow client — the
+// report is built on demand, never cached — and maps the two ambiguous
+// outcomes itself, since the shared mapping reads 404 as an unknown target.
+func (d *DashaClient) IndexAdvisor(
+	ctx context.Context, cluster, database string, excludeUsers []string, limit int,
+) (*apiclient.IndexAdvisorReport, error) {
+	r, err := d.slowAPI.GetIndexesAdvisorWithResponse(ctx, &apiclient.GetIndexesAdvisorParams{
+		ClusterName:  cluster,
+		Database:     database,
+		ExcludeUsers: optStrings(excludeUsers),
+		Limit:        opt(limit),
+		Offset:       nil,
+	}, d.editor(ctx))
+	if err != nil {
+		if isTimeout(err) {
+			return nil, errAdvisorTimeout
+		}
+
+		return nil, wrapErr("index_advisor", err)
+	}
+
+	if r.JSON200 == nil && r.HTTPResponse != nil {
+		switch r.HTTPResponse.StatusCode {
+		case http.StatusNotFound:
+			return nil, errors.New("dasha: index advisor returned 404 on index_advisor — either the " +
+				"cluster/database is unknown (check list_clusters), or the index_advisor feature is disabled " +
+				"in Dasha's configuration. It never means \"no candidates\"")
+		case http.StatusGatewayTimeout:
+			return nil, errAdvisorTimeout
+		}
+	}
+
+	if r.JSON200 == nil {
+		return nil, statusError("index_advisor", r.HTTPResponse)
+	}
+
+	return r.JSON200, nil
+}
+
+// errAdvisorTimeout covers both ends of the same wait: the transport deadline of
+// the slow client and a 504 from Dasha's own timeout.
+var errAdvisorTimeout = errors.New("dasha: the index advisor did not finish in time on index_advisor — " +
+	"the report is built on demand and never cached; retry, or ask the operator to lower " +
+	"index_advisor.max_queries")
+
+// isTimeout reports whether err is a deadline rather than a refused or broken
+// connection: only the former is worth retrying with a narrower workload.
+func isTimeout(err error) bool {
+	var ne net.Error
+
+	return errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &ne) && ne.Timeout())
 }
 
 // HotTables returns the stored hot-tables top for one metric class: daily
@@ -826,24 +911,25 @@ func truncateLogEntries(res *apiclient.LogSearchResult) {
 	for i := range res.Items {
 		e := &res.Items[i]
 		if e.Text != nil {
-			*e.Text = clip(*e.Text)
+			*e.Text = clipTo(*e.Text, maxLogFieldBytes)
 		}
 
 		if e.Fields != nil {
 			for k, v := range *e.Fields {
-				(*e.Fields)[k] = clip(v)
+				(*e.Fields)[k] = clipTo(v, maxLogFieldBytes)
 			}
 		}
 	}
 }
 
-// clip cuts s at maxLogFieldBytes on a rune boundary.
-func clip(s string) string {
-	if len(s) <= maxLogFieldBytes {
+// clipTo cuts s at n bytes on a rune boundary, naming the original length so the
+// model knows the value continues.
+func clipTo(s string, n int) string {
+	if len(s) <= n {
 		return s
 	}
 
-	cut := maxLogFieldBytes
+	cut := n
 	for cut > 0 && !utf8.RuneStart(s[cut]) {
 		cut--
 	}

@@ -39,10 +39,11 @@ const httpShutdownTimeout = 10 * time.Second
 // options carries the CLI flags; secrets stay in env (DASHA_MCP_TOKEN) so they
 // never appear in process listings.
 type options struct {
-	dashaURL string
-	httpAddr string
-	timeout  time.Duration
-	lang     string
+	dashaURL    string
+	httpAddr    string
+	timeout     time.Duration
+	slowTimeout time.Duration
+	lang        string
 }
 
 func main() {
@@ -75,6 +76,8 @@ func Execute(ctx context.Context) error {
 	f.StringVar(&opts.dashaURL, "dasha-url", "http://localhost:8000", "Dasha API base URL")
 	f.StringVar(&opts.httpAddr, "http", "", "listen address for HTTP/SSE transport (e.g. :8765); empty = stdio")
 	f.DurationVar(&opts.timeout, "timeout", 15*time.Second, "per-request timeout for Dasha API calls")
+	f.DurationVar(&opts.slowTimeout, "slow-timeout", 90*time.Second,
+		"timeout for reports Dasha builds on demand (index_advisor); keep it above the server's index_advisor.timeout")
 	f.StringVar(&opts.lang, "lang", "", "knowledge-base language: en|ru (default: $DASHA_MCP_LANG or en)")
 
 	return cmd.ExecuteContext(ctx)
@@ -100,10 +103,11 @@ func run(ctx context.Context, opts options) error {
 	}
 
 	client, err := mcpserver.NewDashaClient(mcpserver.Config{
-		DashaURL: opts.dashaURL,
-		Token:    os.Getenv("DASHA_MCP_TOKEN"),
-		Timeout:  opts.timeout,
-		Logger:   logger,
+		DashaURL:    opts.dashaURL,
+		Token:       os.Getenv("DASHA_MCP_TOKEN"),
+		Timeout:     opts.timeout,
+		SlowTimeout: opts.slowTimeout,
+		Logger:      logger,
 	})
 	if err != nil {
 		return fmt.Errorf("build Dasha client: %w", err)
