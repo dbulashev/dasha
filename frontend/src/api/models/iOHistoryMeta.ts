@@ -18,6 +18,10 @@ export interface IOHistoryMeta {
   track_io_timing: boolean
   /** The setting was toggled inside the period, so I/O times cover only part of it. */
   track_io_timing_changed: boolean
+  /** Value at the newest capture in the period. Governs the time counters of WAL rows (object 'wal', PostgreSQL 18 and newer) independently of track_io_timing. */
+  track_wal_io_timing: boolean
+  /** The setting was toggled inside the period, so WAL times cover only part of it. */
+  track_wal_io_timing_changed: boolean
   /** The server was upgraded inside the period; the intervals spanning the upgrade are incomplete. */
   version_changed: boolean
 }

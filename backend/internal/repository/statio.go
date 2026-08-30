@@ -55,7 +55,8 @@ func (p *PgxPool) GetIOSample(ctx context.Context, clusterName, instanceName str
 			counters []byte
 		)
 
-		if err := rows.Scan(&r.BackendType, &r.Object, &r.Context, &reset, &snap.TrackIOTiming, &opBytes, &counters); err != nil {
+		if err := rows.Scan(&r.BackendType, &r.Object, &r.Context, &reset,
+			&snap.TrackIOTiming, &snap.TrackWALIOTiming, &opBytes, &counters); err != nil {
 			return nil, fmt.Errorf("GetIOSample scan | %w", err)
 		}
 

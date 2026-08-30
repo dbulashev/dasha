@@ -4429,6 +4429,7 @@ components:
         - captured_at
         - version_num
         - track_io_timing
+        - track_wal_io_timing
         - rows
       properties:
         instance:
@@ -4446,6 +4447,11 @@ components:
         track_io_timing:
           type: boolean
           description: When false the server collects no I/O times and the Time metrics are absent.
+        track_wal_io_timing:
+          type: boolean
+          description: >-
+            Governs the time counters of WAL rows (object 'wal', PostgreSQL 18 and newer)
+            independently of track_io_timing.
         stats_reset:
           type: string
           format: date-time
@@ -4514,6 +4520,8 @@ components:
         - instance
         - track_io_timing
         - track_io_timing_changed
+        - track_wal_io_timing
+        - track_wal_io_timing_changed
         - version_changed
       properties:
         instance:
@@ -4533,6 +4541,14 @@ components:
         track_io_timing_changed:
           type: boolean
           description: The setting was toggled inside the period, so I/O times cover only part of it.
+        track_wal_io_timing:
+          type: boolean
+          description: >-
+            Value at the newest capture in the period. Governs the time counters of WAL rows
+            (object 'wal', PostgreSQL 18 and newer) independently of track_io_timing.
+        track_wal_io_timing_changed:
+          type: boolean
+          description: The setting was toggled inside the period, so WAL times cover only part of it.
         version_changed:
           type: boolean
           description: The server was upgraded inside the period; the intervals spanning the upgrade are incomplete.

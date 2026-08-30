@@ -52,7 +52,7 @@ func TestStatioSnapshotTemplate(t *testing.T) {
 		)
 
 		require.NoError(t, rows.Scan(&r.BackendType, &r.Object, &r.Context, &reset,
-			&snap.TrackIOTiming, &opBytes, &counters))
+			&snap.TrackIOTiming, &snap.TrackWALIOTiming, &opBytes, &counters))
 
 		if opBytes.Valid {
 			v := int(opBytes.Int32)

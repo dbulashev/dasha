@@ -181,18 +181,42 @@ func ioHistoryMeta(instance string, earliest, latest *time.Time, metas []statio.
 		}
 	}
 
+	setWALTiming(&meta, metas)
+
 	return meta
+}
+
+// Captures older than the track_wal_io_timing column carry no value at all;
+// they are skipped, so an unknown state never counts as a toggle.
+func setWALTiming(meta *serverhttp.IOHistoryMeta, metas []statio.Meta) {
+	var first *bool
+
+	for _, m := range metas {
+		if m.TrackWALIOTiming == nil {
+			continue
+		}
+
+		switch {
+		case first == nil:
+			first = m.TrackWALIOTiming
+		case *m.TrackWALIOTiming != *first:
+			meta.TrackWalIoTimingChanged = true
+		}
+
+		meta.TrackWalIoTiming = *m.TrackWALIOTiming
+	}
 }
 
 func ioSnapshotToAPI(instance string, snap statio.Snapshot) serverhttp.IOSnapshot {
 	out := serverhttp.IOSnapshot{
-		Instance:      instance,
-		CapturedAt:    snap.CapturedAt,
-		VersionNum:    snap.VersionNum,
-		OpBytes:       snap.OpBytes,
-		TrackIoTiming: snap.TrackIOTiming,
-		StatsReset:    snap.StatsReset,
-		Rows:          make([]serverhttp.IORow, 0, len(snap.Rows)),
+		Instance:         instance,
+		CapturedAt:       snap.CapturedAt,
+		VersionNum:       snap.VersionNum,
+		OpBytes:          snap.OpBytes,
+		TrackIoTiming:    snap.TrackIOTiming,
+		TrackWalIoTiming: snap.TrackWALIOTiming,
+		StatsReset:       snap.StatsReset,
+		Rows:             make([]serverhttp.IORow, 0, len(snap.Rows)),
 	}
 
 	for _, r := range snap.Rows {

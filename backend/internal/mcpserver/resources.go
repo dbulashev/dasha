@@ -69,6 +69,13 @@ func registerResources(s *mcp.Server, lang string) {
 				"is — including the two cases where the obvious fix is the wrong one.",
 		},
 		{
+			"pg-stat-io", "Reading pg_stat_io",
+			"Read before interpreting io_summary / io_trend results: which counters are not I/O " +
+				"(hits), which look alarming but are normal (evictions under bulkread), which are " +
+				"genuinely anomalous (fsyncs on a client backend), what each context and object means, " +
+				"and what an empty or incomplete result actually says.",
+		},
+		{
 			"workflow", "Diagnostic workflows",
 			"Read when unsure which tool to call next: complaint-to-tool-chain playbooks " +
 				"(slow database, everything hangs, disk filling, replica lag, app errors, fleet " +

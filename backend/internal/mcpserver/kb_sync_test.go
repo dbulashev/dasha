@@ -1,16 +1,14 @@
 package mcpserver
 
-// This file deliberately imports internal/health — the only place in mcpserver
-// allowed to: the runtime boundary ("depend only on gen/apiclient") holds
-// because a _test.go import is never linked into cmd/dasha-mcp. The import is
-// the mechanism keeping the embedded knowledge base in lockstep with the rules
-// engine: a rule added to (or removed from) health.Registry without a matching
-// kb section fails CI. Threshold VALUES inside rule closures are not checkable
-// this way — reviews changing severityFor(...) numbers must touch kb too.
+// Importing internal/health is allowed only here: a _test.go import is never
+// linked into cmd/dasha-mcp. Threshold values inside rule closures stay
+// unchecked — changing them must touch kb too.
 
 import (
 	"io/fs"
 	"regexp"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/dbulashev/dasha/internal/health"
@@ -134,4 +132,42 @@ func TestKB_SizeAndLanguageParity(t *testing.T) {
 			}
 		}
 	}
+
+	// Heading text cannot be compared across translations — the nesting can.
+	for _, name := range files["en"] {
+		want := headingLevels(t, "kb/en/"+name)
+
+		for _, lang := range kbLangs[1:] {
+			if got := headingLevels(t, "kb/"+lang+"/"+name); !slices.Equal(got, want) {
+				t.Errorf("kb/%s/%s has heading structure %v, kb/en/%s has %v — a section is missing or extra",
+					lang, name, got, name, want)
+			}
+		}
+	}
+}
+
+// headingLevels returns the depth of each markdown heading in order (2 for "##",
+// 3 for "###"), which is a translation-independent fingerprint of a file's shape.
+func headingLevels(t *testing.T, path string) []int {
+	t.Helper()
+
+	b, err := kbFS.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+
+	var levels []int
+
+	for _, line := range strings.Split(string(b), "\n") {
+		n := 0
+		for n < len(line) && line[n] == '#' {
+			n++
+		}
+
+		if n > 0 && n < len(line) && line[n] == ' ' {
+			levels = append(levels, n)
+		}
+	}
+
+	return levels
 }

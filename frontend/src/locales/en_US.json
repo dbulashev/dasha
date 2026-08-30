@@ -1003,7 +1003,9 @@
     "partialIntervals": "Some intervals in this period are incomplete: a statistics reset, a restart or a major upgrade broke the series. They are drawn as gaps, not as zeros.",
     "noData": "No I/O activity recorded for the current selection.",
     "historyUnavailable": "Live mode only — snapshot storage is not configured",
-    "trackIoTimingOff": "track_io_timing is off on this host — no I/O times are collected. Turn it on to use the Time mode.",
+    "trackIoTimingOff": "track_io_timing and track_wal_io_timing are off on this host — no I/O times are collected.",
+    "trackIoTimingWalOnly": "track_io_timing is off — times cover write-ahead log rows only.",
+    "trackWalIoTimingOff": "track_wal_io_timing is off — write-ahead log rows carry no times.",
     "mode": {
       "history": "History",
       "live": "Live"

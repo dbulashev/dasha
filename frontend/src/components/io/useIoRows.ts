@@ -9,6 +9,7 @@ export function useIoRows(source: {
   liveRows: Ref<MatrixRow[]>
   liveWindowSeconds: Ref<number>
   liveTrackIoTiming: Ref<boolean>
+  liveTrackWalIoTiming: Ref<boolean>
   history: Ref<IOHistory | null>
   matrix: Ref<IOHistory | null>
   backendType: Ref<string | null>
@@ -66,6 +67,12 @@ export function useIoRows(source: {
     return source.history.value.meta.track_io_timing
   })
 
+  const trackWalIoTiming = computed(() => {
+    if (source.live.value) return source.liveTrackWalIoTiming.value
+    if (!source.history.value?.series?.length) return false
+    return source.history.value.meta.track_wal_io_timing
+  })
+
   const partial = computed(
     () =>
       !source.live.value &&
@@ -81,6 +88,7 @@ export function useIoRows(source: {
     backendTypes,
     windowSeconds,
     trackIoTiming,
+    trackWalIoTiming,
     partial,
     noData,
   }
