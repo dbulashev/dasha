@@ -26,6 +26,13 @@ type Config struct {
 	// Timeout bounds each outbound Dasha API call.
 	Timeout time.Duration
 
+	// SlowTimeout bounds the calls Dasha builds on demand rather than serving
+	// from a cache — currently the index advisor, which parses pg_stat_statements
+	// on every host under its own server-side timeout. It must stay above that
+	// server timeout (index_advisor.timeout, 60s by default), otherwise the
+	// connection is dropped before Dasha can answer.
+	SlowTimeout time.Duration
+
 	// Logger receives per-call observability (method, tool, duration, error);
 	// arguments and tokens are never logged. Nil disables logging.
 	Logger *zap.Logger
@@ -35,6 +42,10 @@ type Config struct {
 func (c Config) withDefaults() Config {
 	if c.Timeout <= 0 {
 		c.Timeout = 15 * time.Second
+	}
+
+	if c.SlowTimeout <= 0 {
+		c.SlowTimeout = 90 * time.Second
 	}
 
 	if c.Logger == nil {

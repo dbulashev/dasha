@@ -69,6 +69,13 @@ func registerResources(s *mcp.Server, lang string) {
 				"is — including the two cases where the obvious fix is the wrong one.",
 		},
 		{
+			"index-advisor", "Reading index_advisor results",
+			"Read before interpreting index_advisor results: why a candidate is not yet a " +
+				"recommendation, what weight_pct is (the size of the problem, never a predicted gain), " +
+				"what each warning and not_parsed code means, and which gaps make an empty candidate " +
+				"list something other than a clean bill of health.",
+		},
+		{
 			"pg-stat-io", "Reading pg_stat_io",
 			"Read before interpreting io_summary / io_trend results: which counters are not I/O " +
 				"(hits), which look alarming but are normal (evictions under bulkread), which are " +

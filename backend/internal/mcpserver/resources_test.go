@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-var kbResourceNames = []string{"health-rules", "pg-stat-io", "schema-checks", "wait-events", "workflow"}
+var kbResourceNames = []string{"health-rules", "index-advisor", "pg-stat-io", "schema-checks", "wait-events", "workflow"}
 
 func TestKBHandler_ServesMarkdown(t *testing.T) {
 	t.Parallel()

@@ -277,22 +277,22 @@ func TestLogsParams_ExplicitWindow(t *testing.T) {
 	}
 }
 
-func TestClip(t *testing.T) {
+func TestClipTo(t *testing.T) {
 	t.Parallel()
 
-	if got := clip("short"); got != "short" {
-		t.Errorf("clip(short) = %q, must be unchanged", got)
+	if got := clipTo("short", maxLogFieldBytes); got != "short" {
+		t.Errorf("clipTo(short) = %q, must be unchanged", got)
 	}
 
 	long := strings.Repeat("я", maxLogFieldBytes) // 2-byte runes force a boundary adjustment
-	got := clip(long)
+	got := clipTo(long, maxLogFieldBytes)
 
 	if !strings.Contains(got, "[truncated,") {
-		t.Errorf("clip(long) must carry the truncation marker, got tail %q", got[len(got)-40:])
+		t.Errorf("clipTo(long) must carry the truncation marker, got tail %q", got[len(got)-40:])
 	}
 
 	if !utf8.ValidString(got) {
-		t.Errorf("clip must cut on a rune boundary")
+		t.Errorf("clipTo must cut on a rune boundary")
 	}
 }
 

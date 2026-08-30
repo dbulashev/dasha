@@ -221,6 +221,109 @@ func TestE2E_ResourcesAndPrompts(t *testing.T) {
 	}
 }
 
+// TestE2E_IndexAdvisor drives the index_advisor tool end to end: the trimming of
+// the endpoint's report is what the model actually sees, so it is asserted over
+// the wire rather than on the DTO alone.
+func TestE2E_IndexAdvisor(t *testing.T) {
+	t.Parallel()
+
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/indexes/advisor" {
+			w.WriteHeader(http.StatusNotFound)
+
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+		  "candidates": [{
+		    "schema": "public", "table": "orders", "columns": ["customer_id"],
+		    "predicate": "", "ddl": "CREATE INDEX CONCURRENTLY ON public.orders (customer_id);",
+		    "planner_checked": false, "weight_pct": 31.4, "table_rows": 12000000,
+		    "writes": {"inserted": 4100, "updated": 980, "deleted": 0, "seq_scans": 12, "idx_scans": 8400},
+		    "warnings": [{"code": "similar_index", "names": ["orders_customer_id_idx"]}],
+		    "covered_queries": [
+		      {"fingerprint": "a3f1c2b9", "weight_pct": 22.1, "calls": 918234, "hosts": ["h1"],
+		       "query_id_by_host": {"h1": "8123456789012345"}, "query_ids": ["8123456789012345"],
+		       "query": "select * from orders where customer_id = $1"},
+		      {"fingerprint": "b1", "weight_pct": 4.0, "calls": 12, "hosts": ["h1"],
+		       "query_id_by_host": {"h1": "1"}, "query_ids": ["1"], "query": "select 1"},
+		      {"fingerprint": "c1", "weight_pct": 3.0, "calls": 12, "hosts": ["h1"],
+		       "query_id_by_host": {"h1": "2"}, "query_ids": ["2"], "query": "select 2"},
+		      {"fingerprint": "d1", "weight_pct": 2.0, "calls": 12, "hosts": ["h1"],
+		       "query_id_by_host": {"h1": "3"}, "query_ids": ["3"], "query": "select 3"}
+		    ]
+		  }],
+		  "not_parsed": [{"reason_code": "already_indexed", "count": 212}],
+		  "unreachable_hosts": ["h3"],
+		  "summary": {"pgss_available": true, "analyzed_queries": 500, "collapsed_groups": 341,
+		    "not_parsed_count": 212, "covered_time_pct": 44.2, "catalog_truncated": false,
+		    "hosts": ["h1", "h2"], "hosts_without_stats": []},
+		  "total": 47, "duration_ms": 8123}`))
+	}))
+	defer backend.Close()
+
+	client, err := NewDashaClient(Config{DashaURL: backend.URL, Token: "t"}) //nolint:exhaustruct
+	if err != nil {
+		t.Fatalf("NewDashaClient: %v", err)
+	}
+
+	ctx := context.Background()
+
+	st, ct := mcp.NewInMemoryTransports()
+
+	ss, err := NewMCPServer(client, "test", "en").Connect(ctx, st, nil)
+	if err != nil {
+		t.Fatalf("server connect: %v", err)
+	}
+	defer ss.Close()
+
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0"}, nil).Connect(ctx, ct, nil) //nolint:exhaustruct
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+	defer cs.Close()
+
+	res, err := cs.CallTool(ctx, &mcp.CallToolParams{ //nolint:exhaustruct
+		Name:      "index_advisor",
+		Arguments: map[string]any{"cluster": "demo", "database": "app"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+
+	if res.IsError {
+		t.Fatalf("index_advisor returned IsError: %s", firstText(res))
+	}
+
+	got := firstText(res)
+
+	for _, want := range []string{
+		`"candidates_total":47`,
+		`"gaps":["hosts_unreachable"]`,
+		`"planner_checked":false`,
+		`"covered_queries_total":4`,
+		`"already_indexed"`,
+		"CREATE INDEX CONCURRENTLY",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("result lacks %s\n%s", want, got)
+		}
+	}
+
+	if strings.Contains(got, "select * from orders") {
+		t.Errorf("statement text must be absent without include_queries:\n%s", got)
+	}
+
+	if strings.Contains(got, `"query_ids"`) {
+		t.Errorf("query_ids must be dropped in favour of query_id_by_host:\n%s", got)
+	}
+
+	if n := strings.Count(got, `"fingerprint"`); n != 3 {
+		t.Errorf("covered_queries carries %d entries, want %d", n, maxCoveredPerCandidate)
+	}
+}
+
 func hasTool(tools []*mcp.Tool, name string) bool {
 	for _, tool := range tools {
 		if tool.Name == name {
