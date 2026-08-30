@@ -154,9 +154,10 @@ func TestIOHistoryMetaSeparatesWALTiming(t *testing.T) {
 	at := time.Date(2026, 8, 22, 3, 0, 0, 0, time.UTC)
 	earliest, latest := at.Add(-24*time.Hour), at
 
+	on := true
 	metas := []statio.Meta{
-		{CapturedAt: at.Add(-2 * time.Minute), VersionNum: 180001, TrackWALIOTiming: true},
-		{CapturedAt: at.Add(-time.Minute), VersionNum: 180001, TrackWALIOTiming: true},
+		{CapturedAt: at.Add(-2 * time.Minute), VersionNum: 180001, TrackWALIOTiming: &on},
+		{CapturedAt: at.Add(-time.Minute), VersionNum: 180001, TrackWALIOTiming: &on},
 	}
 
 	meta := ioHistoryMeta("h1", &earliest, &latest, metas)
@@ -171,6 +172,29 @@ func TestIOHistoryMetaSeparatesWALTiming(t *testing.T) {
 
 	if meta.TrackWalIoTimingChanged {
 		t.Error("track_wal_io_timing held steady")
+	}
+}
+
+func TestIOHistoryMetaIgnoresUnrecordedWALTiming(t *testing.T) {
+	t.Parallel()
+
+	at := time.Date(2026, 8, 22, 3, 0, 0, 0, time.UTC)
+	earliest, latest := at.Add(-24*time.Hour), at
+
+	on := true
+	metas := []statio.Meta{
+		{CapturedAt: at.Add(-2 * time.Minute), VersionNum: 180001},
+		{CapturedAt: at.Add(-time.Minute), VersionNum: 180001, TrackWALIOTiming: &on},
+	}
+
+	meta := ioHistoryMeta("h1", &earliest, &latest, metas)
+
+	if meta.TrackWalIoTimingChanged {
+		t.Error("a capture that recorded no track_wal_io_timing is not a toggle")
+	}
+
+	if !meta.TrackWalIoTiming {
+		t.Error("the newest recorded value must be reported")
 	}
 }
 

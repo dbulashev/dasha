@@ -71,7 +71,8 @@ func TestIOSnapshotRoundTrip(t *testing.T) {
 
 	assert.Equal(t, 170004, metas[0].VersionNum)
 	assert.True(t, metas[0].TrackIOTiming)
-	assert.True(t, metas[0].TrackWALIOTiming)
+	require.NotNil(t, metas[0].TrackWALIOTiming)
+	assert.True(t, *metas[0].TrackWALIOTiming)
 	require.NotNil(t, metas[0].StatsReset)
 	assert.WithinDuration(t, reset, *metas[0].StatsReset, time.Second)
 

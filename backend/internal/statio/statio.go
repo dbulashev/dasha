@@ -50,10 +50,11 @@ type Snapshot struct {
 // Meta is one capture's header: what a read plan needs before any matrix body
 // is fetched.
 type Meta struct {
-	CapturedAt       time.Time
-	VersionNum       int
-	TrackIOTiming    bool
-	TrackWALIOTiming bool
+	CapturedAt    time.Time
+	VersionNum    int
+	TrackIOTiming bool
+	// nil for a capture taken before the setting was recorded: unknown, not off.
+	TrackWALIOTiming *bool
 	StatsReset       *time.Time
 }
 
@@ -62,7 +63,7 @@ func (s Snapshot) Meta() Meta {
 		CapturedAt:       s.CapturedAt,
 		VersionNum:       s.VersionNum,
 		TrackIOTiming:    s.TrackIOTiming,
-		TrackWALIOTiming: s.TrackWALIOTiming,
+		TrackWALIOTiming: &s.TrackWALIOTiming,
 		StatsReset:       s.StatsReset,
 	}
 }

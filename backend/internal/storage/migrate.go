@@ -279,15 +279,18 @@ CREATE TABLE IF NOT EXISTS io_snapshot (
     version_num         int  NOT NULL,
     op_bytes            int,
     track_io_timing     boolean NOT NULL,
-    track_wal_io_timing boolean NOT NULL DEFAULT false,
+    track_wal_io_timing boolean,
     stats_reset         timestamptz,
     rows                jsonb NOT NULL,
     CONSTRAINT io_snapshot_pkey PRIMARY KEY (cluster_name, instance, captured_at)
 ) PARTITION BY RANGE (captured_at)`
 
+	// Nullable: captures taken before the column existed recorded no
+	// track_wal_io_timing, and a backfilled false would read as the setting
+	// having been off on a PostgreSQL 18 host.
 	addIOSnapshotWALTimingSQL = `
 ALTER TABLE io_snapshot
-    ADD COLUMN IF NOT EXISTS track_wal_io_timing boolean NOT NULL DEFAULT false`
+    ADD COLUMN IF NOT EXISTS track_wal_io_timing boolean`
 
 	addAutosnapshotIOConfigSQL = `
 ALTER TABLE autosnapshot_config_global

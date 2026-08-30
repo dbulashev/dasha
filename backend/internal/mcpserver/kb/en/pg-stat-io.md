@@ -108,9 +108,9 @@ days" cannot be drawn from a capped window.
 ## Empty results
 
 An empty result is not an answer until `empty_reason` says which one it is.
-Only `no_io` means the instance was idle across the whole window,
-`no_io_in_measured_part` answers for part of it, and the rest mean the question
-went unanswered:
+Only `no_io` means there was no classifiable physical I/O across the whole
+window, `no_io_in_measured_part` answers for part of it, and the rest mean the
+question went unanswered:
 
 - **unsupported_version** — the host runs PostgreSQL 15 or older and has no
   `pg_stat_io`. Nothing about its I/O can be read this way; fall back to
@@ -143,12 +143,13 @@ went unanswered:
   `coverage_pct` per bucket. Not an all-clear for the window as asked.
 - **no_io** — snapshots cover the window, they are comparable, and none of the
   counters the tool classifies moved. For `io_summary` that is every counter
-  except `hits`. `io_trend` classifies `reads`, `writes`, `extends` and their
-  byte and time counters only, so `fsyncs`, `evictions`, `reuses` and
-  `writebacks` may be non-zero behind an `io_trend` `no_io` — read `io_summary`
-  over the same window before calling the instance quiet. This is the only
-  value that is a full answer, and even here `totals` may show heavy cache
-  activity.
+  except `hits`. `io_trend` classifies `reads`, `read_bytes`, `writes`,
+  `write_bytes`, `extends` and, where timing was measured, `read_time` and
+  `write_time`, so `fsyncs`, `evictions`, `reuses` and `writebacks` may be
+  non-zero behind an `io_trend` `no_io` — read `io_summary` over the same
+  window before calling the instance quiet. This is the only value that
+  answers for the whole window, and even it is not idleness: `totals` may show
+  heavy cache activity.
 
 ## Where to go next
 

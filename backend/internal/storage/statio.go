@@ -159,14 +159,17 @@ func (s *Storage) GetIOSnapshotsAt(
 
 	for rows.Next() {
 		var (
-			snap statio.Snapshot
-			body []byte
+			snap    statio.Snapshot
+			walTime *bool
+			body    []byte
 		)
 
 		if err := rows.Scan(&snap.CapturedAt, &snap.VersionNum, &snap.OpBytes,
-			&snap.TrackIOTiming, &snap.TrackWALIOTiming, &snap.StatsReset, &body); err != nil {
+			&snap.TrackIOTiming, &walTime, &snap.StatsReset, &body); err != nil {
 			return nil, fmt.Errorf("storage: scan io snapshot: %w", err)
 		}
+
+		snap.TrackWALIOTiming = walTime != nil && *walTime
 
 		var stored []ioRowJSON
 		if err := json.Unmarshal(body, &stored); err != nil {
