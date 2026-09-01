@@ -304,6 +304,13 @@ func TestGetQueriesTop10ByTime(t *testing.T) {
 		assert.NotEmpty(t, q.ExecTime)
 		assert.Greater(t, q.ExecTimeMs, 0.0)
 		assert.NotEmpty(t, q.QueryTrunc)
+
+		assert.GreaterOrEqual(t, q.IoPct, 0.0)
+		assert.LessOrEqual(t, q.IoPct, 100.0)
+		assert.GreaterOrEqual(t, q.CpuPct, 0.0)
+		assert.LessOrEqual(t, q.CpuPct, 100.0)
+		assert.InDelta(t, 100.0, q.IoPct+q.CpuPct, 0.01)
+		assert.NotEmpty(t, q.IoCpuPct)
 	}
 }
 

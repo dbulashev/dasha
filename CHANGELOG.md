@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.7.3
+
+### Bug Fixes
+- **Top queries by time no longer fail with `numeric field overflow`.** On parallel queries the I/O time of the workers is summed while the elapsed time is not, so the I/O share could exceed the width of the column it was written to and the whole panel came back empty. The share is now capped at 100%.
+
 ## v1.7.2
 
 ### Features
