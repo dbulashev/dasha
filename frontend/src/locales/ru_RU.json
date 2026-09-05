@@ -1433,6 +1433,7 @@
             "scopeCluster": "Уровень кластера",
             "databaseNotTracked": "Эта база не подключена к Dasha — переход откроет другую базу.",
             "searchLogs": "Найти в логах",
+            "openIo": "Разрез I/O",
             "showHowTo": "Что делать",
             "hideHowTo": "Свернуть",
             "copy": "Копировать",
