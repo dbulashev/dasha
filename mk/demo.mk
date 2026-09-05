@@ -1,15 +1,20 @@
 .PHONY: demo-lab demo-lab-down demo-lab-logs demo-lab-restart
 
-# Base demo plus the metrics-backed overlay (VictoriaMetrics + pgSCV + pgbouncer).
-DEMO_COMPOSE = docker compose -f demo/docker-compose.yaml -f demo/docker-compose.metrics.yaml
+# Base demo plus the metrics overlay (VictoriaMetrics + pgSCV + pgbouncer) and
+# the log-search overlay (OpenSearch + Fluent Bit).
+DEMO_COMPOSE = docker compose -f demo/docker-compose.yaml -f demo/docker-compose.metrics.yaml -f demo/docker-compose.logs.yaml
 
-demo-lab: ## Start demo lab (builds from source, http://localhost:3000, VM at :8428)
+demo-lab: ## Start demo lab (builds from source, http://localhost:3000, VM at :8428, OpenSearch at :9200)
 	$(DEMO_COMPOSE) up --build -d
 	@echo ""
-	@echo "Demo lab started: http://localhost:3000"
-	@echo "  VictoriaMetrics: http://localhost:8428/vmui"
-	@echo "  Logs: make demo-lab-logs"
-	@echo "  Stop: make demo-lab-down"
+	@echo "Demo lab started:"
+	@echo "  Dasha:                 http://localhost:3000"
+	@echo "  VictoriaMetrics:       http://localhost:8428/vmui"
+	@echo "  OpenSearch:            http://localhost:9200"
+	@echo "  OpenSearch Dashboards: http://localhost:5601"
+	@echo ""
+	@echo "  Container logs: make demo-lab-logs"
+	@echo "  Stop:           make demo-lab-down"
 
 demo-lab-down: ## Stop demo lab and remove volumes
 	$(DEMO_COMPOSE) down -v

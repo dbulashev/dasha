@@ -12,6 +12,8 @@ export interface Cluster {
   source?: string
   /** true when cluster logs can be searched via GET /api/logs */
   supports_logs?: boolean
+  /** log streams the bound source serves, e.g. postgresql and pooler */
+  log_streams?: string[]
   instances?: ClusterInstance[]
   databases?: string[]
 }

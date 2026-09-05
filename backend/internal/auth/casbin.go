@@ -43,6 +43,7 @@ p, viewer, /api/auth/tokens, POST, allow
 p, viewer, /api/auth/tokens/*, DELETE, allow
 p, viewer, /api/auth/admin/*, GET, deny
 p, viewer, /api/auth/admin/*, DELETE, deny
+p, viewer, /api/logs/check, GET, deny
 `
 
 func NewCasbinEnforcer() (*casbin.Enforcer, error) {

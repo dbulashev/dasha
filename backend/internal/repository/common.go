@@ -176,6 +176,7 @@ type PgxPools map[config.ClusterName][]pgxPoolItem
 type PgxPool struct {
 	mu                    sync.RWMutex
 	clusters              config.Clusters
+	logSources            LogCapability
 	pools                 PgxPools
 	logger                *zap.Logger
 	pgStatsViewConfig     string   // configured pg_stats_view from global config
@@ -191,8 +192,15 @@ type PgxPool struct {
 	sqlParser             sqlparse.Parser // built on first use, see indexAdvisorParser
 }
 
+// LogCapability answers what the log source bound to a cluster offers.
+type LogCapability interface {
+	Supports(cluster config.Cluster) bool
+	Streams(cluster config.Cluster) []string
+}
+
 func NewRepositoryPgxPool(
 	clusters config.Clusters,
+	logSources LogCapability,
 	pgStatsView, pgssResetFunc string,
 	poolCfg config.PoolConfig,
 	schemaLintCfg schemalint.Config,
@@ -201,6 +209,7 @@ func NewRepositoryPgxPool(
 ) Repository {
 	return &PgxPool{
 		clusters:            clusters,
+		logSources:          logSources,
 		pools:               PgxPools{},
 		mu:                  sync.RWMutex{},
 		logger:              logger,
@@ -251,11 +260,18 @@ func (p *PgxPool) Clusters(ctx context.Context) ([]dto.ClusterInfo, error) {
 	// its logs are searchable.
 	sources := make(map[config.ClusterName]string)
 	supportsLogs := make(map[config.ClusterName]bool)
+	logStreams := make(map[config.ClusterName][]string)
 
 	if cls, cfgErr := p.clusters.Get(ctx); cfgErr == nil {
 		for _, c := range cls {
 			sources[c.Name] = c.Source
-			supportsLogs[c.Name] = c.SupportsLogs()
+
+			if p.logSources == nil {
+				continue
+			}
+
+			supportsLogs[c.Name] = p.logSources.Supports(c)
+			logStreams[c.Name] = p.logSources.Streams(c)
 		}
 	} else {
 		p.logger.Warn("clusters metadata lookup failed; source/supports_logs will be empty",
@@ -284,6 +300,7 @@ func (p *PgxPool) Clusters(ctx context.Context) ([]dto.ClusterInfo, error) {
 			Name:         clusterName,
 			Source:       sources[clusterName],
 			SupportsLogs: supportsLogs[clusterName],
+			LogStreams:   logStreams[clusterName],
 			Instances:    instances,
 			Databases:    databases,
 		})

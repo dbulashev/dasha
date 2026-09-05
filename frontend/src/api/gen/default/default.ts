@@ -35,6 +35,7 @@ import type {
   DatabaseHealth,
   DatabaseSize,
   DeleteHealthScoreWeightsParams,
+  ErrorMessage,
   FkTypeMismatch,
   FksPossibleNulls,
   FksPossibleSimilar,
@@ -83,6 +84,7 @@ import type {
   GetIndexesUsageParams,
   GetInstanceInfoParams,
   GetInvalidConstraintsParams,
+  GetLogsCheckParams,
   GetLogsParams,
   GetMaintenanceAutovacuumFreezeMaxAgeParams,
   GetMaintenanceAutovacuumSummaryParams,
@@ -165,6 +167,7 @@ import type {
   ListPersonalTokensParams,
   LockSnapshot,
   LogSearchResult,
+  LogSourceCheck,
   MaintenanceAutovacuumFreezeMaxAge,
   MaintenanceAutovacuumSummary,
   MaintenanceInfo,
@@ -10228,7 +10231,7 @@ export function useGetSettingsAnalyze<
 }
 
 /**
- * Search Yandex Cloud cluster logs (PostgreSQL/pooler) via the MDB API.
+ * Search cluster logs (PostgreSQL/pooler) through the log source bound to the cluster. Streams a source does not serve answer with 501.
  */
 export type getLogsResponse200 = {
   data: LogSearchResult
@@ -10251,7 +10254,7 @@ export type getLogsResponse501 = {
 }
 
 export type getLogsResponse502 = {
-  data: void
+  data: ErrorMessage
   status: 502
 }
 
@@ -10314,7 +10317,7 @@ export const getGetLogsQueryKey = (params?: MaybeRef<GetLogsParams>) => {
 
 export const getGetLogsQueryOptions = <
   TData = Awaited<ReturnType<typeof getLogs>>,
-  TError = void | NotFoundResponse,
+  TError = void | NotFoundResponse | ErrorMessage,
 >(
   params: MaybeRef<GetLogsParams>,
   options?: {
@@ -10337,11 +10340,11 @@ export const getGetLogsQueryOptions = <
 }
 
 export type GetLogsQueryResult = NonNullable<Awaited<ReturnType<typeof getLogs>>>
-export type GetLogsQueryError = void | NotFoundResponse
+export type GetLogsQueryError = void | NotFoundResponse | ErrorMessage
 
 export function useGetLogs<
   TData = Awaited<ReturnType<typeof getLogs>>,
-  TError = void | NotFoundResponse,
+  TError = void | NotFoundResponse | ErrorMessage,
 >(
   params: MaybeRef<GetLogsParams>,
   options?: {
@@ -10350,6 +10353,128 @@ export function useGetLogs<
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetLogsQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Probe the log source bound to a cluster: reachability, the resolved index, how many records the last hour holds, which mapped fields exist and one masked sample record. Admin only.
+ */
+export type getLogsCheckResponse200 = {
+  data: LogSourceCheck
+  status: 200
+}
+
+export type getLogsCheckResponse403 = {
+  data: void
+  status: 403
+}
+
+export type getLogsCheckResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getLogsCheckResponse501 = {
+  data: void
+  status: 501
+}
+
+export type getLogsCheckResponse502 = {
+  data: ErrorMessage
+  status: 502
+}
+
+export type getLogsCheckResponse504 = {
+  data: void
+  status: 504
+}
+
+export type getLogsCheckResponseSuccess = getLogsCheckResponse200 & {
+  headers: Headers
+}
+export type getLogsCheckResponseError = (
+  | getLogsCheckResponse403
+  | getLogsCheckResponse404
+  | getLogsCheckResponse501
+  | getLogsCheckResponse502
+  | getLogsCheckResponse504
+) & {
+  headers: Headers
+}
+
+export type getLogsCheckResponse = getLogsCheckResponseSuccess | getLogsCheckResponseError
+
+export const getGetLogsCheckUrl = (params: GetLogsCheckParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0 ? `/api/logs/check?${stringifiedParams}` : `/api/logs/check`
+}
+
+export const getLogsCheck = async (
+  params: GetLogsCheckParams,
+  options?: RequestInit,
+): Promise<getLogsCheckResponse> => {
+  return customFetch<getLogsCheckResponse>(getGetLogsCheckUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetLogsCheckQueryKey = (params?: MaybeRef<GetLogsCheckParams>) => {
+  return ['api', 'logs', 'check', ...(params ? [params] : [])] as const
+}
+
+export const getGetLogsCheckQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLogsCheck>>,
+  TError = void | NotFoundResponse | ErrorMessage,
+>(
+  params: MaybeRef<GetLogsCheckParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getLogsCheck>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetLogsCheckQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getLogsCheck>>> = ({ signal }) =>
+    getLogsCheck(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getLogsCheck>>,
+    TError,
+    TData
+  >
+}
+
+export type GetLogsCheckQueryResult = NonNullable<Awaited<ReturnType<typeof getLogsCheck>>>
+export type GetLogsCheckQueryError = void | NotFoundResponse | ErrorMessage
+
+export function useGetLogsCheck<
+  TData = Awaited<ReturnType<typeof getLogsCheck>>,
+  TError = void | NotFoundResponse | ErrorMessage,
+>(
+  params: MaybeRef<GetLogsCheckParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getLogsCheck>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLogsCheckQueryOptions(params, options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
 

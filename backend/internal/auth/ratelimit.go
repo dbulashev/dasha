@@ -2,6 +2,7 @@ package auth
 
 import (
 	"net"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -122,8 +123,10 @@ func NewRateLimiter(cfg config.AuthConfig, logger *zap.Logger) *RateLimiter {
 	return &RateLimiter{Middleware: mw, store: store}
 }
 
-// PathRateLimiter throttles a single route with separate limits for admins and
+// PathRateLimiter throttles a set of routes with separate limits for admins and
 // everyone else, keyed like the global rate limiter (user name, else client IP).
+// Requests are split into groups — one per log source — so a store whose limits
+// suit a local index does not inherit the budget of a metered cloud API.
 type PathRateLimiter struct {
 	Middleware echo.MiddlewareFunc
 	stores     []*rateLimiterStore
@@ -135,33 +138,66 @@ func (p *PathRateLimiter) Stop() {
 	}
 }
 
-// NewPathRateLimiter builds a middleware limiting requests to path. Must run
+// RateLimitGroup holds the two limits of one group.
+type RateLimitGroup struct {
+	User, Admin *config.RateLimitConfig
+}
+
+type groupStores struct {
+	user, admin *rateLimiterStore
+}
+
+// NewPathRateLimiter builds a middleware limiting requests to paths. Must run
 // after the auth middleware so the admin role is visible. A nil config or
-// requests_per_second <= 0 disables the corresponding limit.
+// requests_per_second <= 0 disables the corresponding limit. group names the
+// request's group; a name with no configured group falls back to def.
 func NewPathRateLimiter(
-	path string,
-	userCfg, adminCfg *config.RateLimitConfig,
+	paths []string,
+	def RateLimitGroup,
+	groups map[string]RateLimitGroup,
+	group func(echo.Context) string,
 	logger *zap.Logger,
 ) *PathRateLimiter {
-	userStore := newStoreFor(userCfg)
-	adminStore := newStoreFor(adminCfg)
+	p := &PathRateLimiter{ //nolint:exhaustruct
+		stores: nil,
+	}
 
-	p := &PathRateLimiter{}
-	for _, s := range []*rateLimiterStore{userStore, adminStore} {
-		if s != nil {
-			p.stores = append(p.stores, s)
+	build := func(g RateLimitGroup) groupStores {
+		s := groupStores{user: newStoreFor(g.User), admin: newStoreFor(g.Admin)}
+
+		for _, store := range []*rateLimiterStore{s.user, s.admin} {
+			if store != nil {
+				p.stores = append(p.stores, store)
+			}
 		}
+
+		return s
+	}
+
+	defStores := build(def)
+	byGroup := make(map[string]groupStores, len(groups))
+
+	for name, g := range groups {
+		byGroup[name] = build(g)
 	}
 
 	p.Middleware = func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			if c.Path() != path {
+			path := c.Path()
+			if !slices.Contains(paths, path) {
 				return next(c)
 			}
 
-			store := userStore
+			stores := defStores
+			if group != nil {
+				if g, ok := byGroup[group(c)]; ok {
+					stores = g
+				}
+			}
+
+			store := stores.user
 			if u := GetUser(c); u != nil && u.Role == config.RoleAdmin {
-				store = adminStore
+				store = stores.admin
 			}
 
 			if store == nil {

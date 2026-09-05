@@ -1,0 +1,106 @@
+# Additive overlay for the log search demo: OpenSearch + OpenSearch Dashboards +
+# Fluent Bit, which tails the jsonlog files the PostgreSQL containers write to
+# the shared pg-logs volume. Use together with the base file:
+#   docker compose -f demo/docker-compose.yaml -f demo/docker-compose.logs.yaml up -d
+# (mk/demo.mk wires both files automatically.)
+#
+# The store is the source behind log_search in dasha-demo.yaml. pg17-master runs
+# with log_min_duration_statement=0, so it alone accounts for most of the volume.
+services:
+  opensearch:
+    image: opensearchproject/opensearch:3.8.0
+    container_name: dasha-opensearch
+    environment:
+      discovery.type: single-node
+      cluster.name: dasha-demo
+      node.name: opensearch
+      OPENSEARCH_JAVA_OPTS: "-Xms1g -Xmx1g"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      DISABLE_SECURITY_PLUGIN: "true" # demo only: plain HTTP, no authentication
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - opensearch-data:/usr/share/opensearch/data
+    ports:
+      - "127.0.0.1:9200:9200"
+    networks:
+      - dasha-demo
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/9200 && echo -e 'GET /_cluster/health HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200 OK'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+
+  # One-shot: field mapping for the pg-logs-* indices (severity and host must be
+  # keyword, the timestamp a date) plus the three-day retention policy.
+  opensearch-init:
+    image: curlimages/curl:8.22.0
+    entrypoint:
+      - sh
+      - -c
+      - |
+        set -e
+        curl -sf -X PUT http://opensearch:9200/_index_template/pg-logs \
+          -H 'Content-Type: application/json' \
+          --data-binary @/init/index-template.json
+        code=$$(curl -s -o /tmp/ism.out -w '%{http_code}' -X PUT http://opensearch:9200/_plugins/_ism/policies/pg-logs \
+          -H 'Content-Type: application/json' \
+          --data-binary @/init/ism-policy.json)
+        case "$$code" in
+          2*) ;;
+          409) echo "ism policy already exists" ;;
+          *) echo "ism policy request failed with $$code"; cat /tmp/ism.out; exit 1 ;;
+        esac
+        echo "opensearch initialised"
+    volumes:
+      - ./opensearch/index-template.json:/init/index-template.json:ro
+      - ./opensearch/ism-policy.json:/init/ism-policy.json:ro
+    depends_on:
+      opensearch:
+        condition: service_healthy
+    networks:
+      - dasha-demo
+    restart: on-failure
+
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:3.8.0
+    container_name: dasha-opensearch-dashboards
+    environment:
+      OPENSEARCH_HOSTS: '["http://opensearch:9200"]'
+      DISABLE_SECURITY_DASHBOARDS_PLUGIN: "true"
+    ports:
+      - "127.0.0.1:5601:5601"
+    depends_on:
+      opensearch:
+        condition: service_healthy
+    networks:
+      - dasha-demo
+    restart: unless-stopped
+
+  fluent-bit:
+    image: fluent/fluent-bit:3.2.10
+    container_name: dasha-fluent-bit
+    volumes:
+      - ./opensearch/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
+      - ./opensearch/parsers-pg.conf:/fluent-bit/etc/parsers-pg.conf:ro
+      - pg-logs:/pg-logs:ro
+      - fluent-bit-state:/var/lib/fluent-bit
+    ports:
+      - "24224:24224" # forward input: the docker fluentd driver of pgbouncer
+    depends_on:
+      opensearch-init:
+        condition: service_completed_successfully
+    networks:
+      - dasha-demo
+    restart: unless-stopped
+
+volumes:
+  opensearch-data:
+  fluent-bit-state:

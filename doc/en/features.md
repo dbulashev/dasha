@@ -82,12 +82,13 @@
 - Optional **metrics-backed mode**: with a Prometheus/VictoriaMetrics datasource configured (`health_score.metrics`), the score, recommendations and a trend with seasonal baseline and dip detection are computed from time series (pgSCV, Yandex MDB, pgbouncer, host metrics) instead of point-in-time SQL; the SQL snapshot stays the zero-config fallback
 - Scoring model details: [README-health-score.md](../../README-health-score.md)
 
-## Log Search (Yandex Cloud)
-- Search PostgreSQL server and connection-pooler (Odyssey) logs of Yandex-MDB-discovered clusters through the MDB API — top-level `/logs` page, no agents or log shipping required
+## Log Search
+- Search PostgreSQL server and connection-pooler logs from an existing log store — top-level `/logs` page. Yandex MDB clusters work out of the box through the MDB API; self-managed clusters read from an OpenSearch/Elasticsearch index declared in `log_search.sources`
 - Native severity/host filters plus Dasha-side message substrings (AND), `grep -v`-style excludes and database/user filters; cursor pagination and partial results on timeout
 - Optional deduplication groups near-identical messages by masked template (`<*>` placeholders) with count and first/last seen
 - Frequency histogram (time × severity) with click/drag zoom, one-click presets (deadlocks, autovacuum, checkpoints, …), shareable URL filters, Grafana time-range clipboard interop
-- Per-user rate limiting protects the Yandex Cloud API quota (`log_search.rate_limit`, separate admin limit)
+- Per-user rate limiting, configurable per source so a metered cloud API and a local index do not share one budget (`log_search.rate_limit`, separate admin limit)
+- `GET /api/logs/check` (admin) reports the resolved index, the mapped fields found and missing, and one masked sample record
 
 ## Authentication & Authorization
 - Three modes: `none` (open), `token` (static API keys), `oidc` (OpenID Connect)
@@ -107,7 +108,7 @@
 - In-cluster database discovery — the database list comes from the cluster itself and refreshes without a restart
 - Primary / replica role display
 - Optional snapshot storage database (daily-partitioned tables, `dasha migrate` CLI)
-- [MCP connector](mcp.md) (`dasha-mcp`): read-only MCP server exposing fleet diagnostics to AI assistants (28 tools, 5 prompts)
+- [MCP connector](mcp.md) (`dasha-mcp`): read-only MCP server exposing fleet diagnostics to AI assistants (31 tools, 5 prompts)
 
 ## User Preferences
 

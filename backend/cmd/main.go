@@ -10,6 +10,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/labstack/echo/v4"
 	strictecho "github.com/oapi-codegen/runtime/strictmiddleware/echo"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -124,6 +125,7 @@ func autosnapshotExec(cmd *cobra.Command, _ []string) error {
 	// the daemon frees monitoring-user connections between polls).
 	repo := repository.NewRepositoryPgxPool(
 		container.Clusters(),
+		container.LogSources(),
 		cfg.PgStatsView,
 		cfg.PgssResetFunction,
 		cfg.EffectiveAutosnapshotPool(),
@@ -197,11 +199,26 @@ func dashaExec(cmd *cobra.Command, _ []string) error {
 	defer authMW.Stop()
 
 	logSearch := container.Config().LogSearch
-	logsRL := auth.NewPathRateLimiter("/api/logs", logSearch.RateLimit, logSearch.AdminRateLimit, logger)
+	logsSvc := container.Logs()
+
+	groups := make(map[string]auth.RateLimitGroup, len(logSearch.Sources))
+	for name, src := range logSearch.Sources {
+		groups[name] = auth.RateLimitGroup{User: src.RateLimit, Admin: src.AdminRateLimit}
+	}
+
+	logsRL := auth.NewPathRateLimiter(
+		[]string{"/api/logs", "/api/logs/check"},
+		auth.RateLimitGroup{User: logSearch.RateLimit, Admin: logSearch.AdminRateLimit},
+		groups,
+		func(c echo.Context) string {
+			return logsSvc.SourceName(c.Request().Context(), c.QueryParam("cluster_name"))
+		},
+		logger,
+	)
 
 	defer logsRL.Stop()
 
-	d := http.NewDashaHandlers(container.Config(), container.Repository(), st, container.Metrics(), container.Logs())
+	d := http.NewDashaHandlers(container.Config(), container.Repository(), st, container.Metrics(), logsSvc)
 	svc := http.New(d, mw, authMW.RequireHTTPS, authMW.RateLimit, logsRL.Middleware, authMW.Auth, authMW.Casbin, logger)
 
 	if container.Config().Auth.Mode == config.AuthModeOIDC {

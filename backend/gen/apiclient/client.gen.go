@@ -199,8 +199,14 @@ const (
 
 // Defines values for GetLogsParamsServiceType.
 const (
-	Pooler     GetLogsParamsServiceType = "pooler"
-	Postgresql GetLogsParamsServiceType = "postgresql"
+	GetLogsParamsServiceTypePooler     GetLogsParamsServiceType = "pooler"
+	GetLogsParamsServiceTypePostgresql GetLogsParamsServiceType = "postgresql"
+)
+
+// Defines values for GetLogsCheckParamsServiceType.
+const (
+	GetLogsCheckParamsServiceTypePooler     GetLogsCheckParamsServiceType = "pooler"
+	GetLogsCheckParamsServiceTypePostgresql GetLogsCheckParamsServiceType = "postgresql"
 )
 
 // Defines values for GetQueriesRunningParamsQueryFilterMode.
@@ -381,7 +387,10 @@ type AutoSnapshotTriggerDefaults struct {
 type Cluster struct {
 	Databases *[]string          `json:"databases,omitempty"`
 	Instances *[]ClusterInstance `json:"instances,omitempty"`
-	Name      *string            `json:"name,omitempty"`
+
+	// LogStreams log streams the bound source serves, e.g. postgresql and pooler
+	LogStreams *[]string `json:"log_streams,omitempty"`
+	Name       *string   `json:"name,omitempty"`
 
 	// Source cluster origin, e.g. "static" or "yandex-mdb"
 	Source *string `json:"source,omitempty"`
@@ -1269,6 +1278,31 @@ type LogSearchResult struct {
 	// Partial max_scan reached - results/counts are incomplete
 	Partial bool `json:"partial"`
 	Scanned *int `json:"scanned,omitempty"`
+}
+
+// LogSourceCheck defines model for LogSourceCheck.
+type LogSourceCheck struct {
+	// Documents records the source found for the cluster in the last hour; a streaming source stops counting at 1000
+	Documents *int `json:"documents,omitempty"`
+
+	// FieldTypes type the store indexes each mapped field as
+	FieldTypes *map[string]string `json:"field_types,omitempty"`
+
+	// Found field map roles bound to a field present upstream
+	Found *map[string]string `json:"found,omitempty"`
+
+	// Missing roles whose field is absent upstream
+	Missing *[]string `json:"missing,omitempty"`
+
+	// Sample one masked record from the window
+	Sample *map[string]string `json:"sample,omitempty"`
+
+	// Source name of the log source serving the cluster
+	Source string `json:"source"`
+	Stream string `json:"stream"`
+
+	// Target resolved upstream location - an index pattern or a cluster id
+	Target string `json:"target"`
 }
 
 // MaintenanceAutovacuumFreezeMaxAge defines model for MaintenanceAutovacuumFreezeMaxAge.
@@ -2573,6 +2607,15 @@ type GetLogsParams struct {
 // GetLogsParamsServiceType defines parameters for GetLogs.
 type GetLogsParamsServiceType string
 
+// GetLogsCheckParams defines parameters for GetLogsCheck.
+type GetLogsCheckParams struct {
+	ClusterName ClusterName                   `form:"cluster_name" json:"cluster_name"`
+	ServiceType GetLogsCheckParamsServiceType `form:"service_type" json:"service_type"`
+}
+
+// GetLogsCheckParamsServiceType defines parameters for GetLogsCheck.
+type GetLogsCheckParamsServiceType string
+
 // GetMaintenanceAutovacuumFreezeMaxAgeParams defines parameters for GetMaintenanceAutovacuumFreezeMaxAge.
 type GetMaintenanceAutovacuumFreezeMaxAgeParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
@@ -3244,6 +3287,9 @@ type ClientInterface interface {
 
 	// GetLogs request
 	GetLogs(ctx context.Context, params *GetLogsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetLogsCheck request
+	GetLogsCheck(ctx context.Context, params *GetLogsCheckParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetMaintenanceAutovacuumFreezeMaxAge request
 	GetMaintenanceAutovacuumFreezeMaxAge(ctx context.Context, params *GetMaintenanceAutovacuumFreezeMaxAgeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -4196,6 +4242,18 @@ func (c *Client) GetIOHistory(ctx context.Context, params *GetIOHistoryParams, r
 
 func (c *Client) GetLogs(ctx context.Context, params *GetLogsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetLogsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetLogsCheck(ctx context.Context, params *GetLogsCheckParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetLogsCheckRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -9557,6 +9615,63 @@ func NewGetLogsRequest(server string, params *GetLogsParams) (*http.Request, err
 	return req, nil
 }
 
+// NewGetLogsCheckRequest generates requests for GetLogsCheck
+func NewGetLogsCheckRequest(server string, params *GetLogsCheckParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/logs/check")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, params.ClusterName); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "service_type", runtime.ParamLocationQuery, params.ServiceType); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetMaintenanceAutovacuumFreezeMaxAgeRequest generates requests for GetMaintenanceAutovacuumFreezeMaxAge
 func NewGetMaintenanceAutovacuumFreezeMaxAgeRequest(server string, params *GetMaintenanceAutovacuumFreezeMaxAgeParams) (*http.Request, error) {
 	var err error
@@ -13301,6 +13416,9 @@ type ClientWithResponsesInterface interface {
 	// GetLogsWithResponse request
 	GetLogsWithResponse(ctx context.Context, params *GetLogsParams, reqEditors ...RequestEditorFn) (*GetLogsResponse, error)
 
+	// GetLogsCheckWithResponse request
+	GetLogsCheckWithResponse(ctx context.Context, params *GetLogsCheckParams, reqEditors ...RequestEditorFn) (*GetLogsCheckResponse, error)
+
 	// GetMaintenanceAutovacuumFreezeMaxAgeWithResponse request
 	GetMaintenanceAutovacuumFreezeMaxAgeWithResponse(ctx context.Context, params *GetMaintenanceAutovacuumFreezeMaxAgeParams, reqEditors ...RequestEditorFn) (*GetMaintenanceAutovacuumFreezeMaxAgeResponse, error)
 
@@ -14842,6 +14960,7 @@ type GetLogsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *LogSearchResult
+	JSON502      *ErrorMessage
 }
 
 // Status returns HTTPResponse.Status
@@ -14854,6 +14973,29 @@ func (r GetLogsResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetLogsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetLogsCheckResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *LogSourceCheck
+	JSON502      *ErrorMessage
+}
+
+// Status returns HTTPResponse.Status
+func (r GetLogsCheckResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetLogsCheckResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -16453,6 +16595,15 @@ func (c *ClientWithResponses) GetLogsWithResponse(ctx context.Context, params *G
 		return nil, err
 	}
 	return ParseGetLogsResponse(rsp)
+}
+
+// GetLogsCheckWithResponse request returning *GetLogsCheckResponse
+func (c *ClientWithResponses) GetLogsCheckWithResponse(ctx context.Context, params *GetLogsCheckParams, reqEditors ...RequestEditorFn) (*GetLogsCheckResponse, error) {
+	rsp, err := c.GetLogsCheck(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetLogsCheckResponse(rsp)
 }
 
 // GetMaintenanceAutovacuumFreezeMaxAgeWithResponse request returning *GetMaintenanceAutovacuumFreezeMaxAgeResponse
@@ -18495,6 +18646,46 @@ func ParseGetLogsResponse(rsp *http.Response) (*GetLogsResponse, error) {
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
+		var dest ErrorMessage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON502 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetLogsCheckResponse parses an HTTP response from a GetLogsCheckWithResponse call
+func ParseGetLogsCheckResponse(rsp *http.Response) (*GetLogsCheckResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetLogsCheckResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest LogSourceCheck
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
+		var dest ErrorMessage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON502 = &dest
 
 	}
 

@@ -10,6 +10,7 @@ import { LOG_PRESETS, severityOptions, type LogFilters, type LogOrder } from './
 
 const props = defineProps<{
   hosts: string[]
+  streams: string[]
   loading: boolean
 }>()
 
@@ -39,10 +40,30 @@ const preset = ref<string | null>(null)
 const customFrom = ref<string>('')
 const customTo = ref<string>('')
 
-const serviceTypeItems = [
+const allServiceTypes = [
   { value: 'postgresql', title: 'PostgreSQL' },
   { value: 'pooler', title: 'Pooler' },
 ]
+
+// A source that serves no pooler log answers 501 for it; an empty list means
+// the cluster predates the field and both streams stay offered.
+const serviceTypeItems = computed(() =>
+  props.streams.length === 0
+    ? allServiceTypes
+    : allServiceTypes.filter(st => props.streams.includes(st.value)),
+)
+
+// Sync flush and immediate: applyPreset/applyState set the service type and
+// submit in the same tick, so an unavailable stream has to be corrected before
+// the search is emitted.
+function normalizeServiceType() {
+  const items = serviceTypeItems.value
+  if (items.length > 0 && !items.some(st => st.value === serviceType.value)) {
+    serviceType.value = items[0].value as GetLogsServiceType
+  }
+}
+
+watch([serviceTypeItems, serviceType], normalizeServiceType, { immediate: true, flush: 'sync' })
 
 const rangeItems = computed(() => [
   { value: '1h', title: t('logs.range.1h') },
@@ -439,6 +460,7 @@ defineExpose({ applyDrill, addExclude, applyAbsoluteRange })
         <v-col cols="12" sm="6" md="3" class="d-flex align-center justify-space-between">
           <v-icon icon="mdi-text-box-search-outline" size="28" color="primary" class="ms-1" />
           <v-btn-toggle
+            v-if="serviceTypeItems.length > 1"
             v-model="serviceType"
             mandatory
             density="comfortable"

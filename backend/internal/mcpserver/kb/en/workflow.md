@@ -32,8 +32,9 @@ per-database tools also need `database`.
    holding the xmin horizon.
 2. `get_replication` — inactive slots retain WAL (a classic silent eater).
 3. `top_tables` — largest tables; `describe_table` the suspects (bloat section).
-4. On Yandex MDB clusters: `search_logs` (service_type=postgresql,
-   message=["checkpoint"]) only if WAL churn needs confirmation.
+4. On clusters whose log_streams include postgresql: `search_logs`
+   (service_type=postgresql, message=["checkpoint"]) only if WAL churn needs
+   confirmation.
 
 ## "Replica is lagging"
 1. `get_replication` — which standby, how far (time and bytes), slot state.
@@ -42,7 +43,7 @@ per-database tools also need `database`.
 4. `wait_events` on the primary — WAL-write pressure also inflates lag.
 
 ## "Application reports errors"
-1. Yandex MDB clusters only (`supports_logs` in list_clusters):
+1. Clusters whose `log_streams` include postgresql (see list_clusters):
    `search_logs` with severity=["ERROR","FATAL"], dedup on, a narrow window
    (since="1h"). One call with all filters — the endpoint is rate-limited.
 2. Match error templates against `blocked_queries` (deadlocks, lock timeouts)
@@ -86,9 +87,9 @@ per-database tools also need `database`.
   cache/index questions. `hot_indexes` complements `unused_index_report`: one
   names indexes to drop, the other the ones doing the work. Requires snapshot
   storage; a 501 means the feature is off, not a broken instance.
-- `search_logs` is rate-limited per user (~1 request / 30s by default):
-  combine all filters into ONE call, keep dedup on, never poll; after a 429
-  wait ≥30s.
+- `search_logs` is rate-limited per user (the operator sets the limit per
+  source): combine all filters into ONE call, keep dedup on, never poll; after
+  a 429 back off before retrying.
 - One tool call per step; do not re-call a tool with the same arguments.
 - If a result is refused as too large — narrow (one database, smaller limit,
   shorter window), do not retry as-is.
