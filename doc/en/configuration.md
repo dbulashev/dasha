@@ -12,8 +12,8 @@
 ## Monitoring role
 
 Dasha only reads the monitored databases and changes nothing in them; the one exception, resetting
-query statistics, is off by default. The role it connects as has to be a member of `pg_monitor` and
-be allowed to connect to every monitored database:
+query statistics, is off by default. The role it connects as has to be allowed to connect to every
+monitored database; with `pg_monitor` it sees the statements of the other roles too:
 
 ```sql
 CREATE ROLE monitoring_user LOGIN PASSWORD 'secret';
@@ -113,7 +113,9 @@ pgss_reset_function: monitoring.reset_pgss
 ```
 
 The wrapper belongs in the database that holds the extension, and the call inside it carries the
-schema `pg_stat_statements` was installed in — `public` above. Dasha calls the function as
+schema `pg_stat_statements` was installed in — `public` above. `PUBLIC` must have no `CREATE` on
+that schema: `REVOKE CREATE ON SCHEMA public FROM PUBLIC` (the default since PostgreSQL 15), or
+install the extension in a schema only a superuser can create in. Dasha calls the function as
 `SELECT monitoring.reset_pgss()`, without arguments and discarding the result, so the return type
 is free. The name has to be an unquoted `schema.name`; an invalid one is ignored with a warning and
 the function of the extension is called. Without `enable_query_stats_reset` the button is not shown

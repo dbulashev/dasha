@@ -57,7 +57,7 @@ clusters:
       - pg-replica-1.example.com
 ```
 
-The role Dasha connects as needs `pg_monitor` and `CONNECT` on every monitored database:
+The role Dasha connects as needs `CONNECT` on every monitored database; with `pg_monitor` it sees the statements of the other roles too:
 
 ```sql
 CREATE ROLE monitoring_user LOGIN PASSWORD 'secret';

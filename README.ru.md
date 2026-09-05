@@ -57,7 +57,7 @@ clusters:
       - pg-replica-1.example.com
 ```
 
-Роль, под которой подключается Dasha, должна входить в `pg_monitor` и иметь право подключения к наблюдаемым базам:
+Роль, под которой подключается Dasha, должна иметь право подключения к наблюдаемым базам; с `pg_monitor` ей видны и чужие запросы:
 
 ```sql
 CREATE ROLE monitoring_user LOGIN PASSWORD 'secret';
