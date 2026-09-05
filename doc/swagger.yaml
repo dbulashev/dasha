@@ -2557,6 +2557,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LogSourceCheck'
+        '403':
+          description: Caller is not an administrator on an interactive session
         '404':
           $ref: '#/components/responses/NotFound'
         '501':

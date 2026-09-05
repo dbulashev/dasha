@@ -62,6 +62,11 @@ func newClient(cfg config.LogSourceConfig, timeout time.Duration) (*client, erro
 				TLSClientConfig: tlsCfg,
 				Proxy:           http.ProxyFromEnvironment,
 			},
+			// Every request carries the store credentials, which must not be
+			// replayed to whatever a redirect points at.
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
 		},
 	}, nil
 }

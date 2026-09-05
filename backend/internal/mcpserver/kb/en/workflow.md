@@ -87,9 +87,9 @@ per-database tools also need `database`.
   cache/index questions. `hot_indexes` complements `unused_index_report`: one
   names indexes to drop, the other the ones doing the work. Requires snapshot
   storage; a 501 means the feature is off, not a broken instance.
-- `search_logs` is rate-limited per user (~1 request / 30s by default):
-  combine all filters into ONE call, keep dedup on, never poll; after a 429
-  wait ≥30s.
+- `search_logs` is rate-limited per user (the operator sets the limit per
+  source): combine all filters into ONE call, keep dedup on, never poll; after
+  a 429 back off before retrying.
 - One tool call per step; do not re-call a tool with the same arguments.
 - If a result is refused as too large — narrow (one database, smaller limit,
   shorter window), do not retry as-is.

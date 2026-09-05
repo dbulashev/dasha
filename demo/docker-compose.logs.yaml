@@ -27,7 +27,7 @@ services:
     volumes:
       - opensearch-data:/usr/share/opensearch/data
     ports:
-      - "9200:9200"
+      - "127.0.0.1:9200:9200"
     networks:
       - dasha-demo
     healthcheck:
@@ -50,9 +50,14 @@ services:
         curl -sf -X PUT http://opensearch:9200/_index_template/pg-logs \
           -H 'Content-Type: application/json' \
           --data-binary @/init/index-template.json
-        curl -sf -X PUT http://opensearch:9200/_plugins/_ism/policies/pg-logs \
+        code=$$(curl -s -o /tmp/ism.out -w '%{http_code}' -X PUT http://opensearch:9200/_plugins/_ism/policies/pg-logs \
           -H 'Content-Type: application/json' \
-          --data-binary @/init/ism-policy.json || echo "ism policy already exists"
+          --data-binary @/init/ism-policy.json)
+        case "$$code" in
+          2*) ;;
+          409) echo "ism policy already exists" ;;
+          *) echo "ism policy request failed with $$code"; cat /tmp/ism.out; exit 1 ;;
+        esac
         echo "opensearch initialised"
     volumes:
       - ./opensearch/index-template.json:/init/index-template.json:ro
@@ -71,7 +76,7 @@ services:
       OPENSEARCH_HOSTS: '["http://opensearch:9200"]'
       DISABLE_SECURITY_DASHBOARDS_PLUGIN: "true"
     ports:
-      - "5601:5601"
+      - "127.0.0.1:5601:5601"
     depends_on:
       opensearch:
         condition: service_healthy

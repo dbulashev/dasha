@@ -168,6 +168,40 @@ func TestLogSearchValidate(t *testing.T) {
 			wantErr: "https",
 		},
 		{
+			name: "basic auth with certificate verification off",
+			cfg: LogSearchConfig{
+				Sources: map[string]LogSourceConfig{
+					"main": source(func(s *LogSourceConfig) {
+						s.TLS = LogSourceTLSConfig{InsecureSkipVerify: true}
+					}),
+				},
+			},
+			wantErr: "insecure_skip_verify",
+		},
+		{
+			name: "api key auth with certificate verification off",
+			cfg: LogSearchConfig{
+				Sources: map[string]LogSourceConfig{
+					"main": source(func(s *LogSourceConfig) {
+						s.Auth = LogSourceAuthConfig{Kind: LogAuthAPIKey, APIKey: "k"}
+						s.TLS = LogSourceTLSConfig{InsecureSkipVerify: true}
+					}),
+				},
+			},
+			wantErr: "insecure_skip_verify",
+		},
+		{
+			name: "certificate verification off without credentials",
+			cfg: LogSearchConfig{
+				Sources: map[string]LogSourceConfig{
+					"main": source(func(s *LogSourceConfig) {
+						s.Auth = LogSourceAuthConfig{Kind: LogAuthNone}
+						s.TLS = LogSourceTLSConfig{InsecureSkipVerify: true}
+					}),
+				},
+			},
+		},
+		{
 			name: "plain http without credentials",
 			cfg: LogSearchConfig{
 				Sources: map[string]LogSourceConfig{

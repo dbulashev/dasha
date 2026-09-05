@@ -10369,6 +10369,11 @@ export type getLogsCheckResponse200 = {
   status: 200
 }
 
+export type getLogsCheckResponse403 = {
+  data: void
+  status: 403
+}
+
 export type getLogsCheckResponse404 = {
   data: NotFoundResponse
   status: 404
@@ -10393,6 +10398,7 @@ export type getLogsCheckResponseSuccess = getLogsCheckResponse200 & {
   headers: Headers
 }
 export type getLogsCheckResponseError = (
+  | getLogsCheckResponse403
   | getLogsCheckResponse404
   | getLogsCheckResponse501
   | getLogsCheckResponse502
@@ -10433,7 +10439,7 @@ export const getGetLogsCheckQueryKey = (params?: MaybeRef<GetLogsCheckParams>) =
 
 export const getGetLogsCheckQueryOptions = <
   TData = Awaited<ReturnType<typeof getLogsCheck>>,
-  TError = NotFoundResponse | void | ErrorMessage,
+  TError = void | NotFoundResponse | ErrorMessage,
 >(
   params: MaybeRef<GetLogsCheckParams>,
   options?: {
@@ -10456,11 +10462,11 @@ export const getGetLogsCheckQueryOptions = <
 }
 
 export type GetLogsCheckQueryResult = NonNullable<Awaited<ReturnType<typeof getLogsCheck>>>
-export type GetLogsCheckQueryError = NotFoundResponse | void | ErrorMessage
+export type GetLogsCheckQueryError = void | NotFoundResponse | ErrorMessage
 
 export function useGetLogsCheck<
   TData = Awaited<ReturnType<typeof getLogsCheck>>,
-  TError = NotFoundResponse | void | ErrorMessage,
+  TError = void | NotFoundResponse | ErrorMessage,
 >(
   params: MaybeRef<GetLogsCheckParams>,
   options?: {

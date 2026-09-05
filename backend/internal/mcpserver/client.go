@@ -880,8 +880,8 @@ func (d *DashaClient) SearchLogs(ctx context.Context, params *apiclient.GetLogsP
 		switch r.HTTPResponse.StatusCode {
 		case http.StatusTooManyRequests:
 			return nil, errors.New("dasha: log search is rate-limited per user to protect the log store " +
-				"(default ~1 request per 30s with a small burst) — wait at least 30 seconds, then retry with " +
-				"every needed filter combined into that one call")
+				"(the operator sets the limit per source) — back off before retrying, and combine every " +
+				"needed filter into that one call")
 		case http.StatusNotImplemented:
 			return nil, errors.New("dasha: log search is unavailable for this cluster or stream (501) — " +
 				"check supports_logs in list_clusters, and that log_streams lists the service_type you asked for")

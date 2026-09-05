@@ -462,6 +462,11 @@ func validateLogSource(name string, src LogSourceConfig) error {
 				return fmt.Errorf("sources.%s: address %q must use https with auth.kind %q", name, addr, src.Auth.Kind)
 			}
 		}
+
+		if src.TLS.InsecureSkipVerify {
+			return fmt.Errorf("sources.%s: auth.kind %q must not be combined with tls.insecure_skip_verify",
+				name, src.Auth.Kind)
+		}
 	}
 
 	for _, stream := range slices.Sorted(maps.Keys(src.Streams)) {
