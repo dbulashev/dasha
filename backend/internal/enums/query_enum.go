@@ -35,6 +35,8 @@ const (
 	QueryCommonQueryStatsEnabled Query = "common/query_stats_enabled"
 	// QueryCommonQueryStatsReadable is a Query of type common/query_stats_readable.
 	QueryCommonQueryStatsReadable Query = "common/query_stats_readable"
+	// QueryCommonQueryStatsRestricted is a Query of type common/query_stats_restricted.
+	QueryCommonQueryStatsRestricted Query = "common/query_stats_restricted"
 	// QueryCommonServerVersion is a Query of type common/server_version.
 	QueryCommonServerVersion Query = "common/server_version"
 	// QueryCommonServerVersionFull is a Query of type common/server_version_full.
@@ -228,6 +230,7 @@ var _QueryNames = []string{
 	string(QueryCommonQueryStatsAvailable),
 	string(QueryCommonQueryStatsEnabled),
 	string(QueryCommonQueryStatsReadable),
+	string(QueryCommonQueryStatsRestricted),
 	string(QueryCommonServerVersion),
 	string(QueryCommonServerVersionFull),
 	string(QueryCommonServerVersionNum),
@@ -340,6 +343,7 @@ func QueryValues() []Query {
 		QueryCommonQueryStatsAvailable,
 		QueryCommonQueryStatsEnabled,
 		QueryCommonQueryStatsReadable,
+		QueryCommonQueryStatsRestricted,
 		QueryCommonServerVersion,
 		QueryCommonServerVersionFull,
 		QueryCommonServerVersionNum,
@@ -456,6 +460,7 @@ var _QueryValue = map[string]Query{
 	"common/query_stats_available":                  QueryCommonQueryStatsAvailable,
 	"common/query_stats_enabled":                    QueryCommonQueryStatsEnabled,
 	"common/query_stats_readable":                   QueryCommonQueryStatsReadable,
+	"common/query_stats_restricted":                 QueryCommonQueryStatsRestricted,
 	"common/server_version":                         QueryCommonServerVersion,
 	"common/server_version_full":                    QueryCommonServerVersionFull,
 	"common/server_version_num":                     QueryCommonServerVersionNum,

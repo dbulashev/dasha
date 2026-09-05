@@ -476,10 +476,11 @@ func (s *Handlers) GetQueryStatsStatus(
 	}
 
 	ret := serverhttp.GetQueryStatsStatus200JSONResponse{
-		Available: status.Available,
-		Enabled:   status.Enabled,
-		Readable:  status.Readable,
-		Source:    status.Source,
+		Available:  status.Available,
+		Enabled:    status.Enabled,
+		Readable:   status.Readable,
+		Restricted: status.Restricted,
+		Source:     status.Source,
 	}
 
 	return ret, nil

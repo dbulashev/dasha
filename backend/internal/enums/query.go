@@ -17,6 +17,7 @@ package enums
 //	common/query_stats_available
 //	common/query_stats_enabled
 //	common/query_stats_readable
+//	common/query_stats_restricted
 //	common/server_version
 //	common/server_version_full
 //	common/server_version_num

@@ -72,12 +72,15 @@ type QueryTop10ChartItem struct {
 
 // QueryStatsStatus describes the query-statistics extension of one connection.
 // Source is always filled: with nothing installed it names the one worth
-// installing here.
+// installing here. Restricted means the role lacks the privileges of
+// pg_read_all_stats, and the view then hides the identifier and the text of
+// every statement of another user.
 type QueryStatsStatus struct {
-	Available bool
-	Enabled   bool
-	Readable  bool
-	Source    string
+	Available  bool
+	Enabled    bool
+	Readable   bool
+	Restricted bool
+	Source     string
 }
 
 // QueryReport is one aggregated pg_stat_statements entry of a single database.

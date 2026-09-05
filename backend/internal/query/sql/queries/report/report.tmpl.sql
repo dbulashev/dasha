@@ -106,6 +106,7 @@ WITH stst as (
              ($2::bigint IS NOT NULL AND queryid = $2::bigint)
                  AS visible
          FROM stst__
+         WHERE queryid IS NOT NULL
      )
 SELECT queryid,
        query,

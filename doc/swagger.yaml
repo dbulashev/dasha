@@ -5417,6 +5417,7 @@ components:
         - Available
         - Enabled
         - Readable
+        - Restricted
         - Source
       properties:
         Available:
@@ -5424,6 +5425,12 @@ components:
         Enabled:
           type: boolean
         Readable:
+          type: boolean
+        Restricted:
+          description: >-
+            True when the connected role has no privileges of pg_read_all_stats. The
+            statistics view then reports neither the identifier nor the text of the
+            statements of other users, and those rows are left out of every report.
           type: boolean
         Source:
           type: string

@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.7.3
+
+### Bug Fixes
+- **Top queries by time no longer fail with `numeric field overflow`.** On parallel queries the I/O time of the workers is summed while the elapsed time is not, so the I/O share could exceed the width of the column it was written to and the whole panel came back empty. The share is now capped at 100%.
+- **The query report and the Top 10 panels work under a monitoring role without `pg_read_all_stats`.** `pg_stat_statements` hides the identifier and the text of other users' statements from such a role; those rows are now left out instead of failing the whole panel. Grant the role `pg_monitor` to see them.
+
+### UX
+- **The query pages say when the monitoring role reads a restricted view.** A role outside `pg_read_all_stats` sees a note above the report and the Top 10 panels naming the grant that opens the rest of the workload.
+
+### Docs
+- **The privileges of the monitoring role are documented** in the README and in Configuration: `pg_monitor`, `CONNECT` on every monitored database, the statistics extension, and ready recipes for column statistics without access to the tables and for resetting query statistics without a superuser.
+
 ## v1.7.2
 
 ### Features

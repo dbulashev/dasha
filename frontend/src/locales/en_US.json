@@ -117,6 +117,7 @@
   "pgssNotInstalled": "The {ext} extension is not installed in this database. Query statistics (Top 10, report) are unavailable.",
   "pgssNotEnabled": "The {ext} extension is installed but not enabled. Add it to shared_preload_libraries and restart PostgreSQL.",
   "pgssNotReadable": "The {ext} extension is installed and enabled, but the current user has no access to its data.",
+  "pgssRestricted": "The connected role has no privileges of pg_read_all_stats: {ext} reports only the statements of that role, the rest are left out. GRANT pg_monitor TO <role> to see the whole workload.",
   "resetQueryStats": "Reset statistics",
   "resetQueryStatsConfirm": "Reset the {ext} statistics? This cannot be undone.",
   "resetQueryStatsSuccess": "{ext} statistics reset",
