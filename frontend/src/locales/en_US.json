@@ -1432,6 +1432,7 @@
       "scopeCluster": "Cluster-wide",
       "databaseNotTracked": "This database is not connected to Dasha — the link opens a different one.",
       "searchLogs": "Search the logs",
+      "openIo": "I/O breakdown",
       "showHowTo": "What to do",
       "hideHowTo": "Collapse",
       "copy": "Copy",

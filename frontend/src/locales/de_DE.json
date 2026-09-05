@@ -1394,6 +1394,7 @@
       "scopeCluster": "Clusterweit",
       "databaseNotTracked": "Diese Datenbank ist nicht mit Dasha verbunden — der Link öffnet eine andere.",
       "searchLogs": "In Logs suchen",
+      "openIo": "I/O-Aufschlüsselung",
       "showHowTo": "Was tun",
       "hideHowTo": "Einklappen",
       "copy": "Kopieren",
