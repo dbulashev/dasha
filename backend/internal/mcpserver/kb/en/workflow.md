@@ -32,7 +32,7 @@ per-database tools also need `database`.
    holding the xmin horizon.
 2. `get_replication` — inactive slots retain WAL (a classic silent eater).
 3. `top_tables` — largest tables; `describe_table` the suspects (bloat section).
-4. On Yandex MDB clusters: `search_logs` (service_type=postgresql,
+4. On clusters with supports_logs=true: `search_logs` (service_type=postgresql,
    message=["checkpoint"]) only if WAL churn needs confirmation.
 
 ## "Replica is lagging"
@@ -42,7 +42,7 @@ per-database tools also need `database`.
 4. `wait_events` on the primary — WAL-write pressure also inflates lag.
 
 ## "Application reports errors"
-1. Yandex MDB clusters only (`supports_logs` in list_clusters):
+1. Clusters with a log source (`supports_logs` in list_clusters):
    `search_logs` with severity=["ERROR","FATAL"], dedup on, a narrow window
    (since="1h"). One call with all filters — the endpoint is rate-limited.
 2. Match error templates against `blocked_queries` (deadlocks, lock timeouts)

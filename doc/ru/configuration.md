@@ -199,13 +199,16 @@ Dasha открывает по пулу соединений на каждую п
 
 ## Поиск по логам (опционально)
 
-Для кластеров из Yandex MDB discovery страница `/logs` работает из коробки (переиспользуется ключ сервисного аккаунта discovery). Глобальный блок `log_search` только настраивает лимиты:
+Страница `/logs` читает уже существующее хранилище логов; сама Dasha логи не собирает и не разбирает.
+Для кластеров из Yandex MDB discovery всё работает из коробки (переиспользуется ключ сервисного
+аккаунта discovery). Остальные кластеры читают из источника, описанного в `log_search.sources` и
+указанного по имени.
 
 ```yaml
 log_search:
   max_scan: 5000          # максимум просканированных записей за поиск
   max_page_size: 1000     # верхняя граница page_size
-  timeout_seconds: 30     # таймаут чтения из Yandex API
+  timeout_seconds: 30     # таймаут чтения из хранилища
   rate_limit:             # на пользователя (на IP для анонимных); rps <= 0 отключает
     requests_per_second: 0.0333   # 1 запрос в 30с
     burst: 10
@@ -213,6 +216,70 @@ log_search:
     requests_per_second: 0.2      # 1 запрос в 5с
     burst: 20
 ```
+
+### Источники OpenSearch
+
+Сервер должен писать `log_destination = jsonlog` (PostgreSQL 15+) или `csvlog`, а пайплайн доставки —
+сохранять поля: индекс с сырой строкой лога не поддерживается.
+
+```yaml
+log_search:
+  default_source: main          # обслуживает кластеры без своего источника
+  sources:
+    main:
+      type: opensearch
+      addresses: ["https://os-1.example.net:9200"]
+      auth:
+        kind: basic             # none | basic | api_key
+        user: dasha
+        password_from_env: OS_PASSWORD
+      tls:
+        ca_file: /etc/dasha/os-ca.pem
+        insecure_skip_verify: false
+      batch_size: 1000          # записей за один запрос к хранилищу
+      max_boundary_ids: 10000   # курсор останавливается, если на одной метке времени больше записей
+      rate_limit:               # перекрывает глобальные лимиты для этого источника
+        requests_per_second: 1
+        burst: 20
+      streams:
+        postgresql:
+          index: "pg-logs-{{ .Cluster }}-*"
+          selector:             # дополнительный term-фильтр, когда весь парк лежит в одном индексе
+            cluster: "{{ .Cluster }}"
+          field_map:
+            preset: jsonlog     # jsonlog | csvlog | odyssey | none
+            timestamp: "@timestamp"
+            host: host.name
+            host_match: suffix  # exact (по умолчанию) или suffix, когда в индексе FQDN
+        pooler:
+          index: "pgbouncer-logs-*"
+          field_map:
+            preset: none
+            timestamp: "@timestamp"
+            severity: level
+            text: msg
+            host: host.name
+            severities: [debug, info, warning, error, fatal]
+
+clusters:
+  - name: prod
+    log_source: main
+```
+
+`{{ .Cluster }}` и `{{ .Host }}` — единственные подстановки, они раскрываются в шаблоне индекса и в
+значениях `selector`.
+
+Пресет задаёт имена полей известного формата лога, любое поле его перекрывает. Полей `timestamp` и
+`host` в пресетах нет — PostgreSQL их не пишет, их именует агент доставки, — поэтому оба задаются
+явно. В хранилище уходят только фильтры по severity и хосту; подстроки по сообщению, базе и
+пользователю Dasha фильтрует сама, поэтому анализируемое поле `text` не ломает семантику поиска.
+Поле severity должно быть проиндексировано как `keyword`.
+
+Поток, который источник не объявил, недоступен: API отвечает 501, в интерфейсе переключатель скрыт.
+
+`GET /api/logs/check?cluster_name=…&service_type=…` (только админ) проверяет источник: раскрытое имя
+индекса, число записей за последний час, найденные и недостающие поля маппинга и одну маскированную
+запись-образец.
 
 ## Проверки схемы (опционально)
 

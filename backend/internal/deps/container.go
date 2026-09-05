@@ -3,7 +3,9 @@ package deps
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +20,9 @@ import (
 	"github.com/dbulashev/dasha/internal/discovery"
 	"github.com/dbulashev/dasha/internal/discovery/yandex"
 	"github.com/dbulashev/dasha/internal/logs"
+	"github.com/dbulashev/dasha/internal/logs/source"
+	"github.com/dbulashev/dasha/internal/logs/source/opensearch"
+	"github.com/dbulashev/dasha/internal/logs/source/yandexmdb"
 	"github.com/dbulashev/dasha/internal/metrics"
 	"github.com/dbulashev/dasha/internal/pkg/pat"
 	"github.com/dbulashev/dasha/internal/repository"
@@ -52,9 +57,10 @@ func NewContainer() *Container {
 	do.Provide(i, func(i *do.Injector) (repository.Repository, error) {
 		cfg := do.MustInvoke[*config.Config](i)
 		clusters := do.MustInvoke[config.Clusters](i)
+		sources := do.MustInvoke[*source.Registry](i)
 		logger := do.MustInvoke[*zap.Logger](i)
 
-		return provideRepository(*cfg, clusters, logger), nil
+		return provideRepository(*cfg, clusters, sources, logger), nil
 	})
 
 	do.Provide(i, func(_ *do.Injector) (*yandex.Registry, error) {
@@ -70,13 +76,20 @@ func NewContainer() *Container {
 		return provideDiscovery(cfg, clusters, registry, logger), nil
 	})
 
+	do.Provide(i, func(i *do.Injector) (*source.Registry, error) {
+		cfg := do.MustInvoke[*config.Config](i)
+		registry := do.MustInvoke[*yandex.Registry](i)
+
+		return provideLogSources(cfg.LogSearch, registry)
+	})
+
 	do.Provide(i, func(i *do.Injector) (logs.Service, error) {
 		cfg := do.MustInvoke[*config.Config](i)
 		clusters := do.MustInvoke[config.Clusters](i)
-		registry := do.MustInvoke[*yandex.Registry](i)
+		sources := do.MustInvoke[*source.Registry](i)
 		logger := do.MustInvoke[*zap.Logger](i)
 
-		return logs.NewService(clusters, registry, cfg.LogSearch, logger), nil
+		return logs.NewService(clusters, sources, cfg.LogSearch, logger), nil
 	})
 
 	do.Provide(i, func(i *do.Injector) (*metrics.Service, error) {
@@ -146,6 +159,11 @@ func (c *Container) Discovery() *discovery.Engine {
 
 func (c *Container) Logs() logs.Service {
 	return do.MustInvoke[logs.Service](c.i)
+}
+
+// LogSources returns the registry binding clusters to their log source.
+func (c *Container) LogSources() *source.Registry {
+	return do.MustInvoke[*source.Registry](c.i)
 }
 
 // Metrics returns the metrics-backed Health Score service, or nil when the
@@ -490,6 +508,18 @@ func provideConfig() (*config.Config, error) {
 		c.HealthScore.Metrics.Datasource.Auth.Password = os.Getenv(env)
 	}
 
+	for name, src := range c.LogSearch.Sources {
+		if env := src.Auth.PasswordFromEnv; env != "" {
+			src.Auth.Password = os.Getenv(env)
+		}
+
+		if env := src.Auth.APIKeyFromEnv; env != "" {
+			src.Auth.APIKey = os.Getenv(env)
+		}
+
+		c.LogSearch.Sources[name] = src
+	}
+
 	c.HealthScore.Metrics = c.HealthScore.Metrics.WithDefaults()
 	c.LogSearch = c.LogSearch.WithDefaults()
 
@@ -505,6 +535,10 @@ func provideConfig() (*config.Config, error) {
 		return nil, fmt.Errorf("provideConfig | schema_lint: %w", err)
 	}
 
+	if err := c.LogSearch.Validate(); err != nil {
+		return nil, fmt.Errorf("provideConfig | log_search: %w", err)
+	}
+
 	return &c, nil
 }
 
@@ -512,9 +546,15 @@ func provideClusters(cfg config.Config) config.Clusters {
 	return config.NewClustersFromConfig(cfg)
 }
 
-func provideRepository(cfg config.Config, clusters config.Clusters, logger *zap.Logger) repository.Repository {
+func provideRepository(
+	cfg config.Config,
+	clusters config.Clusters,
+	sources *source.Registry,
+	logger *zap.Logger,
+) repository.Repository {
 	return repository.NewRepositoryPgxPool(
-		clusters, cfg.PgStatsView, cfg.PgssResetFunction, cfg.DBPool, cfg.SchemaLint, cfg.IndexAdvisor, logger,
+		clusters, sources, cfg.PgStatsView, cfg.PgssResetFunction,
+		cfg.DBPool, cfg.SchemaLint, cfg.IndexAdvisor, logger,
 	)
 }
 
@@ -529,4 +569,35 @@ func provideDiscovery(
 	}
 
 	return discovery.NewEngine(cfg.Discovery, clusters, registry, logger)
+}
+
+func provideLogSources(cfg config.LogSearchConfig, registry *yandex.Registry) (*source.Registry, error) {
+	sources := source.NewRegistry()
+	sources.Register(yandexmdb.Name, yandexmdb.New(registry))
+
+	for _, name := range slices.Sorted(maps.Keys(cfg.Sources)) {
+		p, err := buildLogSource(cfg.Sources[name], cfg)
+		if err != nil {
+			return nil, fmt.Errorf("log_search.sources.%s: %w", name, err)
+		}
+
+		sources.Register(name, p)
+	}
+
+	sources.SetDefault(cfg.DefaultSource)
+
+	return sources, nil
+}
+
+func buildLogSource(cfg config.LogSourceConfig, global config.LogSearchConfig) (source.Provider, error) {
+	if cfg.Type != config.LogSourceTypeOpenSearch {
+		return nil, fmt.Errorf("unknown log source type %q", cfg.Type)
+	}
+
+	p, err := opensearch.New(cfg, global)
+	if err != nil {
+		return nil, err
+	}
+
+	return p, nil
 }

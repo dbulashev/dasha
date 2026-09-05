@@ -41,6 +41,11 @@ func TestCasbinEnforcer_Policies(t *testing.T) {
 		{"admin", "/api/auth/admin/tokens", "GET", true},
 		{"admin", "/api/auth/admin/tokens/abc", "DELETE", true},
 		{"admin", "/api/auth/admin/users", "GET", true},
+
+		// The log source check exposes index names and a sample record.
+		{"viewer", "/api/logs", "GET", true},
+		{"viewer", "/api/logs/check", "GET", false},
+		{"admin", "/api/logs/check", "GET", true},
 	}
 
 	for _, tt := range tests {

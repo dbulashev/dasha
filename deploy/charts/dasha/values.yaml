@@ -20,7 +20,9 @@ config:
   # enable_query_stats_reset: false  # allow resetting pg_stat_statements via UI
   # pgss_reset_function: monitoring.reset_pgss  # SECURITY DEFINER wrapper when the role lacks EXECUTE on pg_stat_statements_reset()
 
-  # -- Yandex Cloud log search limits (page /logs), applies to yandex-mdb clusters
+  # -- Log search (page /logs). Limits apply to every source; yandex-mdb clusters
+  # need no source of their own. sources[] adds external log stores; a cluster
+  # picks one with log_source, or default_source serves it.
   # log_search:
   #   max_scan: 5000          # max records scanned per search
   #   max_page_size: 1000     # upper bound for page_size
@@ -31,6 +33,32 @@ config:
   #   admin_rate_limit:       # separate limit for the admin role
   #     requests_per_second: 0.2     # 1 request per 5s
   #     burst: 20
+  #   default_source: main
+  #   sources:
+  #     main:
+  #       type: opensearch
+  #       addresses: ["https://opensearch.example.net:9200"]
+  #       auth:
+  #         kind: basic       # none | basic | api_key
+  #         user: dasha
+  #         password_from_env: OS_PASSWORD
+  #       tls:
+  #         ca_file: /etc/dasha/os-ca.pem
+  #         insecure_skip_verify: false
+  #       batch_size: 1000
+  #       rate_limit:         # a local index needs no cloud-API budget
+  #         requests_per_second: 1
+  #         burst: 20
+  #       streams:
+  #         postgresql:
+  #           index: "pg-logs-{{ .Cluster }}-*"
+  #           selector:
+  #             cluster: "{{ .Cluster }}"
+  #           field_map:
+  #             preset: jsonlog   # jsonlog | csvlog | odyssey | none
+  #             timestamp: "@timestamp"
+  #             host: host.name
+  #             host_match: suffix
 
   # -- Connection pools to monitored clusters (one pool per host+database).
   # Defaults: max_conns 4, max_conn_idle_time 2m. Behind a per-user connection

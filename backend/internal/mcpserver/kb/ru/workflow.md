@@ -35,7 +35,7 @@
 2. `get_replication` — неактивные слоты копят WAL (классический тихий пожиратель).
 3. `top_tables` — крупнейшие таблицы; подозрительные — `describe_table`
    (секция bloat).
-4. На кластерах Yandex MDB: `search_logs` (service_type=postgresql,
+4. На кластерах с supports_logs=true: `search_logs` (service_type=postgresql,
    message=["checkpoint"]) — только если нужно подтвердить WAL-чехарду.
 
 ## «Реплика отстаёт»
@@ -45,7 +45,7 @@
 4. `wait_events` на мастере — давление на запись WAL тоже раздувает lag.
 
 ## «Приложение сыплет ошибками»
-1. Только кластеры Yandex MDB (`supports_logs` в list_clusters):
+1. Кластеры с источником логов (`supports_logs` в list_clusters):
    `search_logs` с severity=["ERROR","FATAL"], dedup включён, узкое окно
    (since="1h"). Один вызов со всеми фильтрами — эндпоинт rate-limited.
 2. Сопоставить шаблоны ошибок с `blocked_queries` (дедлоки, lock timeout)

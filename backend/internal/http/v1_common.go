@@ -68,13 +68,20 @@ func (s *Handlers) GetClusters(
 			}
 		})
 
-		ret = append(ret, serverhttp.Cluster{
+		cluster := serverhttp.Cluster{
 			Name:         shortcut.Ptr(v.Name.String()),
 			Source:       shortcut.Ptr(v.Source),
 			SupportsLogs: shortcut.Ptr(v.SupportsLogs),
+			LogStreams:   nil,
 			Instances:    &instances,
 			Databases:    &v.Databases,
-		})
+		}
+
+		if len(v.LogStreams) > 0 {
+			cluster.LogStreams = &v.LogStreams
+		}
+
+		ret = append(ret, cluster)
 	}
 
 	return ret, nil

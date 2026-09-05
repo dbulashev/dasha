@@ -2427,7 +2427,9 @@ paths:
   /api/logs:
     get:
       operationId: getLogs
-      description: Search Yandex Cloud cluster logs (PostgreSQL/pooler) via the MDB API.
+      description: >-
+        Search cluster logs (PostgreSQL/pooler) through the log source bound to
+        the cluster. Streams a source does not serve answer with 501.
       parameters:
         - $ref: '#/components/parameters/ClusterName'
         - in: query
@@ -2523,7 +2525,48 @@ paths:
         '501':
           description: logs not supported for this cluster
         '502':
-          description: upstream Yandex API error
+          description: >-
+            The log source failed or is misconfigured. The message distinguishes
+            a configuration problem (missing index, unusable field map, rejected
+            credentials) from an empty result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '504':
+          description: upstream timeout
+  /api/logs/check:
+    get:
+      operationId: getLogsCheck
+      description: >-
+        Probe the log source bound to a cluster: reachability, the resolved
+        index, how many records the last hour holds, which mapped fields exist
+        and one masked sample record. Admin only.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - in: query
+          name: service_type
+          required: true
+          schema:
+            type: string
+            enum: [postgresql, pooler]
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogSourceCheck'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: logs not supported for this cluster
+        '502':
+          description: The log source failed or is misconfigured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
         '504':
           description: upstream timeout
   /api/autosnapshot/status:
@@ -3091,6 +3134,11 @@ components:
         supports_logs:
           type: boolean
           description: true when cluster logs can be searched via GET /api/logs
+        log_streams:
+          type: array
+          description: log streams the bound source serves, e.g. postgresql and pooler
+          items:
+            type: string
         instances:
           type: array
           items:
@@ -3099,6 +3147,44 @@ components:
           type: array
           items:
             type: string
+    LogSourceCheck:
+      type: object
+      required:
+        - source
+        - stream
+        - target
+      properties:
+        source:
+          type: string
+          description: name of the log source serving the cluster
+        stream:
+          type: string
+        target:
+          type: string
+          description: resolved upstream location - an index pattern or a cluster id
+        documents:
+          type: integer
+          description: records the source holds for the cluster in the last hour
+        found:
+          type: object
+          additionalProperties:
+            type: string
+          description: field map roles bound to a field present upstream
+        missing:
+          type: array
+          description: roles whose field is absent upstream
+          items:
+            type: string
+        field_types:
+          type: object
+          additionalProperties:
+            type: string
+          description: type the store indexes each mapped field as
+        sample:
+          type: object
+          additionalProperties:
+            type: string
+          description: one masked record from the window
     LogEntry:
       type: object
       required:

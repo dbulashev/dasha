@@ -197,7 +197,9 @@ narrow the list with `db` / `exclude_db` and check `db_pool.max_conns`.
 
 ## Log Search (optional)
 
-For clusters discovered via Yandex MDB, the `/logs` page works out of the box (it reuses the discovery service-account key). The global `log_search` block only tunes the limits:
+The `/logs` page reads an existing log store; Dasha never collects or parses logs itself. For clusters
+discovered via Yandex MDB it works out of the box (it reuses the discovery service-account key). Every
+other cluster reads from a source declared in `log_search.sources` and referenced by name.
 
 ```yaml
 log_search:
@@ -211,6 +213,70 @@ log_search:
     requests_per_second: 0.2      # 1 request per 5s
     burst: 20
 ```
+
+### OpenSearch sources
+
+The server must write `log_destination = jsonlog` (PostgreSQL 15+) or `csvlog`, and the delivery
+pipeline must keep the fields intact — an index holding the raw log line is not supported.
+
+```yaml
+log_search:
+  default_source: main          # serves clusters that name no source
+  sources:
+    main:
+      type: opensearch
+      addresses: ["https://os-1.example.net:9200"]
+      auth:
+        kind: basic             # none | basic | api_key
+        user: dasha
+        password_from_env: OS_PASSWORD
+      tls:
+        ca_file: /etc/dasha/os-ca.pem
+        insecure_skip_verify: false
+      batch_size: 1000          # records per upstream request
+      max_boundary_ids: 10000   # cursor stops past this many records at one timestamp
+      rate_limit:               # overrides the global limits for this source
+        requests_per_second: 1
+        burst: 20
+      streams:
+        postgresql:
+          index: "pg-logs-{{ .Cluster }}-*"
+          selector:             # extra term filter when one index holds the whole fleet
+            cluster: "{{ .Cluster }}"
+          field_map:
+            preset: jsonlog     # jsonlog | csvlog | odyssey | none
+            timestamp: "@timestamp"
+            host: host.name
+            host_match: suffix  # exact (default) or suffix, when the index holds FQDNs
+        pooler:
+          index: "pgbouncer-logs-*"
+          field_map:
+            preset: none
+            timestamp: "@timestamp"
+            severity: level
+            text: msg
+            host: host.name
+            severities: [debug, info, warning, error, fatal]
+
+clusters:
+  - name: prod
+    log_source: main
+```
+
+`{{ .Cluster }}` and `{{ .Host }}` are the only substitutions; they expand in the index pattern and in
+selector values.
+
+A preset fills in the field names of a known log format, and any field overrides it. `timestamp` and
+`host` are never part of a preset — PostgreSQL writes neither, the delivery agent names them — so both
+must be set. Severity and host are the only filters pushed down to the store; message, database and
+user substrings are matched by Dasha, so a `text` field analyzed by the store still behaves the way
+the search box promises. The severity field must be indexed as `keyword`.
+
+A stream a source does not declare is unavailable: the API answers 501 and the UI hides the switch.
+
+`GET /api/logs/check?cluster_name=…&service_type=…` (admin only) probes a source: the resolved index,
+how many records the last hour holds, which mapped fields exist, which are missing, and one masked
+sample record.
 
 ## Schema Checks (optional)
 

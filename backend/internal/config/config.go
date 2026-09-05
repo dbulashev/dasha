@@ -138,6 +138,11 @@ type Cluster struct {
 	Source     string            `mapstructure:"source"`
 	ProviderID string            `mapstructure:"provider_id"`
 	Labels     map[string]string `mapstructure:"labels"`
+
+	// LogSource names the entry in log_search.sources serving this cluster's
+	// logs. Empty falls back to the default source, then to the implicit
+	// binding of a discovery provider.
+	LogSource string `mapstructure:"log_source"`
 }
 
 // SourceYandexMDB marks clusters discovered from Yandex Managed Databases.
@@ -146,13 +151,6 @@ const SourceYandexMDB = "yandex-mdb"
 // SourcePostgres marks clusters whose databases are discovered by querying the
 // cluster itself.
 const SourcePostgres = "postgres"
-
-// SupportsLogs reports whether cluster logs can be searched via the provider
-// API. Single source of truth for the capability — exposed to the frontend as
-// Cluster.supports_logs and checked by the logs service.
-func (c Cluster) SupportsLogs() bool {
-	return c.Source == SourceYandexMDB && c.ProviderID != "" && c.Labels["folder_id"] != ""
-}
 
 // DiscoveryClusterFilter defines regex matching rules for discovered clusters.
 type DiscoveryClusterFilter struct {
@@ -219,7 +217,8 @@ func DecodeDiscoveryConfig[T any](raw map[string]any) (T, []string, error) {
 	return out, metadata.Unused, nil
 }
 
-// LogSearchConfig holds global limits for Yandex Cloud log search.
+// LogSearchConfig holds global log search limits and the log sources clusters
+// read their logs from.
 type LogSearchConfig struct {
 	MaxScan        int `mapstructure:"max_scan"`        // max records scanned per search; default 5000
 	MaxPageSize    int `mapstructure:"max_page_size"`   // upper bound for page_size; default 1000
@@ -230,6 +229,88 @@ type LogSearchConfig struct {
 	// the corresponding limit.
 	RateLimit      *RateLimitConfig `mapstructure:"rate_limit"`
 	AdminRateLimit *RateLimitConfig `mapstructure:"admin_rate_limit"`
+
+	// DefaultSource serves clusters that name no source of their own.
+	DefaultSource string `mapstructure:"default_source"`
+	// Sources are the configured log stores, keyed by the name a cluster
+	// references in log_source.
+	Sources map[string]LogSourceConfig `mapstructure:"sources"`
+}
+
+// LogSourceTypeOpenSearch is the source type reading an OpenSearch or
+// Elasticsearch index.
+const LogSourceTypeOpenSearch = "opensearch"
+
+// LogSourceConfig describes one log store.
+type LogSourceConfig struct {
+	Type      string              `mapstructure:"type"`
+	Addresses []string            `mapstructure:"addresses"`
+	Auth      LogSourceAuthConfig `mapstructure:"auth"`
+	TLS       LogSourceTLSConfig  `mapstructure:"tls"`
+	// BatchSize is how many records one upstream request fetches; default 1000.
+	BatchSize int `mapstructure:"batch_size"`
+	// MaxBoundaryIDs caps the ids a cursor carries for one timestamp before the
+	// source stops paginating and marks the result partial; default 10000.
+	MaxBoundaryIDs int `mapstructure:"max_boundary_ids"`
+	// RateLimit / AdminRateLimit override the global log search limits for
+	// clusters served by this source.
+	RateLimit      *RateLimitConfig           `mapstructure:"rate_limit"`
+	AdminRateLimit *RateLimitConfig           `mapstructure:"admin_rate_limit"`
+	Streams        map[string]LogStreamConfig `mapstructure:"streams"`
+}
+
+// Log source auth kinds.
+const (
+	LogAuthNone   = "none"
+	LogAuthBasic  = "basic"
+	LogAuthAPIKey = "api_key"
+)
+
+// LogSourceAuthConfig holds log store credentials. Prefer the *_from_env
+// variants so secrets are injected at runtime instead of stored inline.
+type LogSourceAuthConfig struct {
+	Kind            string `mapstructure:"kind"` // none|basic|api_key
+	User            string `mapstructure:"user"`
+	Password        string `mapstructure:"password"`
+	PasswordFromEnv string `mapstructure:"password_from_env"`
+	APIKey          string `mapstructure:"api_key"`
+	APIKeyFromEnv   string `mapstructure:"api_key_from_env"`
+}
+
+// LogSourceTLSConfig configures the transport to the log store.
+type LogSourceTLSConfig struct {
+	CAFile             string `mapstructure:"ca_file"`
+	InsecureSkipVerify bool   `mapstructure:"insecure_skip_verify"`
+}
+
+// LogStreamConfig describes where one stream of one source lives. Index and
+// selector values accept the {{ .Cluster }} and {{ .Host }} substitutions.
+type LogStreamConfig struct {
+	Index    string            `mapstructure:"index"`
+	Selector map[string]string `mapstructure:"selector"`
+	FieldMap LogFieldMapConfig `mapstructure:"field_map"`
+}
+
+// LogFieldMapConfig names the index fields carrying each role. A preset fills
+// the roles of a known log format; every field overrides the preset.
+type LogFieldMapConfig struct {
+	Preset    string `mapstructure:"preset"`
+	Timestamp string `mapstructure:"timestamp"`
+	Severity  string `mapstructure:"severity"`
+	Text      string `mapstructure:"text"`
+	Host      string `mapstructure:"host"`
+	Database  string `mapstructure:"database"`
+	User      string `mapstructure:"user"`
+	PID       string `mapstructure:"pid"`
+	// Mask lists free-text fields sanitized before they leave the backend.
+	Mask []string `mapstructure:"mask"`
+	// KeywordFields lists fields indexed as keyword rather than analyzed text.
+	KeywordFields []string `mapstructure:"keyword_fields"`
+	// Severities overrides the accepted severity values of the preset.
+	Severities []string `mapstructure:"severities"`
+	// HostMatch is exact or suffix; suffix matches a short host name against an
+	// FQDN stored in the index.
+	HostMatch string `mapstructure:"host_match"`
 }
 
 // Defaults for LogSearchConfig when values are unset (<= 0).
@@ -237,6 +318,8 @@ const (
 	DefaultLogSearchMaxScan        = 5000
 	DefaultLogSearchMaxPageSize    = 1000
 	DefaultLogSearchTimeoutSeconds = 30
+	DefaultLogSourceBatchSize      = 1000
+	DefaultLogSourceMaxBoundaryIDs = 10000
 )
 
 // Default log search rate limits: non-admins 1 req/30s with burst 10, admins
@@ -270,7 +353,73 @@ func (c LogSearchConfig) WithDefaults() LogSearchConfig {
 		c.AdminRateLimit = &rl
 	}
 
+	for name, src := range c.Sources {
+		c.Sources[name] = src.withDefaults(c)
+	}
+
 	return c
+}
+
+func (s LogSourceConfig) withDefaults(parent LogSearchConfig) LogSourceConfig {
+	if s.BatchSize <= 0 {
+		s.BatchSize = DefaultLogSourceBatchSize
+	}
+
+	if s.MaxBoundaryIDs <= 0 {
+		s.MaxBoundaryIDs = DefaultLogSourceMaxBoundaryIDs
+	}
+
+	if s.RateLimit == nil {
+		s.RateLimit = parent.RateLimit
+	}
+
+	if s.AdminRateLimit == nil {
+		s.AdminRateLimit = parent.AdminRateLimit
+	}
+
+	if s.Auth.Kind == "" {
+		s.Auth.Kind = LogAuthNone
+	}
+
+	return s
+}
+
+// Validate checks the structure of the configured log sources. Field maps are
+// validated by the source registry, which owns the presets.
+func (c LogSearchConfig) Validate() error {
+	if c.DefaultSource != "" {
+		if _, ok := c.Sources[c.DefaultSource]; !ok {
+			return fmt.Errorf("default_source %q is not defined in sources", c.DefaultSource)
+		}
+	}
+
+	for name, src := range c.Sources {
+		if src.Type != LogSourceTypeOpenSearch {
+			return fmt.Errorf("sources.%s: unknown type %q", name, src.Type)
+		}
+
+		if len(src.Addresses) == 0 {
+			return fmt.Errorf("sources.%s: addresses must not be empty", name)
+		}
+
+		if len(src.Streams) == 0 {
+			return fmt.Errorf("sources.%s: at least one stream must be configured", name)
+		}
+
+		switch src.Auth.Kind {
+		case LogAuthNone, LogAuthBasic, LogAuthAPIKey:
+		default:
+			return fmt.Errorf("sources.%s: unknown auth.kind %q (want none|basic|api_key)", name, src.Auth.Kind)
+		}
+
+		for stream, sc := range src.Streams {
+			if sc.Index == "" {
+				return fmt.Errorf("sources.%s.streams.%s: index must not be empty", name, stream)
+			}
+		}
+	}
+
+	return nil
 }
 
 // StorageConfig holds optional snapshot storage database settings.

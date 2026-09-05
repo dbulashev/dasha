@@ -10,6 +10,7 @@ type ClusterInfo struct {
 	Name         config.ClusterName
 	Source       string
 	SupportsLogs bool
+	LogStreams   []string
 	Instances    []Instance
 	Databases    []string
 }

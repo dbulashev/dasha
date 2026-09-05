@@ -729,11 +729,12 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 
 	addTool(s, &mcp.Tool{
 		Name: "search_logs",
-		Description: "Search PostgreSQL server or connection-pooler (Odyssey) logs of a Yandex-MDB-discovered " +
-			"cluster (supports_logs=true in list_clusters). Every call reaches the Yandex Cloud API and is " +
-			"rate-limited per user (default ~1 request per 30s with a small burst) — make each call count: " +
-			"keep the default dedup=true overview, a narrow window (since='1h') and severity/message filters, " +
-			"and refine with one follow-up call instead of paging raw records. After a 429 wait ~30 seconds.",
+		Description: "Search PostgreSQL server or connection-pooler logs of a cluster whose logs Dasha can " +
+			"reach (supports_logs=true in list_clusters; log_streams lists the streams it serves). Every call " +
+			"reaches the log store and is rate-limited per user (default ~1 request per 30s with a small " +
+			"burst; an operator may raise it per source) — make each call count: keep the default dedup=true " +
+			"overview, a narrow window (since='1h') and severity/message filters, and refine with one " +
+			"follow-up call instead of paging raw records. After a 429 wait ~30 seconds.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a searchLogsArgs) (*mcp.CallToolResult, any, error) {
 		params, errMsg := logsParams(a)
 		if errMsg != "" {
