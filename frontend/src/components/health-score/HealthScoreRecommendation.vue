@@ -16,8 +16,11 @@ import { usePaginatedApiLoader } from '@/composables/useApiLoader'
 import PaginationControls from '@/components/PaginationControls.vue'
 import { INLINE_SPECS, RULES_WITH_INLINE_DETAILS } from './inlineDetails'
 import { usePrefsStore } from '@/stores/prefs'
+import { useInstanceInfoStore } from '@/stores/instanceInfo'
+import { IO_MIN_VERSION_NUM } from '@/components/io/types'
 
 const prefs = usePrefsStore()
+const instanceInfoStore = useInstanceInfoStore()
 
 const props = defineProps<{
   rec: HealthScoreRecommendation
@@ -91,6 +94,18 @@ const relatedLink = computed(() => {
 const logsLink = computed(() => {
   if (props.rec.rule_id !== 'deadlocks_rate' || !currentCluster.value?.supports_logs) return null
   return { path: `/logs/${clusterName.value}`, query: { preset: 'deadlock' } }
+})
+
+// pg_stat_io tells a cold bulkread cache from a real miss; PG 16+ only, so the
+// link follows the same gate as the I/O menu item.
+const ioLink = computed(() => {
+  if (props.rec.rule_id !== 'low_cache_hit_ratio') return null
+
+  const cluster = String(route.params.clustername ?? '')
+  const host = String(route.query.host ?? '')
+  if ((instanceInfoStore.known(cluster, host)?.VersionNum ?? 0) < IO_MIN_VERSION_NUM) return null
+
+  return { path: `/io/${cluster}`, query: host ? { host } : {} }
 })
 
 const i18nBase = computed(() => `healthScore.recommendations.${props.rec.rule_id}`)
@@ -257,6 +272,15 @@ async function copySql() {
           {{ recDatabase ?? t('healthScore.recommendations.scopeCluster') }}
         </v-chip>
         <v-spacer />
+        <v-btn
+          v-if="ioLink"
+          variant="text"
+          size="small"
+          :to="ioLink"
+          append-icon="mdi-harddisk"
+        >
+          {{ t('healthScore.recommendations.openIo') }}
+        </v-btn>
         <v-btn
           v-if="logsLink"
           variant="text"
