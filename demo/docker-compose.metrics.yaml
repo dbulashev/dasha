@@ -42,6 +42,15 @@ services:
     networks:
       - dasha-demo
     restart: unless-stopped
+    # Feeds the "pooler" log stream through the forward input of the Fluent Bit
+    # in docker-compose.logs.yaml. Async, so the container also starts when that
+    # overlay is not up — and `docker compose logs pgbouncer` stays empty either way.
+    logging:
+      driver: fluentd
+      options:
+        fluentd-address: localhost:24224
+        fluentd-async: "true"
+        tag: pooler.pg18-cluster.pgbouncer
 
   pgscv:
     image: cherts/pgscv:v0.15.3

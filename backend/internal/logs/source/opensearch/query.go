@@ -20,10 +20,11 @@ import (
 var validIndex = regexp.MustCompile(`^[a-zA-Z0-9_][a-zA-Z0-9_.+*,\-]*$`)
 
 // templateData holds the substitutions allowed in index patterns and selector
-// values.
+// values. The host is deliberately absent: a search without a host filter and
+// every Check have none, so a host-dependent index or term would resolve to
+// nothing instead of failing.
 type templateData struct {
 	Cluster string
-	Host    string
 }
 
 func expand(tmpl string, data templateData) (string, error) {
@@ -101,7 +102,7 @@ func buildSearch(
 
 	if len(f.Severities) > 0 {
 		filters = append(filters, map[string]any{
-			"terms": map[string]any{fm.Severity: f.Severities},
+			"terms": map[string]any{fm.Keyword(fm.Severity): f.Severities},
 		})
 	}
 
@@ -111,7 +112,7 @@ func buildSearch(
 
 	for _, k := range sortedKeys(selector) {
 		filters = append(filters, map[string]any{
-			"term": map[string]any{k: selector[k]},
+			"term": map[string]any{fm.Keyword(k): selector[k]},
 		})
 	}
 
@@ -126,14 +127,16 @@ func buildSearch(
 // hostFilter matches the cluster host name against the host field. In suffix
 // mode the index holds an FQDN whose first label is the configured host.
 func hostFilter(fm source.FieldMap, host string) map[string]any {
+	field := fm.Keyword(fm.Host)
+
 	if fm.HostMatch != source.HostMatchSuffix {
-		return map[string]any{"term": map[string]any{fm.Host: host}}
+		return map[string]any{"term": map[string]any{field: host}}
 	}
 
 	return map[string]any{"bool": map[string]any{
 		"should": []map[string]any{
-			{"term": map[string]any{fm.Host: host}},
-			{"prefix": map[string]any{fm.Host: host + "."}},
+			{"term": map[string]any{field: host}},
+			{"prefix": map[string]any{field: host + "."}},
 		},
 		"minimum_should_match": 1,
 	}}
@@ -254,6 +257,11 @@ func parseTime(v any) (time.Time, error) {
 	}
 }
 
+// probeCluster stands in for a real cluster name while the index and selector
+// templates are expanded once at startup, so a template that names an unknown
+// substitution fails here rather than on the first search.
+const probeCluster = "probe"
+
 // streamsFromConfig resolves every configured stream into an index pattern and
 // a validated field map.
 func streamsFromConfig(cfg config.LogSourceConfig) (map[string]streamDef, error) {
@@ -262,6 +270,16 @@ func streamsFromConfig(cfg config.LogSourceConfig) (map[string]streamDef, error)
 	for name, sc := range cfg.Streams {
 		fm, err := source.FieldMapFromConfig(sc.FieldMap)
 		if err != nil {
+			return nil, fmt.Errorf("streams.%s: %w", name, err)
+		}
+
+		probe := templateData{Cluster: probeCluster}
+
+		if _, err := expandIndex(sc.Index, probe); err != nil {
+			return nil, fmt.Errorf("streams.%s: %w", name, err)
+		}
+
+		if _, err := expandSelector(sc.Selector, probe); err != nil {
 			return nil, fmt.Errorf("streams.%s: %w", name, err)
 		}
 

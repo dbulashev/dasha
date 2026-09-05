@@ -247,7 +247,7 @@ pg_locks rows with granted=false (queue length). LOW ≥2, MED ≥5, HIGH ≥15.
 ### deadlocks_rate
 Deadlocks since pg_stat_database_reset. LOW when >0. Any deadlock is an app
 bug (inconsistent lock ordering) — details are in the server log
-(`search_logs` preset on clusters with supports_logs=true).
+(`search_logs` preset on clusters whose log_streams include postgresql).
 
 ### lock_pool_saturation
 Heavyweight-lock pool usage (max_locks_per_transaction × max_connections).

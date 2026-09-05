@@ -2,6 +2,7 @@ package source
 
 import (
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/dbulashev/dasha/internal/config"
@@ -51,8 +52,8 @@ func TestFieldMapFromConfig(t *testing.T) {
 					t.Errorf("Database = %q, want db", fm.Database)
 				}
 
-				if len(fm.Mask) != 1 || fm.Mask[0] != "msg" {
-					t.Errorf("Mask = %v, want [msg]", fm.Mask)
+				if !slices.Equal(fm.Mask, []string{"message", "msg"}) {
+					t.Errorf("Mask = %v, want [message msg]", fm.Mask)
 				}
 			},
 		},
@@ -134,6 +135,68 @@ func TestFieldMapFromConfig(t *testing.T) {
 
 			tt.check(t, fm)
 		})
+	}
+}
+
+func TestFieldMapMasksTheTextFieldWithoutAMaskList(t *testing.T) {
+	t.Parallel()
+
+	fm, err := FieldMapFromConfig(config.LogFieldMapConfig{
+		Preset:     PresetNone,
+		Timestamp:  "@timestamp",
+		Severity:   "level",
+		Text:       "msg",
+		Host:       "host",
+		Severities: []string{"error"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !slices.Contains(fm.Mask, "msg") {
+		t.Errorf("Mask = %v, want the text field", fm.Mask)
+	}
+}
+
+func TestFieldMapMaskCoversTheTextFieldsNesting(t *testing.T) {
+	t.Parallel()
+
+	fm, err := FieldMapFromConfig(config.LogFieldMapConfig{
+		Preset:    PresetJSONLog,
+		Timestamp: "@timestamp",
+		Text:      "pg.message",
+		Host:      "host.name",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	for _, want := range []string{"pg.message", "pg.detail", "detail"} {
+		if !slices.Contains(fm.Mask, want) {
+			t.Errorf("Mask = %v, want it to cover %q", fm.Mask, want)
+		}
+	}
+}
+
+func TestKeywordFallsBackToTheFieldItself(t *testing.T) {
+	t.Parallel()
+
+	fm, err := FieldMapFromConfig(config.LogFieldMapConfig{
+		Preset:        PresetJSONLog,
+		Timestamp:     "@timestamp",
+		Host:          "host.name",
+		KeywordFields: map[string]string{"error_severity": "error_severity.keyword"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if got := fm.Keyword("error_severity"); got != "error_severity.keyword" {
+		t.Errorf("Keyword(error_severity) = %q", got)
+	}
+
+	if got := fm.Keyword("host.name"); got != "host.name" {
+		t.Errorf("Keyword(host.name) = %q, want the field itself", got)
 	}
 }
 

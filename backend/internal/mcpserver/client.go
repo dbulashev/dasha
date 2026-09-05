@@ -865,11 +865,11 @@ func (d *DashaClient) TableDescribeVacuumStats(ctx context.Context, cluster, ins
 	return pick(r.JSON200, r.HTTPResponse, "describe_table")
 }
 
-// SearchLogs searches PostgreSQL / connection-pooler logs of a Yandex-MDB
-// cluster over a bounded time window. Dasha proxies every call to the Yandex
-// Cloud logs API and rate-limits the route per user, so each non-200 is mapped
-// to guidance the model can act on (wait on 429, narrow on 504) instead of a
-// bare status code.
+// SearchLogs searches PostgreSQL / connection-pooler logs of a cluster over a
+// bounded time window. Dasha proxies every call to the log store bound to the
+// cluster and rate-limits the route per user, so each non-200 is mapped to
+// guidance the model can act on (wait on 429, narrow on 504) instead of a bare
+// status code.
 func (d *DashaClient) SearchLogs(ctx context.Context, params *apiclient.GetLogsParams) (any, error) {
 	r, err := d.api.GetLogsWithResponse(ctx, params, d.editor(ctx))
 	if err != nil {
@@ -879,17 +879,17 @@ func (d *DashaClient) SearchLogs(ctx context.Context, params *apiclient.GetLogsP
 	if r.JSON200 == nil && r.HTTPResponse != nil {
 		switch r.HTTPResponse.StatusCode {
 		case http.StatusTooManyRequests:
-			return nil, errors.New("dasha: log search is rate-limited per user to protect the Yandex Cloud API " +
+			return nil, errors.New("dasha: log search is rate-limited per user to protect the log store " +
 				"(default ~1 request per 30s with a small burst) — wait at least 30 seconds, then retry with " +
 				"every needed filter combined into that one call")
 		case http.StatusNotImplemented:
-			return nil, errors.New("dasha: this cluster does not support log search (501) — only clusters " +
-				"discovered via Yandex MDB do; check supports_logs in list_clusters")
+			return nil, errors.New("dasha: log search is unavailable for this cluster or stream (501) — " +
+				"check supports_logs in list_clusters, and that log_streams lists the service_type you asked for")
 		case http.StatusBadRequest:
 			return nil, errors.New("dasha: invalid log search parameters (400) — e.g. page_token combined " +
 				"with dedup, or an unknown severity value")
 		case http.StatusBadGateway:
-			return nil, errors.New("dasha: the Yandex Cloud logs API failed upstream (502) — retry later")
+			return nil, errors.New("dasha: the log store failed upstream (502) — retry later")
 		case http.StatusGatewayTimeout:
 			return nil, errors.New("dasha: log search timed out before collecting anything (504) — narrow " +
 				"the time window or add severity/message filters")

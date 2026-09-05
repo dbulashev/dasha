@@ -53,11 +53,17 @@ const serviceTypeItems = computed(() =>
     : allServiceTypes.filter(st => props.streams.includes(st.value)),
 )
 
-watch(serviceTypeItems, items => {
+// Sync flush and immediate: applyPreset/applyState set the service type and
+// submit in the same tick, so an unavailable stream has to be corrected before
+// the search is emitted.
+function normalizeServiceType() {
+  const items = serviceTypeItems.value
   if (items.length > 0 && !items.some(st => st.value === serviceType.value)) {
     serviceType.value = items[0].value as GetLogsServiceType
   }
-})
+}
+
+watch([serviceTypeItems, serviceType], normalizeServiceType, { immediate: true, flush: 'sync' })
 
 const rangeItems = computed(() => [
   { value: '1h', title: t('logs.range.1h') },

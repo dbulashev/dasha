@@ -1,0 +1,41 @@
+{
+  "index_patterns": ["pg-logs-*", "pooler-logs-*"],
+  "priority": 100,
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "refresh_interval": "5s"
+    },
+    "mappings": {
+      "properties": {
+        "@timestamp": { "type": "date" },
+        "timestamp": { "type": "keyword" },
+        "cluster": { "type": "keyword" },
+        "host": { "type": "keyword" },
+        "error_severity": { "type": "keyword" },
+        "state_code": { "type": "keyword" },
+        "dbname": { "type": "keyword" },
+        "user": { "type": "keyword" },
+        "application_name": { "type": "keyword" },
+        "backend_type": { "type": "keyword" },
+        "remote_host": { "type": "keyword" },
+        "session_id": { "type": "keyword" },
+        "pid": { "type": "long" },
+        "query_id": { "type": "long" },
+        "message": { "type": "text" },
+        "detail": { "type": "text" },
+        "hint": { "type": "text" },
+        "context": { "type": "text" },
+        "statement": { "type": "text" },
+        "internal_query": { "type": "text" },
+        "level": { "type": "keyword" },
+        "msg": { "type": "text" },
+        "log": { "type": "text" },
+        "container_id": { "type": "keyword" },
+        "container_name": { "type": "keyword" },
+        "source": { "type": "keyword" }
+      }
+    }
+  }
+}

@@ -2,6 +2,7 @@ package source
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -25,8 +26,9 @@ type FieldMap struct {
 	Mask []string
 	// Severities are the accepted values in the casing the source stores them.
 	Severities []string
-	// KeywordFields lists fields stored as keyword rather than analyzed text.
-	KeywordFields []string
+	// KeywordFields maps a field to the field an exact-match filter must use
+	// when the store indexes the field as analyzed text.
+	KeywordFields map[string]string
 	// HostMatch selects how a cluster host name is matched against the host
 	// field of the source.
 	HostMatch string
@@ -41,6 +43,16 @@ const (
 // Empty reports whether the map is unset.
 func (m FieldMap) Empty() bool {
 	return m.Text == ""
+}
+
+// Keyword returns the field an exact-match filter must use for field. Without
+// an override the field is assumed to be indexed as keyword already.
+func (m FieldMap) Keyword(field string) string {
+	if kw, ok := m.KeywordFields[field]; ok && kw != "" {
+		return kw
+	}
+
+	return field
 }
 
 // CanonicalSeverity matches a user-supplied severity against the accepted
@@ -183,7 +195,7 @@ func FieldMapFromConfig(c config.LogFieldMapConfig) (FieldMap, error) {
 		fm.Severities = slices.Clone(c.Severities)
 	}
 
-	fm.KeywordFields = slices.Clone(c.KeywordFields)
+	fm.KeywordFields = maps.Clone(c.KeywordFields)
 
 	if fm.HostMatch == "" {
 		fm.HostMatch = HostMatchExact
@@ -216,5 +228,42 @@ func FieldMapFromConfig(c config.LogFieldMapConfig) (FieldMap, error) {
 		return FieldMap{}, fmt.Errorf("%w: field map lists no severity values", ErrConfig)
 	}
 
+	fm.Mask = resolveMask(fm)
+
 	return fm, nil
+}
+
+// resolveMask expands the configured mask onto the field names records really
+// carry: the text field is always sanitized, and a bare entry also covers the
+// same field nested beside the text field, so a text of "pg.message" masks
+// "pg.detail" as well as "detail".
+func resolveMask(fm FieldMap) []string {
+	prefix := ""
+	if i := strings.LastIndex(fm.Text, "."); i >= 0 {
+		prefix = fm.Text[:i+1]
+	}
+
+	out := make([]string, 0, len(fm.Mask)+1)
+	seen := make(map[string]struct{}, len(fm.Mask)+1)
+
+	add := func(field string) {
+		if _, dup := seen[field]; field == "" || dup {
+			return
+		}
+
+		seen[field] = struct{}{}
+		out = append(out, field)
+	}
+
+	add(fm.Text)
+
+	for _, field := range fm.Mask {
+		add(field)
+
+		if prefix != "" && !strings.Contains(field, ".") {
+			add(prefix + field)
+		}
+	}
+
+	return out
 }

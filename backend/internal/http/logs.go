@@ -10,6 +10,10 @@ import (
 	"github.com/dbulashev/dasha/internal/pkg/shortcut"
 )
 
+// upstreamMessage stands in for the log store's own error text, which names
+// internal hosts and indices; the detail is logged instead.
+const upstreamMessage = "log source error"
+
 // GetLogs searches cluster logs through the log source bound to the cluster.
 func (s *Handlers) GetLogs(
 	ctx context.Context,
@@ -45,7 +49,7 @@ func (s *Handlers) GetLogs(
 		case errors.Is(err, logs.ErrTimeout):
 			return serverhttp.GetLogs504Response{}, nil
 		case errors.Is(err, logs.ErrUpstream):
-			return serverhttp.GetLogs502JSONResponse{Message: err.Error()}, nil
+			return serverhttp.GetLogs502JSONResponse{Message: upstreamMessage}, nil
 		default:
 			// context.Canceled (client disconnect) lands here; the error
 			// handler skips logging it.
@@ -124,7 +128,7 @@ func (s *Handlers) GetLogsCheck(
 		case errors.Is(err, logs.ErrTimeout):
 			return serverhttp.GetLogsCheck504Response{}, nil
 		case errors.Is(err, logs.ErrUpstream):
-			return serverhttp.GetLogsCheck502JSONResponse{Message: err.Error()}, nil
+			return serverhttp.GetLogsCheck502JSONResponse{Message: upstreamMessage}, nil
 		default:
 			return nil, fmt.Errorf("GetLogsCheck | %w", err)
 		}

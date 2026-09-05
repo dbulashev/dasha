@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/logs/source"
 )
@@ -29,12 +31,13 @@ type Provider struct {
 	names          []string
 	batchSize      int
 	maxBoundaryIDs int
+	logger         *zap.Logger
 }
 
 // New validates the source configuration and builds its client. A field map
 // that leaves a required role unbound fails here, at startup, rather than as an
 // empty result later.
-func New(cfg config.LogSourceConfig, global config.LogSearchConfig) (*Provider, error) {
+func New(cfg config.LogSourceConfig, global config.LogSearchConfig, logger *zap.Logger) (*Provider, error) {
 	streams, err := streamsFromConfig(cfg)
 	if err != nil {
 		return nil, err
@@ -57,9 +60,11 @@ func New(cfg config.LogSourceConfig, global config.LogSearchConfig) (*Provider, 
 		batchSize = config.DefaultLogSourceBatchSize
 	}
 
-	maxBoundaryIDs := cfg.MaxBoundaryIDs
-	if maxBoundaryIDs <= 0 {
-		maxBoundaryIDs = config.DefaultLogSourceMaxBoundaryIDs
+	// The skip list of a timestamp is read back in one request, so a cap below
+	// the batch size would stop the read earlier than it says it does.
+	maxBoundaryIDs := max(cfg.MaxBoundaryIDs, batchSize)
+	if cfg.MaxBoundaryIDs <= 0 {
+		maxBoundaryIDs = max(config.DefaultLogSourceMaxBoundaryIDs, batchSize)
 	}
 
 	return &Provider{
@@ -68,6 +73,7 @@ func New(cfg config.LogSourceConfig, global config.LogSearchConfig) (*Provider, 
 		names:          names,
 		batchSize:      batchSize,
 		maxBoundaryIDs: maxBoundaryIDs,
+		logger:         logger,
 	}, nil
 }
 
@@ -87,7 +93,7 @@ func (p *Provider) Stream(ctx context.Context, sp source.StreamParams, fn func(s
 		return fmt.Errorf("%w: %q", source.ErrStream, sp.Stream)
 	}
 
-	data := templateData{Cluster: sp.Cluster.Name.String(), Host: sp.Filter.Host}
+	data := templateData{Cluster: sp.Cluster.Name.String()}
 
 	index, err := expandIndex(def.index, data)
 	if err != nil {
@@ -110,43 +116,71 @@ func (p *Provider) Stream(ctx context.Context, sp source.StreamParams, fn func(s
 	}
 
 	b := newBoundary(start)
+	skipped := 0
+
+	defer func() {
+		if skipped > 0 {
+			p.logger.Warn("opensearch: records skipped, timestamp unusable",
+				zap.String("index", index),
+				zap.String("field", def.fields.Timestamp),
+				zap.Int("count", skipped))
+		}
+	}()
 
 	for {
-		req := buildSearch(def.fields, selector, sp.Filter, from, sp.To, p.batchSize, false)
+		// The skip list of a boundary timestamp is re-read on every request, so
+		// the size has to reach past it for the read to make progress.
+		size := min(len(b.ids)+p.batchSize, p.maxBoundaryIDs)
+
+		req := buildSearch(def.fields, selector, sp.Filter, from, sp.To, size, false)
 
 		var resp searchResponse
 		if err := p.client.call(ctx, "POST", "/"+url.PathEscape(index)+"/_search", req, &resp); err != nil {
 			return err
 		}
 
-		delivered, stop, err := p.emit(resp.Hits.Hits, def.fields, &b, fn)
+		res, err := emit(resp.Hits.Hits, def.fields, &b, fn)
+		skipped += res.skipped
+
 		if err != nil {
 			return err
 		}
 
-		if stop || len(resp.Hits.Hits) < p.batchSize {
+		if res.stop || len(resp.Hits.Hits) < size {
 			return nil
 		}
 
-		if delivered == 0 {
-			// A full batch of records already handed out: the timestamp holds
-			// more records than one batch can carry past the skip list.
-			return fmt.Errorf("%w: too many records share one timestamp", source.ErrPartial)
+		if res.delivered == 0 {
+			if res.skipped == len(resp.Hits.Hits) {
+				return fmt.Errorf("%w: %d records in a row carry no usable %s",
+					source.ErrPartial, res.skipped, def.fields.Timestamp)
+			}
+
+			return fmt.Errorf("%w: more than %d records share one timestamp",
+				source.ErrPartial, p.maxBoundaryIDs)
 		}
 
 		from = b.ts
 	}
 }
 
+// emitResult reports what one batch produced: records handed to fn, records
+// dropped because their timestamp is unusable, and whether reading must stop.
+type emitResult struct {
+	delivered int
+	skipped   int
+	stop      bool
+}
+
 // emit hands the hits not yet delivered to fn, giving each a cursor that
 // resumes right after it.
-func (p *Provider) emit(
+func emit(
 	hits []hit,
 	fm source.FieldMap,
 	b *boundary,
 	fn func(source.Record) bool,
-) (int, bool, error) {
-	delivered := 0
+) (emitResult, error) {
+	var res emitResult
 
 	for _, h := range hits {
 		fields := make(map[string]string, len(h.Source))
@@ -161,7 +195,11 @@ func (p *Provider) emit(
 
 		ts, err := parseTime(raw)
 		if err != nil {
-			return delivered, true, err
+			// A document the delivery pipeline wrote without a usable timestamp
+			// cannot be ordered or resumed from; the rest of the index still can.
+			res.skipped++
+
+			continue
 		}
 
 		if b.seen(ts, h.ID) {
@@ -170,24 +208,23 @@ func (p *Provider) emit(
 
 		b.add(ts, h.ID)
 
-		if len(b.ids) > p.maxBoundaryIDs {
-			return delivered, true, fmt.Errorf("%w: more than %d records share one timestamp",
-				source.ErrPartial, p.maxBoundaryIDs)
-		}
-
 		token, err := encodeCursor(cursor{TS: b.ts, IDs: b.ids})
 		if err != nil {
-			return delivered, true, err
+			res.stop = true
+
+			return res, err
 		}
 
-		delivered++
+		res.delivered++
 
 		if !fn(source.Record{Timestamp: ts, Fields: fields, Token: token}) {
-			return delivered, true, nil
+			res.stop = true
+
+			return res, nil
 		}
 	}
 
-	return delivered, false, nil
+	return res, nil
 }
 
 // Check reports whether the index behind a stream is reachable and carries the
@@ -198,7 +235,7 @@ func (p *Provider) Check(ctx context.Context, cluster config.Cluster, stream str
 		return source.CheckResult{}, fmt.Errorf("%w: %q", source.ErrStream, stream)
 	}
 
-	data := templateData{Cluster: cluster.Name.String(), Host: ""}
+	data := templateData{Cluster: cluster.Name.String()}
 
 	index, err := expandIndex(def.index, data)
 	if err != nil {

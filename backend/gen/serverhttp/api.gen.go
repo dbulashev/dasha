@@ -1287,7 +1287,7 @@ type LogSearchResult struct {
 
 // LogSourceCheck defines model for LogSourceCheck.
 type LogSourceCheck struct {
-	// Documents records the source holds for the cluster in the last hour
+	// Documents records the source found for the cluster in the last hour; a streaming source stops counting at 1000
 	Documents *int `json:"documents,omitempty"`
 
 	// FieldTypes type the store indexes each mapped field as

@@ -221,7 +221,7 @@ pipeline must keep the fields intact — an index holding the raw log line is no
 
 ```yaml
 log_search:
-  default_source: main          # serves clusters that name no source
+  default_source: main          # serves every cluster that names no source
   sources:
     main:
       type: opensearch
@@ -234,7 +234,9 @@ log_search:
         ca_file: /etc/dasha/os-ca.pem
         insecure_skip_verify: false
       batch_size: 1000          # records per upstream request
-      max_boundary_ids: 10000   # cursor stops past this many records at one timestamp
+      max_boundary_ids: 10000   # cursor stops past this many records at one timestamp;
+                                # never below batch_size, never above the index
+                                # max_result_window
       rate_limit:               # overrides the global limits for this source
         requests_per_second: 1
         burst: 20
@@ -248,6 +250,9 @@ log_search:
             timestamp: "@timestamp"
             host: host.name
             host_match: suffix  # exact (default) or suffix, when the index holds FQDNs
+            keyword_fields:     # exact-match field of a field the store analyzes
+              error_severity: error_severity.keyword
+              host.name: host.name.keyword
         pooler:
           index: "pgbouncer-logs-*"
           field_map:
@@ -257,20 +262,34 @@ log_search:
             text: msg
             host: host.name
             severities: [debug, info, warning, error, fatal]
+            mask: [msg, query]  # extra fields to sanitize; text is always masked
 
 clusters:
   - name: prod
     log_source: main
 ```
 
-`{{ .Cluster }}` and `{{ .Host }}` are the only substitutions; they expand in the index pattern and in
-selector values.
+Binding order: the cluster's `log_source`, then the built-in Yandex MDB source for clusters
+discovered there, then `default_source`. A cluster named in `log_source` must reference a source
+declared in `sources`, and a source may only declare the `postgresql` and `pooler` streams; both are
+checked at startup.
+
+`{{ .Cluster }}` is the only substitution; it expands in the index pattern and in selector values.
+The host is not substituted: a search without a host filter has none, so a host-dependent index would
+resolve to nothing.
 
 A preset fills in the field names of a known log format, and any field overrides it. `timestamp` and
 `host` are never part of a preset — PostgreSQL writes neither, the delivery agent names them — so both
 must be set. Severity and host are the only filters pushed down to the store; message, database and
 user substrings are matched by Dasha, so a `text` field analyzed by the store still behaves the way
-the search box promises. The severity field must be indexed as `keyword`.
+the search box promises. Severity, host and selector fields are matched exactly, so they must be
+indexed as `keyword`; when the store analyzes one of them instead — the default dynamic mapping does —
+name its exact-match counterpart in `keyword_fields`, otherwise the filter matches nothing. The check
+endpoint below reports the type of every mapped field.
+
+The `text` field always passes through the query sanitizer before it leaves the backend; `mask` adds
+the other free-text fields. An entry naming a bare field also covers the same field nested beside the
+text field, so a `text: pg.message` masks `pg.detail` as well as `detail`.
 
 A stream a source does not declare is unavailable: the API answers 501 and the UI hides the switch.
 

@@ -57,8 +57,11 @@ func newClient(cfg config.LogSourceConfig, timeout time.Duration) (*client, erro
 		addresses: addresses,
 		auth:      cfg.Auth,
 		http: &http.Client{ //nolint:exhaustruct
-			Timeout:   timeout,
-			Transport: &http.Transport{TLSClientConfig: tlsCfg}, //nolint:exhaustruct
+			Timeout: timeout,
+			Transport: &http.Transport{ //nolint:exhaustruct
+				TLSClientConfig: tlsCfg,
+				Proxy:           http.ProxyFromEnvironment,
+			},
 		},
 	}, nil
 }

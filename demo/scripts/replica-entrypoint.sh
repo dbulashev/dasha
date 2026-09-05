@@ -21,11 +21,28 @@ PGPASSWORD=demo pg_basebackup \
   --slot="${REPLICATION_SLOT}" \
   --checkpoint=fast -R
 
+: "${PG_LOG_DIR:=/var/log/postgresql}"
+
 cat >> /var/lib/postgresql/data/postgresql.auto.conf <<EOF
 hot_standby = on
 shared_preload_libraries = 'pg_stat_statements'
 pg_stat_statements.track = all
+logging_collector = on
+log_destination = 'jsonlog'
+log_directory = '${PG_LOG_DIR}'
+log_filename = 'postgresql-%H.log'
+log_rotation_age = 60
+log_rotation_size = 0
+log_truncate_on_rotation = on
+log_timezone = 'UTC'
+log_connections = on
+log_disconnections = on
+log_lock_waits = on
 EOF
+
+mkdir -p "${PG_LOG_DIR}"
+chown -R postgres:postgres "${PG_LOG_DIR}"
+chmod 0750 "${PG_LOG_DIR}"
 
 chown -R postgres:postgres /var/lib/postgresql/data
 chmod 0700 /var/lib/postgresql/data

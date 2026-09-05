@@ -31,8 +31,8 @@ var (
 // StreamPostgreSQL and StreamPooler are the wire values of the service_type
 // API parameter.
 const (
-	StreamPostgreSQL = "postgresql"
-	StreamPooler     = "pooler"
+	StreamPostgreSQL = config.LogStreamPostgreSQL
+	StreamPooler     = config.LogStreamPooler
 )
 
 // Record is one log line: the raw field map of the stream plus the cursor that
@@ -65,7 +65,8 @@ type StreamParams struct {
 type CheckResult struct {
 	// Target is the resolved upstream location: an index name, a cluster id.
 	Target string
-	// Documents counts records seen in the probe window.
+	// Documents counts records seen in the probe window; a source that has to
+	// stream them stops at its own probe limit.
 	Documents int
 	// Found maps field-map roles to the field names present upstream.
 	Found map[string]string

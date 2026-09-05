@@ -108,7 +108,7 @@
 - In-cluster database discovery — the database list comes from the cluster itself and refreshes without a restart
 - Primary / replica role display
 - Optional snapshot storage database (daily-partitioned tables, `dasha migrate` CLI)
-- [MCP connector](mcp.md) (`dasha-mcp`): read-only MCP server exposing fleet diagnostics to AI assistants (28 tools, 5 prompts)
+- [MCP connector](mcp.md) (`dasha-mcp`): read-only MCP server exposing fleet diagnostics to AI assistants (31 tools, 5 prompts)
 
 ## User Preferences
 

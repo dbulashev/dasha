@@ -3164,7 +3164,9 @@ components:
           description: resolved upstream location - an index pattern or a cluster id
         documents:
           type: integer
-          description: records the source holds for the cluster in the last hour
+          description: >-
+            records the source found for the cluster in the last hour; a
+            streaming source stops counting at 1000
         found:
           type: object
           additionalProperties:

@@ -22,7 +22,8 @@ config:
 
   # -- Log search (page /logs). Limits apply to every source; yandex-mdb clusters
   # need no source of their own. sources[] adds external log stores; a cluster
-  # picks one with log_source, or default_source serves it.
+  # picks one with log_source, otherwise default_source serves it — including
+  # MDB-discovered clusters, which keep MDB logs only with log_source: yandex-mdb.
   # log_search:
   #   max_scan: 5000          # max records scanned per search
   #   max_page_size: 1000     # upper bound for page_size
@@ -59,6 +60,9 @@ config:
   #             timestamp: "@timestamp"
   #             host: host.name
   #             host_match: suffix
+  #             keyword_fields:   # when the store analyzes a matched field
+  #               error_severity: error_severity.keyword
+  #               host.name: host.name.keyword
 
   # -- Connection pools to monitored clusters (one pool per host+database).
   # Defaults: max_conns 4, max_conn_idle_time 2m. Behind a per-user connection

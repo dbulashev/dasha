@@ -586,5 +586,7 @@ func (s *service) classify(ctx context.Context, err error) error {
 		return fmt.Errorf("%w: %s", ErrInvalid, err.Error())
 	}
 
+	s.logger.Warn("logs: source error", zap.Error(err))
+
 	return fmt.Errorf("%w: %s", ErrUpstream, sanitize.SQL(err.Error()))
 }

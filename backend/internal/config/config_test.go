@@ -12,7 +12,7 @@ func TestLogSearchValidate(t *testing.T) {
 		s := LogSourceConfig{
 			Type:      LogSourceTypeOpenSearch,
 			Addresses: []string{"https://os:9200"},
-			Auth:      LogSourceAuthConfig{Kind: LogAuthBasic},
+			Auth:      LogSourceAuthConfig{Kind: LogAuthBasic, User: "dasha", Password: "s3cret"},
 			Streams: map[string]LogStreamConfig{
 				"postgresql": {Index: "pg-*"},
 			},
@@ -26,9 +26,10 @@ func TestLogSearchValidate(t *testing.T) {
 	}
 
 	tests := []struct {
-		name    string
-		cfg     LogSearchConfig
-		wantErr string
+		name     string
+		cfg      LogSearchConfig
+		clusters []Cluster
+		wantErr  string
 	}{
 		{
 			name: "valid",
@@ -84,6 +85,64 @@ func TestLogSearchValidate(t *testing.T) {
 			wantErr: "index",
 		},
 		{
+			name: "basic auth without a user",
+			cfg: LogSearchConfig{
+				Sources: map[string]LogSourceConfig{
+					"main": source(func(s *LogSourceConfig) { s.Auth.User = "" }),
+				},
+			},
+			wantErr: "auth.user",
+		},
+		{
+			name: "basic auth whose secret never arrived",
+			cfg: LogSearchConfig{
+				Sources: map[string]LogSourceConfig{
+					"main": source(func(s *LogSourceConfig) {
+						s.Auth.Password = ""
+						s.Auth.PasswordFromEnv = "OS_PASSWORD"
+					}),
+				},
+			},
+			wantErr: "OS_PASSWORD",
+		},
+		{
+			name: "api key auth without a key",
+			cfg: LogSearchConfig{
+				Sources: map[string]LogSourceConfig{
+					"main": source(func(s *LogSourceConfig) {
+						s.Auth = LogSourceAuthConfig{Kind: LogAuthAPIKey}
+					}),
+				},
+			},
+			wantErr: "api_key",
+		},
+		{
+			name: "stream the API does not serve",
+			cfg: LogSearchConfig{
+				Sources: map[string]LogSourceConfig{
+					"main": source(func(s *LogSourceConfig) {
+						s.Streams = map[string]LogStreamConfig{"pg": {Index: "pg-*"}}
+					}),
+				},
+			},
+			wantErr: "unknown stream",
+		},
+		{
+			name: "cluster names a source that does not exist",
+			cfg: LogSearchConfig{
+				Sources: map[string]LogSourceConfig{"main": source(nil)},
+			},
+			clusters: []Cluster{{Name: "prod", LogSource: "mian"}},
+			wantErr:  "log_source",
+		},
+		{
+			name: "cluster pinned to the built-in source",
+			cfg: LogSearchConfig{
+				Sources: map[string]LogSourceConfig{"main": source(nil)},
+			},
+			clusters: []Cluster{{Name: "prod", LogSource: SourceYandexMDB}},
+		},
+		{
 			name: "unknown auth kind",
 			cfg: LogSearchConfig{
 				Sources: map[string]LogSourceConfig{
@@ -91,6 +150,33 @@ func TestLogSearchValidate(t *testing.T) {
 				},
 			},
 			wantErr: "auth.kind",
+		},
+		{
+			name: "reserved source name",
+			cfg: LogSearchConfig{
+				Sources: map[string]LogSourceConfig{SourceYandexMDB: source(nil)},
+			},
+			wantErr: "reserved",
+		},
+		{
+			name: "credentials over plain http",
+			cfg: LogSearchConfig{
+				Sources: map[string]LogSourceConfig{
+					"main": source(func(s *LogSourceConfig) { s.Addresses = []string{"http://os:9200"} }),
+				},
+			},
+			wantErr: "https",
+		},
+		{
+			name: "plain http without credentials",
+			cfg: LogSearchConfig{
+				Sources: map[string]LogSourceConfig{
+					"main": source(func(s *LogSourceConfig) {
+						s.Addresses = []string{"http://os:9200"}
+						s.Auth = LogSourceAuthConfig{Kind: LogAuthNone}
+					}),
+				},
+			},
 		},
 		{
 			name: "no sources at all",
@@ -102,7 +188,7 @@ func TestLogSearchValidate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := tt.cfg.Validate()
+			err := tt.cfg.Validate(tt.clusters)
 
 			if tt.wantErr == "" {
 				if err != nil {
@@ -145,8 +231,33 @@ func TestLogSearchWithDefaults(t *testing.T) {
 		t.Errorf("auth kind = %q, want %q", src.Auth.Kind, LogAuthNone)
 	}
 
-	// A source without limits of its own inherits the global ones.
-	if src.RateLimit != cfg.RateLimit || src.AdminRateLimit != cfg.AdminRateLimit {
+	// A source without limits of its own inherits the global values, but not the
+	// pointers: one source's limits must not change another's.
+	if *src.RateLimit != *cfg.RateLimit || *src.AdminRateLimit != *cfg.AdminRateLimit {
 		t.Error("source did not inherit the global rate limits")
+	}
+
+	if src.RateLimit == cfg.RateLimit || src.AdminRateLimit == cfg.AdminRateLimit {
+		t.Error("source shares the global rate limit values")
+	}
+}
+
+func TestLogSearchWithDefaultsLeavesTheInputAlone(t *testing.T) {
+	t.Parallel()
+
+	in := LogSearchConfig{
+		Sources: map[string]LogSourceConfig{
+			"main": {Type: LogSourceTypeOpenSearch},
+		},
+	}
+
+	_ = in.WithDefaults()
+
+	if got := in.Sources["main"]; got.BatchSize != 0 || got.RateLimit != nil {
+		t.Errorf("WithDefaults wrote back into the caller's sources: %+v", got)
+	}
+
+	if in.MaxScan != 0 || in.RateLimit != nil {
+		t.Errorf("WithDefaults mutated the receiver: %+v", in)
 	}
 }

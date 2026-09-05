@@ -1,11 +1,13 @@
 package config
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -241,6 +243,12 @@ type LogSearchConfig struct {
 // Elasticsearch index.
 const LogSourceTypeOpenSearch = "opensearch"
 
+// Stream names the log API serves; a source may declare no others.
+const (
+	LogStreamPostgreSQL = "postgresql"
+	LogStreamPooler     = "pooler"
+)
+
 // LogSourceConfig describes one log store.
 type LogSourceConfig struct {
 	Type      string              `mapstructure:"type"`
@@ -304,8 +312,10 @@ type LogFieldMapConfig struct {
 	PID       string `mapstructure:"pid"`
 	// Mask lists free-text fields sanitized before they leave the backend.
 	Mask []string `mapstructure:"mask"`
-	// KeywordFields lists fields indexed as keyword rather than analyzed text.
-	KeywordFields []string `mapstructure:"keyword_fields"`
+	// KeywordFields maps a field to the field an exact-match filter must use
+	// when the store indexes it as analyzed text, e.g.
+	// error_severity: error_severity.keyword.
+	KeywordFields map[string]string `mapstructure:"keyword_fields"`
 	// Severities overrides the accepted severity values of the preset.
 	Severities []string `mapstructure:"severities"`
 	// HostMatch is exact or suffix; suffix matches a short host name against an
@@ -353,8 +363,13 @@ func (c LogSearchConfig) WithDefaults() LogSearchConfig {
 		c.AdminRateLimit = &rl
 	}
 
-	for name, src := range c.Sources {
-		c.Sources[name] = src.withDefaults(c)
+	if len(c.Sources) > 0 {
+		sources := make(map[string]LogSourceConfig, len(c.Sources))
+		for name, src := range c.Sources {
+			sources[name] = src.withDefaults(c)
+		}
+
+		c.Sources = sources
 	}
 
 	return c
@@ -370,11 +385,13 @@ func (s LogSourceConfig) withDefaults(parent LogSearchConfig) LogSourceConfig {
 	}
 
 	if s.RateLimit == nil {
-		s.RateLimit = parent.RateLimit
+		rl := *parent.RateLimit
+		s.RateLimit = &rl
 	}
 
 	if s.AdminRateLimit == nil {
-		s.AdminRateLimit = parent.AdminRateLimit
+		rl := *parent.AdminRateLimit
+		s.AdminRateLimit = &rl
 	}
 
 	if s.Auth.Kind == "" {
@@ -384,39 +401,103 @@ func (s LogSourceConfig) withDefaults(parent LogSearchConfig) LogSourceConfig {
 	return s
 }
 
-// Validate checks the structure of the configured log sources. Field maps are
-// validated by the source registry, which owns the presets.
-func (c LogSearchConfig) Validate() error {
+// Validate checks the structure of the configured log sources and that every
+// cluster referencing one names a source that exists. Credentials are read
+// after the *_from_env variables have been resolved, so a missing secret fails
+// here instead of as a 502 on the first search. Field maps are validated by the
+// source registry, which owns the presets.
+func (c LogSearchConfig) Validate(clusters []Cluster) error {
 	if c.DefaultSource != "" {
 		if _, ok := c.Sources[c.DefaultSource]; !ok {
 			return fmt.Errorf("default_source %q is not defined in sources", c.DefaultSource)
 		}
 	}
 
-	for name, src := range c.Sources {
-		if src.Type != LogSourceTypeOpenSearch {
-			return fmt.Errorf("sources.%s: unknown type %q", name, src.Type)
+	for _, name := range slices.Sorted(maps.Keys(c.Sources)) {
+		if err := validateLogSource(name, c.Sources[name]); err != nil {
+			return err
+		}
+	}
+
+	for _, cl := range clusters {
+		if cl.LogSource == "" || cl.LogSource == SourceYandexMDB {
+			continue
 		}
 
-		if len(src.Addresses) == 0 {
-			return fmt.Errorf("sources.%s: addresses must not be empty", name)
+		if _, ok := c.Sources[cl.LogSource]; !ok {
+			return fmt.Errorf("clusters.%s: log_source %q is not defined in log_search.sources",
+				cl.Name, cl.LogSource)
 		}
+	}
 
-		if len(src.Streams) == 0 {
-			return fmt.Errorf("sources.%s: at least one stream must be configured", name)
-		}
+	return nil
+}
 
-		switch src.Auth.Kind {
-		case LogAuthNone, LogAuthBasic, LogAuthAPIKey:
-		default:
-			return fmt.Errorf("sources.%s: unknown auth.kind %q (want none|basic|api_key)", name, src.Auth.Kind)
-		}
+func validateLogSource(name string, src LogSourceConfig) error {
+	// The Yandex MDB source is built in, not configurable: a source under
+	// that name would silently replace it in the registry.
+	if name == SourceYandexMDB {
+		return fmt.Errorf("sources.%s: name is reserved for the built-in source", name)
+	}
 
-		for stream, sc := range src.Streams {
-			if sc.Index == "" {
-				return fmt.Errorf("sources.%s.streams.%s: index must not be empty", name, stream)
+	if src.Type != LogSourceTypeOpenSearch {
+		return fmt.Errorf("sources.%s: unknown type %q", name, src.Type)
+	}
+
+	if len(src.Addresses) == 0 {
+		return fmt.Errorf("sources.%s: addresses must not be empty", name)
+	}
+
+	if len(src.Streams) == 0 {
+		return fmt.Errorf("sources.%s: at least one stream must be configured", name)
+	}
+
+	if err := src.Auth.validate(name); err != nil {
+		return err
+	}
+
+	if src.Auth.Kind == LogAuthBasic || src.Auth.Kind == LogAuthAPIKey {
+		for _, addr := range src.Addresses {
+			if !strings.HasPrefix(strings.ToLower(addr), "https://") {
+				return fmt.Errorf("sources.%s: address %q must use https with auth.kind %q", name, addr, src.Auth.Kind)
 			}
 		}
+	}
+
+	for _, stream := range slices.Sorted(maps.Keys(src.Streams)) {
+		if stream != LogStreamPostgreSQL && stream != LogStreamPooler {
+			return fmt.Errorf("sources.%s.streams.%s: unknown stream (want %s|%s)",
+				name, stream, LogStreamPostgreSQL, LogStreamPooler)
+		}
+
+		if src.Streams[stream].Index == "" {
+			return fmt.Errorf("sources.%s.streams.%s: index must not be empty", name, stream)
+		}
+	}
+
+	return nil
+}
+
+func (a LogSourceAuthConfig) validate(name string) error {
+	switch a.Kind {
+	case LogAuthNone:
+		return nil
+	case LogAuthBasic:
+		if a.User == "" {
+			return fmt.Errorf("sources.%s: auth.kind %q requires auth.user", name, a.Kind)
+		}
+
+		if a.Password == "" {
+			return fmt.Errorf("sources.%s: auth.kind %q requires auth.password (or a %s that is set)",
+				name, a.Kind, cmp.Or(a.PasswordFromEnv, "password_from_env"))
+		}
+	case LogAuthAPIKey:
+		if a.APIKey == "" {
+			return fmt.Errorf("sources.%s: auth.kind %q requires auth.api_key (or a %s that is set)",
+				name, a.Kind, cmp.Or(a.APIKeyFromEnv, "api_key_from_env"))
+		}
+	default:
+		return fmt.Errorf("sources.%s: unknown auth.kind %q (want none|basic|api_key)", name, a.Kind)
 	}
 
 	return nil

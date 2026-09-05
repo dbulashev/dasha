@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
+	"go.uber.org/zap"
 
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/logs/source"
@@ -23,6 +25,11 @@ import (
 const (
 	testIndex   = "pg-logs-prod-000001"
 	testCluster = "prod"
+	// testService is stored in a field the index analyzes, the way a default
+	// dynamic mapping treats every string.
+	testService = "PostgreSQL Server"
+	// malformedIndex sits behind the same pattern as testIndex.
+	malformedIndex = "pg-logs-prod-000002"
 )
 
 var baseURL string
@@ -91,6 +98,7 @@ type seedRecord struct {
 	User          string `json:"user"`
 	PID           int    `json:"pid"`
 	Cluster       string `json:"cluster"`
+	Service       string `json:"service"`
 	Host          struct {
 		Name string `json:"name"`
 	} `json:"host"`
@@ -121,6 +129,7 @@ func seedRecords() []seedRecord {
 			User:          users[i%len(users)],
 			PID:           1000 + i,
 			Cluster:       testCluster,
+			Service:       testService,
 		}
 		r.Host.Name = hosts[i%len(hosts)]
 
@@ -140,7 +149,11 @@ func seed(ctx context.Context) error {
 				"dbname":         map[string]any{"type": "keyword"},
 				"user":           map[string]any{"type": "keyword"},
 				"cluster":        map[string]any{"type": "keyword"},
-				"host":           map[string]any{"properties": map[string]any{"name": map[string]any{"type": "keyword"}}},
+				"service": map[string]any{
+					"type":   "text",
+					"fields": map[string]any{"keyword": map[string]any{"type": "keyword"}},
+				},
+				"host": map[string]any{"properties": map[string]any{"name": map[string]any{"type": "keyword"}}},
 			},
 		},
 	}
@@ -183,7 +196,15 @@ func seed(ctx context.Context) error {
 		return fmt.Errorf("bulk index: %s", resp.Status)
 	}
 
-	return nil
+	return seedMalformed(ctx)
+}
+
+// seedMalformed adds a second index behind the same pattern holding a record
+// whose delivery agent named the timestamp field something else.
+func seedMalformed(ctx context.Context) error {
+	return request(ctx, http.MethodPut,
+		"/"+malformedIndex+"/_doc/no-timestamp?refresh=true",
+		map[string]any{"time": seedStart.Format(time.RFC3339Nano), "message": "agent wrote no @timestamp"})
 }
 
 func request(ctx context.Context, method, path string, body any) error {
@@ -219,29 +240,61 @@ func request(ctx context.Context, method, path string, body any) error {
 func testProvider(t *testing.T, batchSize int) *Provider {
 	t.Helper()
 
+	return testProviderWith(t, batchSize, nil)
+}
+
+func testProviderWith(t *testing.T, batchSize int, mutate func(*config.LogStreamConfig)) *Provider {
+	t.Helper()
+
+	stream := config.LogStreamConfig{
+		Index:    "pg-logs-{{ .Cluster }}-*",
+		Selector: map[string]string{"cluster": "{{ .Cluster }}"},
+		FieldMap: config.LogFieldMapConfig{
+			Preset:    source.PresetJSONLog,
+			Timestamp: "@timestamp",
+			Host:      "host.name",
+			HostMatch: source.HostMatchSuffix,
+		},
+	}
+
+	if mutate != nil {
+		mutate(&stream)
+	}
+
 	p, err := New(config.LogSourceConfig{
 		Type:      config.LogSourceTypeOpenSearch,
 		Addresses: []string{baseURL},
 		Auth:      config.LogSourceAuthConfig{Kind: config.LogAuthNone},
 		BatchSize: batchSize,
-		Streams: map[string]config.LogStreamConfig{
-			source.StreamPostgreSQL: {
-				Index:    "pg-logs-{{ .Cluster }}-*",
-				Selector: map[string]string{"cluster": "{{ .Cluster }}"},
-				FieldMap: config.LogFieldMapConfig{
-					Preset:    source.PresetJSONLog,
-					Timestamp: "@timestamp",
-					Host:      "host.name",
-					HostMatch: source.HostMatchSuffix,
-				},
-			},
-		},
-	}, config.LogSearchConfig{TimeoutSeconds: 30})
+		Streams:   map[string]config.LogStreamConfig{source.StreamPostgreSQL: stream},
+	}, config.LogSearchConfig{TimeoutSeconds: 30}, zap.NewNop())
 	if err != nil {
 		t.Fatalf("new provider: %v", err)
 	}
 
 	return p
+}
+
+// TestSelectorOnAnAnalyzedFieldNeedsItsKeywordField: an exact-match filter on a
+// field the store analyzed matches nothing until keyword_fields names the
+// field to filter on instead.
+func TestSelectorOnAnAnalyzedFieldNeedsItsKeywordField(t *testing.T) {
+	analyzed := testProviderWith(t, 10, func(sc *config.LogStreamConfig) {
+		sc.Selector = map[string]string{"service": testService}
+	})
+
+	if got := collect(t, analyzed, testParams(source.Filter{}), 0); len(got) != 0 {
+		t.Fatalf("read %d records through an analyzed field, want 0", len(got))
+	}
+
+	keyword := testProviderWith(t, 10, func(sc *config.LogStreamConfig) {
+		sc.Selector = map[string]string{"service": testService}
+		sc.FieldMap.KeywordFields = map[string]string{"service": "service.keyword"}
+	})
+
+	if got := collect(t, keyword, testParams(source.Filter{}), 0); len(got) != len(seedRecords()) {
+		t.Fatalf("read %d records through the keyword field, want %d", len(got), len(seedRecords()))
+	}
 }
 
 func testParams(filter source.Filter) source.StreamParams {
@@ -295,6 +348,54 @@ func TestStreamReadsEveryRecordInOrder(t *testing.T) {
 	}
 }
 
+// TestStreamSkipsRecordsWithoutAUsableTimestamp: one document the pipeline
+// wrote without the mapped timestamp must not end the read of the whole
+// pattern.
+func TestStreamSkipsRecordsWithoutAUsableTimestamp(t *testing.T) {
+	p := testProvider(t, 7)
+
+	got := collect(t, p, testParams(source.Filter{}), 0)
+
+	if len(got) != len(seedRecords()) {
+		t.Fatalf("read %d records, want %d", len(got), len(seedRecords()))
+	}
+
+	for _, r := range got {
+		if r.Fields["time"] != "" {
+			t.Fatalf("record without the mapped timestamp was delivered: %v", r.Fields)
+		}
+	}
+}
+
+// TestStreamPagesPastATimestampWiderThanTheBatch: records sharing a timestamp
+// are read past the skip list, so batch_size does not cap how many of them a
+// search can reach.
+func TestStreamPagesPastATimestampWiderThanTheBatch(t *testing.T) {
+	p := testProvider(t, 1)
+
+	got := collect(t, p, testParams(source.Filter{}), 0)
+
+	if len(got) != len(seedRecords()) {
+		t.Fatalf("read %d records with batch_size 1, want %d", len(got), len(seedRecords()))
+	}
+}
+
+// TestStreamStopsAtMaxBoundaryIDs: the cap on the ids one cursor carries is
+// what ends a read of a timestamp too wide to page through.
+func TestStreamStopsAtMaxBoundaryIDs(t *testing.T) {
+	p := testProviderWith(t, 1, nil)
+	p.maxBoundaryIDs = 1
+
+	err := p.Stream(context.Background(), testParams(source.Filter{}), func(source.Record) bool { return true })
+	if !errors.Is(err, source.ErrPartial) {
+		t.Fatalf("stream error = %v, want ErrPartial", err)
+	}
+
+	if !strings.Contains(err.Error(), "1") {
+		t.Errorf("error does not report the cap: %v", err)
+	}
+}
+
 func TestStreamResumesFromCursorWithoutGapOrRepeat(t *testing.T) {
 	p := testProvider(t, 5)
 	all := collect(t, p, testParams(source.Filter{}), 0)
@@ -327,7 +428,7 @@ func TestPushdownOnlyNarrows(t *testing.T) {
 		{Severities: []string{"ERROR"}},
 		{Severities: []string{"ERROR", "FATAL"}},
 		{Host: "db-1"},
-		{Severities: []string{"LOG"}, Host: "db-2"},
+		{Severities: []string{"ERROR"}, Host: "db-2"},
 	}
 
 	full := collect(t, p, testParams(source.Filter{}), 0)
@@ -409,9 +510,9 @@ func TestCheckReportsMappingAndSample(t *testing.T) {
 	}
 }
 
-// TestCheckOnEmptyIndexPatternReportsMissingFields covers the case FR-5 exists
-// for: nothing matches the pattern, and the check says so instead of leaving a
-// silently empty search behind.
+// TestCheckOnEmptyIndexPatternReportsMissingFields: nothing matches the
+// pattern, and the check says so instead of leaving a silently empty search
+// behind.
 func TestCheckOnEmptyIndexPatternReportsMissingFields(t *testing.T) {
 	p := testProvider(t, 10)
 

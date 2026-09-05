@@ -74,6 +74,14 @@ func TestRegistryResolutionOrder(t *testing.T) {
 			want:    "implicit",
 		},
 		{
+			// The default is a fleet-wide fallback; a cluster whose logs live
+			// somewhere a provider claims must not be re-routed into it.
+			name:    "cluster shape wins over the default",
+			cluster: config.Cluster{Name: "a", Source: config.SourceYandexMDB},
+			def:     "main",
+			want:    "implicit",
+		},
+		{
 			name:    "no source at all",
 			cluster: config.Cluster{Name: "a", Source: "static"},
 			want:    "",

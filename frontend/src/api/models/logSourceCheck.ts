@@ -14,7 +14,7 @@ export interface LogSourceCheck {
   stream: string
   /** resolved upstream location - an index pattern or a cluster id */
   target: string
-  /** records the source holds for the cluster in the last hour */
+  /** records the source found for the cluster in the last hour; a streaming source stops counting at 1000 */
   documents?: number
   /** field map roles bound to a field present upstream */
   found?: LogSourceCheckFound

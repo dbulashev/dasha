@@ -904,7 +904,7 @@ func parseSince(since string) (time.Duration, error) {
 }
 
 // logsDefaultSince is the default look-back window for search_logs; a short
-// window keeps the upstream Yandex API scan (and the result) small.
+// window keeps the upstream scan (and the result) small.
 const logsDefaultSince = time.Hour
 
 // logsDefaultPageSize caps raw (dedup=false) records per page, keeping one
@@ -913,11 +913,16 @@ const logsDefaultPageSize = 100
 
 // logsParams validates search_logs arguments locally and maps them onto the
 // API params. Local validation matters more than usual here: the endpoint is
-// rate-limited per user (it fronts the Yandex Cloud API), so a request that
-// would just 400 upstream must not burn a rate-limit slot.
+// rate-limited per user (it fronts the log store), so a request that would just
+// 400 upstream must not burn a rate-limit slot.
 func logsParams(a searchLogsArgs) (*apiclient.GetLogsParams, string) {
-	serviceType := apiclient.GetLogsParamsServiceType(cmp.Or(a.ServiceType, string(apiclient.Postgresql)))
-	if serviceType != apiclient.Postgresql && serviceType != apiclient.Pooler {
+	const (
+		typePostgresql = apiclient.GetLogsParamsServiceTypePostgresql
+		typePooler     = apiclient.GetLogsParamsServiceTypePooler
+	)
+
+	serviceType := apiclient.GetLogsParamsServiceType(cmp.Or(a.ServiceType, string(typePostgresql)))
+	if serviceType != typePostgresql && serviceType != typePooler {
 		return nil, "service_type must be 'postgresql' or 'pooler'"
 	}
 

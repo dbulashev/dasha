@@ -36,8 +36,10 @@ func (r *Registry) SetDefault(name string) {
 }
 
 // For returns the provider serving the cluster and the source name.
-// Resolution order: the cluster's own source, the configured default, then any
-// provider that claims the cluster by its shape.
+// Resolution order: the cluster's own source, then any provider that claims the
+// cluster by its shape, then the configured default. A provider that claims a
+// cluster reads logs the default source does not hold, so it wins over the
+// fleet-wide fallback.
 func (r *Registry) For(cluster config.Cluster) (Provider, string, bool) {
 	if name := cluster.LogSource; name != "" {
 		p, ok := r.providers[name]
@@ -45,16 +47,16 @@ func (r *Registry) For(cluster config.Cluster) (Provider, string, bool) {
 		return p, name, ok
 	}
 
-	if r.defaultName != "" {
-		if p, ok := r.providers[r.defaultName]; ok {
-			return p, r.defaultName, true
-		}
-	}
-
 	for _, name := range r.names {
 		m, ok := r.providers[name].(ClusterMatcher)
 		if ok && m.Matches(cluster) {
 			return r.providers[name], name, true
+		}
+	}
+
+	if r.defaultName != "" {
+		if p, ok := r.providers[r.defaultName]; ok {
+			return p, r.defaultName, true
 		}
 	}
 

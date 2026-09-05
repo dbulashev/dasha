@@ -79,8 +79,9 @@ func NewContainer() *Container {
 	do.Provide(i, func(i *do.Injector) (*source.Registry, error) {
 		cfg := do.MustInvoke[*config.Config](i)
 		registry := do.MustInvoke[*yandex.Registry](i)
+		logger := do.MustInvoke[*zap.Logger](i)
 
-		return provideLogSources(cfg.LogSearch, registry)
+		return provideLogSources(cfg.LogSearch, registry, logger)
 	})
 
 	do.Provide(i, func(i *do.Injector) (logs.Service, error) {
@@ -509,12 +510,18 @@ func provideConfig() (*config.Config, error) {
 	}
 
 	for name, src := range c.LogSearch.Sources {
+		// An unset variable leaves an inline value alone; the credential checks
+		// in LogSearch.Validate then report whatever is still missing.
 		if env := src.Auth.PasswordFromEnv; env != "" {
-			src.Auth.Password = os.Getenv(env)
+			if v, ok := os.LookupEnv(env); ok {
+				src.Auth.Password = v
+			}
 		}
 
 		if env := src.Auth.APIKeyFromEnv; env != "" {
-			src.Auth.APIKey = os.Getenv(env)
+			if v, ok := os.LookupEnv(env); ok {
+				src.Auth.APIKey = v
+			}
 		}
 
 		c.LogSearch.Sources[name] = src
@@ -535,7 +542,7 @@ func provideConfig() (*config.Config, error) {
 		return nil, fmt.Errorf("provideConfig | schema_lint: %w", err)
 	}
 
-	if err := c.LogSearch.Validate(); err != nil {
+	if err := c.LogSearch.Validate(c.Clusters); err != nil {
 		return nil, fmt.Errorf("provideConfig | log_search: %w", err)
 	}
 
@@ -571,12 +578,16 @@ func provideDiscovery(
 	return discovery.NewEngine(cfg.Discovery, clusters, registry, logger)
 }
 
-func provideLogSources(cfg config.LogSearchConfig, registry *yandex.Registry) (*source.Registry, error) {
+func provideLogSources(
+	cfg config.LogSearchConfig,
+	registry *yandex.Registry,
+	logger *zap.Logger,
+) (*source.Registry, error) {
 	sources := source.NewRegistry()
 	sources.Register(yandexmdb.Name, yandexmdb.New(registry))
 
 	for _, name := range slices.Sorted(maps.Keys(cfg.Sources)) {
-		p, err := buildLogSource(cfg.Sources[name], cfg)
+		p, err := buildLogSource(cfg.Sources[name], cfg, logger)
 		if err != nil {
 			return nil, fmt.Errorf("log_search.sources.%s: %w", name, err)
 		}
@@ -589,12 +600,16 @@ func provideLogSources(cfg config.LogSearchConfig, registry *yandex.Registry) (*
 	return sources, nil
 }
 
-func buildLogSource(cfg config.LogSourceConfig, global config.LogSearchConfig) (source.Provider, error) {
+func buildLogSource(
+	cfg config.LogSourceConfig,
+	global config.LogSearchConfig,
+	logger *zap.Logger,
+) (source.Provider, error) {
 	if cfg.Type != config.LogSourceTypeOpenSearch {
 		return nil, fmt.Errorf("unknown log source type %q", cfg.Type)
 	}
 
-	p, err := opensearch.New(cfg, global)
+	p, err := opensearch.New(cfg, global, logger)
 	if err != nil {
 		return nil, err
 	}

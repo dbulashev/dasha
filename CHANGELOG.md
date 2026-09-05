@@ -3,7 +3,7 @@
 ## Unreleased
 
 ### Features
-- **Log search works on self-managed clusters.** Logs are read from an existing OpenSearch or Elasticsearch index: one source serves the whole fleet, the index pattern carries the cluster and host names, and a field map — with presets for `jsonlog`, `csvlog` and the pooler — says which field holds which role. Filters, deduplication, masking and pagination behave exactly as on Yandex MDB clusters. The server must write `jsonlog` or `csvlog`; an index holding the raw log line is refused with a message instead of an empty result.
+- **Log search works on self-managed clusters.** Logs are read from an existing OpenSearch or Elasticsearch index: one source serves the whole fleet, the index pattern carries the cluster name, and a field map — with presets for `jsonlog`, `csvlog` and the pooler — says which field holds which role. Filters, deduplication, masking and pagination behave exactly as on Yandex MDB clusters. The server must write `jsonlog` or `csvlog`; an index holding the raw log line is refused with a message instead of an empty result.
 - **A log source can be checked before anyone searches it**: the resolved index, the records of the last hour, the mapped fields found and missing, and one masked sample record. Admin only.
 - **Rate limits are set per log source**, so a local index is not held to the budget of a metered cloud API.
 - **A cluster reports which log streams it has**, and the pooler switch is hidden where there is no pooler log.

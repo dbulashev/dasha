@@ -20,6 +20,10 @@ const Name = config.SourceYandexMDB
 // checkWindow is the range Check reads a sample record from.
 const checkWindow = time.Hour
 
+// checkProbeLimit caps the records Check counts: the probe answers whether the
+// stream carries data, and the API reports the count as seen in the window.
+const checkProbeLimit = 1000
+
 // hostField carries the host name Yandex adds to every record of both streams.
 const hostField = "hostname"
 
@@ -87,8 +91,8 @@ func (p *Provider) Stream(ctx context.Context, sp source.StreamParams, fn func(s
 	return nil
 }
 
-// Check reads a single record from the last hour and reports which mapped
-// fields it carries.
+// Check counts the records of the last hour up to the probe limit and reports
+// which mapped fields the first of them carries.
 func (p *Provider) Check(ctx context.Context, cluster config.Cluster, stream string) (source.CheckResult, error) {
 	now := time.Now()
 
@@ -115,9 +119,12 @@ func (p *Provider) Check(ctx context.Context, cluster config.Cluster, stream str
 
 	err = sdk.StreamLogs(ctx, params, func(rec yandex.LogRecord) bool {
 		res.Documents++
-		res.Sample = rec.Fields
 
-		return false
+		if res.Sample == nil {
+			res.Sample = rec.Fields
+		}
+
+		return res.Documents < checkProbeLimit
 	})
 	if err != nil {
 		return source.CheckResult{}, fmt.Errorf("yandexmdb check: %w", err)

@@ -28,7 +28,7 @@ func testFieldMap(t *testing.T) source.FieldMap {
 func TestExpandIndex(t *testing.T) {
 	t.Parallel()
 
-	got, err := expandIndex("pg-logs-{{ .Cluster }}-*", templateData{Cluster: "prod", Host: "db-1"})
+	got, err := expandIndex("pg-logs-{{ .Cluster }}-*", templateData{Cluster: "prod"})
 	if err != nil {
 		t.Fatalf("expandIndex: %v", err)
 	}
@@ -182,6 +182,77 @@ func TestParseTime(t *testing.T) {
 
 	if _, err := parseTime(nil); err == nil {
 		t.Error("parseTime accepted a missing value")
+	}
+}
+
+func TestBuildSearchMatchesAnalyzedFieldsThroughTheirKeywordField(t *testing.T) {
+	t.Parallel()
+
+	fm, err := source.FieldMapFromConfig(config.LogFieldMapConfig{
+		Preset:    source.PresetJSONLog,
+		Timestamp: "@timestamp",
+		Host:      "host.name",
+		KeywordFields: map[string]string{
+			"error_severity": "error_severity.keyword",
+			"host.name":      "host.name.keyword",
+			"cluster":        "cluster.keyword",
+		},
+	})
+	if err != nil {
+		t.Fatalf("field map: %v", err)
+	}
+
+	now := time.Now()
+	req := buildSearch(fm, map[string]string{"cluster": "prod"},
+		source.Filter{Severities: []string{"ERROR"}, Host: "db-1"}, now, now.Add(time.Hour), 10, false)
+
+	raw, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	body := string(raw)
+
+	for _, want := range []string{
+		`"terms":{"error_severity.keyword":["ERROR"]}`,
+		`"term":{"host.name.keyword":"db-1"}`,
+		`"term":{"cluster.keyword":"prod"}`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("query body misses %s\ngot: %s", want, body)
+		}
+	}
+}
+
+func TestStreamsFromConfigRejectsHostInATemplate(t *testing.T) {
+	t.Parallel()
+
+	fieldMap := config.LogFieldMapConfig{
+		Preset:    source.PresetJSONLog,
+		Timestamp: "@timestamp",
+		Host:      "host.name",
+	}
+
+	tests := map[string]config.LogStreamConfig{
+		"index":    {Index: "pg-logs-{{ .Host }}-*", FieldMap: fieldMap},
+		"selector": {Index: "pg-*", Selector: map[string]string{"host": "{{ .Host }}"}, FieldMap: fieldMap},
+	}
+
+	for name, sc := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := streamsFromConfig(config.LogSourceConfig{
+				Streams: map[string]config.LogStreamConfig{"postgresql": sc},
+			})
+			if err == nil {
+				t.Fatal("expected an error for a template naming the host")
+			}
+
+			if !strings.Contains(err.Error(), "Host") {
+				t.Errorf("error does not name the substitution: %v", err)
+			}
+		})
 	}
 }
 
