@@ -57,6 +57,16 @@ clusters:
       - pg-replica-1.example.com
 ```
 
+The role Dasha connects as needs `pg_monitor` and `CONNECT` on every monitored database:
+
+```sql
+CREATE ROLE monitoring_user LOGIN PASSWORD 'secret';
+GRANT pg_monitor TO monitoring_user;
+GRANT CONNECT ON DATABASE myapp TO monitoring_user;
+```
+
+Without `pg_monitor` the query report and the Top 10 panels hold the statements of that role alone.
+
 Run with the pre-built images:
 
 ```bash

@@ -13,7 +13,8 @@ WITH agg AS (
         sum(pss.wal_records) AS wal_records
     FROM {{ .Pgss }} pss
     LEFT JOIN pg_catalog.pg_database d ON d.oid = pss.dbid
-    WHERE $1::text IS NULL OR d.datname = $1
+    WHERE ($1::text IS NULL OR d.datname = $1)
+      AND pss.queryid IS NOT NULL
     GROUP BY pss.queryid, pss.dbid, d.datname
 )
 (SELECT 'calls' AS metric, queryid, datname, COALESCE(100.0 * calls / NULLIF(sum(calls) OVER(), 0), 0) AS pct FROM agg ORDER BY calls DESC LIMIT 10)

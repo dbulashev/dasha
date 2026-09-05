@@ -4,6 +4,7 @@ package repository
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"testing"
 	"time"
@@ -399,5 +400,86 @@ func TestGetQueriesReport(t *testing.T) {
 		if q.Calls != nil {
 			assert.Greater(t, *q.Calls, int64(0))
 		}
+	}
+}
+
+// pg_stat_statements hands a role without pg_read_all_stats a NULL queryid and
+// the '<insufficient privilege>' text for every statement of another user, so
+// the query views must drop those rows rather than scan a NULL into int64.
+func TestQueryViewsUnderUnprivilegedRole(t *testing.T) {
+	t.Parallel()
+	adminPool := testinfra.IsolatePool(t)
+	ctx := t.Context()
+
+	admin := NewTestPgxPool(adminPool, zap.NewNop())
+
+	vNum, err := admin.getServerVersionNum(ctx, adminPool)
+	require.NoError(t, err)
+
+	const role = "pgss_watcher"
+
+	_, err = adminPool.Exec(ctx, `CREATE ROLE `+role+` LOGIN PASSWORD 'secret'`)
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		cleanCtx := context.Background()
+		_, _ = adminPool.Exec(cleanCtx, `DROP OWNED BY `+role)
+		_, _ = adminPool.Exec(cleanCtx, `DROP ROLE IF EXISTS `+role)
+	})
+
+	// The admin's own statements are what the role may not see.
+	var marker int64
+
+	require.NoError(t, adminPool.QueryRow(ctx, "SELECT count(*) FROM generate_series(1, 1000)").Scan(&marker))
+
+	var dbName string
+
+	require.NoError(t, adminPool.QueryRow(ctx, `SELECT current_database()`).Scan(&dbName))
+
+	conn := adminPool.Config().ConnConfig
+	dsn := fmt.Sprintf("postgres://%s:secret@%s:%d/%s?sslmode=disable", role, conn.Host, conn.Port, dbName)
+
+	rolePool, err := pgxpool.New(ctx, dsn)
+	require.NoError(t, err, "connect as the unprivileged role")
+
+	defer rolePool.Close()
+
+	watcher := NewTestPgxPool(rolePool, zap.NewNop())
+
+	restricted, err := watcher.getQueryStatsRestricted(ctx, vNum, rolePool)
+	require.NoError(t, err)
+	assert.True(t, restricted, "a role outside pg_read_all_stats reads a restricted view")
+
+	granted, err := admin.getQueryStatsRestricted(ctx, vNum, adminPool)
+	require.NoError(t, err)
+	assert.False(t, granted, "the privileged role reads the whole view")
+
+	report, err := watcher.getQueriesReport(ctx, vNum, rolePool, []string{}, nil)
+	require.NoError(t, err)
+
+	for _, q := range report {
+		assert.NotZero(t, q.QueryID)
+		assert.NotEqual(t, "<insufficient privilege>", q.Query)
+	}
+
+	byTime, err := watcher.getQueriesTop10ByTime(ctx, vNum, rolePool, nil)
+	require.NoError(t, err)
+
+	for _, q := range byTime {
+		assert.NotZero(t, q.QueryID)
+	}
+
+	byWal, err := watcher.getQueriesTop10ByWal(ctx, vNum, rolePool, nil)
+	require.NoError(t, err)
+
+	for _, q := range byWal {
+		assert.NotZero(t, q.QueryID)
+	}
+
+	chart, err := watcher.getQueriesTop10Chart(ctx, vNum, rolePool, nil)
+	require.NoError(t, err)
+
+	for _, q := range chart {
+		assert.NotZero(t, q.QueryID)
 	}
 }

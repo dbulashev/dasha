@@ -22,7 +22,8 @@ FROM (
         left(pss.query, 48) AS query_trunc
     FROM {{ .Pgss }} pss
     LEFT JOIN pg_catalog.pg_database d ON d.oid = pss.dbid
-    WHERE $1::text IS NULL OR d.datname = $1
+    WHERE ($1::text IS NULL OR d.datname = $1)
+      AND pss.queryid IS NOT NULL
     GROUP BY pss.queryid, pss.query, d.datname
     ORDER BY sum(pss.total_exec_time) DESC
     LIMIT 10

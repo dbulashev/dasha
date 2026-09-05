@@ -95,6 +95,7 @@
   "pgssNotInstalled": "Die Erweiterung {ext} ist in dieser Datenbank nicht installiert. Abfragestatistiken (Top 10, Bericht) sind nicht verfügbar.",
   "pgssNotEnabled": "Die Erweiterung {ext} ist installiert, aber nicht aktiviert. Fügen Sie sie zu shared_preload_libraries hinzu und starten Sie PostgreSQL neu.",
   "pgssNotReadable": "Die Erweiterung {ext} ist installiert und aktiviert, aber der aktuelle Benutzer hat keinen Zugriff auf die Daten.",
+  "pgssRestricted": "Die verbundene Rolle besitzt keine Rechte von pg_read_all_stats: {ext} liefert nur die Anweisungen dieser Rolle, die übrigen fehlen im Bericht. Für die gesamte Last: GRANT pg_monitor TO <Rolle>.",
   "resetQueryStats": "Statistiken zurücksetzen",
   "resetQueryStatsConfirm": "{ext}-Statistiken zurücksetzen? Diese Aktion kann nicht rückgängig gemacht werden.",
   "resetQueryStatsSuccess": "{ext}-Statistiken wurden zurückgesetzt",

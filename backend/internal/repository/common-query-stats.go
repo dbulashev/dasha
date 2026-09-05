@@ -56,11 +56,17 @@ func (p *PgxPool) GetQueryStatsStatus(
 		p.logger.Warn("failed to get query stats readable", zap.Error(err))
 	}
 
+	restricted, err := p.getQueryStatsRestricted(ctx, vNum, pool)
+	if err != nil {
+		p.logger.Warn("failed to get query stats restricted", zap.Error(err))
+	}
+
 	return dto.QueryStatsStatus{
-		Available: available,
-		Enabled:   enabled,
-		Readable:  readable,
-		Source:    name,
+		Available:  available,
+		Enabled:    enabled,
+		Readable:   readable,
+		Restricted: restricted,
+		Source:     name,
 	}, nil
 }
 
@@ -140,6 +146,29 @@ func (p *PgxPool) getQueryStatsEnabled(
 	err = pool.QueryRow(ctx, qStr).Scan(&b)
 	if err != nil {
 		return false, fmt.Errorf("getQueryStatsEnabled | %w", err)
+	}
+
+	return b, nil
+}
+
+func (p *PgxPool) getQueryStatsRestricted(
+	ctx context.Context,
+	serverVersion int,
+	pool *pgxpool.Pool,
+) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	qStr, err := query.Get(serverVersion, enums.QueryCommonQueryStatsRestricted, nil)
+	if err != nil {
+		return false, fmt.Errorf("getQueryStatsRestricted | %w", err)
+	}
+
+	var b bool
+
+	err = pool.QueryRow(ctx, qStr).Scan(&b)
+	if err != nil {
+		return false, fmt.Errorf("getQueryStatsRestricted | %w", err)
 	}
 
 	return b, nil

@@ -40,6 +40,13 @@ const pgssWarningMessage = computed(() => {
   return ''
 })
 
+const pgssRestricted = computed(() => {
+  const s = queryStatsStatus.value
+  return !!s && !pgssUnavailable.value && s.Restricted
+})
+
+const statsSourceName = computed(() => queryStatsStatus.value?.Source || DEFAULT_STATS_SOURCE)
+
 async function loadQueryStatsStatus() {
   if (!clusterName.value || !hostName.value || !databaseName.value) return
   const myId = ++reqId
@@ -67,6 +74,7 @@ watch([clusterName, hostName, databaseName], () => {
 
 <template>
   <v-alert v-if="pgssUnavailable" type="warning" class="mb-4" closable>{{ pgssWarningMessage }}</v-alert>
+  <v-alert v-if="pgssRestricted" type="info" class="mb-4" closable>{{ t('pgssRestricted', { ext: statsSourceName }) }}</v-alert>
   <div v-if="hasScopeChoice" class="d-flex align-center ga-2 mb-2">
     <ScopeSwitch />
   </div>

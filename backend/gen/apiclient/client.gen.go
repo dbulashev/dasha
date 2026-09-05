@@ -1607,6 +1607,9 @@ type QueryStatsStatus struct {
 	Enabled   bool `json:"Enabled"`
 	Readable  bool `json:"Readable"`
 
+	// Restricted True when the connected role has no privileges of pg_read_all_stats. The statistics view then reports neither the identifier nor the text of the statements of other users, and those rows are left out of every report.
+	Restricted bool `json:"Restricted"`
+
 	// Source Query-statistics extension this connection is read through: pg_stat_statements, or pgpro_stats on Postgres Pro. Always set — when neither is installed it names the one worth installing here.
 	Source string `json:"Source"`
 }

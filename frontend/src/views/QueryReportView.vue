@@ -54,6 +54,11 @@ const pgssWarningMessage = computed(() => {
   return ''
 })
 
+const pgssRestricted = computed(() => {
+  const s = queryStatsStatus.value
+  return !!s && !pgssUnavailable.value && s.Restricted
+})
+
 const isAdmin = computed(() =>
   authStore.mode === 'none' || authStore.mode === 'token' || authStore.user?.role === 'admin'
 )
@@ -353,6 +358,7 @@ watch([clusterName, hostName, databaseName], async () => {
 
 <template>
   <v-alert v-if="pgssUnavailable" type="warning" class="mb-4" closable>{{ pgssWarningMessage }}</v-alert>
+  <v-alert v-if="pgssRestricted" type="info" class="mb-4" closable>{{ t('pgssRestricted', { ext: statsSourceName }) }}</v-alert>
 
   <div class="d-flex align-center ga-2 mb-2 flex-wrap">
     <v-select
