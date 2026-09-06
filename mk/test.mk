@@ -1,6 +1,6 @@
 ## test targets
 
-POSTGRES_VERSION ?= 17
+POSTGRES_VERSION ?= 18
 
 .PHONY: test-unit
 test-unit: ## Run unit tests (no containers required)

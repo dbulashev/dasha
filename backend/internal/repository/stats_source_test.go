@@ -259,7 +259,7 @@ func TestStatsSource_VanillaSQLUnchanged(t *testing.T) {
 	}
 
 	// Every supported major, so version-specific overrides render too.
-	versions := []int{140000, 150000, 160000, 170000, 180000}
+	versions := []int{140000, 150000, 160000, 170000, 180000, 190000}
 
 	for _, q := range queries {
 		for _, v := range versions {
