@@ -10,20 +10,22 @@ import (
 func severityRank(s string) int {
 	switch strings.ToUpper(s) {
 	case "PANIC":
-		return 8
+		return 9
 	case "FATAL":
-		return 7
+		return 8
 	case "ERROR":
-		return 6
+		return 7
 	case "WARNING":
-		return 5
+		return 6
 	case "NOTICE":
-		return 4
+		return 5
 	case "LOG":
-		return 3
+		return 4
 	case "INFO":
-		return 2
+		return 3
 	case "DEBUG":
+		return 2
+	case "NOISE":
 		return 1
 	default:
 		return 0

@@ -234,3 +234,20 @@ func TestCanonicalSeverityIgnoresCase(t *testing.T) {
 		t.Error("CanonicalSeverity accepted an unknown value")
 	}
 }
+
+func TestPgBouncerPresetKeepsTheNativeLevels(t *testing.T) {
+	t.Parallel()
+
+	fm, ok := Preset(PresetPgBouncer)
+	if !ok {
+		t.Fatal("pgbouncer preset is missing")
+	}
+
+	if got, canon := fm.CanonicalSeverity("noise"); !canon || got != "NOISE" {
+		t.Errorf("CanonicalSeverity(noise) = %q, %v; want NOISE, true", got, canon)
+	}
+
+	if _, canon := fm.CanonicalSeverity("INFO"); canon {
+		t.Error("CanonicalSeverity(INFO) accepted; pgbouncer has no INFO level")
+	}
+}

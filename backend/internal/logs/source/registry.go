@@ -1,6 +1,8 @@
 package source
 
 import (
+	"slices"
+
 	"github.com/dbulashev/dasha/internal/config"
 )
 
@@ -68,6 +70,26 @@ func (r *Registry) Supports(cluster config.Cluster) bool {
 	_, _, ok := r.For(cluster)
 
 	return ok
+}
+
+// Severities lists, per stream, the severity values the cluster's source
+// accepts, in the casing it stores them.
+func (r *Registry) Severities(cluster config.Cluster) map[string][]string {
+	p, _, ok := r.For(cluster)
+	if !ok {
+		return nil
+	}
+
+	out := make(map[string][]string)
+
+	for _, stream := range p.Streams() {
+		fm := p.Fields(stream)
+		if len(fm.Severities) > 0 {
+			out[stream] = slices.Clone(fm.Severities)
+		}
+	}
+
+	return out
 }
 
 // Streams lists the streams the cluster's source serves.

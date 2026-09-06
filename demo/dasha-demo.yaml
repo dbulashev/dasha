@@ -86,14 +86,9 @@ log_search:
         pooler:
           index: "pooler-logs-{{ .Cluster }}-*"
           field_map:
-            preset: none
+            preset: pgbouncer
             timestamp: "@timestamp"
-            severity: level
-            text: msg
             host: host
-            pid: pid
-            mask: [msg]
-            severities: [DEBUG, INFO, WARNING, ERROR, FATAL]
 
 # Metrics-backed Health Score (demo). Reads from the overlay's VictoriaMetrics
 # (demo/docker-compose.metrics.yaml). Providers are self-managed: pgSCV for PG

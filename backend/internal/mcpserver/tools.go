@@ -241,7 +241,7 @@ type searchLogsArgs struct {
 	Since       string   `json:"since,omitempty" jsonschema:"Look-back window ending now, e.g. '15m', '1h', '24h' (default '1h'); ignored when from/to are set"`
 	From        string   `json:"from,omitempty" jsonschema:"Window start, RFC3339 (e.g. 2026-07-10T12:00:00Z); set together with to"`
 	To          string   `json:"to,omitempty" jsonschema:"Window end, RFC3339; set together with from"`
-	Severity    []string `json:"severity,omitempty" jsonschema:"Severities to include: PostgreSQL uses upper-case (ERROR, FATAL, PANIC, WARNING, LOG), the pooler lower-case (error, warn)"`
+	Severity    []string `json:"severity,omitempty" jsonschema:"Severities to include; the values a cluster accepts per stream are listed in log_severities of list_clusters. PostgreSQL uses upper-case (ERROR, FATAL, PANIC, WARNING, LOG)"`
 	Host        string   `json:"host,omitempty" jsonschema:"Optional: restrict to one cluster host"`
 	Message     []string `json:"message,omitempty" jsonschema:"Substrings that must all be present in the message (AND, case-insensitive)"`
 	Exclude     []string `json:"exclude,omitempty" jsonschema:"Drop records whose message contains any of these substrings (grep -v)"`

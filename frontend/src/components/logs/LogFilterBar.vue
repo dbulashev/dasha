@@ -11,6 +11,7 @@ import { LOG_PRESETS, severityOptions, type LogFilters, type LogOrder } from './
 const props = defineProps<{
   hosts: string[]
   streams: string[]
+  sourceSeverities?: Record<string, string[]>
   loading: boolean
 }>()
 
@@ -73,7 +74,7 @@ const rangeItems = computed(() => [
   { value: 'custom', title: t('logs.range.custom') },
 ])
 
-const severityItems = computed(() => severityOptions(serviceType.value))
+const severityItems = computed(() => severityOptions(serviceType.value, props.sourceSeverities))
 
 const pageSizeItems = [50, 100, 250, 500, 1000]
 

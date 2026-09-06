@@ -246,7 +246,7 @@ log_search:
           selector:             # extra term filter when one index holds the whole fleet
             cluster: "{{ .Cluster }}"
           field_map:
-            preset: jsonlog     # jsonlog | csvlog | odyssey | none
+            preset: jsonlog     # jsonlog | csvlog | odyssey | pgbouncer | none
             timestamp: "@timestamp"
             host: host.name
             host_match: suffix  # exact (default) or suffix, when the index holds FQDNs
@@ -256,12 +256,10 @@ log_search:
         pooler:
           index: "pgbouncer-logs-*"
           field_map:
-            preset: none
+            preset: pgbouncer
             timestamp: "@timestamp"
-            severity: level
-            text: msg
             host: host.name
-            severities: [debug, info, warning, error, fatal]
+            severities: [NOISE, LOG, WARNING, ERROR, FATAL]  # narrows the preset vocabulary
             mask: [msg, query]  # extra fields to sanitize; text is always masked
 
 clusters:
@@ -269,10 +267,29 @@ clusters:
     log_source: main
 ```
 
+In the Helm chart the CA is attached as a backend volume, and the mount path goes into `ca_file`:
+
+```yaml
+# values.yaml; kubectl create secret generic dasha-os-ca --from-file=ca.pem=os-ca.pem
+backend:
+  extraVolumes:
+    - name: os-ca
+      secret:
+        secretName: dasha-os-ca
+  extraVolumeMounts:
+    - name: os-ca
+      mountPath: /etc/ssl/opensearch   # ca_file: /etc/ssl/opensearch/ca.pem
+      readOnly: true
+```
+
+In the chart `/etc/dasha` is taken by the ConfigMap holding `dasha.yaml`: the certificate volume
+mounts elsewhere.
+
 Binding order: the cluster's `log_source`, then the built-in Yandex MDB source for clusters
-discovered there, then `default_source`. A cluster named in `log_source` must reference a source
-declared in `sources`, and a source may only declare the `postgresql` and `pooler` streams; both are
-checked at startup.
+discovered there, then `default_source`. A source named in `log_source` must be declared in
+`sources`, and a source may only declare the `postgresql` and `pooler` streams; both are checked at
+startup. The name `yandex-mdb` belongs to the built-in source. With `auth.kind: basic` or `api_key`
+every address must start with `https://`, and `tls.insecure_skip_verify` is rejected.
 
 `{{ .Cluster }}` is the only substitution; it expands in the index pattern and in selector values.
 The host is not substituted: a search without a host filter has none, so a host-dependent index would
@@ -287,9 +304,15 @@ indexed as `keyword`; when the store analyzes one of them instead — the defaul
 name its exact-match counterpart in `keyword_fields`, otherwise the filter matches nothing. The check
 endpoint below reports the type of every mapped field.
 
-The `text` field always passes through the query sanitizer before it leaves the backend; `mask` adds
-the other free-text fields. An entry naming a bare field also covers the same field nested beside the
-text field, so a `text: pg.message` masks `pg.detail` as well as `detail`.
+`severities` lists the levels one stream accepts, in the casing the store holds them: the search
+rejects any other value and the log page offers exactly this list in its level filter. Every preset
+brings its own — upper-case PostgreSQL levels for `jsonlog` and `csvlog`, lower-case for `odyssey`,
+`NOISE, DEBUG, LOG, WARNING, ERROR, FATAL` for `pgbouncer`.
+
+The `text` field is always masked: its value passes through the query sanitizer before it leaves the
+backend. `mask` adds the other free-text fields. When `text` sits in a nested object
+(`text: pg.message`), a mask entry without a dot covers both names: `detail` masks `detail` and
+`pg.detail`.
 
 A stream a source does not declare is unavailable: the API answers 501 and the UI hides the switch.
 

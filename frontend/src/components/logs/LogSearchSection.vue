@@ -37,6 +37,8 @@ const hosts = computed(() =>
 
 const streams = computed(() => currentCluster.value?.log_streams ?? [])
 
+const sourceSeverities = computed(() => currentCluster.value?.log_severities ?? {})
+
 const hasMore = computed(() => !dedup.value && !!nextToken.value)
 
 const activeIncludes = computed(() => lastFilters.value?.includes ?? [])
@@ -193,7 +195,14 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <LogFilterBar ref="filterBar" :hosts="hosts" :streams="streams" :loading="loading" @search="onSearch" />
+  <LogFilterBar
+    ref="filterBar"
+    :hosts="hosts"
+    :streams="streams"
+    :source-severities="sourceSeverities"
+    :loading="loading"
+    @search="onSearch"
+  />
 
   <v-alert
     v-if="rateLimitSeconds > 0"

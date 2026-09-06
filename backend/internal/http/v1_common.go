@@ -69,16 +69,21 @@ func (s *Handlers) GetClusters(
 		})
 
 		cluster := serverhttp.Cluster{
-			Name:         shortcut.Ptr(v.Name.String()),
-			Source:       shortcut.Ptr(v.Source),
-			SupportsLogs: shortcut.Ptr(v.SupportsLogs),
-			LogStreams:   nil,
-			Instances:    &instances,
-			Databases:    &v.Databases,
+			Name:          shortcut.Ptr(v.Name.String()),
+			Source:        shortcut.Ptr(v.Source),
+			SupportsLogs:  shortcut.Ptr(v.SupportsLogs),
+			LogStreams:    nil,
+			LogSeverities: nil,
+			Instances:     &instances,
+			Databases:     &v.Databases,
 		}
 
 		if len(v.LogStreams) > 0 {
 			cluster.LogStreams = &v.LogStreams
+		}
+
+		if len(v.LogSeverities) > 0 {
+			cluster.LogSeverities = &v.LogSeverities
 		}
 
 		ret = append(ret, cluster)

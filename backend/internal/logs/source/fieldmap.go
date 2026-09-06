@@ -95,15 +95,25 @@ var presets = map[string]FieldMap{
 		Mask:       []string{"text"},
 		Severities: []string{"debug", "info", "warning", "error", "fatal"},
 	},
+	// pgbouncer writes plain text lines; the roles below are the field names of
+	// the reference parser in demo/opensearch/parsers-pg.conf.
+	PresetPgBouncer: {
+		Severity:   "level",
+		Text:       "msg",
+		PID:        "pid",
+		Mask:       []string{"msg"},
+		Severities: []string{"NOISE", "DEBUG", "LOG", "WARNING", "ERROR", "FATAL"},
+	},
 }
 
 // Preset names of the supported log formats. PresetNone leaves every role to
 // the configuration.
 const (
-	PresetCSVLog  = "csvlog"
-	PresetJSONLog = "jsonlog"
-	PresetOdyssey = "odyssey"
-	PresetNone    = "none"
+	PresetCSVLog    = "csvlog"
+	PresetJSONLog   = "jsonlog"
+	PresetOdyssey   = "odyssey"
+	PresetPgBouncer = "pgbouncer"
+	PresetNone      = "none"
 )
 
 var pgSeverities = []string{

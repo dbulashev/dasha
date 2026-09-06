@@ -125,3 +125,24 @@ func TestRegistryResolutionOrder(t *testing.T) {
 		})
 	}
 }
+
+func TestRegistrySeveritiesPerStream(t *testing.T) {
+	t.Parallel()
+
+	r := source.NewRegistry()
+	r.Register("main", stubProvider{claims: ""})
+
+	got := r.Severities(config.Cluster{Name: "a", LogSource: "main"})
+
+	if len(got) != 1 {
+		t.Fatalf("severities = %v, want one stream", got)
+	}
+
+	if len(got[source.StreamPostgreSQL]) == 0 {
+		t.Errorf("postgresql severities are empty: %v", got)
+	}
+
+	if unbound := r.Severities(config.Cluster{Name: "b", LogSource: "other"}); unbound != nil {
+		t.Errorf("severities of an unbound cluster = %v, want nil", unbound)
+	}
+}

@@ -388,6 +388,9 @@ type Cluster struct {
 	Databases *[]string          `json:"databases,omitempty"`
 	Instances *[]ClusterInstance `json:"instances,omitempty"`
 
+	// LogSeverities severity values each stream accepts, keyed by stream name, in the casing the source stores them; the log search rejects any other value
+	LogSeverities *map[string][]string `json:"log_severities,omitempty"`
+
 	// LogStreams log streams the bound source serves, e.g. postgresql and pooler
 	LogStreams *[]string `json:"log_streams,omitempty"`
 	Name       *string   `json:"name,omitempty"`

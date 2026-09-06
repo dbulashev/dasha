@@ -3141,6 +3141,16 @@ components:
           description: log streams the bound source serves, e.g. postgresql and pooler
           items:
             type: string
+        log_severities:
+          type: object
+          description: >-
+            severity values each stream accepts, keyed by stream name, in the
+            casing the source stores them; the log search rejects any other
+            value
+          additionalProperties:
+            type: array
+            items:
+              type: string
         instances:
           type: array
           items:

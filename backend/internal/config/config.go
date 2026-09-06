@@ -292,7 +292,7 @@ type LogSourceTLSConfig struct {
 }
 
 // LogStreamConfig describes where one stream of one source lives. Index and
-// selector values accept the {{ .Cluster }} and {{ .Host }} substitutions.
+// selector values accept the {{ .Cluster }} substitution.
 type LogStreamConfig struct {
 	Index    string            `mapstructure:"index"`
 	Selector map[string]string `mapstructure:"selector"`

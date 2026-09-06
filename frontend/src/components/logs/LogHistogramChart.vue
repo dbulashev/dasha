@@ -25,9 +25,10 @@ const themeStore = useThemeStore()
 // Stack order = severity rank; lowercase keys cover both PostgreSQL (UPPER)
 // and pooler (lower) spellings. Each palette is CVD-validated against the
 // corresponding surface, so the two modes use different steps of the same hues.
-const SEVERITY_ORDER = ['debug', 'log', 'info', 'notice', 'warning', 'error', 'fatal', 'panic']
+const SEVERITY_ORDER = ['noise', 'debug', 'log', 'info', 'notice', 'warning', 'error', 'fatal', 'panic']
 
 const COLORS_LIGHT: Record<string, string> = {
+  noise: '#78909C',
   debug: '#A0522D',
   log: '#42A5F5',
   info: '#00897B',
@@ -39,6 +40,7 @@ const COLORS_LIGHT: Record<string, string> = {
 }
 
 const COLORS_DARK: Record<string, string> = {
+  noise: '#90A4AE',
   debug: '#B25E33',
   log: '#2196F3',
   info: '#009688',
