@@ -6,7 +6,7 @@ import type { LocationQuery } from 'vue-router'
 import type { GetLogsServiceType } from '@/api/models'
 import { copyToClipboard } from '@/utils/sql'
 import { fromDateTimeInput, toDateTimeInput, withZoneLabel } from '@/utils/format'
-import { LOG_PRESETS, severityOptions, type LogFilters, type LogOrder } from './types'
+import { LOG_PRESETS, severityOptions, type LogFilters, type LogOrder, type LogPreset } from './types'
 
 const props = defineProps<{
   hosts: string[]
@@ -97,12 +97,27 @@ const presetItems = computed(() =>
   LOG_PRESETS.map(p => ({ value: p.id, title: t(`logs.preset.${p.id}`) })),
 )
 
+// A source may declare its own vocabulary, and the backend rejects a search
+// carrying a severity outside it; keep the preset to what the source accepts,
+// in the spelling it stores.
+function presetSeverities(p: LogPreset): string[] {
+  const allowed = severityOptions('postgresql', props.sourceSeverities)
+  return p.severities
+    .map(s => allowed.find(a => a.toLowerCase() === s.toLowerCase()))
+    .filter((s): s is string => s !== undefined)
+}
+
 function applyPreset(id: string | null) {
   const p = LOG_PRESETS.find(x => x.id === id)
   if (!p) return
+  const picked = presetSeverities(p)
+  if (picked.length === 0) {
+    preset.value = null
+    return
+  }
   serviceType.value = 'postgresql'
   includes.value = p.message ? [p.message] : []
-  severities.value = [...p.severities]
+  severities.value = picked
 }
 
 watch(preset, applyPreset)
@@ -121,7 +136,7 @@ watch([serviceType, includes, severities], () => {
   const matches =
     serviceType.value === 'postgresql' &&
     sameArr(includes.value ?? [], wantIncludes) &&
-    sameArr(severities.value ?? [], p.severities)
+    sameArr(severities.value ?? [], presetSeverities(p))
   if (!matches) preset.value = null
 })
 
