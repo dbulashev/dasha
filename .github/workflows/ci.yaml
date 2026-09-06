@@ -102,9 +102,15 @@ jobs:
 
   test-backend-integration:
     runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.experimental || false }}
     strategy:
+      fail-fast: false
       matrix:
         pg-version: [14, 15, 16, 17, 18]
+        include:
+          # Beta: reported, never blocking. Bump the tag as betas/RCs ship.
+          - pg-version: 19beta3
+            experimental: true
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
