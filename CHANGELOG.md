@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Features
+- **Log search in OpenSearch and Elasticsearch**
+
 ## v1.7.3
 
 ### Bug Fixes

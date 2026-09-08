@@ -241,7 +241,7 @@ type searchLogsArgs struct {
 	Since       string   `json:"since,omitempty" jsonschema:"Look-back window ending now, e.g. '15m', '1h', '24h' (default '1h'); ignored when from/to are set"`
 	From        string   `json:"from,omitempty" jsonschema:"Window start, RFC3339 (e.g. 2026-07-10T12:00:00Z); set together with to"`
 	To          string   `json:"to,omitempty" jsonschema:"Window end, RFC3339; set together with from"`
-	Severity    []string `json:"severity,omitempty" jsonschema:"Severities to include: PostgreSQL uses upper-case (ERROR, FATAL, PANIC, WARNING, LOG), the pooler lower-case (error, warn)"`
+	Severity    []string `json:"severity,omitempty" jsonschema:"Severities to include; the values a cluster accepts per stream are listed in log_severities of list_clusters. PostgreSQL uses upper-case (ERROR, FATAL, PANIC, WARNING, LOG)"`
 	Host        string   `json:"host,omitempty" jsonschema:"Optional: restrict to one cluster host"`
 	Message     []string `json:"message,omitempty" jsonschema:"Substrings that must all be present in the message (AND, case-insensitive)"`
 	Exclude     []string `json:"exclude,omitempty" jsonschema:"Drop records whose message contains any of these substrings (grep -v)"`
@@ -729,11 +729,12 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 
 	addTool(s, &mcp.Tool{
 		Name: "search_logs",
-		Description: "Search PostgreSQL server or connection-pooler (Odyssey) logs of a Yandex-MDB-discovered " +
-			"cluster (supports_logs=true in list_clusters). Every call reaches the Yandex Cloud API and is " +
-			"rate-limited per user (default ~1 request per 30s with a small burst) — make each call count: " +
-			"keep the default dedup=true overview, a narrow window (since='1h') and severity/message filters, " +
-			"and refine with one follow-up call instead of paging raw records. After a 429 wait ~30 seconds.",
+		Description: "Search PostgreSQL server or connection-pooler logs of a cluster whose logs Dasha can " +
+			"reach (supports_logs=true in list_clusters; log_streams lists the streams it serves). Every call " +
+			"reaches the log store and is rate-limited per user (the operator sets the limit per source) — " +
+			"make each call count: keep the default dedup=true overview, a narrow window (since='1h') and " +
+			"severity/message filters, and refine with one follow-up call instead of paging raw records. " +
+			"After a 429 back off before retrying.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a searchLogsArgs) (*mcp.CallToolResult, any, error) {
 		params, errMsg := logsParams(a)
 		if errMsg != "" {
@@ -903,7 +904,7 @@ func parseSince(since string) (time.Duration, error) {
 }
 
 // logsDefaultSince is the default look-back window for search_logs; a short
-// window keeps the upstream Yandex API scan (and the result) small.
+// window keeps the upstream scan (and the result) small.
 const logsDefaultSince = time.Hour
 
 // logsDefaultPageSize caps raw (dedup=false) records per page, keeping one
@@ -912,11 +913,16 @@ const logsDefaultPageSize = 100
 
 // logsParams validates search_logs arguments locally and maps them onto the
 // API params. Local validation matters more than usual here: the endpoint is
-// rate-limited per user (it fronts the Yandex Cloud API), so a request that
-// would just 400 upstream must not burn a rate-limit slot.
+// rate-limited per user (it fronts the log store), so a request that would just
+// 400 upstream must not burn a rate-limit slot.
 func logsParams(a searchLogsArgs) (*apiclient.GetLogsParams, string) {
-	serviceType := apiclient.GetLogsParamsServiceType(cmp.Or(a.ServiceType, string(apiclient.Postgresql)))
-	if serviceType != apiclient.Postgresql && serviceType != apiclient.Pooler {
+	const (
+		typePostgresql = apiclient.GetLogsParamsServiceTypePostgresql
+		typePooler     = apiclient.GetLogsParamsServiceTypePooler
+	)
+
+	serviceType := apiclient.GetLogsParamsServiceType(cmp.Or(a.ServiceType, string(typePostgresql)))
+	if serviceType != typePostgresql && serviceType != typePooler {
 		return nil, "service_type must be 'postgresql' or 'pooler'"
 	}
 

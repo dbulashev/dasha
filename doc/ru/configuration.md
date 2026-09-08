@@ -199,20 +199,127 @@ Dasha открывает по пулу соединений на каждую п
 
 ## Поиск по логам (опционально)
 
-Для кластеров из Yandex MDB discovery страница `/logs` работает из коробки (переиспользуется ключ сервисного аккаунта discovery). Глобальный блок `log_search` только настраивает лимиты:
+Страница `/logs` читает уже существующее хранилище логов; сама Dasha логи не собирает и не разбирает.
+Для кластеров из сервис-дискавери Yandex MDB всё работает из коробки: берётся ключ сервисного
+аккаунта дискаверинга. Остальные кластеры читают из источника, описанного в `log_search.sources` и
+названного в `log_source` кластера.
 
 ```yaml
 log_search:
   max_scan: 5000          # максимум просканированных записей за поиск
   max_page_size: 1000     # верхняя граница page_size
-  timeout_seconds: 30     # таймаут чтения из Yandex API
-  rate_limit:             # на пользователя (на IP для анонимных); rps <= 0 отключает
+  timeout_seconds: 30     # таймаут чтения из хранилища
+  rate_limit:             # на пользователя (на IP для анонимных); rps <= 0 снимает лимит
     requests_per_second: 0.0333   # 1 запрос в 30с
     burst: 10
   admin_rate_limit:
     requests_per_second: 0.2      # 1 запрос в 5с
     burst: 20
 ```
+
+### Источники OpenSearch
+
+Сервер должен писать `log_destination = jsonlog` (PostgreSQL 15+) или `csvlog`, а агент доставки —
+раскладывать запись по полям; индекс с сырой строкой лога не поддерживается.
+
+```yaml
+log_search:
+  default_source: main          # обслуживает все кластеры без своего источника
+  sources:
+    main:
+      type: opensearch
+      addresses: ["https://os-1.example.net:9200"]
+      auth:
+        kind: basic             # none | basic | api_key
+        user: dasha
+        password_from_env: OS_PASSWORD
+      tls:
+        ca_file: /etc/dasha/os-ca.pem
+        insecure_skip_verify: false
+      batch_size: 1000          # записей за один запрос к хранилищу
+      max_boundary_ids: 10000   # курсор останавливается, если на одной метке времени больше записей;
+                                # не меньше batch_size и не больше max_result_window индекса
+      rate_limit:               # перекрывает глобальные лимиты для этого источника
+        requests_per_second: 1
+        burst: 20
+      streams:
+        postgresql:
+          index: "pg-logs-{{ .Cluster }}-*"
+          selector:             # дополнительный term-фильтр, когда все кластеры в одном индексе
+            cluster: "{{ .Cluster }}"
+          field_map:
+            preset: jsonlog     # jsonlog | csvlog | odyssey | pgbouncer | none
+            timestamp: "@timestamp"
+            host: host.name
+            host_match: suffix  # exact (по умолчанию) или suffix, когда в индексе FQDN
+            keyword_fields:     # поле точного совпадения для анализируемого поля
+              error_severity: error_severity.keyword
+              host.name: host.name.keyword
+        pooler:
+          index: "pgbouncer-logs-*"
+          field_map:
+            preset: pgbouncer
+            timestamp: "@timestamp"
+            host: host.name
+            severities: [NOISE, LOG, WARNING, ERROR, FATAL]  # сужает словарь пресета
+            mask: [msg, query]  # дополнительные поля для маскирования; text маскируется всегда
+
+clusters:
+  - name: prod
+    log_source: main
+```
+
+В Helm-чарте CA подключается как том бэкенда, а путь монтирования подставляется в `ca_file`:
+
+```yaml
+# values.yaml; kubectl create secret generic dasha-os-ca --from-file=ca.pem=os-ca.pem
+backend:
+  extraVolumes:
+    - name: os-ca
+      secret:
+        secretName: dasha-os-ca
+  extraVolumeMounts:
+    - name: os-ca
+      mountPath: /etc/ssl/opensearch   # ca_file: /etc/ssl/opensearch/ca.pem
+      readOnly: true
+```
+
+В чарте `/etc/dasha` занят ConfigMap с `dasha.yaml`: том с сертификатом монтируется отдельным путём.
+
+Порядок привязки: `log_source` кластера, затем встроенный источник Yandex MDB для кластеров из
+MDB-дискаверинга, затем `default_source`. Указанный в `log_source` источник должен быть описан в
+`sources`, а источник может объявлять только потоки `postgresql` и `pooler`; и то, и другое
+проверяется на старте. Имя `yandex-mdb` занято встроенным источником. С `auth.kind: basic` и
+`api_key` все адреса должны начинаться с `https://`, а `tls.insecure_skip_verify` запрещён.
+
+`{{ .Cluster }}` — единственная подстановка, она раскрывается в шаблоне индекса и в значениях
+`selector`. Хост не подставляется: в поиске без фильтра по хосту его нет, и шаблон индекса с хостом
+не совпал бы ни с одним индексом.
+
+Пресет задаёт имена полей известного формата лога; заданное явно поле перекрывает пресет. Полей
+`timestamp` и `host` в пресетах нет — PostgreSQL их не пишет, их именует агент доставки, — поэтому
+оба задаются явно. В хранилище уходят только фильтры по severity и хосту; подстроки по сообщению,
+базе и пользователю Dasha фильтрует сама — анализируемое поле `text` поиску не мешает. Поля
+severity, хоста и `selector` сравниваются точно, поэтому должны быть проиндексированы как `keyword`;
+если хранилище анализирует такое поле — а динамический маппинг по умолчанию именно это и делает, —
+укажите в `keyword_fields` его keyword-вариант, иначе фильтр не найдёт ничего. Тип каждого поля
+маппинга показывает проверка источника (ниже).
+
+`severities` — словарь уровней потока в том написании, в каком уровни лежат в хранилище: любое
+другое значение поиск отклоняет, а страница логов предлагает в фильтре уровней ровно этот список.
+У каждого пресета он свой: уровни PostgreSQL в верхнем регистре для `jsonlog` и `csvlog`, в нижнем —
+для `odyssey`, `NOISE, DEBUG, LOG, WARNING, ERROR, FATAL` для `pgbouncer`.
+
+Поле `text` маскируется всегда: его значение проходит через санитайзер запросов, прежде чем покинуть
+бэкенд. `mask` добавляет остальные текстовые поля. Когда `text` лежит во вложенном объекте
+(`text: pg.message`), запись `mask` без точки маскирует оба имени: по записи `detail` маскируются
+и `detail`, и `pg.detail`.
+
+Поток, который источник не объявил, недоступен: API отвечает 501, в интерфейсе переключатель скрыт.
+
+`GET /api/logs/check?cluster_name=…&service_type=…` (только админ) проверяет источник и возвращает
+раскрытое имя индекса, число записей за последний час, найденные и недостающие поля маппинга и одну
+маскированную запись-образец.
 
 ## Проверки схемы (опционально)
 

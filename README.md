@@ -31,7 +31,7 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 [Settings Analysis](doc/en/features.md#settings-analysis) ·
 [Schema Checks](doc/en/features.md#schema-checks) ·
 [Health Score](doc/en/features.md#health-score) ·
-[Log Search (Yandex Cloud)](doc/en/features.md#log-search-yandex-cloud) ·
+[Log Search](doc/en/features.md#log-search) ·
 [Authentication & Authorization](doc/en/features.md#authentication--authorization) ·
 [Infrastructure](doc/en/features.md#infrastructure) ·
 [User Preferences](doc/en/features.md#user-preferences) ·

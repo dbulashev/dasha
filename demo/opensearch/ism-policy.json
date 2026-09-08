@@ -1,0 +1,23 @@
+{
+  "policy": {
+    "description": "Demo retention for PostgreSQL log indices",
+    "default_state": "hot",
+    "states": [
+      {
+        "name": "hot",
+        "actions": [],
+        "transitions": [
+          { "state_name": "delete", "conditions": { "min_index_age": "3d" } }
+        ]
+      },
+      {
+        "name": "delete",
+        "actions": [{ "delete": {} }],
+        "transitions": []
+      }
+    ],
+    "ism_template": [
+      { "index_patterns": ["pg-logs-*", "pooler-logs-*"], "priority": 100 }
+    ]
+  }
+}

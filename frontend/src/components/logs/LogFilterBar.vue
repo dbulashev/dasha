@@ -6,10 +6,12 @@ import type { LocationQuery } from 'vue-router'
 import type { GetLogsServiceType } from '@/api/models'
 import { copyToClipboard } from '@/utils/sql'
 import { fromDateTimeInput, toDateTimeInput, withZoneLabel } from '@/utils/format'
-import { LOG_PRESETS, severityOptions, type LogFilters, type LogOrder } from './types'
+import { LOG_PRESETS, severityOptions, type LogFilters, type LogOrder, type LogPreset } from './types'
 
 const props = defineProps<{
   hosts: string[]
+  streams: string[]
+  sourceSeverities?: Record<string, string[]>
   loading: boolean
 }>()
 
@@ -39,10 +41,30 @@ const preset = ref<string | null>(null)
 const customFrom = ref<string>('')
 const customTo = ref<string>('')
 
-const serviceTypeItems = [
+const allServiceTypes = [
   { value: 'postgresql', title: 'PostgreSQL' },
   { value: 'pooler', title: 'Pooler' },
 ]
+
+// A source that serves no pooler log answers 501 for it; an empty list means
+// the cluster predates the field and both streams stay offered.
+const serviceTypeItems = computed(() =>
+  props.streams.length === 0
+    ? allServiceTypes
+    : allServiceTypes.filter(st => props.streams.includes(st.value)),
+)
+
+// Sync flush and immediate: applyPreset/applyState set the service type and
+// submit in the same tick, so an unavailable stream has to be corrected before
+// the search is emitted.
+function normalizeServiceType() {
+  const items = serviceTypeItems.value
+  if (items.length > 0 && !items.some(st => st.value === serviceType.value)) {
+    serviceType.value = items[0].value as GetLogsServiceType
+  }
+}
+
+watch([serviceTypeItems, serviceType], normalizeServiceType, { immediate: true, flush: 'sync' })
 
 const rangeItems = computed(() => [
   { value: '1h', title: t('logs.range.1h') },
@@ -52,7 +74,7 @@ const rangeItems = computed(() => [
   { value: 'custom', title: t('logs.range.custom') },
 ])
 
-const severityItems = computed(() => severityOptions(serviceType.value))
+const severityItems = computed(() => severityOptions(serviceType.value, props.sourceSeverities))
 
 const pageSizeItems = [50, 100, 250, 500, 1000]
 
@@ -75,12 +97,27 @@ const presetItems = computed(() =>
   LOG_PRESETS.map(p => ({ value: p.id, title: t(`logs.preset.${p.id}`) })),
 )
 
+// A source may declare its own vocabulary, and the backend rejects a search
+// carrying a severity outside it; keep the preset to what the source accepts,
+// in the spelling it stores.
+function presetSeverities(p: LogPreset): string[] {
+  const allowed = severityOptions('postgresql', props.sourceSeverities)
+  return p.severities
+    .map(s => allowed.find(a => a.toLowerCase() === s.toLowerCase()))
+    .filter((s): s is string => s !== undefined)
+}
+
 function applyPreset(id: string | null) {
   const p = LOG_PRESETS.find(x => x.id === id)
   if (!p) return
+  const picked = presetSeverities(p)
+  if (picked.length === 0) {
+    preset.value = null
+    return
+  }
   serviceType.value = 'postgresql'
   includes.value = p.message ? [p.message] : []
-  severities.value = [...p.severities]
+  severities.value = picked
 }
 
 watch(preset, applyPreset)
@@ -99,7 +136,7 @@ watch([serviceType, includes, severities], () => {
   const matches =
     serviceType.value === 'postgresql' &&
     sameArr(includes.value ?? [], wantIncludes) &&
-    sameArr(severities.value ?? [], p.severities)
+    sameArr(severities.value ?? [], presetSeverities(p))
   if (!matches) preset.value = null
 })
 
@@ -439,6 +476,7 @@ defineExpose({ applyDrill, addExclude, applyAbsoluteRange })
         <v-col cols="12" sm="6" md="3" class="d-flex align-center justify-space-between">
           <v-icon icon="mdi-text-box-search-outline" size="28" color="primary" class="ms-1" />
           <v-btn-toggle
+            v-if="serviceTypeItems.length > 1"
             v-model="serviceType"
             mandatory
             density="comfortable"

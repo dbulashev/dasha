@@ -1,7 +1,6 @@
-// Package logs orchestrates Yandex Cloud cluster log search on top of the
-// low-level StreamClusterLogs wrapper: it resolves the cluster to its folder
-// SDK, builds an injection-safe native filter, applies Dasha-side filtering,
-// masks sensitive text, and optionally deduplicates messages.
+// Package logs orchestrates cluster log search on top of a log source: it
+// resolves the cluster to its source, applies Dasha-side filtering, masks
+// sensitive text, and optionally deduplicates messages.
 package logs
 
 import (
@@ -16,7 +15,7 @@ import (
 
 	"github.com/dbulashev/dasha/internal/auth"
 	"github.com/dbulashev/dasha/internal/config"
-	"github.com/dbulashev/dasha/internal/discovery/yandex"
+	"github.com/dbulashev/dasha/internal/logs/source"
 	"github.com/dbulashev/dasha/internal/pkg/sanitize"
 )
 
@@ -26,52 +25,31 @@ const defaultPageSize = 100
 var (
 	// ErrNotFound means the cluster name is unknown.
 	ErrNotFound = errors.New("cluster not found")
-	// ErrUnsupported means the cluster is not a Yandex MDB cluster or has no SDK.
+	// ErrUnsupported means no log source is bound to the cluster, or the
+	// source does not serve the requested stream.
 	ErrUnsupported = errors.New("logs not supported for this cluster")
 	// ErrInvalid means the request parameters failed validation.
 	ErrInvalid = errors.New("invalid log search parameters")
-	// ErrUpstream means the Yandex API returned an error.
-	ErrUpstream = errors.New("yandex api error")
+	// ErrUpstream means the log source returned an error.
+	ErrUpstream = errors.New("log source error")
 	// ErrTimeout means the upstream read exceeded the configured timeout.
-	ErrTimeout = errors.New("yandex api timeout")
+	ErrTimeout = errors.New("log source timeout")
 )
-
-// ServiceTypePooler is the wire value selecting the connection pooler log.
-const ServiceTypePooler = "pooler"
-
-// ParseServiceType maps the API service_type string to a yandex.ServiceType,
-// defaulting to PostgreSQL for any non-pooler value.
-func ParseServiceType(s string) yandex.ServiceType {
-	if s == ServiceTypePooler {
-		return yandex.ServicePooler
-	}
-
-	return yandex.ServicePostgreSQL
-}
-
-// serviceTypeName is the reverse of ParseServiceType, for logging.
-func serviceTypeName(st yandex.ServiceType) string {
-	if st == yandex.ServicePooler {
-		return ServiceTypePooler
-	}
-
-	return "postgresql"
-}
 
 // SearchQuery is a normalized log search request.
 type SearchQuery struct {
-	Cluster     string
-	ServiceType yandex.ServiceType
-	From, To    time.Time
-	Severities  []string // native filter (allowlist)
-	Host        string   // native filter (validated against cluster hosts)
-	Include     []string // Dasha-side substrings on message, all must match (AND)
-	Exclude     []string // Dasha-side negative substrings on message (grep -v)
-	Database    string   // Dasha-side substring (case-insensitive)
-	User        string   // Dasha-side substring (case-insensitive)
-	Dedup       bool
-	PageSize    int
-	PageToken   string // non-dedup cursor only
+	Cluster    string
+	Stream     string
+	From, To   time.Time
+	Severities []string // pushed down to the source (allowlist)
+	Host       string   // pushed down to the source (validated against cluster hosts)
+	Include    []string // Dasha-side substrings on message, all must match (AND)
+	Exclude    []string // Dasha-side negative substrings on message (grep -v)
+	Database   string   // Dasha-side substring (case-insensitive)
+	User       string   // Dasha-side substring (case-insensitive)
+	Dedup      bool
+	PageSize   int
+	PageToken  string // non-dedup cursor only
 }
 
 // Entry is a single result row (or a dedup group when Count > 0).
@@ -99,14 +77,30 @@ type SearchResult struct {
 	Scanned       int
 }
 
+// CheckReport is the outcome of probing the source bound to a cluster.
+type CheckReport struct {
+	Source    string
+	Stream    string
+	Target    string
+	Documents int
+	Found     map[string]string
+	Missing   []string
+	Types     map[string]string
+	Sample    map[string]string // masked
+}
+
 // Service searches cluster logs.
 type Service interface {
 	Search(ctx context.Context, q SearchQuery) (SearchResult, error)
+	// Check probes the source bound to a cluster.
+	Check(ctx context.Context, cluster, stream string) (CheckReport, error)
+	// SourceName is the name of the source bound to a cluster, empty when none.
+	SourceName(ctx context.Context, cluster string) string
 }
 
 type service struct {
 	clusters config.Clusters
-	registry *yandex.Registry
+	sources  *source.Registry
 	cfg      config.LogSearchConfig
 	logger   *zap.Logger
 }
@@ -114,13 +108,13 @@ type service struct {
 // NewService builds the log search service.
 func NewService(
 	clusters config.Clusters,
-	registry *yandex.Registry,
+	sources *source.Registry,
 	cfg config.LogSearchConfig,
 	logger *zap.Logger,
 ) Service {
 	return &service{
 		clusters: clusters,
-		registry: registry,
+		sources:  sources,
 		cfg:      cfg.WithDefaults(),
 		logger:   logger,
 	}
@@ -132,18 +126,17 @@ func (s *service) Search(ctx context.Context, q SearchQuery) (SearchResult, erro
 		return SearchResult{}, ErrNotFound
 	}
 
-	if !cluster.SupportsLogs() {
+	provider, sourceName, ok := s.sources.For(cluster)
+	if !ok {
 		return SearchResult{}, fmt.Errorf("%w: cluster has no log source", ErrUnsupported)
 	}
 
-	sdk, ok := s.registry.Get(cluster.Labels["folder_id"])
-	if !ok {
-		return SearchResult{}, fmt.Errorf("%w: no SDK for folder", ErrUnsupported)
+	fm := provider.Fields(q.Stream)
+	if fm.Empty() {
+		return SearchResult{}, fmt.Errorf("%w: source %q has no stream %q", ErrUnsupported, sourceName, q.Stream)
 	}
 
-	fd := fieldsFor(q.ServiceType)
-
-	severities, err := s.validate(cluster, fd, q)
+	severities, err := s.validate(cluster, fm, q)
 	if err != nil {
 		return SearchResult{}, err
 	}
@@ -156,28 +149,89 @@ func (s *service) Search(ctx context.Context, q SearchQuery) (SearchResult, erro
 	s.logger.Info("log search",
 		zap.String("user", user),
 		zap.String("cluster", q.Cluster),
-		zap.String("service", serviceTypeName(q.ServiceType)),
+		zap.String("source", sourceName),
+		zap.String("service", q.Stream),
 	)
 
-	filter := buildFilter(fd, severities, q.Host)
-
-	params := yandex.StreamLogsParams{ //nolint:exhaustruct
-		ClusterID:   cluster.ProviderID,
-		ServiceType: q.ServiceType,
-		From:        q.From,
-		To:          q.To,
-		Filter:      filter,
-		RecordToken: q.PageToken,
+	params := source.StreamParams{
+		Cluster: cluster,
+		Stream:  q.Stream,
+		From:    q.From,
+		To:      q.To,
+		Filter: source.Filter{
+			Severities: severities,
+			Host:       q.Host,
+		},
+		Token: q.PageToken,
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(s.cfg.TimeoutSeconds)*time.Second)
 	defer cancel()
 
 	if q.Dedup {
-		return s.searchDedup(ctx, sdk, params, q, fd)
+		return s.searchDedup(ctx, provider, params, q, fm)
 	}
 
-	return s.searchPage(ctx, sdk, params, q, fd)
+	return s.searchPage(ctx, provider, params, q, fm)
+}
+
+// Check probes the source bound to the cluster and masks the sample record it
+// brings back.
+func (s *service) Check(ctx context.Context, cluster, stream string) (CheckReport, error) {
+	c, ok := s.findCluster(ctx, cluster)
+	if !ok {
+		return CheckReport{}, ErrNotFound
+	}
+
+	provider, sourceName, ok := s.sources.For(c)
+	if !ok {
+		return CheckReport{}, fmt.Errorf("%w: cluster has no log source", ErrUnsupported)
+	}
+
+	fm := provider.Fields(stream)
+	if fm.Empty() {
+		return CheckReport{}, fmt.Errorf("%w: source %q has no stream %q", ErrUnsupported, sourceName, stream)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(s.cfg.TimeoutSeconds)*time.Second)
+	defer cancel()
+
+	res, err := provider.Check(ctx, c, stream)
+	if err != nil {
+		return CheckReport{}, s.classify(ctx, err)
+	}
+
+	report := CheckReport{
+		Source:    sourceName,
+		Stream:    stream,
+		Target:    res.Target,
+		Documents: res.Documents,
+		Found:     res.Found,
+		Missing:   res.Missing,
+		Types:     res.Types,
+		Sample:    nil,
+	}
+
+	if res.Sample != nil {
+		report.Sample = maskFields(res.Sample, fm)
+	}
+
+	return report, nil
+}
+
+// SourceName resolves the log source serving a cluster.
+func (s *service) SourceName(ctx context.Context, cluster string) string {
+	c, ok := s.findCluster(ctx, cluster)
+	if !ok {
+		return ""
+	}
+
+	_, name, ok := s.sources.For(c)
+	if !ok {
+		return ""
+	}
+
+	return name
 }
 
 func (s *service) findCluster(ctx context.Context, name string) (config.Cluster, bool) {
@@ -198,8 +252,8 @@ func (s *service) findCluster(ctx context.Context, name string) (config.Cluster,
 }
 
 // validate checks time range, severities and host; returns the severities in
-// the casing the Yandex API expects.
-func (s *service) validate(cluster config.Cluster, fd serviceFields, q SearchQuery) ([]string, error) {
+// the casing the source stores them.
+func (s *service) validate(cluster config.Cluster, fm source.FieldMap, q SearchQuery) ([]string, error) {
 	if !q.From.Before(q.To) {
 		return nil, fmt.Errorf("%w: 'from' must be before 'to'", ErrInvalid)
 	}
@@ -217,8 +271,8 @@ func (s *service) validate(cluster config.Cluster, fd serviceFields, q SearchQue
 			continue
 		}
 
-		v := fd.normalizeSeverity(raw)
-		if _, ok := fd.severityAllow[v]; !ok {
+		v, ok := fm.CanonicalSeverity(raw)
+		if !ok {
 			return nil, fmt.Errorf("%w: unknown severity %q", ErrInvalid, raw)
 		}
 
@@ -242,37 +296,16 @@ func hostInCluster(cluster config.Cluster, host string) bool {
 	return false
 }
 
-// buildFilter assembles the native StreamLogs filter from allowlisted values
-// only (severity enum + validated host), so the expression is injection-safe.
-func buildFilter(fd serviceFields, severities []string, host string) string {
-	var parts []string
-
-	if len(severities) > 0 {
-		quoted := make([]string, len(severities))
-		for i, sev := range severities {
-			quoted[i] = `"` + sev + `"`
-		}
-
-		parts = append(parts, fmt.Sprintf("%s IN (%s)", fd.severityFilterField, strings.Join(quoted, ", ")))
-	}
-
-	if host != "" {
-		parts = append(parts, fmt.Sprintf(`%s = "%s"`, fd.hostFilterField, host))
-	}
-
-	return strings.Join(parts, " AND ")
-}
-
 // searchPage collects up to PageSize matching records (cursor-based pagination).
 // Once the page is full it keeps scanning (without consuming) until the next
 // match or EOF, so NextPageToken is emitted only when more matches actually
 // exist — never a token that leads to an empty page.
 func (s *service) searchPage(
 	ctx context.Context,
-	sdk *yandex.SDK,
-	params yandex.StreamLogsParams,
+	provider source.Provider,
+	params source.StreamParams,
 	q SearchQuery,
-	fd serviceFields,
+	fm source.FieldMap,
 ) (SearchResult, error) {
 	pageSize := q.PageSize
 	if pageSize <= 0 {
@@ -291,8 +324,8 @@ func (s *service) searchPage(
 		capped    bool
 	)
 
-	err := sdk.StreamLogs(ctx, params, func(rec yandex.LogRecord) bool {
-		e, ok := s.toEntry(rec, q, fd)
+	err := provider.Stream(ctx, params, func(rec source.Record) bool {
+		e, ok := s.toEntry(rec, q, fm)
 
 		if ok && len(items) >= pageSize {
 			// Lookahead match: do not consume it — the resume token must point
@@ -319,12 +352,24 @@ func (s *service) searchPage(
 	})
 	if err != nil {
 		cErr := s.classify(ctx, err)
+
+		// A timeout keeps its resume token; a source that stopped early cannot
+		// hand one out. Either way what was collected is returned as a partial
+		// page instead of being discarded.
 		if errors.Is(cErr, ErrTimeout) && len(items) > 0 {
-			// Surface what was collected before the timeout as a partial page
-			// instead of discarding it.
 			return SearchResult{
 				Items:         items,
 				NextPageToken: lastToken,
+				Dedup:         false,
+				Partial:       true,
+				Scanned:       scanned,
+			}, nil
+		}
+
+		if errors.Is(err, source.ErrPartial) {
+			return SearchResult{
+				Items:         items,
+				NextPageToken: "",
 				Dedup:         false,
 				Partial:       true,
 				Scanned:       scanned,
@@ -353,10 +398,10 @@ func (s *service) searchPage(
 // searchDedup scans up to MaxScan records and groups matches by normalized text.
 func (s *service) searchDedup(
 	ctx context.Context,
-	sdk *yandex.SDK,
-	params yandex.StreamLogsParams,
+	provider source.Provider,
+	params source.StreamParams,
 	q SearchQuery,
-	fd serviceFields,
+	fm source.FieldMap,
 ) (SearchResult, error) {
 	var (
 		groups  = make(map[string]*Entry)
@@ -364,10 +409,10 @@ func (s *service) searchDedup(
 		capped  bool
 	)
 
-	err := sdk.StreamLogs(ctx, params, func(rec yandex.LogRecord) bool {
+	err := provider.Stream(ctx, params, func(rec source.Record) bool {
 		scanned++
 
-		if e, ok := s.toEntry(rec, q, fd); ok {
+		if e, ok := s.toEntry(rec, q, fm); ok {
 			key := normalize(e.Text)
 
 			if g, exists := groups[key]; exists {
@@ -407,12 +452,15 @@ func (s *service) searchDedup(
 	})
 	if err != nil {
 		cErr := s.classify(ctx, err)
-		if !errors.Is(cErr, ErrTimeout) || len(groups) == 0 {
+
+		partial := errors.Is(err, source.ErrPartial) ||
+			(errors.Is(cErr, ErrTimeout) && len(groups) > 0)
+		if !partial {
 			return SearchResult{}, cErr
 		}
 
-		// Surface the groups collected before the timeout as a partial result
-		// instead of discarding them.
+		// Surface the groups collected before the source gave up as a partial
+		// result instead of discarding them.
 		capped = true
 	}
 
@@ -443,14 +491,12 @@ func (s *service) searchDedup(
 // Filters run against the raw values first so the map copy and masking happen
 // only for records that will actually be returned.
 func (s *service) toEntry(
-	rec yandex.LogRecord,
+	rec source.Record,
 	q SearchQuery,
-	fd serviceFields,
+	fm source.FieldMap,
 ) (Entry, bool) {
-	pf := fd.promoted
-
 	for _, inc := range q.Include {
-		if inc != "" && !containsFold(rec.Fields[pf.text], inc) {
+		if inc != "" && !containsFold(rec.Fields[fm.Text], inc) {
 			return Entry{}, false //nolint:exhaustruct
 		}
 	}
@@ -466,7 +512,7 @@ func (s *service) toEntry(
 
 		if strings.Contains(ex, displayPlaceholder) {
 			if templated == "" {
-				templated = displayTemplate(rec.Fields[pf.text])
+				templated = displayTemplate(rec.Fields[fm.Text])
 			}
 
 			if containsFold(templated, ex) {
@@ -476,39 +522,47 @@ func (s *service) toEntry(
 			continue
 		}
 
-		if containsFold(rec.Fields[pf.text], ex) {
+		if containsFold(rec.Fields[fm.Text], ex) {
 			return Entry{}, false //nolint:exhaustruct
 		}
 	}
 
-	if q.Database != "" && !containsFold(rec.Fields[pf.database], q.Database) {
+	if q.Database != "" && !containsFold(rec.Fields[fm.Database], q.Database) {
 		return Entry{}, false //nolint:exhaustruct
 	}
 
-	if q.User != "" && !containsFold(rec.Fields[pf.user], q.User) {
+	if q.User != "" && !containsFold(rec.Fields[fm.User], q.User) {
 		return Entry{}, false //nolint:exhaustruct
 	}
 
-	masked := make(map[string]string, len(rec.Fields))
-	for k, v := range rec.Fields {
+	masked := maskFields(rec.Fields, fm)
+
+	return Entry{ //nolint:exhaustruct
+		Timestamp: rec.Timestamp,
+		Severity:  masked[fm.Severity],
+		Hostname:  masked[fm.Host],
+		Text:      masked[fm.Text],
+		Database:  masked[fm.Database],
+		User:      masked[fm.User],
+		Fields:    masked,
+	}, true
+}
+
+// maskFields copies the record's fields, passing the free-text ones listed in
+// the field map through sanitize.SQL().
+func maskFields(fields map[string]string, fm source.FieldMap) map[string]string {
+	masked := make(map[string]string, len(fields))
+	for k, v := range fields {
 		masked[k] = v
 	}
 
-	for _, mk := range fd.mask {
+	for _, mk := range fm.Mask {
 		if v, ok := masked[mk]; ok {
 			masked[mk] = sanitize.SQL(v)
 		}
 	}
 
-	return Entry{ //nolint:exhaustruct
-		Timestamp: rec.Timestamp,
-		Severity:  masked[pf.severity],
-		Hostname:  masked[pf.host],
-		Text:      masked[pf.text],
-		Database:  masked[pf.database],
-		User:      masked[pf.user],
-		Fields:    masked,
-	}, true
+	return masked
 }
 
 // classify converts a low-level stream error into a sentinel error. A cancelled
@@ -523,6 +577,16 @@ func (s *service) classify(ctx context.Context, err error) error {
 	if errors.Is(ctx.Err(), context.Canceled) || errors.Is(err, context.Canceled) {
 		return context.Canceled
 	}
+
+	if errors.Is(err, source.ErrStream) || errors.Is(err, source.ErrUnavailable) {
+		return fmt.Errorf("%w: %s", ErrUnsupported, err.Error())
+	}
+
+	if errors.Is(err, source.ErrInvalidToken) {
+		return fmt.Errorf("%w: %s", ErrInvalid, err.Error())
+	}
+
+	s.logger.Warn("logs: source error", zap.Error(err))
 
 	return fmt.Errorf("%w: %s", ErrUpstream, sanitize.SQL(err.Error()))
 }

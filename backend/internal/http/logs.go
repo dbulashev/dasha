@@ -10,7 +10,11 @@ import (
 	"github.com/dbulashev/dasha/internal/pkg/shortcut"
 )
 
-// GetLogs searches Yandex Cloud cluster logs (PostgreSQL/pooler) via the MDB API.
+// upstreamMessage stands in for the log store's own error text, which names
+// internal hosts and indices; the detail is logged instead.
+const upstreamMessage = "log source error"
+
+// GetLogs searches cluster logs through the log source bound to the cluster.
 func (s *Handlers) GetLogs(
 	ctx context.Context,
 	req serverhttp.GetLogsRequestObject,
@@ -18,19 +22,19 @@ func (s *Handlers) GetLogs(
 	p := req.Params
 
 	q := logs.SearchQuery{
-		Cluster:     string(p.ClusterName),
-		ServiceType: logs.ParseServiceType(string(p.ServiceType)),
-		From:        p.From,
-		To:          p.To,
-		Severities:  deref(p.Severity),
-		Host:        deref(p.Host),
-		Include:     deref(p.Message),
-		Exclude:     deref(p.Exclude),
-		Database:    deref(p.Database),
-		User:        deref(p.User),
-		Dedup:       deref(p.Dedup),
-		PageSize:    deref(p.PageSize),
-		PageToken:   deref(p.PageToken),
+		Cluster:    string(p.ClusterName),
+		Stream:     string(p.ServiceType),
+		From:       p.From,
+		To:         p.To,
+		Severities: deref(p.Severity),
+		Host:       deref(p.Host),
+		Include:    deref(p.Message),
+		Exclude:    deref(p.Exclude),
+		Database:   deref(p.Database),
+		User:       deref(p.User),
+		Dedup:      deref(p.Dedup),
+		PageSize:   deref(p.PageSize),
+		PageToken:  deref(p.PageToken),
 	}
 
 	res, err := s.logs.Search(ctx, q)
@@ -45,7 +49,7 @@ func (s *Handlers) GetLogs(
 		case errors.Is(err, logs.ErrTimeout):
 			return serverhttp.GetLogs504Response{}, nil
 		case errors.Is(err, logs.ErrUpstream):
-			return serverhttp.GetLogs502Response{}, nil
+			return serverhttp.GetLogs502JSONResponse{Message: upstreamMessage}, nil
 		default:
 			// context.Canceled (client disconnect) lands here; the error
 			// handler skips logging it.
@@ -106,4 +110,52 @@ func deref[T any](p *T) T {
 	}
 
 	return *p
+}
+
+// GetLogsCheck probes the log source bound to a cluster so a misconfigured
+// field map or an unreachable index is visible before anyone searches.
+func (s *Handlers) GetLogsCheck(
+	ctx context.Context,
+	req serverhttp.GetLogsCheckRequestObject,
+) (serverhttp.GetLogsCheckResponseObject, error) {
+	res, err := s.logs.Check(ctx, string(req.Params.ClusterName), string(req.Params.ServiceType))
+	if err != nil {
+		switch {
+		case errors.Is(err, logs.ErrNotFound):
+			return serverhttp.GetLogsCheck404Response{}, nil
+		case errors.Is(err, logs.ErrUnsupported):
+			return serverhttp.GetLogsCheck501Response{}, nil
+		case errors.Is(err, logs.ErrTimeout):
+			return serverhttp.GetLogsCheck504Response{}, nil
+		case errors.Is(err, logs.ErrUpstream):
+			return serverhttp.GetLogsCheck502JSONResponse{Message: upstreamMessage}, nil
+		default:
+			return nil, fmt.Errorf("GetLogsCheck | %w", err)
+		}
+	}
+
+	out := serverhttp.LogSourceCheck{
+		Source:     res.Source,
+		Stream:     res.Stream,
+		Target:     res.Target,
+		Documents:  shortcut.Ptr(res.Documents),
+		Found:      mapOrNil(res.Found),
+		FieldTypes: mapOrNil(res.Types),
+		Missing:    nil,
+		Sample:     mapOrNil(res.Sample),
+	}
+
+	if len(res.Missing) > 0 {
+		out.Missing = &res.Missing
+	}
+
+	return serverhttp.GetLogsCheck200JSONResponse(out), nil
+}
+
+func mapOrNil(m map[string]string) *map[string]string {
+	if len(m) == 0 {
+		return nil
+	}
+
+	return &m
 }

@@ -5,6 +5,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { ClusterInstance } from './clusterInstance'
+import type { ClusterLogSeverities } from './clusterLogSeverities'
 
 export interface Cluster {
   name?: string
@@ -12,6 +13,10 @@ export interface Cluster {
   source?: string
   /** true when cluster logs can be searched via GET /api/logs */
   supports_logs?: boolean
+  /** log streams the bound source serves, e.g. postgresql and pooler */
+  log_streams?: string[]
+  /** severity values each stream accepts, keyed by stream name, in the casing the source stores them; the log search rejects any other value */
+  log_severities?: ClusterLogSeverities
   instances?: ClusterInstance[]
   databases?: string[]
 }

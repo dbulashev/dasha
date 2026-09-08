@@ -22,12 +22,19 @@ export interface LogFilters {
 
 export type LogOrder = 'asc' | 'desc'
 
-// Severity options per service type — postgresql uses UPPER case, the pooler
-// (Odyssey) uses lower case, matching what the Yandex API expects.
+// Fallback severity options, used for a cluster whose source declares no
+// vocabulary of its own (log_severities): PostgreSQL upper case, the pooler in
+// the lower-case spelling of Odyssey.
 export const SEVERITIES_POSTGRESQL = ['DEBUG', 'LOG', 'INFO', 'NOTICE', 'WARNING', 'ERROR', 'FATAL', 'PANIC']
 export const SEVERITIES_POOLER = ['debug', 'info', 'warning', 'error', 'fatal']
 
-export function severityOptions(serviceType: GetLogsServiceType): string[] {
+export function severityOptions(
+  serviceType: GetLogsServiceType,
+  declared?: Record<string, string[]>,
+): string[] {
+  const fromSource = declared?.[serviceType]
+  if (fromSource?.length) return fromSource
+
   return serviceType === 'pooler' ? SEVERITIES_POOLER : SEVERITIES_POSTGRESQL
 }
 

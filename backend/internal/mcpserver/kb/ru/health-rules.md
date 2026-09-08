@@ -254,7 +254,7 @@ WAL — переключить на replica, если логическая ре�
 ### deadlocks_rate
 Дедлоки с момента pg_stat_database_reset. LOW при >0. Любой дедлок — баг
 приложения (разный порядок захвата блокировок) — детали в логе сервера
-(`search_logs` с пресетом на кластерах Yandex MDB).
+(`search_logs` с пресетом на кластерах, у которых в log_streams есть postgresql).
 
 ### lock_pool_saturation
 Заполнение пула тяжёлых блокировок (max_locks_per_transaction × max_connections).
