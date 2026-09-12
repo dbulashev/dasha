@@ -3,7 +3,7 @@
 ## Не выпущено
 
 ### Фичи
-- **Поиск по логам в OpenSearch и Elasticsearch**
+- **Поиск по логам в OpenSearch, Elasticsearch и VictoriaLogs**
 
 ### UX
 - **Health Score доступен роли viewer**, а не только admin.

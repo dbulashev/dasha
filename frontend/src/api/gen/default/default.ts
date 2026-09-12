@@ -10362,7 +10362,7 @@ export function useGetLogs<
 }
 
 /**
- * Probe the log source bound to a cluster: reachability, the resolved index, how many records the last hour holds, which mapped fields exist and one masked sample record. Admin only.
+ * Probe the log source bound to a cluster: reachability, the resolved target, how many records the last hour holds, which mapped fields exist and one masked sample record. Admin only.
  */
 export type getLogsCheckResponse200 = {
   data: LogSourceCheck

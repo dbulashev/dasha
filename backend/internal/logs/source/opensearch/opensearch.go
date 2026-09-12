@@ -13,6 +13,7 @@ import (
 
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/logs/source"
+	"github.com/dbulashev/dasha/internal/logs/source/transport"
 )
 
 // checkWindow is the range Check counts documents and samples a record in.
@@ -26,7 +27,7 @@ type streamDef struct {
 
 // Provider serves one configured log store.
 type Provider struct {
-	client         *client
+	client         *transport.Client
 	streams        map[string]streamDef
 	names          []string
 	batchSize      int
@@ -43,7 +44,8 @@ func New(cfg config.LogSourceConfig, global config.LogSearchConfig, logger *zap.
 		return nil, err
 	}
 
-	c, err := newClient(cfg, time.Duration(global.TimeoutSeconds)*time.Second)
+	c, err := transport.New(cfg, time.Duration(global.TimeoutSeconds)*time.Second,
+		transport.Options{NotFound: "index not found", Headers: nil})
 	if err != nil {
 		return nil, err
 	}
@@ -93,14 +95,14 @@ func (p *Provider) Stream(ctx context.Context, sp source.StreamParams, fn func(s
 		return fmt.Errorf("%w: %q", source.ErrStream, sp.Stream)
 	}
 
-	data := templateData{Cluster: sp.Cluster.Name.String()}
+	data := source.TemplateData{Cluster: sp.Cluster.Name.String()}
 
 	index, err := expandIndex(def.index, data)
 	if err != nil {
 		return err
 	}
 
-	selector, err := expandSelector(def.selector, data)
+	selector, err := source.ExpandMap(def.selector, data)
 	if err != nil {
 		return err
 	}
@@ -135,7 +137,7 @@ func (p *Provider) Stream(ctx context.Context, sp source.StreamParams, fn func(s
 		req := buildSearch(def.fields, selector, sp.Filter, from, sp.To, size, false)
 
 		var resp searchResponse
-		if err := p.client.call(ctx, "POST", "/"+url.PathEscape(index)+"/_search", req, &resp); err != nil {
+		if err := p.client.JSON(ctx, "POST", "/"+url.PathEscape(index)+"/_search", req, &resp); err != nil {
 			return err
 		}
 
@@ -193,7 +195,7 @@ func emit(
 			}
 		}
 
-		ts, err := parseTime(raw)
+		ts, err := source.ParseTime(raw)
 		if err != nil {
 			// A document the delivery pipeline wrote without a usable timestamp
 			// cannot be ordered or resumed from; the rest of the index still can.
@@ -235,14 +237,14 @@ func (p *Provider) Check(ctx context.Context, cluster config.Cluster, stream str
 		return source.CheckResult{}, fmt.Errorf("%w: %q", source.ErrStream, stream)
 	}
 
-	data := templateData{Cluster: cluster.Name.String()}
+	data := source.TemplateData{Cluster: cluster.Name.String()}
 
 	index, err := expandIndex(def.index, data)
 	if err != nil {
 		return source.CheckResult{}, err
 	}
 
-	selector, err := expandSelector(def.selector, data)
+	selector, err := source.ExpandMap(def.selector, data)
 	if err != nil {
 		return source.CheckResult{}, err
 	}
@@ -257,7 +259,7 @@ func (p *Provider) Check(ctx context.Context, cluster config.Cluster, stream str
 	}
 
 	var caps fieldCapsResponse
-	if err := p.client.call(ctx, "GET",
+	if err := p.client.JSON(ctx, "GET",
 		"/"+url.PathEscape(index)+"/_field_caps?fields=*", nil, &caps); err != nil {
 		return source.CheckResult{}, err
 	}
@@ -288,7 +290,7 @@ func (p *Provider) Check(ctx context.Context, cluster config.Cluster, stream str
 		now.Add(-checkWindow), now, 1, true)
 
 	var resp searchResponse
-	if err := p.client.call(ctx, "POST", "/"+url.PathEscape(index)+"/_search", req, &resp); err != nil {
+	if err := p.client.JSON(ctx, "POST", "/"+url.PathEscape(index)+"/_search", req, &resp); err != nil {
 		return source.CheckResult{}, err
 	}
 

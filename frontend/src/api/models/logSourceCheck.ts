@@ -12,7 +12,7 @@ export interface LogSourceCheck {
   /** name of the log source serving the cluster */
   source: string
   stream: string
-  /** resolved upstream location - an index pattern or a cluster id */
+  /** resolved upstream target - an index pattern, a LogsQL expression or a cluster id */
   target: string
   /** records the source found for the cluster in the last hour; a streaming source stops counting at 1000 */
   documents?: number
@@ -20,7 +20,7 @@ export interface LogSourceCheck {
   found?: LogSourceCheckFound
   /** roles whose field is absent upstream */
   missing?: string[]
-  /** type the store indexes each mapped field as */
+  /** type the store indexes each mapped field as; empty for a store without field types */
   field_types?: LogSourceCheckFieldTypes
   /** one masked record from the window */
   sample?: LogSourceCheckSample

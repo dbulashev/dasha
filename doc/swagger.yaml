@@ -2540,7 +2540,7 @@ paths:
       operationId: getLogsCheck
       description: >-
         Probe the log source bound to a cluster: reachability, the resolved
-        index, how many records the last hour holds, which mapped fields exist
+        target, how many records the last hour holds, which mapped fields exist
         and one masked sample record. Admin only.
       parameters:
         - $ref: '#/components/parameters/ClusterName'
@@ -3173,7 +3173,9 @@ components:
           type: string
         target:
           type: string
-          description: resolved upstream location - an index pattern or a cluster id
+          description: >-
+            resolved upstream target - an index pattern, a LogsQL expression or
+            a cluster id
         documents:
           type: integer
           description: >-
@@ -3193,7 +3195,9 @@ components:
           type: object
           additionalProperties:
             type: string
-          description: type the store indexes each mapped field as
+          description: >-
+            type the store indexes each mapped field as; empty for a store
+            without field types
         sample:
           type: object
           additionalProperties:

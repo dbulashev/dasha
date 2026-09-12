@@ -1288,7 +1288,7 @@ type LogSourceCheck struct {
 	// Documents records the source found for the cluster in the last hour; a streaming source stops counting at 1000
 	Documents *int `json:"documents,omitempty"`
 
-	// FieldTypes type the store indexes each mapped field as
+	// FieldTypes type the store indexes each mapped field as; empty for a store without field types
 	FieldTypes *map[string]string `json:"field_types,omitempty"`
 
 	// Found field map roles bound to a field present upstream
@@ -1304,7 +1304,7 @@ type LogSourceCheck struct {
 	Source string `json:"source"`
 	Stream string `json:"stream"`
 
-	// Target resolved upstream location - an index pattern or a cluster id
+	// Target resolved upstream target - an index pattern, a LogsQL expression or a cluster id
 	Target string `json:"target"`
 }
 

@@ -22,6 +22,7 @@ import (
 	"github.com/dbulashev/dasha/internal/logs"
 	"github.com/dbulashev/dasha/internal/logs/source"
 	"github.com/dbulashev/dasha/internal/logs/source/opensearch"
+	"github.com/dbulashev/dasha/internal/logs/source/victorialogs"
 	"github.com/dbulashev/dasha/internal/logs/source/yandexmdb"
 	"github.com/dbulashev/dasha/internal/metrics"
 	"github.com/dbulashev/dasha/internal/pkg/pat"
@@ -524,6 +525,12 @@ func provideConfig() (*config.Config, error) {
 			}
 		}
 
+		if env := src.Auth.TokenFromEnv; env != "" {
+			if v, ok := os.LookupEnv(env); ok {
+				src.Auth.Token = v
+			}
+		}
+
 		c.LogSearch.Sources[name] = src
 	}
 
@@ -605,14 +612,22 @@ func buildLogSource(
 	global config.LogSearchConfig,
 	logger *zap.Logger,
 ) (source.Provider, error) {
-	if cfg.Type != config.LogSourceTypeOpenSearch {
+	switch cfg.Type {
+	case config.LogSourceTypeOpenSearch:
+		p, err := opensearch.New(cfg, global, logger)
+		if err != nil {
+			return nil, err
+		}
+
+		return p, nil
+	case config.LogSourceTypeVictoriaLogs:
+		p, err := victorialogs.New(cfg, global, logger)
+		if err != nil {
+			return nil, err
+		}
+
+		return p, nil
+	default:
 		return nil, fmt.Errorf("unknown log source type %q", cfg.Type)
 	}
-
-	p, err := opensearch.New(cfg, global, logger)
-	if err != nil {
-		return nil, err
-	}
-
-	return p, nil
 }

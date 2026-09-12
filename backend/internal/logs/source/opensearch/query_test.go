@@ -28,7 +28,7 @@ func testFieldMap(t *testing.T) source.FieldMap {
 func TestExpandIndex(t *testing.T) {
 	t.Parallel()
 
-	got, err := expandIndex("pg-logs-{{ .Cluster }}-*", templateData{Cluster: "prod"})
+	got, err := expandIndex("pg-logs-{{ .Cluster }}-*", source.TemplateData{Cluster: "prod"})
 	if err != nil {
 		t.Fatalf("expandIndex: %v", err)
 	}
@@ -38,7 +38,7 @@ func TestExpandIndex(t *testing.T) {
 	}
 
 	for _, name := range []string{"prod/../_all", "prod?x=1", "../etc"} {
-		if _, err := expandIndex("{{ .Cluster }}", templateData{Cluster: name}); err == nil {
+		if _, err := expandIndex("{{ .Cluster }}", source.TemplateData{Cluster: name}); err == nil {
 			t.Errorf("expandIndex accepted cluster name %q", name)
 		}
 	}
@@ -150,38 +150,6 @@ func TestFlattenNestedSource(t *testing.T) {
 		if out[k] != v {
 			t.Errorf("flatten()[%q] = %q, want %q", k, out[k], v)
 		}
-	}
-}
-
-func TestParseTime(t *testing.T) {
-	t.Parallel()
-
-	want := time.Date(2026, 9, 5, 10, 0, 0, 0, time.UTC)
-
-	tests := []any{
-		"2026-09-05T10:00:00Z",
-		"2026-09-05T10:00:00.000Z",
-		"2026-09-05 10:00:00+00:00",
-		float64(want.UnixMilli()),
-	}
-
-	for _, in := range tests {
-		got, err := parseTime(in)
-		if err != nil {
-			t.Fatalf("parseTime(%v): %v", in, err)
-		}
-
-		if !got.Equal(want) {
-			t.Errorf("parseTime(%v) = %v, want %v", in, got, want)
-		}
-	}
-
-	if _, err := parseTime("yesterday"); err == nil {
-		t.Error("parseTime accepted an unparseable value")
-	}
-
-	if _, err := parseTime(nil); err == nil {
-		t.Error("parseTime accepted a missing value")
 	}
 }
 

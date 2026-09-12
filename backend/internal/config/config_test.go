@@ -25,6 +25,23 @@ func TestLogSearchValidate(t *testing.T) {
 		return s
 	}
 
+	vlogsSource := func(mutate func(*LogSourceConfig)) LogSourceConfig {
+		s := LogSourceConfig{
+			Type:      LogSourceTypeVictoriaLogs,
+			Addresses: []string{"https://vlogs:9428"},
+			Auth:      LogSourceAuthConfig{Kind: LogAuthBearer, Token: "t0k"},
+			Streams: map[string]LogStreamConfig{
+				"postgresql": {StreamSelector: map[string]string{"cluster": "{{ .Cluster }}"}},
+			},
+		}
+
+		if mutate != nil {
+			mutate(&s)
+		}
+
+		return s
+	}
+
 	tests := []struct {
 		name     string
 		cfg      LogSearchConfig
@@ -216,6 +233,83 @@ func TestLogSearchValidate(t *testing.T) {
 			name: "no sources at all",
 			cfg:  LogSearchConfig{},
 		},
+		{
+			name: "valid victorialogs source",
+			cfg: LogSearchConfig{
+				Sources: map[string]LogSourceConfig{"vlogs": vlogsSource(nil)},
+			},
+		},
+		{
+			name: "victorialogs stream with an index",
+			cfg: LogSearchConfig{
+				Sources: map[string]LogSourceConfig{
+					"vlogs": vlogsSource(func(s *LogSourceConfig) {
+						s.Streams = map[string]LogStreamConfig{
+							"postgresql": {Index: "pg-*", Query: "*"},
+						}
+					}),
+				},
+			},
+			wantErr: "index belongs to type",
+		},
+		{
+			name: "victorialogs stream without a filter",
+			cfg: LogSearchConfig{
+				Sources: map[string]LogSourceConfig{
+					"vlogs": vlogsSource(func(s *LogSourceConfig) {
+						s.Streams = map[string]LogStreamConfig{"postgresql": {}}
+					}),
+				},
+			},
+			wantErr: "stream_selector",
+		},
+		{
+			name: "victorialogs stream whose only filter is blank",
+			cfg: LogSearchConfig{
+				Sources: map[string]LogSourceConfig{
+					"vlogs": vlogsSource(func(s *LogSourceConfig) {
+						s.Streams = map[string]LogStreamConfig{"postgresql": {Query: "   "}}
+					}),
+				},
+			},
+			wantErr: "stream_selector",
+		},
+		{
+			name: "opensearch stream with a logsql query",
+			cfg: LogSearchConfig{
+				Sources: map[string]LogSourceConfig{
+					"main": source(func(s *LogSourceConfig) {
+						s.Streams = map[string]LogStreamConfig{
+							"postgresql": {Index: "pg-*", Query: "*"},
+						}
+					}),
+				},
+			},
+			wantErr: "belong to type",
+		},
+		{
+			name: "bearer auth whose token never arrived",
+			cfg: LogSearchConfig{
+				Sources: map[string]LogSourceConfig{
+					"vlogs": vlogsSource(func(s *LogSourceConfig) {
+						s.Auth = LogSourceAuthConfig{Kind: LogAuthBearer, TokenFromEnv: "VL_TOKEN"}
+					}),
+				},
+			},
+			wantErr: "VL_TOKEN",
+		},
+		{
+			name: "bearer auth over plain http",
+			cfg: LogSearchConfig{
+				Sources: map[string]LogSourceConfig{
+					"vlogs": vlogsSource(func(s *LogSourceConfig) {
+						s.Addresses = []string{"http://vlogs:9428"}
+						s.Auth = LogSourceAuthConfig{Kind: LogAuthBearer, Token: "t"}
+					}),
+				},
+			},
+			wantErr: "https",
+		},
 	}
 
 	for _, tt := range tests {
@@ -261,6 +355,15 @@ func TestLogSearchWithDefaults(t *testing.T) {
 		t.Errorf("source defaults not applied: %+v", src)
 	}
 
+	vlogs := LogSearchConfig{
+		Sources: map[string]LogSourceConfig{
+			"vlogs": {Type: LogSourceTypeVictoriaLogs},
+		},
+	}.WithDefaults().Sources["vlogs"]
+	if vlogs.MaxBoundaryIDs != DefaultVictoriaLogsMaxBoundaryIDs {
+		t.Errorf("max_boundary_ids = %d, want %d", vlogs.MaxBoundaryIDs, DefaultVictoriaLogsMaxBoundaryIDs)
+	}
+
 	if src.Auth.Kind != LogAuthNone {
 		t.Errorf("auth kind = %q, want %q", src.Auth.Kind, LogAuthNone)
 	}
@@ -273,6 +376,18 @@ func TestLogSearchWithDefaults(t *testing.T) {
 
 	if src.RateLimit == cfg.RateLimit || src.AdminRateLimit == cfg.AdminRateLimit {
 		t.Error("source shares the global rate limit values")
+	}
+
+	stream := LogSearchConfig{
+		Sources: map[string]LogSourceConfig{
+			"vlogs": {
+				Type:    LogSourceTypeVictoriaLogs,
+				Streams: map[string]LogStreamConfig{"postgresql": {Query: "  _msg:error  "}},
+			},
+		},
+	}.WithDefaults().Sources["vlogs"].Streams["postgresql"]
+	if stream.Query != "_msg:error" {
+		t.Errorf("stream query = %q, want it trimmed", stream.Query)
 	}
 }
 
