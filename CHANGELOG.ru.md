@@ -5,6 +5,9 @@
 ### Фичи
 - **Поиск по логам в OpenSearch и Elasticsearch**
 
+### UX
+- **Health Score доступен роли viewer**, а не только admin.
+
 ## v1.7.3
 
 ### Багфиксы
