@@ -1,0 +1,3 @@
+Query Text: SELECT probe_f();
+Result  (cost=0.00..0.26 rows=1 width=8) (actual time=14.853..14.854 rows=1 loops=1)
+  Buffers: shared hit=2816

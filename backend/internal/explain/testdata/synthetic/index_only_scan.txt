@@ -1,0 +1,7 @@
+Query Text: SELECT id FROM orders WHERE id < 100000;
+Index Only Scan using orders_pkey on public.orders  (cost=0.43..2135.12 rows=99999 width=8) (actual time=0.032..240.401 rows=99999 loops=1)
+  Index Cond: (id < 100000)
+  Heap Fetches: 88000
+  Buffers: shared hit=1200 read=320
+Planning Time: 0.140 ms
+Execution Time: 252.510 ms

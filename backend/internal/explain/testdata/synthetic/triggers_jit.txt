@@ -1,0 +1,11 @@
+Query Text: INSERT INTO t SELECT * FROM src;
+Insert on public.t  (cost=0.00..1500.00 rows=0 width=0) (actual time=890.120..890.121 rows=0 loops=1)
+  ->  Seq Scan on public.src  (cost=0.00..1500.00 rows=100000 width=40) (actual time=0.010..25.100 rows=100000 loops=1)
+Planning Time: 0.180 ms
+Trigger for constraint t_fk on t: time=340.500 calls=100000
+JIT:
+  Functions: 8
+  Options: Inlining false, Optimization false, Expressions true, Deforming true
+  Timing: Generation 30.000 ms, Inlining 90.000 ms, Optimization 100.000 ms, Emission 100.000 ms, Total 320.000 ms
+Settings: work_mem = '64MB', search_path = '"$user", public'
+Execution Time: 905.300 ms

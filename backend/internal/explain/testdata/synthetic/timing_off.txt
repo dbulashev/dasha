@@ -1,0 +1,5 @@
+Query Text: SELECT count(*) FROM probe_t WHERE k = 42;
+Aggregate  (cost=6022.43..6022.44 rows=1 width=8) (actual rows=1 loops=1)
+  ->  Seq Scan on probe_t  (cost=0.00..6021.88 rows=220 width=0) (actual rows=300 loops=1)
+        Filter: (k = 42)
+        Rows Removed by Filter: 299700

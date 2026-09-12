@@ -1,0 +1,13 @@
+Query Text: SELECT payload FROM probe_t ORDER BY payload LIMIT 10;
+Limit  (cost=9394.19..9395.34 rows=10 width=33) (actual time=34.137..35.588 rows=10 loops=1)
+  Buffers: shared hit=2873
+  ->  Gather Merge  (cost=9394.19..29688.36 rows=176471 width=33) (actual time=34.132..35.582 rows=10 loops=1)
+        Workers Planned: 1
+        Workers Launched: 1
+        Buffers: shared hit=2873
+        ->  Sort  (cost=8394.18..8835.36 rows=176471 width=33) (actual time=32.421..32.422 rows=8 loops=2)
+              Sort Key: payload
+              Sort Method: still in progress  Memory: 0kB
+              Buffers: shared hit=2873
+              ->  Parallel Seq Scan on probe_t  (cost=0.00..4580.71 rows=176471 width=33) (actual time=0.006..13.897 rows=150000 loops=2)
+                    Buffers: shared hit=2816

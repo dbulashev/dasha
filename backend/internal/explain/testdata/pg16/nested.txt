@@ -1,0 +1,13 @@
+Query Text: SELECT count(*)        FROM probe_t WHERE k = 7
+Finalize Aggregate  (cost=6022.43..6022.44 rows=1 width=8) (actual time=14.494..14.495 rows=1 loops=1)
+  Buffers: shared hit=2816
+  ->  Gather  (cost=6022.32..6022.43 rows=1 width=8) (actual time=14.489..14.490 rows=1 loops=1)
+        Workers Planned: 1
+        Workers Launched: 0
+        Buffers: shared hit=2816
+        ->  Partial Aggregate  (cost=5022.32..5022.33 rows=1 width=8) (actual time=14.488..14.489 rows=1 loops=1)
+              Buffers: shared hit=2816
+              ->  Parallel Seq Scan on probe_t  (cost=0.00..5021.88 rows=175 width=0) (actual time=0.012..14.446 rows=300 loops=1)
+                    Filter: (k = 7)
+                    Rows Removed by Filter: 299700
+                    Buffers: shared hit=2816
