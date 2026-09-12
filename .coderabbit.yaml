@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+reviews:
+  path_filters:
+    # Generated from doc/swagger.yaml by `make generate`.
+    - "!backend/gen/**"
+    - "!frontend/src/api/gen/**"
+    - "!frontend/src/api/models/**"
+    # Captured EXPLAIN output.
+    - "!backend/internal/explain/testdata/**"
