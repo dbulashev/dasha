@@ -97,6 +97,7 @@ type seedRecord struct {
 	Dbname        string `json:"dbname"`
 	User          string `json:"user"`
 	PID           int    `json:"pid"`
+	QueryID       int64  `json:"query_id"`
 	Cluster       string `json:"cluster"`
 	Service       string `json:"service"`
 	Host          struct {
@@ -128,6 +129,7 @@ func seedRecords() []seedRecord {
 			Dbname:        dbs[i%len(dbs)],
 			User:          users[i%len(users)],
 			PID:           1000 + i,
+			QueryID:       queryID(i),
 			Cluster:       testCluster,
 			Service:       testService,
 		}
@@ -137,6 +139,17 @@ func seedRecords() []seedRecord {
 	}
 
 	return out
+}
+
+// queryID mimics the statement identifier PostgreSQL writes: a signed 64-bit
+// value, negative as often as positive.
+func queryID(i int) int64 {
+	id := int64(1000000 + i)
+	if i%2 == 1 {
+		return -id
+	}
+
+	return id
 }
 
 func seed(ctx context.Context) error {

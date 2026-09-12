@@ -88,8 +88,10 @@ make lint-vue # Vue: eslint
 
 # Testing
 make test-unit                                     # Unit tests
-make test-integration                              # Integration tests (Docker required)
-POSTGRES_VERSION=14 make test-integration          # Specific PG version
+make test-integration                              # Every integration suite (Docker required)
+make test-integration-pg                           # PostgreSQL suites only
+POSTGRES_VERSION=14 make test-integration-pg       # Specific PG version
+make test-integration-logs                         # OpenSearch and VictoriaLogs suites only
 cd frontend && npm run test:unit                   # Frontend unit tests
 
 # Dependencies

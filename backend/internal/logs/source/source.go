@@ -86,7 +86,10 @@ type Provider interface {
 	// stream is unknown.
 	Fields(stream string) FieldMap
 	// Stream invokes fn for each record until it returns false, the range is
-	// exhausted or ctx ends.
+	// exhausted or ctx ends. Records arrive ordered by timestamp; the order of
+	// records sharing one timestamp is the store's own and may differ between
+	// reads, so a cursor resumes by skipping the records already delivered at
+	// that timestamp rather than by position.
 	Stream(ctx context.Context, p StreamParams, fn func(Record) bool) error
 	// Check probes the source for a cluster and stream.
 	Check(ctx context.Context, cluster config.Cluster, stream string) (CheckResult, error)

@@ -318,13 +318,11 @@ func (s *service) searchPage(
 
 	var (
 		items     = make([]Entry, 0, pageSize)
-		scanned   int
 		lastToken string
 		hasMore   bool
-		capped    bool
 	)
 
-	err := provider.Stream(ctx, params, func(rec source.Record) bool {
+	st, err := s.scan(ctx, provider, params, s.searchLimits(), func(rec source.Record) bool {
 		e, ok := s.toEntry(rec, q, fm)
 
 		if ok && len(items) >= pageSize {
@@ -335,54 +333,44 @@ func (s *service) searchPage(
 			return false
 		}
 
-		scanned++
 		lastToken = rec.Token
 
 		if ok {
 			items = append(items, e)
 		}
 
-		if scanned >= s.cfg.MaxScan {
-			capped = true
-
-			return false
-		}
-
 		return true
 	})
 	if err != nil {
-		cErr := s.classify(ctx, err)
-
 		// A timeout keeps its resume token; a source that stopped early cannot
 		// hand one out. Either way what was collected is returned as a partial
 		// page instead of being discarded.
-		if errors.Is(cErr, ErrTimeout) && len(items) > 0 {
+		switch {
+		case errors.Is(err, ErrTimeout) && len(items) > 0:
 			return SearchResult{
 				Items:         items,
 				NextPageToken: lastToken,
 				Dedup:         false,
 				Partial:       true,
-				Scanned:       scanned,
+				Scanned:       st.Records,
 			}, nil
-		}
-
-		if errors.Is(err, source.ErrPartial) {
+		case st.Partial:
 			return SearchResult{
 				Items:         items,
 				NextPageToken: "",
 				Dedup:         false,
 				Partial:       true,
-				Scanned:       scanned,
+				Scanned:       st.Records,
 			}, nil
+		default:
+			return SearchResult{}, err
 		}
-
-		return SearchResult{}, cErr
 	}
 
 	// On a capped scan the token lets the client continue scanning even though
 	// no further match has been seen yet.
 	next := ""
-	if hasMore || capped {
+	if hasMore || st.Capped {
 		next = lastToken
 	}
 
@@ -390,8 +378,8 @@ func (s *service) searchPage(
 		Items:         items,
 		NextPageToken: next,
 		Dedup:         false,
-		Partial:       capped,
-		Scanned:       scanned,
+		Partial:       st.Capped,
+		Scanned:       st.Records,
 	}, nil
 }
 
@@ -403,15 +391,9 @@ func (s *service) searchDedup(
 	q SearchQuery,
 	fm source.FieldMap,
 ) (SearchResult, error) {
-	var (
-		groups  = make(map[string]*Entry)
-		scanned int
-		capped  bool
-	)
+	groups := make(map[string]*Entry)
 
-	err := provider.Stream(ctx, params, func(rec source.Record) bool {
-		scanned++
-
+	st, err := s.scan(ctx, provider, params, s.searchLimits(), func(rec source.Record) bool {
 		if e, ok := s.toEntry(rec, q, fm); ok {
 			key := normalize(e.Text)
 
@@ -442,21 +424,15 @@ func (s *service) searchDedup(
 			}
 		}
 
-		if scanned >= s.cfg.MaxScan {
-			capped = true
-
-			return false
-		}
-
 		return true
 	})
-	if err != nil {
-		cErr := s.classify(ctx, err)
 
-		partial := errors.Is(err, source.ErrPartial) ||
-			(errors.Is(cErr, ErrTimeout) && len(groups) > 0)
+	capped := st.Capped
+
+	if err != nil {
+		partial := st.Partial || (errors.Is(err, ErrTimeout) && len(groups) > 0)
 		if !partial {
-			return SearchResult{}, cErr
+			return SearchResult{}, err
 		}
 
 		// Surface the groups collected before the source gave up as a partial
@@ -482,7 +458,7 @@ func (s *service) searchDedup(
 		NextPageToken: "",
 		Dedup:         true,
 		Partial:       capped,
-		Scanned:       scanned,
+		Scanned:       st.Records,
 	}, nil
 }
 

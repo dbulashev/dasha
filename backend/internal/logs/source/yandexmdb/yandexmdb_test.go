@@ -76,9 +76,17 @@ func TestFieldsPerStream(t *testing.T) {
 		t.Errorf("postgresql field map = %+v", pg)
 	}
 
+	if pg.QueryID != "query_id" {
+		t.Errorf("postgresql QueryID = %q, want query_id", pg.QueryID)
+	}
+
 	pooler := p.Fields(source.StreamPooler)
 	if pooler.Text != "text" || pooler.Severity != "level" {
 		t.Errorf("pooler field map = %+v", pooler)
+	}
+
+	if pooler.QueryID != "" {
+		t.Errorf("pooler QueryID = %q, want none", pooler.QueryID)
 	}
 
 	if got, ok := pooler.CanonicalSeverity("ERROR"); !ok || got != "error" {

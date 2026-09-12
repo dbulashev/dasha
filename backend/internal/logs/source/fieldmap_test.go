@@ -251,3 +251,71 @@ func TestPgBouncerPresetKeepsTheNativeLevels(t *testing.T) {
 		t.Error("CanonicalSeverity(INFO) accepted; pgbouncer has no INFO level")
 	}
 }
+
+func TestPostgreSQLPresetsBindTheQueryID(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{PresetCSVLog, PresetJSONLog} {
+		fm, ok := Preset(name)
+		if !ok {
+			t.Fatalf("preset %q is missing", name)
+		}
+
+		if fm.QueryID != "query_id" {
+			t.Errorf("%s: QueryID = %q, want query_id", name, fm.QueryID)
+		}
+
+		if fm.Roles()[RoleQueryID] != "query_id" {
+			t.Errorf("%s: roles = %v, want the query id among them", name, fm.Roles())
+		}
+	}
+
+	fm, ok := Preset(PresetOdyssey)
+	if !ok {
+		t.Fatal("odyssey preset is missing")
+	}
+
+	if _, reported := fm.Roles()[RoleQueryID]; reported {
+		t.Error("odyssey reports a query id role; a pooler writes no plans")
+	}
+}
+
+// TestFieldMapWithoutAQueryIDIsUsable: the role is optional, so a stream whose
+// records carry no statement identifier still serves search and check.
+func TestFieldMapWithoutAQueryIDIsUsable(t *testing.T) {
+	t.Parallel()
+
+	fm, err := FieldMapFromConfig(config.LogFieldMapConfig{
+		Preset:     PresetNone,
+		Timestamp:  "@timestamp",
+		Severity:   "level",
+		Text:       "msg",
+		Host:       "host",
+		Severities: []string{"error"},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if _, reported := fm.Roles()[RoleQueryID]; reported {
+		t.Errorf("roles = %v, want no query id", fm.Roles())
+	}
+}
+
+func TestQueryIDOverridesThePreset(t *testing.T) {
+	t.Parallel()
+
+	fm, err := FieldMapFromConfig(config.LogFieldMapConfig{
+		Preset:    PresetJSONLog,
+		Timestamp: "@timestamp",
+		Host:      "host.name",
+		QueryID:   "pg.query_id",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if fm.QueryID != "pg.query_id" {
+		t.Errorf("QueryID = %q, want pg.query_id", fm.QueryID)
+	}
+}
