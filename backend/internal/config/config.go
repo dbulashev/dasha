@@ -239,9 +239,13 @@ type LogSearchConfig struct {
 	Sources map[string]LogSourceConfig `mapstructure:"sources"`
 }
 
-// LogSourceTypeOpenSearch is the source type reading an OpenSearch or
-// Elasticsearch index.
-const LogSourceTypeOpenSearch = "opensearch"
+// Log source types.
+const (
+	// LogSourceTypeOpenSearch reads an OpenSearch or Elasticsearch index.
+	LogSourceTypeOpenSearch = "opensearch"
+	// LogSourceTypeVictoriaLogs reads a VictoriaLogs stream through LogsQL.
+	LogSourceTypeVictoriaLogs = "victorialogs"
+)
 
 // Stream names the log API serves; a source may declare no others.
 const (
@@ -255,10 +259,13 @@ type LogSourceConfig struct {
 	Addresses []string            `mapstructure:"addresses"`
 	Auth      LogSourceAuthConfig `mapstructure:"auth"`
 	TLS       LogSourceTLSConfig  `mapstructure:"tls"`
+	// Tenant selects the VictoriaLogs tenant; the zero value is tenant 0/0.
+	Tenant LogSourceTenantConfig `mapstructure:"tenant"`
 	// BatchSize is how many records one upstream request fetches; default 1000.
 	BatchSize int `mapstructure:"batch_size"`
 	// MaxBoundaryIDs caps the ids a cursor carries for one timestamp before the
-	// source stops paginating and marks the result partial; default 10000.
+	// source stops paginating and marks the result partial; default 10000,
+	// 1000 for VictoriaLogs.
 	MaxBoundaryIDs int `mapstructure:"max_boundary_ids"`
 	// RateLimit / AdminRateLimit override the global log search limits for
 	// clusters served by this source.
@@ -272,6 +279,7 @@ const (
 	LogAuthNone   = "none"
 	LogAuthBasic  = "basic"
 	LogAuthAPIKey = "api_key"
+	LogAuthBearer = "bearer"
 )
 
 // LogSourceAuthConfig holds log store credentials. Prefer the *_from_env
@@ -283,6 +291,14 @@ type LogSourceAuthConfig struct {
 	PasswordFromEnv string `mapstructure:"password_from_env"`
 	APIKey          string `mapstructure:"api_key"`
 	APIKeyFromEnv   string `mapstructure:"api_key_from_env"`
+	Token           string `mapstructure:"token"`
+	TokenFromEnv    string `mapstructure:"token_from_env"`
+}
+
+// LogSourceTenantConfig addresses one VictoriaLogs tenant.
+type LogSourceTenantConfig struct {
+	AccountID int `mapstructure:"account_id"`
+	ProjectID int `mapstructure:"project_id"`
 }
 
 // LogSourceTLSConfig configures the transport to the log store.
@@ -291,10 +307,15 @@ type LogSourceTLSConfig struct {
 	InsecureSkipVerify bool   `mapstructure:"insecure_skip_verify"`
 }
 
-// LogStreamConfig describes where one stream of one source lives. Index and
-// selector values accept the {{ .Cluster }} substitution.
+// LogStreamConfig describes where one stream of one source lives. Index,
+// selector, stream selector and query accept the {{ .Cluster }} substitution.
 type LogStreamConfig struct {
-	Index    string            `mapstructure:"index"`
+	// Index is the OpenSearch index pattern.
+	Index string `mapstructure:"index"`
+	// StreamSelector is the VictoriaLogs log stream filter, {field="value"}.
+	StreamSelector map[string]string `mapstructure:"stream_selector"`
+	// Query is an extra LogsQL expression ANDed to the VictoriaLogs filter.
+	Query    string            `mapstructure:"query"`
 	Selector map[string]string `mapstructure:"selector"`
 	FieldMap LogFieldMapConfig `mapstructure:"field_map"`
 }
@@ -330,6 +351,9 @@ const (
 	DefaultLogSearchTimeoutSeconds = 30
 	DefaultLogSourceBatchSize      = 1000
 	DefaultLogSourceMaxBoundaryIDs = 10000
+	// DefaultVictoriaLogsMaxBoundaryIDs is lower: a VictoriaLogs record has no
+	// id, so the cursor carries content hashes in a query parameter.
+	DefaultVictoriaLogsMaxBoundaryIDs = 1000
 )
 
 // Default log search rate limits: non-admins 1 req/30s with burst 10, admins
@@ -382,6 +406,9 @@ func (s LogSourceConfig) withDefaults(parent LogSearchConfig) LogSourceConfig {
 
 	if s.MaxBoundaryIDs <= 0 {
 		s.MaxBoundaryIDs = DefaultLogSourceMaxBoundaryIDs
+		if s.Type == LogSourceTypeVictoriaLogs {
+			s.MaxBoundaryIDs = DefaultVictoriaLogsMaxBoundaryIDs
+		}
 	}
 
 	if s.RateLimit == nil {
@@ -440,10 +467,6 @@ func validateLogSource(name string, src LogSourceConfig) error {
 		return fmt.Errorf("sources.%s: name is reserved for the built-in source", name)
 	}
 
-	if src.Type != LogSourceTypeOpenSearch {
-		return fmt.Errorf("sources.%s: unknown type %q", name, src.Type)
-	}
-
 	if len(src.Addresses) == 0 {
 		return fmt.Errorf("sources.%s: addresses must not be empty", name)
 	}
@@ -456,7 +479,7 @@ func validateLogSource(name string, src LogSourceConfig) error {
 		return err
 	}
 
-	if src.Auth.Kind == LogAuthBasic || src.Auth.Kind == LogAuthAPIKey {
+	if src.Auth.Kind != LogAuthNone {
 		for _, addr := range src.Addresses {
 			if !strings.HasPrefix(strings.ToLower(addr), "https://") {
 				return fmt.Errorf("sources.%s: address %q must use https with auth.kind %q", name, addr, src.Auth.Kind)
@@ -474,9 +497,50 @@ func validateLogSource(name string, src LogSourceConfig) error {
 			return fmt.Errorf("sources.%s.streams.%s: unknown stream (want %s|%s)",
 				name, stream, LogStreamPostgreSQL, LogStreamPooler)
 		}
+	}
 
-		if src.Streams[stream].Index == "" {
+	switch src.Type {
+	case LogSourceTypeOpenSearch:
+		return validateOpenSearchSource(name, src)
+	case LogSourceTypeVictoriaLogs:
+		return validateVictoriaLogsSource(name, src)
+	default:
+		return fmt.Errorf("sources.%s: unknown type %q (want %s|%s)",
+			name, src.Type, LogSourceTypeOpenSearch, LogSourceTypeVictoriaLogs)
+	}
+}
+
+func validateOpenSearchSource(name string, src LogSourceConfig) error {
+	for _, stream := range slices.Sorted(maps.Keys(src.Streams)) {
+		sc := src.Streams[stream]
+
+		if sc.Index == "" {
 			return fmt.Errorf("sources.%s.streams.%s: index must not be empty", name, stream)
+		}
+
+		if sc.Query != "" || len(sc.StreamSelector) > 0 {
+			return fmt.Errorf("sources.%s.streams.%s: query and stream_selector belong to type %s",
+				name, stream, LogSourceTypeVictoriaLogs)
+		}
+	}
+
+	return nil
+}
+
+func validateVictoriaLogsSource(name string, src LogSourceConfig) error {
+	for _, stream := range slices.Sorted(maps.Keys(src.Streams)) {
+		sc := src.Streams[stream]
+
+		if sc.Index != "" {
+			return fmt.Errorf("sources.%s.streams.%s: index belongs to type %s",
+				name, stream, LogSourceTypeOpenSearch)
+		}
+
+		// A stream without a filter serves the logs of the whole fleet under
+		// the name of one cluster.
+		if sc.Query == "" && len(sc.Selector) == 0 && len(sc.StreamSelector) == 0 {
+			return fmt.Errorf("sources.%s.streams.%s: one of query, selector or stream_selector must be set",
+				name, stream)
 		}
 	}
 
@@ -501,8 +565,13 @@ func (a LogSourceAuthConfig) validate(name string) error {
 			return fmt.Errorf("sources.%s: auth.kind %q requires auth.api_key (or a %s that is set)",
 				name, a.Kind, cmp.Or(a.APIKeyFromEnv, "api_key_from_env"))
 		}
+	case LogAuthBearer:
+		if a.Token == "" {
+			return fmt.Errorf("sources.%s: auth.kind %q requires auth.token (or a %s that is set)",
+				name, a.Kind, cmp.Or(a.TokenFromEnv, "token_from_env"))
+		}
 	default:
-		return fmt.Errorf("sources.%s: unknown auth.kind %q (want none|basic|api_key)", name, a.Kind)
+		return fmt.Errorf("sources.%s: unknown auth.kind %q (want none|basic|api_key|bearer)", name, a.Kind)
 	}
 
 	return nil

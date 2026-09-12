@@ -83,7 +83,7 @@
 - Scoring model details: [README-health-score.md](../../README-health-score.md)
 
 ## Log Search
-- Search PostgreSQL server and connection-pooler logs from an existing log store — top-level `/logs` page. Yandex MDB clusters work out of the box through the MDB API; self-managed clusters read from an OpenSearch/Elasticsearch index declared in `log_search.sources`
+- Search PostgreSQL server and connection-pooler logs from an existing log store — top-level `/logs` page. Yandex MDB clusters work out of the box through the MDB API; self-managed clusters read from an OpenSearch/Elasticsearch index or a VictoriaLogs stream declared in `log_search.sources`
 - Native severity/host filters plus Dasha-side message substrings (AND), `grep -v`-style excludes and database/user filters; cursor pagination and partial results on timeout
 - Optional deduplication groups near-identical messages by masked template (`<*>` placeholders) with count and first/last seen
 - Frequency histogram (time × severity) with click/drag zoom, one-click presets (deadlocks, autovacuum, checkpoints, …), shareable URL filters, Grafana time-range clipboard interop

@@ -6,6 +6,6 @@
  */
 
 /**
- * type the store indexes each mapped field as
+ * type the store indexes each mapped field as; empty for a store without field types
  */
 export type LogSourceCheckFieldTypes = { [key: string]: string }

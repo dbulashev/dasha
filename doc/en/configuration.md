@@ -288,19 +288,77 @@ mounts elsewhere.
 Binding order: the cluster's `log_source`, then the built-in Yandex MDB source for clusters
 discovered there, then `default_source`. A source named in `log_source` must be declared in
 `sources`, and a source may only declare the `postgresql` and `pooler` streams; both are checked at
-startup. The name `yandex-mdb` belongs to the built-in source. With `auth.kind: basic` or `api_key`
-every address must start with `https://`, and `tls.insecure_skip_verify` is rejected.
+startup. The name `yandex-mdb` belongs to the built-in source. With any `auth.kind` but `none` every
+address must start with `https://`, and `tls.insecure_skip_verify` is rejected.
 
-`{{ .Cluster }}` is the only substitution; it expands in the index pattern and in selector values.
+`{{ .Cluster }}` is the only substitution; it expands in the index pattern, in `query` and in the
+values of `selector` and `stream_selector`.
 The host is not substituted: a search without a host filter has none, so a host-dependent index would
 resolve to nothing.
+
+### VictoriaLogs sources
+
+A stream is addressed by a LogsQL expression rather than by an index. The delivery agent must split
+the record into fields; a whole log line in `_msg` is not supported.
+
+```yaml
+log_search:
+  sources:
+    vlogs:
+      type: victorialogs
+      addresses: ["https://vlogs.example.net:9428"]
+      auth:
+        kind: bearer            # none | basic | api_key | bearer
+        token_from_env: VL_TOKEN
+      tenant:                   # 0/0 by default
+        account_id: 12
+        project_id: 34
+      batch_size: 1000          # records per request
+      max_boundary_ids: 1000    # records of one timestamp the cursor remembers
+      streams:
+        postgresql:
+          stream_selector:      # -> {cluster="prod"}; the cheapest filter VictoriaLogs has
+            cluster: "{{ .Cluster }}"
+          selector:             # -> "app":="postgres"
+            app: postgres
+          query: '*'            # extra LogsQL expression
+          field_map:
+            preset: jsonlog
+            timestamp: _time
+            text: _msg
+            host: host
+
+clusters:
+  - name: prod
+    log_source: vlogs
+```
+
+One of `query`, `selector` or `stream_selector` must be set: a source without a filter serves the
+logs of the whole fleet under the name of one cluster. `index` is rejected in a VictoriaLogs stream,
+and so are `query` and `stream_selector` in an OpenSearch one. Both are checked at startup.
+
+The time comes from `_time`, and so does pagination. Reading runs from new to old, so a search that
+reaches `max_scan` shows the most recent records of the window rather than the oldest.
+
+VictoriaLogs has no authentication of its own: `auth` targets vmauth or a reverse proxy in front of
+it. As with OpenSearch, any credentials require every address to start with `https://`. The tenant
+travels in the `AccountID` and `ProjectID` headers.
+
+VictoriaLogs keeps no field types — every field is a string: `keyword_fields` does not apply, and the
+source check returns an empty type list. A misspelled field name yields an empty result rather than
+an error, and only the source check shows it.
+
+`max_boundary_ids` defaults to 1000 instead of 10000: a VictoriaLogs record carries no id, so the
+cursor holds the hashes of the records at the timestamp reading stopped on.
+
+### Common to external sources
 
 A preset fills in the field names of a known log format, and any field overrides it. `timestamp` and
 `host` are never part of a preset — PostgreSQL writes neither, the delivery agent names them — so both
 must be set. Severity and host are the only filters pushed down to the store; message, database and
 user substrings are matched by Dasha, so a `text` field analyzed by the store still behaves the way
-the search box promises. Severity, host and selector fields are matched exactly, so they must be
-indexed as `keyword`; when the store analyzes one of them instead — the default dynamic mapping does —
+the search box promises. In OpenSearch severity, host and selector fields are matched exactly, so
+they must be indexed as `keyword`; when the store analyzes one of them instead — the default dynamic mapping does —
 name its exact-match counterpart in `keyword_fields`, otherwise the filter matches nothing. The check
 endpoint below reports the type of every mapped field.
 
@@ -316,9 +374,9 @@ backend. `mask` adds the other free-text fields. When `text` sits in a nested ob
 
 A stream a source does not declare is unavailable: the API answers 501 and the UI hides the switch.
 
-`GET /api/logs/check?cluster_name=…&service_type=…` (admin only) probes a source: the resolved index,
-how many records the last hour holds, which mapped fields exist, which are missing, and one masked
-sample record.
+`GET /api/logs/check?cluster_name=…&service_type=…` (admin only) probes a source: the resolved target
+— an index name or a LogsQL expression — how many records the last hour holds, which mapped fields
+exist, which are missing, and one masked sample record.
 
 ## Schema Checks (optional)
 

@@ -63,6 +63,27 @@ config:
   #             keyword_fields:   # when the store analyzes a matched field
   #               error_severity: error_severity.keyword
   #               host.name: host.name.keyword
+  #     vlogs:
+  #       type: victorialogs
+  #       addresses: ["https://vlogs.example.net:9428"]
+  #       auth:
+  #         kind: bearer      # none | basic | api_key | bearer
+  #         token_from_env: VL_TOKEN
+  #       tenant:             # 0/0 by default
+  #         account_id: 12
+  #         project_id: 34
+  #       max_boundary_ids: 1000
+  #       streams:
+  #         postgresql:
+  #           stream_selector:  # -> {cluster="prod"}
+  #             cluster: "{{ .Cluster }}"
+  #           selector:         # -> "app":="postgres"
+  #             app: postgres
+  #           field_map:
+  #             preset: jsonlog
+  #             timestamp: _time
+  #             text: _msg
+  #             host: host
 
   # -- Connection pools to monitored clusters (one pool per host+database).
   # Defaults: max_conns 4, max_conn_idle_time 2m. Behind a per-user connection

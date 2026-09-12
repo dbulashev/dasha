@@ -3,7 +3,7 @@
 ## Unreleased
 
 ### Features
-- **Log search in OpenSearch and Elasticsearch**
+- **Log search in OpenSearch, Elasticsearch and VictoriaLogs**
 
 ### UX
 - **Health Score is open to the viewer role**, not to admins only.

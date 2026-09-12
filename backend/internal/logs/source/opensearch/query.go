@@ -1,14 +1,11 @@
 package opensearch
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"regexp"
 	"slices"
 	"strconv"
-	"strings"
-	"text/template"
 	"time"
 
 	"github.com/dbulashev/dasha/internal/config"
@@ -19,30 +16,8 @@ import (
 // request path: no traversal, no query string, no host of its own.
 var validIndex = regexp.MustCompile(`^[a-zA-Z0-9_][a-zA-Z0-9_.+*,\-]*$`)
 
-// templateData holds the substitutions allowed in index patterns and selector
-// values. The host is deliberately absent: a search without a host filter and
-// every Check have none, so a host-dependent index or term would resolve to
-// nothing instead of failing.
-type templateData struct {
-	Cluster string
-}
-
-func expand(tmpl string, data templateData) (string, error) {
-	t, err := template.New("t").Option("missingkey=error").Parse(tmpl)
-	if err != nil {
-		return "", fmt.Errorf("%w: template %q: %w", source.ErrConfig, tmpl, err)
-	}
-
-	var out bytes.Buffer
-	if err := t.Execute(&out, data); err != nil {
-		return "", fmt.Errorf("%w: template %q: %w", source.ErrConfig, tmpl, err)
-	}
-
-	return out.String(), nil
-}
-
-func expandIndex(tmpl string, data templateData) (string, error) {
-	index, err := expand(tmpl, data)
+func expandIndex(tmpl string, data source.TemplateData) (string, error) {
+	index, err := source.Expand(tmpl, data)
 	if err != nil {
 		return "", err
 	}
@@ -52,25 +27,6 @@ func expandIndex(tmpl string, data templateData) (string, error) {
 	}
 
 	return index, nil
-}
-
-func expandSelector(selector map[string]string, data templateData) (map[string]string, error) {
-	if len(selector) == 0 {
-		return nil, nil
-	}
-
-	out := make(map[string]string, len(selector))
-
-	for k, v := range selector {
-		value, err := expand(v, data)
-		if err != nil {
-			return nil, err
-		}
-
-		out[k] = value
-	}
-
-	return out, nil
 }
 
 // searchRequest is the body of one _search call. Every user-supplied value
@@ -217,51 +173,6 @@ func scalar(v any) string {
 	}
 }
 
-// timeLayouts are tried in order when the timestamp field is a string.
-var timeLayouts = []string{
-	time.RFC3339Nano,
-	"2006-01-02T15:04:05.999999999",
-	"2006-01-02 15:04:05.999999999-07:00",
-	"2006-01-02 15:04:05.999999999",
-}
-
-// parseTime reads the timestamp field of a record: a date string, or epoch
-// milliseconds when the index stores it as a number.
-func parseTime(v any) (time.Time, error) {
-	switch t := v.(type) {
-	case string:
-		trimmed := strings.TrimSpace(t)
-
-		for _, layout := range timeLayouts {
-			if ts, err := time.Parse(layout, trimmed); err == nil {
-				return ts.UTC(), nil
-			}
-		}
-
-		if ms, err := strconv.ParseInt(trimmed, 10, 64); err == nil {
-			return time.UnixMilli(ms).UTC(), nil
-		}
-
-		return time.Time{}, fmt.Errorf("%w: timestamp %q has no recognized format", source.ErrConfig, t)
-	case float64:
-		return time.UnixMilli(int64(t)).UTC(), nil
-	case json.Number:
-		ms, err := t.Int64()
-		if err != nil {
-			return time.Time{}, fmt.Errorf("%w: timestamp %q is not a number", source.ErrConfig, t.String())
-		}
-
-		return time.UnixMilli(ms).UTC(), nil
-	default:
-		return time.Time{}, fmt.Errorf("%w: record has no usable timestamp", source.ErrConfig)
-	}
-}
-
-// probeCluster stands in for a real cluster name while the index and selector
-// templates are expanded once at startup, so a template that names an unknown
-// substitution fails here rather than on the first search.
-const probeCluster = "probe"
-
 // streamsFromConfig resolves every configured stream into an index pattern and
 // a validated field map.
 func streamsFromConfig(cfg config.LogSourceConfig) (map[string]streamDef, error) {
@@ -273,13 +184,13 @@ func streamsFromConfig(cfg config.LogSourceConfig) (map[string]streamDef, error)
 			return nil, fmt.Errorf("streams.%s: %w", name, err)
 		}
 
-		probe := templateData{Cluster: probeCluster}
+		probe := source.TemplateData{Cluster: source.ProbeCluster}
 
 		if _, err := expandIndex(sc.Index, probe); err != nil {
 			return nil, fmt.Errorf("streams.%s: %w", name, err)
 		}
 
-		if _, err := expandSelector(sc.Selector, probe); err != nil {
+		if _, err := source.ExpandMap(sc.Selector, probe); err != nil {
 			return nil, fmt.Errorf("streams.%s: %w", name, err)
 		}
 
