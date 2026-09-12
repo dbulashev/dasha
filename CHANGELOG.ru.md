@@ -1,6 +1,6 @@
 # История изменений
 
-## Не выпущено
+## v1.8.0
 
 ### Фичи
 - **Поиск по логам в OpenSearch, Elasticsearch и VictoriaLogs**

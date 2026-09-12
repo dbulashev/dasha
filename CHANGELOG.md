@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.8.0
 
 ### Features
 - **Log search in OpenSearch, Elasticsearch and VictoriaLogs**
