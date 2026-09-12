@@ -55,12 +55,12 @@ discovery:
       refresh_interval: 1        # minutes; 1 to keep the demo responsive
       exclude_db: "^postgres$"   # the maintenance database is of no interest
 
-# Log search source: the demo lab's OpenSearch (demo/docker-compose.logs.yaml).
-# Fluent Bit ships the jsonlog of every PostgreSQL host into daily
-# pg-logs-<cluster>-* indices and fills `host` with the container name.
+# Log search source: the demo lab's VictoriaLogs (demo/docker-compose.logs.yaml).
+# Fluent Bit ships the jsonlog of every PostgreSQL host into the log stream
+# {cluster, host, app} and fills `host` with the container name.
 # Probe the binding at: GET /api/logs/check?cluster_name=pg18-cluster&service_type=postgresql
 log_search:
-  default_source: demo-opensearch
+  default_source: demo-victorialogs
   rate_limit:
     requests_per_second: 2
     burst: 20
@@ -68,27 +68,53 @@ log_search:
     requests_per_second: 5
     burst: 40
   sources:
-    demo-opensearch:
-      type: opensearch
+    demo-victorialogs:
+      type: victorialogs
       addresses:
-        - "http://opensearch:9200"
+        - "http://victorialogs:9428"
       auth:
         kind: none
       streams:
         postgresql:
-          index: "pg-logs-{{ .Cluster }}-*"
+          stream_selector:
+            cluster: "{{ .Cluster }}"
+            app: postgres
           field_map:
             preset: jsonlog
-            timestamp: "@timestamp"
+            timestamp: _time
+            text: _msg
             host: host
-        # Only pg18-cluster runs a pooler; for the other clusters the pattern
-        # matches no index and the stream comes back empty.
+        # Only pg18-cluster runs a pooler; for the other clusters the selector
+        # matches no stream and the result comes back empty.
         pooler:
-          index: "pooler-logs-{{ .Cluster }}-*"
+          stream_selector:
+            cluster: "{{ .Cluster }}"
+            app: pgbouncer
           field_map:
             preset: pgbouncer
-            timestamp: "@timestamp"
+            timestamp: _time
+            text: _msg
             host: host
+
+    # demo-opensearch:
+    #   type: opensearch
+    #   addresses:
+    #     - "http://opensearch:9200"
+    #   auth:
+    #     kind: none
+    #   streams:
+    #     postgresql:
+    #       index: "pg-logs-{{ .Cluster }}-*"
+    #       field_map:
+    #         preset: jsonlog
+    #         timestamp: "@timestamp"
+    #         host: host
+    #     pooler:
+    #       index: "pooler-logs-{{ .Cluster }}-*"
+    #       field_map:
+    #         preset: pgbouncer
+    #         timestamp: "@timestamp"
+    #         host: host
 
 # Metrics-backed Health Score (demo). Reads from the overlay's VictoriaMetrics
 # (demo/docker-compose.metrics.yaml). Providers are self-managed: pgSCV for PG
