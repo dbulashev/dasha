@@ -1,0 +1,15 @@
+Query Text: SELECT k FROM probe_i GROUP BY k;
+Group  (cost=1000.45..16546.60 rows=1000 width=4) (actual time=84.428..92.874 rows=1000 loops=1)
+  Group Key: k
+  Buffers: shared hit=296974 read=3278 written=1563
+  ->  Gather Merge  (cost=1000.45..16541.60 rows=2000 width=4) (actual time=84.427..92.675 rows=1193 loops=1)
+        Workers Planned: 2
+        Workers Launched: 2
+        Buffers: shared hit=296974 read=3278 written=1563
+        ->  Group  (cost=0.42..15310.72 rows=1000 width=4) (actual time=0.062..59.279 rows=398 loops=3)
+              Group Key: k
+              Buffers: shared hit=296974 read=3278 written=1563
+              ->  Parallel Index Only Scan using probe_i_k on probe_i  (cost=0.42..14998.22 rows=125000 width=4) (actual time=0.061..53.014 rows=100000 loops=3)
+                    Heap Fetches: 300000
+                    Buffers: shared hit=296974 read=3278 written=1563
+Settings: enable_hashagg = 'off'

@@ -1,0 +1,119 @@
+Query Text: "SELECT count(*) FROM probe_t WHERE k = 42;"
+Plan: 
+  Node Type: "Aggregate"
+  Strategy: "Plain"
+  Partial Mode: "Finalize"
+  Parallel Aware: false
+  Async Capable: false
+  Startup Cost: 6010.43
+  Total Cost: 6010.44
+  Plan Rows: 1
+  Plan Width: 8
+  Actual Startup Time: 11.236
+  Actual Total Time: 12.530
+  Actual Rows: 1
+  Actual Loops: 1
+  Shared Hit Blocks: 608
+  Shared Read Blocks: 2196
+  Shared Dirtied Blocks: 0
+  Shared Written Blocks: 0
+  Local Hit Blocks: 0
+  Local Read Blocks: 0
+  Local Dirtied Blocks: 0
+  Local Written Blocks: 0
+  Temp Read Blocks: 0
+  Temp Written Blocks: 0
+  WAL Records: 0
+  WAL FPI: 0
+  WAL Bytes: 0
+  Plans: 
+    - Node Type: "Gather"
+      Parent Relationship: "Outer"
+      Parallel Aware: false
+      Async Capable: false
+      Startup Cost: 6010.32
+      Total Cost: 6010.43
+      Plan Rows: 1
+      Plan Width: 8
+      Actual Startup Time: 11.147
+      Actual Total Time: 12.522
+      Actual Rows: 2
+      Actual Loops: 1
+      Workers Planned: 1
+      Workers Launched: 1
+      Single Copy: false
+      Shared Hit Blocks: 608
+      Shared Read Blocks: 2196
+      Shared Dirtied Blocks: 0
+      Shared Written Blocks: 0
+      Local Hit Blocks: 0
+      Local Read Blocks: 0
+      Local Dirtied Blocks: 0
+      Local Written Blocks: 0
+      Temp Read Blocks: 0
+      Temp Written Blocks: 0
+      WAL Records: 0
+      WAL FPI: 0
+      WAL Bytes: 0
+      Plans: 
+        - Node Type: "Aggregate"
+          Strategy: "Plain"
+          Partial Mode: "Partial"
+          Parent Relationship: "Outer"
+          Parallel Aware: false
+          Async Capable: false
+          Startup Cost: 5010.32
+          Total Cost: 5010.33
+          Plan Rows: 1
+          Plan Width: 8
+          Actual Startup Time: 8.834
+          Actual Total Time: 8.835
+          Actual Rows: 1
+          Actual Loops: 2
+          Shared Hit Blocks: 608
+          Shared Read Blocks: 2196
+          Shared Dirtied Blocks: 0
+          Shared Written Blocks: 0
+          Local Hit Blocks: 0
+          Local Read Blocks: 0
+          Local Dirtied Blocks: 0
+          Local Written Blocks: 0
+          Temp Read Blocks: 0
+          Temp Written Blocks: 0
+          WAL Records: 0
+          WAL FPI: 0
+          WAL Bytes: 0
+          Workers: 
+          Plans: 
+            - Node Type: "Seq Scan"
+              Parent Relationship: "Outer"
+              Parallel Aware: true
+              Async Capable: false
+              Relation Name: "probe_t"
+              Alias: "probe_t"
+              Startup Cost: 0.00
+              Total Cost: 5009.88
+              Plan Rows: 175
+              Plan Width: 0
+              Actual Startup Time: 0.047
+              Actual Total Time: 8.811
+              Actual Rows: 150
+              Actual Loops: 2
+              Filter: "(k = 42)"
+              Rows Removed by Filter: 149850
+              Shared Hit Blocks: 608
+              Shared Read Blocks: 2196
+              Shared Dirtied Blocks: 0
+              Shared Written Blocks: 0
+              Local Hit Blocks: 0
+              Local Read Blocks: 0
+              Local Dirtied Blocks: 0
+              Local Written Blocks: 0
+              Temp Read Blocks: 0
+              Temp Written Blocks: 0
+              WAL Records: 0
+              WAL FPI: 0
+              WAL Bytes: 0
+              Workers: 
+Settings: 
+Triggers: 

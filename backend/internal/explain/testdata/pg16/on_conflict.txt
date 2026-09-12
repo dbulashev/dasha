@@ -1,0 +1,13 @@
+Query Text: INSERT INTO probe_dml SELECT id, k, payload FROM probe_small
+ON CONFLICT (id) DO UPDATE SET k = EXCLUDED.k + 1 WHERE probe_dml.k < 100;
+Insert on probe_dml  (cost=0.00..4.00 rows=0 width=0) (actual time=0.561..0.561 rows=0 loops=1)
+  Conflict Resolution: UPDATE
+  Conflict Arbiter Indexes: probe_dml_pkey
+  Conflict Filter: (probe_dml.k < 100)
+  Tuples Inserted: 0
+  Conflicting Tuples: 200
+  Buffers: shared hit=1630 dirtied=1 written=1
+  WAL: records=636 bytes=44116
+  ->  Seq Scan on probe_small  (cost=0.00..4.00 rows=200 width=41) (actual time=0.002..0.016 rows=200 loops=1)
+        Buffers: shared hit=2
+Trigger probe_after_stmt: time=0.009 calls=1

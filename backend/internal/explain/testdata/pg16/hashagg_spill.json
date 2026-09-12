@@ -1,0 +1,92 @@
+{
+  "Query Text": "SELECT payload, count(*) FROM probe_i GROUP BY payload HAVING count(*) > 1;",
+  "Plan": {
+    "Node Type": "Aggregate",
+    "Strategy": "Hashed",
+    "Partial Mode": "Simple",
+    "Parallel Aware": false,
+    "Async Capable": false,
+    "Startup Cost": 131058.00,
+    "Total Cost": 158245.50,
+    "Plan Rows": 100000,
+    "Plan Width": 41,
+    "Actual Startup Time": 392.021,
+    "Actual Total Time": 392.022,
+    "Actual Rows": 0,
+    "Actual Loops": 1,
+    "Group Key": ["payload"],
+    "Filter": "(count(*) > 1)",
+    "Planned Partitions": 4,
+    "HashAgg Batches": 1365,
+    "Peak Memory Usage": 169,
+    "Disk Usage": 17520,
+    "Rows Removed by Filter": 300000,
+    "Shared Hit Blocks": 1970,
+    "Shared Read Blocks": 838,
+    "Shared Dirtied Blocks": 0,
+    "Shared Written Blocks": 0,
+    "Local Hit Blocks": 0,
+    "Local Read Blocks": 0,
+    "Local Dirtied Blocks": 0,
+    "Local Written Blocks": 0,
+    "Temp Read Blocks": 8671,
+    "Temp Written Blocks": 10260,
+    "WAL Records": 0,
+    "WAL FPI": 0,
+    "WAL Bytes": 0,
+    "Plans": [
+      {
+        "Node Type": "Seq Scan",
+        "Parent Relationship": "Outer",
+        "Parallel Aware": false,
+        "Async Capable": false,
+        "Relation Name": "probe_i",
+        "Alias": "probe_i",
+        "Startup Cost": 0.00,
+        "Total Cost": 5808.00,
+        "Plan Rows": 300000,
+        "Plan Width": 33,
+        "Actual Startup Time": 0.010,
+        "Actual Total Time": 26.150,
+        "Actual Rows": 300000,
+        "Actual Loops": 1,
+        "Shared Hit Blocks": 1970,
+        "Shared Read Blocks": 838,
+        "Shared Dirtied Blocks": 0,
+        "Shared Written Blocks": 0,
+        "Local Hit Blocks": 0,
+        "Local Read Blocks": 0,
+        "Local Dirtied Blocks": 0,
+        "Local Written Blocks": 0,
+        "Temp Read Blocks": 0,
+        "Temp Written Blocks": 0,
+        "WAL Records": 0,
+        "WAL FPI": 0,
+        "WAL Bytes": 0
+      }
+    ]
+  },
+  "Settings": {
+    "work_mem": "64kB",
+    "enable_sort": "off",
+    "max_parallel_workers_per_gather": "0"
+  },
+  "Triggers": [
+  ],
+  "JIT": {
+    "Functions": 8,
+    "Options": {
+      "Inlining": false,
+      "Optimization": false,
+      "Expressions": true,
+      "Deforming": true
+    },
+    "Timing": {
+      "Generation": 0.317,
+      "Inlining": 0.000,
+      "Optimization": 0.291,
+      "Emission": 4.031,
+      "Total": 4.640
+    }
+  }
+}

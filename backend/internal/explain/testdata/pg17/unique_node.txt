@@ -1,0 +1,13 @@
+Query Text: SELECT DISTINCT k FROM probe_i ORDER BY k;
+Unique  (cost=1000.45..16545.80 rows=1000 width=4) (actual time=81.685..101.456 rows=1000 loops=1)
+  Buffers: shared hit=297466 read=2786 written=1
+  ->  Gather Merge  (cost=1000.45..16540.80 rows=2000 width=4) (actual time=81.684..101.317 rows=1229 loops=1)
+        Workers Planned: 2
+        Workers Launched: 2
+        Buffers: shared hit=297466 read=2786 written=1
+        ->  Unique  (cost=0.42..15309.93 rows=1000 width=4) (actual time=0.043..51.491 rows=410 loops=3)
+              Buffers: shared hit=297466 read=2786 written=1
+              ->  Parallel Index Only Scan using probe_i_k on probe_i  (cost=0.42..14997.43 rows=125000 width=4) (actual time=0.042..45.409 rows=100000 loops=3)
+                    Heap Fetches: 300000
+                    Buffers: shared hit=297466 read=2786 written=1
+Settings: enable_hashagg = 'off'

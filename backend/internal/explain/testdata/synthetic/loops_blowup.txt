@@ -1,0 +1,8 @@
+Query Text: SELECT * FROM a JOIN b ON b.id = a.b_id WHERE a.flag;
+Nested Loop  (cost=0.29..820.00 rows=12 width=16) (actual time=0.030..980.500 rows=5000 loops=1)
+  ->  Seq Scan on a  (cost=0.00..180.00 rows=12 width=8) (actual time=0.012..9.200 rows=5000 loops=1)
+        Filter: flag
+  ->  Index Scan using b_pkey on b  (cost=0.29..0.53 rows=1 width=8) (actual time=0.180..0.190 rows=1 loops=5000)
+        Index Cond: (id = a.b_id)
+Planning Time: 0.210 ms
+Execution Time: 1005.400 ms

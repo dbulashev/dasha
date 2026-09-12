@@ -1,0 +1,20 @@
+Query Text: SELECT count(*) FROM probe_i WHERE k < 900;
+Finalize Aggregate  (cost=9372.73..9372.74 rows=1 width=8) (actual time=52.627..55.014 rows=1.00 loops=1)
+  Buffers: shared hit=323 read=2729 written=1
+  ->  Gather  (cost=9372.51..9372.72 rows=2 width=8) (actual time=52.345..55.008 rows=2.00 loops=1)
+        Workers Planned: 1
+        Workers Launched: 1
+        Buffers: shared hit=323 read=2729 written=1
+        ->  Partial Aggregate  (cost=8372.51..8372.52 rows=1 width=8) (actual time=46.352..46.353 rows=1.00 loops=2)
+              Buffers: shared hit=323 read=2729 written=1
+              ->  Parallel Bitmap Heap Scan on probe_i  (cost=3005.18..7976.16 rows=158539 width=0) (actual time=3.710..39.872 rows=135000.00 loops=2)
+                    Recheck Cond: (k < 900)
+                    Rows Removed by Index Recheck: 7923
+                    Heap Blocks: exact=387 lossy=1104
+                    Buffers: shared hit=323 read=2729 written=1
+                    Worker 0:  Heap Blocks: exact=348 lossy=965
+                    ->  Bitmap Index Scan on probe_i_k  (cost=0.00..2937.80 rows=269517 width=0) (actual time=7.151..7.152 rows=270000.00 loops=1)
+                          Index Cond: (k < 900)
+                          Index Searches: 1
+                          Buffers: shared hit=3 read=225
+Settings: work_mem = '64kB', enable_seqscan = 'off', enable_indexscan = 'off'

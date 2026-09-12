@@ -1,0 +1,5 @@
+Query Text: SELECT count(*) FROM probe_fdw WHERE k = 7;
+Foreign Scan  (cost=100.04..152.73 rows=1 width=8) (actual time=5.230..5.231 rows=1 loops=1)
+  Output: (count(*))
+  Relations: Aggregate on (public.probe_fdw)
+  Remote SQL: SELECT count(*) FROM public.probe_i WHERE ((k = 7))

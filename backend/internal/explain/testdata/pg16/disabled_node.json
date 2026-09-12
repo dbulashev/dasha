@@ -1,0 +1,85 @@
+{
+  "Query Text": "SELECT count(*) FROM probe_t WHERE payload LIKE '%zz%';",
+  "Plan": {
+    "Node Type": "Aggregate",
+    "Strategy": "Plain",
+    "Partial Mode": "Simple",
+    "Parallel Aware": false,
+    "Async Capable": false,
+    "Startup Cost": 10000006558.08,
+    "Total Cost": 10000006558.09,
+    "Plan Rows": 1,
+    "Plan Width": 8,
+    "Actual Startup Time": 48.655,
+    "Actual Total Time": 48.655,
+    "Actual Rows": 1,
+    "Actual Loops": 1,
+    "Shared Hit Blocks": 32,
+    "Shared Read Blocks": 2776,
+    "Shared Dirtied Blocks": 0,
+    "Shared Written Blocks": 0,
+    "Local Hit Blocks": 0,
+    "Local Read Blocks": 0,
+    "Local Dirtied Blocks": 0,
+    "Local Written Blocks": 0,
+    "Temp Read Blocks": 0,
+    "Temp Written Blocks": 0,
+    "WAL Records": 0,
+    "WAL FPI": 0,
+    "WAL Bytes": 0,
+    "Plans": [
+      {
+        "Node Type": "Seq Scan",
+        "Parent Relationship": "Outer",
+        "Parallel Aware": false,
+        "Async Capable": false,
+        "Relation Name": "probe_t",
+        "Alias": "probe_t",
+        "Startup Cost": 10000000000.00,
+        "Total Cost": 10000006558.00,
+        "Plan Rows": 30,
+        "Plan Width": 0,
+        "Actual Startup Time": 48.619,
+        "Actual Total Time": 48.619,
+        "Actual Rows": 0,
+        "Actual Loops": 1,
+        "Filter": "(payload ~~ '%zz%'::text)",
+        "Rows Removed by Filter": 300000,
+        "Shared Hit Blocks": 32,
+        "Shared Read Blocks": 2776,
+        "Shared Dirtied Blocks": 0,
+        "Shared Written Blocks": 0,
+        "Local Hit Blocks": 0,
+        "Local Read Blocks": 0,
+        "Local Dirtied Blocks": 0,
+        "Local Written Blocks": 0,
+        "Temp Read Blocks": 0,
+        "Temp Written Blocks": 0,
+        "WAL Records": 0,
+        "WAL FPI": 0,
+        "WAL Bytes": 0
+      }
+    ]
+  },
+  "Settings": {
+    "enable_seqscan": "off"
+  },
+  "Triggers": [
+  ],
+  "JIT": {
+    "Functions": 4,
+    "Options": {
+      "Inlining": true,
+      "Optimization": true,
+      "Expressions": true,
+      "Deforming": true
+    },
+    "Timing": {
+      "Generation": 0.356,
+      "Inlining": 3.805,
+      "Optimization": 8.930,
+      "Emission": 7.820,
+      "Total": 20.910
+    }
+  }
+}

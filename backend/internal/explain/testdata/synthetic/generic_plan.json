@@ -1,0 +1,36 @@
+[
+  {
+    "Plan": {
+      "Node Type": "Aggregate",
+      "Strategy": "Plain",
+      "Partial Mode": "Simple",
+      "Parallel Aware": false,
+      "Async Capable": false,
+      "Startup Cost": 8560.00,
+      "Total Cost": 8560.01,
+      "Plan Rows": 1,
+      "Plan Width": 8,
+      "Plans": [
+        {
+          "Node Type": "Seq Scan",
+          "Parent Relationship": "Outer",
+          "Parallel Aware": false,
+          "Async Capable": false,
+          "Relation Name": "orders",
+          "Schema": "public",
+          "Alias": "orders",
+          "Startup Cost": 0.00,
+          "Total Cost": 8535.00,
+          "Plan Rows": 12000,
+          "Plan Width": 0,
+          "Filter": "(customer_id = $1)"
+        }
+      ]
+    },
+    "Settings": {
+      "work_mem": "64MB",
+      "random_page_cost": "1.1"
+    },
+    "Planning Time": 0.234
+  }
+]

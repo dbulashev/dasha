@@ -1,0 +1,12 @@
+Query Text: SELECT count(*) FROM probe_small s
+WHERE NOT EXISTS (SELECT 1 FROM probe_i i WHERE i.id = s.id + 400000);
+Aggregate  (cost=1336.17..1336.18 rows=1 width=8) (actual time=0.556..0.558 rows=1 loops=1)
+  Buffers: shared hit=599 read=3
+  ->  Nested Loop Anti Join  (cost=0.42..1335.92 rows=100 width=0) (actual time=0.089..0.529 rows=200 loops=1)
+        Buffers: shared hit=599 read=3
+        ->  Seq Scan on probe_small s  (cost=0.00..4.00 rows=200 width=4) (actual time=0.046..0.082 rows=200 loops=1)
+              Buffers: shared read=2
+        ->  Index Only Scan using probe_i_id on probe_i i  (cost=0.42..7.90 rows=1 width=4) (actual time=0.002..0.002 rows=0 loops=200)
+              Index Cond: (id = (s.id + 400000))
+              Heap Fetches: 0
+              Buffers: shared hit=599 read=1

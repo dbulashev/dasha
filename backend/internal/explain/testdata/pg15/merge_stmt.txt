@@ -1,0 +1,23 @@
+Query Text: MERGE INTO probe_dml d
+USING probe_small s ON d.id = s.id + 5000
+WHEN MATCHED THEN UPDATE SET k = s.k
+WHEN NOT MATCHED THEN INSERT (id, k, payload) VALUES (s.id + 5000, s.k, s.payload);
+Merge on probe_dml d  (cost=51.80..56.35 rows=0 width=0) (actual time=0.414..0.414 rows=0 loops=1)
+  Tuples: inserted=200
+  Buffers: shared hit=618 dirtied=1 written=1
+  WAL: records=403 bytes=32730
+  ->  Hash Left Join  (cost=51.80..56.35 rows=200 width=53) (actual time=0.142..0.190 rows=200 loops=1)
+        Hash Cond: ((s.id + 5000) = d.id)
+        Buffers: shared hit=16
+        WAL: records=3 bytes=730
+        ->  Seq Scan on probe_small s  (cost=0.00..4.00 rows=200 width=47) (actual time=0.004..0.022 rows=200 loops=1)
+              Buffers: shared hit=2
+        ->  Hash  (cost=30.80..30.80 rows=1680 width=10) (actual time=0.136..0.136 rows=600 loops=1)
+              Buckets: 2048  Batches: 1  Memory Usage: 42kB
+              Buffers: shared hit=14
+              WAL: records=3 bytes=730
+              ->  Seq Scan on probe_dml d  (cost=0.00..30.80 rows=1680 width=10) (actual time=0.003..0.077 rows=600 loops=1)
+                    Buffers: shared hit=14
+                    WAL: records=3 bytes=730
+Trigger probe_after_row: time=0.540 calls=200
+Trigger probe_after_stmt: time=0.017 calls=1

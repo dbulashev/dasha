@@ -1,0 +1,14 @@
+Query Text: SELECT k FROM probe_i EXCEPT SELECT id FROM probe_small;
+SetOp Except  (cost=12.07..17504.97 rows=1000 width=4) (actual time=0.310..110.533 rows=800.00 loops=1)
+  Buffers: shared hit=297282 read=2972
+  ->  Index Only Scan using probe_i_k on probe_i  (cost=0.42..16739.82 rows=300000 width=4) (actual time=0.054..98.019 rows=300000.00 loops=1)
+        Heap Fetches: 300000
+        Index Searches: 1
+        Buffers: shared hit=297280 read=2972
+  ->  Sort  (cost=11.64..12.14 rows=200 width=4) (actual time=0.032..0.049 rows=200.00 loops=1)
+        Sort Key: probe_small.id
+        Sort Method: quicksort  Memory: 25kB
+        Buffers: shared hit=2
+        ->  Seq Scan on probe_small  (cost=0.00..4.00 rows=200 width=4) (actual time=0.003..0.019 rows=200.00 loops=1)
+              Buffers: shared hit=2
+Settings: enable_hashagg = 'off'

@@ -1,0 +1,6 @@
+Query Text: SELECT count(*) FROM probe_i TABLESAMPLE SYSTEM (1) REPEATABLE (42);
+Aggregate  (cost=149.74..149.75 rows=1 width=8) (actual time=0.504..0.504 rows=1 loops=1)
+  Buffers: shared hit=11 read=15
+  ->  Sample Scan on probe_i  (cost=0.00..142.19 rows=3019 width=0) (actual time=0.009..0.362 rows=2782 loops=1)
+        Sampling: system ('1'::real) REPEATABLE ('42'::double precision)
+        Buffers: shared hit=11 read=15

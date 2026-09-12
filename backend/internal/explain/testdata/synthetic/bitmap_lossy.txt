@@ -1,0 +1,11 @@
+Query Text: SELECT count(*) FROM probe_t WHERE k < 400;
+Aggregate  (cost=12500.00..12500.01 rows=1 width=8) (actual time=310.220..310.221 rows=1 loops=1)
+  ->  Bitmap Heap Scan on probe_t  (cost=1350.00..12200.00 rows=120000 width=0) (actual time=40.100..280.400 rows=120000 loops=1)
+        Recheck Cond: (k < 400)
+        Rows Removed by Index Recheck: 40000
+        Heap Blocks: exact=1200 lossy=4300
+        Buffers: shared hit=5500
+        ->  Bitmap Index Scan on probe_t_k_idx  (cost=0.00..1320.00 rows=120000 width=0) (actual time=25.300..25.301 rows=120000 loops=1)
+              Index Cond: (k < 400)
+Planning Time: 0.190 ms
+Execution Time: 320.100 ms

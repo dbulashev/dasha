@@ -1,0 +1,7 @@
+Query Text: UPDATE probe_i SET k = k WHERE id < 1000;
+Update on probe_i  (cost=0.42..43.41 rows=0 width=0) (actual time=41.456..41.457 rows=0 loops=1)
+  Buffers: shared hit=14840 read=525 dirtied=540 written=16
+  WAL: records=6040 bytes=450943
+  ->  Index Scan using probe_i_id on probe_i  (cost=0.42..43.41 rows=1028 width=10) (actual time=0.015..1.165 rows=999 loops=1)
+        Index Cond: (id < 1000)
+        Buffers: shared hit=7 read=8

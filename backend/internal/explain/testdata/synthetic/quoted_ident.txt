@@ -1,0 +1,7 @@
+Query Text: SELECT * FROM "My Schema"."My Table" t WHERE t.k = 1;
+Seq Scan on "My Schema"."My Table" t  (cost=0.00..21.00 rows=4 width=36) (actual time=0.012..0.018 rows=4 loops=1)
+  Output: t.id, t.k
+  Filter: (t.k = 1)
+  Rows Removed by Filter: 96
+Planning Time: 0.104 ms
+Execution Time: 0.041 ms

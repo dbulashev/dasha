@@ -1,0 +1,12 @@
+Query Text: SELECT count(*) FROM probe_t WHERE payload LIKE '%zz%';
+Aggregate  (cost=10000006558.08..10000006558.09 rows=1 width=8) (actual time=159.467..159.468 rows=1 loops=1)
+  Buffers: shared read=2808
+  ->  Seq Scan on probe_t  (cost=10000000000.00..10000006558.00 rows=30 width=0) (actual time=159.411..159.411 rows=0 loops=1)
+        Filter: (payload ~~ '%zz%'::text)
+        Rows Removed by Filter: 300000
+        Buffers: shared read=2808
+Settings: enable_seqscan = 'off'
+JIT:
+  Functions: 4
+  Options: Inlining true, Optimization true, Expressions true, Deforming true
+  Timing: Generation 0.547 ms (Deform 0.140 ms), Inlining 90.623 ms, Optimization 28.011 ms, Emission 11.168 ms, Total 130.348 ms

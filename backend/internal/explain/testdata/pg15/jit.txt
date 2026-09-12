@@ -1,0 +1,18 @@
+Query Text: SELECT count(*) FROM probe_i WHERE payload LIKE '%zz%';
+Finalize Aggregate  (cost=6043.99..6044.00 rows=1 width=8) (actual time=148.129..153.416 rows=1 loops=1)
+  Buffers: shared hit=984 read=1839
+  ->  Gather  (cost=6043.88..6043.99 rows=1 width=8) (actual time=95.687..153.356 rows=2 loops=1)
+        Workers Planned: 1
+        Workers Launched: 1
+        Buffers: shared hit=984 read=1839
+        ->  Partial Aggregate  (cost=5043.88..5043.89 rows=1 width=8) (actual time=102.048..102.050 rows=1 loops=2)
+              Buffers: shared hit=984 read=1839
+              ->  Parallel Seq Scan on probe_i  (cost=0.00..5043.83 rows=18 width=0) (actual time=102.005..102.006 rows=0 loops=2)
+                    Filter: (payload ~~ '%zz%'::text)
+                    Rows Removed by Filter: 150000
+                    Buffers: shared hit=984 read=1839
+Settings: jit_above_cost = '0', jit_inline_above_cost = '0', jit_optimize_above_cost = '0'
+JIT:
+  Functions: 10
+  Options: Inlining true, Optimization true, Expressions true, Deforming true
+  Timing: Generation 2.701 ms, Inlining 94.258 ms, Optimization 23.307 ms, Emission 33.558 ms, Total 153.824 ms

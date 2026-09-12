@@ -1,0 +1,141 @@
+{
+  "Query Text": "SELECT id FROM probe_i ORDER BY (k % 3), payload;",
+  "Plan": {
+    "Node Type": "Gather Merge",
+    "Parallel Aware": false,
+    "Async Capable": false,
+    "Startup Cost": 21382.95,
+    "Total Cost": 84427.51,
+    "Plan Rows": 176471,
+    "Plan Width": 41,
+    "Actual Startup Time": 115.193,
+    "Actual Total Time": 514.274,
+    "Actual Rows": 300000,
+    "Actual Loops": 1,
+    "Workers Planned": 1,
+    "Workers Launched": 1,
+    "Shared Hit Blocks": 385,
+    "Shared Read Blocks": 8522,
+    "Shared Dirtied Blocks": 0,
+    "Shared Written Blocks": 0,
+    "Local Hit Blocks": 0,
+    "Local Read Blocks": 0,
+    "Local Dirtied Blocks": 0,
+    "Local Written Blocks": 0,
+    "Temp Read Blocks": 6322,
+    "Temp Written Blocks": 6899,
+    "WAL Records": 0,
+    "WAL FPI": 0,
+    "WAL Bytes": 0,
+    "Plans": [
+      {
+        "Node Type": "Incremental Sort",
+        "Parent Relationship": "Outer",
+        "Parallel Aware": false,
+        "Async Capable": false,
+        "Startup Cost": 20382.94,
+        "Total Cost": 63574.51,
+        "Plan Rows": 176471,
+        "Plan Width": 41,
+        "Actual Startup Time": 97.886,
+        "Actual Total Time": 344.114,
+        "Actual Rows": 150000,
+        "Actual Loops": 2,
+        "Sort Key": ["((k % 3))", "payload"],
+        "Presorted Key": ["((k % 3))"],
+        "Full-sort Groups": {
+          "Group Count": 3,
+          "Sort Methods Used": ["quicksort"],
+          "Sort Space Memory": {
+            "Average Sort Space Used": 30,
+            "Peak Sort Space Used": 30
+          }
+        },
+        "Pre-sorted Groups": {
+          "Group Count": 3,
+          "Sort Methods Used": ["external merge"],
+          "Sort Space Disk": {
+            "Average Sort Space Used": 2992,
+            "Peak Sort Space Used": 2992
+          }
+        },
+        "Shared Hit Blocks": 385,
+        "Shared Read Blocks": 8522,
+        "Shared Dirtied Blocks": 0,
+        "Shared Written Blocks": 0,
+        "Local Hit Blocks": 0,
+        "Local Read Blocks": 0,
+        "Local Dirtied Blocks": 0,
+        "Local Written Blocks": 0,
+        "Temp Read Blocks": 6322,
+        "Temp Written Blocks": 6899,
+        "WAL Records": 0,
+        "WAL FPI": 0,
+        "WAL Bytes": 0,
+        "Workers": [
+          {
+            "Worker Number": 0,
+            "Full-sort Groups": {
+              "Group Count": 3,
+              "Sort Methods Used": ["quicksort"],
+              "Sort Space Memory": {
+                "Average Sort Space Used": 30,
+                "Peak Sort Space Used": 30
+              }
+            },
+            "Pre-sorted Groups": {
+              "Group Count": 3,
+              "Sort Methods Used": ["external merge"],
+              "Sort Space Disk": {
+                "Average Sort Space Used": 3984,
+                "Peak Sort Space Used": 4944
+              }
+            }
+          }
+        ],
+        "Plans": [
+          {
+            "Node Type": "Index Scan",
+            "Parent Relationship": "Outer",
+            "Parallel Aware": true,
+            "Async Capable": false,
+            "Scan Direction": "Forward",
+            "Index Name": "probe_i_k3",
+            "Relation Name": "probe_i",
+            "Alias": "probe_i",
+            "Startup Cost": 0.42,
+            "Total Cost": 14959.56,
+            "Plan Rows": 176471,
+            "Plan Width": 41,
+            "Actual Startup Time": 0.030,
+            "Actual Total Time": 36.872,
+            "Actual Rows": 150000,
+            "Actual Loops": 2,
+            "Shared Hit Blocks": 305,
+            "Shared Read Blocks": 8507,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0,
+            "WAL Records": 0,
+            "WAL FPI": 0,
+            "WAL Bytes": 0,
+            "Workers": [
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "Settings": {
+    "enable_seqscan": "off",
+    "enable_sort": "off",
+    "work_mem": "64kB"
+  },
+  "Triggers": [
+  ]
+}

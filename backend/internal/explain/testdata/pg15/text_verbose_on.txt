@@ -1,0 +1,21 @@
+Query Text: SELECT count(*) FROM probe_t WHERE k = 42 AND payload LIKE '%abc%';
+Finalize Aggregate  (cost=6451.18..6451.19 rows=1 width=8) (actual time=21.424..23.043 rows=1 loops=1)
+  Output: count(*)
+  Buffers: shared hit=352 read=2452
+  ->  Gather  (cost=6451.06..6451.17 rows=1 width=8) (actual time=21.321..23.038 rows=2 loops=1)
+        Output: (PARTIAL count(*))
+        Workers Planned: 1
+        Workers Launched: 1
+        Buffers: shared hit=352 read=2452
+        ->  Partial Aggregate  (cost=5451.06..5451.07 rows=1 width=8) (actual time=20.075..20.075 rows=1 loops=2)
+              Output: PARTIAL count(*)
+              Buffers: shared hit=352 read=2452
+              Worker 0:  actual time=18.941..18.942 rows=1 loops=1
+                Buffers: shared hit=172 read=1160
+              ->  Parallel Seq Scan on public.probe_t  (cost=0.00..5451.06 rows=2 width=0) (actual time=13.290..20.069 rows=1 loops=2)
+                    Output: id, k, payload
+                    Filter: ((probe_t.payload ~~ '%abc%'::text) AND (probe_t.k = 42))
+                    Rows Removed by Filter: 149999
+                    Buffers: shared hit=352 read=2452
+                    Worker 0:  actual time=18.021..18.936 rows=1 loops=1
+                      Buffers: shared hit=172 read=1160

@@ -1,0 +1,16 @@
+Query Text: WITH RECURSIVE r(n) AS (
+	SELECT 1
+	UNION ALL
+	SELECT n + 1 FROM r WHERE n < 100
+)
+SELECT count(*) FROM r;
+Aggregate  (cost=3.34..3.35 rows=1 width=8) (actual time=0.060..0.061 rows=1.00 loops=1)
+  CTE r
+    ->  Recursive Union  (cost=0.00..2.65 rows=31 width=4) (actual time=0.002..0.039 rows=100.00 loops=1)
+          Storage: Memory  Maximum Storage: 33kB
+          ->  Result  (cost=0.00..0.01 rows=1 width=4) (actual time=0.001..0.001 rows=1.00 loops=1)
+          ->  WorkTable Scan on r r_1  (cost=0.00..0.23 rows=3 width=4) (actual time=0.000..0.000 rows=0.99 loops=100)
+                Filter: (n < 100)
+                Rows Removed by Filter: 0
+  ->  CTE Scan on r  (cost=0.00..0.62 rows=31 width=0) (actual time=0.003..0.053 rows=100.00 loops=1)
+        Storage: Memory  Maximum Storage: 20kB

@@ -1,0 +1,9 @@
+Query Text: SELECT * FROM a JOIN b ON b.k = a.k;
+Nested Loop  (cost=0.00..1250000.00 rows=50000 width=16) (actual time=0.050..4210.220 rows=50000 loops=1)
+  Join Filter: (b.k = a.k)
+  Rows Removed by Join Filter: 4950000
+  ->  Seq Scan on a  (cost=0.00..1443.00 rows=100000 width=8) (actual time=0.010..12.100 rows=100000 loops=1)
+  ->  Materialize  (cost=0.00..2000.00 rows=50000 width=8) (actual time=0.000..0.015 rows=50 loops=100000)
+        ->  Seq Scan on b  (cost=0.00..1000.00 rows=50000 width=8) (actual time=0.008..8.400 rows=50000 loops=1)
+Planning Time: 0.310 ms
+Execution Time: 4300.500 ms

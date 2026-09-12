@@ -1,0 +1,7 @@
+Query Text: SELECT count(*) FROM part_fdw WHERE k = 7;
+Aggregate  (cost=200.24..200.25 rows=1 width=8) (actual time=12.441..12.443 rows=1 loops=1)
+  ->  Append  (cost=100.00..200.22 rows=6 width=0) (actual time=6.112..12.401 rows=12 loops=1)
+        ->  Async Foreign Scan on part_fdw_1 p_1  (cost=100.00..100.11 rows=3 width=0) (actual time=6.109..6.110 rows=6 loops=1)
+        ->  Async Foreign Scan on part_fdw_2 p_2  (cost=100.00..100.11 rows=3 width=0) (actual time=0.001..0.002 rows=6 loops=1)
+Planning Time: 0.412 ms
+Execution Time: 13.004 ms

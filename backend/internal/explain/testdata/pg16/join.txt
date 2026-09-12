@@ -1,0 +1,21 @@
+Query Text: SELECT count(*) FROM probe_t a JOIN probe_t b ON b.id = a.k WHERE a.payload LIKE '%ff%';
+Finalize Aggregate  (cost=13073.73..13073.74 rows=1 width=8) (actual time=82.896..84.356 rows=1 loops=1)
+  Buffers: shared hit=1745 read=3952
+  ->  Gather  (cost=13073.62..13073.73 rows=1 width=8) (actual time=82.661..84.352 rows=2 loops=1)
+        Workers Planned: 1
+        Workers Launched: 1
+        Buffers: shared hit=1745 read=3952
+        ->  Partial Aggregate  (cost=12073.62..12073.63 rows=1 width=8) (actual time=81.162..81.164 rows=1 loops=2)
+              Buffers: shared hit=1745 read=3952
+              ->  Parallel Hash Join  (cost=6778.59..12015.68 rows=23173 width=0) (actual time=56.606..80.403 rows=16405 loops=2)
+                    Hash Cond: (a.k = b.id)
+                    Buffers: shared hit=1745 read=3952
+                    ->  Parallel Seq Scan on probe_t a  (cost=0.00..5013.88 rows=23173 width=4) (actual time=0.025..20.047 rows=16422 loops=2)
+                          Filter: (payload ~~ '%ff%'::text)
+                          Rows Removed by Filter: 133578
+                          Buffers: shared hit=864 read=1944
+                    ->  Parallel Hash  (cost=4572.71..4572.71 rows=176471 width=4) (actual time=54.277..54.278 rows=150000 loops=2)
+                          Buckets: 524288  Batches: 1  Memory Usage: 15872kB
+                          Buffers: shared hit=800 read=2008
+                          ->  Parallel Seq Scan on probe_t b  (cost=0.00..4572.71 rows=176471 width=4) (actual time=0.027..16.146 rows=150000 loops=2)
+                                Buffers: shared hit=800 read=2008

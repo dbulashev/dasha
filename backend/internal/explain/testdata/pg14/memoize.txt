@@ -1,0 +1,21 @@
+Query Text: SELECT count(*) FROM probe_small s JOIN probe_i t ON t.k = s.k;
+Aggregate  (cost=2259.89..2259.90 rows=1 width=8) (actual time=16.941..16.942 rows=1 loops=1)
+  Output: count(*)
+  Buffers: shared hit=6001 read=66
+  ->  Nested Loop  (cost=0.43..2106.48 rows=61361 width=0) (actual time=0.227..13.907 rows=60000 loops=1)
+        Buffers: shared hit=6001 read=66
+        ->  Seq Scan on public.probe_small s  (cost=0.00..4.00 rows=200 width=4) (actual time=0.039..0.124 rows=200 loops=1)
+              Output: s.id, s.k, s.payload
+              Buffers: shared read=2
+        ->  Memoize  (cost=0.43..64.64 rows=300 width=4) (actual time=0.002..0.040 rows=300 loops=200)
+              Output: t.k
+              Cache Key: s.k
+              Cache Mode: logical
+              Hits: 180  Misses: 20  Evictions: 0  Overflows: 0  Memory Usage: 213kB
+              Buffers: shared hit=6001 read=64
+              ->  Index Only Scan using probe_i_k on public.probe_i t  (cost=0.42..64.63 rows=300 width=4) (actual time=0.015..0.196 rows=300 loops=20)
+                    Output: t.k
+                    Index Cond: (t.k = s.k)
+                    Heap Fetches: 6000
+                    Buffers: shared hit=6001 read=64
+Settings: enable_hashjoin = 'off', enable_mergejoin = 'off'

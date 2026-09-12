@@ -1,0 +1,6 @@
+Query Text: SELECT count(*) FROM probe_i WHERE ctid > '(0,0)' AND ctid < '(10,0)';
+Aggregate  (cost=26.36..26.37 rows=1 width=8) (actual time=0.020..0.020 rows=1.00 loops=1)
+  Buffers: shared hit=10
+  ->  Tid Range Scan on probe_i  (cost=0.01..23.69 rows=1068 width=0) (actual time=0.011..0.016 rows=71.00 loops=1)
+        TID Cond: ((ctid > '(0,0)'::tid) AND (ctid < '(10,0)'::tid))
+        Buffers: shared hit=10

@@ -1,0 +1,13 @@
+Query Text: SELECT * FROM a JOIN b ON b.k = a.k WHERE a.v > (SELECT avg(v) FROM c);
+Nested Loop  (cost=1.05..1251000.00 rows=50000 width=16) (actual time=0.060..4215.300 rows=50000 loops=1)
+  Join Filter: (b.k = a.k)
+  Rows Removed by Join Filter: 4950000
+  InitPlan 1 (returns $0)
+    ->  Aggregate  (cost=1.04..1.05 rows=1 width=32) (actual time=0.020..0.021 rows=1 loops=1)
+          ->  Seq Scan on c  (cost=0.00..1.03 rows=3 width=4) (actual time=0.008..0.009 rows=3 loops=1)
+  ->  Seq Scan on a  (cost=0.00..1443.00 rows=100000 width=8) (actual time=0.010..12.100 rows=100000 loops=1)
+        Filter: ((v)::numeric > $0)
+  ->  Materialize  (cost=0.00..2000.00 rows=50000 width=8) (actual time=0.000..0.015 rows=50 loops=100000)
+        ->  Seq Scan on b  (cost=0.00..1000.00 rows=50000 width=8) (actual time=0.008..8.400 rows=50000 loops=1)
+Planning Time: 0.330 ms
+Execution Time: 4305.100 ms

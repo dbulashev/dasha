@@ -1,0 +1,6 @@
+Query Text: SELECT count(*) FROM generate_series(1, 10000) AS g;
+Aggregate  (cost=125.00..125.01 rows=1 width=8) (actual time=1.121..1.121 rows=1 loops=1)
+  Output: count(*)
+  ->  Function Scan on pg_catalog.generate_series g  (cost=0.00..100.00 rows=10000 width=0) (actual time=0.301..0.738 rows=10000 loops=1)
+        Output: g
+        Function Call: generate_series(1, 10000)

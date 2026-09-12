@@ -1,0 +1,31 @@
+Query Text: SELECT count(*) FROM probe_i a JOIN probe_i b ON b.id = a.id WHERE a.k < 5;
+Finalize Aggregate  (cost=12716.89..12716.90 rows=1 width=8) (actual time=73.575..77.942 rows=1.00 loops=1)
+  Buffers: shared hit=2570 read=2525
+  ->  Gather  (cost=12716.67..12716.88 rows=2 width=8) (actual time=73.368..77.934 rows=3.00 loops=1)
+        Workers Planned: 2
+        Workers Launched: 2
+        Buffers: shared hit=2570 read=2525
+        ->  Partial Aggregate  (cost=11716.67..11716.68 rows=1 width=8) (actual time=46.420..46.423 rows=1.00 loops=3)
+              Buffers: shared hit=2570 read=2525
+              ->  Merge Join  (cost=2530.08..11715.13 rows=616 width=0) (actual time=1.663..46.353 rows=500.00 loops=3)
+                    Merge Cond: (b.id = a.id)
+                    Buffers: shared hit=2570 read=2525
+                    ->  Parallel Index Only Scan using probe_i_id on probe_i b  (cost=0.42..8859.42 rows=125000 width=4) (actual time=0.239..37.220 rows=100000.00 loops=3)
+                          Heap Fetches: 300000
+                          Index Searches: 1
+                          Buffers: shared hit=1577 read=2520
+                    ->  Sort  (cost=2529.66..2533.36 rows=1478 width=4) (actual time=1.319..1.466 rows=1493.33 loops=3)
+                          Sort Key: a.id
+                          Sort Method: quicksort  Memory: 49kB
+                          Buffers: shared hit=993 read=5
+                          Worker 0:  Sort Method: quicksort  Memory: 49kB
+                          Worker 1:  Sort Method: quicksort  Memory: 49kB
+                          ->  Bitmap Heap Scan on probe_i a  (cost=19.88..2451.85 rows=1478 width=4) (actual time=0.369..1.008 rows=1500.00 loops=3)
+                                Recheck Cond: (k < 5)
+                                Heap Blocks: exact=312
+                                Buffers: shared hit=986 read=4
+                                ->  Bitmap Index Scan on probe_i_k  (cost=0.00..19.51 rows=1478 width=0) (actual time=0.189..0.189 rows=1500.00 loops=3)
+                                      Index Cond: (k < 5)
+                                      Index Searches: 3
+                                      Buffers: shared hit=13 read=1
+Settings: enable_hashjoin = 'off', enable_nestloop = 'off'

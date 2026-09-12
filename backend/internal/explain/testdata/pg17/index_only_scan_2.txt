@@ -1,0 +1,10 @@
+Query Text: SELECT count(*) FROM probe_i WHERE id < 5000;
+Aggregate  (cost=219.20..219.21 rows=1 width=8) (actual time=1.451..1.451 rows=1 loops=1)
+  Buffers: shared hit=2008 read=47
+  WAL: records=10 bytes=2538
+  ->  Index Only Scan using probe_i_id on probe_i  (cost=0.42..205.98 rows=5289 width=0) (actual time=0.023..1.229 rows=4999 loops=1)
+        Index Cond: (id < 5000)
+        Heap Fetches: 5998
+        Buffers: shared hit=2008 read=47
+        WAL: records=10 bytes=2538
+Settings: enable_seqscan = 'off', enable_bitmapscan = 'off'

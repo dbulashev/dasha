@@ -1,0 +1,4 @@
+Query Text: SELECT count(*) FROM probe_t WHERE 1 = 0;
+Aggregate  (cost=0.00..0.01 rows=1 width=8) (actual time=0.002..0.002 rows=1.00 loops=1)
+  ->  Result  (cost=0.00..0.00 rows=0 width=0) (actual time=0.000..0.000 rows=0.00 loops=1)
+        One-Time Filter: false

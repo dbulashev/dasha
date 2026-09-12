@@ -1,0 +1,12 @@
+Query Text: INSERT INTO probe_dml SELECT id + 1000, k, payload FROM probe_small
+ON CONFLICT DO NOTHING;
+Insert on probe_dml  (cost=0.00..4.50 rows=0 width=0) (actual time=1.099..1.099 rows=0 loops=1)
+  Conflict Resolution: NOTHING
+  Tuples Inserted: 200
+  Conflicting Tuples: 0
+  Buffers: shared hit=806 dirtied=2 written=2
+  WAL: records=600 bytes=41600
+  ->  Seq Scan on probe_small  (cost=0.00..4.50 rows=200 width=41) (actual time=0.006..0.036 rows=200 loops=1)
+        Buffers: shared hit=2
+Trigger probe_after_row: time=0.639 calls=200
+Trigger probe_after_stmt: time=0.020 calls=1

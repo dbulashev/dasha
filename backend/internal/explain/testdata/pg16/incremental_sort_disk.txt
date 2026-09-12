@@ -1,0 +1,16 @@
+Query Text: SELECT id FROM probe_i ORDER BY (k % 3), payload;
+Gather Merge  (cost=16097.00..68349.06 rows=176471 width=41) (actual time=95.564..545.798 rows=300000 loops=1)
+  Workers Planned: 1
+  Workers Launched: 1
+  Buffers: shared hit=787 read=8047 written=1, temp read=5615 written=6137
+  ->  Incremental Sort  (cost=15096.99..47496.06 rows=176471 width=41) (actual time=86.855..314.516 rows=150000 loops=2)
+        Sort Key: ((k % 3)), payload
+        Presorted Key: ((k % 3))
+        Full-sort Groups: 3  Sort Method: quicksort  Average Memory: 29kB  Peak Memory: 29kB
+        Pre-sorted Groups: 3  Sort Method: external merge  Average Disk: 2736kB  Peak Disk: 2736kB
+        Buffers: shared hit=787 read=8047 written=1, temp read=5615 written=6137
+        Worker 0:  Full-sort Groups: 3  Sort Method: quicksort  Average Memory: 29kB  Peak Memory: 29kB
+          Pre-sorted Groups: 3  Sort Method: external merge  Average Disk: 4117kB  Peak Disk: 4992kB
+        ->  Parallel Index Scan using probe_i_k3 on probe_i  (cost=0.42..14992.99 rows=176471 width=41) (actual time=0.022..33.062 rows=150000 loops=2)
+              Buffers: shared hit=704 read=8036 written=1
+Settings: enable_seqscan = 'off', enable_sort = 'off', work_mem = '64kB'

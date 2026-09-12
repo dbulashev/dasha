@@ -1,0 +1,12 @@
+Query Text: UPDATE probe_dml SET k = k + 1 WHERE id <= 100;
+Update on probe_dml  (cost=7.25..23.25 rows=0 width=0) (actual time=0.495..0.496 rows=0.00 loops=1)
+  Buffers: shared hit=604 dirtied=4 written=4
+  WAL: records=307 bytes=28018
+  ->  Bitmap Heap Scan on probe_dml  (cost=7.25..23.25 rows=400 width=10) (actual time=0.010..0.039 rows=100.00 loops=1)
+        Recheck Cond: (id <= 100)
+        Heap Blocks: exact=1
+        Buffers: shared hit=2
+        ->  Bitmap Index Scan on probe_dml_pkey  (cost=0.00..7.15 rows=400 width=0) (actual time=0.004..0.004 rows=100.00 loops=1)
+              Index Cond: (id <= 100)
+              Index Searches: 1
+              Buffers: shared hit=1

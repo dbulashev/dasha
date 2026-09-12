@@ -1,0 +1,14 @@
+Query Text: SELECT count(*) FROM (
+	SELECT id, row_number() OVER (ORDER BY id) AS rn FROM probe_i
+) s WHERE rn < 10;
+Aggregate  (cost=19107.42..19107.43 rows=1 width=8) (actual time=158.902..158.903 rows=1 loops=1)
+  Buffers: shared read=3626 written=1621
+  ->  Subquery Scan on s  (cost=0.42..18857.42 rows=100000 width=0) (actual time=0.136..158.897 rows=9 loops=1)
+        Filter: (s.rn < 10)
+        Rows Removed by Filter: 299991
+        Buffers: shared read=3626 written=1621
+        ->  WindowAgg  (cost=0.42..15107.42 rows=300000 width=12) (actual time=0.135..139.036 rows=300000 loops=1)
+              Buffers: shared read=3626 written=1621
+              ->  Index Only Scan using probe_i_id on probe_i  (cost=0.42..10607.42 rows=300000 width=4) (actual time=0.109..63.075 rows=300000 loops=1)
+                    Heap Fetches: 300000
+                    Buffers: shared read=3626 written=1621

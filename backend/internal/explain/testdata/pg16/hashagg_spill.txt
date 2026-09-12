@@ -1,0 +1,14 @@
+Query Text: SELECT payload, count(*) FROM probe_i GROUP BY payload HAVING count(*) > 1;
+HashAggregate  (cost=131058.00..158245.50 rows=100000 width=41) (actual time=474.832..474.833 rows=0 loops=1)
+  Group Key: payload
+  Filter: (count(*) > 1)
+  Planned Partitions: 4  Batches: 1365  Memory Usage: 169kB  Disk Usage: 17520kB
+  Rows Removed by Filter: 300000
+  Buffers: shared hit=1958 read=850, temp read=8671 written=10260
+  ->  Seq Scan on probe_i  (cost=0.00..5808.00 rows=300000 width=33) (actual time=0.012..36.977 rows=300000 loops=1)
+        Buffers: shared hit=1958 read=850
+Settings: work_mem = '64kB', enable_sort = 'off', max_parallel_workers_per_gather = '0'
+JIT:
+  Functions: 8
+  Options: Inlining false, Optimization false, Expressions true, Deforming true
+  Timing: Generation 0.869 ms, Inlining 0.000 ms, Optimization 1.969 ms, Emission 21.003 ms, Total 23.842 ms

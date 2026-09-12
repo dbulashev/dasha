@@ -1,0 +1,6 @@
+Query Text: INSERT INTO t SELECT * FROM src;
+Insert on t  (cost=0.00..1500.00 rows=0 width=0) (actual time=890.120..890.121 rows=0 loops=1)
+  ->  Seq Scan on src  (cost=0.00..1500.00 rows=100000 width=40) (actual time=0.010..25.100 rows=100000 loops=1)
+Planning Time: 0.180 ms
+Trigger t_audit: time=340.500 calls=100000
+Execution Time: 905.300 ms

@@ -1,0 +1,8 @@
+Query Text: SELECT p FROM probe_geo ORDER BY p <-> point '(0,0)' LIMIT 5;
+Limit  (cost=0.15..0.53 rows=5 width=24) (actual time=0.078..0.083 rows=5 loops=1)
+  Buffers: shared read=4
+  ->  Index Only Scan using probe_geo_p on probe_geo  (cost=0.15..760.15 rows=10000 width=24) (actual time=0.077..0.082 rows=5 loops=1)
+        Order By: (p <-> '(0,0)'::point)
+        Heap Fetches: 5
+        Buffers: shared read=4
+Settings: enable_seqscan = 'off'

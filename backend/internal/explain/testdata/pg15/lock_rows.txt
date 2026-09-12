@@ -1,0 +1,9 @@
+Query Text: SELECT id FROM probe_small ORDER BY id LIMIT 5 FOR UPDATE;
+Limit  (cost=0.14..0.59 rows=5 width=10) (actual time=0.310..0.316 rows=5 loops=1)
+  Buffers: shared hit=5 read=2 dirtied=1
+  WAL: records=5 bytes=270
+  ->  LockRows  (cost=0.14..18.14 rows=200 width=10) (actual time=0.309..0.314 rows=5 loops=1)
+        Buffers: shared hit=5 read=2 dirtied=1
+        WAL: records=5 bytes=270
+        ->  Index Scan using probe_small_id on probe_small  (cost=0.14..16.14 rows=200 width=10) (actual time=0.293..0.295 rows=5 loops=1)
+              Buffers: shared read=2

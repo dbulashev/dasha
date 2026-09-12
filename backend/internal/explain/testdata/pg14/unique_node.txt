@@ -1,0 +1,7 @@
+Query Text: SELECT DISTINCT k FROM probe_i ORDER BY k;
+Unique  (cost=0.42..17481.68 rows=1000 width=4) (actual time=0.172..393.787 rows=1000 loops=1)
+  Buffers: shared hit=297597 read=2655 written=1
+  ->  Index Only Scan using probe_i_k on probe_i  (cost=0.42..16731.68 rows=300000 width=4) (actual time=0.170..362.568 rows=300000 loops=1)
+        Heap Fetches: 300000
+        Buffers: shared hit=297597 read=2655 written=1
+Settings: enable_hashagg = 'off'

@@ -1,0 +1,20 @@
+Query Text: SELECT count(*) FROM probe_i t JOIN probe_small s ON s.id = t.id;
+Aggregate  (cost=23.36..23.37 rows=1 width=8) (actual time=0.152..0.153 rows=1 loops=1)
+  Output: count(*)
+  Buffers: shared hit=6 read=1
+  ->  Merge Join  (cost=12.14..22.86 rows=200 width=0) (actual time=0.045..0.141 rows=200 loops=1)
+        Inner Unique: true
+        Merge Cond: (t.id = s.id)
+        Buffers: shared hit=6 read=1
+        ->  Index Only Scan using probe_i_id on public.probe_i t  (cost=0.42..10607.42 rows=300000 width=4) (actual time=0.005..0.039 rows=201 loops=1)
+              Output: t.id
+              Heap Fetches: 201
+              Buffers: shared hit=4 read=1
+        ->  Sort  (cost=11.64..12.14 rows=200 width=4) (actual time=0.038..0.049 rows=200 loops=1)
+              Output: s.id
+              Sort Key: s.id
+              Sort Method: quicksort  Memory: 25kB
+              Buffers: shared hit=2
+              ->  Seq Scan on public.probe_small s  (cost=0.00..4.00 rows=200 width=4) (actual time=0.005..0.021 rows=200 loops=1)
+                    Output: s.id
+                    Buffers: shared hit=2
