@@ -1,0 +1,12 @@
+Query Text: PREPARE probe_pp(int) AS SELECT count(*) FROM probe_part WHERE id = $1;
+Query Parameters: $1 = '42'
+Aggregate  (cost=24.95..24.96 rows=1 width=8) (actual time=0.017..0.017 rows=1 loops=1)
+  Buffers: shared hit=1 read=2
+  ->  Append  (cost=0.29..24.95 rows=3 width=0) (actual time=0.015..0.016 rows=1 loops=1)
+        Buffers: shared hit=1 read=2
+        Subplans Removed: 2
+        ->  Index Only Scan using probe_part_1_id_idx on probe_part_1  (cost=0.29..8.31 rows=1 width=0) (actual time=0.014..0.015 rows=1 loops=1)
+              Index Cond: (id = $1)
+              Heap Fetches: 1
+              Buffers: shared hit=1 read=2
+Settings: plan_cache_mode = 'force_generic_plan'

@@ -1,0 +1,13 @@
+Query Text: SELECT k FROM probe_i EXCEPT SELECT id FROM probe_small;
+HashSetOp Except  (cost=0.00..11065.50 rows=1000 width=8) (actual time=112.195..112.289 rows=800 loops=1)
+  Buffers: shared hit=1998 read=812
+  ->  Append  (cost=0.00..10315.00 rows=300200 width=8) (actual time=0.012..84.259 rows=300200 loops=1)
+        Buffers: shared hit=1998 read=812
+        ->  Subquery Scan on "*SELECT* 1"  (cost=0.00..8808.00 rows=300000 width=8) (actual time=0.011..58.173 rows=300000 loops=1)
+              Buffers: shared hit=1996 read=812
+              ->  Seq Scan on probe_i  (cost=0.00..5808.00 rows=300000 width=4) (actual time=0.010..28.489 rows=300000 loops=1)
+                    Buffers: shared hit=1996 read=812
+        ->  Subquery Scan on "*SELECT* 2"  (cost=0.00..6.00 rows=200 width=8) (actual time=0.013..0.070 rows=200 loops=1)
+              Buffers: shared hit=2
+              ->  Seq Scan on probe_small  (cost=0.00..4.00 rows=200 width=4) (actual time=0.012..0.049 rows=200 loops=1)
+                    Buffers: shared hit=2

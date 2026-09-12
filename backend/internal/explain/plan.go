@@ -47,6 +47,7 @@ type Plan struct {
 	Format        Format
 	Generic       bool // GENERIC_PLAN: parameters are not substituted
 	QueryText     string
+	QueryParams   string // absent before pg16
 	QueryID       int64
 	HasQueryID    bool
 	Duration      *float64 // ms, known from a log record only
@@ -92,18 +93,19 @@ type Node struct {
 	RecheckCond string
 	JoinCond    string
 	SortKey     []string
-	// RowsRemovedByFilter also carries "Rows Removed by Join Filter": for the
-	// rules the two are one signal.
-	RowsRemovedByFilter *float64
-	HeapFetches         *float64
-	SortMethod          string
-	SortSpaceKB         *float64
-	SortSpaceType       string
-	WorkersPlanned      *int
-	WorkersLaunched     *int
-	HeapBlocksExact     *float64
-	HeapBlocksLossy     *float64
-	Buffers             *Buffers
+	// A join node counts the two apart: the join condition and the node's own
+	// qual each throw rows away.
+	RowsRemovedByFilter     *float64
+	RowsRemovedByJoinFilter *float64
+	HeapFetches             *float64
+	SortMethod              string
+	SortSpaceKB             *float64
+	SortSpaceType           string
+	WorkersPlanned          *int
+	WorkersLaunched         *int
+	HeapBlocksExact         *float64
+	HeapBlocksLossy         *float64
+	Buffers                 *Buffers
 
 	Children []Node
 }

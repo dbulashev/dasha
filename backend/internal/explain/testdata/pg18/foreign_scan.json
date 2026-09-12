@@ -1,0 +1,40 @@
+{
+  "Query Text": "SELECT count(*) FROM probe_fdw WHERE k = 7;",
+  "Plan": {
+    "Node Type": "Foreign Scan",
+    "Operation": "Select",
+    "Parallel Aware": false,
+    "Async Capable": false,
+    "Startup Cost": 100.04,
+    "Total Cost": 152.92,
+    "Plan Rows": 1,
+    "Plan Width": 8,
+    "Actual Startup Time": 0.313,
+    "Actual Total Time": 0.313,
+    "Actual Rows": 1.00,
+    "Actual Loops": 1,
+    "Disabled": false,
+    "Output": ["(count(*))"],
+    "Relations": "Aggregate on (public.probe_fdw)",
+    "Remote SQL": "SELECT count(*) FROM public.probe_i WHERE ((k = 7))",
+    "Shared Hit Blocks": 0,
+    "Shared Read Blocks": 0,
+    "Shared Dirtied Blocks": 0,
+    "Shared Written Blocks": 0,
+    "Local Hit Blocks": 0,
+    "Local Read Blocks": 0,
+    "Local Dirtied Blocks": 0,
+    "Local Written Blocks": 0,
+    "Temp Read Blocks": 0,
+    "Temp Written Blocks": 0,
+    "WAL Records": 0,
+    "WAL FPI": 0,
+    "WAL Bytes": 0,
+    "WAL Buffers Full": 0
+  },
+  "Settings": {
+  },
+  "Query Identifier": -2998997103762049148,
+  "Triggers": [
+  ]
+}

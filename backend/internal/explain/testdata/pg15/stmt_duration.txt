@@ -1,13 +1,13 @@
 Query Text: SELECT count(*) FROM probe_t WHERE k = 5;
-Finalize Aggregate  (cost=6010.43..6010.44 rows=1 width=8) (actual time=8.614..9.837 rows=1 loops=1)
-  Buffers: shared hit=2804
-  ->  Gather  (cost=6010.32..6010.43 rows=1 width=8) (actual time=8.513..9.832 rows=2 loops=1)
+Finalize Aggregate  (cost=6010.43..6010.44 rows=1 width=8) (actual time=13.580..15.067 rows=1 loops=1)
+  Buffers: shared hit=1088 read=1716
+  ->  Gather  (cost=6010.32..6010.43 rows=1 width=8) (actual time=13.396..15.061 rows=2 loops=1)
         Workers Planned: 1
         Workers Launched: 1
-        Buffers: shared hit=2804
-        ->  Partial Aggregate  (cost=5010.32..5010.33 rows=1 width=8) (actual time=7.139..7.140 rows=1 loops=2)
-              Buffers: shared hit=2804
-              ->  Parallel Seq Scan on probe_t  (cost=0.00..5009.88 rows=176 width=0) (actual time=0.043..7.126 rows=150 loops=2)
+        Buffers: shared hit=1088 read=1716
+        ->  Partial Aggregate  (cost=5010.32..5010.33 rows=1 width=8) (actual time=10.423..10.424 rows=1 loops=2)
+              Buffers: shared hit=1088 read=1716
+              ->  Parallel Seq Scan on probe_t  (cost=0.00..5009.88 rows=175 width=0) (actual time=0.115..10.392 rows=150 loops=2)
                     Filter: (k = 5)
                     Rows Removed by Filter: 149850
-                    Buffers: shared hit=2804
+                    Buffers: shared hit=1088 read=1716

@@ -8,6 +8,7 @@ import (
 
 type jsonPlan struct {
 	QueryText     string         `json:"Query Text"`
+	QueryParams   string         `json:"Query Parameters"`
 	QueryID       *int64         `json:"Query Identifier"`
 	Plan          *jsonNode      `json:"Plan"`
 	PlanningTime  *float64       `json:"Planning Time"`
@@ -24,10 +25,34 @@ type jsonTrigger struct {
 	Calls    float64 `json:"Calls"`
 }
 
+// jitTime is one JIT timing entry: a plain duration, or an object carrying the
+// breakdown next to the total.
+type jitTime struct {
+	Total *float64
+}
+
+func (t *jitTime) UnmarshalJSON(b []byte) error {
+	if len(b) > 0 && b[0] == '{' {
+		var obj struct {
+			Total *float64 `json:"Total"`
+		}
+
+		if err := json.Unmarshal(b, &obj); err != nil {
+			return err
+		}
+
+		t.Total = obj.Total
+
+		return nil
+	}
+
+	return json.Unmarshal(b, &t.Total)
+}
+
 type jsonJIT struct {
 	Functions int `json:"Functions"`
 	Timing    struct {
-		Generation   *float64 `json:"Generation"`
+		Generation   jitTime  `json:"Generation"`
 		Inlining     *float64 `json:"Inlining"`
 		Optimization *float64 `json:"Optimization"`
 		Emission     *float64 `json:"Emission"`
@@ -52,6 +77,8 @@ type jsonNode struct {
 	IndexName string `json:"Index Name"`
 	CTEName   string `json:"CTE Name"`
 	FuncName  string `json:"Function Name"`
+	TableFunc string `json:"Table Function Name"`
+	TupleName string `json:"Tuplestore Name"`
 
 	StartupCost float64 `json:"Startup Cost"`
 	TotalCost   float64 `json:"Total Cost"`
@@ -64,6 +91,7 @@ type jsonNode struct {
 	ActualLoops       *float64 `json:"Actual Loops"`
 
 	Filter      string   `json:"Filter"`
+	OneTime     string   `json:"One-Time Filter"`
 	IndexCond   string   `json:"Index Cond"`
 	RecheckCond string   `json:"Recheck Cond"`
 	HashCond    string   `json:"Hash Cond"`
@@ -130,6 +158,7 @@ func ParseJSON(body string, src Source) (Plan, error) {
 		Source:        src,
 		Format:        FormatJSON,
 		QueryText:     raw.QueryText,
+		QueryParams:   raw.QueryParams,
 		PlanningTime:  raw.PlanningTime,
 		ExecutionTime: raw.ExecutionTime,
 	}
@@ -154,7 +183,7 @@ func ParseJSON(body string, src Source) (Plan, error) {
 	if raw.JIT != nil {
 		p.JIT = &JIT{
 			Functions:    raw.JIT.Functions,
-			Generation:   raw.JIT.Timing.Generation,
+			Generation:   raw.JIT.Timing.Generation.Total,
 			Inlining:     raw.JIT.Timing.Inlining,
 			Optimization: raw.JIT.Timing.Optimization,
 			Emission:     raw.JIT.Timing.Emission,
@@ -205,7 +234,7 @@ func convertJSONNode(j *jsonNode, caps *Capabilities) Node {
 		PartialMode:   normalizePartialMode(j.PartialMode),
 		Strategy:      j.Strategy,
 		JoinType:      j.JoinType,
-		ScanDirection: j.ScanDirection,
+		ScanDirection: scanDirection(j.ScanDirection),
 		Operation:     j.Operation,
 
 		StartupCost: j.StartupCost,
@@ -213,24 +242,25 @@ func convertJSONNode(j *jsonNode, caps *Capabilities) Node {
 		PlanRows:    j.PlanRows,
 		PlanWidth:   j.PlanWidth,
 
-		Filter:              j.Filter,
-		IndexCond:           firstNonEmpty(j.IndexCond, j.TIDCond),
-		RecheckCond:         j.RecheckCond,
-		JoinCond:            firstNonEmpty(j.HashCond, j.MergeCond, j.JoinFilter),
-		SortKey:             j.SortKey,
-		RowsRemovedByFilter: firstNonNil(j.RowsRemovedByFilter, j.RowsRemovedByJoinFilter),
-		HeapFetches:         j.HeapFetches,
-		SortMethod:          j.SortMethod,
-		SortSpaceKB:         j.SortSpaceUsed,
-		SortSpaceType:       j.SortSpaceType,
-		WorkersPlanned:      j.WorkersPlanned,
-		WorkersLaunched:     j.WorkersLaunched,
-		HeapBlocksExact:     j.ExactHeapBlocks,
-		HeapBlocksLossy:     j.LossyHeapBlocks,
+		Filter:                  firstNonEmpty(j.Filter, j.OneTime),
+		IndexCond:               firstNonEmpty(j.IndexCond, j.TIDCond),
+		RecheckCond:             j.RecheckCond,
+		JoinCond:                firstNonEmpty(j.HashCond, j.MergeCond, j.JoinFilter),
+		SortKey:                 j.SortKey,
+		RowsRemovedByFilter:     j.RowsRemovedByFilter,
+		RowsRemovedByJoinFilter: j.RowsRemovedByJoinFilter,
+		HeapFetches:             j.HeapFetches,
+		SortMethod:              j.SortMethod,
+		SortSpaceKB:             j.SortSpaceUsed,
+		SortSpaceType:           j.SortSpaceType,
+		WorkersPlanned:          j.WorkersPlanned,
+		WorkersLaunched:         j.WorkersLaunched,
+		HeapBlocksExact:         j.ExactHeapBlocks,
+		HeapBlocksLossy:         j.LossyHeapBlocks,
 	}
 
 	if n.Relation == "" {
-		n.Relation = firstNonEmpty(j.CTEName, j.FuncName)
+		n.Relation = firstNonEmpty(j.CTEName, j.FuncName, j.TableFunc, j.TupleName)
 	}
 
 	if n.Alias == n.Relation {
@@ -270,9 +300,11 @@ func jsonBuffers(j *jsonNode) *Buffers {
 		j.TempRead, j.TempWritten,
 	}
 
+	// A node that touched no block prints no Buffers line at all in the text
+	// format, so an all-zero set has to read as absent in both.
 	present := false
 	for _, f := range fields {
-		if f != nil {
+		if f != nil && *f != 0 {
 			present = true
 
 			break
@@ -315,6 +347,16 @@ func deref(v *float64) float64 {
 	return *v
 }
 
+// scanDirection folds NoMovement into Forward: the text format prints a
+// direction only when it is Backward, so the two cannot be told apart there.
+func scanDirection(s string) string {
+	if s == "NoMovement" {
+		return "Forward"
+	}
+
+	return s
+}
+
 func firstNonEmpty(vs ...string) string {
 	for _, v := range vs {
 		if v != "" {
@@ -323,14 +365,4 @@ func firstNonEmpty(vs ...string) string {
 	}
 
 	return ""
-}
-
-func firstNonNil(vs ...*float64) *float64 {
-	for _, v := range vs {
-		if v != nil {
-			return v
-		}
-	}
-
-	return nil
 }

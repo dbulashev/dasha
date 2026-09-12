@@ -1,0 +1,18 @@
+Query Text: SELECT count(*) FROM probe_part WHERE id < 150000;
+Finalize Aggregate  (cost=4809.13..4809.14 rows=1 width=8) (actual time=64.017..68.090 rows=1 loops=1)
+  Buffers: shared hit=1 read=1869
+  ->  Gather  (cost=4808.92..4809.13 rows=2 width=8) (actual time=63.771..68.080 rows=3 loops=1)
+        Workers Planned: 2
+        Workers Launched: 2
+        Buffers: shared hit=1 read=1869
+        ->  Partial Aggregate  (cost=3808.92..3808.93 rows=1 width=8) (actual time=34.178..34.180 rows=1 loops=3)
+              Buffers: shared hit=1 read=1869
+              ->  Parallel Append  (cost=0.00..3652.81 rows=62445 width=0) (actual time=0.045..31.656 rows=50000 loops=3)
+                    Buffers: shared hit=1 read=1869
+                    ->  Parallel Seq Scan on probe_part_2  (cost=0.00..1670.29 rows=29335 width=0) (actual time=0.036..16.952 rows=16667 loops=3)
+                          Filter: (id < 150000)
+                          Rows Removed by Filter: 16667
+                          Buffers: shared read=935
+                    ->  Parallel Seq Scan on probe_part_1  (cost=0.00..1670.29 rows=58823 width=0) (actual time=0.036..32.306 rows=99999 loops=1)
+                          Filter: (id < 150000)
+                          Buffers: shared hit=1 read=934

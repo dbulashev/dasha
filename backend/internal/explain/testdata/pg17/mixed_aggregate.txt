@@ -1,0 +1,10 @@
+Query Text: SELECT k, id, count(*) FROM probe_small GROUP BY CUBE (k, id);
+MixedAggregate  (cost=0.00..12.21 rows=421 width=16) (actual time=0.082..0.122 rows=421 loops=1)
+  Hash Key: k, id
+  Hash Key: k
+  Hash Key: id
+  Group Key: ()
+  Batches: 1  Memory Usage: 96kB
+  Buffers: shared hit=2
+  ->  Seq Scan on probe_small  (cost=0.00..4.00 rows=200 width=8) (actual time=0.003..0.016 rows=200 loops=1)
+        Buffers: shared hit=2

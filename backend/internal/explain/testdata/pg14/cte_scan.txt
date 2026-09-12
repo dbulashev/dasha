@@ -1,0 +1,27 @@
+Query Text: WITH c AS MATERIALIZED (SELECT k, count(*) AS n FROM probe_i GROUP BY k)
+SELECT count(*) FROM c WHERE n > 100;
+Aggregate  (cost=6664.23..6664.24 rows=1 width=8) (actual time=38.633..41.007 rows=1 loops=1)
+  Buffers: shared hit=7 read=2804
+  CTE c
+    ->  Finalize GroupAggregate  (cost=6510.90..6640.90 rows=1000 width=12) (actual time=37.110..40.703 rows=1000 loops=1)
+          Group Key: probe_i.k
+          Buffers: shared hit=7 read=2804
+          ->  Gather Merge  (cost=6510.90..6625.90 rows=1000 width=12) (actual time=37.101..40.380 rows=2000 loops=1)
+                Workers Planned: 1
+                Workers Launched: 1
+                Buffers: shared hit=7 read=2804
+                ->  Sort  (cost=5510.89..5513.39 rows=1000 width=12) (actual time=33.903..33.964 rows=1000 loops=2)
+                      Sort Key: probe_i.k
+                      Sort Method: quicksort  Memory: 71kB
+                      Buffers: shared hit=7 read=2804
+                      Worker 0:  Sort Method: quicksort  Memory: 71kB
+                      ->  Partial HashAggregate  (cost=5451.06..5461.06 rows=1000 width=12) (actual time=33.404..33.593 rows=1000 loops=2)
+                            Group Key: probe_i.k
+                            Batches: 1  Memory Usage: 193kB
+                            Buffers: shared read=2804
+                            Worker 0:  Batches: 1  Memory Usage: 193kB
+                            ->  Parallel Seq Scan on probe_i  (cost=0.00..4568.71 rows=176471 width=4) (actual time=0.012..14.796 rows=150000 loops=2)
+                                  Buffers: shared read=2804
+  ->  CTE Scan on c  (cost=0.00..22.50 rows=333 width=0) (actual time=37.113..38.587 rows=1000 loops=1)
+        Filter: (n > 100)
+        Buffers: shared read=1524

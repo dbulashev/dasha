@@ -147,12 +147,7 @@ func scannedRows(n *Node) float64 {
 		return 0
 	}
 
-	rows := n.Actual.TotalRows()
-	if n.RowsRemovedByFilter != nil {
-		rows += *n.RowsRemovedByFilter * n.Actual.Loops
-	}
-
-	return rows
+	return n.Actual.TotalRows() + rowsRemoved(n)*n.Actual.Loops
 }
 
 func evalCostHotspot(p *Plan, _ Context) []Finding {
@@ -188,11 +183,16 @@ func evalNestedLoopBlowup(p *Plan, _ Context) []Finding {
 	var out []Finding
 
 	eachNode(p, func(path []int, n, _ *Node) {
-		if n.Type != "Nested Loop" || len(n.Children) < 2 {
+		if n.Type != "Nested Loop" {
 			return
 		}
 
-		outer, inner := n.Children[0].PlanRows, n.Children[1].PlanRows
+		outerIdx, innerIdx, ok := joinSides(n)
+		if !ok {
+			return
+		}
+
+		outer, inner := n.Children[outerIdx].PlanRows, n.Children[innerIdx].PlanRows
 		pairs := outer * inner
 
 		if outer < nestedLoopMinOuterRows || pairs < nestedLoopMinPairs {
@@ -213,22 +213,49 @@ func evalIndexCandidateJoin(p *Plan, _ Context) []Finding {
 	var out []Finding
 
 	eachNode(p, func(path []int, n, _ *Node) {
-		if n.Type != "Nested Loop" || len(n.Children) < 2 {
+		if n.Type != "Nested Loop" {
 			return
 		}
 
-		inner, innerPath := unwrapBuffered(&n.Children[1], append(clonePath(path), 1))
+		outerIdx, innerIdx, ok := joinSides(n)
+		if !ok {
+			return
+		}
+
+		inner, innerPath := unwrapBuffered(&n.Children[innerIdx], append(clonePath(path), innerIdx))
 		if inner.Type != "Seq Scan" {
 			return
 		}
 
+		// A cross join has nothing an index could serve.
+		if n.JoinCond == "" && inner.Filter == "" {
+			return
+		}
+
 		out = append(out, finding(RuleIndexCandidateJoin, health.SeverityHigh, innerPath, inner, map[string]any{
-			ParamOuterRows: n.Children[0].PlanRows,
+			ParamOuterRows: n.Children[outerIdx].PlanRows,
 			ParamInnerRows: inner.PlanRows,
 		}))
 	})
 
 	return out
+}
+
+// joinSides locates the two sides of a join. An InitPlan or a SubPlan shares
+// the child slice without holding a side, and PostgreSQL prints it first.
+func joinSides(n *Node) (outer, inner int, ok bool) {
+	outer, inner = -1, -1
+
+	for i := range n.Children {
+		switch {
+		case n.Children[i].ParentRel == RelOuter && outer < 0:
+			outer = i
+		case n.Children[i].ParentRel == RelInner && inner < 0:
+			inner = i
+		}
+	}
+
+	return outer, inner, outer >= 0 && inner >= 0
 }
 
 // unwrapBuffered steps through the nodes that only hold another node's output,
@@ -342,15 +369,29 @@ func evalSortSpillActual(p *Plan, _ Context) []Finding {
 	return out
 }
 
+// rowsRemoved is what the node threw away per loop: a join counts the rows its
+// join condition rejected apart from the ones its own qual did.
+func rowsRemoved(n *Node) float64 {
+	removed := 0.0
+
+	for _, v := range []*float64{n.RowsRemovedByFilter, n.RowsRemovedByJoinFilter} {
+		if v != nil {
+			removed += *v
+		}
+	}
+
+	return removed
+}
+
 func evalFilterDiscardsRows(p *Plan, _ Context) []Finding {
 	var out []Finding
 
 	eachNode(p, func(path []int, n, _ *Node) {
-		if n.Actual == nil || n.RowsRemovedByFilter == nil {
+		if n.Actual == nil || (n.RowsRemovedByFilter == nil && n.RowsRemovedByJoinFilter == nil) {
 			return
 		}
 
-		removed := *n.RowsRemovedByFilter * n.Actual.Loops
+		removed := rowsRemoved(n) * n.Actual.Loops
 		if removed < discardMinRows {
 			return
 		}
@@ -399,7 +440,7 @@ func evalLoopsBlowup(p *Plan, _ Context) []Finding {
 	var out []Finding
 
 	eachNode(p, func(path []int, n, parent *Node) {
-		if n.Actual == nil || parent == nil || parent.Type != "Nested Loop" || len(parent.Children) < 2 {
+		if n.Actual == nil || parent == nil || parent.Type != "Nested Loop" {
 			return
 		}
 
@@ -407,7 +448,18 @@ func evalLoopsBlowup(p *Plan, _ Context) []Finding {
 			return
 		}
 
-		expected := math.Max(parent.Children[0].PlanRows, 1)
+		outerIdx, _, ok := joinSides(parent)
+		if !ok {
+			return
+		}
+
+		// Loops count every execution of the inner side, so the outer estimate
+		// holds per execution of the join itself.
+		expected := math.Max(parent.Children[outerIdx].PlanRows, 1)
+		if parent.Actual != nil && parent.Actual.Loops > 0 {
+			expected *= parent.Actual.Loops
+		}
+
 		loops := n.Actual.Loops
 
 		if loops < loopsMin || loops < expected*loopsFactor {

@@ -1,0 +1,18 @@
+Query Text: SELECT k FROM probe_i EXCEPT SELECT id FROM probe_small;
+SetOp Except  (cost=41732.04..43233.04 rows=1000 width=8) (actual time=113.321..151.752 rows=800 loops=1)
+  Buffers: shared hit=2016 read=794, temp read=663 written=667
+  ->  Sort  (cost=41732.04..42482.54 rows=300200 width=8) (actual time=113.280..135.921 rows=300200 loops=1)
+        Sort Key: "*SELECT* 1".k
+        Sort Method: external merge  Disk: 5304kB
+        Buffers: shared hit=2016 read=794, temp read=663 written=667
+        ->  Append  (cost=0.00..10315.00 rows=300200 width=8) (actual time=0.007..75.187 rows=300200 loops=1)
+              Buffers: shared hit=2016 read=794
+              ->  Subquery Scan on "*SELECT* 1"  (cost=0.00..8808.00 rows=300000 width=8) (actual time=0.007..52.203 rows=300000 loops=1)
+                    Buffers: shared hit=2014 read=794
+                    ->  Seq Scan on probe_i  (cost=0.00..5808.00 rows=300000 width=4) (actual time=0.006..25.520 rows=300000 loops=1)
+                          Buffers: shared hit=2014 read=794
+              ->  Subquery Scan on "*SELECT* 2"  (cost=0.00..6.00 rows=200 width=8) (actual time=0.006..0.041 rows=200 loops=1)
+                    Buffers: shared hit=2
+                    ->  Seq Scan on probe_small  (cost=0.00..4.00 rows=200 width=4) (actual time=0.005..0.023 rows=200 loops=1)
+                          Buffers: shared hit=2
+Settings: enable_hashagg = 'off'

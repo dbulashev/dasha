@@ -5,16 +5,16 @@ Plan:
   Partial Mode: "Finalize"
   Parallel Aware: false
   Async Capable: false
-  Startup Cost: 6022.43
-  Total Cost: 6022.44
+  Startup Cost: 6014.43
+  Total Cost: 6014.44
   Plan Rows: 1
   Plan Width: 8
-  Actual Startup Time: 9.271
-  Actual Total Time: 11.053
+  Actual Startup Time: 9.564
+  Actual Total Time: 11.404
   Actual Rows: 1
   Actual Loops: 1
-  Shared Hit Blocks: 2816
-  Shared Read Blocks: 0
+  Shared Hit Blocks: 608
+  Shared Read Blocks: 2200
   Shared Dirtied Blocks: 0
   Shared Written Blocks: 0
   Local Hit Blocks: 0
@@ -23,24 +23,27 @@ Plan:
   Local Written Blocks: 0
   Temp Read Blocks: 0
   Temp Written Blocks: 0
+  WAL Records: 0
+  WAL FPI: 0
+  WAL Bytes: 0
   Plans: 
     - Node Type: "Gather"
       Parent Relationship: "Outer"
       Parallel Aware: false
       Async Capable: false
-      Startup Cost: 6022.32
-      Total Cost: 6022.43
+      Startup Cost: 6014.32
+      Total Cost: 6014.43
       Plan Rows: 1
       Plan Width: 8
-      Actual Startup Time: 9.145
-      Actual Total Time: 11.048
+      Actual Startup Time: 9.469
+      Actual Total Time: 11.399
       Actual Rows: 2
       Actual Loops: 1
       Workers Planned: 1
       Workers Launched: 1
       Single Copy: false
-      Shared Hit Blocks: 2816
-      Shared Read Blocks: 0
+      Shared Hit Blocks: 608
+      Shared Read Blocks: 2200
       Shared Dirtied Blocks: 0
       Shared Written Blocks: 0
       Local Hit Blocks: 0
@@ -49,6 +52,9 @@ Plan:
       Local Written Blocks: 0
       Temp Read Blocks: 0
       Temp Written Blocks: 0
+      WAL Records: 0
+      WAL FPI: 0
+      WAL Bytes: 0
       Plans: 
         - Node Type: "Aggregate"
           Strategy: "Plain"
@@ -56,16 +62,16 @@ Plan:
           Parent Relationship: "Outer"
           Parallel Aware: false
           Async Capable: false
-          Startup Cost: 5022.32
-          Total Cost: 5022.33
+          Startup Cost: 5014.32
+          Total Cost: 5014.33
           Plan Rows: 1
           Plan Width: 8
-          Actual Startup Time: 6.894
-          Actual Total Time: 6.895
+          Actual Startup Time: 7.947
+          Actual Total Time: 7.947
           Actual Rows: 1
           Actual Loops: 2
-          Shared Hit Blocks: 2816
-          Shared Read Blocks: 0
+          Shared Hit Blocks: 608
+          Shared Read Blocks: 2200
           Shared Dirtied Blocks: 0
           Shared Written Blocks: 0
           Local Hit Blocks: 0
@@ -74,6 +80,9 @@ Plan:
           Local Written Blocks: 0
           Temp Read Blocks: 0
           Temp Written Blocks: 0
+          WAL Records: 0
+          WAL FPI: 0
+          WAL Bytes: 0
           Workers: 
           Plans: 
             - Node Type: "Seq Scan"
@@ -83,17 +92,17 @@ Plan:
               Relation Name: "probe_t"
               Alias: "probe_t"
               Startup Cost: 0.00
-              Total Cost: 5021.88
+              Total Cost: 5013.88
               Plan Rows: 175
               Plan Width: 0
-              Actual Startup Time: 0.027
-              Actual Total Time: 6.882
+              Actual Startup Time: 0.096
+              Actual Total Time: 7.927
               Actual Rows: 150
               Actual Loops: 2
               Filter: "(k = 42)"
               Rows Removed by Filter: 149850
-              Shared Hit Blocks: 2816
-              Shared Read Blocks: 0
+              Shared Hit Blocks: 608
+              Shared Read Blocks: 2200
               Shared Dirtied Blocks: 0
               Shared Written Blocks: 0
               Local Hit Blocks: 0
@@ -102,4 +111,9 @@ Plan:
               Local Written Blocks: 0
               Temp Read Blocks: 0
               Temp Written Blocks: 0
+              WAL Records: 0
+              WAL FPI: 0
+              WAL Bytes: 0
               Workers: 
+Settings: 
+Triggers: 

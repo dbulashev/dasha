@@ -1,0 +1,37 @@
+{
+  "Query Text": "SELECT * FROM XMLTABLE('/r/i' PASSING XMLPARSE(DOCUMENT '<r><i>1</i><i>2</i></r>')\n                       COLUMNS x int PATH '.');",
+  "Plan": {
+    "Node Type": "Table Function Scan",
+    "Parallel Aware": false,
+    "Async Capable": false,
+    "Table Function Name": "xmltable",
+    "Alias": "xmltable",
+    "Startup Cost": 0.00,
+    "Total Cost": 1.00,
+    "Plan Rows": 100,
+    "Plan Width": 4,
+    "Actual Startup Time": 0.016,
+    "Actual Total Time": 0.016,
+    "Actual Rows": 2,
+    "Actual Loops": 1,
+    "Output": ["x"],
+    "Table Function Call": "XMLTABLE(('/r/i'::text) PASSING (XMLPARSE(DOCUMENT '<r><i>1</i><i>2</i></r>'::text STRIP WHITESPACE)) COLUMNS x integer PATH ('.'::text))",
+    "Shared Hit Blocks": 0,
+    "Shared Read Blocks": 0,
+    "Shared Dirtied Blocks": 0,
+    "Shared Written Blocks": 0,
+    "Local Hit Blocks": 0,
+    "Local Read Blocks": 0,
+    "Local Dirtied Blocks": 0,
+    "Local Written Blocks": 0,
+    "Temp Read Blocks": 0,
+    "Temp Written Blocks": 0,
+    "WAL Records": 0,
+    "WAL FPI": 0,
+    "WAL Bytes": 0
+  },
+  "Settings": {
+  },
+  "Triggers": [
+  ]
+}

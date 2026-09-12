@@ -1,0 +1,19 @@
+Query Text: SELECT payload FROM probe_i ORDER BY payload OFFSET 299990;
+Limit  (cost=56085.63..56085.63 rows=1 width=33) (actual time=452.306..454.862 rows=10 loops=1)
+  Buffers: shared hit=966 read=1917, temp read=4091 written=4199
+  I/O Timings: shared read=3.747, temp read=7.043 write=11.457
+  ->  Gather Merge  (cost=35661.40..56085.63 rows=177602 width=33) (actual time=353.251..444.265 rows=300000 loops=1)
+        Workers Planned: 1
+        Workers Launched: 1
+        Buffers: shared hit=966 read=1917, temp read=4091 written=4199
+        I/O Timings: shared read=3.747, temp read=7.043 write=11.457
+        ->  Sort  (cost=34661.39..35105.40 rows=177602 width=33) (actual time=302.214..332.970 rows=150000 loops=2)
+              Sort Key: payload
+              Sort Method: external merge  Disk: 5704kB
+              Buffers: shared hit=966 read=1917, temp read=4091 written=4199
+              I/O Timings: shared read=3.747, temp read=7.043 write=11.457
+              Worker 0:  Sort Method: external merge  Disk: 5296kB
+              ->  Parallel Seq Scan on probe_i  (cost=0.00..4602.02 rows=177602 width=33) (actual time=0.014..15.359 rows=150000 loops=2)
+                    Buffers: shared hit=912 read=1914
+                    I/O Timings: shared read=3.711
+Settings: work_mem = '64kB'

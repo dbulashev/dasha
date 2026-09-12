@@ -45,6 +45,17 @@ func TestDetectFormat_Corpus(t *testing.T) {
 	}
 }
 
+// EXPLAIN prints yaml as a list, and without a Query Text line the body opens
+// straight with the list item.
+func TestDetectFormat_YAMLList(t *testing.T) {
+	body := "- Plan:\n    Node Type: \"Seq Scan\"\n    Relation Name: \"t\"\n"
+
+	var fe *Error
+	if _, err := DetectFormat(body); !errors.As(err, &fe) || fe.Code != CodeUnsupportedFormat {
+		t.Fatalf("want %s, got %v", CodeUnsupportedFormat, err)
+	}
+}
+
 func TestDetectFormat_Empty(t *testing.T) {
 	if _, err := DetectFormat("  \n\t"); err == nil {
 		t.Fatal("want an error on an empty body")

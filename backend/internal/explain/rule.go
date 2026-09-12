@@ -3,6 +3,8 @@ package explain
 import (
 	"cmp"
 	"slices"
+	"strconv"
+	"strings"
 
 	"github.com/dbulashev/dasha/internal/health"
 )
@@ -31,8 +33,9 @@ const (
 // log track has no connection at parse time and fills in neither.
 type Context struct {
 	WorkMemKB *int64
-	// TableRows maps a relation name (schema-qualified when the plan says so)
-	// to its reltuples.
+	// TableRows maps a relation to its reltuples. Keys are schema-qualified; a
+	// bare name is an alias the caller adds only for a relation whose name is
+	// unique across schemas, since a plan without VERBOSE carries no schema.
 	TableRows map[string]int64
 }
 
@@ -82,6 +85,10 @@ type Dormant struct {
 // not silence: a user with log_analyze = off has to see that half the catalog
 // never ran, and why.
 func Evaluate(p *Plan, ctx Context) (findings []Finding, dormant []Dormant) {
+	if ctx.WorkMemKB == nil {
+		ctx.WorkMemKB = planWorkMemKB(p)
+	}
+
 	for _, rule := range registry {
 		if missing := missingFor(rule.Requires, p.Caps, ctx); len(missing) > 0 {
 			dormant = append(dormant, Dormant{Code: rule.Code, Missing: missing})
@@ -101,6 +108,42 @@ func Evaluate(p *Plan, ctx Context) (findings []Finding, dormant []Dormant) {
 	})
 
 	return findings, dormant
+}
+
+// planWorkMemKB reads the setting the plan printed itself, which is all the log
+// track has: it holds no connection to ask.
+func planWorkMemKB(p *Plan) *int64 {
+	kb, ok := parseMemKB(p.Settings["work_mem"])
+	if !ok {
+		return nil
+	}
+
+	return &kb
+}
+
+// parseMemKB reads a memory setting as PostgreSQL shows it. A bare number is in
+// the setting's own unit, kB for work_mem.
+func parseMemKB(v string) (int64, bool) {
+	v = strings.TrimSpace(v)
+	mult := int64(1)
+
+	switch {
+	case strings.HasSuffix(v, "kB"):
+		v = strings.TrimSuffix(v, "kB")
+	case strings.HasSuffix(v, "MB"):
+		v, mult = strings.TrimSuffix(v, "MB"), 1<<10
+	case strings.HasSuffix(v, "GB"):
+		v, mult = strings.TrimSuffix(v, "GB"), 1<<20
+	case strings.HasSuffix(v, "TB"):
+		v, mult = strings.TrimSuffix(v, "TB"), 1<<30
+	}
+
+	kb, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+	if err != nil || kb < 0 {
+		return 0, false
+	}
+
+	return kb * mult, true
 }
 
 func missingFor(req Requirement, caps Capabilities, ctx Context) []string {

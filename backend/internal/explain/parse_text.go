@@ -10,7 +10,7 @@ var (
 	nodeLineRe  = regexp.MustCompile(`^(\s*)(->\s+)?(\S.*?)\s\s\((cost=|actual |never executed)`)
 	costRe      = regexp.MustCompile(`\(cost=([0-9]+\.?[0-9]*)\.\.([0-9]+\.?[0-9]*) rows=([0-9]+\.?[0-9]*) width=([0-9]+)\)`)
 	actualRe    = regexp.MustCompile(`\(actual (?:time=([0-9]+\.?[0-9]*)\.\.([0-9]+\.?[0-9]*) )?rows=([0-9]+\.?[0-9]*) loops=([0-9]+\.?[0-9]*)\)`)
-	triggerRe   = regexp.MustCompile(`^Trigger (.+?) on (\S+): time=([0-9.]+) calls=([0-9.]+)`)
+	triggerRe   = regexp.MustCompile(`^Trigger (.+?)(?: on (\S+))?: time=([0-9.]+) calls=([0-9.]+)`)
 	jitTimeRe   = regexp.MustCompile(`(Generation|Inlining|Optimization|Emission|Total) ([0-9.]+) ms`)
 	sortSpaceRe = regexp.MustCompile(`\s\s(Memory|Disk): ([0-9]+)kB`)
 	subplanRe   = regexp.MustCompile(`^(InitPlan|SubPlan|CTE)\b`)
@@ -37,12 +37,15 @@ func ParseText(body string, src Source) (Plan, error) {
 			break
 		}
 
-		line := lines[i]
+		line := strings.TrimLeft(lines[i], " \t")
 		switch {
-		case strings.HasPrefix(strings.TrimLeft(line, " \t"), "Query Text: "):
-			queryText = append(queryText, strings.TrimPrefix(strings.TrimLeft(line, " \t"), "Query Text: "))
+		case strings.HasPrefix(line, "Query Text: "):
+			queryText = append(queryText, strings.TrimPrefix(line, "Query Text: "))
+		// The bind parameters stand between the query text and the plan.
+		case strings.HasPrefix(line, "Query Parameters: "):
+			p.QueryParams = strings.TrimPrefix(line, "Query Parameters: ")
 		case len(queryText) > 0:
-			queryText = append(queryText, line)
+			queryText = append(queryText, lines[i])
 		}
 	}
 
@@ -85,7 +88,7 @@ func ParseText(body string, src Source) (Plan, error) {
 			}
 
 			parent := stack[len(stack)-1]
-			node.ParentRel = childRole(parent.node, len(parent.node.Children))
+			node.ParentRel = childRole(parent.node, planChildren(parent.node))
 
 			if pending != "" {
 				node.SubplanName = pending
@@ -207,6 +210,9 @@ func parseLabel(label string, n *Node) {
 		label = rest
 	}
 
+	// Both prefixes can stand on one node, parallel first.
+	label = strings.TrimPrefix(label, "Async ")
+
 	for _, mode := range []string{"Partial", "Finalize"} {
 		if rest, ok := strings.CutPrefix(label, mode+" "); ok {
 			n.PartialMode = mode
@@ -231,6 +237,8 @@ func parseLabel(label string, n *Node) {
 		label = rest
 	}
 
+	label = trimSetOpCommand(label)
+
 	normalizeType(label, n)
 
 	if aliasOnlyTypes[n.Type] && n.Relation != "" {
@@ -247,17 +255,12 @@ func parseLabel(label string, n *Node) {
 }
 
 func parseOnClause(s string, n *Node) {
-	fields := strings.Fields(s)
+	fields := splitIdents(s)
 	if len(fields) == 0 {
 		return
 	}
 
-	name := unquoteIdent(fields[0])
-	if schema, rel, ok := strings.Cut(name, "."); ok {
-		n.Schema, n.Relation = schema, rel
-	} else {
-		n.Relation = name
-	}
+	n.Schema, n.Relation = splitQualified(fields[0])
 
 	if len(fields) > 1 {
 		alias := unquoteIdent(fields[1])
@@ -265,6 +268,59 @@ func parseOnClause(s string, n *Node) {
 			n.Alias = alias
 		}
 	}
+}
+
+// splitIdents cuts the "on" clause into identifiers, keeping a quoted one whole
+// even when it holds a space, as "*SELECT* 1" does.
+func splitIdents(s string) []string {
+	var (
+		out   []string
+		token strings.Builder
+		quote bool
+	)
+
+	flush := func() {
+		if token.Len() > 0 {
+			out = append(out, token.String())
+			token.Reset()
+		}
+	}
+
+	for i := 0; i < len(s); i++ {
+		switch c := s[i]; {
+		case c == '"':
+			quote = !quote
+
+			token.WriteByte(c)
+		case c == ' ' && !quote:
+			flush()
+		default:
+			token.WriteByte(c)
+		}
+	}
+
+	flush()
+
+	return out
+}
+
+// splitQualified cuts schema.relation at the dot that stands outside quotes and
+// unquotes the halves apart: a quoted name may hold a dot of its own.
+func splitQualified(name string) (string, string) {
+	quote := false
+
+	for i := 0; i < len(name); i++ {
+		switch name[i] {
+		case '"':
+			quote = !quote
+		case '.':
+			if !quote {
+				return unquoteIdent(name[:i]), unquoteIdent(name[i+1:])
+			}
+		}
+	}
+
+	return "", unquoteIdent(name)
 }
 
 func unquoteIdent(s string) string {
@@ -276,6 +332,24 @@ func unquoteIdent(s string) string {
 }
 
 var joinTypes = []string{"Left", "Right Semi", "Right Anti", "Right", "Full", "Semi", "Anti"}
+
+var setOpCommands = []string{"Intersect All", "Intersect", "Except All", "Except"}
+
+// trimSetOpCommand drops the command the text format appends to a SetOp label;
+// JSON keeps it in a field of its own.
+func trimSetOpCommand(label string) string {
+	if !strings.HasPrefix(label, "SetOp") && !strings.HasPrefix(label, "HashSetOp") {
+		return label
+	}
+
+	for _, cmd := range setOpCommands {
+		if rest, ok := strings.CutSuffix(label, " "+cmd); ok {
+			return rest
+		}
+	}
+
+	return label
+}
 
 // normalizeType maps the printed name onto the JSON node type plus strategy,
 // join type or operation — "HashAggregate" is an Aggregate with a Hashed
@@ -308,6 +382,14 @@ func normalizeType(label string, n *Node) {
 		return
 	case "Insert", "Update", "Delete", "Merge":
 		n.Type, n.Operation = "ModifyTable", label
+
+		return
+	case "Foreign Scan":
+		n.Type, n.Operation = "Foreign Scan", "Select"
+
+		return
+	case "Foreign Insert", "Foreign Update", "Foreign Delete":
+		n.Type, n.Operation = "Foreign Scan", strings.TrimPrefix(label, "Foreign ")
 
 		return
 	}
@@ -352,9 +434,23 @@ func joinTypeName(head string) string {
 	}
 }
 
+// planChildren counts the children that hold a position in the tree: an
+// InitPlan or a SubPlan sits beside them without taking one.
+func planChildren(parent *Node) int {
+	n := 0
+
+	for i := range parent.Children {
+		if parent.Children[i].SubplanName == "" {
+			n++
+		}
+	}
+
+	return n
+}
+
 func childRole(parent *Node, index int) string {
 	switch parent.Type {
-	case "Append", "Merge Append", "BitmapAnd", "BitmapOr", "ModifyTable":
+	case "Append", "Merge Append", "BitmapAnd", "BitmapOr":
 		return RelMember
 	case "Subquery Scan":
 		return RelSubquery
@@ -412,8 +508,10 @@ func setTextAttr(n *Node, key, value, raw string) {
 		n.RecheckCond = value
 	case "Hash Cond", "Merge Cond", "Join Filter":
 		n.JoinCond = value
-	case "Rows Removed by Filter", "Rows Removed by Join Filter":
+	case "Rows Removed by Filter":
 		n.RowsRemovedByFilter = ptrFloat(parseFloat(value))
+	case "Rows Removed by Join Filter":
+		n.RowsRemovedByJoinFilter = ptrFloat(parseFloat(value))
 	case "Heap Fetches":
 		n.HeapFetches = ptrFloat(parseFloat(value))
 	case "Sort Key":

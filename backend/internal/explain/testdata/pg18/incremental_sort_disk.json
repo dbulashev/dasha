@@ -1,0 +1,92 @@
+{
+  "Query Text": "SELECT id FROM probe_i ORDER BY (k % 3), payload;",
+  "Plan": {
+    "Node Type": "Incremental Sort",
+    "Parallel Aware": false,
+    "Async Capable": false,
+    "Startup Cost": 23056.67,
+    "Total Cost": 72919.24,
+    "Plan Rows": 300000,
+    "Plan Width": 41,
+    "Actual Startup Time": 184.076,
+    "Actual Total Time": 680.979,
+    "Actual Rows": 300000.00,
+    "Actual Loops": 1,
+    "Disabled": false,
+    "Sort Key": ["((k % 3))", "payload"],
+    "Presorted Key": ["((k % 3))"],
+    "Full-sort Groups": {
+      "Group Count": 3,
+      "Sort Methods Used": ["quicksort"],
+      "Sort Space Memory": {
+        "Average Sort Space Used": 29,
+        "Peak Sort Space Used": 29
+      }
+    },
+    "Pre-sorted Groups": {
+      "Group Count": 3,
+      "Sort Methods Used": ["external merge"],
+      "Sort Space Disk": {
+        "Average Sort Space Used": 5024,
+        "Peak Sort Space Used": 5024
+      }
+    },
+    "Shared Hit Blocks": 0,
+    "Shared Read Blocks": 8667,
+    "Shared Dirtied Blocks": 0,
+    "Shared Written Blocks": 0,
+    "Local Hit Blocks": 0,
+    "Local Read Blocks": 0,
+    "Local Dirtied Blocks": 0,
+    "Local Written Blocks": 0,
+    "Temp Read Blocks": 5631,
+    "Temp Written Blocks": 6099,
+    "WAL Records": 0,
+    "WAL FPI": 0,
+    "WAL Bytes": 0,
+    "WAL Buffers Full": 0,
+    "Plans": [
+      {
+        "Node Type": "Index Scan",
+        "Parent Relationship": "Outer",
+        "Parallel Aware": false,
+        "Async Capable": false,
+        "Scan Direction": "Forward",
+        "Index Name": "probe_i_k3",
+        "Relation Name": "probe_i",
+        "Alias": "probe_i",
+        "Startup Cost": 0.42,
+        "Total Cost": 16566.22,
+        "Plan Rows": 300000,
+        "Plan Width": 41,
+        "Actual Startup Time": 0.046,
+        "Actual Total Time": 89.297,
+        "Actual Rows": 300000.00,
+        "Actual Loops": 1,
+        "Disabled": false,
+        "Index Searches": 1,
+        "Shared Hit Blocks": 0,
+        "Shared Read Blocks": 8667,
+        "Shared Dirtied Blocks": 0,
+        "Shared Written Blocks": 0,
+        "Local Hit Blocks": 0,
+        "Local Read Blocks": 0,
+        "Local Dirtied Blocks": 0,
+        "Local Written Blocks": 0,
+        "Temp Read Blocks": 0,
+        "Temp Written Blocks": 0,
+        "WAL Records": 0,
+        "WAL FPI": 0,
+        "WAL Bytes": 0,
+        "WAL Buffers Full": 0
+      }
+    ]
+  },
+  "Settings": {
+    "enable_seqscan": "off",
+    "enable_sort": "off",
+    "work_mem": "64kB"
+  },
+  "Triggers": [
+  ]
+}

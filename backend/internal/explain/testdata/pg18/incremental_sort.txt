@@ -1,0 +1,14 @@
+Query Text: SELECT id, payload FROM probe_i WHERE k < 50 ORDER BY k, payload LIMIT 100;
+Limit  (cost=12.24..94.29 rows=100 width=41) (actual time=0.531..0.547 rows=100.00 loops=1)
+  Buffers: shared hit=304
+  ->  Incremental Sort  (cost=12.24..12017.80 rows=14632 width=41) (actual time=0.530..0.537 rows=100.00 loops=1)
+        Sort Key: k, payload
+        Presorted Key: k
+        Full-sort Groups: 1  Sort Method: quicksort  Average Memory: 29kB  Peak Memory: 29kB
+        Pre-sorted Groups: 1  Sort Method: top-N heapsort  Average Memory: 37kB  Peak Memory: 37kB
+        Buffers: shared hit=304
+        ->  Index Scan using probe_i_k on probe_i  (cost=0.42..11531.69 rows=14632 width=41) (actual time=0.011..0.237 rows=301.00 loops=1)
+              Index Cond: (k < 50)
+              Index Searches: 1
+              Buffers: shared hit=304
+Settings: enable_seqscan = 'off'

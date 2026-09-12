@@ -1,0 +1,29 @@
+Query Text: SELECT count(*) FROM probe_i a JOIN probe_i b ON b.id = a.id WHERE a.k < 5;
+Finalize Aggregate  (cost=12596.47..12596.48 rows=1 width=8) (actual time=47.381..52.735 rows=1 loops=1)
+  Buffers: shared hit=2622 read=2528
+  ->  Gather  (cost=12596.25..12596.46 rows=2 width=8) (actual time=47.373..52.729 rows=3 loops=1)
+        Workers Planned: 2
+        Workers Launched: 2
+        Buffers: shared hit=2622 read=2528
+        ->  Partial Aggregate  (cost=11596.25..11596.26 rows=1 width=8) (actual time=29.255..29.256 rows=1 loops=3)
+              Buffers: shared hit=2622 read=2528
+              ->  Merge Join  (cost=2409.20..11594.87 rows=553 width=0) (actual time=1.280..29.206 rows=500 loops=3)
+                    Merge Cond: (b.id = a.id)
+                    Buffers: shared hit=2622 read=2528
+                    ->  Parallel Index Only Scan using probe_i_id on probe_i b  (cost=0.42..8861.42 rows=125000 width=4) (actual time=0.040..22.348 rows=100000 loops=3)
+                          Heap Fetches: 300000
+                          Buffers: shared hit=1666 read=2526
+                    ->  Sort  (cost=2408.78..2412.10 rows=1328 width=4) (actual time=1.126..1.242 rows=1500 loops=3)
+                          Sort Key: a.id
+                          Sort Method: quicksort  Memory: 49kB
+                          Buffers: shared hit=956 read=2
+                          Worker 0:  Sort Method: quicksort  Memory: 49kB
+                          Worker 1:  Sort Method: quicksort  Memory: 49kB
+                          ->  Bitmap Heap Scan on probe_i a  (cost=18.71..2339.89 rows=1328 width=4) (actual time=0.096..0.725 rows=1500 loops=3)
+                                Recheck Cond: (k < 5)
+                                Heap Blocks: exact=312
+                                Buffers: shared hit=949 read=1
+                                ->  Bitmap Index Scan on probe_i_k  (cost=0.00..18.38 rows=1328 width=0) (actual time=0.066..0.066 rows=1500 loops=3)
+                                      Index Cond: (k < 5)
+                                      Buffers: shared hit=13 read=1
+Settings: enable_hashjoin = 'off', enable_nestloop = 'off'

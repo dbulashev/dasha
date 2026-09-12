@@ -90,6 +90,13 @@ func TestSeqScanLarge_SeverityFollowsWhatIsKnown(t *testing.T) {
 	if _, fired := codes(small)[RuleSeqScanLarge]; fired {
 		t.Error("a scan of a small table is not a finding")
 	}
+
+	bare, _ := Evaluate(&p, Context{TableRows: map[string]int64{"orders": 4_000_000}})
+
+	f, ok = codes(bare)[RuleSeqScanLarge]
+	if !ok || f.Severity != health.SeverityMedium {
+		t.Errorf("a plan carrying a schema still matches the unqualified alias: %+v", f)
+	}
 }
 
 func TestRules_NestedLoop(t *testing.T) {
@@ -123,6 +130,35 @@ func TestRules_NestedLoop(t *testing.T) {
 
 	if share, _ := discards.Params[ParamRemovedShare].(float64); share < 0.9 {
 		t.Errorf("removed share: %v", share)
+	}
+}
+
+func TestRules_InitPlanKeepsJoinSides(t *testing.T) {
+	p := parseFixture(t, "synthetic/initplan_join.txt", SourceLog)
+
+	findings, _ := Evaluate(&p, Context{})
+	got := codes(findings)
+
+	blowup, ok := got[RuleNestedLoopBlowup]
+	if !ok {
+		t.Fatal("an InitPlan on the join holds neither side of it")
+	}
+
+	if blowup.Params[ParamPairs] != 100000.0*50000.0 {
+		t.Errorf("pairs: %v", blowup.Params[ParamPairs])
+	}
+
+	candidate, ok := got[RuleIndexCandidateJoin]
+	if !ok {
+		t.Fatal("a sequential scan on the inner side is an index candidate")
+	}
+
+	if candidate.Relation != "b" {
+		t.Errorf("the candidate is the inner scan, not the outer one: %+v", candidate)
+	}
+
+	if _, ok := got[RuleLoopsBlowup]; ok {
+		t.Error("loops that match the outer estimate are not a blow-up")
 	}
 }
 
@@ -164,6 +200,7 @@ func TestRules_ActualSignals(t *testing.T) {
 		{fixture: "synthetic/bitmap_lossy.txt", code: RuleBitmapLossy},
 		{fixture: "pg17/nested.txt", code: RuleWorkersNotLaunched},
 		{fixture: "synthetic/triggers_jit.txt", code: RuleTriggerTime},
+		{fixture: "synthetic/trigger_no_relname.txt", code: RuleTriggerTime},
 		{fixture: "synthetic/triggers_jit.txt", code: RuleJITOverhead},
 	}
 
@@ -213,6 +250,51 @@ func TestSortEstimateSpill_NeedsWorkMem(t *testing.T) {
 
 	if f.Params[ParamWorkMemKB] != workMem {
 		t.Errorf("the finding quotes the threshold it tripped on: %+v", f.Params)
+	}
+}
+
+func TestSortEstimateSpill_FallsBackToPlanSettings(t *testing.T) {
+	p := parseFixture(t, "synthetic/sort_settings.txt", SourceLog)
+
+	findings, dormant := Evaluate(&p, Context{})
+
+	for _, d := range dormant {
+		if d.Code == RuleSortEstimateSpill {
+			t.Fatal("the plan printed work_mem, so the rule runs without a connection")
+		}
+	}
+
+	f, ok := codes(findings)[RuleSortEstimateSpill]
+	if !ok {
+		t.Fatal("300k rows of 37 bytes do not fit in 4 MB")
+	}
+
+	if f.Params[ParamWorkMemKB] != int64(4096) {
+		t.Errorf("the finding quotes the setting the plan printed: %+v", f.Params)
+	}
+
+	live := int64(1 << 20)
+
+	findings, _ = Evaluate(&p, Context{WorkMemKB: &live})
+	if _, fired := codes(findings)[RuleSortEstimateSpill]; fired {
+		t.Error("the caller's work_mem outranks the one in the plan")
+	}
+}
+
+func TestParseMemKB(t *testing.T) {
+	sizes := map[string]int64{"8kB": 8, "4MB": 4096, "1GB": 1 << 20, "2TB": 2 << 30, "4096": 4096}
+
+	for in, want := range sizes {
+		got, ok := parseMemKB(in)
+		if !ok || got != want {
+			t.Errorf("%s: %d (%v), want %d", in, got, ok, want)
+		}
+	}
+
+	for _, in := range []string{"", "on", "-1", "abc"} {
+		if _, ok := parseMemKB(in); ok {
+			t.Errorf("%q is not a size", in)
+		}
 	}
 }
 

@@ -1,0 +1,123 @@
+{
+  "Query Text": "SELECT id, payload FROM probe_i WHERE k < 50 ORDER BY k, payload LIMIT 100;",
+  "Plan": {
+    "Node Type": "Limit",
+    "Parallel Aware": false,
+    "Async Capable": false,
+    "Startup Cost": 12.24,
+    "Total Cost": 94.29,
+    "Plan Rows": 100,
+    "Plan Width": 41,
+    "Actual Startup Time": 0.332,
+    "Actual Total Time": 0.348,
+    "Actual Rows": 100.00,
+    "Actual Loops": 1,
+    "Disabled": false,
+    "Shared Hit Blocks": 304,
+    "Shared Read Blocks": 0,
+    "Shared Dirtied Blocks": 0,
+    "Shared Written Blocks": 0,
+    "Local Hit Blocks": 0,
+    "Local Read Blocks": 0,
+    "Local Dirtied Blocks": 0,
+    "Local Written Blocks": 0,
+    "Temp Read Blocks": 0,
+    "Temp Written Blocks": 0,
+    "WAL Records": 0,
+    "WAL FPI": 0,
+    "WAL Bytes": 0,
+    "WAL Buffers Full": 0,
+    "Plans": [
+      {
+        "Node Type": "Incremental Sort",
+        "Parent Relationship": "Outer",
+        "Parallel Aware": false,
+        "Async Capable": false,
+        "Startup Cost": 12.24,
+        "Total Cost": 12017.80,
+        "Plan Rows": 14632,
+        "Plan Width": 41,
+        "Actual Startup Time": 0.332,
+        "Actual Total Time": 0.339,
+        "Actual Rows": 100.00,
+        "Actual Loops": 1,
+        "Disabled": false,
+        "Sort Key": ["k", "payload"],
+        "Presorted Key": ["k"],
+        "Full-sort Groups": {
+          "Group Count": 1,
+          "Sort Methods Used": ["quicksort"],
+          "Sort Space Memory": {
+            "Average Sort Space Used": 29,
+            "Peak Sort Space Used": 29
+          }
+        },
+        "Pre-sorted Groups": {
+          "Group Count": 1,
+          "Sort Methods Used": ["top-N heapsort"],
+          "Sort Space Memory": {
+            "Average Sort Space Used": 37,
+            "Peak Sort Space Used": 37
+          }
+        },
+        "Shared Hit Blocks": 304,
+        "Shared Read Blocks": 0,
+        "Shared Dirtied Blocks": 0,
+        "Shared Written Blocks": 0,
+        "Local Hit Blocks": 0,
+        "Local Read Blocks": 0,
+        "Local Dirtied Blocks": 0,
+        "Local Written Blocks": 0,
+        "Temp Read Blocks": 0,
+        "Temp Written Blocks": 0,
+        "WAL Records": 0,
+        "WAL FPI": 0,
+        "WAL Bytes": 0,
+        "WAL Buffers Full": 0,
+        "Plans": [
+          {
+            "Node Type": "Index Scan",
+            "Parent Relationship": "Outer",
+            "Parallel Aware": false,
+            "Async Capable": false,
+            "Scan Direction": "Forward",
+            "Index Name": "probe_i_k",
+            "Relation Name": "probe_i",
+            "Alias": "probe_i",
+            "Startup Cost": 0.42,
+            "Total Cost": 11531.69,
+            "Plan Rows": 14632,
+            "Plan Width": 41,
+            "Actual Startup Time": 0.005,
+            "Actual Total Time": 0.088,
+            "Actual Rows": 301.00,
+            "Actual Loops": 1,
+            "Disabled": false,
+            "Index Cond": "(k < 50)",
+            "Rows Removed by Index Recheck": 0,
+            "Index Searches": 1,
+            "Shared Hit Blocks": 304,
+            "Shared Read Blocks": 0,
+            "Shared Dirtied Blocks": 0,
+            "Shared Written Blocks": 0,
+            "Local Hit Blocks": 0,
+            "Local Read Blocks": 0,
+            "Local Dirtied Blocks": 0,
+            "Local Written Blocks": 0,
+            "Temp Read Blocks": 0,
+            "Temp Written Blocks": 0,
+            "WAL Records": 0,
+            "WAL FPI": 0,
+            "WAL Bytes": 0,
+            "WAL Buffers Full": 0
+          }
+        ]
+      }
+    ]
+  },
+  "Settings": {
+    "enable_seqscan": "off"
+  },
+  "Triggers": [
+  ]
+}

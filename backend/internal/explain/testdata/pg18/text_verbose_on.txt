@@ -1,22 +1,15 @@
 Query Text: SELECT count(*) FROM probe_t WHERE k = 42 AND payload LIKE '%abc%';
-Finalize Aggregate  (cost=6463.28..6463.29 rows=1 width=8) (actual time=39.198..42.791 rows=1.00 loops=1)
+Aggregate  (cost=6453.16..6453.17 rows=1 width=8) (actual time=134.012..136.121 rows=1.00 loops=1)
   Output: count(*)
-  Buffers: shared hit=2816
-  ->  Gather  (cost=6463.07..6463.28 rows=2 width=8) (actual time=39.019..42.784 rows=2.00 loops=1)
-        Output: (PARTIAL count(*))
+  Buffers: shared hit=576 read=2230
+  ->  Gather  (cost=1000.00..6453.16 rows=1 width=0) (actual time=132.440..136.108 rows=2.00 loops=1)
         Workers Planned: 1
         Workers Launched: 1
-        Buffers: shared hit=2816
-        ->  Partial Aggregate  (cost=5463.07..5463.08 rows=1 width=8) (actual time=35.620..35.620 rows=1.00 loops=2)
-              Output: PARTIAL count(*)
-              Buffers: shared hit=2816
-              Worker 0:  actual time=32.388..32.389 rows=1.00 loops=1
-                Buffers: shared hit=1211
-              ->  Parallel Seq Scan on public.probe_t  (cost=0.00..5463.06 rows=4 width=0) (actual time=23.037..35.599 rows=1.00 loops=2)
-                    Output: id, k, payload
-                    Filter: ((probe_t.payload ~~ '%abc%'::text) AND (probe_t.k = 42))
-                    Rows Removed by Filter: 149999
-                    Buffers: shared hit=2816
-                    Worker 0:  actual time=8.201..32.367 rows=1.00 loops=1
-                      Buffers: shared hit=1211
+        Buffers: shared hit=576 read=2230
+        ->  Parallel Seq Scan on public.probe_t  (cost=0.00..5453.06 rows=1 width=0) (actual time=106.455..131.462 rows=1.00 loops=2)
+              Filter: ((probe_t.payload ~~ '%abc%'::text) AND (probe_t.k = 42))
+              Rows Removed by Filter: 149999
+              Buffers: shared hit=576 read=2230
+              Worker 0:  actual time=80.707..129.397 rows=1.00 loops=1
+                Buffers: shared hit=287 read=1137
 Query Identifier: 6341805849365623254

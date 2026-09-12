@@ -1,0 +1,9 @@
+Query Text: DELETE FROM probe_dml WHERE id > 2000;
+Delete on probe_dml  (cost=0.00..25.00 rows=0 width=0) (actual time=0.101..0.101 rows=0 loops=1)
+  Buffers: shared hit=208
+  WAL: records=202 bytes=11124
+  ->  Seq Scan on probe_dml  (cost=0.00..25.00 rows=400 width=6) (actual time=0.033..0.053 rows=200 loops=1)
+        Filter: (id > 2000)
+        Rows Removed by Filter: 400
+        Buffers: shared hit=8
+        WAL: records=2 bytes=324

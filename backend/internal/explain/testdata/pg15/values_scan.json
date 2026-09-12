@@ -1,0 +1,34 @@
+{
+  "Query Text": "SELECT * FROM (VALUES (1, 'a'), (2, 'b')) AS v(x, y);",
+  "Plan": {
+    "Node Type": "Values Scan",
+    "Parallel Aware": false,
+    "Async Capable": false,
+    "Alias": "*VALUES*",
+    "Startup Cost": 0.00,
+    "Total Cost": 0.03,
+    "Plan Rows": 2,
+    "Plan Width": 36,
+    "Actual Startup Time": 0.001,
+    "Actual Total Time": 0.001,
+    "Actual Rows": 2,
+    "Actual Loops": 1,
+    "Shared Hit Blocks": 0,
+    "Shared Read Blocks": 0,
+    "Shared Dirtied Blocks": 0,
+    "Shared Written Blocks": 0,
+    "Local Hit Blocks": 0,
+    "Local Read Blocks": 0,
+    "Local Dirtied Blocks": 0,
+    "Local Written Blocks": 0,
+    "Temp Read Blocks": 0,
+    "Temp Written Blocks": 0,
+    "WAL Records": 0,
+    "WAL FPI": 0,
+    "WAL Bytes": 0
+  },
+  "Settings": {
+  },
+  "Triggers": [
+  ]
+}

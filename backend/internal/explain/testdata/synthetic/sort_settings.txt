@@ -1,0 +1,6 @@
+Query Text: SELECT payload FROM probe_t ORDER BY payload, id DESC;
+Sort  (cost=42130.11..42880.11 rows=300000 width=37)
+  Sort Key: payload, id DESC
+  ->  Seq Scan on probe_t  (cost=0.00..5580.00 rows=300000 width=37)
+Settings: work_mem = '4MB'
+Planning Time: 0.120 ms

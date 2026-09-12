@@ -1,0 +1,27 @@
+Query Text: SELECT count(*) FROM probe_i a JOIN probe_i b ON b.id = a.id WHERE a.k < 5;
+Finalize Aggregate  (cost=12715.36..12715.37 rows=1 width=8) (actual time=228.642..282.118 rows=1 loops=1)
+  Buffers: shared hit=1417 read=2525
+  ->  Gather  (cost=12715.14..12715.35 rows=2 width=8) (actual time=176.033..282.094 rows=3 loops=1)
+        Workers Planned: 2
+        Workers Launched: 2
+        Buffers: shared hit=1417 read=2525
+        ->  Partial Aggregate  (cost=11715.14..11715.15 rows=1 width=8) (actual time=58.167..58.168 rows=1 loops=3)
+              Buffers: shared hit=1417 read=2525
+              ->  Merge Join  (cost=2530.53..11713.60 rows=617 width=0) (actual time=0.954..58.068 rows=500 loops=3)
+                    Merge Cond: (b.id = a.id)
+                    Buffers: shared hit=1417 read=2525
+                    ->  Parallel Index Only Scan using probe_i_id on probe_i b  (cost=0.42..8857.42 rows=125000 width=4) (actual time=0.180..49.248 rows=100000 loops=3)
+                          Heap Fetches: 300000
+                          Buffers: shared hit=1101 read=2525
+                    ->  Sort  (cost=2530.11..2533.81 rows=1480 width=4) (actual time=2.308..2.729 rows=1500 loops=1)
+                          Sort Key: a.id
+                          Sort Method: quicksort  Memory: 119kB
+                          Buffers: shared hit=316
+                          ->  Bitmap Heap Scan on probe_i a  (cost=19.89..2452.17 rows=1480 width=4) (actual time=0.200..1.989 rows=1500 loops=1)
+                                Recheck Cond: (k < 5)
+                                Heap Blocks: exact=312
+                                Buffers: shared hit=316
+                                ->  Bitmap Index Scan on probe_i_k  (cost=0.00..19.52 rows=1480 width=0) (actual time=0.147..0.147 rows=1500 loops=1)
+                                      Index Cond: (k < 5)
+                                      Buffers: shared hit=4
+Settings: enable_hashjoin = 'off', enable_nestloop = 'off'

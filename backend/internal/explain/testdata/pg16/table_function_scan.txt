@@ -1,0 +1,6 @@
+Query Text: SELECT * FROM XMLTABLE('/r/i' PASSING XMLPARSE(DOCUMENT '<r><i>1</i><i>2</i></r>')
+                       COLUMNS x int PATH '.');
+Table Function Scan on "xmltable"  (cost=0.00..1.00 rows=100 width=4) (actual time=0.592..0.592 rows=2 loops=1)
+  Output: x
+  Table Function Call: XMLTABLE(('/r/i'::text) PASSING (XMLPARSE(DOCUMENT '<r><i>1</i><i>2</i></r>'::text STRIP WHITESPACE)) COLUMNS x integer PATH ('.'::text))
+Query Identifier: 5346615710510170356

@@ -1,0 +1,14 @@
+Query Text: SELECT count(*) FROM (
+	SELECT id, row_number() OVER (ORDER BY id) AS rn FROM probe_i
+) s WHERE rn < 10;
+Aggregate  (cost=18859.42..18859.43 rows=1 width=8) (actual time=0.078..0.079 rows=1.00 loops=1)
+  Buffers: shared read=4 written=4
+  ->  WindowAgg  (cost=0.47..15109.42 rows=300000 width=12) (actual time=0.072..0.076 rows=9.00 loops=1)
+        Window: w1 AS (ORDER BY probe_i.id ROWS UNBOUNDED PRECEDING)
+        Run Condition: (row_number() OVER w1 < 10)
+        Storage: Memory  Maximum Storage: 17kB
+        Buffers: shared read=4 written=4
+        ->  Index Only Scan using probe_i_id on probe_i  (cost=0.42..10609.42 rows=300000 width=4) (actual time=0.068..0.069 rows=10.00 loops=1)
+              Heap Fetches: 10
+              Index Searches: 1
+              Buffers: shared read=4 written=4

@@ -1,13 +1,13 @@
 Query Text: SELECT count(*) FROM probe_t WHERE k = 42 AND payload LIKE '%abc%';
-Finalize Aggregate  (cost=6451.18..6451.19 rows=1 width=8) (actual time=31.280..33.501 rows=1 loops=1)
-  Buffers: shared hit=2080 read=724
-  ->  Gather  (cost=6451.07..6451.18 rows=1 width=8) (actual time=31.145..33.495 rows=2 loops=1)
+Finalize Aggregate  (cost=6451.18..6451.19 rows=1 width=8) (actual time=20.951..22.206 rows=1 loops=1)
+  Buffers: shared hit=288 read=2516
+  ->  Gather  (cost=6451.06..6451.17 rows=1 width=8) (actual time=20.864..22.202 rows=2 loops=1)
         Workers Planned: 1
         Workers Launched: 1
-        Buffers: shared hit=2080 read=724
-        ->  Partial Aggregate  (cost=5451.07..5451.08 rows=1 width=8) (actual time=29.141..29.141 rows=1 loops=2)
-              Buffers: shared hit=2080 read=724
-              ->  Parallel Seq Scan on probe_t  (cost=0.00..5451.06 rows=5 width=0) (actual time=22.792..29.136 rows=1 loops=2)
+        Buffers: shared hit=288 read=2516
+        ->  Partial Aggregate  (cost=5451.06..5451.07 rows=1 width=8) (actual time=19.083..19.084 rows=1 loops=2)
+              Buffers: shared hit=288 read=2516
+              ->  Parallel Seq Scan on probe_t  (cost=0.00..5451.06 rows=2 width=0) (actual time=13.153..19.079 rows=1 loops=2)
                     Filter: ((payload ~~ '%abc%'::text) AND (k = 42))
                     Rows Removed by Filter: 149999
-                    Buffers: shared hit=2080 read=724
+                    Buffers: shared hit=288 read=2516

@@ -1,0 +1,9 @@
+Query Text: SELECT count(*) FROM (SELECT k FROM probe_small OFFSET 0) s WHERE s.k = 1;
+Aggregate  (cost=6.53..6.54 rows=1 width=8) (actual time=0.039..0.040 rows=1 loops=1)
+  Buffers: shared hit=2
+  ->  Subquery Scan on s  (cost=0.00..6.50 rows=10 width=0) (actual time=0.009..0.036 rows=10 loops=1)
+        Filter: (s.k = 1)
+        Rows Removed by Filter: 190
+        Buffers: shared hit=2
+        ->  Seq Scan on probe_small  (cost=0.00..4.00 rows=200 width=4) (actual time=0.008..0.024 rows=200 loops=1)
+              Buffers: shared hit=2

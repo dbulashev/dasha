@@ -1,0 +1,2 @@
+Query Text: SELECT * FROM (VALUES (1, 'a'), (2, 'b')) AS v(x, y);
+Values Scan on "*VALUES*"  (cost=0.00..0.03 rows=2 width=36) (actual time=0.011..0.011 rows=2 loops=1)

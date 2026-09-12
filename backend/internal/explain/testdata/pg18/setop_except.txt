@@ -1,0 +1,7 @@
+Query Text: SELECT k FROM probe_i EXCEPT SELECT id FROM probe_small;
+HashSetOp Except  (cost=6560.50..6563.00 rows=1000 width=4) (actual time=80.045..80.102 rows=800.00 loops=1)
+  Buffers: shared hit=1998 read=810
+  ->  Seq Scan on probe_i  (cost=0.00..5806.00 rows=300000 width=4) (actual time=0.022..51.789 rows=300000.00 loops=1)
+        Buffers: shared hit=1996 read=810
+  ->  Seq Scan on probe_small  (cost=0.00..4.00 rows=200 width=4) (actual time=0.015..0.032 rows=200.00 loops=1)
+        Buffers: shared hit=2

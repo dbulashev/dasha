@@ -1,0 +1,15 @@
+Query Text: SELECT count(*) FROM probe_t WHERE payload LIKE '%zz%';
+Finalize Aggregate  (cost=6012.14..6012.15 rows=1 width=8) (actual time=42.208..44.428 rows=1.00 loops=1)
+  Buffers: shared read=2806
+  ->  Gather  (cost=6011.93..6012.14 rows=2 width=8) (actual time=42.204..44.424 rows=2.00 loops=1)
+        Workers Planned: 1
+        Workers Launched: 1
+        Buffers: shared read=2806
+        ->  Partial Aggregate  (cost=5011.93..5011.94 rows=1 width=8) (actual time=36.221..36.221 rows=1.00 loops=2)
+              Buffers: shared read=2806
+              ->  Parallel Seq Scan on probe_t  (cost=0.00..5011.88 rows=18 width=0) (actual time=36.219..36.219 rows=0.00 loops=2)
+                    Disabled: true
+                    Filter: (payload ~~ '%zz%'::text)
+                    Rows Removed by Filter: 150000
+                    Buffers: shared read=2806
+Settings: enable_seqscan = 'off'

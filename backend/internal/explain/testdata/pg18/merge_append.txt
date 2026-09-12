@@ -1,0 +1,16 @@
+Query Text: SELECT id FROM probe_part ORDER BY k LIMIT 10;
+Limit  (cost=0.90..1.59 rows=10 width=8) (actual time=0.077..0.128 rows=10.00 loops=1)
+  Buffers: shared read=18
+  ->  Merge Append  (cost=0.90..20629.21 rows=300000 width=8) (actual time=0.076..0.126 rows=10.00 loops=1)
+        Sort Key: probe_part.k
+        Buffers: shared read=18
+        ->  Index Scan using probe_part_1_k_idx on probe_part_1  (cost=0.29..5583.81 rows=99999 width=8) (actual time=0.022..0.070 rows=10.00 loops=1)
+              Index Searches: 1
+              Buffers: shared read=12
+        ->  Index Scan using probe_part_2_k_idx on probe_part_2  (cost=0.29..5583.68 rows=100000 width=8) (actual time=0.019..0.020 rows=1.00 loops=1)
+              Index Searches: 1
+              Buffers: shared read=3
+        ->  Index Scan using probe_part_3_k_idx on probe_part_3  (cost=0.29..5584.25 rows=100001 width=8) (actual time=0.034..0.034 rows=1.00 loops=1)
+              Index Searches: 1
+              Buffers: shared read=3
+Settings: enable_seqscan = 'off'

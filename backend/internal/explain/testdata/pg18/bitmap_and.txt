@@ -1,0 +1,18 @@
+Query Text: SELECT count(*) FROM probe_i WHERE k = 1 AND j = 1;
+Aggregate  (cost=17.60..17.61 rows=1 width=8) (actual time=0.185..0.185 rows=1.00 loops=1)
+  Buffers: shared read=7
+  ->  Bitmap Heap Scan on probe_i  (cost=13.58..17.60 rows=1 width=0) (actual time=0.182..0.183 rows=1.00 loops=1)
+        Recheck Cond: ((k = 1) AND (j = 1))
+        Heap Blocks: exact=1
+        Buffers: shared read=7
+        ->  BitmapAnd  (cost=13.58..13.58 rows=1 width=0) (actual time=0.112..0.113 rows=0.00 loops=1)
+              Buffers: shared read=6
+              ->  Bitmap Index Scan on probe_i_k  (cost=0.00..6.67 rows=299 width=0) (actual time=0.037..0.037 rows=300.00 loops=1)
+                    Index Cond: (k = 1)
+                    Index Searches: 1
+                    Buffers: shared read=3
+              ->  Bitmap Index Scan on probe_i_j  (cost=0.00..6.67 rows=299 width=0) (actual time=0.064..0.064 rows=301.00 loops=1)
+                    Index Cond: (j = 1)
+                    Index Searches: 1
+                    Buffers: shared read=3
+Settings: enable_seqscan = 'off', enable_indexscan = 'off'

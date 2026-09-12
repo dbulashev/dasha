@@ -1,0 +1,68 @@
+{
+  "Query Text": "SELECT DISTINCT k FROM probe_i ORDER BY k;",
+  "Plan": {
+    "Node Type": "Unique",
+    "Parallel Aware": false,
+    "Async Capable": false,
+    "Startup Cost": 0.42,
+    "Total Cost": 17481.68,
+    "Plan Rows": 1000,
+    "Plan Width": 4,
+    "Actual Startup Time": 0.104,
+    "Actual Total Time": 268.159,
+    "Actual Rows": 1000,
+    "Actual Loops": 1,
+    "Shared Hit Blocks": 297196,
+    "Shared Read Blocks": 3056,
+    "Shared Dirtied Blocks": 0,
+    "Shared Written Blocks": 0,
+    "Local Hit Blocks": 0,
+    "Local Read Blocks": 0,
+    "Local Dirtied Blocks": 0,
+    "Local Written Blocks": 0,
+    "Temp Read Blocks": 0,
+    "Temp Written Blocks": 0,
+    "WAL Records": 0,
+    "WAL FPI": 0,
+    "WAL Bytes": 0,
+    "Plans": [
+      {
+        "Node Type": "Index Only Scan",
+        "Parent Relationship": "Outer",
+        "Parallel Aware": false,
+        "Async Capable": false,
+        "Scan Direction": "Forward",
+        "Index Name": "probe_i_k",
+        "Relation Name": "probe_i",
+        "Alias": "probe_i",
+        "Startup Cost": 0.42,
+        "Total Cost": 16731.68,
+        "Plan Rows": 300000,
+        "Plan Width": 4,
+        "Actual Startup Time": 0.102,
+        "Actual Total Time": 245.052,
+        "Actual Rows": 300000,
+        "Actual Loops": 1,
+        "Heap Fetches": 300000,
+        "Shared Hit Blocks": 297196,
+        "Shared Read Blocks": 3056,
+        "Shared Dirtied Blocks": 0,
+        "Shared Written Blocks": 0,
+        "Local Hit Blocks": 0,
+        "Local Read Blocks": 0,
+        "Local Dirtied Blocks": 0,
+        "Local Written Blocks": 0,
+        "Temp Read Blocks": 0,
+        "Temp Written Blocks": 0,
+        "WAL Records": 0,
+        "WAL FPI": 0,
+        "WAL Bytes": 0
+      }
+    ]
+  },
+  "Settings": {
+    "enable_hashagg": "off"
+  },
+  "Triggers": [
+  ]
+}

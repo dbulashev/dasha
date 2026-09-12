@@ -1,21 +1,21 @@
 Query Text: SELECT count(*) FROM probe_t a JOIN probe_t b ON b.id = a.k WHERE a.payload LIKE '%ff%';
-Finalize Aggregate  (cost=14520.84..14520.85 rows=1 width=8) (actual time=82.950..85.168 rows=1 loops=1)
-  Buffers: shared hit=5690, temp read=760 written=780
-  ->  Gather  (cost=14520.73..14520.84 rows=1 width=8) (actual time=82.561..85.162 rows=2 loops=1)
+Finalize Aggregate  (cost=14734.61..14734.62 rows=1 width=8) (actual time=92.142..94.582 rows=1 loops=1)
+  Buffers: shared hit=1746 read=3944, temp read=761 written=780
+  ->  Gather  (cost=14734.50..14734.61 rows=1 width=8) (actual time=92.118..94.558 rows=2 loops=1)
         Workers Planned: 1
         Workers Launched: 1
-        Buffers: shared hit=5690, temp read=760 written=780
-        ->  Partial Aggregate  (cost=13520.73..13520.74 rows=1 width=8) (actual time=80.968..81.043 rows=1 loops=2)
-              Buffers: shared hit=5690, temp read=760 written=780
-              ->  Parallel Hash Join  (cost=7464.59..13476.17 rows=17825 width=0) (actual time=70.127..80.064 rows=16405 loops=2)
+        Buffers: shared hit=1746 read=3944, temp read=761 written=780
+        ->  Partial Aggregate  (cost=13734.50..13734.51 rows=1 width=8) (actual time=90.667..90.670 rows=1 loops=2)
+              Buffers: shared hit=1746 read=3944, temp read=761 written=780
+              ->  Parallel Hash Join  (cost=7464.59..13663.20 rows=28521 width=0) (actual time=80.854..89.820 rows=16405 loops=2)
                     Hash Cond: (a.k = b.id)
-                    Buffers: shared hit=5690, temp read=760 written=780
-                    ->  Parallel Seq Scan on probe_t a  (cost=0.00..5009.88 rows=17825 width=4) (actual time=0.008..20.062 rows=16422 loops=2)
+                    Buffers: shared hit=1746 read=3944, temp read=761 written=780
+                    ->  Parallel Seq Scan on probe_t a  (cost=0.00..5009.88 rows=28521 width=4) (actual time=0.028..23.374 rows=16422 loops=2)
                           Filter: (payload ~~ '%ff%'::text)
                           Rows Removed by Filter: 133578
-                          Buffers: shared hit=2804
-                    ->  Parallel Hash  (cost=4568.71..4568.71 rows=176471 width=4) (actual time=40.781..40.782 rows=150000 loops=2)
+                          Buffers: shared hit=864 read=1940
+                    ->  Parallel Hash  (cost=4568.71..4568.71 rows=176471 width=4) (actual time=45.640..45.640 rows=150000 loops=2)
                           Buckets: 131072  Batches: 4  Memory Usage: 4000kB
-                          Buffers: shared hit=2804, temp written=668
-                          ->  Parallel Seq Scan on probe_t b  (cost=0.00..4568.71 rows=176471 width=4) (actual time=0.005..14.588 rows=150000 loops=2)
-                                Buffers: shared hit=2804
+                          Buffers: shared hit=800 read=2004, temp written=668
+                          ->  Parallel Seq Scan on probe_t b  (cost=0.00..4568.71 rows=176471 width=4) (actual time=0.022..14.040 rows=150000 loops=2)
+                                Buffers: shared hit=800 read=2004

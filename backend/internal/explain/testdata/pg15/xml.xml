@@ -10,12 +10,12 @@
     <Total-Cost>6010.44</Total-Cost>
     <Plan-Rows>1</Plan-Rows>
     <Plan-Width>8</Plan-Width>
-    <Actual-Startup-Time>8.247</Actual-Startup-Time>
-    <Actual-Total-Time>9.587</Actual-Total-Time>
+    <Actual-Startup-Time>10.407</Actual-Startup-Time>
+    <Actual-Total-Time>11.758</Actual-Total-Time>
     <Actual-Rows>1</Actual-Rows>
     <Actual-Loops>1</Actual-Loops>
-    <Shared-Hit-Blocks>2804</Shared-Hit-Blocks>
-    <Shared-Read-Blocks>0</Shared-Read-Blocks>
+    <Shared-Hit-Blocks>544</Shared-Hit-Blocks>
+    <Shared-Read-Blocks>2260</Shared-Read-Blocks>
     <Shared-Dirtied-Blocks>0</Shared-Dirtied-Blocks>
     <Shared-Written-Blocks>0</Shared-Written-Blocks>
     <Local-Hit-Blocks>0</Local-Hit-Blocks>
@@ -24,6 +24,9 @@
     <Local-Written-Blocks>0</Local-Written-Blocks>
     <Temp-Read-Blocks>0</Temp-Read-Blocks>
     <Temp-Written-Blocks>0</Temp-Written-Blocks>
+    <WAL-Records>0</WAL-Records>
+    <WAL-FPI>0</WAL-FPI>
+    <WAL-Bytes>0</WAL-Bytes>
     <Plans>
       <Plan>
         <Node-Type>Gather</Node-Type>
@@ -34,15 +37,15 @@
         <Total-Cost>6010.43</Total-Cost>
         <Plan-Rows>1</Plan-Rows>
         <Plan-Width>8</Plan-Width>
-        <Actual-Startup-Time>8.152</Actual-Startup-Time>
-        <Actual-Total-Time>9.582</Actual-Total-Time>
+        <Actual-Startup-Time>10.283</Actual-Startup-Time>
+        <Actual-Total-Time>11.752</Actual-Total-Time>
         <Actual-Rows>2</Actual-Rows>
         <Actual-Loops>1</Actual-Loops>
         <Workers-Planned>1</Workers-Planned>
         <Workers-Launched>1</Workers-Launched>
         <Single-Copy>false</Single-Copy>
-        <Shared-Hit-Blocks>2804</Shared-Hit-Blocks>
-        <Shared-Read-Blocks>0</Shared-Read-Blocks>
+        <Shared-Hit-Blocks>544</Shared-Hit-Blocks>
+        <Shared-Read-Blocks>2260</Shared-Read-Blocks>
         <Shared-Dirtied-Blocks>0</Shared-Dirtied-Blocks>
         <Shared-Written-Blocks>0</Shared-Written-Blocks>
         <Local-Hit-Blocks>0</Local-Hit-Blocks>
@@ -51,6 +54,9 @@
         <Local-Written-Blocks>0</Local-Written-Blocks>
         <Temp-Read-Blocks>0</Temp-Read-Blocks>
         <Temp-Written-Blocks>0</Temp-Written-Blocks>
+        <WAL-Records>0</WAL-Records>
+        <WAL-FPI>0</WAL-FPI>
+        <WAL-Bytes>0</WAL-Bytes>
         <Plans>
           <Plan>
             <Node-Type>Aggregate</Node-Type>
@@ -63,12 +69,12 @@
             <Total-Cost>5010.33</Total-Cost>
             <Plan-Rows>1</Plan-Rows>
             <Plan-Width>8</Plan-Width>
-            <Actual-Startup-Time>6.856</Actual-Startup-Time>
-            <Actual-Total-Time>6.856</Actual-Total-Time>
+            <Actual-Startup-Time>7.965</Actual-Startup-Time>
+            <Actual-Total-Time>7.967</Actual-Total-Time>
             <Actual-Rows>1</Actual-Rows>
             <Actual-Loops>2</Actual-Loops>
-            <Shared-Hit-Blocks>2804</Shared-Hit-Blocks>
-            <Shared-Read-Blocks>0</Shared-Read-Blocks>
+            <Shared-Hit-Blocks>544</Shared-Hit-Blocks>
+            <Shared-Read-Blocks>2260</Shared-Read-Blocks>
             <Shared-Dirtied-Blocks>0</Shared-Dirtied-Blocks>
             <Shared-Written-Blocks>0</Shared-Written-Blocks>
             <Local-Hit-Blocks>0</Local-Hit-Blocks>
@@ -77,6 +83,9 @@
             <Local-Written-Blocks>0</Local-Written-Blocks>
             <Temp-Read-Blocks>0</Temp-Read-Blocks>
             <Temp-Written-Blocks>0</Temp-Written-Blocks>
+            <WAL-Records>0</WAL-Records>
+            <WAL-FPI>0</WAL-FPI>
+            <WAL-Bytes>0</WAL-Bytes>
             <Workers>
             </Workers>
             <Plans>
@@ -89,16 +98,16 @@
                 <Alias>probe_t</Alias>
                 <Startup-Cost>0.00</Startup-Cost>
                 <Total-Cost>5009.88</Total-Cost>
-                <Plan-Rows>176</Plan-Rows>
+                <Plan-Rows>175</Plan-Rows>
                 <Plan-Width>0</Plan-Width>
-                <Actual-Startup-Time>0.021</Actual-Startup-Time>
-                <Actual-Total-Time>6.843</Actual-Total-Time>
+                <Actual-Startup-Time>0.257</Actual-Startup-Time>
+                <Actual-Total-Time>7.947</Actual-Total-Time>
                 <Actual-Rows>150</Actual-Rows>
                 <Actual-Loops>2</Actual-Loops>
                 <Filter>(k = 42)</Filter>
                 <Rows-Removed-by-Filter>149850</Rows-Removed-by-Filter>
-                <Shared-Hit-Blocks>2804</Shared-Hit-Blocks>
-                <Shared-Read-Blocks>0</Shared-Read-Blocks>
+                <Shared-Hit-Blocks>544</Shared-Hit-Blocks>
+                <Shared-Read-Blocks>2260</Shared-Read-Blocks>
                 <Shared-Dirtied-Blocks>0</Shared-Dirtied-Blocks>
                 <Shared-Written-Blocks>0</Shared-Written-Blocks>
                 <Local-Hit-Blocks>0</Local-Hit-Blocks>
@@ -107,6 +116,9 @@
                 <Local-Written-Blocks>0</Local-Written-Blocks>
                 <Temp-Read-Blocks>0</Temp-Read-Blocks>
                 <Temp-Written-Blocks>0</Temp-Written-Blocks>
+                <WAL-Records>0</WAL-Records>
+                <WAL-FPI>0</WAL-FPI>
+                <WAL-Bytes>0</WAL-Bytes>
                 <Workers>
                 </Workers>
               </Plan>
@@ -116,4 +128,8 @@
       </Plan>
     </Plans>
   </Plan>
+  <Settings>
+  </Settings>
+  <Triggers>
+  </Triggers>
 </explain>

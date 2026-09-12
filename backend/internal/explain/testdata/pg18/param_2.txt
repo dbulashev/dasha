@@ -1,11 +1,11 @@
 Query Text: SELECT count(*) FROM probe_t WHERE id = 2;
-Aggregate  (cost=6021.98..6021.99 rows=1 width=8) (actual time=7.245..8.635 rows=1.00 loops=1)
-  Buffers: shared hit=2816
-  ->  Gather  (cost=1000.00..6021.98 rows=1 width=0) (actual time=0.109..8.630 rows=1.00 loops=1)
+Aggregate  (cost=6011.98..6011.99 rows=1 width=8) (actual time=54.670..56.849 rows=1.00 loops=1)
+  Buffers: shared hit=1216 read=1590
+  ->  Gather  (cost=1000.00..6011.98 rows=1 width=0) (actual time=0.607..56.840 rows=1.00 loops=1)
         Workers Planned: 1
         Workers Launched: 1
-        Buffers: shared hit=2816
-        ->  Parallel Seq Scan on probe_t  (cost=0.00..5021.88 rows=1 width=0) (actual time=2.492..5.996 rows=0.50 loops=2)
+        Buffers: shared hit=1216 read=1590
+        ->  Parallel Seq Scan on probe_t  (cost=0.00..5011.88 rows=1 width=0) (actual time=25.646..52.581 rows=0.50 loops=2)
               Filter: (id = 2)
               Rows Removed by Filter: 150000
-              Buffers: shared hit=2816
+              Buffers: shared hit=1216 read=1590

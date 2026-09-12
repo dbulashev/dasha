@@ -1,7 +1,7 @@
 Query Text: SELECT count(*) FROM probe_t WHERE k = 42 AND payload LIKE '%abc%';
-Finalize Aggregate  (cost=6463.18..6463.19 rows=1 width=8)
-  ->  Gather  (cost=6463.07..6463.18 rows=1 width=8)
+Finalize Aggregate  (cost=6455.18..6455.19 rows=1 width=8)
+  ->  Gather  (cost=6455.06..6455.17 rows=1 width=8)
         Workers Planned: 1
-        ->  Partial Aggregate  (cost=5463.07..5463.08 rows=1 width=8)
-              ->  Parallel Seq Scan on probe_t  (cost=0.00..5463.06 rows=4 width=0)
+        ->  Partial Aggregate  (cost=5455.06..5455.07 rows=1 width=8)
+              ->  Parallel Seq Scan on probe_t  (cost=0.00..5455.06 rows=2 width=0)
                     Filter: ((payload ~~ '%abc%'::text) AND (k = 42))

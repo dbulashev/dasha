@@ -1,0 +1,23 @@
+Query Text: SELECT s.id, (SELECT count(*) FROM probe_i i WHERE i.k = s.k)
+FROM probe_small s
+WHERE s.k > (SELECT max(k) FROM probe_i);
+Seq Scan on probe_small s  (cost=0.49..59284.83 rows=67 width=12) (actual time=0.039..0.040 rows=0 loops=1)
+  Filter: (k > $2)
+  Rows Removed by Filter: 200
+  Buffers: shared hit=5 read=1
+  InitPlan 3 (returns $2)
+    ->  Result  (cost=0.48..0.49 rows=1 width=4) (actual time=0.016..0.016 rows=1 loops=1)
+          Buffers: shared hit=4
+          InitPlan 2 (returns $1)
+            ->  Limit  (cost=0.42..0.48 rows=1 width=4) (actual time=0.015..0.015 rows=1 loops=1)
+                  Buffers: shared hit=4
+                  ->  Index Only Scan Backward using probe_i_k on probe_i  (cost=0.42..17593.25 rows=302033 width=4) (actual time=0.014..0.015 rows=1 loops=1)
+                        Index Cond: (k IS NOT NULL)
+                        Heap Fetches: 1
+                        Buffers: shared hit=4
+  SubPlan 1
+    ->  Aggregate  (cost=884.76..884.77 rows=1 width=8) (never executed)
+          ->  Bitmap Heap Scan on probe_i i  (cost=6.76..884.01 rows=302 width=0) (never executed)
+                Recheck Cond: (k = s.k)
+                ->  Bitmap Index Scan on probe_i_k  (cost=0.00..6.69 rows=302 width=0) (never executed)
+                      Index Cond: (k = s.k)

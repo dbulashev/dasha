@@ -2,6 +2,8 @@ package explain
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -35,6 +37,59 @@ func TestParse_TextMatchesJSON(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// TestParse_ShapeCorpusMatches holds every case the probe logged in both
+// formats to the same rule. The pair is named <case>.txt / <case>.json.
+func TestParse_ShapeCorpusMatches(t *testing.T) {
+	pairs := 0
+
+	for _, version := range versions {
+		entries, err := os.ReadDir(filepath.Join("testdata", version))
+		if err != nil {
+			t.Fatalf("read testdata/%s: %v", version, err)
+		}
+
+		for _, entry := range entries {
+			name, ok := strings.CutSuffix(entry.Name(), ".json")
+			if !ok {
+				continue
+			}
+
+			if _, err := os.Stat(filepath.Join("testdata", version, name+".txt")); err != nil {
+				continue
+			}
+
+			pairs++
+
+			t.Run(version+"/"+name, func(t *testing.T) {
+				text := parseFixture(t, filepath.Join(version, name+".txt"), SourceLog)
+				js := parseFixture(t, filepath.Join(version, name+".json"), SourceLog)
+
+				if text.QueryText != js.QueryText {
+					t.Errorf("query text:\n text %q\n json %q", text.QueryText, js.QueryText)
+				}
+
+				if text.QueryParams != js.QueryParams {
+					t.Errorf("query parameters: text %q, json %q", text.QueryParams, js.QueryParams)
+				}
+
+				compareNodes(t, "root", &text.Root, &js.Root)
+
+				if got, want := Hash(text.Root), Hash(js.Root); got != want {
+					t.Errorf("hash: text %s, json %s", got, want)
+				}
+
+				if text.Caps != js.Caps {
+					t.Errorf("capabilities: text %+v, json %+v", text.Caps, js.Caps)
+				}
+			})
+		}
+	}
+
+	if pairs == 0 {
+		t.Skip("no shape corpus in testdata")
 	}
 }
 
@@ -123,8 +178,8 @@ func TestParseText_WorkerBlockKeepsNodeBuffers(t *testing.T) {
 		t.Fatal("no Seq Scan with buffers")
 	}
 
-	if partial.Buffers.SharedHit != 2816 {
-		t.Errorf("shared hit: %v", partial.Buffers.SharedHit)
+	if partial.Buffers.SharedHit != 576 || partial.Buffers.SharedRead != 2232 {
+		t.Errorf("buffers: %+v", partial.Buffers)
 	}
 
 	if partial.Schema != "public" || partial.Relation != "probe_t" {
@@ -218,6 +273,23 @@ func TestParseText_TailBlocks(t *testing.T) {
 	}
 }
 
+// A statement with a single result relation prints the trigger without one.
+func TestParseText_TriggerWithoutRelation(t *testing.T) {
+	p := parseFixture(t, "synthetic/trigger_no_relname.txt", SourceLog)
+
+	if len(p.Triggers) != 1 {
+		t.Fatalf("triggers: %+v", p.Triggers)
+	}
+
+	if tr := p.Triggers[0]; tr.Name != "t_audit" || tr.Relation != "" || tr.Time != 340.5 || tr.Calls != 100000 {
+		t.Errorf("trigger: %+v", tr)
+	}
+
+	if p.ExecutionTime == nil || *p.ExecutionTime != 905.3 {
+		t.Errorf("execution time: %v", p.ExecutionTime)
+	}
+}
+
 func TestParseText_Subplan(t *testing.T) {
 	p := parseFixture(t, "synthetic/subplan.txt", SourceLog)
 
@@ -299,6 +371,36 @@ func TestParseText_BitmapScans(t *testing.T) {
 	index := findNode(&p, "Bitmap Index Scan")
 	if index == nil || index.IndexName != "probe_t_k_idx" || index.Relation != "" {
 		t.Fatalf("bitmap index scan: %+v", index)
+	}
+}
+
+func TestParseText_AsyncForeignScan(t *testing.T) {
+	p := parseFixture(t, "synthetic/async_foreign.txt", SourceLog)
+
+	scan := findNode(&p, "Foreign Scan")
+	if scan == nil {
+		t.Fatal("no Foreign Scan node")
+	}
+
+	if scan.Relation != "part_fdw_1" || scan.Alias != "p_1" || scan.Parallel {
+		t.Errorf("foreign scan: %+v", scan)
+	}
+
+	if scan.ParentRel != RelMember {
+		t.Errorf("parent relationship: %q", scan.ParentRel)
+	}
+}
+
+func TestParseText_QuotedRelation(t *testing.T) {
+	p := parseFixture(t, "synthetic/quoted_ident.txt", SourceLog)
+
+	scan := findNode(&p, "Seq Scan")
+	if scan == nil {
+		t.Fatal("no Seq Scan node")
+	}
+
+	if scan.Schema != "My Schema" || scan.Relation != "My Table" || scan.Alias != "t" {
+		t.Errorf("relation: %q.%q as %q", scan.Schema, scan.Relation, scan.Alias)
 	}
 }
 

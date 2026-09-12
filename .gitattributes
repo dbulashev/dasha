@@ -8,3 +8,6 @@
 /backend/gen/** binary linguist-generated=true
 /frontend/src/api/gen/** binary linguist-generated=true
 /frontend/src/api/models/** binary linguist-generated=true
+
+# Captured EXPLAIN output, not hand-written source.
+/backend/internal/explain/testdata/** binary linguist-generated=true

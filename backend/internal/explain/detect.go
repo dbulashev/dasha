@@ -68,7 +68,8 @@ func isYAML(body string) bool {
 			continue
 		}
 
-		if strings.TrimRight(line, " ") == "Plan:" {
+		switch strings.TrimRight(line, " ") {
+		case "Plan:", "- Plan:":
 			return true
 		}
 	}

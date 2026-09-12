@@ -1,0 +1,14 @@
+Query Text: SELECT count(*) FROM probe_small a, probe_small b WHERE a.k = b.k;
+Aggregate  (cost=613.50..613.51 rows=1 width=8) (actual time=11.820..11.822 rows=1 loops=1)
+  Buffers: shared hit=4
+  ->  Nested Loop  (cost=0.00..608.50 rows=2000 width=0) (actual time=0.018..11.514 rows=2000 loops=1)
+        Join Filter: (a.k = b.k)
+        Rows Removed by Join Filter: 38000
+        Buffers: shared hit=4
+        ->  Seq Scan on probe_small a  (cost=0.00..4.00 rows=200 width=4) (actual time=0.010..0.160 rows=200 loops=1)
+              Buffers: shared hit=2
+        ->  Materialize  (cost=0.00..5.00 rows=200 width=4) (actual time=0.000..0.024 rows=200 loops=200)
+              Buffers: shared hit=2
+              ->  Seq Scan on probe_small b  (cost=0.00..4.00 rows=200 width=4) (actual time=0.002..0.019 rows=200 loops=1)
+                    Buffers: shared hit=2
+Settings: enable_hashjoin = 'off', enable_memoize = 'off', enable_mergejoin = 'off'

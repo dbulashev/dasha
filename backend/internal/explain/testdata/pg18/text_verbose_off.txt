@@ -1,13 +1,11 @@
 Query Text: SELECT count(*) FROM probe_t WHERE k = 42 AND payload LIKE '%abc%';
-Finalize Aggregate  (cost=6463.28..6463.29 rows=1 width=8) (actual time=30.717..33.027 rows=1.00 loops=1)
-  Buffers: shared hit=2304 read=512
-  ->  Gather  (cost=6463.07..6463.28 rows=2 width=8) (actual time=30.555..33.018 rows=2.00 loops=1)
+Aggregate  (cost=6453.16..6453.17 rows=1 width=8) (actual time=350.995..363.561 rows=1.00 loops=1)
+  Buffers: shared hit=512 read=2294
+  ->  Gather  (cost=1000.00..6453.16 rows=1 width=0) (actual time=170.971..363.545 rows=2.00 loops=1)
         Workers Planned: 1
         Workers Launched: 1
-        Buffers: shared hit=2304 read=512
-        ->  Partial Aggregate  (cost=5463.07..5463.08 rows=1 width=8) (actual time=27.254..27.255 rows=1.00 loops=2)
-              Buffers: shared hit=2304 read=512
-              ->  Parallel Seq Scan on probe_t  (cost=0.00..5463.06 rows=4 width=0) (actual time=18.478..27.246 rows=1.00 loops=2)
-                    Filter: ((payload ~~ '%abc%'::text) AND (k = 42))
-                    Rows Removed by Filter: 149999
-                    Buffers: shared hit=2304 read=512
+        Buffers: shared hit=512 read=2294
+        ->  Parallel Seq Scan on probe_t  (cost=0.00..5453.06 rows=1 width=0) (actual time=242.943..331.918 rows=1.00 loops=2)
+              Filter: ((payload ~~ '%abc%'::text) AND (k = 42))
+              Rows Removed by Filter: 149999
+              Buffers: shared hit=512 read=2294
