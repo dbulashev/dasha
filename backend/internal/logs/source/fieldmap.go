@@ -21,6 +21,9 @@ type FieldMap struct {
 	Database  string
 	User      string
 	PID       string
+	// QueryID is optional: PostgreSQL writes the statement identifier only
+	// with compute_query_id on, and a pooler log never carries it.
+	QueryID string
 	// Mask lists the free-text fields whose values pass through sanitize.SQL()
 	// before leaving the backend.
 	Mask []string
@@ -74,6 +77,7 @@ var presets = map[string]FieldMap{
 		Database:   "database_name",
 		User:       "user_name",
 		PID:        "process_id",
+		QueryID:    "query_id",
 		Mask:       []string{"message", "query", "internal_query", "detail", "hint", "context"},
 		Severities: pgSeverities,
 	},
@@ -83,6 +87,7 @@ var presets = map[string]FieldMap{
 		Database:   "dbname",
 		User:       "user",
 		PID:        "pid",
+		QueryID:    "query_id",
 		Mask:       []string{"message", "statement", "internal_query", "detail", "hint", "context"},
 		Severities: pgSeverities,
 	},
@@ -142,11 +147,12 @@ const (
 	RoleDatabase  = "database"
 	RoleUser      = "user"
 	RolePID       = "pid"
+	RoleQueryID   = "query_id"
 )
 
 // Roles returns the configured role-to-field pairs, skipping unset roles.
 func (m FieldMap) Roles() map[string]string {
-	roles := make(map[string]string, 7)
+	roles := make(map[string]string, 8)
 
 	for role, field := range map[string]string{
 		RoleTimestamp: m.Timestamp,
@@ -156,6 +162,7 @@ func (m FieldMap) Roles() map[string]string {
 		RoleDatabase:  m.Database,
 		RoleUser:      m.User,
 		RolePID:       m.PID,
+		RoleQueryID:   m.QueryID,
 	} {
 		if field != "" {
 			roles[role] = field
@@ -190,6 +197,7 @@ func FieldMapFromConfig(c config.LogFieldMapConfig) (FieldMap, error) {
 		{&fm.Database, c.Database},
 		{&fm.User, c.User},
 		{&fm.PID, c.PID},
+		{&fm.QueryID, c.QueryID},
 		{&fm.HostMatch, c.HostMatch},
 	} {
 		if o.src != "" {

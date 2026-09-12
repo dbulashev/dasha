@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"slices"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -84,6 +85,7 @@ type seedRecord struct {
 	Dbname        string `json:"dbname"`
 	User          string `json:"user"`
 	PID           string `json:"pid"`
+	QueryID       string `json:"query_id"`
 	Cluster       string `json:"cluster"`
 	Host          string `json:"host"`
 	App           string `json:"app"`
@@ -113,6 +115,7 @@ func seedRecords() []seedRecord {
 			Dbname:        dbs[i%len(dbs)],
 			User:          users[i%len(users)],
 			PID:           fmt.Sprintf("%d", 1000+i),
+			QueryID:       queryID(i),
 			Cluster:       testCluster,
 			Host:          hosts[i%len(hosts)],
 			App:           "postgres",
@@ -128,12 +131,24 @@ func seedRecords() []seedRecord {
 		Dbname:        "shop",
 		User:          "app",
 		PID:           "9999",
+		QueryID:       queryID(0),
 		Cluster:       testCluster,
 		Host:          "db-1.example.net",
 		App:           "postgres",
 	}
 
 	return append(out, dup, dup)
+}
+
+// queryID mimics the statement identifier PostgreSQL writes: a signed 64-bit
+// value, negative as often as positive.
+func queryID(i int) string {
+	id := int64(1000000 + i)
+	if i%2 == 1 {
+		id = -id
+	}
+
+	return fmt.Sprintf("%d", id)
 }
 
 func seed(ctx context.Context) error {
@@ -272,6 +287,48 @@ func signature(r source.Record) string {
 	return r.Fields["pid"] + "|" + r.Fields["_msg"]
 }
 
+// keyed is one record reduced to what a comparison may rely on: its timestamp
+// and a key identifying it.
+type keyed struct {
+	ts  time.Time
+	key string
+}
+
+// sortTies orders the keys of one timestamp among themselves: which record of a
+// timestamp comes first is the store's own choice and does not survive a
+// re-read.
+func sortTies(items []keyed) []string {
+	out := make([]string, 0, len(items))
+
+	for i := 0; i < len(items); {
+		j := i
+		for j < len(items) && items[j].ts.Equal(items[i].ts) {
+			j++
+		}
+
+		run := make([]string, 0, j-i)
+		for _, it := range items[i:j] {
+			run = append(run, it.key)
+		}
+
+		sort.Strings(run)
+		out = append(out, run...)
+
+		i = j
+	}
+
+	return out
+}
+
+func recordKeys(records []source.Record) []string {
+	items := make([]keyed, 0, len(records))
+	for _, r := range records {
+		items = append(items, keyed{ts: r.Timestamp, key: signature(r)})
+	}
+
+	return sortTies(items)
+}
+
 func counts(records []source.Record) map[string]int {
 	out := map[string]int{}
 	for _, r := range records {
@@ -345,10 +402,12 @@ func TestStreamResumesFromCursorWithoutGapOrRepeat(t *testing.T) {
 		t.Fatalf("resumed read covers %d+%d records, want %d", len(first), len(rest), len(all))
 	}
 
-	joined := append(append([]source.Record{}, first...), rest...)
-	for i, r := range joined {
-		if signature(r) != signature(all[i]) {
-			t.Fatalf("record %d differs after resume: %s vs %s", i, signature(r), signature(all[i]))
+	want := recordKeys(all)
+	got := recordKeys(append(append([]source.Record{}, first...), rest...))
+
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("record %d differs after resume: %s vs %s", i, got[i], want[i])
 		}
 	}
 }

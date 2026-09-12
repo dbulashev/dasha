@@ -331,6 +331,7 @@ type LogFieldMapConfig struct {
 	Database  string `mapstructure:"database"`
 	User      string `mapstructure:"user"`
 	PID       string `mapstructure:"pid"`
+	QueryID   string `mapstructure:"query_id"`
 	// Mask lists free-text fields sanitized before they leave the backend.
 	Mask []string `mapstructure:"mask"`
 	// KeywordFields maps a field to the field an exact-match filter must use

@@ -349,6 +349,11 @@ they must be indexed as `keyword`; when the store analyzes one of them instead â
 name its exact-match counterpart in `keyword_fields`, otherwise the filter matches nothing. The check
 endpoint below reports the type of every mapped field.
 
+`query_id` is optional. The `jsonlog` and `csvlog` presets bind it to the field of that name, which
+PostgreSQL fills when `compute_query_id` is on; `odyssey` and `pgbouncer` leave it unset. A stream
+whose records lack the field still searches, and the check endpoint lists the role among the missing
+ones.
+
 `severities` lists the levels one stream accepts, in the casing the store holds them: the search
 rejects any other value and the log page offers exactly this list in its level filter. Every preset
 brings its own â€” upper-case PostgreSQL levels for `jsonlog` and `csvlog`, lower-case for `odyssey`,

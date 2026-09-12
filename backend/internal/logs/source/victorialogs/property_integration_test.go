@@ -53,8 +53,7 @@ func newReplayProvider(t *testing.T, fields source.FieldMap) *replayProvider {
 		})
 	}
 
-	// The store-backed provider reads from new to old; the reference does too,
-	// so the two pages line up record for record.
+	// The store-backed provider reads from new to old; the reference does too.
 	slices.SortStableFunc(records, func(a, b source.Record) int {
 		return b.Timestamp.Compare(a.Timestamp)
 	})
@@ -239,13 +238,13 @@ func withQuery(q logs.SearchQuery, mutate func(*logs.SearchQuery)) logs.SearchQu
 }
 
 func entryKeys(entries []logs.Entry) []string {
-	out := make([]string, 0, len(entries))
+	items := make([]keyed, 0, len(entries))
 	for _, e := range entries {
-		out = append(out, fmt.Sprintf("%s|%s|%s|%s|%s|%s",
-			e.Timestamp.UTC().Format(time.RFC3339Nano), e.Severity, e.Hostname, e.Text, e.Database, e.User))
+		items = append(items, keyed{ts: e.Timestamp, key: fmt.Sprintf("%s|%s|%s|%s|%s|%s",
+			e.Timestamp.UTC().Format(time.RFC3339Nano), e.Severity, e.Hostname, e.Text, e.Database, e.User)})
 	}
 
-	return out
+	return sortTies(items)
 }
 
 func dedupKeys(entries []logs.Entry) []string {
