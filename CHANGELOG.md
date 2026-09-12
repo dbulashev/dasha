@@ -5,6 +5,9 @@
 ### Features
 - **Log search in OpenSearch and Elasticsearch**
 
+### UX
+- **Health Score is open to the viewer role**, not to admins only.
+
 ## v1.7.3
 
 ### Bug Fixes
