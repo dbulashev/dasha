@@ -264,6 +264,17 @@ func TestLogSearchValidate(t *testing.T) {
 			wantErr: "stream_selector",
 		},
 		{
+			name: "victorialogs stream whose only filter is blank",
+			cfg: LogSearchConfig{
+				Sources: map[string]LogSourceConfig{
+					"vlogs": vlogsSource(func(s *LogSourceConfig) {
+						s.Streams = map[string]LogStreamConfig{"postgresql": {Query: "   "}}
+					}),
+				},
+			},
+			wantErr: "stream_selector",
+		},
+		{
 			name: "opensearch stream with a logsql query",
 			cfg: LogSearchConfig{
 				Sources: map[string]LogSourceConfig{
@@ -365,6 +376,18 @@ func TestLogSearchWithDefaults(t *testing.T) {
 
 	if src.RateLimit == cfg.RateLimit || src.AdminRateLimit == cfg.AdminRateLimit {
 		t.Error("source shares the global rate limit values")
+	}
+
+	stream := LogSearchConfig{
+		Sources: map[string]LogSourceConfig{
+			"vlogs": {
+				Type:    LogSourceTypeVictoriaLogs,
+				Streams: map[string]LogStreamConfig{"postgresql": {Query: "  _msg:error  "}},
+			},
+		},
+	}.WithDefaults().Sources["vlogs"].Streams["postgresql"]
+	if stream.Query != "_msg:error" {
+		t.Errorf("stream query = %q, want it trimmed", stream.Query)
 	}
 }
 

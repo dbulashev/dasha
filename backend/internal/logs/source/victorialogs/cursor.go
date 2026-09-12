@@ -49,16 +49,24 @@ func decodeCursor(token string) (cursor, error) {
 	return c, nil
 }
 
+// resumeAt is the upper bound of a resumed read. A token carried over from a
+// wider range must not lift the bound the caller asked for.
+func resumeAt(c cursor, to time.Time) time.Time {
+	if c.TS.IsZero() || c.TS.After(to) {
+		return to
+	}
+
+	return c.TS
+}
+
 // hashRecord identifies a record by its content: every field in canonical
-// order, truncated to the first 8 bytes of the digest.
+// order, truncated to the first 8 bytes of the digest. Keys and values are
+// length-prefixed, so a separator byte inside either cannot shift a boundary.
 func hashRecord(fields map[string]string) string {
 	h := sha256.New()
 
 	for _, k := range sortedKeys(fields) {
-		_, _ = h.Write([]byte(k))
-		_, _ = h.Write([]byte{0})
-		_, _ = h.Write([]byte(fields[k]))
-		_, _ = h.Write([]byte{0})
+		_, _ = fmt.Fprintf(h, "%d:%s%d:%s", len(k), k, len(fields[k]), fields[k])
 	}
 
 	return base64.RawURLEncoding.EncodeToString(h.Sum(nil)[:8])

@@ -193,6 +193,26 @@ func TestReadRecords(t *testing.T) {
 	}
 }
 
+// TestReadRecordsStopsAtTheLimit: the limit bounds the answer a source may
+// hold in memory, not only the request.
+func TestReadRecordsStopsAtTheLimit(t *testing.T) {
+	t.Parallel()
+
+	body := `{"_time":"2026-09-12T10:00:00Z","_msg":"a"}
+{"_time":"2026-09-12T10:00:01Z","_msg":"b"}
+{"_time":"2026-09-12T10:00:02Z","_msg":"c"}
+`
+
+	got, err := readRecords(strings.NewReader(body), 2)
+	if err != nil {
+		t.Fatalf("readRecords: %v", err)
+	}
+
+	if len(got) != 2 || got[1]["_msg"] != "b" {
+		t.Fatalf("readRecords() = %v, want the first two records", got)
+	}
+}
+
 // TestReadRecordsOnATruncatedStream: the answer is streamed, so a failure
 // upstream arrives as a cut-off body and must not read as the end of the data.
 func TestReadRecordsOnATruncatedStream(t *testing.T) {

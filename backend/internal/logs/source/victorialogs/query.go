@@ -188,6 +188,10 @@ func readRecords(r io.Reader, limit int) ([]map[string]string, error) {
 		}
 
 		out = append(out, rec)
+
+		if limit > 0 && len(out) == limit {
+			return out, nil
+		}
 	}
 }
 

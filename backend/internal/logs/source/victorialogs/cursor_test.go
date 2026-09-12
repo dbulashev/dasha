@@ -78,6 +78,85 @@ func TestHashRecordIgnoresFieldOrderAndSeparatesContent(t *testing.T) {
 	}
 }
 
+// TestHashRecordSeparatesContentHoldingTheSeparator: a log line may carry any
+// byte, so field boundaries cannot rest on one.
+func TestHashRecordSeparatesContentHoldingTheSeparator(t *testing.T) {
+	t.Parallel()
+
+	pairs := [][2]map[string]string{
+		{
+			{"a": "x", "b": "y"},
+			{"a": "x\x00b\x00y"},
+		},
+		{
+			{"_msg": "a:2:bc"},
+			{"_msg": "a", "2": "bc"},
+		},
+	}
+
+	for _, p := range pairs {
+		if hashRecord(p[0]) == hashRecord(p[1]) {
+			t.Errorf("%v and %v share a hash", p[0], p[1])
+		}
+	}
+}
+
+// TestEmitDistinguishesRecordsWhoseFieldsRunTogether: a colliding hash at the
+// boundary timestamp drops a record from the next page.
+func TestEmitDistinguishesRecordsWhoseFieldsRunTogether(t *testing.T) {
+	t.Parallel()
+
+	ts := cursorTS.Format(time.RFC3339Nano)
+	first := map[string]string{"_time": ts, "a": "x", "b": "y"}
+	second := map[string]string{"_time": ts, "a": "x\x00b\x00y"}
+
+	b := newBoundary(cursor{}) //nolint:exhaustruct
+
+	delivered, _, err := emitAll(t, []map[string]string{first}, &b, 100)
+	if err != nil {
+		t.Fatalf("emit: %v", err)
+	}
+
+	resume, err := decodeCursor(delivered[0].Token)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	rb := newBoundary(resume)
+
+	got, _, err := emitAll(t, []map[string]string{first, second}, &rb, 100)
+	if err != nil {
+		t.Fatalf("emit: %v", err)
+	}
+
+	if len(got) != 1 || got[0].Fields["a"] != second["a"] {
+		t.Fatalf("resumed read delivered %d records, want only the second", len(got))
+	}
+}
+
+func TestResumeAtStaysWithinTheRequestedRange(t *testing.T) {
+	t.Parallel()
+
+	to := cursorTS
+
+	cases := []struct {
+		name string
+		c    cursor
+		want time.Time
+	}{
+		{"no token", cursor{TS: time.Time{}, Hashes: nil}, to},
+		{"inside the range", cursor{TS: to.Add(-time.Minute), Hashes: nil}, to.Add(-time.Minute)},
+		{"at the bound", cursor{TS: to, Hashes: nil}, to},
+		{"from a range that reached further", cursor{TS: to.Add(time.Hour), Hashes: nil}, to},
+	}
+
+	for _, tc := range cases {
+		if got := resumeAt(tc.c, to); !got.Equal(tc.want) {
+			t.Errorf("%s: resumeAt = %s, want %s", tc.name, got, tc.want)
+		}
+	}
+}
+
 func record(ts time.Time, msg string) map[string]string {
 	return map[string]string{"_time": ts.Format(time.RFC3339Nano), "_msg": msg, "host": "db-1"}
 }

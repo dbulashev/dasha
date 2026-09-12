@@ -425,6 +425,16 @@ func (s LogSourceConfig) withDefaults(parent LogSearchConfig) LogSourceConfig {
 		s.Auth.Kind = LogAuthNone
 	}
 
+	if len(s.Streams) > 0 {
+		streams := make(map[string]LogStreamConfig, len(s.Streams))
+		for name, sc := range s.Streams {
+			sc.Query = strings.TrimSpace(sc.Query)
+			streams[name] = sc
+		}
+
+		s.Streams = streams
+	}
+
 	return s
 }
 
@@ -538,7 +548,7 @@ func validateVictoriaLogsSource(name string, src LogSourceConfig) error {
 
 		// A stream without a filter serves the logs of the whole fleet under
 		// the name of one cluster.
-		if sc.Query == "" && len(sc.Selector) == 0 && len(sc.StreamSelector) == 0 {
+		if strings.TrimSpace(sc.Query) == "" && len(sc.Selector) == 0 && len(sc.StreamSelector) == 0 {
 			return fmt.Errorf("sources.%s.streams.%s: one of query, selector or stream_selector must be set",
 				name, stream)
 		}

@@ -353,6 +353,30 @@ func TestStreamResumesFromCursorWithoutGapOrRepeat(t *testing.T) {
 	}
 }
 
+// TestStreamKeepsTheRequestedUpperBoundOnAReusedToken: a token reaching back
+// from a wider range must not lift the bound of the next read.
+func TestStreamKeepsTheRequestedUpperBoundOnAReusedToken(t *testing.T) {
+	p := testProvider(nil)
+	ctx := context.Background()
+
+	all := collect(ctx, t, p, testParams(source.Filter{}), 0)
+
+	params := testParams(source.Filter{})
+	params.To = all[len(all)/2].Timestamp
+	params.Token = all[0].Token
+
+	got := collect(ctx, t, p, params, 0)
+	if len(got) == 0 {
+		t.Fatal("the narrowed read came back empty")
+	}
+
+	for _, r := range got {
+		if r.Timestamp.After(params.To) {
+			t.Fatalf("record at %s lies past the requested bound %s", r.Timestamp, params.To)
+		}
+	}
+}
+
 // TestPushdownOnlyNarrows is the guarantee the design rests on: what the store
 // filters out is exactly what a full scan would have dropped anyway.
 func TestPushdownOnlyNarrows(t *testing.T) {
@@ -454,6 +478,27 @@ func TestCheckReportsAMisspelledField(t *testing.T) {
 
 	if !slices.Contains(res.Missing, source.RoleHost) {
 		t.Errorf("missing roles = %v, want the host among them", res.Missing)
+	}
+}
+
+// TestCheckOnAnEmptyWindowSaysNothingAboutTheFields: field_names answers for
+// the matching records only, so an idle window must not read as a broken map.
+func TestCheckOnAnEmptyWindowSaysNothingAboutTheFields(t *testing.T) {
+	p := testProvider(func(_ *config.LogStreamConfig, cfg *config.LogSourceConfig) {
+		cfg.Tenant = config.LogSourceTenantConfig{AccountID: 12, ProjectID: 34}
+	})
+
+	res, err := p.Check(context.Background(), config.Cluster{Name: testCluster}, source.StreamPostgreSQL)
+	if err != nil {
+		t.Fatalf("check: %v", err)
+	}
+
+	if res.Documents != 0 || res.Sample != nil {
+		t.Fatalf("documents = %d, sample = %v, want an empty window", res.Documents, res.Sample)
+	}
+
+	if len(res.Missing) != 0 || len(res.Found) != 0 {
+		t.Errorf("missing = %v, found = %v, want neither", res.Missing, res.Found)
 	}
 }
 

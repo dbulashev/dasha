@@ -127,10 +127,7 @@ func (p *Provider) Stream(ctx context.Context, sp source.StreamParams, fn func(s
 		return err
 	}
 
-	to := sp.To
-	if !start.TS.IsZero() {
-		to = start.TS
-	}
+	to := resumeAt(start, sp.To)
 
 	b := newBoundary(start)
 	skipped := 0
@@ -294,6 +291,24 @@ func (p *Provider) Check(ctx context.Context, cluster config.Cluster, stream str
 		Sample: nil,
 	}
 
+	res.Documents, err = p.hits(ctx, expr)
+	if err != nil {
+		return source.CheckResult{}, err
+	}
+
+	sample, err := p.query(ctx, expr, 1)
+	if err != nil {
+		return source.CheckResult{}, err
+	}
+
+	// field_names answers for the matching records only: an empty window says
+	// nothing about the mapping.
+	if len(sample) == 0 {
+		return res, nil
+	}
+
+	res.Sample = sample[0]
+
 	names, err := p.fieldNames(ctx, expr)
 	if err != nil {
 		return source.CheckResult{}, err
@@ -310,20 +325,6 @@ func (p *Provider) Check(ctx context.Context, cluster config.Cluster, stream str
 	}
 
 	slices.Sort(res.Missing)
-
-	res.Documents, err = p.hits(ctx, expr)
-	if err != nil {
-		return source.CheckResult{}, err
-	}
-
-	sample, err := p.query(ctx, expr, 1)
-	if err != nil {
-		return source.CheckResult{}, err
-	}
-
-	if len(sample) > 0 {
-		res.Sample = sample[0]
-	}
 
 	return res, nil
 }

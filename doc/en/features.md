@@ -88,7 +88,7 @@
 - Optional deduplication groups near-identical messages by masked template (`<*>` placeholders) with count and first/last seen
 - Frequency histogram (time × severity) with click/drag zoom, one-click presets (deadlocks, autovacuum, checkpoints, …), shareable URL filters, Grafana time-range clipboard interop
 - Per-user rate limiting, configurable per source so a metered cloud API and a local index do not share one budget (`log_search.rate_limit`, separate admin limit)
-- `GET /api/logs/check` (admin) reports the resolved index, the mapped fields found and missing, and one masked sample record
+- `GET /api/logs/check` (admin) reports the resolved index name or LogsQL expression, the mapped fields found and missing, and one masked sample record
 
 ## Authentication & Authorization
 - Three modes: `none` (open), `token` (static API keys), `oidc` (OpenID Connect)
