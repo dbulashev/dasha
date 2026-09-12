@@ -298,7 +298,7 @@ resolve to nothing.
 
 ### VictoriaLogs sources
 
-A stream is addressed by a LogsQL expression rather than by an index. The delivery agent must split
+A stream is addressed by a LogsQL expression. The delivery agent must split
 the record into fields; a whole log line in `_msg` is not supported.
 
 ```yaml
@@ -317,7 +317,7 @@ log_search:
       max_boundary_ids: 1000    # records of one timestamp the cursor remembers
       streams:
         postgresql:
-          stream_selector:      # -> {cluster="prod"}; the cheapest filter VictoriaLogs has
+          stream_selector:      # -> {cluster="prod"}
             cluster: "{{ .Cluster }}"
           selector:             # -> "app":="postgres"
             app: postgres
@@ -337,19 +337,6 @@ One of `query`, `selector` or `stream_selector` must be set: a source without a 
 logs of the whole fleet under the name of one cluster. `index` is rejected in a VictoriaLogs stream,
 and so are `query` and `stream_selector` in an OpenSearch one. Both are checked at startup.
 
-The time comes from `_time`, and so does pagination. Reading runs from new to old, so a search that
-reaches `max_scan` shows the most recent records of the window rather than the oldest.
-
-VictoriaLogs has no authentication of its own: `auth` targets vmauth or a reverse proxy in front of
-it. As with OpenSearch, any credentials require every address to start with `https://`. The tenant
-travels in the `AccountID` and `ProjectID` headers.
-
-VictoriaLogs keeps no field types — every field is a string: `keyword_fields` does not apply, and the
-source check returns an empty type list. A misspelled field name yields an empty result rather than
-an error, and only the source check shows it.
-
-`max_boundary_ids` defaults to 1000 instead of 10000: a VictoriaLogs record carries no id, so the
-cursor holds the hashes of the records at the timestamp reading stopped on.
 
 ### Common to external sources
 
