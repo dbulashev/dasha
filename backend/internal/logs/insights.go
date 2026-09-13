@@ -98,10 +98,23 @@ func (s *service) Insights(ctx context.Context, q InsightsQuery) (InsightsResult
 		Token:   "",
 	}
 
+	fm := b.fields
+	classify := func(rec source.Record) string {
+		return insights.Classify(insights.Record{
+			Stream:   q.Stream,
+			Severity: rec.Fields[fm.Severity],
+			SQLState: rec.Fields[fm.SQLState],
+			Text:     rec.Fields[fm.Text],
+		})
+	}
+
 	limits := scanLimits{
 		MaxRecords:     s.insights.MaxRecords,
 		MaxBytes:       s.insights.MaxBytes,
 		MaxRecordBytes: int64(s.insights.MaxPlanBytes),
+		CapRecord: func(rec source.Record) bool {
+			return classify(rec) == insights.CategoryPlan
+		},
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(s.cfg.TimeoutSeconds)*time.Second)
@@ -109,7 +122,6 @@ func (s *service) Insights(ctx context.Context, q InsightsQuery) (InsightsResult
 
 	var covered, plansCovered Span
 
-	fm := b.fields
 	categories := insights.NewCategoryCounts()
 	plans := insights.NewPlans(insights.PlanLimits{
 		MaxPlanBytes: s.insights.MaxPlanBytes,
@@ -118,13 +130,7 @@ func (s *service) Insights(ctx context.Context, q InsightsQuery) (InsightsResult
 
 	st, err := s.scan(ctx, b.provider, params, limits, func(rec source.Record) bool {
 		text := rec.Fields[fm.Text]
-
-		code := insights.Classify(insights.Record{
-			Stream:   q.Stream,
-			Severity: rec.Fields[fm.Severity],
-			SQLState: rec.Fields[fm.SQLState],
-			Text:     text,
-		})
+		code := classify(rec)
 
 		categories.Add(code, text, rec.Timestamp)
 
@@ -177,20 +183,22 @@ func (s *service) Insights(ctx context.Context, q InsightsQuery) (InsightsResult
 		PlansCovered:   plansCovered,
 		Categories:     categories.Summary(insightsTopTemplates),
 		Plans:          summary,
-		EmptyReason:    emptyReason(st, summary),
+		EmptyReason:    emptyReason(st, err != nil, summary),
 	}, nil
 }
 
-func emptyReason(st scanStats, p insights.PlansSummary) string {
+func emptyReason(st scanStats, interrupted bool, p insights.PlansSummary) string {
 	switch {
 	case p.TotalGroups > 0:
 		return ""
-	case st.Records == 0 && st.Partial:
+	case st.Records == 0 && interrupted:
 		return EmptySourceUnavailable
 	case st.Records == 0:
 		return EmptyNoRecords
 	case p.Records == 0 && st.Capped:
 		return EmptyBudgetExhausted
+	case p.Records == 0 && interrupted:
+		return EmptySourceUnavailable
 	case p.Records == 0:
 		return EmptyNoPlanRecords
 	case onlyUnsupported(p.NotParsed):

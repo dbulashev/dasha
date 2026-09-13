@@ -37,12 +37,16 @@ func ParseTime(v any) (time.Time, error) {
 	case float64:
 		return time.UnixMilli(int64(t)).UTC(), nil
 	case json.Number:
-		ms, err := t.Int64()
+		if ms, err := t.Int64(); err == nil {
+			return time.UnixMilli(ms).UTC(), nil
+		}
+
+		ms, err := t.Float64()
 		if err != nil {
 			return time.Time{}, fmt.Errorf("%w: timestamp %q is not a number", ErrConfig, t.String())
 		}
 
-		return time.UnixMilli(ms).UTC(), nil
+		return time.UnixMilli(int64(ms)).UTC(), nil
 	default:
 		return time.Time{}, fmt.Errorf("%w: record has no usable timestamp", ErrConfig)
 	}

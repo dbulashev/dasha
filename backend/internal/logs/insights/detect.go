@@ -5,6 +5,7 @@
 package insights
 
 import (
+	"math"
 	"strconv"
 	"strings"
 )
@@ -89,7 +90,7 @@ func splitDuration(text string) (float64, string, bool) {
 	}
 
 	ms, err := strconv.ParseFloat(num, 64)
-	if err != nil || ms < 0 {
+	if err != nil || math.IsNaN(ms) || math.IsInf(ms, 0) || ms < 0 {
 		return 0, "", false
 	}
 
