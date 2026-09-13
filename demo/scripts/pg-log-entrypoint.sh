@@ -21,4 +21,5 @@ exec docker-entrypoint.sh "$@" \
   -c log_connections=on \
   -c log_disconnections=on \
   -c log_lock_waits=on \
+  -c log_temp_files=0 \
   -c log_autovacuum_min_duration=0

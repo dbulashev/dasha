@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -82,6 +83,27 @@ func TestScanStopsAtTheByteBudget(t *testing.T) {
 
 	if st.Bytes < budget {
 		t.Errorf("bytes = %d, want at least the budget %d", st.Bytes, budget)
+	}
+}
+
+func TestScanChargesAHugeRecordOnlyUpToTheRecordCap(t *testing.T) {
+	t.Parallel()
+
+	recs := records(5)
+	recs[0].Fields["message"] = strings.Repeat("x", 1<<20)
+
+	p := &fakeProvider{fields: testFieldMap(t), records: recs}
+	svc := newScanService(t, p)
+
+	st, err := svc.scan(context.Background(), p, scanParams(),
+		scanLimits{MaxRecords: 0, MaxBytes: 1 << 16, MaxRecordBytes: 1 << 10},
+		func(source.Record) bool { return true })
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+
+	if st.Records != 5 || st.Capped {
+		t.Errorf("records = %d, capped = %v; want the whole window read", st.Records, st.Capped)
 	}
 }
 

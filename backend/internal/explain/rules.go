@@ -150,9 +150,10 @@ func scannedRows(n *Node) float64 {
 	return n.Actual.TotalRows() + rowsRemoved(n)*n.Actual.Loops
 }
 
+// evalCostHotspot works on estimates only; a plan with actual numbers skips it.
 func evalCostHotspot(p *Plan, _ Context) []Finding {
 	total := p.Root.TotalCost
-	if total <= 0 {
+	if total <= 0 || p.Caps.Actual {
 		return nil
 	}
 

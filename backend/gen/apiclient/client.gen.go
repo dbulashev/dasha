@@ -50,9 +50,9 @@ const (
 
 // Defines values for HealthScoreRecommendationSeverity.
 const (
-	HIGH   HealthScoreRecommendationSeverity = "HIGH"
-	LOW    HealthScoreRecommendationSeverity = "LOW"
-	MEDIUM HealthScoreRecommendationSeverity = "MEDIUM"
+	HealthScoreRecommendationSeverityHIGH   HealthScoreRecommendationSeverity = "HIGH"
+	HealthScoreRecommendationSeverityLOW    HealthScoreRecommendationSeverity = "LOW"
+	HealthScoreRecommendationSeverityMEDIUM HealthScoreRecommendationSeverity = "MEDIUM"
 )
 
 // Defines values for HealthScoreWeightsSource.
@@ -99,6 +99,42 @@ const (
 	IndexVerdictVerdictUsed             IndexVerdictVerdict = "used"
 )
 
+// Defines values for LogCategoryCode.
+const (
+	LogCategoryCodeAuthentication  LogCategoryCode = "authentication"
+	LogCategoryCodeAutovacuum      LogCategoryCode = "autovacuum"
+	LogCategoryCodeCanceled        LogCategoryCode = "canceled"
+	LogCategoryCodeCheckpoint      LogCategoryCode = "checkpoint"
+	LogCategoryCodeConnection      LogCategoryCode = "connection"
+	LogCategoryCodeConnectionLimit LogCategoryCode = "connection_limit"
+	LogCategoryCodeDeadlock        LogCategoryCode = "deadlock"
+	LogCategoryCodeError           LogCategoryCode = "error"
+	LogCategoryCodeLockWait        LogCategoryCode = "lock_wait"
+	LogCategoryCodeOther           LogCategoryCode = "other"
+	LogCategoryCodePlan            LogCategoryCode = "plan"
+	LogCategoryCodeSlowQuery       LogCategoryCode = "slow_query"
+	LogCategoryCodeTempFile        LogCategoryCode = "temp_file"
+)
+
+// Defines values for LogInsightsPartialReason.
+const (
+	Bytes   LogInsightsPartialReason = "bytes"
+	Plans   LogInsightsPartialReason = "plans"
+	Records LogInsightsPartialReason = "records"
+	Source  LogInsightsPartialReason = "source"
+	Timeout LogInsightsPartialReason = "timeout"
+)
+
+// Defines values for LogPlansSummaryEmptyReason.
+const (
+	LogPlansSummaryEmptyReasonBudgetExhausted       LogPlansSummaryEmptyReason = "budget_exhausted"
+	LogPlansSummaryEmptyReasonNoPlanRecords         LogPlansSummaryEmptyReason = "no_plan_records"
+	LogPlansSummaryEmptyReasonNoRecords             LogPlansSummaryEmptyReason = "no_records"
+	LogPlansSummaryEmptyReasonNotParsed             LogPlansSummaryEmptyReason = "not_parsed"
+	LogPlansSummaryEmptyReasonSourceUnavailable     LogPlansSummaryEmptyReason = "source_unavailable"
+	LogPlansSummaryEmptyReasonUnsupportedPlanFormat LogPlansSummaryEmptyReason = "unsupported_plan_format"
+)
+
 // Defines values for PersonalAccessTokenRole.
 const (
 	PersonalAccessTokenRoleAdmin  PersonalAccessTokenRole = "admin"
@@ -115,6 +151,55 @@ const (
 const (
 	PersonalAccessTokenCreatedRoleAdmin  PersonalAccessTokenCreatedRole = "admin"
 	PersonalAccessTokenCreatedRoleViewer PersonalAccessTokenCreatedRole = "viewer"
+)
+
+// Defines values for PlanFindingCode.
+const (
+	BitmapLossy        PlanFindingCode = "bitmap_lossy"
+	CostHotspot        PlanFindingCode = "cost_hotspot"
+	CteMaterialize     PlanFindingCode = "cte_materialize"
+	FilterDiscardsRows PlanFindingCode = "filter_discards_rows"
+	HeapFetchesHigh    PlanFindingCode = "heap_fetches_high"
+	IndexCandidateJoin PlanFindingCode = "index_candidate_join"
+	JitOverhead        PlanFindingCode = "jit_overhead"
+	LoopsBlowup        PlanFindingCode = "loops_blowup"
+	NestedLoopBlowup   PlanFindingCode = "nested_loop_blowup"
+	RowMisestimate     PlanFindingCode = "row_misestimate"
+	SeqScanLarge       PlanFindingCode = "seq_scan_large"
+	SortEstimateSpill  PlanFindingCode = "sort_estimate_spill"
+	SortSpillActual    PlanFindingCode = "sort_spill_actual"
+	TriggerTime        PlanFindingCode = "trigger_time"
+	WorkersNotLaunched PlanFindingCode = "workers_not_launched"
+)
+
+// Defines values for PlanFindingSeverity.
+const (
+	PlanFindingSeverityHIGH   PlanFindingSeverity = "HIGH"
+	PlanFindingSeverityLOW    PlanFindingSeverity = "LOW"
+	PlanFindingSeverityMEDIUM PlanFindingSeverity = "MEDIUM"
+)
+
+// Defines values for PlanMissingRequirement.
+const (
+	Actual  PlanMissingRequirement = "actual"
+	Buffers PlanMissingRequirement = "buffers"
+	Timing  PlanMissingRequirement = "timing"
+	WorkMem PlanMissingRequirement = "work_mem"
+)
+
+// Defines values for PlanNotParsedCode.
+const (
+	PlanNotParsedCodeEmptyPlan             PlanNotParsedCode = "empty_plan"
+	PlanNotParsedCodeParseError            PlanNotParsedCode = "parse_error"
+	PlanNotParsedCodePlanBudgetExhausted   PlanNotParsedCode = "plan_budget_exhausted"
+	PlanNotParsedCodePlanTooLarge          PlanNotParsedCode = "plan_too_large"
+	PlanNotParsedCodeUnsupportedPlanFormat PlanNotParsedCode = "unsupported_plan_format"
+)
+
+// Defines values for PlanSummaryFormat.
+const (
+	Json PlanSummaryFormat = "json"
+	Text PlanSummaryFormat = "text"
 )
 
 // Defines values for RoleChangeTriggerDirection.
@@ -209,6 +294,12 @@ const (
 	GetLogsCheckParamsServiceTypePostgresql GetLogsCheckParamsServiceType = "postgresql"
 )
 
+// Defines values for GetLogsInsightsParamsServiceType.
+const (
+	Pooler     GetLogsInsightsParamsServiceType = "pooler"
+	Postgresql GetLogsInsightsParamsServiceType = "postgresql"
+)
+
 // Defines values for GetQueriesRunningParamsQueryFilterMode.
 const (
 	Like    GetQueriesRunningParamsQueryFilterMode = "like"
@@ -217,9 +308,9 @@ const (
 
 // Defines values for GetSchemaLintParamsLevel.
 const (
-	Error   GetSchemaLintParamsLevel = "error"
-	Notice  GetSchemaLintParamsLevel = "notice"
-	Warning GetSchemaLintParamsLevel = "warning"
+	GetSchemaLintParamsLevelError   GetSchemaLintParamsLevel = "error"
+	GetSchemaLintParamsLevelNotice  GetSchemaLintParamsLevel = "notice"
+	GetSchemaLintParamsLevelWarning GetSchemaLintParamsLevel = "warning"
 )
 
 // ActivitySpikeTrigger defines model for ActivitySpikeTrigger.
@@ -1247,6 +1338,32 @@ type LockSnapshot struct {
 	Rows          *[]QueryBlocked `json:"rows,omitempty"`
 }
 
+// LogCategory defines model for LogCategory.
+type LogCategory struct {
+	// Code Matched by SQLSTATE where the stream carries it, then by the record itself (an auto_explain plan, a statement duration), then by the English message text. other is whatever matched nothing.
+	Code      LogCategoryCode `json:"code"`
+	Count     int             `json:"count"`
+	FirstSeen time.Time       `json:"first_seen"`
+	LastSeen  time.Time       `json:"last_seen"`
+
+	// Share fraction of the records read, 0..1
+	Share float64 `json:"share"`
+
+	// Templates most frequent message templates, variable parts replaced with <*>; empty for plan
+	Templates []LogCategoryTemplate `json:"templates"`
+}
+
+// LogCategoryCode Matched by SQLSTATE where the stream carries it, then by the record itself (an auto_explain plan, a statement duration), then by the English message text. other is whatever matched nothing.
+type LogCategoryCode string
+
+// LogCategoryTemplate defines model for LogCategoryTemplate.
+type LogCategoryTemplate struct {
+	Count     int       `json:"count"`
+	FirstSeen time.Time `json:"first_seen"`
+	LastSeen  time.Time `json:"last_seen"`
+	Template  string    `json:"template"`
+}
+
 // LogEntry defines model for LogEntry.
 type LogEntry struct {
 	// Count dedup only - number of matched records in the group
@@ -1269,6 +1386,82 @@ type LogEntry struct {
 	Timestamp time.Time `json:"timestamp"`
 	User      *string   `json:"user,omitempty"`
 }
+
+// LogInsights defines model for LogInsights.
+type LogInsights struct {
+	// Categories event categories seen in the window, most frequent first
+	Categories []LogCategory `json:"categories"`
+
+	// CoveredFrom earliest record read; absent when nothing was read. A scan cut by its budget keeps the newest records on VictoriaLogs and the oldest on OpenSearch.
+	CoveredFrom *time.Time `json:"covered_from,omitempty"`
+
+	// CoveredTo latest record read; absent when nothing was read
+	CoveredTo *time.Time `json:"covered_to,omitempty"`
+
+	// Partial the summary covers less than the whole window
+	Partial        bool                       `json:"partial"`
+	PartialReasons []LogInsightsPartialReason `json:"partial_reasons"`
+	Plans          LogPlansSummary            `json:"plans"`
+
+	// Scanned records read from the window
+	Scanned int `json:"scanned"`
+}
+
+// LogInsightsPartialReason records and bytes - the scan budget of log_insights ran out; timeout - the source did not answer in time; source - the source stopped before the end of the window; plans - max_plans plan records were parsed and the rest were only counted.
+type LogInsightsPartialReason string
+
+// LogPlanGroup Plans of one statement with one shape. Nested statements share the query_id of the statement that ran them, so the normalized query text is part of the grouping.
+type LogPlanGroup struct {
+	Count int `json:"count"`
+
+	// Durations exact over the plans of the group; percentiles by nearest rank
+	Durations PlanDurationStats `json:"durations"`
+	FirstSeen time.Time         `json:"first_seen"`
+
+	// Hash plan shape fingerprint
+	Hash     string    `json:"hash"`
+	LastSeen time.Time `json:"last_seen"`
+
+	// Plan One parsed plan with the rules evaluated on it.
+	Plan PlanSummary `json:"plan"`
+
+	// QueryId query_id of the log record as string to preserve int64 precision in JavaScript; absent when the record has none
+	QueryId *string `json:"query_id,omitempty"`
+}
+
+// LogPlansSummary defines model for LogPlansSummary.
+type LogPlansSummary struct {
+	// CoveredFrom earliest record read while the plan budget lasted; equals the scan span unless max_plans ran out
+	CoveredFrom *time.Time `json:"covered_from,omitempty"`
+
+	// CoveredTo latest record read while the plan budget lasted
+	CoveredTo *time.Time `json:"covered_to,omitempty"`
+
+	// Dormant rules that could not run on some groups, and what those plans lacked
+	Dormant []PlanDormantRule `json:"dormant"`
+
+	// EmptyReason set when groups is empty
+	EmptyReason *LogPlansSummaryEmptyReason `json:"empty_reason,omitempty"`
+	FirstSeen   *time.Time                  `json:"first_seen,omitempty"`
+
+	// Groups the groups among the top by total time or among the top by slowest run, ordered by total time
+	Groups        []LogPlanGroup  `json:"groups"`
+	LastSeen      *time.Time      `json:"last_seen,omitempty"`
+	MaxDurationMs float64         `json:"max_duration_ms"`
+	NotParsed     []PlanNotParsed `json:"not_parsed"`
+	Parsed        int             `json:"parsed"`
+
+	// Records auto_explain records found, parsed or not
+	Records         int     `json:"records"`
+	TotalDurationMs float64 `json:"total_duration_ms"`
+	TotalGroups     int     `json:"total_groups"`
+
+	// WithoutQueryId parsed plans whose record carries no query_id
+	WithoutQueryId int `json:"without_query_id"`
+}
+
+// LogPlansSummaryEmptyReason set when groups is empty
+type LogPlansSummaryEmptyReason string
 
 // LogSearchResult defines model for LogSearchResult.
 type LogSearchResult struct {
@@ -1415,6 +1608,196 @@ type PgSetting struct {
 	Setting string `json:"Setting"`
 	Source  string `json:"Source"`
 	Unit    string `json:"Unit"`
+}
+
+// PlanBuffers defines model for PlanBuffers.
+type PlanBuffers struct {
+	LocalDirtied  float64 `json:"local_dirtied"`
+	LocalHit      float64 `json:"local_hit"`
+	LocalRead     float64 `json:"local_read"`
+	LocalWritten  float64 `json:"local_written"`
+	SharedDirtied float64 `json:"shared_dirtied"`
+	SharedHit     float64 `json:"shared_hit"`
+	SharedRead    float64 `json:"shared_read"`
+	SharedWritten float64 `json:"shared_written"`
+	TempRead      float64 `json:"temp_read"`
+	TempWritten   float64 `json:"temp_written"`
+}
+
+// PlanCapabilities what the plan itself proved it carries
+type PlanCapabilities struct {
+	Actual   bool `json:"actual"`
+	Buffers  bool `json:"buffers"`
+	Settings bool `json:"settings"`
+	Timing   bool `json:"timing"`
+}
+
+// PlanDormantRule defines model for PlanDormantRule.
+type PlanDormantRule struct {
+	Code string `json:"code"`
+
+	// Groups in a summary, how many plan groups the rule could not run on
+	Groups *int `json:"groups,omitempty"`
+
+	// Missing what the plan lacked for the rule to run
+	Missing []PlanMissingRequirement `json:"missing"`
+}
+
+// PlanDurationStats exact over the plans of the group; percentiles by nearest rank
+type PlanDurationStats struct {
+	MaxMs float64 `json:"max_ms"`
+	MinMs float64 `json:"min_ms"`
+	P50Ms float64 `json:"p50_ms"`
+	P95Ms float64 `json:"p95_ms"`
+	SumMs float64 `json:"sum_ms"`
+}
+
+// PlanFinding defines model for PlanFinding.
+type PlanFinding struct {
+	// Code Stable rule code. The wording is rendered from it and from params; the API carries no prose.
+	Code     PlanFindingCode `json:"code"`
+	NodeType string          `json:"node_type"`
+
+	// Params The values the wording quotes. Which keys are set depends on code; a client reads only the ones its phrasing needs.
+	Params *map[string]interface{} `json:"params,omitempty"`
+
+	// Path child indexes from the root to the node
+	Path     []int               `json:"path"`
+	Relation *string             `json:"relation,omitempty"`
+	Severity PlanFindingSeverity `json:"severity"`
+}
+
+// PlanFindingCode Stable rule code. The wording is rendered from it and from params; the API carries no prose.
+type PlanFindingCode string
+
+// PlanFindingSeverity defines model for PlanFinding.Severity.
+type PlanFindingSeverity string
+
+// PlanJIT defines model for PlanJIT.
+type PlanJIT struct {
+	EmissionMs     *float64 `json:"emission_ms,omitempty"`
+	Functions      int      `json:"functions"`
+	GenerationMs   *float64 `json:"generation_ms,omitempty"`
+	InliningMs     *float64 `json:"inlining_ms,omitempty"`
+	OptimizationMs *float64 `json:"optimization_ms,omitempty"`
+	TotalMs        *float64 `json:"total_ms,omitempty"`
+}
+
+// PlanMissingRequirement defines model for PlanMissingRequirement.
+type PlanMissingRequirement string
+
+// PlanNode One plan node. type is the canonical node name; the modifiers the text format folds into it are separate fields.
+type PlanNode struct {
+	// Actual measured per loop, as PostgreSQL prints it; the node's output is rows × loops
+	Actual   *PlanNodeActual `json:"actual,omitempty"`
+	Alias    *string         `json:"alias,omitempty"`
+	Buffers  *PlanBuffers    `json:"buffers,omitempty"`
+	Children []PlanNode      `json:"children"`
+
+	// Filter at most 4 KiB, like the other conditions; *_omitted_bytes counts the rest
+	Filter *string `json:"filter,omitempty"`
+
+	// FilterOmittedBytes bytes cut from the end of filter; absent when it is complete
+	FilterOmittedBytes      *int      `json:"filter_omitted_bytes,omitempty"`
+	HeapBlocksExact         *float64  `json:"heap_blocks_exact,omitempty"`
+	HeapBlocksLossy         *float64  `json:"heap_blocks_lossy,omitempty"`
+	HeapFetches             *float64  `json:"heap_fetches,omitempty"`
+	IndexCond               *string   `json:"index_cond,omitempty"`
+	IndexCondOmittedBytes   *int      `json:"index_cond_omitted_bytes,omitempty"`
+	IndexName               *string   `json:"index_name,omitempty"`
+	JoinCond                *string   `json:"join_cond,omitempty"`
+	JoinCondOmittedBytes    *int      `json:"join_cond_omitted_bytes,omitempty"`
+	JoinType                *string   `json:"join_type,omitempty"`
+	Operation               *string   `json:"operation,omitempty"`
+	Parallel                bool      `json:"parallel"`
+	ParentRelationship      *string   `json:"parent_relationship,omitempty"`
+	PartialMode             *string   `json:"partial_mode,omitempty"`
+	PlanRows                float64   `json:"plan_rows"`
+	PlanWidth               int       `json:"plan_width"`
+	RecheckCond             *string   `json:"recheck_cond,omitempty"`
+	RecheckCondOmittedBytes *int      `json:"recheck_cond_omitted_bytes,omitempty"`
+	Relation                *string   `json:"relation,omitempty"`
+	RowsRemovedByFilter     *float64  `json:"rows_removed_by_filter,omitempty"`
+	RowsRemovedByJoinFilter *float64  `json:"rows_removed_by_join_filter,omitempty"`
+	ScanDirection           *string   `json:"scan_direction,omitempty"`
+	Schema                  *string   `json:"schema,omitempty"`
+	SortKey                 *[]string `json:"sort_key,omitempty"`
+	SortMethod              *string   `json:"sort_method,omitempty"`
+	SortSpaceKb             *float64  `json:"sort_space_kb,omitempty"`
+	SortSpaceType           *string   `json:"sort_space_type,omitempty"`
+	StartupCost             float64   `json:"startup_cost"`
+	Strategy                *string   `json:"strategy,omitempty"`
+	SubplanName             *string   `json:"subplan_name,omitempty"`
+	TotalCost               float64   `json:"total_cost"`
+	Type                    string    `json:"type"`
+	WorkersLaunched         *int      `json:"workers_launched,omitempty"`
+	WorkersPlanned          *int      `json:"workers_planned,omitempty"`
+}
+
+// PlanNodeActual measured per loop, as PostgreSQL prints it; the node's output is rows × loops
+type PlanNodeActual struct {
+	Loops         float64  `json:"loops"`
+	Rows          float64  `json:"rows"`
+	StartupTimeMs *float64 `json:"startup_time_ms,omitempty"`
+	TotalTimeMs   *float64 `json:"total_time_ms,omitempty"`
+}
+
+// PlanNotParsed defines model for PlanNotParsed.
+type PlanNotParsed struct {
+	// Code unsupported_plan_format - xml or yaml; empty_plan; parse_error; plan_too_large - larger than max_plan_bytes; plan_budget_exhausted - past max_plans.
+	Code  PlanNotParsedCode `json:"code"`
+	Count int               `json:"count"`
+}
+
+// PlanNotParsedCode unsupported_plan_format - xml or yaml; empty_plan; parse_error; plan_too_large - larger than max_plan_bytes; plan_budget_exhausted - past max_plans.
+type PlanNotParsedCode string
+
+// PlanSummary One parsed plan with the rules evaluated on it.
+type PlanSummary struct {
+	// Capabilities what the plan itself proved it carries
+	Capabilities PlanCapabilities  `json:"capabilities"`
+	Dormant      []PlanDormantRule `json:"dormant"`
+
+	// DurationMs known for a plan taken from a log record
+	DurationMs      *float64 `json:"duration_ms,omitempty"`
+	ExecutionTimeMs *float64 `json:"execution_time_ms,omitempty"`
+
+	// Findings most severe first
+	Findings []PlanFinding     `json:"findings"`
+	Format   PlanSummaryFormat `json:"format"`
+
+	// Generic built with GENERIC_PLAN, parameters not substituted
+	Generic        bool     `json:"generic"`
+	Jit            *PlanJIT `json:"jit,omitempty"`
+	PlanningTimeMs *float64 `json:"planning_time_ms,omitempty"`
+
+	// QueryParams at most 8 KiB; query_params_omitted_bytes counts the rest
+	QueryParams *string `json:"query_params,omitempty"`
+
+	// QueryParamsOmittedBytes bytes cut from the end of query_params; absent when it is complete
+	QueryParamsOmittedBytes *int `json:"query_params_omitted_bytes,omitempty"`
+
+	// QueryText at most 8 KiB; query_text_omitted_bytes counts the rest
+	QueryText string `json:"query_text"`
+
+	// QueryTextOmittedBytes bytes cut from the end of query_text; absent when it is complete
+	QueryTextOmittedBytes *int `json:"query_text_omitted_bytes,omitempty"`
+
+	// Root One plan node. type is the canonical node name; the modifiers the text format folds into it are separate fields.
+	Root     PlanNode           `json:"root"`
+	Settings *map[string]string `json:"settings,omitempty"`
+	Triggers *[]PlanTrigger     `json:"triggers,omitempty"`
+}
+
+// PlanSummaryFormat defines model for PlanSummary.Format.
+type PlanSummaryFormat string
+
+// PlanTrigger defines model for PlanTrigger.
+type PlanTrigger struct {
+	Calls    float64 `json:"calls"`
+	Name     string  `json:"name"`
+	Relation *string `json:"relation,omitempty"`
+	TimeMs   float64 `json:"time_ms"`
 }
 
 // ProgressAnalyze defines model for ProgressAnalyze.
@@ -2619,6 +3002,18 @@ type GetLogsCheckParams struct {
 // GetLogsCheckParamsServiceType defines parameters for GetLogsCheck.
 type GetLogsCheckParamsServiceType string
 
+// GetLogsInsightsParams defines parameters for GetLogsInsights.
+type GetLogsInsightsParams struct {
+	ClusterName ClusterName                      `form:"cluster_name" json:"cluster_name"`
+	ServiceType GetLogsInsightsParamsServiceType `form:"service_type" json:"service_type"`
+	From        time.Time                        `form:"from" json:"from"`
+	To          time.Time                        `form:"to" json:"to"`
+	Host        *string                          `form:"host,omitempty" json:"host,omitempty"`
+}
+
+// GetLogsInsightsParamsServiceType defines parameters for GetLogsInsights.
+type GetLogsInsightsParamsServiceType string
+
 // GetMaintenanceAutovacuumFreezeMaxAgeParams defines parameters for GetMaintenanceAutovacuumFreezeMaxAge.
 type GetMaintenanceAutovacuumFreezeMaxAgeParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
@@ -3293,6 +3688,9 @@ type ClientInterface interface {
 
 	// GetLogsCheck request
 	GetLogsCheck(ctx context.Context, params *GetLogsCheckParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetLogsInsights request
+	GetLogsInsights(ctx context.Context, params *GetLogsInsightsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetMaintenanceAutovacuumFreezeMaxAge request
 	GetMaintenanceAutovacuumFreezeMaxAge(ctx context.Context, params *GetMaintenanceAutovacuumFreezeMaxAgeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -4257,6 +4655,18 @@ func (c *Client) GetLogs(ctx context.Context, params *GetLogsParams, reqEditors 
 
 func (c *Client) GetLogsCheck(ctx context.Context, params *GetLogsCheckParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetLogsCheckRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetLogsInsights(ctx context.Context, params *GetLogsInsightsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetLogsInsightsRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -9675,6 +10085,103 @@ func NewGetLogsCheckRequest(server string, params *GetLogsCheckParams) (*http.Re
 	return req, nil
 }
 
+// NewGetLogsInsightsRequest generates requests for GetLogsInsights
+func NewGetLogsInsightsRequest(server string, params *GetLogsInsightsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/logs/insights")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, params.ClusterName); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "service_type", runtime.ParamLocationQuery, params.ServiceType); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "from", runtime.ParamLocationQuery, params.From); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "to", runtime.ParamLocationQuery, params.To); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.Host != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "host", runtime.ParamLocationQuery, *params.Host); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetMaintenanceAutovacuumFreezeMaxAgeRequest generates requests for GetMaintenanceAutovacuumFreezeMaxAge
 func NewGetMaintenanceAutovacuumFreezeMaxAgeRequest(server string, params *GetMaintenanceAutovacuumFreezeMaxAgeParams) (*http.Request, error) {
 	var err error
@@ -13422,6 +13929,9 @@ type ClientWithResponsesInterface interface {
 	// GetLogsCheckWithResponse request
 	GetLogsCheckWithResponse(ctx context.Context, params *GetLogsCheckParams, reqEditors ...RequestEditorFn) (*GetLogsCheckResponse, error)
 
+	// GetLogsInsightsWithResponse request
+	GetLogsInsightsWithResponse(ctx context.Context, params *GetLogsInsightsParams, reqEditors ...RequestEditorFn) (*GetLogsInsightsResponse, error)
+
 	// GetMaintenanceAutovacuumFreezeMaxAgeWithResponse request
 	GetMaintenanceAutovacuumFreezeMaxAgeWithResponse(ctx context.Context, params *GetMaintenanceAutovacuumFreezeMaxAgeParams, reqEditors ...RequestEditorFn) (*GetMaintenanceAutovacuumFreezeMaxAgeResponse, error)
 
@@ -14999,6 +15509,29 @@ func (r GetLogsCheckResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetLogsCheckResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetLogsInsightsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *LogInsights
+	JSON502      *ErrorMessage
+}
+
+// Status returns HTTPResponse.Status
+func (r GetLogsInsightsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetLogsInsightsResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -16607,6 +17140,15 @@ func (c *ClientWithResponses) GetLogsCheckWithResponse(ctx context.Context, para
 		return nil, err
 	}
 	return ParseGetLogsCheckResponse(rsp)
+}
+
+// GetLogsInsightsWithResponse request returning *GetLogsInsightsResponse
+func (c *ClientWithResponses) GetLogsInsightsWithResponse(ctx context.Context, params *GetLogsInsightsParams, reqEditors ...RequestEditorFn) (*GetLogsInsightsResponse, error) {
+	rsp, err := c.GetLogsInsights(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetLogsInsightsResponse(rsp)
 }
 
 // GetMaintenanceAutovacuumFreezeMaxAgeWithResponse request returning *GetMaintenanceAutovacuumFreezeMaxAgeResponse
@@ -18678,6 +19220,39 @@ func ParseGetLogsCheckResponse(rsp *http.Response) (*GetLogsCheckResponse, error
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest LogSourceCheck
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
+		var dest ErrorMessage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON502 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetLogsInsightsResponse parses an HTTP response from a GetLogsInsightsWithResponse call
+func ParseGetLogsInsightsResponse(rsp *http.Response) (*GetLogsInsightsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetLogsInsightsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest LogInsights
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

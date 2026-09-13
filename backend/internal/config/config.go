@@ -332,6 +332,7 @@ type LogFieldMapConfig struct {
 	User      string `mapstructure:"user"`
 	PID       string `mapstructure:"pid"`
 	QueryID   string `mapstructure:"query_id"`
+	SQLState  string `mapstructure:"sql_state"`
 	// Mask lists free-text fields sanitized before they leave the backend.
 	Mask []string `mapstructure:"mask"`
 	// KeywordFields maps a field to the field an exact-match filter must use
@@ -588,6 +589,52 @@ func (a LogSourceAuthConfig) validate(name string) error {
 	return nil
 }
 
+// Defaults for LogInsightsConfig when values are unset (<= 0).
+const (
+	DefaultLogInsightsMaxRecords   = 50000
+	DefaultLogInsightsMaxBytes     = 64 << 20
+	DefaultLogInsightsMaxPlanBytes = 2 << 20
+	DefaultLogInsightsMaxPlans     = 5000
+)
+
+// LogInsightsConfig bounds one scan of the log insights summary. The upstream
+// timeout and the rate limits are the ones of log_search.
+type LogInsightsConfig struct {
+	// Enabled defaults to true.
+	Enabled    *bool `mapstructure:"enabled"`
+	MaxRecords int   `mapstructure:"max_records"`
+	MaxBytes   int64 `mapstructure:"max_bytes"`
+	// MaxPlanBytes is the largest plan record parsed; a larger one is counted
+	// as not parsed and charged to MaxBytes only up to this size.
+	MaxPlanBytes int `mapstructure:"max_plan_bytes"`
+	// MaxPlans caps the plan records parsed in one scan.
+	MaxPlans int `mapstructure:"max_plans"`
+}
+
+// IsEnabled reports the flag with its default applied: an absent key means on.
+func (c LogInsightsConfig) IsEnabled() bool { return c.Enabled == nil || *c.Enabled }
+
+// WithDefaults returns a copy with unset (<=0) fields filled from defaults.
+func (c LogInsightsConfig) WithDefaults() LogInsightsConfig {
+	if c.MaxRecords <= 0 {
+		c.MaxRecords = DefaultLogInsightsMaxRecords
+	}
+
+	if c.MaxBytes <= 0 {
+		c.MaxBytes = DefaultLogInsightsMaxBytes
+	}
+
+	if c.MaxPlanBytes <= 0 {
+		c.MaxPlanBytes = DefaultLogInsightsMaxPlanBytes
+	}
+
+	if c.MaxPlans <= 0 {
+		c.MaxPlans = DefaultLogInsightsMaxPlans
+	}
+
+	return c
+}
+
 // StorageConfig holds optional snapshot storage database settings.
 type StorageConfig struct {
 	// DSN is the service connection: regular reads/writes (DML). In hardened
@@ -646,6 +693,9 @@ type Config struct {
 
 	// LogSearch holds global limits for Yandex Cloud log search.
 	LogSearch LogSearchConfig `mapstructure:"log_search"`
+
+	// LogInsights bounds the summary of plans and events read from the logs.
+	LogInsights LogInsightsConfig `mapstructure:"log_insights"`
 
 	// PgssResetFunction is an optional custom function (schema-qualified, no args)
 	// to call instead of pg_stat_statements_reset(). Useful when the connecting

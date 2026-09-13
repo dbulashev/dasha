@@ -45,6 +45,7 @@ func TestCasbinEnforcer_Policies(t *testing.T) {
 		// The log source check exposes index names and a sample record.
 		{"viewer", "/api/logs", "GET", true},
 		{"viewer", "/api/logs/check", "GET", false},
+		{"viewer", "/api/logs/insights", "GET", true},
 		{"admin", "/api/logs/check", "GET", true},
 	}
 

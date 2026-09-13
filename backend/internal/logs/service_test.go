@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/dbulashev/dasha/internal/config"
+	"github.com/dbulashev/dasha/internal/logs/pattern"
 	"github.com/dbulashev/dasha/internal/logs/source"
 )
 
@@ -136,7 +137,7 @@ func newTestService(t *testing.T, p *fakeProvider, cfg config.LogSearchConfig) S
 		}},
 	})
 
-	return NewService(clusters, reg, cfg, zap.NewNop())
+	return NewService(clusters, reg, cfg, config.LogInsightsConfig{}, zap.NewNop())
 }
 
 func testQuery() SearchQuery {
@@ -410,7 +411,7 @@ func TestSearchDedupGroupsStructurallyEqualMessages(t *testing.T) {
 		t.Errorf("largest group Count = %d, want 3", top.Count)
 	}
 
-	if !strings.Contains(top.Text, displayPlaceholder) {
+	if !strings.Contains(top.Text, pattern.Placeholder) {
 		t.Errorf("group text %q is not a template", top.Text)
 	}
 

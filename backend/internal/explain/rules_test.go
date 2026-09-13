@@ -298,8 +298,24 @@ func TestParseMemKB(t *testing.T) {
 	}
 }
 
+func TestCostHotspot_OnlyWithoutActuals(t *testing.T) {
+	estimated := parseFixture(t, "pg17/analyze_off.txt", SourceLog)
+
+	findings, _ := Evaluate(&estimated, Context{})
+	if _, ok := codes(findings)[RuleCostHotspot]; !ok {
+		t.Error("a plan without actual numbers names its costliest node")
+	}
+
+	analyzed := parseFixture(t, "pg17/text_verbose_off.txt", SourceLog)
+
+	findings, _ = Evaluate(&analyzed, Context{})
+	if f, ok := codes(findings)[RuleCostHotspot]; ok {
+		t.Errorf("cost hotspot on a plan with actual numbers: %+v", f)
+	}
+}
+
 func TestEvaluate_SortsBySeverity(t *testing.T) {
-	p := parseFixture(t, "synthetic/loops_blowup.txt", SourceLog)
+	p := parseFixture(t, "synthetic/nested_loop.txt", SourceLog)
 
 	findings, _ := Evaluate(&p, Context{})
 	if len(findings) < 2 {

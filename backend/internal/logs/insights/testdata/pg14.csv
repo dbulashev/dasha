@@ -1,0 +1,493 @@
+2026-09-12 15:27:17.086 UTC,,,54,,6aa56f55.36,1,,2026-09-12 15:27:17 UTC,,0,LOG,00000,"starting PostgreSQL 14.24 (Debian 14.24-1.pgdg13+2) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",,,,,,,,,,postmaster,,0
+2026-09-12 15:27:17.088 UTC,,,54,,6aa56f55.36,2,,2026-09-12 15:27:17 UTC,,0,LOG,00000,"listening on Unix socket ""/var/run/postgresql/.s.PGSQL.5432""",,,,,,,,,,postmaster,,0
+2026-09-12 15:27:17.096 UTC,,,56,,6aa56f55.38,1,,2026-09-12 15:27:17 UTC,,0,LOG,00000,database system was shut down at 2026-09-12 15:27:16 UTC,,,,,,,,,,startup,,0
+2026-09-12 15:27:17.100 UTC,,,54,,6aa56f55.36,3,,2026-09-12 15:27:17 UTC,,0,LOG,00000,database system is ready to accept connections,,,,,,,,,,postmaster,,0
+2026-09-12 15:27:17.198 UTC,postgres,postgres,65,[local],6aa56f55.41,1,SELECT,2026-09-12 15:27:17 UTC,3/2,0,LOG,00000,"duration: 0.009 ms  plan:
+Query Text: SELECT 1 FROM pg_database WHERE datname = 'postgres' ;
+Seq Scan on pg_database  (cost=0.00..1.02 rows=1 width=4) (actual time=0.005..0.006 rows=1 loops=1)
+  Filter: (datname = 'postgres'::name)
+  Rows Removed by Filter: 2
+  Buffers: shared hit=1",,,,,,,,,psql,client backend,,7035266605739405788
+2026-09-12 15:27:17.201 UTC,,,54,,6aa56f55.36,4,,2026-09-12 15:27:17 UTC,,0,LOG,00000,received fast shutdown request,,,,,,,,,,postmaster,,0
+2026-09-12 15:27:17.203 UTC,,,54,,6aa56f55.36,5,,2026-09-12 15:27:17 UTC,,0,LOG,00000,aborting any active transactions,,,,,,,,,,postmaster,,0
+2026-09-12 15:27:17.206 UTC,,,54,,6aa56f55.36,6,,2026-09-12 15:27:17 UTC,,0,LOG,00000,"background worker ""logical replication launcher"" (PID 62) exited with exit code 1",,,,,,,,,,postmaster,,0
+2026-09-12 15:27:17.206 UTC,,,57,,6aa56f55.39,1,,2026-09-12 15:27:17 UTC,,0,LOG,00000,shutting down,,,,,,,,,,checkpointer,,0
+2026-09-12 15:27:17.215 UTC,,,54,,6aa56f55.36,7,,2026-09-12 15:27:17 UTC,,0,LOG,00000,database system is shut down,,,,,,,,,,postmaster,,0
+2026-09-12 15:27:17.336 UTC,,,1,,6aa56f55.1,1,,2026-09-12 15:27:17 UTC,,0,LOG,00000,"starting PostgreSQL 14.24 (Debian 14.24-1.pgdg13+2) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",,,,,,,,,,postmaster,,0
+2026-09-12 15:27:17.337 UTC,,,1,,6aa56f55.1,2,,2026-09-12 15:27:17 UTC,,0,LOG,00000,"listening on IPv4 address ""0.0.0.0"", port 5432",,,,,,,,,,postmaster,,0
+2026-09-12 15:27:17.337 UTC,,,1,,6aa56f55.1,3,,2026-09-12 15:27:17 UTC,,0,LOG,00000,"listening on IPv6 address ""::"", port 5432",,,,,,,,,,postmaster,,0
+2026-09-12 15:27:17.341 UTC,,,1,,6aa56f55.1,4,,2026-09-12 15:27:17 UTC,,0,LOG,00000,"listening on Unix socket ""/var/run/postgresql/.s.PGSQL.5432""",,,,,,,,,,postmaster,,0
+2026-09-12 15:27:17.347 UTC,,,69,,6aa56f55.45,1,,2026-09-12 15:27:17 UTC,,0,LOG,00000,database system was shut down at 2026-09-12 15:27:17 UTC,,,,,,,,,,startup,,0
+2026-09-12 15:27:17.356 UTC,,,1,,6aa56f55.1,5,,2026-09-12 15:27:17 UTC,,0,LOG,00000,database system is ready to accept connections,,,,,,,,,,postmaster,,0
+2026-09-12 15:27:18.427 UTC,postgres,postgres,96,[local],6aa56f55.60,1,CREATE TABLE AS,2026-09-12 15:27:17 UTC,3/5,735,LOG,00000,"duration: 477.860 ms  plan:
+Query Text: CREATE TABLE probe_t AS
+SELECT g AS id, (g % 1000) AS k, md5(g::text) AS payload
+FROM generate_series(1, 300000) g;
+Function Scan on generate_series g  (cost=0.00..6000.00 rows=300000 width=40) (actual time=21.153..250.089 rows=300000 loops=1)
+  Buffers: temp read=513 written=513",,,,,,,,,psql,client backend,,-4700431232296556623
+2026-09-12 15:27:18.493 UTC,postgres,postgres,96,[local],6aa56f55.60,2,SELECT,2026-09-12 15:27:17 UTC,3/8,0,LOG,00000,"duration: 0.044 ms  plan:
+Query Text: SELECT pg_stat_statements_reset();
+Result  (cost=0.00..0.01 rows=1 width=4) (actual time=0.035..0.035 rows=1 loops=1)",,,,,,,,,psql,client backend,,-7807822433144909498
+2026-09-12 15:27:18.493 UTC,postgres,postgres,96,[local],6aa56f55.60,3,DO,2026-09-12 15:27:17 UTC,3/9,0,LOG,00000,PROBE text_verbose_off,,,,,PL/pgSQL function inline_code_block line 1 at RAISE,DO $$ BEGIN RAISE LOG 'PROBE text_verbose_off'; END $$;,,,psql,client backend,,118683406971545167
+2026-09-12 15:27:18.519 UTC,postgres,postgres,96,[local],6aa56f55.60,4,SELECT,2026-09-12 15:27:17 UTC,3/10,0,LOG,00000,"duration: 25.384 ms  plan:
+Query Text: SELECT count(*) FROM probe_t WHERE k = 42 AND payload LIKE '%abc%';
+Aggregate  (cost=6451.16..6451.17 rows=1 width=8) (actual time=23.878..25.374 rows=1 loops=1)
+  Buffers: shared hit=288 read=2516
+  ->  Gather  (cost=1000.00..6451.16 rows=1 width=0) (actual time=23.754..25.363 rows=2 loops=1)
+        Workers Planned: 1
+        Workers Launched: 1
+        Buffers: shared hit=288 read=2516
+        ->  Parallel Seq Scan on probe_t  (cost=0.00..5451.06 rows=1 width=0) (actual time=14.504..20.893 rows=1 loops=2)
+              Filter: ((payload ~~ '%abc%'::text) AND (k = 42))
+              Rows Removed by Filter: 149999
+              Buffers: shared hit=288 read=2516",,,,,,,,,psql,client backend,,-7056336404429194658
+2026-09-12 15:27:18.544 UTC,postgres,postgres,96,[local],6aa56f55.60,7,DO,2026-09-12 15:27:17 UTC,3/15,0,LOG,00000,PROBE json_verbose_off,,,,,PL/pgSQL function inline_code_block line 1 at RAISE,DO $$ BEGIN RAISE LOG 'PROBE json_verbose_off'; END $$;,,,psql,client backend,,9125313119946384444
+2026-09-12 15:27:18.572 UTC,postgres,postgres,96,[local],6aa56f55.60,8,SELECT,2026-09-12 15:27:17 UTC,3/17,0,LOG,00000,"duration: 27.081 ms  plan:
+{
+  ""Query Text"": ""SELECT count(*) FROM probe_t WHERE k = 42 AND payload LIKE '%abc%';"",
+  ""Plan"": {
+    ""Node Type"": ""Aggregate"",
+    ""Strategy"": ""Plain"",
+    ""Partial Mode"": ""Simple"",
+    ""Parallel Aware"": false,
+    ""Async Capable"": false,
+    ""Startup Cost"": 6451.16,
+    ""Total Cost"": 6451.17,
+    ""Plan Rows"": 1,
+    ""Plan Width"": 8,
+    ""Actual Startup Time"": 25.460,
+    ""Actual Total Time"": 27.074,
+    ""Actual Rows"": 1,
+    ""Actual Loops"": 1,
+    ""Shared Hit Blocks"": 416,
+    ""Shared Read Blocks"": 2388,
+    ""Shared Dirtied Blocks"": 0,
+    ""Shared Written Blocks"": 0,
+    ""Local Hit Blocks"": 0,
+    ""Local Read Blocks"": 0,
+    ""Local Dirtied Blocks"": 0,
+    ""Local Written Blocks"": 0,
+    ""Temp Read Blocks"": 0,
+    ""Temp Written Blocks"": 0,
+    ""WAL Records"": 0,
+    ""WAL FPI"": 0,
+    ""WAL Bytes"": 0,
+    ""Plans"": [
+      {
+        ""Node Type"": ""Gather"",
+        ""Parent Relationship"": ""Outer"",
+        ""Parallel Aware"": false,
+        ""Async Capable"": false,
+        ""Startup Cost"": 1000.00,
+        ""Total Cost"": 6451.16,
+        ""Plan Rows"": 1,
+        ""Plan Width"": 0,
+        ""Actual Startup Time"": 13.188,
+        ""Actual Total Time"": 27.066,
+        ""Actual Rows"": 2,
+        ""Actual Loops"": 1,
+        ""Workers Planned"": 1,
+        ""Workers Launched"": 1,
+        ""Single Copy"": false,
+        ""Shared Hit Blocks"": 416,
+        ""Shared Read Blocks"": 2388,
+        ""Shared Dirtied Blocks"": 0,
+        ""Shared Written Blocks"": 0,
+        ""Local Hit Blocks"": 0,
+        ""Local Read Blocks"": 0,
+        ""Local Dirtied Blocks"": 0,
+        ""Local Written Blocks"": 0,
+        ""Temp Read Blocks"": 0,
+        ""Temp Written Blocks"": 0,
+        ""WAL Records"": 0,
+        ""WAL FPI"": 0,
+        ""WAL Bytes"": 0,
+        ""Plans"": [
+          {
+            ""Node Type"": ""Seq Scan"",
+            ""Parent Relationship"": ""Outer"",
+            ""Parallel Aware"": true,
+            ""Async Capable"": false,
+            ""Relation Name"": ""probe_t"",
+            ""Alias"": ""probe_t"",
+            ""Startup Cost"": 0.00,
+            ""Total Cost"": 5451.06,
+            ""Plan Rows"": 1,
+            ""Plan Width"": 0,
+            ""Actual Startup Time"": 16.158,
+            ""Actual Total Time"": 22.214,
+            ""Actual Rows"": 1,
+            ""Actual Loops"": 2,
+            ""Filter"": ""((payload ~~ '%abc%'::text) AND (k = 42))"",
+            ""Rows Removed by Filter"": 149999,
+            ""Shared Hit Blocks"": 416,
+            ""Shared Read Blocks"": 2388,
+            ""Shared Dirtied Blocks"": 0,
+            ""Shared Written Blocks"": 0,
+            ""Local Hit Blocks"": 0,
+            ""Local Read Blocks"": 0,
+            ""Local Dirtied Blocks"": 0,
+            ""Local Written Blocks"": 0,
+            ""Temp Read Blocks"": 0,
+            ""Temp Written Blocks"": 0,
+            ""WAL Records"": 0,
+            ""WAL FPI"": 0,
+            ""WAL Bytes"": 0,
+            ""Workers"": [
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  ""Settings"": {
+  },
+  ""Triggers"": [
+  ]
+}",,,,,,,,,psql,client backend,,-7056336404429194658
+2026-09-12 15:27:18.599 UTC,postgres,postgres,96,[local],6aa56f55.60,11,DO,2026-09-12 15:27:17 UTC,3/22,0,LOG,00000,PROBE xml,,,,,PL/pgSQL function inline_code_block line 1 at RAISE,DO $$ BEGIN RAISE LOG 'PROBE xml'; END $$;,,,psql,client backend,,-6629495831906083235
+2026-09-12 15:27:18.610 UTC,postgres,postgres,96,[local],6aa56f55.60,12,SELECT,2026-09-12 15:27:17 UTC,3/24,0,LOG,00000,"duration: 11.242 ms  plan:
+<explain xmlns=""http://www.postgresql.org/2009/explain"">
+  <Query-Text>SELECT count(*) FROM probe_t WHERE k = 42;</Query-Text>
+  <Plan>
+    <Node-Type>Aggregate</Node-Type>
+    <Strategy>Plain</Strategy>
+    <Partial-Mode>Finalize</Partial-Mode>
+    <Parallel-Aware>false</Parallel-Aware>
+    <Async-Capable>false</Async-Capable>
+    <Startup-Cost>6010.43</Startup-Cost>
+    <Total-Cost>6010.44</Total-Cost>
+    <Plan-Rows>1</Plan-Rows>
+    <Plan-Width>8</Plan-Width>
+    <Actual-Startup-Time>9.908</Actual-Startup-Time>
+    <Actual-Total-Time>11.219</Actual-Total-Time>
+    <Actual-Rows>1</Actual-Rows>
+    <Actual-Loops>1</Actual-Loops>
+    <Shared-Hit-Blocks>544</Shared-Hit-Blocks>
+    <Shared-Read-Blocks>2260</Shared-Read-Blocks>
+    <Shared-Dirtied-Blocks>0</Shared-Dirtied-Blocks>
+    <Shared-Written-Blocks>0</Shared-Written-Blocks>
+    <Local-Hit-Blocks>0</Local-Hit-Blocks>
+    <Local-Read-Blocks>0</Local-Read-Blocks>
+    <Local-Dirtied-Blocks>0</Local-Dirtied-Blocks>
+    <Local-Written-Blocks>0</Local-Written-Blocks>
+    <Temp-Read-Blocks>0</Temp-Read-Blocks>
+    <Temp-Written-Blocks>0</Temp-Written-Blocks>
+    <WAL-Records>0</WAL-Records>
+    <WAL-FPI>0</WAL-FPI>
+    <WAL-Bytes>0</WAL-Bytes>
+    <Plans>
+      <Plan>
+        <Node-Type>Gather</Node-Type>
+        <Parent-Relationship>Outer</Parent-Relationship>
+        <Parallel-Aware>false</Parallel-Aware>
+        <Async-Capable>false</Async-Capable>
+        <Startup-Cost>6010.32</Startup-Cost>
+        <Total-Cost>6010.43</Total-Cost>
+        <Plan-Rows>1</Plan-Rows>
+        <Plan-Width>8</Plan-Width>
+        <Actual-Startup-Time>9.700</Actual-Startup-Time>
+        <Actual-Total-Time>11.209</Actual-Total-Time>
+        <Actual-Rows>2</Actual-Rows>
+        <Actual-Loops>1</Actual-Loops>
+        <Workers-Planned>1</Workers-Planned>
+        <Workers-Launched>1</Workers-Launched>
+        <Single-Copy>false</Single-Copy>
+        <Shared-Hit-Blocks>544</Shared-Hit-Blocks>
+        <Shared-Read-Blocks>2260</Shared-Read-Blocks>
+        <Shared-Dirtied-Blocks>0</Shared-Dirtied-Blocks>
+        <Shared-Written-Blocks>0</Shared-Written-Blocks>
+        <Local-Hit-Blocks>0</Local-Hit-Blocks>
+        <Local-Read-Blocks>0</Local-Read-Blocks>
+        <Local-Dirtied-Blocks>0</Local-Dirtied-Blocks>
+        <Local-Written-Blocks>0</Local-Written-Blocks>
+        <Temp-Read-Blocks>0</Temp-Read-Blocks>
+        <Temp-Written-Blocks>0</Temp-Written-Blocks>
+        <WAL-Records>0</WAL-Records>
+        <WAL-FPI>0</WAL-FPI>
+        <WAL-Bytes>0</WAL-Bytes>
+        <Plans>
+          <Plan>
+            <Node-Type>Aggregate</Node-Type>
+            <Strategy>Plain</Strategy>
+            <Partial-Mode>Partial</Partial-Mode>
+            <Parent-Relationship>Outer</Parent-Relationship>
+            <Parallel-Aware>false</Parallel-Aware>
+            <Async-Capable>false</Async-Capable>
+            <Startup-Cost>5010.32</Startup-Cost>
+            <Total-Cost>5010.33</Total-Cost>
+            <Plan-Rows>1</Plan-Rows>
+            <Plan-Width>8</Plan-Width>
+            <Actual-Startup-Time>8.498</Actual-Startup-Time>
+            <Actual-Total-Time>8.499</Actual-Total-Time>
+            <Actual-Rows>1</Actual-Rows>
+            <Actual-Loops>2</Actual-Loops>
+            <Shared-Hit-Blocks>544</Shared-Hit-Blocks>
+            <Shared-Read-Blocks>2260</Shared-Read-Blocks>
+            <Shared-Dirtied-Blocks>0</Shared-Dirtied-Blocks>
+            <Shared-Written-Blocks>0</Shared-Written-Blocks>
+            <Local-Hit-Blocks>0</Local-Hit-Blocks>
+            <Local-Read-Blocks>0</Local-Read-Blocks>
+            <Local-Dirtied-Blocks>0</Local-Dirtied-Blocks>
+            <Local-Written-Blocks>0</Local-Written-Blocks>
+            <Temp-Read-Blocks>0</Temp-Read-Blocks>
+            <Temp-Written-Blocks>0</Temp-Written-Blocks>
+            <WAL-Records>0</WAL-Records>
+            <WAL-FPI>0</WAL-FPI>
+            <WAL-Bytes>0</WAL-Bytes>
+            <Workers>
+            </Workers>
+            <Plans>
+              <Plan>
+                <Node-Type>Seq Scan</Node-Type>
+                <Parent-Relationship>Outer</Parent-Relationship>
+                <Parallel-Aware>true</Parallel-Aware>
+                <Async-Capable>false</Async-Capable>
+                <Relation-Name>probe_t</Relation-Name>
+                <Alias>probe_t</Alias>
+                <Startup-Cost>0.00</Startup-Cost>
+                <Total-Cost>5009.88</Total-Cost>
+                <Plan-Rows>176</Plan-Rows>
+                <Plan-Width>0</Plan-Width>
+                <Actual-Startup-Time>0.029</Actual-Startup-Time>
+                <Actual-Total-Time>8.479</Actual-Total-Time>
+                <Actual-Rows>150</Actual-Rows>
+                <Actual-Loops>2</Actual-Loops>
+                <Filter>(k = 42)</Filter>
+                <Rows-Removed-by-Filter>149850</Rows-Removed-by-Filter>
+                <Shared-Hit-Blocks>544</Shared-Hit-Blocks>
+                <Shared-Read-Blocks>2260</Shared-Read-Blocks>
+                <Shared-Dirtied-Blocks>0</Shared-Dirtied-Blocks>
+                <Shared-Written-Blocks>0</Shared-Written-Blocks>
+                <Local-Hit-Blocks>0</Local-Hit-Blocks>
+                <Local-Read-Blocks>0</Local-Read-Blocks>
+                <Local-Dirtied-Blocks>0</Local-Dirtied-Blocks>
+                <Local-Written-Blocks>0</Local-Written-Blocks>
+                <Temp-Read-Blocks>0</Temp-Read-Blocks>
+                <Temp-Written-Blocks>0</Temp-Written-Blocks>
+                <WAL-Records>0</WAL-Records>
+                <WAL-FPI>0</WAL-FPI>
+                <WAL-Bytes>0</WAL-Bytes>
+                <Workers>
+                </Workers>
+              </Plan>
+            </Plans>
+          </Plan>
+        </Plans>
+      </Plan>
+    </Plans>
+  </Plan>
+  <Settings>
+  </Settings>
+  <Triggers>
+  </Triggers>
+</explain>",,,,,,,,,psql,client backend,,-6427770559224207873
+2026-09-12 15:27:18.611 UTC,postgres,postgres,96,[local],6aa56f55.60,13,DO,2026-09-12 15:27:17 UTC,3/25,0,LOG,00000,PROBE yaml,,,,,PL/pgSQL function inline_code_block line 1 at RAISE,DO $$ BEGIN RAISE LOG 'PROBE yaml'; END $$;,,,psql,client backend,,4012600606691506196
+2026-09-12 15:27:18.624 UTC,postgres,postgres,96,[local],6aa56f55.60,14,SELECT,2026-09-12 15:27:17 UTC,3/27,0,LOG,00000,"duration: 12.542 ms  plan:
+Query Text: ""SELECT count(*) FROM probe_t WHERE k = 42;""
+Plan: 
+  Node Type: ""Aggregate""
+  Strategy: ""Plain""
+  Partial Mode: ""Finalize""
+  Parallel Aware: false
+  Async Capable: false
+  Startup Cost: 6010.43
+  Total Cost: 6010.44
+  Plan Rows: 1
+  Plan Width: 8
+  Actual Startup Time: 8.826
+  Actual Total Time: 12.534
+  Actual Rows: 1
+  Actual Loops: 1
+  Shared Hit Blocks: 608
+  Shared Read Blocks: 2196
+  Shared Dirtied Blocks: 0
+  Shared Written Blocks: 0
+  Local Hit Blocks: 0
+  Local Read Blocks: 0
+  Local Dirtied Blocks: 0
+  Local Written Blocks: 0
+  Temp Read Blocks: 0
+  Temp Written Blocks: 0
+  WAL Records: 0
+  WAL FPI: 0
+  WAL Bytes: 0
+  Plans: 
+    - Node Type: ""Gather""
+      Parent Relationship: ""Outer""
+      Parallel Aware: false
+      Async Capable: false
+      Startup Cost: 6010.32
+      Total Cost: 6010.43
+      Plan Rows: 1
+      Plan Width: 8
+      Actual Startup Time: 8.723
+      Actual Total Time: 12.528
+      Actual Rows: 2
+      Actual Loops: 1
+      Workers Planned: 1
+      Workers Launched: 1
+      Single Copy: false
+      Shared Hit Blocks: 608
+      Shared Read Blocks: 2196
+      Shared Dirtied Blocks: 0
+      Shared Written Blocks: 0
+      Local Hit Blocks: 0
+      Local Read Blocks: 0
+      Local Dirtied Blocks: 0
+      Local Written Blocks: 0
+      Temp Read Blocks: 0
+      Temp Written Blocks: 0
+      WAL Records: 0
+      WAL FPI: 0
+      WAL Bytes: 0
+      Plans: 
+        - Node Type: ""Aggregate""
+          Strategy: ""Plain""
+          Partial Mode: ""Partial""
+          Parent Relationship: ""Outer""
+          Parallel Aware: false
+          Async Capable: false
+          Startup Cost: 5010.32
+          Total Cost: 5010.33
+          Plan Rows: 1
+          Plan Width: 8
+          Actual Startup Time: 7.505
+          Actual Total Time: 7.505
+          Actual Rows: 1
+          Actual Loops: 2
+          Shared Hit Blocks: 608
+          Shared Read Blocks: 2196
+          Shared Dirtied Blocks: 0
+          Shared Written Blocks: 0
+          Local Hit Blocks: 0
+          Local Read Blocks: 0
+          Local Dirtied Blocks: 0
+          Local Written Blocks: 0
+          Temp Read Blocks: 0
+          Temp Written Blocks: 0
+          WAL Records: 0
+          WAL FPI: 0
+          WAL Bytes: 0
+          Workers: 
+          Plans: 
+            - Node Type: ""Seq Scan""
+              Parent Relationship: ""Outer""
+              Parallel Aware: true
+              Async Capable: false
+              Relation Name: ""probe_t""
+              Alias: ""probe_t""
+              Startup Cost: 0.00
+              Total Cost: 5009.88
+              Plan Rows: 176
+              Plan Width: 0
+              Actual Startup Time: 0.026
+              Actual Total Time: 7.490
+              Actual Rows: 150
+              Actual Loops: 2
+              Filter: ""(k = 42)""
+              Rows Removed by Filter: 149850
+              Shared Hit Blocks: 608
+              Shared Read Blocks: 2196
+              Shared Dirtied Blocks: 0
+              Shared Written Blocks: 0
+              Local Hit Blocks: 0
+              Local Read Blocks: 0
+              Local Dirtied Blocks: 0
+              Local Written Blocks: 0
+              Temp Read Blocks: 0
+              Temp Written Blocks: 0
+              WAL Records: 0
+              WAL FPI: 0
+              WAL Bytes: 0
+              Workers: 
+Settings: 
+Triggers: ",,,,,,,,,psql,client backend,,-6427770559224207873
+2026-09-12 15:27:18.624 UTC,postgres,postgres,96,[local],6aa56f55.60,15,DO,2026-09-12 15:27:17 UTC,3/29,0,LOG,00000,PROBE analyze_off,,,,,PL/pgSQL function inline_code_block line 1 at RAISE,DO $$ BEGIN RAISE LOG 'PROBE analyze_off'; END $$;,,,psql,client backend,,3286338884377096841
+2026-09-12 15:27:18.646 UTC,postgres,postgres,96,[local],6aa56f55.60,16,SELECT,2026-09-12 15:27:17 UTC,3/31,0,LOG,00000,"duration: 21.316 ms  plan:
+Query Text: SELECT count(*) FROM probe_t WHERE k = 42 AND payload LIKE '%abc%';
+Aggregate  (cost=6451.16..6451.17 rows=1 width=8)
+  ->  Gather  (cost=1000.00..6451.16 rows=1 width=0)
+        Workers Planned: 1
+        ->  Parallel Seq Scan on probe_t  (cost=0.00..5451.06 rows=1 width=0)
+              Filter: ((payload ~~ '%abc%'::text) AND (k = 42))",,,,,,,,,psql,client backend,,-7056336404429194658
+2026-09-12 15:27:18.646 UTC,postgres,postgres,96,[local],6aa56f55.60,17,DO,2026-09-12 15:27:17 UTC,3/33,0,LOG,00000,PROBE sort_spill,,,,,PL/pgSQL function inline_code_block line 1 at RAISE,DO $$ BEGIN RAISE LOG 'PROBE sort_spill'; END $$;,,,psql,client backend,,1110242715664868741
+2026-09-12 15:27:18.681 UTC,postgres,postgres,96,[local],6aa56f55.60,18,SELECT,2026-09-12 15:27:17 UTC,3/35,0,LOG,00000,"duration: 34.611 ms  plan:
+Query Text: SELECT payload FROM probe_t ORDER BY payload LIMIT 10;
+Limit  (cost=9382.19..9383.34 rows=10 width=33) (actual time=33.275..34.602 rows=10 loops=1)
+  Buffers: shared hit=794 read=2068
+  ->  Gather Merge  (cost=9382.19..29676.36 rows=176471 width=33) (actual time=33.273..34.600 rows=10 loops=1)
+        Workers Planned: 1
+        Workers Launched: 1
+        Buffers: shared hit=794 read=2068
+        ->  Sort  (cost=8382.18..8823.36 rows=176471 width=33) (actual time=31.900..31.901 rows=9 loops=2)
+              Sort Key: payload
+              Sort Method: top-N heapsort  Memory: 26kB
+              Buffers: shared hit=794 read=2068
+              Worker 0:  Sort Method: top-N heapsort  Memory: 26kB
+              ->  Parallel Seq Scan on probe_t  (cost=0.00..4568.71 rows=176471 width=33) (actual time=0.017..12.707 rows=150000 loops=2)
+                    Buffers: shared hit=736 read=2068
+Settings: work_mem = '64kB'",,,,,,,,,psql,client backend,,-7966615284271679329
+2026-09-12 15:27:18.777 UTC,postgres,postgres,96,[local],6aa56f55.60,21,DO,2026-09-12 15:27:17 UTC,3/39,0,LOG,00000,PROBE param_1,,,,,PL/pgSQL function inline_code_block line 1 at RAISE,DO $$ BEGIN RAISE LOG 'PROBE param_1'; END $$;,,,psql,client backend,,-7057047630402540727
+2026-09-12 15:27:18.793 UTC,postgres,postgres,96,[local],6aa56f55.60,22,SELECT,2026-09-12 15:27:17 UTC,3/40,0,LOG,00000,"duration: 15.404 ms  plan:
+Query Text: SELECT count(*) FROM probe_t WHERE id = 1;
+Aggregate  (cost=6009.98..6009.99 rows=1 width=8) (actual time=12.367..15.396 rows=1 loops=1)
+  Buffers: shared hit=928 read=1876
+  ->  Gather  (cost=1000.00..6009.98 rows=1 width=0) (actual time=0.114..15.392 rows=1 loops=1)
+        Workers Planned: 1
+        Workers Launched: 1
+        Buffers: shared hit=928 read=1876
+        ->  Parallel Seq Scan on probe_t  (cost=0.00..5009.88 rows=1 width=0) (actual time=3.555..9.636 rows=0 loops=2)
+              Filter: (id = 1)
+              Rows Removed by Filter: 150000
+              Buffers: shared hit=928 read=1876",,,,,,,,,psql,client backend,,372306291497856440
+2026-09-12 15:27:18.793 UTC,postgres,postgres,96,[local],6aa56f55.60,23,DO,2026-09-12 15:27:17 UTC,3/41,0,LOG,00000,PROBE param_2,,,,,PL/pgSQL function inline_code_block line 1 at RAISE,DO $$ BEGIN RAISE LOG 'PROBE param_2'; END $$;,,,psql,client backend,,4548832959181125688
+2026-09-12 15:27:18.803 UTC,postgres,postgres,96,[local],6aa56f55.60,24,SELECT,2026-09-12 15:27:17 UTC,3/42,0,LOG,00000,"duration: 10.163 ms  plan:
+Query Text: SELECT count(*) FROM probe_t WHERE id = 2;
+Aggregate  (cost=6009.98..6009.99 rows=1 width=8) (actual time=8.901..10.155 rows=1 loops=1)
+  Buffers: shared hit=992 read=1812
+  ->  Gather  (cost=1000.00..6009.98 rows=1 width=0) (actual time=0.129..10.151 rows=1 loops=1)
+        Workers Planned: 1
+        Workers Launched: 1
+        Buffers: shared hit=992 read=1812
+        ->  Parallel Seq Scan on probe_t  (cost=0.00..5009.88 rows=1 width=0) (actual time=3.141..7.470 rows=0 loops=2)
+              Filter: (id = 2)
+              Rows Removed by Filter: 150000
+              Buffers: shared hit=992 read=1812",,,,,,,,,psql,client backend,,372306291497856440
+2026-09-12 15:27:18.804 UTC,postgres,postgres,96,[local],6aa56f55.60,25,DO,2026-09-12 15:27:17 UTC,3/43,0,LOG,00000,PROBE nested,,,,,PL/pgSQL function inline_code_block line 1 at RAISE,DO $$ BEGIN RAISE LOG 'PROBE nested'; END $$;,,,psql,client backend,,8744322400061511643
+2026-09-12 15:27:18.820 UTC,postgres,postgres,96,[local],6aa56f55.60,26,SELECT,2026-09-12 15:27:17 UTC,3/45,0,LOG,00000,"duration: 15.928 ms  plan:
+Query Text: SELECT count(*)        FROM probe_t WHERE k = 7
+Finalize Aggregate  (cost=6010.43..6010.44 rows=1 width=8) (actual time=15.922..15.923 rows=1 loops=1)
+  Buffers: shared hit=1056 read=1748
+  ->  Gather  (cost=6010.32..6010.43 rows=1 width=8) (actual time=15.915..15.917 rows=1 loops=1)
+        Workers Planned: 1
+        Workers Launched: 0
+        Buffers: shared hit=1056 read=1748
+        ->  Partial Aggregate  (cost=5010.32..5010.33 rows=1 width=8) (actual time=15.914..15.915 rows=1 loops=1)
+              Buffers: shared hit=1056 read=1748
+              ->  Parallel Seq Scan on probe_t  (cost=0.00..5009.88 rows=176 width=0) (actual time=0.019..15.876 rows=300 loops=1)
+                    Filter: (k = 7)
+                    Rows Removed by Filter: 299700
+                    Buffers: shared hit=1056 read=1748",,,,,"SQL statement ""SELECT count(*)        FROM probe_t WHERE k = 7""
+PL/pgSQL function probe_f() line 4 at SQL statement",,,,psql,client backend,,-2811740254007360874
+2026-09-12 15:27:18.820 UTC,postgres,postgres,96,[local],6aa56f55.60,27,SELECT,2026-09-12 15:27:17 UTC,3/45,0,LOG,00000,"duration: 16.310 ms  plan:
+Query Text: SELECT probe_f();
+Result  (cost=0.00..0.26 rows=1 width=8) (actual time=16.304..16.305 rows=1 loops=1)
+  Buffers: shared hit=1056 read=1748",,,,,,,,,psql,client backend,,-2811740254007360874
+2026-09-12 15:27:18.821 UTC,postgres,postgres,96,[local],6aa56f55.60,28,DO,2026-09-12 15:27:17 UTC,3/47,0,LOG,00000,PROBE stmt_duration,,,,,PL/pgSQL function inline_code_block line 1 at RAISE,DO $$ BEGIN RAISE LOG 'PROBE stmt_duration'; END $$;,,,psql,client backend,,5698238860131881095
+2026-09-12 15:27:18.821 UTC,postgres,postgres,96,[local],6aa56f55.60,29,SET,2026-09-12 15:27:17 UTC,3/0,0,LOG,00000,duration: 0.093 ms  statement: SET log_min_duration_statement = 0;,,,,,,,,,psql,client backend,,8410328031013335827
+2026-09-12 15:27:18.839 UTC,postgres,postgres,96,[local],6aa56f55.60,30,SELECT,2026-09-12 15:27:17 UTC,3/49,0,LOG,00000,"duration: 17.503 ms  plan:
+Query Text: SELECT count(*) FROM probe_t WHERE k = 5;
+Finalize Aggregate  (cost=6010.43..6010.44 rows=1 width=8) (actual time=14.484..17.491 rows=1 loops=1)
+  Buffers: shared hit=1088 read=1716
+  ->  Gather  (cost=6010.32..6010.43 rows=1 width=8) (actual time=14.324..17.482 rows=2 loops=1)
+        Workers Planned: 1
+        Workers Launched: 1
+        Buffers: shared hit=1088 read=1716
+        ->  Partial Aggregate  (cost=5010.32..5010.33 rows=1 width=8) (actual time=11.815..11.816 rows=1 loops=2)
+              Buffers: shared hit=1088 read=1716
+              ->  Parallel Seq Scan on probe_t  (cost=0.00..5009.88 rows=176 width=0) (actual time=0.082..11.791 rows=150 loops=2)
+                    Filter: (k = 5)
+                    Rows Removed by Filter: 149850
+                    Buffers: shared hit=1088 read=1716",,,,,,,,,psql,client backend,,-6427770559224207873
+2026-09-12 15:27:18.839 UTC,postgres,postgres,96,[local],6aa56f55.60,31,SELECT,2026-09-12 15:27:17 UTC,3/0,0,LOG,00000,duration: 17.732 ms  statement: SELECT count(*) FROM probe_t WHERE k = 5;,,,,,,,,,psql,client backend,,-6427770559224207873
