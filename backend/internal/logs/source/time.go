@@ -3,6 +3,7 @@ package source
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -35,7 +36,7 @@ func ParseTime(v any) (time.Time, error) {
 
 		return time.Time{}, fmt.Errorf("%w: timestamp %q has no recognized format", ErrConfig, t)
 	case float64:
-		return time.UnixMilli(int64(t)).UTC(), nil
+		return floatMillis(t)
 	case json.Number:
 		if ms, err := t.Int64(); err == nil {
 			return time.UnixMilli(ms).UTC(), nil
@@ -46,8 +47,16 @@ func ParseTime(v any) (time.Time, error) {
 			return time.Time{}, fmt.Errorf("%w: timestamp %q is not a number", ErrConfig, t.String())
 		}
 
-		return time.UnixMilli(int64(ms)).UTC(), nil
+		return floatMillis(ms)
 	default:
 		return time.Time{}, fmt.Errorf("%w: record has no usable timestamp", ErrConfig)
 	}
+}
+
+func floatMillis(ms float64) (time.Time, error) {
+	if math.IsNaN(ms) || ms < math.MinInt64 || ms >= math.MaxInt64 {
+		return time.Time{}, fmt.Errorf("%w: timestamp %v is out of range", ErrConfig, ms)
+	}
+
+	return time.UnixMilli(int64(ms)).UTC(), nil
 }
