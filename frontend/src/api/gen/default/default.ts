@@ -85,6 +85,7 @@ import type {
   GetInstanceInfoParams,
   GetInvalidConstraintsParams,
   GetLogsCheckParams,
+  GetLogsInsightsParams,
   GetLogsParams,
   GetMaintenanceAutovacuumFreezeMaxAgeParams,
   GetMaintenanceAutovacuumSummaryParams,
@@ -166,6 +167,7 @@ import type {
   ListAllPersonalTokensParams,
   ListPersonalTokensParams,
   LockSnapshot,
+  LogInsights,
   LogSearchResult,
   LogSourceCheck,
   MaintenanceAutovacuumFreezeMaxAge,
@@ -10475,6 +10477,130 @@ export function useGetLogsCheck<
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetLogsCheckQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Read one window of cluster logs once: count every record by event category and summarize the auto_explain plans it holds, grouped by query id and plan shape. Plans come from records above auto_explain.log_min_duration, so the summary describes the slow tail, not the whole workload. Only the host filter is pushed down to the source. Answers 404 when log_insights is disabled.
+ */
+export type getLogsInsightsResponse200 = {
+  data: LogInsights
+  status: 200
+}
+
+export type getLogsInsightsResponse400 = {
+  data: void
+  status: 400
+}
+
+export type getLogsInsightsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getLogsInsightsResponse501 = {
+  data: void
+  status: 501
+}
+
+export type getLogsInsightsResponse502 = {
+  data: ErrorMessage
+  status: 502
+}
+
+export type getLogsInsightsResponse504 = {
+  data: void
+  status: 504
+}
+
+export type getLogsInsightsResponseSuccess = getLogsInsightsResponse200 & {
+  headers: Headers
+}
+export type getLogsInsightsResponseError = (
+  | getLogsInsightsResponse400
+  | getLogsInsightsResponse404
+  | getLogsInsightsResponse501
+  | getLogsInsightsResponse502
+  | getLogsInsightsResponse504
+) & {
+  headers: Headers
+}
+
+export type getLogsInsightsResponse = getLogsInsightsResponseSuccess | getLogsInsightsResponseError
+
+export const getGetLogsInsightsUrl = (params: GetLogsInsightsParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/logs/insights?${stringifiedParams}`
+    : `/api/logs/insights`
+}
+
+export const getLogsInsights = async (
+  params: GetLogsInsightsParams,
+  options?: RequestInit,
+): Promise<getLogsInsightsResponse> => {
+  return customFetch<getLogsInsightsResponse>(getGetLogsInsightsUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetLogsInsightsQueryKey = (params?: MaybeRef<GetLogsInsightsParams>) => {
+  return ['api', 'logs', 'insights', ...(params ? [params] : [])] as const
+}
+
+export const getGetLogsInsightsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLogsInsights>>,
+  TError = void | NotFoundResponse | ErrorMessage,
+>(
+  params: MaybeRef<GetLogsInsightsParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getLogsInsights>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetLogsInsightsQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getLogsInsights>>> = ({ signal }) =>
+    getLogsInsights(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getLogsInsights>>,
+    TError,
+    TData
+  >
+}
+
+export type GetLogsInsightsQueryResult = NonNullable<Awaited<ReturnType<typeof getLogsInsights>>>
+export type GetLogsInsightsQueryError = void | NotFoundResponse | ErrorMessage
+
+export function useGetLogsInsights<
+  TData = Awaited<ReturnType<typeof getLogsInsights>>,
+  TError = void | NotFoundResponse | ErrorMessage,
+>(
+  params: MaybeRef<GetLogsInsightsParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getLogsInsights>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLogsInsightsQueryOptions(params, options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
 

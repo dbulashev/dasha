@@ -10,6 +10,23 @@ until pg_isready -h pg17-master -p 5432 -U demo -d demo; do sleep 2; done
 echo "Waiting for pg18-standalone..."
 until pg_isready -h pg18-standalone -p 5432 -U demo -d demo; do sleep 2; done
 
+# --- Log insights fixtures: a table large enough for plans worth reading and a
+#     function whose statement auto_explain logs as a nested one ---
+for host in pg18-master pg17-master; do
+  psql -h "$host" -U demo -d demo <<'SQL'
+CREATE TABLE IF NOT EXISTS plan_demo AS
+  SELECT g AS id, g % 1000 AS k, md5(g::text) AS payload
+  FROM generate_series(1, 300000) g;
+ANALYZE plan_demo;
+CREATE OR REPLACE FUNCTION plan_demo_count(p int) RETURNS bigint
+LANGUAGE plpgsql AS $$
+BEGIN
+  RETURN (SELECT count(*) FROM plan_demo WHERE k = p);
+END
+$$;
+SQL
+done
+
 echo "=== Starting continuous pgbench load ==="
 pgbench -h pg18-master -U demo -d demo -c 4 -j 2 -T 0 -P 60 &
 pgbench -h pg17-master -U demo -d demo -c 2 -j 1 -T 0 -P 60 &
@@ -225,6 +242,39 @@ SQL
     for host in pg18-master pg17-master; do
       psql -h "$host" -U demo -d demo -c \
         "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_session_stats;"
+    done
+  fi
+
+  # 8. Log insights: plans that trip the plan rules (a filter discarding most
+  #    rows, a row misestimate, a sort spilling to disk), one statement with a
+  #    fresh literal each cycle, a nested statement, and events for the
+  #    classifier (temp files, a statement timeout, an unknown role).
+  k=$((RANDOM % 1000))
+  for host in pg18-master pg17-master; do
+    psql -h "$host" -U demo -d demo <<SQL 2>/dev/null
+SET max_parallel_workers_per_gather = 0;
+SELECT count(*) FROM plan_demo WHERE k = $k AND payload LIKE '%ab%';
+SELECT count(*) FROM plan_demo WHERE k = $k AND id % 1000 = $k;
+SELECT plan_demo_count($k);
+SET work_mem = '64kB';
+SELECT id FROM plan_demo ORDER BY payload OFFSET 290000 LIMIT 1;
+RESET work_mem;
+RESET max_parallel_workers_per_gather;
+SELECT count(*) FROM plan_demo WHERE payload LIKE '%abc%';
+SET statement_timeout = '50ms';
+SELECT pg_sleep(1);
+SQL
+    psql -h "$host" -U ghost -d demo -c "SELECT 1" 2>/dev/null || true
+  done
+
+  # 8b. A plan record of ~350 KB: the IN list lands in the query text and in the
+  #     filter, past the 256 KiB VictoriaLogs line limit by default.
+  if [ $((cycle % 20)) -eq 1 ]; then
+    ids="$(seq -s, 1 30000)"
+    for host in pg18-master pg17-master; do
+      psql -h "$host" -U demo -d demo >/dev/null 2>&1 <<SQL || true
+SELECT count(*) FROM plan_demo WHERE id = ANY ('{$ids}'::int[]);
+SQL
     done
   fi
 

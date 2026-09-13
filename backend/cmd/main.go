@@ -207,7 +207,7 @@ func dashaExec(cmd *cobra.Command, _ []string) error {
 	}
 
 	logsRL := auth.NewPathRateLimiter(
-		[]string{"/api/logs", "/api/logs/check"},
+		[]string{"/api/logs", "/api/logs/check", "/api/logs/insights"},
 		auth.RateLimitGroup{User: logSearch.RateLimit, Admin: logSearch.AdminRateLimit},
 		groups,
 		func(c echo.Context) string {

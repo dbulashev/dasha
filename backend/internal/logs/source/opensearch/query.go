@@ -1,6 +1,7 @@
 package opensearch
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -120,8 +121,25 @@ type searchResponse struct {
 }
 
 type hit struct {
-	ID     string         `json:"_id"`
-	Source map[string]any `json:"_source"`
+	ID     string    `json:"_id"`
+	Source hitSource `json:"_source"`
+}
+
+// hitSource keeps numbers as json.Number: a float64 cannot hold an int64 query_id.
+type hitSource map[string]any
+
+func (s *hitSource) UnmarshalJSON(b []byte) error {
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.UseNumber()
+
+	var m map[string]any
+	if err := dec.Decode(&m); err != nil {
+		return fmt.Errorf("decode _source: %w", err)
+	}
+
+	*s = m
+
+	return nil
 }
 
 // fieldCapsResponse maps a field name to the types it has across the indices

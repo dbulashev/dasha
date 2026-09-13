@@ -2571,6 +2571,62 @@ paths:
                 $ref: '#/components/schemas/ErrorMessage'
         '504':
           description: upstream timeout
+  /api/logs/insights:
+    get:
+      operationId: getLogsInsights
+      description: >-
+        Read one window of cluster logs once: count every record by event
+        category and summarize the auto_explain plans it holds, grouped by query
+        id and plan shape. Plans come from records above
+        auto_explain.log_min_duration, so the summary describes the slow tail,
+        not the whole workload. Only the host filter is pushed down to the source.
+        Answers 404 when log_insights is disabled.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - in: query
+          name: service_type
+          required: true
+          schema:
+            type: string
+            enum: [postgresql, pooler]
+        - in: query
+          name: from
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: to
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: host
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogInsights'
+        '400':
+          description: invalid parameters
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: logs not supported for this cluster
+        '502':
+          description: The log source failed or is misconfigured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '504':
+          description: upstream timeout with nothing read
   /api/autosnapshot/status:
     get:
       operationId: getAutosnapshotStatus
@@ -3259,6 +3315,619 @@ components:
           description: max_scan reached - results/counts are incomplete
         scanned:
           type: integer
+    LogInsights:
+      type: object
+      required:
+        - scanned
+        - partial
+        - partial_reasons
+        - categories
+        - plans
+      properties:
+        scanned:
+          type: integer
+          description: records read from the window
+        partial:
+          type: boolean
+          description: the summary covers less than the whole window
+        partial_reasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogInsightsPartialReason'
+        covered_from:
+          type: string
+          format: date-time
+          description: >-
+            earliest record read; absent when nothing was read. A scan cut by its
+            budget keeps the newest records on VictoriaLogs and the oldest on
+            OpenSearch.
+        covered_to:
+          type: string
+          format: date-time
+          description: latest record read; absent when nothing was read
+        categories:
+          type: array
+          description: event categories seen in the window, most frequent first
+          items:
+            $ref: '#/components/schemas/LogCategory'
+        plans:
+          $ref: '#/components/schemas/LogPlansSummary'
+    LogInsightsPartialReason:
+      type: string
+      description: >-
+        records and bytes - the scan budget of log_insights ran out; timeout - the
+        source did not answer in time; source - the source stopped before the end
+        of the window; plans - max_plans plan records were parsed and the rest
+        were only counted.
+      enum: [records, bytes, timeout, source, plans]
+    LogCategory:
+      type: object
+      required:
+        - code
+        - count
+        - share
+        - first_seen
+        - last_seen
+        - templates
+      properties:
+        code:
+          type: string
+          description: >-
+            Matched by SQLSTATE where the stream carries it, then by the record
+            itself (an auto_explain plan, a statement duration), then by the English
+            message text. other is whatever matched nothing.
+          enum:
+            - deadlock
+            - lock_wait
+            - connection_limit
+            - authentication
+            - canceled
+            - plan
+            - slow_query
+            - checkpoint
+            - autovacuum
+            - temp_file
+            - connection
+            - error
+            - other
+        count:
+          type: integer
+        share:
+          type: number
+          format: double
+          description: fraction of the records read, 0..1
+        first_seen:
+          type: string
+          format: date-time
+        last_seen:
+          type: string
+          format: date-time
+        templates:
+          type: array
+          description: >-
+            most frequent message templates, variable parts replaced with <*>;
+            empty for plan
+          items:
+            $ref: '#/components/schemas/LogCategoryTemplate'
+    LogCategoryTemplate:
+      type: object
+      required:
+        - template
+        - count
+        - first_seen
+        - last_seen
+      properties:
+        template:
+          type: string
+        count:
+          type: integer
+        first_seen:
+          type: string
+          format: date-time
+        last_seen:
+          type: string
+          format: date-time
+    LogPlansSummary:
+      type: object
+      required:
+        - records
+        - parsed
+        - not_parsed
+        - without_query_id
+        - total_groups
+        - total_duration_ms
+        - max_duration_ms
+        - groups
+        - dormant
+      properties:
+        records:
+          type: integer
+          description: auto_explain records found, parsed or not
+        parsed:
+          type: integer
+        not_parsed:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanNotParsed'
+        without_query_id:
+          type: integer
+          description: parsed plans whose record carries no query_id
+        total_groups:
+          type: integer
+        covered_from:
+          type: string
+          format: date-time
+          description: >-
+            earliest record read while the plan budget lasted; equals the scan span
+            unless max_plans ran out
+        covered_to:
+          type: string
+          format: date-time
+          description: latest record read while the plan budget lasted
+        total_duration_ms:
+          type: number
+          format: double
+        max_duration_ms:
+          type: number
+          format: double
+        first_seen:
+          type: string
+          format: date-time
+        last_seen:
+          type: string
+          format: date-time
+        groups:
+          type: array
+          description: >-
+            the groups among the top by total time or among the top by slowest run,
+            ordered by total time
+          items:
+            $ref: '#/components/schemas/LogPlanGroup'
+        dormant:
+          type: array
+          description: rules that could not run on some groups, and what those plans lacked
+          items:
+            $ref: '#/components/schemas/PlanDormantRule'
+        empty_reason:
+          type: string
+          description: set when groups is empty
+          enum:
+            - no_records
+            - no_plan_records
+            - unsupported_plan_format
+            - not_parsed
+            - budget_exhausted
+            - source_unavailable
+    PlanNotParsed:
+      type: object
+      required:
+        - code
+        - count
+      properties:
+        code:
+          type: string
+          description: >-
+            unsupported_plan_format - xml or yaml; empty_plan; parse_error;
+            plan_too_large - larger than max_plan_bytes; plan_budget_exhausted -
+            past max_plans.
+          enum:
+            - unsupported_plan_format
+            - empty_plan
+            - parse_error
+            - plan_too_large
+            - plan_budget_exhausted
+        count:
+          type: integer
+    LogPlanGroup:
+      type: object
+      description: >-
+        Plans of one statement with one shape. Nested statements share the
+        query_id of the statement that ran them, so the normalized query text is
+        part of the grouping.
+      required:
+        - hash
+        - count
+        - durations
+        - first_seen
+        - last_seen
+        - plan
+      properties:
+        query_id:
+          type: string
+          description: query_id of the log record as string to preserve int64 precision in JavaScript; absent when the record has none
+        hash:
+          type: string
+          description: plan shape fingerprint
+        count:
+          type: integer
+        durations:
+          $ref: '#/components/schemas/PlanDurationStats'
+        first_seen:
+          type: string
+          format: date-time
+        last_seen:
+          type: string
+          format: date-time
+        plan:
+          $ref: '#/components/schemas/PlanSummary'
+    PlanDurationStats:
+      type: object
+      description: exact over the plans of the group; percentiles by nearest rank
+      required:
+        - min_ms
+        - p50_ms
+        - p95_ms
+        - max_ms
+        - sum_ms
+      properties:
+        min_ms:
+          type: number
+          format: double
+        p50_ms:
+          type: number
+          format: double
+        p95_ms:
+          type: number
+          format: double
+        max_ms:
+          type: number
+          format: double
+        sum_ms:
+          type: number
+          format: double
+    PlanSummary:
+      type: object
+      description: One parsed plan with the rules evaluated on it.
+      required:
+        - format
+        - generic
+        - query_text
+        - capabilities
+        - root
+        - findings
+        - dormant
+      properties:
+        format:
+          type: string
+          enum: [text, json]
+        generic:
+          type: boolean
+          description: built with GENERIC_PLAN, parameters not substituted
+        query_text:
+          type: string
+          description: at most 8 KiB; query_text_omitted_bytes counts the rest
+        query_text_omitted_bytes:
+          type: integer
+          description: bytes cut from the end of query_text; absent when it is complete
+        query_params:
+          type: string
+          description: at most 8 KiB; query_params_omitted_bytes counts the rest
+        query_params_omitted_bytes:
+          type: integer
+          description: bytes cut from the end of query_params; absent when it is complete
+        duration_ms:
+          type: number
+          format: double
+          description: known for a plan taken from a log record
+        planning_time_ms:
+          type: number
+          format: double
+        execution_time_ms:
+          type: number
+          format: double
+        capabilities:
+          $ref: '#/components/schemas/PlanCapabilities'
+        root:
+          $ref: '#/components/schemas/PlanNode'
+        triggers:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanTrigger'
+        jit:
+          $ref: '#/components/schemas/PlanJIT'
+        settings:
+          type: object
+          additionalProperties:
+            type: string
+        findings:
+          type: array
+          description: most severe first
+          items:
+            $ref: '#/components/schemas/PlanFinding'
+        dormant:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanDormantRule'
+    PlanCapabilities:
+      type: object
+      description: what the plan itself proved it carries
+      required:
+        - actual
+        - buffers
+        - timing
+        - settings
+      properties:
+        actual:
+          type: boolean
+        buffers:
+          type: boolean
+        timing:
+          type: boolean
+        settings:
+          type: boolean
+    PlanNode:
+      type: object
+      description: >-
+        One plan node. type is the canonical node name; the modifiers the text
+        format folds into it are separate fields.
+      required:
+        - type
+        - parallel
+        - startup_cost
+        - total_cost
+        - plan_rows
+        - plan_width
+        - children
+      properties:
+        type:
+          type: string
+        relation:
+          type: string
+        schema:
+          type: string
+        alias:
+          type: string
+        index_name:
+          type: string
+        parent_relationship:
+          type: string
+        subplan_name:
+          type: string
+        parallel:
+          type: boolean
+        partial_mode:
+          type: string
+        strategy:
+          type: string
+        join_type:
+          type: string
+        scan_direction:
+          type: string
+        operation:
+          type: string
+        startup_cost:
+          type: number
+          format: double
+        total_cost:
+          type: number
+          format: double
+        plan_rows:
+          type: number
+          format: double
+        plan_width:
+          type: integer
+        actual:
+          $ref: '#/components/schemas/PlanNodeActual'
+        filter:
+          type: string
+          description: at most 4 KiB, like the other conditions; *_omitted_bytes counts the rest
+        filter_omitted_bytes:
+          type: integer
+          description: bytes cut from the end of filter; absent when it is complete
+        index_cond:
+          type: string
+        index_cond_omitted_bytes:
+          type: integer
+        recheck_cond:
+          type: string
+        recheck_cond_omitted_bytes:
+          type: integer
+        join_cond:
+          type: string
+        join_cond_omitted_bytes:
+          type: integer
+        sort_key:
+          type: array
+          items:
+            type: string
+        rows_removed_by_filter:
+          type: number
+          format: double
+        rows_removed_by_join_filter:
+          type: number
+          format: double
+        heap_fetches:
+          type: number
+          format: double
+        sort_method:
+          type: string
+        sort_space_kb:
+          type: number
+          format: double
+        sort_space_type:
+          type: string
+        workers_planned:
+          type: integer
+        workers_launched:
+          type: integer
+        heap_blocks_exact:
+          type: number
+          format: double
+        heap_blocks_lossy:
+          type: number
+          format: double
+        buffers:
+          $ref: '#/components/schemas/PlanBuffers'
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanNode'
+    PlanNodeActual:
+      type: object
+      description: measured per loop, as PostgreSQL prints it; the node's output is rows × loops
+      required:
+        - rows
+        - loops
+      properties:
+        startup_time_ms:
+          type: number
+          format: double
+        total_time_ms:
+          type: number
+          format: double
+        rows:
+          type: number
+          format: double
+        loops:
+          type: number
+          format: double
+    PlanBuffers:
+      type: object
+      required:
+        - shared_hit
+        - shared_read
+        - shared_dirtied
+        - shared_written
+        - local_hit
+        - local_read
+        - local_dirtied
+        - local_written
+        - temp_read
+        - temp_written
+      properties:
+        shared_hit:
+          type: number
+          format: double
+        shared_read:
+          type: number
+          format: double
+        shared_dirtied:
+          type: number
+          format: double
+        shared_written:
+          type: number
+          format: double
+        local_hit:
+          type: number
+          format: double
+        local_read:
+          type: number
+          format: double
+        local_dirtied:
+          type: number
+          format: double
+        local_written:
+          type: number
+          format: double
+        temp_read:
+          type: number
+          format: double
+        temp_written:
+          type: number
+          format: double
+    PlanTrigger:
+      type: object
+      required:
+        - name
+        - time_ms
+        - calls
+      properties:
+        name:
+          type: string
+        relation:
+          type: string
+        time_ms:
+          type: number
+          format: double
+        calls:
+          type: number
+          format: double
+    PlanJIT:
+      type: object
+      required:
+        - functions
+      properties:
+        functions:
+          type: integer
+        generation_ms:
+          type: number
+          format: double
+        inlining_ms:
+          type: number
+          format: double
+        optimization_ms:
+          type: number
+          format: double
+        emission_ms:
+          type: number
+          format: double
+        total_ms:
+          type: number
+          format: double
+    PlanFinding:
+      type: object
+      required:
+        - code
+        - severity
+        - path
+        - node_type
+      properties:
+        code:
+          type: string
+          description: Stable rule code. The wording is rendered from it and from params; the API carries no prose.
+          enum:
+            - seq_scan_large
+            - cost_hotspot
+            - nested_loop_blowup
+            - index_candidate_join
+            - sort_estimate_spill
+            - cte_materialize
+            - row_misestimate
+            - sort_spill_actual
+            - filter_discards_rows
+            - heap_fetches_high
+            - loops_blowup
+            - bitmap_lossy
+            - workers_not_launched
+            - jit_overhead
+            - trigger_time
+        severity:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+        path:
+          type: array
+          description: child indexes from the root to the node
+          items:
+            type: integer
+        node_type:
+          type: string
+        relation:
+          type: string
+        params:
+          type: object
+          description: >-
+            The values the wording quotes. Which keys are set depends on code; a
+            client reads only the ones its phrasing needs.
+          additionalProperties: {}
+    PlanDormantRule:
+      type: object
+      required:
+        - code
+        - missing
+      properties:
+        code:
+          type: string
+        missing:
+          type: array
+          description: what the plan lacked for the rule to run
+          items:
+            $ref: '#/components/schemas/PlanMissingRequirement'
+        groups:
+          type: integer
+          description: in a summary, how many plan groups the rule could not run on
+    PlanMissingRequirement:
+      type: string
+      enum: [actual, timing, buffers, work_mem]
     ClusterInstance:
       type: object
       properties:

@@ -91,7 +91,7 @@ func NewContainer() *Container {
 		sources := do.MustInvoke[*source.Registry](i)
 		logger := do.MustInvoke[*zap.Logger](i)
 
-		return logs.NewService(clusters, sources, cfg.LogSearch, logger), nil
+		return logs.NewService(clusters, sources, cfg.LogSearch, cfg.LogInsights, logger), nil
 	})
 
 	do.Provide(i, func(i *do.Injector) (*metrics.Service, error) {

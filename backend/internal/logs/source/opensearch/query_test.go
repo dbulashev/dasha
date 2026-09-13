@@ -153,6 +153,33 @@ func TestFlattenNestedSource(t *testing.T) {
 	}
 }
 
+func TestHitKeepsInt64Precision(t *testing.T) {
+	t.Parallel()
+
+	body := `{"_id":"a","_source":{"query_id":-3560200806914842915,"pg":{"pid":4242},"@timestamp":1757066400000}}`
+
+	var h hit
+	if err := json.Unmarshal([]byte(body), &h); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	out := map[string]string{}
+	flatten("", h.Source, out)
+
+	if out["query_id"] != "-3560200806914842915" {
+		t.Errorf("query_id = %q, want the exact int64", out["query_id"])
+	}
+
+	if out["pg.pid"] != "4242" {
+		t.Errorf("pg.pid = %q, want 4242", out["pg.pid"])
+	}
+
+	ts, err := source.ParseTime(h.Source["@timestamp"])
+	if err != nil || ts.UnixMilli() != 1757066400000 {
+		t.Errorf("timestamp = %v, %v; want epoch millis read back", ts, err)
+	}
+}
+
 func TestBuildSearchMatchesAnalyzedFieldsThroughTheirKeywordField(t *testing.T) {
 	t.Parallel()
 

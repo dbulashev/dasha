@@ -354,6 +354,10 @@ PostgreSQL fills when `compute_query_id` is on; `odyssey` and `pgbouncer` leave 
 whose records lack the field still searches, and the check endpoint lists the role among the missing
 ones.
 
+`sql_state` is optional too: `csvlog` binds it to `sql_state_code`, `jsonlog` to `state_code`. The log
+insights summary assigns an event its category by the SQLSTATE code first and by the message text only
+after that.
+
 `severities` lists the levels one stream accepts, in the casing the store holds them: the search
 rejects any other value and the log page offers exactly this list in its level filter. Every preset
 brings its own — upper-case PostgreSQL levels for `jsonlog` and `csvlog`, lower-case for `odyssey`,
@@ -369,6 +373,37 @@ A stream a source does not declare is unavailable: the API answers 501 and the U
 `GET /api/logs/check?cluster_name=…&service_type=…` (admin only) probes a source: the resolved target
 — an index name or a LogsQL expression — how many records the last hour holds, which mapped fields
 exist, which are missing, and one masked sample record.
+
+### Log insights
+
+`GET /api/logs/insights` reads a cluster's logs for the selected interval and returns two summaries:
+event counts by category (locks, checkpoints, autovacuum, errors and more) and the `auto_explain`
+plans, grouped by query and plan shape. The logs come from the same source as the log search, with
+the same `timeout_seconds` and `rate_limit`. The global `log_insights` block limits a single request:
+
+```yaml
+log_insights:
+  enabled: true           # false answers 404
+  max_records: 50000      # records read per request
+  max_bytes: 67108864     # bytes read per request
+  max_plan_bytes: 2097152 # a larger plan is counted but not parsed
+  max_plans: 5000         # plans parsed per request
+```
+
+If a limit is reached before the end of the interval, the response says which part of the interval
+the summary covers: the latest records for VictoriaLogs, the earliest for OpenSearch. If `max_plans`
+runs out first, the plans cover a shorter part than the categories.
+
+Plans reach the log when `auto_explain` is loaded through `shared_preload_libraries` and
+`auto_explain.log_format` is `text` or `json`. Only queries slower than
+`auto_explain.log_min_duration` make it into the summary. Plan checks based on actual row counts and
+timings need `auto_explain.log_analyze = on`. Plans are masked for credentials only, as in the log
+search; query literals stay as they are.
+
+A large plan may never reach Dasha. VictoriaLogs drops lines longer than `-insert.maxLineSizeBytes`
+(256 KiB by default, 2 MB at most), and the Fluent Bit `tail` input with `Skip_Long_Lines` on skips
+lines longer than `Buffer_Max_Size`. If the delivery agent truncates long lines, a text plan arrives
+without its end and a json plan fails to parse.
 
 ## Schema Checks (optional)
 

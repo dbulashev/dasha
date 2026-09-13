@@ -11,11 +11,12 @@
 # backend and the overlay switches between the two.
 services:
   victorialogs:
-    image: victoriametrics/victoria-logs:v1.0.0-victorialogs
+    image: victoriametrics/victoria-logs:v1.52.0
     container_name: dasha-vlogs
     command:
       - "-storageDataPath=/victoria-logs-data"
       - "-retentionPeriod=3d"
+      - "-insert.maxLineSizeBytes=2MiB" # auto_explain plans are single lines of up to megabytes
     volumes:
       - vlogs-data:/victoria-logs-data
     ports:

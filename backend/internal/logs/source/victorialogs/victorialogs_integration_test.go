@@ -73,7 +73,7 @@ func image() string {
 		return v
 	}
 
-	return "victoriametrics/victoria-logs:v1.0.0-victorialogs"
+	return "victoriametrics/victoria-logs:v1.52.0"
 }
 
 // seedRecord is one jsonlog record as the delivery agent writes it into
@@ -86,6 +86,7 @@ type seedRecord struct {
 	User          string `json:"user"`
 	PID           string `json:"pid"`
 	QueryID       string `json:"query_id"`
+	StateCode     string `json:"state_code"`
 	Cluster       string `json:"cluster"`
 	Host          string `json:"host"`
 	App           string `json:"app"`
@@ -116,6 +117,7 @@ func seedRecords() []seedRecord {
 			User:          users[i%len(users)],
 			PID:           fmt.Sprintf("%d", 1000+i),
 			QueryID:       queryID(i),
+			StateCode:     []string{"00000", "XX000", "XX000", "01000"}[i%4],
 			Cluster:       testCluster,
 			Host:          hosts[i%len(hosts)],
 			App:           "postgres",
@@ -132,6 +134,7 @@ func seedRecords() []seedRecord {
 		User:          "app",
 		PID:           "9999",
 		QueryID:       queryID(0),
+		StateCode:     "00000",
 		Cluster:       testCluster,
 		Host:          "db-1.example.net",
 		App:           "postgres",
@@ -141,9 +144,9 @@ func seedRecords() []seedRecord {
 }
 
 // queryID mimics the statement identifier PostgreSQL writes: a signed 64-bit
-// value, negative as often as positive.
+// value past the float64 range of exact integers, negative as often as positive.
 func queryID(i int) string {
-	id := int64(1000000 + i)
+	id := int64(4452854032459450605) + int64(i)*1000003
 	if i%2 == 1 {
 		id = -id
 	}
@@ -354,6 +357,21 @@ func TestStreamReadsEveryRecordNewestFirst(t *testing.T) {
 	if counts(got)["9999|duplicate line"] != 2 {
 		t.Errorf("the two identical records at one timestamp came back as %d",
 			counts(got)["9999|duplicate line"])
+	}
+}
+
+// TestStreamKeepsInt64FieldsExact: a store that keeps a column of mixed-sign
+// integers as float64 hands back query ids with their low digits rounded off.
+func TestStreamKeepsInt64FieldsExact(t *testing.T) {
+	want := map[string]bool{}
+	for _, r := range seedRecords() {
+		want[r.QueryID] = true
+	}
+
+	for _, r := range collect(context.Background(), t, testProvider(nil), testParams(source.Filter{}), 0) {
+		if !want[r.Fields["query_id"]] {
+			t.Errorf("query_id %q was never seeded", r.Fields["query_id"])
+		}
 	}
 }
 

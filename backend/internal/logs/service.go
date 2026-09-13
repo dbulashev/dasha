@@ -15,6 +15,7 @@ import (
 
 	"github.com/dbulashev/dasha/internal/auth"
 	"github.com/dbulashev/dasha/internal/config"
+	"github.com/dbulashev/dasha/internal/logs/pattern"
 	"github.com/dbulashev/dasha/internal/logs/source"
 	"github.com/dbulashev/dasha/internal/pkg/sanitize"
 )
@@ -34,6 +35,8 @@ var (
 	ErrUpstream = errors.New("log source error")
 	// ErrTimeout means the upstream read exceeded the configured timeout.
 	ErrTimeout = errors.New("log source timeout")
+	// ErrDisabled means the feature is switched off in the configuration.
+	ErrDisabled = errors.New("feature disabled")
 )
 
 // SearchQuery is a normalized log search request.
@@ -96,12 +99,15 @@ type Service interface {
 	Check(ctx context.Context, cluster, stream string) (CheckReport, error)
 	// SourceName is the name of the source bound to a cluster, empty when none.
 	SourceName(ctx context.Context, cluster string) string
+	// Insights classifies every record of a window and summarizes its plans.
+	Insights(ctx context.Context, q InsightsQuery) (InsightsResult, error)
 }
 
 type service struct {
 	clusters config.Clusters
 	sources  *source.Registry
 	cfg      config.LogSearchConfig
+	insights config.LogInsightsConfig
 	logger   *zap.Logger
 }
 
@@ -110,51 +116,33 @@ func NewService(
 	clusters config.Clusters,
 	sources *source.Registry,
 	cfg config.LogSearchConfig,
+	insights config.LogInsightsConfig,
 	logger *zap.Logger,
 ) Service {
 	return &service{
 		clusters: clusters,
 		sources:  sources,
 		cfg:      cfg.WithDefaults(),
+		insights: insights.WithDefaults(),
 		logger:   logger,
 	}
 }
 
 func (s *service) Search(ctx context.Context, q SearchQuery) (SearchResult, error) {
-	cluster, ok := s.findCluster(ctx, q.Cluster)
-	if !ok {
-		return SearchResult{}, ErrNotFound
-	}
-
-	provider, sourceName, ok := s.sources.For(cluster)
-	if !ok {
-		return SearchResult{}, fmt.Errorf("%w: cluster has no log source", ErrUnsupported)
-	}
-
-	fm := provider.Fields(q.Stream)
-	if fm.Empty() {
-		return SearchResult{}, fmt.Errorf("%w: source %q has no stream %q", ErrUnsupported, sourceName, q.Stream)
-	}
-
-	severities, err := s.validate(cluster, fm, q)
+	b, err := s.resolve(ctx, q.Cluster, q.Stream)
 	if err != nil {
 		return SearchResult{}, err
 	}
 
-	user := ""
-	if u := auth.UserFromContext(ctx); u != nil {
-		user = u.Name
+	severities, err := s.validate(b.cluster, b.fields, q)
+	if err != nil {
+		return SearchResult{}, err
 	}
 
-	s.logger.Info("log search",
-		zap.String("user", user),
-		zap.String("cluster", q.Cluster),
-		zap.String("source", sourceName),
-		zap.String("service", q.Stream),
-	)
+	s.logRead(ctx, "log search", q.Cluster, b.sourceName, q.Stream)
 
 	params := source.StreamParams{
-		Cluster: cluster,
+		Cluster: b.cluster,
 		Stream:  q.Stream,
 		From:    q.From,
 		To:      q.To,
@@ -169,40 +157,30 @@ func (s *service) Search(ctx context.Context, q SearchQuery) (SearchResult, erro
 	defer cancel()
 
 	if q.Dedup {
-		return s.searchDedup(ctx, provider, params, q, fm)
+		return s.searchDedup(ctx, b.provider, params, q, b.fields)
 	}
 
-	return s.searchPage(ctx, provider, params, q, fm)
+	return s.searchPage(ctx, b.provider, params, q, b.fields)
 }
 
 // Check probes the source bound to the cluster and masks the sample record it
 // brings back.
 func (s *service) Check(ctx context.Context, cluster, stream string) (CheckReport, error) {
-	c, ok := s.findCluster(ctx, cluster)
-	if !ok {
-		return CheckReport{}, ErrNotFound
-	}
-
-	provider, sourceName, ok := s.sources.For(c)
-	if !ok {
-		return CheckReport{}, fmt.Errorf("%w: cluster has no log source", ErrUnsupported)
-	}
-
-	fm := provider.Fields(stream)
-	if fm.Empty() {
-		return CheckReport{}, fmt.Errorf("%w: source %q has no stream %q", ErrUnsupported, sourceName, stream)
+	b, err := s.resolve(ctx, cluster, stream)
+	if err != nil {
+		return CheckReport{}, err
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(s.cfg.TimeoutSeconds)*time.Second)
 	defer cancel()
 
-	res, err := provider.Check(ctx, c, stream)
+	res, err := b.provider.Check(ctx, b.cluster, stream)
 	if err != nil {
 		return CheckReport{}, s.classify(ctx, err)
 	}
 
 	report := CheckReport{
-		Source:    sourceName,
+		Source:    b.sourceName,
 		Stream:    stream,
 		Target:    res.Target,
 		Documents: res.Documents,
@@ -213,10 +191,51 @@ func (s *service) Check(ctx context.Context, cluster, stream string) (CheckRepor
 	}
 
 	if res.Sample != nil {
-		report.Sample = maskFields(res.Sample, fm)
+		report.Sample = maskFields(res.Sample, b.fields)
 	}
 
 	return report, nil
+}
+
+// binding is a cluster resolved to the source and the stream serving it.
+type binding struct {
+	cluster    config.Cluster
+	provider   source.Provider
+	sourceName string
+	fields     source.FieldMap
+}
+
+func (s *service) resolve(ctx context.Context, cluster, stream string) (binding, error) {
+	c, ok := s.findCluster(ctx, cluster)
+	if !ok {
+		return binding{}, ErrNotFound
+	}
+
+	provider, sourceName, ok := s.sources.For(c)
+	if !ok {
+		return binding{}, fmt.Errorf("%w: cluster has no log source", ErrUnsupported)
+	}
+
+	fm := provider.Fields(stream)
+	if fm.Empty() {
+		return binding{}, fmt.Errorf("%w: source %q has no stream %q", ErrUnsupported, sourceName, stream)
+	}
+
+	return binding{cluster: c, provider: provider, sourceName: sourceName, fields: fm}, nil
+}
+
+func (s *service) logRead(ctx context.Context, msg, cluster, sourceName, stream string) {
+	user := ""
+	if u := auth.UserFromContext(ctx); u != nil {
+		user = u.Name
+	}
+
+	s.logger.Info(msg,
+		zap.String("user", user),
+		zap.String("cluster", cluster),
+		zap.String("source", sourceName),
+		zap.String("service", stream),
+	)
 }
 
 // SourceName resolves the log source serving a cluster.
@@ -254,8 +273,8 @@ func (s *service) findCluster(ctx context.Context, name string) (config.Cluster,
 // validate checks time range, severities and host; returns the severities in
 // the casing the source stores them.
 func (s *service) validate(cluster config.Cluster, fm source.FieldMap, q SearchQuery) ([]string, error) {
-	if !q.From.Before(q.To) {
-		return nil, fmt.Errorf("%w: 'from' must be before 'to'", ErrInvalid)
+	if err := validateWindow(cluster, q.From, q.To, q.Host); err != nil {
+		return nil, err
 	}
 
 	// A resume cursor would make dedup counts cover an arbitrary partial
@@ -279,11 +298,19 @@ func (s *service) validate(cluster config.Cluster, fm source.FieldMap, q SearchQ
 		severities = append(severities, v)
 	}
 
-	if q.Host != "" && !hostInCluster(cluster, q.Host) {
-		return nil, fmt.Errorf("%w: unknown host %q", ErrInvalid, q.Host)
+	return severities, nil
+}
+
+func validateWindow(cluster config.Cluster, from, to time.Time, host string) error {
+	if !from.Before(to) {
+		return fmt.Errorf("%w: 'from' must be before 'to'", ErrInvalid)
 	}
 
-	return severities, nil
+	if host != "" && !hostInCluster(cluster, host) {
+		return fmt.Errorf("%w: unknown host %q", ErrInvalid, host)
+	}
+
+	return nil
 }
 
 func hostInCluster(cluster config.Cluster, host string) bool {
@@ -395,7 +422,7 @@ func (s *service) searchDedup(
 
 	st, err := s.scan(ctx, provider, params, s.searchLimits(), func(rec source.Record) bool {
 		if e, ok := s.toEntry(rec, q, fm); ok {
-			key := normalize(e.Text)
+			key := pattern.Key(e.Text)
 
 			if g, exists := groups[key]; exists {
 				g.Count++
@@ -418,7 +445,7 @@ func (s *service) searchDedup(
 				e.LastSeen = e.Timestamp
 				// The row shows the shared template (concrete values of one member
 				// would mislead); the latest record's real values stay in Fields.
-				e.Text = displayTemplate(e.Text)
+				e.Text = pattern.Display(e.Text)
 				cp := e
 				groups[key] = &cp
 			}
@@ -486,9 +513,9 @@ func (s *service) toEntry(
 			continue
 		}
 
-		if strings.Contains(ex, displayPlaceholder) {
+		if strings.Contains(ex, pattern.Placeholder) {
 			if templated == "" {
-				templated = displayTemplate(rec.Fields[fm.Text])
+				templated = pattern.Display(rec.Fields[fm.Text])
 			}
 
 			if containsFold(templated, ex) {

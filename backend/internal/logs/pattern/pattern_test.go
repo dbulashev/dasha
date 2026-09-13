@@ -1,14 +1,17 @@
-package logs
+package pattern
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
-func TestNormalize_MasksVariableParts(t *testing.T) {
+func TestKeyMasksVariableParts(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name string
 		a, b string
-		same bool // whether a and b should normalize to the same template
+		same bool
 	}{
 		{
 			name: "durations differ only by number",
@@ -52,11 +55,24 @@ func TestNormalize_MasksVariableParts(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			gotSame := normalize(tt.a) == normalize(tt.b)
+			gotSame := Key(tt.a) == Key(tt.b)
 			if gotSame != tt.same {
-				t.Errorf("normalize(%q)=%q vs normalize(%q)=%q: same=%v, want %v",
-					tt.a, normalize(tt.a), tt.b, normalize(tt.b), gotSame, tt.same)
+				t.Errorf("Key(%q)=%q vs Key(%q)=%q: same=%v, want %v",
+					tt.a, Key(tt.a), tt.b, Key(tt.b), gotSame, tt.same)
 			}
 		})
+	}
+}
+
+func TestDisplayUsesThePlaceholder(t *testing.T) {
+	t.Parallel()
+
+	got := Display("temporary file: path \"base/pgsql_tmp/pgsql_tmp42.0\", size 8192")
+	if want := "temporary file: path " + Placeholder + ", size " + Placeholder; got != want {
+		t.Errorf("Display = %q, want %q", got, want)
+	}
+
+	if strings.Contains(Key("size 8192"), Placeholder) {
+		t.Error("Key carries the display placeholder")
 	}
 }

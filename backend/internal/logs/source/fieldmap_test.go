@@ -280,6 +280,38 @@ func TestPostgreSQLPresetsBindTheQueryID(t *testing.T) {
 	}
 }
 
+func TestPostgreSQLPresetsBindTheSQLState(t *testing.T) {
+	t.Parallel()
+
+	for name, field := range map[string]string{
+		PresetCSVLog:  "sql_state_code",
+		PresetJSONLog: "state_code",
+	} {
+		fm, ok := Preset(name)
+		if !ok {
+			t.Fatalf("preset %q is missing", name)
+		}
+
+		if fm.Roles()[RoleSQLState] != field {
+			t.Errorf("%s: roles = %v, want sql_state bound to %s", name, fm.Roles(), field)
+		}
+	}
+
+	fm, err := FieldMapFromConfig(config.LogFieldMapConfig{
+		Preset:    PresetJSONLog,
+		Timestamp: "@timestamp",
+		Host:      "host.name",
+		SQLState:  "pg.state_code",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if fm.SQLState != "pg.state_code" {
+		t.Errorf("SQLState = %q, want the override", fm.SQLState)
+	}
+}
+
 // TestFieldMapWithoutAQueryIDIsUsable: the role is optional, so a stream whose
 // records carry no statement identifier still serves search and check.
 func TestFieldMapWithoutAQueryIDIsUsable(t *testing.T) {

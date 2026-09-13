@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -98,6 +99,7 @@ type seedRecord struct {
 	User          string `json:"user"`
 	PID           int    `json:"pid"`
 	QueryID       int64  `json:"query_id"`
+	StateCode     string `json:"state_code"`
 	Cluster       string `json:"cluster"`
 	Service       string `json:"service"`
 	Host          struct {
@@ -130,6 +132,7 @@ func seedRecords() []seedRecord {
 			User:          users[i%len(users)],
 			PID:           1000 + i,
 			QueryID:       queryID(i),
+			StateCode:     stateCode(severities[i%len(severities)]),
 			Cluster:       testCluster,
 			Service:       testService,
 		}
@@ -142,14 +145,22 @@ func seedRecords() []seedRecord {
 }
 
 // queryID mimics the statement identifier PostgreSQL writes: a signed 64-bit
-// value, negative as often as positive.
+// value past the float64 range of exact integers, negative as often as positive.
 func queryID(i int) int64 {
-	id := int64(1000000 + i)
+	id := int64(4452854032459450605) + int64(i)*1000003
 	if i%2 == 1 {
 		return -id
 	}
 
 	return id
+}
+
+func stateCode(severity string) string {
+	if severity == "ERROR" || severity == "FATAL" {
+		return "XX000"
+	}
+
+	return "00000"
 }
 
 func seed(ctx context.Context) error {
@@ -358,6 +369,19 @@ func TestStreamReadsEveryRecordInOrder(t *testing.T) {
 		}
 
 		seen[r.Fields["pid"]] = true
+	}
+}
+
+func TestStreamKeepsInt64FieldsExact(t *testing.T) {
+	want := map[string]bool{}
+	for _, r := range seedRecords() {
+		want[strconv.FormatInt(r.QueryID, 10)] = true
+	}
+
+	for _, r := range collect(t, testProvider(t, 7), testParams(source.Filter{}), 0) {
+		if !want[r.Fields["query_id"]] {
+			t.Errorf("query_id %q was never seeded", r.Fields["query_id"])
+		}
 	}
 }
 

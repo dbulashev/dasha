@@ -18,6 +18,9 @@ auth:
     - name: demo-api
       token: "demo-api-token-for-testing"
       role: viewer
+    - name: demo-admin-api
+      token: "demo-admin-token-for-testing"
+      role: admin
 
 clusters:
   - name: pg18-cluster
@@ -115,6 +118,11 @@ log_search:
     #         preset: pgbouncer
     #         timestamp: "@timestamp"
     #         host: host
+
+# Event categories and auto_explain plans over the same log source:
+# GET /api/logs/insights?cluster_name=pg17-cluster&service_type=postgresql&from=…&to=…
+log_insights:
+  enabled: true
 
 # Metrics-backed Health Score (demo). Reads from the overlay's VictoriaMetrics
 # (demo/docker-compose.metrics.yaml). Providers are self-managed: pgSCV for PG

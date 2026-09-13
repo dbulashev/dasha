@@ -11,6 +11,10 @@ import (
 type scanLimits struct {
 	MaxRecords int
 	MaxBytes   int64
+	// MaxRecordBytes caps what one record CapRecord accepts is charged against
+	// MaxBytes; any other record is charged in full.
+	MaxRecordBytes int64
+	CapRecord      func(source.Record) bool
 }
 
 // scanStats says what the read consumed and why it ended.
@@ -25,7 +29,7 @@ type scanStats struct {
 }
 
 func (s *service) searchLimits() scanLimits {
-	return scanLimits{MaxRecords: s.cfg.MaxScan, MaxBytes: 0}
+	return scanLimits{MaxRecords: s.cfg.MaxScan, MaxBytes: 0, MaxRecordBytes: 0, CapRecord: nil}
 }
 
 // scan streams a window record by record. A record visit rejects is neither
@@ -48,7 +52,13 @@ func (s *service) scan(
 		st.Records++
 
 		if limits.MaxBytes > 0 {
-			st.Bytes += recordBytes(rec)
+			n := recordBytes(rec)
+			if limits.MaxRecordBytes > 0 && n > limits.MaxRecordBytes &&
+				limits.CapRecord != nil && limits.CapRecord(rec) {
+				n = limits.MaxRecordBytes
+			}
+
+			st.Bytes += n
 		}
 
 		if limits.MaxRecords > 0 && st.Records >= limits.MaxRecords {
