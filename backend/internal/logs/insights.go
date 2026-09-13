@@ -165,7 +165,9 @@ func (s *service) Insights(ctx context.Context, q InsightsQuery) (InsightsResult
 	if st.Capped {
 		if limits.MaxRecords > 0 && st.Records >= limits.MaxRecords {
 			reasons = append(reasons, PartialRecords)
-		} else {
+		}
+
+		if limits.MaxBytes > 0 && st.Bytes >= limits.MaxBytes {
 			reasons = append(reasons, PartialBytes)
 		}
 	}

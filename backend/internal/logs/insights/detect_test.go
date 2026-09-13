@@ -106,6 +106,7 @@ func TestDetectRejectsWhatIsNotAPlan(t *testing.T) {
 		"duration: NaN ms  plan:\nQuery Text: SELECT 1",
 		"duration: Inf ms  plan:\nQuery Text: SELECT 1",
 		"duration: -Inf ms  plan:\nQuery Text: SELECT 1",
+		"duration: 1e308 ms  plan:\nQuery Text: SELECT 1",
 		"duration: -1.000 ms  plan:\nQuery Text: SELECT 1",
 		"checkpoint starting: time",
 	} {

@@ -8,6 +8,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // PlanRecord is the part of an auto_explain record the plan parser needs.
@@ -18,7 +19,10 @@ type PlanRecord struct {
 	HasQueryID bool
 }
 
-const durationPrefix = "duration: "
+const (
+	durationPrefix = "duration: "
+	maxDurationMs  = float64(100 * 365 * 24 * time.Hour / time.Millisecond)
+)
 
 // Detect recognizes an auto_explain record: "duration: <ms> ms  plan:" and the
 // plan body after it. queryID is the log field: the body carries none before
@@ -90,7 +94,7 @@ func splitDuration(text string) (float64, string, bool) {
 	}
 
 	ms, err := strconv.ParseFloat(num, 64)
-	if err != nil || math.IsNaN(ms) || math.IsInf(ms, 0) || ms < 0 {
+	if err != nil || math.IsNaN(ms) || ms < 0 || ms > maxDurationMs {
 		return 0, "", false
 	}
 

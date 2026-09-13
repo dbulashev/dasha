@@ -2,9 +2,11 @@ package logs
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -144,6 +146,28 @@ func TestInsightsSaysWhyItStopped(t *testing.T) {
 		t.Errorf("partial = %v, reasons = %v; want records", res.Partial, res.PartialReasons)
 	}
 
+	recs := insightsRecords()
+	twoRecords := recordBytes(recs[0]) + recordBytes(recs[1])
+
+	for _, tt := range []struct {
+		cfg  config.LogInsightsConfig
+		want []string
+	}{
+		{cfg: config.LogInsightsConfig{MaxBytes: twoRecords}, want: []string{PartialBytes}},
+		{cfg: config.LogInsightsConfig{MaxRecords: 2, MaxBytes: twoRecords}, want: []string{PartialRecords, PartialBytes}},
+	} {
+		p = &fakeProvider{fields: testFieldMap(t), records: insightsRecords()}
+
+		res, err = newInsightsService(t, p, tt.cfg).Insights(context.Background(), insightsQuery())
+		if err != nil {
+			t.Fatalf("insights: %v", err)
+		}
+
+		if res.Scanned != 2 || !slices.Equal(res.PartialReasons, tt.want) {
+			t.Errorf("%+v: scanned = %d, reasons = %v; want 2, %v", tt.cfg, res.Scanned, res.PartialReasons, tt.want)
+		}
+	}
+
 	p = &fakeProvider{
 		fields:  testFieldMap(t),
 		records: insightsRecords(),
@@ -230,6 +254,36 @@ func TestInsightsEmptyReason(t *testing.T) {
 				t.Errorf("empty reason = %q, want %q", res.EmptyReason, tt.want)
 			}
 		})
+	}
+}
+
+func TestInsightsStaysEncodableOnHugeDurations(t *testing.T) {
+	t.Parallel()
+
+	recs := make([]source.Record, 0, 4)
+
+	for i, d := range []string{"3000000000000.000", "1e308", "3000000000000.000", "1e308"} {
+		r := record(i, strings.Replace(insightsPlan, "25.000", d, 1))
+		r.Fields["error_severity"] = "LOG"
+		r.Fields["query_id"] = "-4452854032459450605"
+		recs = append(recs, r)
+	}
+
+	p := &fakeProvider{fields: testFieldMap(t), records: recs}
+	svc := newInsightsService(t, p, config.LogInsightsConfig{})
+
+	res, err := svc.Insights(context.Background(), insightsQuery())
+	if err != nil {
+		t.Fatalf("insights: %v", err)
+	}
+
+	if res.Plans.Records != 2 || res.Plans.TotalGroups != 1 || res.Plans.TotalDurationMs != 6e12 {
+		t.Errorf("plans = %d in %d groups, total %v ms; want 2 in 1, 6e12",
+			res.Plans.Records, res.Plans.TotalGroups, res.Plans.TotalDurationMs)
+	}
+
+	if _, err := json.Marshal(res); err != nil {
+		t.Errorf("marshal: %v", err)
 	}
 }
 
