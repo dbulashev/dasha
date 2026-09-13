@@ -376,9 +376,10 @@ exist, which are missing, and one masked sample record.
 
 ### Log insights
 
-`GET /api/logs/insights` reads one window of the logs through the same source: it counts events by
-category and summarizes the `auto_explain` plans, grouped by query and plan shape. It shares the
-timeout and the rate limits of `log_search`; the global `log_insights` block bounds one read:
+`GET /api/logs/insights` reads a cluster's logs for the selected interval and returns two summaries:
+event counts by category (locks, checkpoints, autovacuum, errors and more) and the `auto_explain`
+plans, grouped by query and plan shape. The logs come from the same source as the log search, with
+the same `timeout_seconds` and `rate_limit`. The global `log_insights` block limits a single request:
 
 ```yaml
 log_insights:
@@ -389,17 +390,20 @@ log_insights:
   max_plans: 5000         # plans parsed per request
 ```
 
-When a budget runs out, the response names the part of the window it covers: VictoriaLogs is read
-from the newest records, OpenSearch from the oldest.
+If a limit is reached before the end of the interval, the response says which part of the interval
+the summary covers: the latest records for VictoriaLogs, the earliest for OpenSearch. If `max_plans`
+runs out first, the plans cover a shorter part than the categories.
 
-Plans need `auto_explain` in `shared_preload_libraries` with `log_format` text or json, and
-`log_analyze = on` for the checks that read actual rows and times. Plan values are not masked beyond
-the credentials the log search masks.
+Plans reach the log when `auto_explain` is loaded through `shared_preload_libraries` and
+`auto_explain.log_format` is `text` or `json`. Only queries slower than
+`auto_explain.log_min_duration` make it into the summary. Plan checks based on actual row counts and
+timings need `auto_explain.log_analyze = on`. Plans are masked for credentials only, as in the log
+search; query literals stay as they are.
 
-Every hop of the delivery caps a plan record before `max_plan_bytes` does: VictoriaLogs ignores lines
-above `-insert.maxLineSizeBytes` (256 KiB by default, 2 MB at most), the Fluent Bit `tail` input skips
-lines above `Buffer_Max_Size` with `Skip_Long_Lines` on. An agent that truncates long lines leaves text
-plans without their tail.
+A large plan may never reach Dasha. VictoriaLogs drops lines longer than `-insert.maxLineSizeBytes`
+(256 KiB by default, 2 MB at most), and the Fluent Bit `tail` input with `Skip_Long_Lines` on skips
+lines longer than `Buffer_Max_Size`. If the delivery agent truncates long lines, a text plan arrives
+without its end and a json plan fails to parse.
 
 ## Schema Checks (optional)
 
