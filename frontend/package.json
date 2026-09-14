@@ -55,7 +55,7 @@
     "unplugin-fonts": "^1.4.0",
     "vite": "^7.1.11",
     "vite-plugin-vue-devtools": "^8.2.1",
-    "vitest": "^4.1.11",
+    "vitest": "^5.0.0",
     "vue-tsc": "^3.3.11"
   },
   "overrides": {
