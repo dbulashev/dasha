@@ -56,6 +56,8 @@ type Store interface {
 	LastIOSnapshotAt(ctx context.Context) (map[string]time.Time, error)
 	InsertIOSnapshot(ctx context.Context, clusterName, instance string, snap statio.Snapshot) error
 	DropIOPartitionsBefore(ctx context.Context, cutoff time.Time) error
+
+	TruncateInsightsScans(ctx context.Context) error
 }
 
 // Daemon is the long-running auto-snapshot worker.
@@ -69,14 +71,15 @@ type Daemon struct {
 	// so a multi-minute spike can be replayed without sleeping.
 	clock func() time.Time
 
-	mu               sync.Mutex
-	hosts            map[hostKey]*hostState
-	lastAuto         map[hostKey]time.Time
-	lastHotAttempt   map[string]time.Time
-	lastIOAttempt    map[string]time.Time
-	lastRetry        time.Time
-	lastHotRetention time.Time
-	lastIORetention  time.Time
+	mu                    sync.Mutex
+	hosts                 map[hostKey]*hostState
+	lastAuto              map[hostKey]time.Time
+	lastHotAttempt        map[string]time.Time
+	lastIOAttempt         map[string]time.Time
+	lastRetry             time.Time
+	lastHotRetention      time.Time
+	lastIORetention       time.Time
+	lastInsightsRetention time.Time
 }
 
 type hostKey struct {
@@ -337,6 +340,7 @@ func (d *Daemon) loop(ctx context.Context) error {
 		d.maybeRunRetention(ctx, cfg)
 		d.maybeRunHotRetention(ctx, cfg)
 		d.maybeRunIORetention(ctx, cfg)
+		d.maybeRunInsightsRetention(ctx)
 
 		timer.Reset(interval)
 	}

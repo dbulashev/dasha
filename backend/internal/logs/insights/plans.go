@@ -32,6 +32,8 @@ type DurationStats struct {
 // PlanGroup is the plans of one statement with one shape. Sample is the
 // slowest of them; the findings and dormant rules are evaluated on it.
 type PlanGroup struct {
+	// Ord is the rank of the group by total time within its scan.
+	Ord         int
 	QueryID     int64
 	HasQueryID  bool
 	Hash        string
@@ -41,6 +43,55 @@ type PlanGroup struct {
 	Sample      explain.Plan
 	Findings    []explain.Finding
 	Dormant     []explain.Dormant
+}
+
+// GroupRow is a PlanGroup without its plan tree: a listing of a scan carries
+// one per group.
+type GroupRow struct {
+	Ord         int
+	QueryID     int64
+	HasQueryID  bool
+	Hash        string
+	Count       int
+	Durations   DurationStats
+	First, Last time.Time
+	QueryText   string
+	Findings    []explain.Finding
+	Dormant     []explain.Dormant
+}
+
+// Row splits the plan tree off the group.
+func (g PlanGroup) Row() GroupRow {
+	return GroupRow{
+		Ord:        g.Ord,
+		QueryID:    g.QueryID,
+		HasQueryID: g.HasQueryID,
+		Hash:       g.Hash,
+		Count:      g.Count,
+		Durations:  g.Durations,
+		First:      g.First,
+		Last:       g.Last,
+		QueryText:  g.Sample.QueryText,
+		Findings:   g.Findings,
+		Dormant:    g.Dormant,
+	}
+}
+
+// WithPlan puts a tree back under its row.
+func (r GroupRow) WithPlan(p explain.Plan) PlanGroup {
+	return PlanGroup{
+		Ord:        r.Ord,
+		QueryID:    r.QueryID,
+		HasQueryID: r.HasQueryID,
+		Hash:       r.Hash,
+		Count:      r.Count,
+		Durations:  r.Durations,
+		First:      r.First,
+		Last:       r.Last,
+		Sample:     p,
+		Findings:   r.Findings,
+		Dormant:    r.Dormant,
+	}
 }
 
 type NotParsed struct {
@@ -175,9 +226,9 @@ func (a *Plans) Exhausted() bool {
 	return a.exhausted
 }
 
-// Summary evaluates the rules once per group and keeps the groups among the
-// top by total time or among the top by slowest run, ordered by total time.
-func (a *Plans) Summary(top int) PlansSummary {
+// Summary evaluates the rules once per group and returns every group ranked by
+// total time. TopGroups cuts the ranking down to what a response carries.
+func (a *Plans) Summary() PlansSummary {
 	s := PlansSummary{
 		Records:         a.records,
 		Parsed:          a.parsed,
@@ -239,13 +290,7 @@ func (a *Plans) Summary(top int) PlansSummary {
 
 	slices.SortFunc(s.Dormant, func(x, y DormantRule) int { return cmp.Compare(x.Code, y.Code) })
 
-	s.Groups = topGroups(groups, top)
-
-	return s
-}
-
-func topGroups(groups []PlanGroup, top int) []PlanGroup {
-	bySum := func(x, y PlanGroup) int {
+	slices.SortFunc(groups, func(x, y PlanGroup) int {
 		return cmp.Or(
 			cmp.Compare(y.Durations.Sum, x.Durations.Sum),
 			cmp.Compare(y.Durations.Max, x.Durations.Max),
@@ -254,11 +299,21 @@ func topGroups(groups []PlanGroup, top int) []PlanGroup {
 			cmp.Compare(x.QueryID, y.QueryID),
 			cmp.Compare(x.Sample.QueryText, y.Sample.QueryText),
 		)
+	})
+
+	for i := range groups {
+		groups[i].Ord = i
 	}
 
-	slices.SortFunc(groups, bySum)
+	s.Groups = groups
 
-	if len(groups) <= top {
+	return s
+}
+
+// TopGroups keeps the groups among the top by total time or among the top by
+// slowest run, in the order Summary ranked them. A non-positive top keeps all.
+func TopGroups(groups []PlanGroup, top int) []PlanGroup {
+	if top <= 0 || len(groups) <= top {
 		return groups
 	}
 

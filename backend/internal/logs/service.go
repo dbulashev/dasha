@@ -9,12 +9,15 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/dbulashev/dasha/internal/auth"
 	"github.com/dbulashev/dasha/internal/config"
+	"github.com/dbulashev/dasha/internal/logs/insights"
 	"github.com/dbulashev/dasha/internal/logs/pattern"
 	"github.com/dbulashev/dasha/internal/logs/source"
 	"github.com/dbulashev/dasha/internal/pkg/sanitize"
@@ -37,6 +40,9 @@ var (
 	ErrTimeout = errors.New("log source timeout")
 	// ErrDisabled means the feature is switched off in the configuration.
 	ErrDisabled = errors.New("feature disabled")
+	// ErrNoStorage means the request needs the snapshot storage Dasha is not
+	// configured with.
+	ErrNoStorage = errors.New("storage not configured")
 )
 
 // SearchQuery is a normalized log search request.
@@ -101,14 +107,23 @@ type Service interface {
 	SourceName(ctx context.Context, cluster string) string
 	// Insights classifies every record of a window and summarizes its plans.
 	Insights(ctx context.Context, q InsightsQuery) (InsightsResult, error)
+	// Snapshot returns a stored scan; the three snapshot methods read the
+	// storage only, never the log source.
+	Snapshot(ctx context.Context, id uuid.UUID) (Scan, error)
+	SnapshotGroups(ctx context.Context, q GroupsQuery) (GroupPage, error)
+	SnapshotGroup(ctx context.Context, id uuid.UUID, ord int) (insights.PlanGroup, error)
 }
 
 type service struct {
-	clusters config.Clusters
-	sources  *source.Registry
-	cfg      config.LogSearchConfig
-	insights config.LogInsightsConfig
-	logger   *zap.Logger
+	clusters  config.Clusters
+	sources   *source.Registry
+	cfg       config.LogSearchConfig
+	insights  config.LogInsightsConfig
+	snapshots SnapshotStore
+	logger    *zap.Logger
+
+	pendingMu sync.Mutex
+	pending   map[uuid.UUID]chan struct{}
 }
 
 // NewService builds the log search service.
@@ -116,15 +131,18 @@ func NewService(
 	clusters config.Clusters,
 	sources *source.Registry,
 	cfg config.LogSearchConfig,
-	insights config.LogInsightsConfig,
+	insightsCfg config.LogInsightsConfig,
+	snapshots SnapshotStore,
 	logger *zap.Logger,
 ) Service {
-	return &service{
-		clusters: clusters,
-		sources:  sources,
-		cfg:      cfg.WithDefaults(),
-		insights: insights.WithDefaults(),
-		logger:   logger,
+	return &service{ //nolint:exhaustruct
+		clusters:  clusters,
+		sources:   sources,
+		cfg:       cfg.WithDefaults(),
+		insights:  insightsCfg.WithDefaults(),
+		snapshots: snapshots,
+		logger:    logger,
+		pending:   make(map[uuid.UUID]chan struct{}),
 	}
 }
 

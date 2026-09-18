@@ -8,6 +8,9 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/google/uuid"
+	openapi_types "github.com/oapi-codegen/runtime/types"
+
 	"github.com/dbulashev/dasha/gen/serverhttp"
 	"github.com/dbulashev/dasha/internal/explain"
 	"github.com/dbulashev/dasha/internal/logs"
@@ -48,12 +51,16 @@ func (s *Handlers) GetLogsInsights(
 		}
 	}
 
+	return serverhttp.GetLogsInsights200JSONResponse(mapLogInsights(res)), nil
+}
+
+func mapLogInsights(res logs.InsightsResult) serverhttp.LogInsights {
 	reasons := make([]serverhttp.LogInsightsPartialReason, 0, len(res.PartialReasons))
 	for _, r := range res.PartialReasons {
 		reasons = append(reasons, serverhttp.LogInsightsPartialReason(r))
 	}
 
-	out := serverhttp.GetLogsInsights200JSONResponse{ //nolint:exhaustruct
+	out := serverhttp.LogInsights{ //nolint:exhaustruct
 		Scanned:        res.Scanned,
 		Partial:        res.Partial,
 		PartialReasons: reasons,
@@ -64,7 +71,11 @@ func (s *Handlers) GetLogsInsights(
 	out.CoveredFrom, out.CoveredTo = spanBounds(res.Covered)
 	out.Plans.CoveredFrom, out.Plans.CoveredTo = spanBounds(res.PlansCovered)
 
-	return out, nil
+	if res.ScanID != uuid.Nil {
+		out.ScanId = shortcut.Ptr(openapi_types.UUID(res.ScanID))
+	}
+
+	return out
 }
 
 func spanBounds(s logs.Span) (*time.Time, *time.Time) {
@@ -128,15 +139,10 @@ func mapLogPlansSummary(p insights.PlansSummary, emptyReason string) serverhttp.
 
 func mapLogPlanGroup(g insights.PlanGroup) serverhttp.LogPlanGroup {
 	out := serverhttp.LogPlanGroup{ //nolint:exhaustruct
-		Hash:  g.Hash,
-		Count: g.Count,
-		Durations: serverhttp.PlanDurationStats{
-			MinMs: g.Durations.Min,
-			P50Ms: g.Durations.P50,
-			P95Ms: g.Durations.P95,
-			MaxMs: g.Durations.Max,
-			SumMs: g.Durations.Sum,
-		},
+		Ord:       g.Ord,
+		Hash:      g.Hash,
+		Count:     g.Count,
+		Durations: mapPlanDurations(g.Durations),
 		FirstSeen: g.First,
 		LastSeen:  g.Last,
 		Plan:      mapPlanSummary(&g.Sample, g.Findings, g.Dormant),
@@ -147,6 +153,16 @@ func mapLogPlanGroup(g insights.PlanGroup) serverhttp.LogPlanGroup {
 	}
 
 	return out
+}
+
+func mapPlanDurations(d insights.DurationStats) serverhttp.PlanDurationStats {
+	return serverhttp.PlanDurationStats{
+		MinMs: d.Min,
+		P50Ms: d.P50,
+		P95Ms: d.P95,
+		MaxMs: d.Max,
+		SumMs: d.Sum,
+	}
 }
 
 func mapPlanSummary(p *explain.Plan, findings []explain.Finding, dormant []explain.Dormant) serverhttp.PlanSummary {

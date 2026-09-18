@@ -45,7 +45,7 @@ const (
 func TestPlansCorpusSummary(t *testing.T) {
 	t.Parallel()
 
-	s := corpusPlans(t, "pg17.jsonl", PlanLimits{}).Summary(100)
+	s := corpusPlans(t, "pg17.jsonl", PlanLimits{}).Summary()
 
 	if s.Records != 14 {
 		t.Errorf("records = %d, want 14", s.Records)
@@ -87,7 +87,7 @@ func TestPlansCorpusSummary(t *testing.T) {
 func TestPlansFoldLiteralsAndFormats(t *testing.T) {
 	t.Parallel()
 
-	s := corpusPlans(t, "pg17.jsonl", PlanLimits{}).Summary(100)
+	s := corpusPlans(t, "pg17.jsonl", PlanLimits{}).Summary()
 
 	param := groupsOf(s, qidParam)
 	if len(param) != 1 || param[0].Count != 2 {
@@ -120,7 +120,7 @@ func TestPlansFoldLiteralsAndFormats(t *testing.T) {
 func TestPlansKeepNestedStatementsApart(t *testing.T) {
 	t.Parallel()
 
-	s := corpusPlans(t, "pg17.jsonl", PlanLimits{}).Summary(100)
+	s := corpusPlans(t, "pg17.jsonl", PlanLimits{}).Summary()
 
 	nested := groupsOf(s, qidNested)
 	if len(nested) != 2 {
@@ -147,7 +147,7 @@ func TestPlansWithoutQueryIDStayApartByText(t *testing.T) {
 	plans.Add(PlanRecord{DurationMs: 2, Body: body("a = 2")}, at(1))
 	plans.Add(PlanRecord{DurationMs: 3, Body: body("b = 1")}, at(2))
 
-	s := plans.Summary(10)
+	s := plans.Summary()
 
 	if s.WithoutQueryID != 3 {
 		t.Errorf("without query id = %d, want 3", s.WithoutQueryID)
@@ -167,7 +167,7 @@ func TestPlansDormantRulesOnAPlanWithoutAnalyze(t *testing.T) {
 	plans := NewPlans(PlanLimits{})
 	plans.Add(pr, r.Timestamp)
 
-	s := plans.Summary(10)
+	s := plans.Summary()
 
 	i := slices.IndexFunc(s.Dormant, func(d DormantRule) bool { return d.Code == explain.RuleRowMisestimate })
 	if i < 0 {
@@ -182,7 +182,7 @@ func TestPlansDormantRulesOnAPlanWithoutAnalyze(t *testing.T) {
 func TestPlansLimits(t *testing.T) {
 	t.Parallel()
 
-	s := corpusPlans(t, "pg17.jsonl", PlanLimits{MaxPlans: 3}).Summary(100)
+	s := corpusPlans(t, "pg17.jsonl", PlanLimits{MaxPlans: 3}).Summary()
 
 	if !s.BudgetExhausted || s.Parsed > 3 {
 		t.Errorf("parsed = %d, exhausted = %v; want at most 3 and exhausted", s.Parsed, s.BudgetExhausted)
@@ -192,7 +192,7 @@ func TestPlansLimits(t *testing.T) {
 		t.Errorf("not parsed = %+v, want %s", s.NotParsed, CodePlanBudgetExhausted)
 	}
 
-	s = corpusPlans(t, "pg17.jsonl", PlanLimits{MaxPlanBytes: 700}).Summary(100)
+	s = corpusPlans(t, "pg17.jsonl", PlanLimits{MaxPlanBytes: 700}).Summary()
 
 	large := slices.IndexFunc(s.NotParsed, func(np NotParsed) bool { return np.Code == CodePlanTooLarge })
 	if large < 0 || s.BudgetExhausted {
@@ -212,7 +212,7 @@ func TestPlansMaskCredentials(t *testing.T) {
 	plans := NewPlans(PlanLimits{})
 	plans.Add(PlanRecord{DurationMs: 1, Body: body, QueryID: 7, HasQueryID: true}, at(0))
 
-	g := plans.Summary(1).Groups[0]
+	g := plans.Summary().Groups[0]
 
 	if strings.Contains(g.Sample.QueryText, "hunter2") || strings.Contains(g.Sample.Root.Filter, "hunter2") {
 		t.Errorf("password left in the plan: %q / %q", g.Sample.QueryText, g.Sample.Root.Filter)
@@ -228,7 +228,7 @@ func TestTopGroupsKeepsTheSlowestRunToo(t *testing.T) {
 		{Hash: "small", Durations: DurationStats{Sum: 20, Max: 5}},
 	}
 
-	got := topGroups(groups, 1)
+	got := TopGroups(groups, 1)
 
 	hashes := make([]string, 0, len(got))
 	for _, g := range got {

@@ -11,6 +11,8 @@ import type { PlanSummary } from './planSummary'
  * Plans of one statement with one shape. Nested statements share the query_id of the statement that ran them, so the normalized query text is part of the grouping.
  */
 export interface LogPlanGroup {
+  /** rank of the group by total time within the scan; names it in GET /api/logs/scans/{scan_id}/groups/{ord} */
+  ord: number
   /** query_id of the log record as string to preserve int64 precision in JavaScript; absent when the record has none */
   query_id?: string
   /** plan shape fingerprint */

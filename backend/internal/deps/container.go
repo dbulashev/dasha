@@ -91,7 +91,12 @@ func NewContainer() *Container {
 		sources := do.MustInvoke[*source.Registry](i)
 		logger := do.MustInvoke[*zap.Logger](i)
 
-		return logs.NewService(clusters, sources, cfg.LogSearch, cfg.LogInsights, logger), nil
+		st, err := do.Invoke[*storage.Storage](i)
+		if err != nil {
+			logger.Warn("logs service built before ProvideStorage, insights snapshots stay disabled", zap.Error(err))
+		}
+
+		return logs.NewService(clusters, sources, cfg.LogSearch, cfg.LogInsights, newScanSnapshots(st), logger), nil
 	})
 
 	do.Provide(i, func(i *do.Injector) (*metrics.Service, error) {
@@ -157,6 +162,12 @@ func (c *Container) Repository() repository.Repository {
 
 func (c *Container) Discovery() *discovery.Engine {
 	return do.MustInvoke[*discovery.Engine](c.i)
+}
+
+// ProvideStorage registers the snapshot storage. Services the container builds
+// afterwards reach it from there, so it has to run before Logs().
+func (c *Container) ProvideStorage(st *storage.Storage) {
+	do.ProvideValue(c.i, st)
 }
 
 func (c *Container) Logs() logs.Service {
@@ -426,6 +437,17 @@ func NewPATResolver(st *storage.Storage, logger *zap.Logger) auth.PATResolver {
 // rather than passing st straight through — keeps a typed-nil *storage.Storage
 // out of the interface, where it would satisfy != nil and panic on first call.
 func NewLoginRecorder(st *storage.Storage) auth.LoginRecorder {
+	if st == nil {
+		return nil
+	}
+
+	return st
+}
+
+// newScanSnapshots returns the log-insights snapshot store backed by storage, or
+// nil (scans answer without a scan id) when storage is not configured. The
+// explicit nil keeps a typed-nil *storage.Storage out of the interface.
+func newScanSnapshots(st *storage.Storage) logs.SnapshotStore {
 	if st == nil {
 		return nil
 	}

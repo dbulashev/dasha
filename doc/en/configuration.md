@@ -405,6 +405,18 @@ A large plan may never reach Dasha. VictoriaLogs drops lines longer than `-inser
 lines longer than `Buffer_Max_Size`. If the delivery agent truncates long lines, a text plan arrives
 without its end and a json plan fails to parse.
 
+With snapshot storage configured (`storage.dsn`), every summary is stored as a snapshot and the
+response carries `scan_id`. `GET /api/logs/scans/{scan_id}` repeats the same numbers,
+`.../groups` lists every plan group — the summary itself carries the top ones only — and
+`.../groups/{ord}` hands out one plan tree. None of them reads the log source again, so refining a
+summary costs nothing and cannot disagree with it. Without storage the three endpoints answer 501
+and the summary carries no `scan_id`.
+
+The auto-snapshot daemon empties the snapshots once a day, the first time on start: a `scan_id`
+lives a day at most, after which it answers 404 and the client scans again. Without a running
+daemon the tables `log_insights_scans` and `log_insights_groups` are never cleared. Query literals
+are not masked in a stored plan and are readable by any viewer until the cleanup.
+
 ## Schema Checks (optional)
 
 The `/schema-lint` page works without configuration. The global `schema_lint` block silences checks and

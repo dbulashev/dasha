@@ -87,6 +87,7 @@ import type {
   GetLogsCheckParams,
   GetLogsInsightsParams,
   GetLogsParams,
+  GetLogsScanGroupsParams,
   GetMaintenanceAutovacuumFreezeMaxAgeParams,
   GetMaintenanceAutovacuumSummaryParams,
   GetMaintenanceInfoParams,
@@ -168,6 +169,8 @@ import type {
   ListPersonalTokensParams,
   LockSnapshot,
   LogInsights,
+  LogPlanGroup,
+  LogPlanGroupPage,
   LogSearchResult,
   LogSourceCheck,
   MaintenanceAutovacuumFreezeMaxAge,
@@ -10601,6 +10604,327 @@ export function useGetLogsInsights<
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetLogsInsightsQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * The stored result of one scan, in the shape the scanning endpoint answered with. Reads the snapshot, never the log source, so the numbers are the ones of that scan and not of a fresh window. A snapshot lives until the auto-snapshot daemon clears it, at most a day.
+ */
+export type getLogsScanResponse200 = {
+  data: LogInsights
+  status: 200
+}
+
+export type getLogsScanResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getLogsScanResponse501 = {
+  data: void
+  status: 501
+}
+
+export type getLogsScanResponseSuccess = getLogsScanResponse200 & {
+  headers: Headers
+}
+export type getLogsScanResponseError = (getLogsScanResponse404 | getLogsScanResponse501) & {
+  headers: Headers
+}
+
+export type getLogsScanResponse = getLogsScanResponseSuccess | getLogsScanResponseError
+
+export const getGetLogsScanUrl = (scanId: string) => {
+  return `/api/logs/scans/${scanId}`
+}
+
+export const getLogsScan = async (
+  scanId: string,
+  options?: RequestInit,
+): Promise<getLogsScanResponse> => {
+  return customFetch<getLogsScanResponse>(getGetLogsScanUrl(scanId), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetLogsScanQueryKey = (scanId: MaybeRef<string>) => {
+  return ['api', 'logs', 'scans', scanId] as const
+}
+
+export const getGetLogsScanQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLogsScan>>,
+  TError = NotFoundResponse | void,
+>(
+  scanId: MaybeRef<string>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getLogsScan>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetLogsScanQueryKey(scanId)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getLogsScan>>> = ({ signal }) =>
+    getLogsScan(unref(scanId), { signal, ...requestOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: computed(() => !!unref(scanId)),
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getLogsScan>>, TError, TData>
+}
+
+export type GetLogsScanQueryResult = NonNullable<Awaited<ReturnType<typeof getLogsScan>>>
+export type GetLogsScanQueryError = NotFoundResponse | void
+
+export function useGetLogsScan<
+  TData = Awaited<ReturnType<typeof getLogsScan>>,
+  TError = NotFoundResponse | void,
+>(
+  scanId: MaybeRef<string>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getLogsScan>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLogsScanQueryOptions(scanId, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * The plan groups of a scan without their plan trees. A scan answers with its top groups; the whole ranking is here.
+ */
+export type getLogsScanGroupsResponse200 = {
+  data: LogPlanGroupPage
+  status: 200
+}
+
+export type getLogsScanGroupsResponse400 = {
+  data: void
+  status: 400
+}
+
+export type getLogsScanGroupsResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getLogsScanGroupsResponse501 = {
+  data: void
+  status: 501
+}
+
+export type getLogsScanGroupsResponseSuccess = getLogsScanGroupsResponse200 & {
+  headers: Headers
+}
+export type getLogsScanGroupsResponseError = (
+  | getLogsScanGroupsResponse400
+  | getLogsScanGroupsResponse404
+  | getLogsScanGroupsResponse501
+) & {
+  headers: Headers
+}
+
+export type getLogsScanGroupsResponse =
+  | getLogsScanGroupsResponseSuccess
+  | getLogsScanGroupsResponseError
+
+export const getGetLogsScanGroupsUrl = (scanId: string, params?: GetLogsScanGroupsParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/logs/scans/${scanId}/groups?${stringifiedParams}`
+    : `/api/logs/scans/${scanId}/groups`
+}
+
+export const getLogsScanGroups = async (
+  scanId: string,
+  params?: GetLogsScanGroupsParams,
+  options?: RequestInit,
+): Promise<getLogsScanGroupsResponse> => {
+  return customFetch<getLogsScanGroupsResponse>(getGetLogsScanGroupsUrl(scanId, params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetLogsScanGroupsQueryKey = (
+  scanId: MaybeRef<string>,
+  params?: MaybeRef<GetLogsScanGroupsParams>,
+) => {
+  return ['api', 'logs', 'scans', scanId, 'groups', ...(params ? [params] : [])] as const
+}
+
+export const getGetLogsScanGroupsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLogsScanGroups>>,
+  TError = void | NotFoundResponse,
+>(
+  scanId: MaybeRef<string>,
+  params?: MaybeRef<GetLogsScanGroupsParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getLogsScanGroups>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetLogsScanGroupsQueryKey(scanId, params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getLogsScanGroups>>> = ({ signal }) =>
+    getLogsScanGroups(unref(scanId), unref(params), { signal, ...requestOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: computed(() => !!unref(scanId)),
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getLogsScanGroups>>, TError, TData>
+}
+
+export type GetLogsScanGroupsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getLogsScanGroups>>
+>
+export type GetLogsScanGroupsQueryError = void | NotFoundResponse
+
+export function useGetLogsScanGroups<
+  TData = Awaited<ReturnType<typeof getLogsScanGroups>>,
+  TError = void | NotFoundResponse,
+>(
+  scanId: MaybeRef<string>,
+  params?: MaybeRef<GetLogsScanGroupsParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getLogsScanGroups>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLogsScanGroupsQueryOptions(scanId, params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * One plan group of a scan with its plan tree.
+ */
+export type getLogsScanGroupResponse200 = {
+  data: LogPlanGroup
+  status: 200
+}
+
+export type getLogsScanGroupResponse400 = {
+  data: void
+  status: 400
+}
+
+export type getLogsScanGroupResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getLogsScanGroupResponse501 = {
+  data: void
+  status: 501
+}
+
+export type getLogsScanGroupResponseSuccess = getLogsScanGroupResponse200 & {
+  headers: Headers
+}
+export type getLogsScanGroupResponseError = (
+  | getLogsScanGroupResponse400
+  | getLogsScanGroupResponse404
+  | getLogsScanGroupResponse501
+) & {
+  headers: Headers
+}
+
+export type getLogsScanGroupResponse =
+  | getLogsScanGroupResponseSuccess
+  | getLogsScanGroupResponseError
+
+export const getGetLogsScanGroupUrl = (scanId: string, ord: number) => {
+  return `/api/logs/scans/${scanId}/groups/${ord}`
+}
+
+export const getLogsScanGroup = async (
+  scanId: string,
+  ord: number,
+  options?: RequestInit,
+): Promise<getLogsScanGroupResponse> => {
+  return customFetch<getLogsScanGroupResponse>(getGetLogsScanGroupUrl(scanId, ord), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetLogsScanGroupQueryKey = (scanId: MaybeRef<string>, ord: MaybeRef<number>) => {
+  return ['api', 'logs', 'scans', scanId, 'groups', ord] as const
+}
+
+export const getGetLogsScanGroupQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLogsScanGroup>>,
+  TError = void | NotFoundResponse,
+>(
+  scanId: MaybeRef<string>,
+  ord: MaybeRef<number>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getLogsScanGroup>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetLogsScanGroupQueryKey(scanId, ord)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getLogsScanGroup>>> = ({ signal }) =>
+    getLogsScanGroup(unref(scanId), unref(ord), { signal, ...requestOptions })
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: computed(() => !!(unref(scanId) && unref(ord))),
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getLogsScanGroup>>, TError, TData>
+}
+
+export type GetLogsScanGroupQueryResult = NonNullable<Awaited<ReturnType<typeof getLogsScanGroup>>>
+export type GetLogsScanGroupQueryError = void | NotFoundResponse
+
+export function useGetLogsScanGroup<
+  TData = Awaited<ReturnType<typeof getLogsScanGroup>>,
+  TError = void | NotFoundResponse,
+>(
+  scanId: MaybeRef<string>,
+  ord: MaybeRef<number>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getLogsScanGroup>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLogsScanGroupQueryOptions(scanId, ord, options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
 

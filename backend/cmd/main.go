@@ -188,6 +188,8 @@ func dashaExec(cmd *cobra.Command, _ []string) error {
 		defer st.Close()
 	}
 
+	container.ProvideStorage(st)
+
 	// Personal access tokens are resolved against snapshot storage; nil disables them.
 	resolver := deps.NewPATResolver(st, serverLogger)
 

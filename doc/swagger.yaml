@@ -2627,6 +2627,98 @@ paths:
                 $ref: '#/components/schemas/ErrorMessage'
         '504':
           description: upstream timeout with nothing read
+  /api/logs/scans/{scan_id}:
+    get:
+      operationId: getLogsScan
+      description: >-
+        The stored result of one scan, in the shape the scanning endpoint
+        answered with. Reads the snapshot, never the log source, so the numbers
+        are the ones of that scan and not of a fresh window. A snapshot lives
+        until the auto-snapshot daemon clears it, at most a day.
+      parameters:
+        - $ref: '#/components/parameters/ScanID'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogInsights'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: snapshot storage not configured
+  /api/logs/scans/{scan_id}/groups:
+    get:
+      operationId: getLogsScanGroups
+      description: >-
+        The plan groups of a scan without their plan trees. A scan answers with
+        its top groups; the whole ranking is here.
+      parameters:
+        - $ref: '#/components/parameters/ScanID'
+        - in: query
+          name: query_id
+          description: keep the groups of this query_id only
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: order
+          required: false
+          schema:
+            type: string
+            enum: [sum, max, count]
+            default: sum
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+            default: 50
+        - in: query
+          name: offset
+          required: false
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogPlanGroupPage'
+        '400':
+          description: invalid parameters
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: snapshot storage not configured
+  /api/logs/scans/{scan_id}/groups/{ord}:
+    get:
+      operationId: getLogsScanGroup
+      description: One plan group of a scan with its plan tree.
+      parameters:
+        - $ref: '#/components/parameters/ScanID'
+        - in: path
+          name: ord
+          required: true
+          description: rank of the group by total time within the scan
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogPlanGroup'
+        '400':
+          description: invalid parameters
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: snapshot storage not configured
   /api/autosnapshot/status:
     get:
       operationId: getAutosnapshotStatus
@@ -2945,6 +3037,13 @@ components:
         type: boolean
         default: false
       required: false
+    ScanID:
+      in: path
+      name: scan_id
+      schema:
+        type: string
+        format: uuid
+      required: true
     ClusterName:
       in: query
       name: cluster_name
@@ -3352,6 +3451,45 @@ components:
             $ref: '#/components/schemas/LogCategory'
         plans:
           $ref: '#/components/schemas/LogPlansSummary'
+        scan_id:
+          type: string
+          format: uuid
+          description: >-
+            the snapshot this summary was stored as; absent when no snapshot
+            storage is configured or the write failed. Refine it through
+            GET /api/logs/scans/{scan_id}.
+        scan:
+          $ref: '#/components/schemas/LogScanInfo'
+    LogScanInfo:
+      type: object
+      description: what a stored scan read; present when the summary comes from a snapshot
+      required:
+        - kind
+        - cluster_name
+        - service_type
+        - from
+        - to
+        - created_at
+      properties:
+        kind:
+          type: string
+          enum: [insights]
+        cluster_name:
+          type: string
+        service_type:
+          type: string
+          enum: [postgresql, pooler]
+        host:
+          type: string
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
     LogInsightsPartialReason:
       type: string
       description: >-
@@ -3525,6 +3663,7 @@ components:
         query_id of the statement that ran them, so the normalized query text is
         part of the grouping.
       required:
+        - ord
         - hash
         - count
         - durations
@@ -3532,6 +3671,9 @@ components:
         - last_seen
         - plan
       properties:
+        ord:
+          type: integer
+          description: rank of the group by total time within the scan; names it in GET /api/logs/scans/{scan_id}/groups/{ord}
         query_id:
           type: string
           description: query_id of the log record as string to preserve int64 precision in JavaScript; absent when the record has none
@@ -3550,6 +3692,60 @@ components:
           format: date-time
         plan:
           $ref: '#/components/schemas/PlanSummary'
+    LogPlanGroupPage:
+      type: object
+      required:
+        - total
+        - items
+      properties:
+        total:
+          type: integer
+          description: groups the scan holds, after query_id is applied
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogPlanGroupRow'
+    LogPlanGroupRow:
+      type: object
+      description: a plan group without its plan tree
+      required:
+        - ord
+        - hash
+        - count
+        - durations
+        - first_seen
+        - last_seen
+        - query_text
+        - findings
+      properties:
+        ord:
+          type: integer
+          description: rank of the group by total time within the scan
+        query_id:
+          type: string
+          description: query_id of the log record as string to preserve int64 precision in JavaScript; absent when the record has none
+        hash:
+          type: string
+          description: plan shape fingerprint
+        count:
+          type: integer
+        durations:
+          $ref: '#/components/schemas/PlanDurationStats'
+        first_seen:
+          type: string
+          format: date-time
+        last_seen:
+          type: string
+          format: date-time
+        query_text:
+          type: string
+        query_text_omitted_bytes:
+          type: integer
+          description: bytes of query_text left out of the response
+        findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanFinding'
     PlanDurationStats:
       type: object
       description: exact over the plans of the group; percentiles by nearest rank
