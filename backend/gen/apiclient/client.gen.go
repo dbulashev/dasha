@@ -135,6 +135,17 @@ const (
 	LogPlansSummaryEmptyReasonUnsupportedPlanFormat LogPlansSummaryEmptyReason = "unsupported_plan_format"
 )
 
+// Defines values for LogScanInfoKind.
+const (
+	Insights LogScanInfoKind = "insights"
+)
+
+// Defines values for LogScanInfoServiceType.
+const (
+	LogScanInfoServiceTypePooler     LogScanInfoServiceType = "pooler"
+	LogScanInfoServiceTypePostgresql LogScanInfoServiceType = "postgresql"
+)
+
 // Defines values for PersonalAccessTokenRole.
 const (
 	PersonalAccessTokenRoleAdmin  PersonalAccessTokenRole = "admin"
@@ -296,8 +307,15 @@ const (
 
 // Defines values for GetLogsInsightsParamsServiceType.
 const (
-	Pooler     GetLogsInsightsParamsServiceType = "pooler"
-	Postgresql GetLogsInsightsParamsServiceType = "postgresql"
+	GetLogsInsightsParamsServiceTypePooler     GetLogsInsightsParamsServiceType = "pooler"
+	GetLogsInsightsParamsServiceTypePostgresql GetLogsInsightsParamsServiceType = "postgresql"
+)
+
+// Defines values for GetLogsScanGroupsParamsOrder.
+const (
+	Count GetLogsScanGroupsParamsOrder = "count"
+	Max   GetLogsScanGroupsParamsOrder = "max"
+	Sum   GetLogsScanGroupsParamsOrder = "sum"
 )
 
 // Defines values for GetQueriesRunningParamsQueryFilterMode.
@@ -1403,6 +1421,12 @@ type LogInsights struct {
 	PartialReasons []LogInsightsPartialReason `json:"partial_reasons"`
 	Plans          LogPlansSummary            `json:"plans"`
 
+	// Scan what a stored scan read; present when the summary comes from a snapshot
+	Scan *LogScanInfo `json:"scan,omitempty"`
+
+	// ScanId the snapshot this summary was stored as; absent when no snapshot storage is configured or the write failed. Refine it through GET /api/logs/scans/{scan_id}.
+	ScanId *openapi_types.UUID `json:"scan_id,omitempty"`
+
 	// Scanned records read from the window
 	Scanned int `json:"scanned"`
 }
@@ -1422,11 +1446,46 @@ type LogPlanGroup struct {
 	Hash     string    `json:"hash"`
 	LastSeen time.Time `json:"last_seen"`
 
+	// Ord rank of the group by total time within the scan; names it in GET /api/logs/scans/{scan_id}/groups/{ord}
+	Ord int `json:"ord"`
+
 	// Plan One parsed plan with the rules evaluated on it.
 	Plan PlanSummary `json:"plan"`
 
 	// QueryId query_id of the log record as string to preserve int64 precision in JavaScript; absent when the record has none
 	QueryId *string `json:"query_id,omitempty"`
+}
+
+// LogPlanGroupPage defines model for LogPlanGroupPage.
+type LogPlanGroupPage struct {
+	Items []LogPlanGroupRow `json:"items"`
+
+	// Total groups the scan holds, after query_id is applied
+	Total int `json:"total"`
+}
+
+// LogPlanGroupRow a plan group without its plan tree
+type LogPlanGroupRow struct {
+	Count int `json:"count"`
+
+	// Durations exact over the plans of the group; percentiles by nearest rank
+	Durations PlanDurationStats `json:"durations"`
+	Findings  []PlanFinding     `json:"findings"`
+	FirstSeen time.Time         `json:"first_seen"`
+
+	// Hash plan shape fingerprint
+	Hash     string    `json:"hash"`
+	LastSeen time.Time `json:"last_seen"`
+
+	// Ord rank of the group by total time within the scan
+	Ord int `json:"ord"`
+
+	// QueryId query_id of the log record as string to preserve int64 precision in JavaScript; absent when the record has none
+	QueryId   *string `json:"query_id,omitempty"`
+	QueryText string  `json:"query_text"`
+
+	// QueryTextOmittedBytes bytes of query_text left out of the response
+	QueryTextOmittedBytes *int `json:"query_text_omitted_bytes,omitempty"`
 }
 
 // LogPlansSummary defines model for LogPlansSummary.
@@ -1462,6 +1521,23 @@ type LogPlansSummary struct {
 
 // LogPlansSummaryEmptyReason set when groups is empty
 type LogPlansSummaryEmptyReason string
+
+// LogScanInfo what a stored scan read; present when the summary comes from a snapshot
+type LogScanInfo struct {
+	ClusterName string                 `json:"cluster_name"`
+	CreatedAt   time.Time              `json:"created_at"`
+	From        time.Time              `json:"from"`
+	Host        *string                `json:"host,omitempty"`
+	Kind        LogScanInfoKind        `json:"kind"`
+	ServiceType LogScanInfoServiceType `json:"service_type"`
+	To          time.Time              `json:"to"`
+}
+
+// LogScanInfoKind defines model for LogScanInfo.Kind.
+type LogScanInfoKind string
+
+// LogScanInfoServiceType defines model for LogScanInfo.ServiceType.
+type LogScanInfoServiceType string
 
 // LogSearchResult defines model for LogSearchResult.
 type LogSearchResult struct {
@@ -2512,6 +2588,9 @@ type IncludeRevoked = bool
 // Instance defines model for Instance.
 type Instance = string
 
+// ScanID defines model for ScanID.
+type ScanID = openapi_types.UUID
+
 // Scope defines model for Scope.
 type Scope = string
 
@@ -3013,6 +3092,18 @@ type GetLogsInsightsParams struct {
 
 // GetLogsInsightsParamsServiceType defines parameters for GetLogsInsights.
 type GetLogsInsightsParamsServiceType string
+
+// GetLogsScanGroupsParams defines parameters for GetLogsScanGroups.
+type GetLogsScanGroupsParams struct {
+	// QueryId keep the groups of this query_id only
+	QueryId *string                       `form:"query_id,omitempty" json:"query_id,omitempty"`
+	Order   *GetLogsScanGroupsParamsOrder `form:"order,omitempty" json:"order,omitempty"`
+	Limit   *int                          `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset  *int                          `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// GetLogsScanGroupsParamsOrder defines parameters for GetLogsScanGroups.
+type GetLogsScanGroupsParamsOrder string
 
 // GetMaintenanceAutovacuumFreezeMaxAgeParams defines parameters for GetMaintenanceAutovacuumFreezeMaxAge.
 type GetMaintenanceAutovacuumFreezeMaxAgeParams struct {
@@ -3691,6 +3782,15 @@ type ClientInterface interface {
 
 	// GetLogsInsights request
 	GetLogsInsights(ctx context.Context, params *GetLogsInsightsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetLogsScan request
+	GetLogsScan(ctx context.Context, scanId ScanID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetLogsScanGroups request
+	GetLogsScanGroups(ctx context.Context, scanId ScanID, params *GetLogsScanGroupsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetLogsScanGroup request
+	GetLogsScanGroup(ctx context.Context, scanId ScanID, ord int, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetMaintenanceAutovacuumFreezeMaxAge request
 	GetMaintenanceAutovacuumFreezeMaxAge(ctx context.Context, params *GetMaintenanceAutovacuumFreezeMaxAgeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -4667,6 +4767,42 @@ func (c *Client) GetLogsCheck(ctx context.Context, params *GetLogsCheckParams, r
 
 func (c *Client) GetLogsInsights(ctx context.Context, params *GetLogsInsightsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetLogsInsightsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetLogsScan(ctx context.Context, scanId ScanID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetLogsScanRequest(c.Server, scanId)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetLogsScanGroups(ctx context.Context, scanId ScanID, params *GetLogsScanGroupsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetLogsScanGroupsRequest(c.Server, scanId, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetLogsScanGroup(ctx context.Context, scanId ScanID, ord int, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetLogsScanGroupRequest(c.Server, scanId, ord)
 	if err != nil {
 		return nil, err
 	}
@@ -10182,6 +10318,185 @@ func NewGetLogsInsightsRequest(server string, params *GetLogsInsightsParams) (*h
 	return req, nil
 }
 
+// NewGetLogsScanRequest generates requests for GetLogsScan
+func NewGetLogsScanRequest(server string, scanId ScanID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "scan_id", runtime.ParamLocationPath, scanId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/logs/scans/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetLogsScanGroupsRequest generates requests for GetLogsScanGroups
+func NewGetLogsScanGroupsRequest(server string, scanId ScanID, params *GetLogsScanGroupsParams) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "scan_id", runtime.ParamLocationPath, scanId)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/logs/scans/%s/groups", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.QueryId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "query_id", runtime.ParamLocationQuery, *params.QueryId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Order != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "order", runtime.ParamLocationQuery, *params.Order); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetLogsScanGroupRequest generates requests for GetLogsScanGroup
+func NewGetLogsScanGroupRequest(server string, scanId ScanID, ord int) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "scan_id", runtime.ParamLocationPath, scanId)
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithLocation("simple", false, "ord", runtime.ParamLocationPath, ord)
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/logs/scans/%s/groups/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetMaintenanceAutovacuumFreezeMaxAgeRequest generates requests for GetMaintenanceAutovacuumFreezeMaxAge
 func NewGetMaintenanceAutovacuumFreezeMaxAgeRequest(server string, params *GetMaintenanceAutovacuumFreezeMaxAgeParams) (*http.Request, error) {
 	var err error
@@ -13932,6 +14247,15 @@ type ClientWithResponsesInterface interface {
 	// GetLogsInsightsWithResponse request
 	GetLogsInsightsWithResponse(ctx context.Context, params *GetLogsInsightsParams, reqEditors ...RequestEditorFn) (*GetLogsInsightsResponse, error)
 
+	// GetLogsScanWithResponse request
+	GetLogsScanWithResponse(ctx context.Context, scanId ScanID, reqEditors ...RequestEditorFn) (*GetLogsScanResponse, error)
+
+	// GetLogsScanGroupsWithResponse request
+	GetLogsScanGroupsWithResponse(ctx context.Context, scanId ScanID, params *GetLogsScanGroupsParams, reqEditors ...RequestEditorFn) (*GetLogsScanGroupsResponse, error)
+
+	// GetLogsScanGroupWithResponse request
+	GetLogsScanGroupWithResponse(ctx context.Context, scanId ScanID, ord int, reqEditors ...RequestEditorFn) (*GetLogsScanGroupResponse, error)
+
 	// GetMaintenanceAutovacuumFreezeMaxAgeWithResponse request
 	GetMaintenanceAutovacuumFreezeMaxAgeWithResponse(ctx context.Context, params *GetMaintenanceAutovacuumFreezeMaxAgeParams, reqEditors ...RequestEditorFn) (*GetMaintenanceAutovacuumFreezeMaxAgeResponse, error)
 
@@ -15532,6 +15856,72 @@ func (r GetLogsInsightsResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetLogsInsightsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetLogsScanResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *LogInsights
+}
+
+// Status returns HTTPResponse.Status
+func (r GetLogsScanResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetLogsScanResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetLogsScanGroupsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *LogPlanGroupPage
+}
+
+// Status returns HTTPResponse.Status
+func (r GetLogsScanGroupsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetLogsScanGroupsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetLogsScanGroupResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *LogPlanGroup
+}
+
+// Status returns HTTPResponse.Status
+func (r GetLogsScanGroupResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetLogsScanGroupResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -17149,6 +17539,33 @@ func (c *ClientWithResponses) GetLogsInsightsWithResponse(ctx context.Context, p
 		return nil, err
 	}
 	return ParseGetLogsInsightsResponse(rsp)
+}
+
+// GetLogsScanWithResponse request returning *GetLogsScanResponse
+func (c *ClientWithResponses) GetLogsScanWithResponse(ctx context.Context, scanId ScanID, reqEditors ...RequestEditorFn) (*GetLogsScanResponse, error) {
+	rsp, err := c.GetLogsScan(ctx, scanId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetLogsScanResponse(rsp)
+}
+
+// GetLogsScanGroupsWithResponse request returning *GetLogsScanGroupsResponse
+func (c *ClientWithResponses) GetLogsScanGroupsWithResponse(ctx context.Context, scanId ScanID, params *GetLogsScanGroupsParams, reqEditors ...RequestEditorFn) (*GetLogsScanGroupsResponse, error) {
+	rsp, err := c.GetLogsScanGroups(ctx, scanId, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetLogsScanGroupsResponse(rsp)
+}
+
+// GetLogsScanGroupWithResponse request returning *GetLogsScanGroupResponse
+func (c *ClientWithResponses) GetLogsScanGroupWithResponse(ctx context.Context, scanId ScanID, ord int, reqEditors ...RequestEditorFn) (*GetLogsScanGroupResponse, error) {
+	rsp, err := c.GetLogsScanGroup(ctx, scanId, ord, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetLogsScanGroupResponse(rsp)
 }
 
 // GetMaintenanceAutovacuumFreezeMaxAgeWithResponse request returning *GetMaintenanceAutovacuumFreezeMaxAgeResponse
@@ -19264,6 +19681,84 @@ func ParseGetLogsInsightsResponse(rsp *http.Response) (*GetLogsInsightsResponse,
 			return nil, err
 		}
 		response.JSON502 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetLogsScanResponse parses an HTTP response from a GetLogsScanWithResponse call
+func ParseGetLogsScanResponse(rsp *http.Response) (*GetLogsScanResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetLogsScanResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest LogInsights
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetLogsScanGroupsResponse parses an HTTP response from a GetLogsScanGroupsWithResponse call
+func ParseGetLogsScanGroupsResponse(rsp *http.Response) (*GetLogsScanGroupsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetLogsScanGroupsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest LogPlanGroupPage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetLogsScanGroupResponse parses an HTTP response from a GetLogsScanGroupWithResponse call
+func ParseGetLogsScanGroupResponse(rsp *http.Response) (*GetLogsScanGroupResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetLogsScanGroupResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest LogPlanGroup
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	}
 

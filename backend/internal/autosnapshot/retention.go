@@ -79,3 +79,21 @@ func (d *Daemon) maybeRunRetention(ctx context.Context, cfg Config) {
 			zap.Int64("retention_bytes", cfg.RetentionBytes))
 	}
 }
+
+// maybeRunInsightsRetention empties the log-insights snapshots whole: a snapshot
+// lives anywhere from nothing to retentionInterval. Runs at most once per
+// retentionInterval, the first time on start.
+func (d *Daemon) maybeRunInsightsRetention(ctx context.Context) {
+	d.mu.Lock()
+	if !d.lastInsightsRetention.IsZero() && time.Since(d.lastInsightsRetention) < retentionInterval {
+		d.mu.Unlock()
+
+		return
+	}
+	d.lastInsightsRetention = time.Now().UTC()
+	d.mu.Unlock()
+
+	if err := d.store.TruncateInsightsScans(ctx); err != nil {
+		d.logger.Warn("log insights retention failed", zap.Error(err))
+	}
+}

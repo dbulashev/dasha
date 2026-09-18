@@ -5,6 +5,8 @@ import (
 	"errors"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/dbulashev/dasha/internal/explain"
 	"github.com/dbulashev/dasha/internal/logs/insights"
 	"github.com/dbulashev/dasha/internal/logs/source"
@@ -58,8 +60,9 @@ type InsightsQuery struct {
 
 // InsightsResult is one read of a window. Covered spans the records read;
 // PlansCovered spans those read while the plan budget lasted. EmptyReason is
-// set when Plans holds no group.
+// set when Plans holds no group. ScanID is uuid.Nil when no snapshot was stored.
 type InsightsResult struct {
+	ScanID         uuid.UUID
 	Scanned        int
 	Partial        bool
 	PartialReasons []string
@@ -117,7 +120,7 @@ func (s *service) Insights(ctx context.Context, q InsightsQuery) (InsightsResult
 		},
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(s.cfg.TimeoutSeconds)*time.Second)
+	scanCtx, cancel := context.WithTimeout(ctx, time.Duration(s.cfg.TimeoutSeconds)*time.Second)
 	defer cancel()
 
 	var covered, plansCovered Span
@@ -128,7 +131,7 @@ func (s *service) Insights(ctx context.Context, q InsightsQuery) (InsightsResult
 		MaxPlans:     s.insights.MaxPlans,
 	})
 
-	st, err := s.scan(ctx, b.provider, params, limits, func(rec source.Record) bool {
+	st, err := s.scan(scanCtx, b.provider, params, limits, func(rec source.Record) bool {
 		text := rec.Fields[fm.Text]
 		code := classify(rec)
 
@@ -172,12 +175,12 @@ func (s *service) Insights(ctx context.Context, q InsightsQuery) (InsightsResult
 		}
 	}
 
-	summary := plans.Summary(insightsTopGroups)
+	summary := plans.Summary()
 	if summary.BudgetExhausted {
 		reasons = append(reasons, PartialPlans)
 	}
 
-	return InsightsResult{
+	res := InsightsResult{ //nolint:exhaustruct
 		Scanned:        st.Records,
 		Partial:        len(reasons) > 0,
 		PartialReasons: reasons,
@@ -186,7 +189,16 @@ func (s *service) Insights(ctx context.Context, q InsightsQuery) (InsightsResult
 		Categories:     categories.Summary(insightsTopTemplates),
 		Plans:          summary,
 		EmptyReason:    emptyReason(st, err != nil, summary),
-	}, nil
+	}
+
+	ranked := summary.Groups
+	res.Plans.Groups = insights.TopGroups(ranked, insightsTopGroups)
+
+	// On the request context, not the scan one: a slow source must not cut the
+	// write short.
+	res.ScanID = s.saveInsightsScan(ctx, q, res, ranked)
+
+	return res, nil
 }
 
 func emptyReason(st scanStats, interrupted bool, p insights.PlansSummary) string {

@@ -7,6 +7,7 @@
 import type { LogCategory } from './logCategory'
 import type { LogInsightsPartialReason } from './logInsightsPartialReason'
 import type { LogPlansSummary } from './logPlansSummary'
+import type { LogScanInfo } from './logScanInfo'
 
 export interface LogInsights {
   /** records read from the window */
@@ -21,4 +22,7 @@ export interface LogInsights {
   /** event categories seen in the window, most frequent first */
   categories: LogCategory[]
   plans: LogPlansSummary
+  /** the snapshot this summary was stored as; absent when no snapshot storage is configured or the write failed. Refine it through GET /api/logs/scans/{scan_id}. */
+  scan_id?: string
+  scan?: LogScanInfo
 }

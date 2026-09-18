@@ -297,6 +297,42 @@ ALTER TABLE autosnapshot_config_global
     ADD COLUMN IF NOT EXISTS io_enabled        boolean NOT NULL DEFAULT true,
     ADD COLUMN IF NOT EXISTS io_schedule       text    NOT NULL DEFAULT '*/5 * * * *',
     ADD COLUMN IF NOT EXISTS io_retention_days int     NOT NULL DEFAULT 30`
+
+	// One row = one read of a log window. summary is the answer the endpoint
+	// gave, without its plan groups. Both insights tables are emptied whole by
+	// the daemon once a day, so neither is partitioned nor indexed by time.
+	createLogInsightsScansSQL = `
+CREATE TABLE IF NOT EXISTS log_insights_scans (
+    scan_id      uuid PRIMARY KEY,
+    created_at   timestamptz NOT NULL DEFAULT now(),
+    kind         text NOT NULL,
+    cluster_name text NOT NULL,
+    stream       text NOT NULL,
+    host         text,
+    window_from  timestamptz NOT NULL,
+    window_to    timestamptz NOT NULL,
+    summary      jsonb NOT NULL
+)`
+
+	// ord is the rank of the group by total time within its scan; group_row
+	// repeats the columns beside it so a listing never opens the plan tree.
+	createLogInsightsGroupsSQL = `
+CREATE TABLE IF NOT EXISTS log_insights_groups (
+    scan_id   uuid NOT NULL,
+    ord       int  NOT NULL,
+    query_id  bigint,
+    hash      text NOT NULL,
+    count     int  NOT NULL,
+    sum_ms    double precision NOT NULL,
+    max_ms    double precision NOT NULL,
+    group_row jsonb NOT NULL,
+    plan      jsonb NOT NULL,
+    CONSTRAINT log_insights_groups_pkey PRIMARY KEY (scan_id, ord)
+)`
+
+	createLogInsightsGroupsIdxSQL = `
+CREATE INDEX IF NOT EXISTS idx_log_insights_groups_query
+    ON log_insights_groups (scan_id, query_id)`
 )
 
 // partitionedTables lists the day-partitioned tables managed together —
@@ -379,6 +415,9 @@ func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
 		createIOSnapshotSQL,
 		addIOSnapshotWALTimingSQL,
 		addAutosnapshotIOConfigSQL,
+		createLogInsightsScansSQL,
+		createLogInsightsGroupsSQL,
+		createLogInsightsGroupsIdxSQL,
 	} {
 		if _, err := s.ddlPool.Exec(ctx, ddl); err != nil {
 			return fmt.Errorf("storage: migrate: %w", err)

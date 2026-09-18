@@ -44,6 +44,17 @@ func insightsRecords() []source.Record {
 func newInsightsService(t *testing.T, p *fakeProvider, cfg config.LogInsightsConfig) Service {
 	t.Helper()
 
+	return newInsightsServiceWithSnapshots(t, p, cfg, nil)
+}
+
+func newInsightsServiceWithSnapshots(
+	t *testing.T,
+	p *fakeProvider,
+	cfg config.LogInsightsConfig,
+	snapshots SnapshotStore,
+) Service {
+	t.Helper()
+
 	reg := source.NewRegistry()
 	reg.Register("main", p)
 
@@ -55,7 +66,7 @@ func newInsightsService(t *testing.T, p *fakeProvider, cfg config.LogInsightsCon
 		}},
 	})
 
-	return NewService(clusters, reg, config.LogSearchConfig{}, cfg, zap.NewNop())
+	return NewService(clusters, reg, config.LogSearchConfig{}, cfg, snapshots, zap.NewNop())
 }
 
 func insightsQuery() InsightsQuery {
