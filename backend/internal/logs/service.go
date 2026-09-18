@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -120,6 +121,9 @@ type service struct {
 	insights  config.LogInsightsConfig
 	snapshots SnapshotStore
 	logger    *zap.Logger
+
+	pendingMu sync.Mutex
+	pending   map[uuid.UUID]chan struct{}
 }
 
 // NewService builds the log search service.
@@ -131,13 +135,14 @@ func NewService(
 	snapshots SnapshotStore,
 	logger *zap.Logger,
 ) Service {
-	return &service{
+	return &service{ //nolint:exhaustruct
 		clusters:  clusters,
 		sources:   sources,
 		cfg:       cfg.WithDefaults(),
 		insights:  insightsCfg.WithDefaults(),
 		snapshots: snapshots,
 		logger:    logger,
+		pending:   make(map[uuid.UUID]chan struct{}),
 	}
 }
 

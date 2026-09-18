@@ -91,7 +91,10 @@ func NewContainer() *Container {
 		sources := do.MustInvoke[*source.Registry](i)
 		logger := do.MustInvoke[*zap.Logger](i)
 
-		st, _ := do.Invoke[*storage.Storage](i)
+		st, err := do.Invoke[*storage.Storage](i)
+		if err != nil {
+			logger.Warn("logs service built before ProvideStorage, insights snapshots stay disabled", zap.Error(err))
+		}
 
 		return logs.NewService(clusters, sources, cfg.LogSearch, cfg.LogInsights, newScanSnapshots(st), logger), nil
 	})

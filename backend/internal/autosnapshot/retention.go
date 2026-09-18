@@ -7,7 +7,11 @@ import (
 	"go.uber.org/zap"
 )
 
-const retentionInterval = 24 * time.Hour
+const (
+	retentionInterval = 24 * time.Hour
+	// A failed insights truncate is retried within the day.
+	insightsRetentionRetry = time.Hour
+)
 
 // maybeRunRetention drops the oldest day-triples while the total size of all
 // partitioned tables exceeds cfg.RetentionBytes. Partitions younger than
@@ -95,5 +99,10 @@ func (d *Daemon) maybeRunInsightsRetention(ctx context.Context) {
 
 	if err := d.store.TruncateInsightsScans(ctx); err != nil {
 		d.logger.Warn("log insights retention failed", zap.Error(err))
+
+		// Back-dated so the next tick after insightsRetentionRetry runs it again.
+		d.mu.Lock()
+		d.lastInsightsRetention = time.Now().UTC().Add(insightsRetentionRetry - retentionInterval)
+		d.mu.Unlock()
 	}
 }

@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -16,12 +18,15 @@ import (
 // fakeSnapshots records what the service handed it; err makes every write fail.
 type fakeSnapshots struct {
 	SnapshotStore
+	calls  int
 	saved  []Scan
 	groups [][]insights.PlanGroup
 	err    error
 }
 
 func (f *fakeSnapshots) SaveInsightsScan(_ context.Context, scan Scan, groups []insights.PlanGroup) error {
+	f.calls++
+
 	if f.err != nil {
 		return f.err
 	}
@@ -30,6 +35,56 @@ func (f *fakeSnapshots) SaveInsightsScan(_ context.Context, scan Scan, groups []
 	f.groups = append(f.groups, groups)
 
 	return nil
+}
+
+// slowSnapshots delays the write so a read racing it has to wait for the rows.
+type slowSnapshots struct {
+	SnapshotStore
+	delay time.Duration
+
+	mu    sync.Mutex
+	saved map[uuid.UUID]Scan
+}
+
+func (f *slowSnapshots) SaveInsightsScan(_ context.Context, scan Scan, _ []insights.PlanGroup) error {
+	time.Sleep(f.delay)
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.saved == nil {
+		f.saved = make(map[uuid.UUID]Scan)
+	}
+
+	f.saved[scan.ID] = scan
+
+	return nil
+}
+
+func (f *slowSnapshots) GetInsightsScan(_ context.Context, id uuid.UUID, _ int) (Scan, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	scan, ok := f.saved[id]
+	if !ok {
+		return Scan{}, ErrNotFound
+	}
+
+	return scan, nil
+}
+
+// awaitSnapshotWrite blocks until the background write of id is over.
+func awaitSnapshotWrite(t *testing.T, svc Service, id uuid.UUID) {
+	t.Helper()
+
+	impl, ok := svc.(*service)
+	if !ok {
+		t.Fatalf("service = %T, want the package implementation", svc)
+	}
+
+	if err := impl.awaitSnapshot(context.Background(), id); err != nil {
+		t.Fatalf("await snapshot: %v", err)
+	}
 }
 
 // planOf builds an auto_explain record whose plan is unique per table and whose
@@ -69,6 +124,8 @@ func TestInsightsStoresEveryGroupAndAnswersWithTheTop(t *testing.T) {
 	if err != nil {
 		t.Fatalf("insights: %v", err)
 	}
+
+	awaitSnapshotWrite(t, svc, res.ScanID)
 
 	if len(res.Plans.Groups) != insightsTopGroups {
 		t.Errorf("answered with %d groups, want the top %d", len(res.Plans.Groups), insightsTopGroups)
@@ -119,12 +176,40 @@ func TestInsightsSurvivesAFailedSnapshot(t *testing.T) {
 		t.Fatalf("insights: %v", err)
 	}
 
-	if res.ScanID != uuid.Nil {
-		t.Errorf("scan id = %s, want none", res.ScanID)
+	awaitSnapshotWrite(t, svc, res.ScanID)
+
+	if snaps.calls != 1 {
+		t.Errorf("write attempts = %d, want one", snaps.calls)
 	}
 
 	if len(res.Plans.Groups) != 3 {
 		t.Errorf("groups = %d, want the scan itself to stand", len(res.Plans.Groups))
+	}
+}
+
+func TestSnapshotWaitsForTheWriteInFlight(t *testing.T) {
+	t.Parallel()
+
+	store := &slowSnapshots{delay: 50 * time.Millisecond} //nolint:exhaustruct
+	p := &fakeProvider{fields: testFieldMap(t), records: snapshotRecords(2)}
+	svc := newInsightsServiceWithSnapshots(t, p, config.LogInsightsConfig{}, store)
+
+	res, err := svc.Insights(context.Background(), insightsQuery())
+	if err != nil {
+		t.Fatalf("insights: %v", err)
+	}
+
+	if res.ScanID == uuid.Nil {
+		t.Fatal("scan id = none, want one before the write lands")
+	}
+
+	scan, err := svc.Snapshot(context.Background(), res.ScanID)
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+
+	if scan.ID != res.ScanID {
+		t.Errorf("snapshot id = %s, want %s", scan.ID, res.ScanID)
 	}
 }
 

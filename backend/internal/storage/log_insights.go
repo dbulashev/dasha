@@ -215,8 +215,10 @@ func (s *Storage) GetInsightsGroup(ctx context.Context, id uuid.UUID, ord int) (
 
 // TruncateInsightsScans drops every stored scan. Runs as the DDL role: TRUNCATE
 // needs a privilege the read-write role of a hardened install does not hold.
+// Table order follows SaveInsightsScan: the reverse deadlocks against a
+// concurrent save.
 func (s *Storage) TruncateInsightsScans(ctx context.Context) error {
-	if _, err := s.ddlPool.Exec(ctx, `TRUNCATE log_insights_groups, log_insights_scans`); err != nil {
+	if _, err := s.ddlPool.Exec(ctx, `TRUNCATE log_insights_scans, log_insights_groups`); err != nil {
 		return fmt.Errorf("storage: truncate insights scans: %w", err)
 	}
 

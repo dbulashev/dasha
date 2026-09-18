@@ -194,9 +194,7 @@ func (s *service) Insights(ctx context.Context, q InsightsQuery) (InsightsResult
 	ranked := summary.Groups
 	res.Plans.Groups = insights.TopGroups(ranked, insightsTopGroups)
 
-	// On the request context, not the scan one: a slow source must not cut the
-	// write short.
-	res.ScanID = s.saveInsightsScan(ctx, q, res, ranked)
+	res.ScanID = s.saveInsightsScan(q, res, ranked)
 
 	return res, nil
 }
