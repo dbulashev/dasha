@@ -14,6 +14,10 @@ import (
 // new index rolling into the pattern may carry a field the old ones did not.
 const fieldTypeTTL = 15 * time.Minute
 
+// unmappedType is what _field_caps names the indices of the pattern that do not
+// hold the field at all.
+const unmappedType = "unmapped"
+
 type fieldTypeEntry struct {
 	types map[string][]string
 	at    time.Time
@@ -51,29 +55,50 @@ func (p *Provider) Narrow(ctx context.Context, sp source.StreamParams) source.Fi
 		out.QueryID = sp.Filter.QueryID
 	}
 
-	if len(sp.Filter.Contains) > 0 && analyzed(types, fm.Text) {
+	if len(sp.Filter.Contains) > 0 && fullyAnalyzed(types, fm.Text) {
 		out.Contains = sp.Filter.Contains
 	}
 
 	return out
 }
 
-// analyzed reports whether the store tokenizes the field, which a phrase needs.
-func analyzed(types map[string][]string, field string) bool {
+// fullyAnalyzed reports whether every index behind the pattern tokenizes the
+// field: a phrase sent to one that maps it as a keyword matches nothing there.
+func fullyAnalyzed(types map[string][]string, field string) bool {
+	if len(types[field]) == 0 {
+		return false
+	}
+
 	for _, t := range types[field] {
-		if t == "text" || t == "match_only_text" {
-			return true
+		if !analyzedType(t) {
+			return false
 		}
 	}
 
-	return false
+	return true
 }
 
-// exact reports whether a term matches the field as written: it is mapped, and
-// mapped as something the store does not tokenize. A field the index does not
-// hold at all matches nothing, which is the outcome push-down must never cause.
+func analyzedType(t string) bool {
+	return t == "text" || t == "match_only_text"
+}
+
+// exact reports whether a term matches the field as written in every index
+// behind the pattern: mapped there, and mapped as something the store does not
+// tokenize. An index rolled over from a template that does not hold the field
+// answers nothing for it, which is the outcome push-down must never cause —
+// hence include_unmapped on the mapping read.
 func exact(types map[string][]string, field string) bool {
-	return len(types[field]) > 0 && !analyzed(types, field)
+	if len(types[field]) == 0 {
+		return false
+	}
+
+	for _, t := range types[field] {
+		if t == unmappedType || analyzedType(t) {
+			return false
+		}
+	}
+
+	return true
 }
 
 // fieldTypes reads the mapping of an index pattern, cached for fieldTypeTTL. A
@@ -112,7 +137,8 @@ func (p *Provider) fieldTypes(ctx context.Context, index string) map[string][]st
 func (p *Provider) fieldCaps(ctx context.Context, index string) (fieldCapsResponse, error) {
 	var caps fieldCapsResponse
 
-	err := p.client.JSON(ctx, "GET", "/"+url.PathEscape(index)+"/_field_caps?fields=*", nil, &caps)
+	err := p.client.JSON(ctx, "GET",
+		"/"+url.PathEscape(index)+"/_field_caps?fields=*&include_unmapped=true", nil, &caps)
 
 	return caps, err
 }

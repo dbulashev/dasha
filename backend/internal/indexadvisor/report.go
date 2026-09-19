@@ -27,6 +27,10 @@ const (
 	WarnSimilarIndex = "similar_index"
 	// WarnManyIndexes: the table already carries enough indexes to weigh one more.
 	WarnManyIndexes = "many_indexes"
+	// WarnStaleStatistics: a logged plan of a covered statement misestimated the
+	// rows of this table, so the statistics the key order was chosen from are the
+	// ones the planner already reads wrong.
+	WarnStaleStatistics = "stale_statistics"
 )
 
 // Params keys. They are passed to i18n as-is, so they are part of the contract
@@ -39,6 +43,9 @@ const (
 	ParamRequested  = "requested"
 	ParamPartitions = "partitions"
 	ParamIndexes    = "indexes"
+	ParamRatio      = "ratio"
+	ParamPlanRows   = "plan_rows"
+	ParamActualRows = "actual_rows"
 )
 
 // Reasons a statement contributed no candidate. The collector's own codes
@@ -115,6 +122,9 @@ type Candidate struct {
 	TableRows int64
 	Writes    Writes
 	Warnings  []Warning
+	// Evidence is what the logged plans of the statements say, when anything
+	// looked at them.
+	Evidence Evidence
 	// PlannerChecked stays false through step 1 and is the flag the UI and MCP
 	// must not hide: the whole report is a heuristic until the planner sees it.
 	PlannerChecked bool

@@ -23,6 +23,11 @@ const (
 	severeFactor   = 10.0
 )
 
+// Plans a shape needs in both windows before their p95 is compared: percentiles
+// go by nearest rank, so below this the p95 is the slowest run and an ordinary
+// spread between two executions reads as a slowdown.
+const minSlowerPlans = 20
+
 // Regression is one statement whose plans differ between a baseline window and
 // the current one. Current and Baseline are the durations of the shape that
 // took the most time in each window: percentiles of two shapes cannot be merged
@@ -38,6 +43,10 @@ type Regression struct {
 	LostIndexes   []string
 	Current       DurationStats
 	Baseline      DurationStats
+	// CurrentCount and BaselineCount are the plans behind the dominant shape of
+	// each window, which is what the ratios are measured over.
+	CurrentCount  int
+	BaselineCount int
 	P50Ratio      float64
 	P95Ratio      float64
 	Severity      health.Severity
@@ -139,6 +148,8 @@ func compareStatement(cur, base *statement, indexesKnown bool) (Regression, bool
 		LostIndexes:   nil,
 		Current:       cur.dominant.Durations,
 		Baseline:      base.dominant.Durations,
+		CurrentCount:  cur.dominant.Count,
+		BaselineCount: base.dominant.Count,
 		P50Ratio:      ratio(cur.dominant.Durations.P50, base.dominant.Durations.P50),
 		P95Ratio:      ratio(cur.dominant.Durations.P95, base.dominant.Durations.P95),
 		Severity:      "",
@@ -157,7 +168,9 @@ func compareStatement(cur, base *statement, indexesKnown bool) (Regression, bool
 		r.Reasons = append(r.Reasons, ReasonLostIndex)
 	}
 
-	if r.P95Ratio >= slowdownFactor {
+	measured := r.CurrentCount >= minSlowerPlans && r.BaselineCount >= minSlowerPlans
+
+	if measured && r.P95Ratio >= slowdownFactor {
 		r.Reasons = append(r.Reasons, ReasonSlower)
 	}
 
@@ -172,12 +185,15 @@ func compareStatement(cur, base *statement, indexesKnown bool) (Regression, bool
 
 // regressionSeverity ranks what the change costs: an index the current window
 // stopped using, or a tenfold p95, outweighs a shape that appeared without
-// costing time.
+// costing time. A ratio that did not earn ReasonSlower carries no weight here
+// either.
 func regressionSeverity(r Regression) health.Severity {
+	slower := slices.Contains(r.Reasons, ReasonSlower)
+
 	switch {
-	case len(r.LostIndexes) > 0, r.P95Ratio >= severeFactor:
+	case len(r.LostIndexes) > 0, slower && r.P95Ratio >= severeFactor:
 		return health.SeverityHigh
-	case r.P95Ratio >= slowdownFactor:
+	case slower:
 		return health.SeverityMedium
 	default:
 		return health.SeverityLow

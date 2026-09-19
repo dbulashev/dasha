@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dbulashev/dasha/internal/config"
+	"github.com/dbulashev/dasha/internal/logs/stream"
 )
 
 // corpusRecord is one record of testdata/, taken from the auto_explain probe
@@ -25,7 +25,7 @@ type corpusRecord struct {
 }
 
 func (r corpusRecord) classified() Record {
-	return Record{Stream: config.LogStreamPostgreSQL, Severity: r.Severity, SQLState: r.SQLState, Text: r.Text}
+	return Record{Stream: stream.PostgreSQL, Severity: r.Severity, SQLState: r.SQLState, Text: r.Text}
 }
 
 const corpusTimeLayout = "2006-01-02 15:04:05.000 MST"

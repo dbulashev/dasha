@@ -235,10 +235,10 @@ func (s *service) storedWindow(ctx context.Context, b binding, q CompareQuery) (
 }
 
 // recordsIndexes says whether the groups carry the indexes their plans read. A
-// scan stored before they did carries none, and an empty list there is not an
-// index the window lost.
+// group holding no list at all knows none of them, while an empty list is a
+// plan that read no index, and neither of those is an index the window lost.
 func recordsIndexes(rows []insights.GroupRow) bool {
-	return slices.ContainsFunc(rows, func(r insights.GroupRow) bool { return len(r.Indexes) > 0 })
+	return slices.ContainsFunc(rows, func(r insights.GroupRow) bool { return r.Indexes != nil })
 }
 
 // scanCovers refuses a scan that read something else: both sides of a

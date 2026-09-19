@@ -61,7 +61,15 @@ func NewContainer() *Container {
 		sources := do.MustInvoke[*source.Registry](i)
 		logger := do.MustInvoke[*zap.Logger](i)
 
-		return provideRepository(*cfg, clusters, sources, logger), nil
+		// The log service is resolved lazily: it needs the repository itself, so
+		// asking for it here would close the loop at startup. By the time a report
+		// calls through, both are built and the container hands back the one
+		// instance.
+		planEvidence := func() repository.PlanEvidenceSource {
+			return do.MustInvoke[logs.Service](i)
+		}
+
+		return provideRepository(*cfg, clusters, sources, planEvidence, logger), nil
 	})
 
 	do.Provide(i, func(_ *do.Injector) (*yandex.Registry, error) {
@@ -590,10 +598,11 @@ func provideRepository(
 	cfg config.Config,
 	clusters config.Clusters,
 	sources *source.Registry,
+	planEvidence func() repository.PlanEvidenceSource,
 	logger *zap.Logger,
 ) repository.Repository {
 	return repository.NewRepositoryPgxPool(
-		clusters, sources, cfg.PgStatsView, cfg.PgssResetFunction,
+		clusters, sources, planEvidence, cfg.PgStatsView, cfg.PgssResetFunction,
 		cfg.DBPool, cfg.SchemaLint, cfg.IndexAdvisor, logger,
 	)
 }

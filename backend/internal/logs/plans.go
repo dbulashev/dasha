@@ -39,7 +39,11 @@ type PlansQuery struct {
 	From, To   time.Time
 	QueryID    int64
 	HasQueryID bool
-	Host       string
+	// QueryIDs keeps the plans of these statements and drops the rest. Unlike
+	// QueryID it never reaches the store: a set of identifiers is not a filter
+	// any of them runs.
+	QueryIDs []int64
+	Host     string
 	// Limit caps the groups the answer carries; the snapshot keeps them all.
 	Limit int
 }
@@ -90,11 +94,11 @@ func validatePlansWindow(b binding, q PlansQuery) error {
 	return validateQueryIDRole(b, q)
 }
 
-// validateQueryIDRole refuses a request for one statement on a stream that
+// validateQueryIDRole refuses a request for named statements on a stream that
 // carries no query_id: a scan of the whole window would only come back empty.
 // GET /api/logs/check lists the role as missing.
 func validateQueryIDRole(b binding, q PlansQuery) error {
-	if q.HasQueryID && b.fields.QueryID == "" {
+	if (q.HasQueryID || len(q.QueryIDs) > 0) && b.fields.QueryID == "" {
 		return fmt.Errorf("%w: stream %q carries no query_id", ErrInvalid, q.Stream)
 	}
 
@@ -125,14 +129,7 @@ func (s *service) scanPlans(
 	defer cancel()
 
 	fm := b.fields
-	detect := func(rec source.Record) (insights.PlanRecord, bool) {
-		pr, ok := insights.Detect(rec.Fields[fm.Text], rec.Fields[fm.QueryID])
-		if !ok || !q.HasQueryID {
-			return pr, ok
-		}
-
-		return pr, pr.HasQueryID && pr.QueryID == q.QueryID
-	}
+	wanted := wantedPlan(q)
 
 	// Every plan record is charged at the plan cap, not only the ones of the
 	// requested statement: what makes a record large is the plan in it.
@@ -144,11 +141,16 @@ func (s *service) scanPlans(
 
 	var covered, plansCovered Span
 
+	planRecords := 0
 	plans := s.newPlans()
 
 	st, scanErr := s.scan(scanCtx, b.provider, params, limits, func(rec source.Record) bool {
-		if pr, ok := detect(rec); ok {
-			plans.Add(pr, rec.Timestamp)
+		if pr, ok := insights.Detect(rec.Fields[fm.Text], rec.Fields[fm.QueryID]); ok {
+			planRecords++
+
+			if wanted(pr) {
+				plans.Add(pr, rec.Timestamp)
+			}
 		}
 
 		covered.add(rec.Timestamp)
@@ -175,6 +177,7 @@ func (s *service) scanPlans(
 		PlansCovered:   plansCovered,
 		NarrowedBy:     narrowedBy(params.Filter),
 		Plans:          summary,
+		PlanRecords:    planRecords,
 		EmptyReason:    emptyReason(st, scanErr != nil, summary),
 		Configuration:  logging.Config,
 	}
@@ -183,6 +186,33 @@ func (s *service) scanPlans(
 	res.Plans.Groups = insights.TopGroups(ranked, planGroupLimit(q.Limit))
 
 	return res, ranked, nil
+}
+
+// wantedPlan decides which detected records a scan keeps. The push-down may
+// have let more through than was asked for, and a set of identifiers is not
+// pushed down at all.
+func wantedPlan(q PlansQuery) func(insights.PlanRecord) bool {
+	switch {
+	case q.HasQueryID:
+		return func(pr insights.PlanRecord) bool { return pr.HasQueryID && pr.QueryID == q.QueryID }
+	case len(q.QueryIDs) > 0:
+		ids := make(map[int64]struct{}, len(q.QueryIDs))
+		for _, id := range q.QueryIDs {
+			ids[id] = struct{}{}
+		}
+
+		return func(pr insights.PlanRecord) bool {
+			if !pr.HasQueryID {
+				return false
+			}
+
+			_, ok := ids[pr.QueryID]
+
+			return ok
+		}
+	default:
+		return func(insights.PlanRecord) bool { return true }
+	}
 }
 
 // narrow asks the provider which parts of the filter it runs itself, on a

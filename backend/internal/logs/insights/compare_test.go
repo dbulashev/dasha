@@ -13,8 +13,8 @@ func row(queryID int64, hash string, p50, p95 float64, indexes ...string) GroupR
 		QueryID:    queryID,
 		HasQueryID: queryID != 0,
 		Hash:       hash,
-		Count:      10,
-		Durations:  DurationStats{Min: p50, P50: p50, P95: p95, Max: p95, Sum: p50 * 10},
+		Count:      minSlowerPlans,
+		Durations:  DurationStats{Min: p50, P50: p50, P95: p95, Max: p95, Sum: p50 * minSlowerPlans},
 		QueryText:  "SELECT count(*) FROM orders WHERE status = $1",
 		Indexes:    indexes,
 	}
@@ -50,6 +50,71 @@ func TestCompareListsAStatementThatLostItsIndex(t *testing.T) {
 
 	if r.P50Ratio != 20 || r.P95Ratio != 25 {
 		t.Errorf("ratios = %v / %v, want 20 and 25", r.P50Ratio, r.P95Ratio)
+	}
+}
+
+func withCount(r GroupRow, count int) GroupRow {
+	r.Count = count
+
+	return r
+}
+
+func TestCompareIgnoresASlowdownMeasuredOnTooFewPlans(t *testing.T) {
+	t.Parallel()
+
+	base := []GroupRow{withCount(row(42, "hot", 10, 20, "orders_status_idx"), 2)}
+	cur := []GroupRow{withCount(row(42, "hot", 30, 70, "orders_status_idx"), 2)}
+
+	if got := Compare(cur, base, true); len(got) != 0 {
+		t.Errorf("regressions = %+v, want none: the p95 of two plans is their slowest run", got)
+	}
+
+	shifted := []GroupRow{withCount(row(42, "cold", 100, 2000, "orders_status_idx"), 2)}
+
+	got := Compare(shifted, base, true)
+	if len(got) != 1 {
+		t.Fatalf("regressions = %d, want the new shape", len(got))
+	}
+
+	if !slices.Equal(got[0].Reasons, []string{ReasonNewShape}) || got[0].Severity != health.SeverityLow {
+		t.Errorf("regression = %v at %s, want the shape alone at %s",
+			got[0].Reasons, got[0].Severity, health.SeverityLow)
+	}
+}
+
+func TestCompareReportsALostIndexHoweverFewThePlans(t *testing.T) {
+	t.Parallel()
+
+	base := []GroupRow{withCount(row(42, "indexed", 10, 12, "orders_status_idx"), 1)}
+	cur := []GroupRow{withCount(row(42, "seqscan", 200, 300), 1)}
+
+	got := Compare(cur, base, true)
+	if len(got) != 1 {
+		t.Fatalf("regressions = %d, want the one statement", len(got))
+	}
+
+	if !slices.Equal(got[0].Reasons, []string{ReasonNewShape, ReasonLostIndex}) {
+		t.Errorf("reasons = %v, want the shape and the index without the time", got[0].Reasons)
+	}
+
+	if got[0].Severity != health.SeverityHigh {
+		t.Errorf("severity = %s, want %s", got[0].Severity, health.SeverityHigh)
+	}
+}
+
+func TestCompareCarriesThePlanCountsOfBothSides(t *testing.T) {
+	t.Parallel()
+
+	base := []GroupRow{withCount(row(42, "indexed", 10, 12, "orders_status_idx"), 40)}
+	cur := []GroupRow{withCount(row(42, "seqscan", 200, 300), 25)}
+
+	got := Compare(cur, base, true)
+	if len(got) != 1 {
+		t.Fatalf("regressions = %d, want one", len(got))
+	}
+
+	if got[0].CurrentCount != 25 || got[0].BaselineCount != 40 {
+		t.Errorf("counts = %d / %d, want 25 and 40", got[0].CurrentCount, got[0].BaselineCount)
 	}
 }
 

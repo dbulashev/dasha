@@ -102,6 +102,8 @@ func mapLogRegression(r insights.Regression) serverhttp.LogPlanRegression {
 		LostIndexes:   emptyIfNil(r.LostIndexes),
 		Current:       mapPlanDurations(r.Current),
 		Baseline:      mapPlanDurations(r.Baseline),
+		CurrentCount:  r.CurrentCount,
+		BaselineCount: r.BaselineCount,
 		P50Ratio:      r.P50Ratio,
 		P95Ratio:      r.P95Ratio,
 	}

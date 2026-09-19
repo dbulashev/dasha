@@ -155,7 +155,8 @@ func (s *hitSource) UnmarshalJSON(b []byte) error {
 }
 
 // fieldCapsResponse maps a field name to the types it has across the indices
-// the pattern resolves to.
+// the pattern resolves to, unmappedType among them where an index does not hold
+// the field.
 type fieldCapsResponse struct {
 	Fields map[string]map[string]struct {
 		Type string `json:"type"`

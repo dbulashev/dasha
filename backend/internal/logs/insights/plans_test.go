@@ -271,3 +271,14 @@ func TestDurationStats(t *testing.T) {
 		t.Errorf("single run = %+v", one)
 	}
 }
+
+func TestRowTellsAnEmptyIndexListFromAnAbsentOne(t *testing.T) {
+	t.Parallel()
+
+	var g PlanGroup
+	g.Sample.Root.Type = "Seq Scan"
+
+	if idx := g.Row().Indexes; idx == nil || len(idx) != 0 {
+		t.Errorf("indexes = %#v, want an empty list: the plan read none", idx)
+	}
+}

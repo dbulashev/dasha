@@ -3701,7 +3701,9 @@ components:
       description: >-
         new_shape - a plan shape the baseline window did not hold; lost_index -
         an index the baseline window read and this one does not; slower - p95
-        grew at least twofold.
+        grew at least twofold, over a shape both windows hold at least 20 plans
+        of. Below that count a p95 by nearest rank is the slowest run, and the
+        reason is left out however large the ratio.
       enum: [new_shape, lost_index, slower]
     LogComparedWindow:
       type: object
@@ -3739,6 +3741,8 @@ components:
         - lost_indexes
         - current
         - baseline
+        - current_count
+        - baseline_count
         - p50_ratio
         - p95_ratio
       properties:
@@ -3780,6 +3784,14 @@ components:
           $ref: '#/components/schemas/PlanDurationStats'
         baseline:
           $ref: '#/components/schemas/PlanDurationStats'
+        current_count:
+          type: integer
+          description: >-
+            plans of the dominant shape in the current window, which is what its
+            percentiles and the ratios are measured over
+        baseline_count:
+          type: integer
+          description: plans of the dominant shape in the baseline window
         p50_ratio:
           type: number
           format: double
@@ -4785,6 +4797,7 @@ components:
         - table_rows
         - writes
         - warnings
+        - evidence
         - planner_checked
       properties:
         schema:
@@ -4842,6 +4855,8 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/IndexAdvisorWarning'
+        evidence:
+          $ref: '#/components/schemas/IndexAdvisorEvidence'
         planner_checked:
           description: >-
             False throughout this step. A client must carry the caveat: the recommendation
@@ -4952,7 +4967,11 @@ components:
             does not serve the statements, but names lists it so the reader can decide
             between a new index and a rewritten one. many_indexes — the table already
             carries params.indexes indexes, so one more is unlikely to be the best trade
-            available.
+            available. stale_statistics — a logged plan of a covered statement estimated
+            the rows of this table params.ratio times wrong, so the statistics that decided
+            the key order and the partial predicate are the ones the planner already reads
+            wrong; ANALYZE, default_statistics_target or extended statistics come before
+            CREATE INDEX.
           type: string
           enum:
             - write_heavy
@@ -4963,6 +4982,7 @@ components:
             - matview
             - similar_index
             - many_indexes
+            - stale_statistics
         params:
           description: >-
             Numbers the wording of this code quotes, keyed by name. Which keys are present
@@ -4978,6 +4998,63 @@ components:
           type: array
           items:
             type: string
+
+    IndexAdvisorEvidence:
+      description: >-
+        What the plans auto_explain wrote over a recent window say about this candidate.
+        Off unless log_insights.index_advisor_evidence is set, and silent whenever the log
+        source cannot be read: the report is built from pg_stat_statements and the catalog
+        alone, exactly as it is on a cluster with no logs at all.
+      type: object
+      required:
+        - state
+      properties:
+        state:
+          description: >-
+            found — plans over the window scan this table sequentially while running the
+            statements the candidate covers. not_found — the plans were read and none of
+            them does, which is an argument against the index. not_searched — nothing
+            looked: evidence is off, the cluster has no log source, the store did not
+            answer, or the window holds no plan at all. A client must not render
+            not_searched as not_found; the first says nothing about the database.
+          type: string
+          enum:
+            - not_searched
+            - not_found
+            - found
+        plans:
+          description: >-
+            Plan records over the window that scan this table sequentially, counted per
+            record rather than per shape.
+          type: integer
+        seq_scan_nodes:
+          description: >-
+            Sequential scans of this table across the sampled plans — one sample per
+            shape, the slowest of it.
+          type: integer
+        actual_time_ms:
+          description: >-
+            Time those nodes spent, across all loops, summed over the sampled plans. It is
+            the weight of the sampled executions, NOT extrapolated to every record behind
+            them. Zero where auto_explain.log_analyze is off: the scans are known, their
+            cost is not.
+          type: number
+          format: double
+        rows_removed:
+          description: Rows the filters of those nodes discarded, across all loops.
+          type: number
+          format: double
+        window_from:
+          type: string
+          format: date-time
+        window_to:
+          type: string
+          format: date-time
+        partial:
+          description: >-
+            The window was read only in part — the scan hit its record or byte budget, or
+            the store gave up — so every count here is a lower bound.
+          type: boolean
 
     IndexAdvisorNotParsed:
       type: object

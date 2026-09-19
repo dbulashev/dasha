@@ -25,6 +25,10 @@ export interface LogPlanRegression {
   lost_indexes: string[]
   current: PlanDurationStats
   baseline: PlanDurationStats
+  /** plans of the dominant shape in the current window, which is what its percentiles and the ratios are measured over */
+  current_count: number
+  /** plans of the dominant shape in the baseline window */
+  baseline_count: number
   /** current p50 over baseline p50; 0 when the baseline measured nothing */
   p50_ratio: number
   /** current p95 over baseline p95; 0 when the baseline measured nothing */

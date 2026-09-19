@@ -40,7 +40,7 @@ type ClusterSettings interface {
 type Configuration struct {
 	Instance         string
 	AutoExplain      bool
-	LogMinDurationMs *int64
+	LogMinDurationMs *int
 	LogAnalyze       *bool
 	LogFormat        string
 	LogLevel         string
@@ -178,7 +178,7 @@ func newConfiguration(values map[string]string) *Configuration {
 		return cfg
 	}
 
-	if ms, err := strconv.ParseInt(values[settingLogMinDuration], 10, 64); err == nil {
+	if ms, err := strconv.Atoi(values[settingLogMinDuration]); err == nil {
 		cfg.LogMinDurationMs = &ms
 	}
 

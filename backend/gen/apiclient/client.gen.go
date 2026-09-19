@@ -61,16 +61,24 @@ const (
 	Override HealthScoreWeightsSource = "override"
 )
 
+// Defines values for IndexAdvisorEvidenceState.
+const (
+	Found       IndexAdvisorEvidenceState = "found"
+	NotFound    IndexAdvisorEvidenceState = "not_found"
+	NotSearched IndexAdvisorEvidenceState = "not_searched"
+)
+
 // Defines values for IndexAdvisorWarningCode.
 const (
-	LowWeight     IndexAdvisorWarningCode = "low_weight"
-	ManyIndexes   IndexAdvisorWarningCode = "many_indexes"
-	Matview       IndexAdvisorWarningCode = "matview"
-	PartitionRoot IndexAdvisorWarningCode = "partition_root"
-	SimilarIndex  IndexAdvisorWarningCode = "similar_index"
-	StatsMissing  IndexAdvisorWarningCode = "stats_missing"
-	WideIndex     IndexAdvisorWarningCode = "wide_index"
-	WriteHeavy    IndexAdvisorWarningCode = "write_heavy"
+	LowWeight       IndexAdvisorWarningCode = "low_weight"
+	ManyIndexes     IndexAdvisorWarningCode = "many_indexes"
+	Matview         IndexAdvisorWarningCode = "matview"
+	PartitionRoot   IndexAdvisorWarningCode = "partition_root"
+	SimilarIndex    IndexAdvisorWarningCode = "similar_index"
+	StaleStatistics IndexAdvisorWarningCode = "stale_statistics"
+	StatsMissing    IndexAdvisorWarningCode = "stats_missing"
+	WideIndex       IndexAdvisorWarningCode = "wide_index"
+	WriteHeavy      IndexAdvisorWarningCode = "write_heavy"
 )
 
 // Defines values for IndexVerdictReasonCode.
@@ -1043,6 +1051,9 @@ type IndexAdvisorCandidate struct {
 	// Ddl Statement suggested to the user, or a short script when the table is partitioned: PostgreSQL rejects CREATE INDEX CONCURRENTLY on a partitioned table, so the script creates the root index with ON ONLY — invalid and holding no lock — then builds an index on every partition concurrently and attaches each one, which turns the root index valid with the last. The statements go one at a time, as psql sends them: CREATE INDEX CONCURRENTLY cannot run inside a transaction block. Dasha never executes DDL.
 	Ddl string `json:"ddl"`
 
+	// Evidence What the plans auto_explain wrote over a recent window say about this candidate. Off unless log_insights.index_advisor_evidence is set, and silent whenever the log source cannot be read: the report is built from pg_stat_statements and the catalog alone, exactly as it is on a cluster with no logs at all.
+	Evidence IndexAdvisorEvidence `json:"evidence"`
+
 	// PlannerChecked False throughout this step. A client must carry the caveat: the recommendation is structural, derived from the statements and the catalog alone.
 	PlannerChecked bool `json:"planner_checked"`
 
@@ -1086,6 +1097,32 @@ type IndexAdvisorCoveredQuery struct {
 	QueryIds  []string `json:"query_ids"`
 	WeightPct float64  `json:"weight_pct"`
 }
+
+// IndexAdvisorEvidence What the plans auto_explain wrote over a recent window say about this candidate. Off unless log_insights.index_advisor_evidence is set, and silent whenever the log source cannot be read: the report is built from pg_stat_statements and the catalog alone, exactly as it is on a cluster with no logs at all.
+type IndexAdvisorEvidence struct {
+	// ActualTimeMs Time those nodes spent, across all loops, summed over the sampled plans. It is the weight of the sampled executions, NOT extrapolated to every record behind them. Zero where auto_explain.log_analyze is off: the scans are known, their cost is not.
+	ActualTimeMs *float64 `json:"actual_time_ms,omitempty"`
+
+	// Partial The window was read only in part — the scan hit its record or byte budget, or the store gave up — so every count here is a lower bound.
+	Partial *bool `json:"partial,omitempty"`
+
+	// Plans Plan records over the window that scan this table sequentially, counted per record rather than per shape.
+	Plans *int `json:"plans,omitempty"`
+
+	// RowsRemoved Rows the filters of those nodes discarded, across all loops.
+	RowsRemoved *float64 `json:"rows_removed,omitempty"`
+
+	// SeqScanNodes Sequential scans of this table across the sampled plans — one sample per shape, the slowest of it.
+	SeqScanNodes *int `json:"seq_scan_nodes,omitempty"`
+
+	// State found — plans over the window scan this table sequentially while running the statements the candidate covers. not_found — the plans were read and none of them does, which is an argument against the index. not_searched — nothing looked: evidence is off, the cluster has no log source, the store did not answer, or the window holds no plan at all. A client must not render not_searched as not_found; the first says nothing about the database.
+	State      IndexAdvisorEvidenceState `json:"state"`
+	WindowFrom *time.Time                `json:"window_from,omitempty"`
+	WindowTo   *time.Time                `json:"window_to,omitempty"`
+}
+
+// IndexAdvisorEvidenceState found — plans over the window scan this table sequentially while running the statements the candidate covers. not_found — the plans were read and none of them does, which is an argument against the index. not_searched — nothing looked: evidence is off, the cluster has no log source, the store did not answer, or the window holds no plan at all. A client must not render not_searched as not_found; the first says nothing about the database.
+type IndexAdvisorEvidenceState string
 
 // IndexAdvisorNotParsed defines model for IndexAdvisorNotParsed.
 type IndexAdvisorNotParsed struct {
@@ -1139,7 +1176,7 @@ type IndexAdvisorSummary struct {
 
 // IndexAdvisorWarning defines model for IndexAdvisorWarning.
 type IndexAdvisorWarning struct {
-	// Code write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. partition_root — the table is partitioned: the root index cannot be built with CONCURRENTLY, so the DDL goes through ON ONLY plus a concurrent build and an ATTACH per partition, and every partition pays for the index; params.partitions counts them. stats_missing — no pg_stats row for some of the columns, so their order is the order the statement wrote them and an IS NULL filter may have been left out of the index. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires a unique index over plain column names covering every row, so a partial or expression index does not enable it. similar_index — an existing index already holds every column of the candidate, in another order or behind other columns; it does not serve the statements, but names lists it so the reader can decide between a new index and a rewritten one. many_indexes — the table already carries params.indexes indexes, so one more is unlikely to be the best trade available.
+	// Code write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. partition_root — the table is partitioned: the root index cannot be built with CONCURRENTLY, so the DDL goes through ON ONLY plus a concurrent build and an ATTACH per partition, and every partition pays for the index; params.partitions counts them. stats_missing — no pg_stats row for some of the columns, so their order is the order the statement wrote them and an IS NULL filter may have been left out of the index. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires a unique index over plain column names covering every row, so a partial or expression index does not enable it. similar_index — an existing index already holds every column of the candidate, in another order or behind other columns; it does not serve the statements, but names lists it so the reader can decide between a new index and a rewritten one. many_indexes — the table already carries params.indexes indexes, so one more is unlikely to be the best trade available. stale_statistics — a logged plan of a covered statement estimated the rows of this table params.ratio times wrong, so the statistics that decided the key order and the partial predicate are the ones the planner already reads wrong; ANALYZE, default_statistics_target or extended statistics come before CREATE INDEX.
 	Code IndexAdvisorWarningCode `json:"code"`
 
 	// Names Objects the wording of this code quotes — existing index names, for the codes that point at one. Absent when the code names nothing.
@@ -1149,7 +1186,7 @@ type IndexAdvisorWarning struct {
 	Params *map[string]float64 `json:"params,omitempty"`
 }
 
-// IndexAdvisorWarningCode write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. partition_root — the table is partitioned: the root index cannot be built with CONCURRENTLY, so the DDL goes through ON ONLY plus a concurrent build and an ATTACH per partition, and every partition pays for the index; params.partitions counts them. stats_missing — no pg_stats row for some of the columns, so their order is the order the statement wrote them and an IS NULL filter may have been left out of the index. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires a unique index over plain column names covering every row, so a partial or expression index does not enable it. similar_index — an existing index already holds every column of the candidate, in another order or behind other columns; it does not serve the statements, but names lists it so the reader can decide between a new index and a rewritten one. many_indexes — the table already carries params.indexes indexes, so one more is unlikely to be the best trade available.
+// IndexAdvisorWarningCode write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. partition_root — the table is partitioned: the root index cannot be built with CONCURRENTLY, so the DDL goes through ON ONLY plus a concurrent build and an ATTACH per partition, and every partition pays for the index; params.partitions counts them. stats_missing — no pg_stats row for some of the columns, so their order is the order the statement wrote them and an IS NULL filter may have been left out of the index. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires a unique index over plain column names covering every row, so a partial or expression index does not enable it. similar_index — an existing index already holds every column of the candidate, in another order or behind other columns; it does not serve the statements, but names lists it so the reader can decide between a new index and a rewritten one. many_indexes — the table already carries params.indexes indexes, so one more is unlikely to be the best trade available. stale_statistics — a logged plan of a covered statement estimated the rows of this table params.ratio times wrong, so the statistics that decided the key order and the partial predicate are the ones the planner already reads wrong; ANALYZE, default_statistics_target or extended statistics come before CREATE INDEX.
 type IndexAdvisorWarningCode string
 
 // IndexAdvisorWrites What maintaining an index on this table would cost, from pg_stat_user_tables. Scans are the other side of the trade: they are what an index would serve.
@@ -1600,9 +1637,15 @@ type LogPlanRegression struct {
 	// Baseline exact over the plans of the group; percentiles by nearest rank
 	Baseline PlanDurationStats `json:"baseline"`
 
+	// BaselineCount plans of the dominant shape in the baseline window
+	BaselineCount int `json:"baseline_count"`
+
 	// Current exact over the plans of the group; percentiles by nearest rank
-	Current     PlanDurationStats `json:"current"`
-	LostIndexes []string          `json:"lost_indexes"`
+	Current PlanDurationStats `json:"current"`
+
+	// CurrentCount plans of the dominant shape in the current window, which is what its percentiles and the ratios are measured over
+	CurrentCount int      `json:"current_count"`
+	LostIndexes  []string `json:"lost_indexes"`
 
 	// P50Ratio current p50 over baseline p50; 0 when the baseline measured nothing
 	P50Ratio float64 `json:"p50_ratio"`
@@ -1624,7 +1667,7 @@ type LogPlanRegression struct {
 // LogPlanRegressionSeverity defines model for LogPlanRegression.Severity.
 type LogPlanRegressionSeverity string
 
-// LogPlanRegressionReason new_shape - a plan shape the baseline window did not hold; lost_index - an index the baseline window read and this one does not; slower - p95 grew at least twofold.
+// LogPlanRegressionReason new_shape - a plan shape the baseline window did not hold; lost_index - an index the baseline window read and this one does not; slower - p95 grew at least twofold, over a shape both windows hold at least 20 plans of. Below that count a p95 by nearest rank is the slowest run, and the reason is left out however large the ratio.
 type LogPlanRegressionReason string
 
 // LogPlansSummary defines model for LogPlansSummary.

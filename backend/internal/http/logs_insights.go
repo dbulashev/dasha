@@ -100,7 +100,7 @@ func mapLogConfiguration(c *logs.Configuration) *serverhttp.LogPlanConfiguration
 	}
 
 	if c.LogMinDurationMs != nil {
-		out.LogMinDurationMs = shortcut.Ptr(int(*c.LogMinDurationMs))
+		out.LogMinDurationMs = shortcut.Ptr(*c.LogMinDurationMs)
 	}
 
 	if c.LogFormat != "" {

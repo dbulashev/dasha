@@ -21,6 +21,7 @@ import (
 	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/hotobjects"
 	"github.com/dbulashev/dasha/internal/indexadvisor"
+	"github.com/dbulashev/dasha/internal/logs/insights"
 	"github.com/dbulashev/dasha/internal/pkg/mapstruct"
 	"github.com/dbulashev/dasha/internal/schemalint"
 	"github.com/dbulashev/dasha/internal/sqlparse"
@@ -178,6 +179,7 @@ type PgxPool struct {
 	mu                    sync.RWMutex
 	clusters              config.Clusters
 	logSources            LogCapability
+	planEvidence          func() PlanEvidenceSource
 	pools                 PgxPools
 	logger                *zap.Logger
 	pgStatsViewConfig     string   // configured pg_stats_view from global config
@@ -200,9 +202,23 @@ type LogCapability interface {
 	Severities(cluster config.Cluster) map[string][]string
 }
 
+// PlanEvidenceSource reads the plans a log window holds for the given
+// statements. Declared here and implemented by the log service, which needs the
+// repository itself — hence a resolver rather than the value: the two are wired
+// in one direction and resolved in the other, at the first request instead of at
+// startup. A nil resolver, a nil source or an error from it all mean the same
+// thing to the report, and it says so rather than claiming the plans back
+// nothing.
+type PlanEvidenceSource interface {
+	PlansForQueryIDs(
+		ctx context.Context, cluster, stream string, from, to time.Time, ids []int64,
+	) (insights.PlanWindow, error)
+}
+
 func NewRepositoryPgxPool(
 	clusters config.Clusters,
 	logSources LogCapability,
+	planEvidence func() PlanEvidenceSource,
 	pgStatsView, pgssResetFunc string,
 	poolCfg config.PoolConfig,
 	schemaLintCfg schemalint.Config,
@@ -212,6 +228,7 @@ func NewRepositoryPgxPool(
 	return &PgxPool{
 		clusters:            clusters,
 		logSources:          logSources,
+		planEvidence:        planEvidence,
 		pools:               PgxPools{},
 		mu:                  sync.RWMutex{},
 		logger:              logger,

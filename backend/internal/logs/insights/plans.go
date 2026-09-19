@@ -81,8 +81,10 @@ func (g PlanGroup) Row() GroupRow {
 	}
 }
 
+// A plan that reads no index gives an empty list, never nil: a group carrying
+// no list at all is a group whose indexes are unknown.
 func planIndexes(p *explain.Plan) []string {
-	var out []string
+	out := []string{}
 
 	p.Walk(func(_ []int, n *explain.Node) bool {
 		if n.IndexName != "" && !slices.Contains(out, n.IndexName) {
@@ -138,6 +140,18 @@ type PlansSummary struct {
 	Groups          []PlanGroup
 	Dormant         []DormantRule
 	BudgetExhausted bool
+}
+
+// PlanWindow is the plans of one window as another feature asks for them:
+// every group, and whether the window was read whole. Partial makes the counts
+// lower bounds rather than totals.
+type PlanWindow struct {
+	Groups  []PlanGroup
+	Partial bool
+	// PlanRecords counts the auto_explain records the window held, including the
+	// ones a filter on the statement dropped. With none, the window is silent
+	// about every statement rather than negative about the ones asked for.
+	PlanRecords int
 }
 
 // A nested statement shares the query id of its caller, so the normalized query

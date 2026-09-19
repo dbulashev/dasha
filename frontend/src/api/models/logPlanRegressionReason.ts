@@ -6,7 +6,7 @@
  */
 
 /**
- * new_shape - a plan shape the baseline window did not hold; lost_index - an index the baseline window read and this one does not; slower - p95 grew at least twofold.
+ * new_shape - a plan shape the baseline window did not hold; lost_index - an index the baseline window read and this one does not; slower - p95 grew at least twofold, over a shape both windows hold at least 20 plans of. Below that count a p95 by nearest rank is the slowest run, and the reason is left out however large the ratio.
  */
 export type LogPlanRegressionReason =
   (typeof LogPlanRegressionReason)[keyof typeof LogPlanRegressionReason]

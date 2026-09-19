@@ -391,6 +391,7 @@ log_insights:
   compare_rate_limit:     # GET /api/logs/plans/compare, per user
     requests_per_second: 0.016
     burst: 3
+  index_advisor_evidence: false  # back index candidates with plans from the log
 ```
 
 If a limit is reached before the end of the interval, the response says which part of the interval
@@ -404,6 +405,14 @@ scan covers. The `narrowed_by` field of the response lists what the store execut
 it cannot run is not sent, and Dasha reads a wider window instead. The records the store
 returns are filtered on the Dasha side regardless. A log stream without a `query_id` role answers 400
 to a request for one; `GET /api/logs/check` shows which roles are missing.
+
+With `index_advisor_evidence: true`, a candidate in the index recommendation report comes with the
+number of plans over the last hour that read its table sequentially, the time those nodes spent and
+the rows their filters discarded. A candidate no such plan was found for and a candidate whose plans
+were never read are two different answers in the response: the second is no argument against the
+index. A window auto_explain wrote no plan to is the second answer, not the first. A plan that
+misestimated the rows of that table raises the `stale_statistics` warning — `ANALYZE` first, the
+index after. The depth of the window is `index_advisor.evidence_window` (`1h` by default). Off by default: with it on, the latency of the report depends on the log store.
 
 `GET /api/logs/plans/compare` reads two intervals and lists the statements whose plans changed for
 the worse: a plan shape the baseline interval did not hold, an index it read and the current one does
@@ -444,6 +453,28 @@ The auto-snapshot daemon empties the snapshots once a day, the first time on sta
 lives a day at most, after which it answers 404 and the client scans again. Without a running
 daemon the tables `log_insights_scans` and `log_insights_groups` are never cleared. Query literals
 are not masked in a stored plan and are readable by any viewer until the cleanup.
+
+## Index recommendations (optional)
+
+The index recommendation report needs no configuration. The global `index_advisor` block bounds the
+work and the shape of the candidates:
+
+```yaml
+index_advisor:
+  enabled: true            # false answers 404
+  max_queries: 500         # statements read per report, by total time descending
+  max_query_bytes: 102400  # a longer statement is not parsed
+  max_candidates: 50       # candidates in the report
+  max_index_columns: 3     # columns in a candidate key; 4 is the ceiling
+  min_table_rows: 10000    # a smaller table yields no candidate
+  parse_cache_size: 1000   # parsed statements kept between reports
+  timeout: 60s             # bounds one report
+  evidence_window: 1h      # window the logged plans behind a candidate are read over
+```
+
+`evidence_window` is read only with `log_insights.index_advisor_evidence` on. The MCP server asks for
+this report with its own `--slow-timeout` (`90s` by default): raised above it, `timeout` never applies,
+because the MCP call gives up first.
 
 ## Schema Checks (optional)
 

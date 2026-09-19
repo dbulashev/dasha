@@ -16,6 +16,10 @@ func TestConfigWithDefaults(t *testing.T) {
 	if cfg.Timeout != DefaultTimeout {
 		t.Errorf("Timeout = %s, want %s", cfg.Timeout, DefaultTimeout)
 	}
+
+	if cfg.EvidenceWindow != DefaultEvidenceWindow {
+		t.Errorf("EvidenceWindow = %s, want %s", cfg.EvidenceWindow, DefaultEvidenceWindow)
+	}
 }
 
 // Configuring a wider index than the ceiling is capped rather than rejected: the

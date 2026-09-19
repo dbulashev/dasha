@@ -79,6 +79,27 @@ func TestNarrowDropsWhatTheMappingWouldSilentlyEmpty(t *testing.T) {
 	}
 }
 
+// One index of the pattern mapping the field as a keyword is enough: the phrase
+// matches nothing there, and the records it holds go missing.
+func TestNarrowDropsAPhraseOnAMixedMapping(t *testing.T) {
+	t.Parallel()
+
+	p := narrowProvider(t, map[string][]string{
+		"query_id": {"long"},
+		"message":  {"text", "keyword"},
+	})
+
+	got := p.Narrow(context.Background(), narrowParams(planFilter()))
+
+	if got.Contains != nil {
+		t.Errorf("filter = %+v, want the phrase dropped: one index maps the field as a keyword", got)
+	}
+
+	if got.QueryID == nil {
+		t.Errorf("filter = %+v, want the id kept: its own mapping is exact", got)
+	}
+}
+
 func TestNarrowWithoutAMappingNarrowsNothingExtra(t *testing.T) {
 	t.Parallel()
 
@@ -119,6 +140,27 @@ func TestNarrowDropsAnUnmappedQueryIDField(t *testing.T) {
 
 	if got.QueryID != nil {
 		t.Errorf("filter = %+v, want the id dropped: the index has no such field", got)
+	}
+
+	if len(got.Contains) != 1 {
+		t.Errorf("filter = %+v, want the phrase kept", got)
+	}
+}
+
+// One index of the pattern not holding query_id is enough: a term sent there
+// matches nothing, and every record it holds goes missing.
+func TestNarrowDropsTheIDOnAPartlyUnmappedField(t *testing.T) {
+	t.Parallel()
+
+	p := narrowProvider(t, map[string][]string{
+		"query_id": {"long", unmappedType},
+		"message":  {"text"},
+	})
+
+	got := p.Narrow(context.Background(), narrowParams(planFilter()))
+
+	if got.QueryID != nil {
+		t.Errorf("filter = %+v, want the id dropped: one index of the pattern has no such field", got)
 	}
 
 	if len(got.Contains) != 1 {

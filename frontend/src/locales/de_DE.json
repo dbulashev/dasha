@@ -578,7 +578,8 @@
         "wide_index": "Die Anweisungen verlangten mehr Spalten, als der Schlüssel fasst: {columns} von {requested} behalten. Ein langer Schlüssel ist teurer in der Pflege, deshalb wurde der Rest abgeschnitten.",
         "matview": "Dies ist eine materialisierte Sicht: Ein einfaches REFRESH schreibt sie vollständig neu und baut jeden Index darauf neu auf, die Kosten eines Index richten sich also nach der Aktualisierungsrate. Umgekehrt funktioniert REFRESH ... CONCURRENTLY nicht ohne einen eindeutigen Index über einfache Spaltennamen, der alle Zeilen umfasst: Ein partieller Index oder ein Ausdrucksindex zählt dafür nicht.",
         "similar_index": "Vorhandene Indexe enthalten bereits alle Spalten dieses Kandidaten — in anderer Reihenfolge oder hinter anderen Spalten: {names}. Die Anweisungen bedienen sie nicht, aber einen davon umzubauen kann günstiger sein, als einen weiteren Index anzulegen.",
-        "many_indexes": "Die Tabelle trägt bereits {indexes} Indexe, und jeder Schreibvorgang pflegt sie alle. Bevor ein weiterer hinzukommt, lohnt sich der Blick, ob einige davon ungenutzt sind oder einander duplizieren."
+        "many_indexes": "Die Tabelle trägt bereits {indexes} Indexe, und jeder Schreibvorgang pflegt sie alle. Bevor ein weiterer hinzukommt, lohnt sich der Blick, ob einige davon ungenutzt sind oder einander duplizieren.",
+        "stale_statistics": "Pläne aus dem Log haben die Zeilenzahl dieser Tabelle um den Faktor {ratio} falsch geschätzt ({planRows} geplant gegen {actualRows} tatsächlich). Die Schlüsselreihenfolge und das Prädikat des partiellen Index stammen aus derselben Statistik, die der Planer bereits falsch liest. Zuerst ANALYZE, default_statistics_target oder erweiterte Statistik, dann der Index."
       },
       "notParsed": {
         "empty": "leerer Anweisungstext",
@@ -598,6 +599,16 @@
         "table_too_small": "die Tabelle ist zu klein: ein sequenzieller Scan ist hier günstiger als ein Index",
         "already_indexed": "ein vorhandener Index bedient die Anweisung bereits — das gesunde Ergebnis",
         "no_indexable_predicate": "die Anweisung enthält nichts, wobei ein Index helfen würde"
+      },
+      "evidence": {
+        "header": "Belege",
+        "found": "Pläne mit Seq Scan: {plans}",
+        "notFound": "keine",
+        "notSearched": "—",
+        "foundHint": "Im Fenster {from} — {to}: {plans} Pläne lesen diese Tabelle sequenziell, in {nodes} Knoten, mit {ms} ms und {rows} vom Filter verworfenen Zeilen. Die Zeiten sind am langsamsten Plan jeder Form gemessen und nicht mit der Ausführungshäufigkeit multipliziert.",
+        "notFoundHint": "Die Pläne im Fenster {from} — {to} wurden gelesen, keiner davon liest diese Tabelle sequenziell. Das spricht gegen den Index.",
+        "notSearchedHint": "Niemand hat die Pläne angesehen: Belege sind aus, der Cluster hat keine Logquelle, der Speicher hat nicht geantwortet, oder das Fenster enthält keinen einzigen Plan. Das spricht weder für noch gegen den Index.",
+        "partial": "Das Fenster wurde nur teilweise gelesen, die Zahlen sind eine Untergrenze."
       }
     },
     "report": {

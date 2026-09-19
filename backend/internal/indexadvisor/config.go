@@ -17,6 +17,12 @@ const (
 	DefaultTimeout         = 60 * time.Second
 )
 
+// DefaultEvidenceWindow is how far back the log scan backing a candidate
+// reaches. An hour, because the scan is bounded in records rather than in time:
+// a wider window on a busy cluster spends the budget before it reaches the
+// present and answers with a partial count the user cannot compare.
+const DefaultEvidenceWindow = time.Hour
+
 // MaxIndexColumnsCeiling caps what an operator may configure. Past four columns a
 // btree candidate is guesswork: the normalized text of pg_stat_statements carries
 // no constants, so nothing in this step knows the selectivity that would justify
@@ -37,6 +43,9 @@ type Config struct {
 	MinTableRows    int64         `mapstructure:"min_table_rows"`
 	ParseCacheSize  int           `mapstructure:"parse_cache_size"`
 	Timeout         time.Duration `mapstructure:"timeout"`
+	// EvidenceWindow is the log window the plans of a candidate are read over.
+	// Whether they are read at all is log_insights.index_advisor_evidence.
+	EvidenceWindow time.Duration `mapstructure:"evidence_window"`
 }
 
 // IsEnabled reports the flag with its default applied: an absent key means on.
@@ -74,6 +83,10 @@ func (c Config) WithDefaults() Config {
 
 	if c.Timeout <= 0 {
 		c.Timeout = DefaultTimeout
+	}
+
+	if c.EvidenceWindow <= 0 {
+		c.EvidenceWindow = DefaultEvidenceWindow
 	}
 
 	return c

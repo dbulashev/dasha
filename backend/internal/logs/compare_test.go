@@ -427,3 +427,32 @@ func TestCompareCallsNoIndexLostWhenTheStoredScanRecordedNone(t *testing.T) {
 		}
 	}
 }
+
+// A stored group whose plan read no index holds an empty list, not an absent
+// one, and the index the baseline read is one the window lost.
+func TestCompareCallsAnIndexLostWhenTheStoredScanRecordedAnEmptyList(t *testing.T) {
+	t.Parallel()
+
+	id := uuid.New()
+	p := compareProvider(t, nil, planRecordsOf(indexedPlan("12.000"), indexedPlan("14.000")))
+	stored := storedScanOf(id, "")
+	stored.rows[0].Indexes = []string{}
+	svc := newCompareService(t, p, stored, config.LogInsightsConfig{})
+
+	q := compareQuery()
+	q.From, q.To = time.Time{}, time.Time{}
+	q.ScanID = id
+
+	res, err := svc.Compare(context.Background(), q)
+	if err != nil {
+		t.Fatalf("compare: %v", err)
+	}
+
+	if len(res.Regressions) != 1 {
+		t.Fatalf("regressions = %+v, want the stored statement", res.Regressions)
+	}
+
+	if lost := res.Regressions[0].LostIndexes; len(lost) != 1 || lost[0] != "orders_status_idx" {
+		t.Errorf("lost indexes = %v, want the index the baseline read", lost)
+	}
+}

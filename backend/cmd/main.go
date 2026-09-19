@@ -126,6 +126,8 @@ func autosnapshotExec(cmd *cobra.Command, _ []string) error {
 	repo := repository.NewRepositoryPgxPool(
 		container.Clusters(),
 		container.LogSources(),
+		// The daemon builds no index advisor report, so it needs no plan evidence.
+		nil,
 		cfg.PgStatsView,
 		cfg.PgssResetFunction,
 		cfg.EffectiveAutosnapshotPool(),

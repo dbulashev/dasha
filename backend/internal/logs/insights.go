@@ -73,8 +73,11 @@ type ScanResult struct {
 	NarrowedBy     []string
 	Categories     []insights.CategorySummary
 	Plans          insights.PlansSummary
-	EmptyReason    string
-	Configuration  *Configuration
+	// PlanRecords counts the auto_explain records the window held, including the
+	// ones a filter on the statement dropped before Plans saw them.
+	PlanRecords   int
+	EmptyReason   string
+	Configuration *Configuration
 }
 
 // Insights reads the window once: every record is classified, and a record
@@ -164,6 +167,7 @@ func (s *service) Insights(ctx context.Context, q InsightsQuery) (ScanResult, er
 		PlansCovered:   plansCovered,
 		Categories:     categories.Summary(insightsTopTemplates),
 		Plans:          summary,
+		PlanRecords:    summary.Records,
 		EmptyReason:    emptyReason(st, scanErr != nil, summary),
 		Configuration:  configuration(),
 	}
