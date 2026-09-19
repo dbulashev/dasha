@@ -149,7 +149,7 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: cd frontend && npm ci
-      # - run: cd frontend && npm run test:unit
+      - run: cd frontend && npm run test:unit
 
   # The frontend image runs nginx as a non-root user, so a missing write permission
   # inside it only surfaces at startup — build the image and actually serve a request.
