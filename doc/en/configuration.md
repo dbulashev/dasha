@@ -416,7 +416,8 @@ index after. The depth of the window is `index_advisor.evidence_window` (`1h` by
 
 `GET /api/logs/plans/compare` reads two intervals and lists the statements whose plans changed for
 the worse: a plan shape the baseline interval did not hold, an index it read and the current one does
-not, a p95 at least twice as high. A statement only one of the intervals holds is left out. The
+not, a p95 at least twice as high. The p95 counts only where the costliest shape of each interval
+holds at least 20 plans. A statement only one of the intervals holds is left out. The
 durations of each side are those of the shape that took the most time in that interval, and the ratio
 of two truncated intervals is marked `partial`. The current interval comes from `from` and `to`, or
 from a stored scan named in `scan_id`; the baseline interval is read only when the current one found

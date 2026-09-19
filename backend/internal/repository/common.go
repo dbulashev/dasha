@@ -211,7 +211,7 @@ type LogCapability interface {
 // nothing.
 type PlanEvidenceSource interface {
 	PlansForQueryIDs(
-		ctx context.Context, cluster, stream string, from, to time.Time, ids []int64,
+		ctx context.Context, cluster, stream, database string, from, to time.Time, ids []int64,
 	) (insights.PlanWindow, error)
 }
 

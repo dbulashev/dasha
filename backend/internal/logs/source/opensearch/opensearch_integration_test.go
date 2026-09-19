@@ -542,8 +542,10 @@ func TestCheckReportsMappingAndSample(t *testing.T) {
 		}
 	}
 
-	if res.Types["@timestamp"] != "date" {
-		t.Errorf("timestamp indexed as %q, want date", res.Types["@timestamp"])
+	// malformedIndex sits behind the same pattern without the timestamp field,
+	// and the check reports that alongside the mapping of the other index.
+	if res.Types["@timestamp"] != "date,unmapped" {
+		t.Errorf("timestamp indexed as %q, want date,unmapped", res.Types["@timestamp"])
 	}
 }
 

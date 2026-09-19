@@ -43,6 +43,10 @@ type PlansQuery struct {
 	// QueryID it never reaches the store: a set of identifiers is not a filter
 	// any of them runs.
 	QueryIDs []int64
+	// Database keeps the plans of one database and drops the rest: databases
+	// cloned from one template share the relation OIDs a statement identifier is
+	// built from, so the identifier alone does not tell them apart.
+	Database string
 	Host     string
 	// Limit caps the groups the answer carries; the snapshot keeps them all.
 	Limit int
@@ -145,11 +149,13 @@ func (s *service) scanPlans(
 	plans := s.newPlans()
 
 	st, scanErr := s.scan(scanCtx, b.provider, params, limits, func(rec source.Record) bool {
-		if pr, ok := insights.Detect(rec.Fields[fm.Text], rec.Fields[fm.QueryID]); ok {
-			planRecords++
+		if q.Database == "" || rec.Fields[fm.Database] == q.Database {
+			if pr, ok := insights.Detect(rec.Fields[fm.Text], rec.Fields[fm.QueryID]); ok {
+				planRecords++
 
-			if wanted(pr) {
-				plans.Add(pr, rec.Timestamp)
+				if wanted(pr) {
+					plans.Add(pr, rec.Timestamp)
+				}
 			}
 		}
 

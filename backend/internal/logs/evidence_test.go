@@ -6,7 +6,11 @@ import (
 	"testing"
 
 	"github.com/dbulashev/dasha/internal/config"
+	"github.com/dbulashev/dasha/internal/logs/source"
 )
+
+// testDatabase is the database planRecords logs its plans from.
+const testDatabase = "shop"
 
 func evidenceConfig() config.LogInsightsConfig {
 	return config.LogInsightsConfig{IndexAdvisorEvidence: true} //nolint:exhaustruct
@@ -16,7 +20,7 @@ func plansForIDs(t *testing.T, svc Service, ids ...int64) ([]int64, bool) {
 	t.Helper()
 
 	w, err := svc.PlansForQueryIDs(
-		context.Background(), "prod", testStream, testWindow.from, testWindow.to, ids)
+		context.Background(), "prod", testStream, testDatabase, testWindow.from, testWindow.to, ids)
 	if err != nil {
 		t.Fatalf("plans for query ids: %v", err)
 	}
@@ -66,7 +70,7 @@ func TestPlansForQueryIDsDisabledByDefault(t *testing.T) {
 	svc := newInsightsService(t, p, config.LogInsightsConfig{}) //nolint:exhaustruct
 
 	_, err := svc.PlansForQueryIDs(
-		context.Background(), "prod", testStream, testWindow.from, testWindow.to, []int64{111})
+		context.Background(), "prod", testStream, testDatabase, testWindow.from, testWindow.to, []int64{111})
 	if !errors.Is(err, ErrDisabled) {
 		t.Fatalf("err = %v, want ErrDisabled", err)
 	}
@@ -82,7 +86,7 @@ func TestPlansForQueryIDsDisabledWithInsights(t *testing.T) {
 	svc := newInsightsService(t, p, cfg)
 
 	_, err := svc.PlansForQueryIDs(
-		context.Background(), "prod", testStream, testWindow.from, testWindow.to, []int64{111})
+		context.Background(), "prod", testStream, testDatabase, testWindow.from, testWindow.to, []int64{111})
 	if !errors.Is(err, ErrDisabled) {
 		t.Fatalf("err = %v, want ErrDisabled", err)
 	}
@@ -97,7 +101,7 @@ func TestPlansForQueryIDsWithoutIDsDoesNotScan(t *testing.T) {
 	svc := newInsightsService(t, p, evidenceConfig())
 
 	w, err := svc.PlansForQueryIDs(
-		context.Background(), "prod", testStream, testWindow.from, testWindow.to, nil)
+		context.Background(), "prod", testStream, testDatabase, testWindow.from, testWindow.to, nil)
 	if err != nil {
 		t.Fatalf("plans for query ids: %v", err)
 	}
@@ -123,7 +127,7 @@ func TestPlansForQueryIDsWithoutQueryIDRole(t *testing.T) {
 	svc := newInsightsService(t, p, evidenceConfig())
 
 	_, err := svc.PlansForQueryIDs(
-		context.Background(), "prod", testStream, testWindow.from, testWindow.to, []int64{111})
+		context.Background(), "prod", testStream, testDatabase, testWindow.from, testWindow.to, []int64{111})
 	if !errors.Is(err, ErrInvalid) {
 		t.Fatalf("err = %v, want ErrInvalid", err)
 	}
@@ -140,7 +144,7 @@ func TestPlansForQueryIDsUnknownCluster(t *testing.T) {
 	svc := newInsightsService(t, p, evidenceConfig())
 
 	_, err := svc.PlansForQueryIDs(
-		context.Background(), "staging", testStream, testWindow.from, testWindow.to, []int64{111})
+		context.Background(), "staging", testStream, testDatabase, testWindow.from, testWindow.to, []int64{111})
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("err = %v, want ErrNotFound", err)
 	}
@@ -156,7 +160,7 @@ func TestPlansForQueryIDsCountsEveryPlanRecord(t *testing.T) {
 	svc := newInsightsService(t, p, evidenceConfig())
 
 	w, err := svc.PlansForQueryIDs(
-		context.Background(), "prod", testStream, testWindow.from, testWindow.to, []int64{999})
+		context.Background(), "prod", testStream, testDatabase, testWindow.from, testWindow.to, []int64{999})
 	if err != nil {
 		t.Fatalf("plans for query ids: %v", err)
 	}
@@ -167,5 +171,68 @@ func TestPlansForQueryIDsCountsEveryPlanRecord(t *testing.T) {
 
 	if w.PlanRecords != 2 {
 		t.Errorf("plan records = %d, want the two plans the window holds", w.PlanRecords)
+	}
+}
+
+// planRecordsInDatabases logs one statement from two databases under the same
+// identifier, the way a database cloned from a template repeats it.
+func planRecordsInDatabases() []source.Record {
+	recs := []source.Record{record(0, insightsPlan), record(1, insightsPlan)}
+
+	for i := range recs {
+		recs[i].Fields["error_severity"] = "LOG"
+		recs[i].Fields["query_id"] = "111"
+	}
+
+	recs[0].Fields["dbname"] = testDatabase
+	recs[1].Fields["dbname"] = "billing"
+
+	return recs
+}
+
+// The plans of another database answer for its own indexes, and folding them in
+// would credit a candidate with scans its database never ran.
+func TestPlansForQueryIDsKeepsOnlyTheRequestedDatabase(t *testing.T) {
+	t.Parallel()
+
+	p := &fakeProvider{fields: testFieldMap(t), records: planRecordsInDatabases()}
+	svc := newInsightsService(t, p, evidenceConfig())
+
+	w, err := svc.PlansForQueryIDs(
+		context.Background(), "prod", testStream, testDatabase, testWindow.from, testWindow.to,
+		[]int64{111})
+	if err != nil {
+		t.Fatalf("plans for query ids: %v", err)
+	}
+
+	if w.PlanRecords != 1 {
+		t.Fatalf("plan records = %d, want the one the database logged", w.PlanRecords)
+	}
+
+	if len(w.Groups) != 1 || w.Groups[0].Count != 1 {
+		t.Fatalf("groups = %+v, want one plan of one shape", w.Groups)
+	}
+}
+
+// Without the database role no record can be scoped, and the report is better
+// off saying the plans were never read.
+func TestPlansForQueryIDsWithoutDatabaseRole(t *testing.T) {
+	t.Parallel()
+
+	fm := testFieldMap(t)
+	fm.Database = ""
+
+	p := &fakeProvider{fields: fm, records: planRecords()}
+	svc := newInsightsService(t, p, evidenceConfig())
+
+	_, err := svc.PlansForQueryIDs(
+		context.Background(), "prod", testStream, testDatabase, testWindow.from, testWindow.to,
+		[]int64{111})
+	if !errors.Is(err, ErrInvalid) {
+		t.Fatalf("err = %v, want ErrInvalid", err)
+	}
+
+	if p.calls != 0 {
+		t.Errorf("provider streamed %d times, want none", p.calls)
 	}
 }

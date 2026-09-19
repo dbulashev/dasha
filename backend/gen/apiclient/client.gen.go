@@ -1115,13 +1115,13 @@ type IndexAdvisorEvidence struct {
 	// SeqScanNodes Sequential scans of this table across the sampled plans — one sample per shape, the slowest of it.
 	SeqScanNodes *int `json:"seq_scan_nodes,omitempty"`
 
-	// State found — plans over the window scan this table sequentially while running the statements the candidate covers. not_found — the plans were read and none of them does, which is an argument against the index. not_searched — nothing looked: evidence is off, the cluster has no log source, the store did not answer, or the window holds no plan at all. A client must not render not_searched as not_found; the first says nothing about the database.
+	// State found — plans over the window scan this table sequentially while running the statements the candidate covers. not_found — every plan of the window was read and none of them does, which is an argument against the index. not_searched — nothing looked or nothing conclusive came back: evidence is off, the cluster has no log source, the store did not answer, the window holds no plan at all, only part of it could be read, or a scan of this table name carries no schema while the report holds the name in two. A client must not render not_searched as not_found; the first says nothing about the database.
 	State      IndexAdvisorEvidenceState `json:"state"`
 	WindowFrom *time.Time                `json:"window_from,omitempty"`
 	WindowTo   *time.Time                `json:"window_to,omitempty"`
 }
 
-// IndexAdvisorEvidenceState found — plans over the window scan this table sequentially while running the statements the candidate covers. not_found — the plans were read and none of them does, which is an argument against the index. not_searched — nothing looked: evidence is off, the cluster has no log source, the store did not answer, or the window holds no plan at all. A client must not render not_searched as not_found; the first says nothing about the database.
+// IndexAdvisorEvidenceState found — plans over the window scan this table sequentially while running the statements the candidate covers. not_found — every plan of the window was read and none of them does, which is an argument against the index. not_searched — nothing looked or nothing conclusive came back: evidence is off, the cluster has no log source, the store did not answer, the window holds no plan at all, only part of it could be read, or a scan of this table name carries no schema while the report holds the name in two. A client must not render not_searched as not_found; the first says nothing about the database.
 type IndexAdvisorEvidenceState string
 
 // IndexAdvisorNotParsed defines model for IndexAdvisorNotParsed.

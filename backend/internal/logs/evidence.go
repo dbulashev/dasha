@@ -2,6 +2,7 @@ package logs
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"go.uber.org/zap"
@@ -23,7 +24,7 @@ import (
 // rather than one per candidate.
 func (s *service) PlansForQueryIDs(
 	ctx context.Context,
-	cluster, stream string,
+	cluster, stream, database string,
 	from, to time.Time,
 	ids []int64,
 ) (insights.PlanWindow, error) {
@@ -40,12 +41,21 @@ func (s *service) PlansForQueryIDs(
 		return insights.PlanWindow{}, s.logEvidenceUnavailable(cluster, stream, err)
 	}
 
+	// The report answers for one database, and a statement identifier does not
+	// tell two cloned databases apart. Plans that cannot be scoped to the
+	// database are no evidence about it.
+	if database == "" || b.fields.Database == "" {
+		return insights.PlanWindow{}, s.logEvidenceUnavailable(cluster, stream,
+			fmt.Errorf("%w: stream %q carries no database", ErrInvalid, stream))
+	}
+
 	q := PlansQuery{ //nolint:exhaustruct
 		Cluster:  cluster,
 		Stream:   stream,
 		From:     from,
 		To:       to,
 		QueryIDs: ids,
+		Database: database,
 	}
 
 	if err := validatePlansWindow(b, q); err != nil {

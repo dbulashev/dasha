@@ -55,17 +55,42 @@ func AttachEvidence(rep *Report, w insights.PlanWindow, from, to time.Time) {
 	}
 
 	byID := groupsByQueryID(w.Groups)
+	ambiguous := ambiguousTables(rep.Candidates)
 
 	for i := range rep.Candidates {
 		c := &rep.Candidates[i]
 		groups := matchGroups(byID, c)
 
-		c.Evidence = evidenceOf(c, groups, w.Partial, from, to)
+		c.Evidence = evidenceOf(c, groups, ambiguous, w.Partial, from, to)
 
-		if warn, ok := staleStatistics(c, groups); ok {
+		if warn, ok := staleStatistics(c, groups, ambiguous); ok {
 			c.Warnings = append(c.Warnings, warn)
 		}
 	}
+}
+
+// ambiguousTables are the table names the report holds in more than one schema.
+// A plan logged without VERBOSE prints no schema, and crediting such a node to
+// every candidate of that name would invent evidence for all but one of them.
+func ambiguousTables(candidates []Candidate) map[string]bool {
+	schema := make(map[string]string, len(candidates))
+	out := map[string]bool{}
+
+	for i := range candidates {
+		c := &candidates[i]
+
+		if s, ok := schema[c.Table]; ok {
+			if s != c.Schema {
+				out[c.Table] = true
+			}
+
+			continue
+		}
+
+		schema[c.Table] = c.Schema
+	}
+
+	return out
 }
 
 func groupsByQueryID(groups []insights.PlanGroup) map[int64][]insights.PlanGroup {
@@ -107,7 +132,13 @@ func matchGroups(byID map[int64][]insights.PlanGroup, c *Candidate) []insights.P
 	return out
 }
 
-func evidenceOf(c *Candidate, groups []insights.PlanGroup, partial bool, from, to time.Time) Evidence {
+func evidenceOf(
+	c *Candidate,
+	groups []insights.PlanGroup,
+	ambiguous map[string]bool,
+	partial bool,
+	from, to time.Time,
+) Evidence {
 	ev := Evidence{ //nolint:exhaustruct
 		State:   EvidenceNotFound,
 		From:    from,
@@ -115,70 +146,105 @@ func evidenceOf(c *Candidate, groups []insights.PlanGroup, partial bool, from, t
 		Partial: partial,
 	}
 
+	undecided := false
+
 	for i := range groups {
 		g := &groups[i]
 
-		nodes, timeMs, removed := seqScansOn(&g.Sample, c.Schema, c.Table)
-		if nodes == 0 {
+		scans := seqScansOn(&g.Sample, c.Schema, c.Table, ambiguous)
+		undecided = undecided || scans.undecided
+
+		if scans.nodes == 0 {
 			continue
 		}
 
 		ev.Plans += g.Count
-		ev.SeqScanNodes += nodes
-		ev.ActualTimeMs += timeMs
-		ev.RowsRemoved += removed
+		ev.SeqScanNodes += scans.nodes
+		ev.ActualTimeMs += scans.timeMs
+		ev.RowsRemoved += scans.rowsRemoved
 	}
 
-	if ev.Plans > 0 {
+	switch {
+	case ev.Plans > 0:
 		ev.State = EvidenceFound
+	case partial || undecided:
+		// not_found claims every plan was read and none matched, which neither a
+		// window read in part nor a scan of a name held in two schemas supports.
+		ev.State = EvidenceNotSearched
 	}
 
 	return ev
+}
+
+// seqScans is what one plan says about a relation.
+type seqScans struct {
+	nodes       int
+	timeMs      float64
+	rowsRemoved float64
+	// undecided marks a scan of the table name under no schema while the report
+	// holds that name in two: the scan is real, whose it is unknown.
+	undecided bool
 }
 
 // seqScansOn measures the sequential scans of one relation in a plan. A node
 // logged without ANALYZE still counts: the scan happened, only its cost is
 // unknown, and dropping it would understate the evidence on a cluster running
 // auto_explain.log_analyze = off.
-func seqScansOn(p *explain.Plan, schema, table string) (nodes int, timeMs, rowsRemoved float64) {
+func seqScansOn(p *explain.Plan, schema, table string, ambiguous map[string]bool) seqScans {
+	var out seqScans
+
 	p.Walk(func(_ []int, n *explain.Node) bool {
-		if n.Type != seqScanNode || !relationIs(n, schema, table) {
+		if n.Type != seqScanNode || n.Relation != table {
 			return true
 		}
 
-		nodes++
+		if !relationIs(n, schema, table, ambiguous) {
+			out.undecided = out.undecided || n.Schema == ""
+
+			return true
+		}
+
+		out.nodes++
 
 		if n.Actual == nil {
 			return true
 		}
 
-		timeMs += n.Actual.TotalTime * n.Actual.Loops
+		out.timeMs += n.Actual.TotalTime * n.Actual.Loops
 
 		if n.RowsRemovedByFilter != nil {
-			rowsRemoved += *n.RowsRemovedByFilter * n.Actual.Loops
+			out.rowsRemoved += *n.RowsRemovedByFilter * n.Actual.Loops
 		}
 
 		return true
 	})
 
-	return nodes, timeMs, rowsRemoved
+	return out
 }
 
 // relationIs matches a plan node against a catalog relation. A plan logged
-// without VERBOSE prints no schema, and then the bare name is all there is.
-func relationIs(n *explain.Node, schema, table string) bool {
+// without VERBOSE prints no schema, and then the bare name is all there is —
+// unless the report holds that name in more than one schema, where it names no
+// relation at all.
+func relationIs(n *explain.Node, schema, table string, ambiguous map[string]bool) bool {
 	if n.Relation != table {
 		return false
 	}
 
-	return n.Schema == "" || n.Schema == schema
+	if n.Schema == "" {
+		return !ambiguous[table]
+	}
+
+	return n.Schema == schema
 }
 
 // staleStatistics fires when a plan of a covered statement misestimated the rows
 // of the candidate's own table. The key order and the partial predicate were
 // chosen from pg_stats, so a planner that already reads that table wrong is
 // choosing them from the same wrong numbers.
-func staleStatistics(c *Candidate, groups []insights.PlanGroup) (Warning, bool) {
+func staleStatistics(
+	c *Candidate, groups []insights.PlanGroup, ambiguous map[string]bool,
+) (Warning, bool) {
 	var worst, planRows, actualRows float64
 
 	for i := range groups {
@@ -190,7 +256,7 @@ func staleStatistics(c *Candidate, groups []insights.PlanGroup) (Warning, bool) 
 			}
 
 			n := g.Sample.NodeAt(f.Path)
-			if n == nil || !relationIs(n, c.Schema, c.Table) {
+			if n == nil || !relationIs(n, c.Schema, c.Table, ambiguous) {
 				continue
 			}
 

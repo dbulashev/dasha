@@ -78,7 +78,7 @@ func (p *PgxPool) GetIndexAdvisorReport(
 	}
 
 	rep := indexadvisor.Build(workload, cat, p.indexAdvisorConfig)
-	p.attachPlanEvidence(ctx, clusterName, &rep)
+	p.attachPlanEvidence(ctx, clusterName, databaseName, &rep)
 	rep.DurationMs = time.Since(started).Milliseconds()
 
 	return rep, nil
@@ -92,7 +92,9 @@ func (p *PgxPool) GetIndexAdvisorReport(
 // a disabled feature and a store that will not answer are all reasons to say
 // nothing about the plans, never reasons to fail a report the workload and the
 // catalog already answered in full.
-func (p *PgxPool) attachPlanEvidence(ctx context.Context, clusterName string, rep *indexadvisor.Report) {
+func (p *PgxPool) attachPlanEvidence(
+	ctx context.Context, clusterName, databaseName string, rep *indexadvisor.Report,
+) {
 	if p.planEvidence == nil {
 		return
 	}
@@ -110,7 +112,8 @@ func (p *PgxPool) attachPlanEvidence(ctx context.Context, clusterName string, re
 	to := time.Now()
 	from := to.Add(-p.indexAdvisorConfig.WithDefaults().EvidenceWindow)
 
-	window, err := src.PlansForQueryIDs(ctx, clusterName, source.StreamPostgreSQL, from, to, ids)
+	window, err := src.PlansForQueryIDs(
+		ctx, clusterName, source.StreamPostgreSQL, databaseName, from, to, ids)
 	if err != nil {
 		p.logger.Debug("index advisor plan evidence unavailable",
 			zap.String("cluster", clusterName), zap.Error(err))

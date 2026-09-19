@@ -6,7 +6,7 @@
  */
 
 /**
- * found — plans over the window scan this table sequentially while running the statements the candidate covers. not_found — the plans were read and none of them does, which is an argument against the index. not_searched — nothing looked: evidence is off, the cluster has no log source, the store did not answer, or the window holds no plan at all. A client must not render not_searched as not_found; the first says nothing about the database.
+ * found — plans over the window scan this table sequentially while running the statements the candidate covers. not_found — every plan of the window was read and none of them does, which is an argument against the index. not_searched — nothing looked or nothing conclusive came back: evidence is off, the cluster has no log source, the store did not answer, the window holds no plan at all, only part of it could be read, or a scan of this table name carries no schema while the report holds the name in two. A client must not render not_searched as not_found; the first says nothing about the database.
  */
 export type IndexAdvisorEvidenceState =
   (typeof IndexAdvisorEvidenceState)[keyof typeof IndexAdvisorEvidenceState]

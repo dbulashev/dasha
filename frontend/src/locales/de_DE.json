@@ -607,7 +607,7 @@
         "notSearched": "—",
         "foundHint": "Im Fenster {from} — {to}: {plans} Pläne lesen diese Tabelle sequenziell, in {nodes} Knoten, mit {ms} ms und {rows} vom Filter verworfenen Zeilen. Die Zeiten sind am langsamsten Plan jeder Form gemessen und nicht mit der Ausführungshäufigkeit multipliziert.",
         "notFoundHint": "Die Pläne im Fenster {from} — {to} wurden gelesen, keiner davon liest diese Tabelle sequenziell. Das spricht gegen den Index.",
-        "notSearchedHint": "Niemand hat die Pläne angesehen: Belege sind aus, der Cluster hat keine Logquelle, der Speicher hat nicht geantwortet, oder das Fenster enthält keinen einzigen Plan. Das spricht weder für noch gegen den Index.",
+        "notSearchedHint": "Nichts Eindeutiges über die Pläne: Belege sind aus, der Cluster hat keine Logquelle, der Speicher hat nicht geantwortet, das Fenster enthält keinen einzigen Plan, oder es wurde nur zum Teil gelesen. Das spricht weder für noch gegen den Index.",
         "partial": "Das Fenster wurde nur teilweise gelesen, die Zahlen sind eine Untergrenze."
       }
     },

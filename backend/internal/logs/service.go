@@ -112,7 +112,7 @@ type Service interface {
 	// PlansForQueryIDs reads a window for the plans of the given statements. It
 	// backs the index advisor and is off unless index_advisor_evidence is set.
 	PlansForQueryIDs(
-		ctx context.Context, cluster, stream string, from, to time.Time, ids []int64,
+		ctx context.Context, cluster, stream, database string, from, to time.Time, ids []int64,
 	) (insights.PlanWindow, error)
 	// Compare puts the plans of two windows side by side.
 	Compare(ctx context.Context, q CompareQuery) (CompareResult, error)

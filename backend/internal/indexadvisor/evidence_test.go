@@ -271,3 +271,58 @@ func TestAttachEvidenceIgnoresPlansWithoutQueryID(t *testing.T) {
 		t.Fatalf("state = %q, want not_found", got)
 	}
 }
+
+// A window the scan stopped short of holds no argument against the index: the
+// plans that would have carried one may be the ones it never read.
+func TestAttachEvidencePartialWithoutAMatchIsNotSearched(t *testing.T) {
+	rep := reportOf(candidateOn("orders", 11))
+	AttachEvidence(&rep, insights.PlanWindow{
+		Groups:  []insights.PlanGroup{groupOf(0, 11, 3, seqScan(testSchema, "customers", 120, 1, 0))},
+		Partial: true,
+	}, evidenceFrom, evidenceTo)
+
+	if got := rep.Candidates[0].Evidence.State; got != EvidenceNotSearched {
+		t.Fatalf("state = %q, want not_searched", got)
+	}
+}
+
+// Two schemas holding a table of the same name, and a plan logged without
+// VERBOSE naming neither: the scan belongs to one of the candidates, and
+// crediting both would invent evidence for the other.
+func TestAttachEvidenceSchemalessNodeWithTheNameInTwoSchemas(t *testing.T) {
+	other := candidateOn("orders", 11)
+	other.Schema = "archive"
+
+	rep := reportOf(candidateOn("orders", 11), other)
+	AttachEvidence(&rep, insights.PlanWindow{
+		Groups:  []insights.PlanGroup{groupOf(0, 11, 3, seqScan("", "orders", 120, 1, 0))},
+		Partial: false,
+	}, evidenceFrom, evidenceTo)
+
+	for _, c := range rep.Candidates {
+		if c.Evidence.State != EvidenceNotSearched {
+			t.Errorf("%s.%s: state = %q, want not_searched", c.Schema, c.Table, c.Evidence.State)
+		}
+	}
+}
+
+// The same two candidates, and a plan that does name the schema: it is evidence
+// for that one alone.
+func TestAttachEvidenceSchemaQualifiedNodeWithTheNameInTwoSchemas(t *testing.T) {
+	other := candidateOn("orders", 11)
+	other.Schema = "archive"
+
+	rep := reportOf(candidateOn("orders", 11), other)
+	AttachEvidence(&rep, insights.PlanWindow{
+		Groups:  []insights.PlanGroup{groupOf(0, 11, 3, seqScan("archive", "orders", 120, 1, 0))},
+		Partial: false,
+	}, evidenceFrom, evidenceTo)
+
+	if got := rep.Candidates[0].Evidence.State; got != EvidenceNotFound {
+		t.Errorf("public.orders: state = %q, want not_found", got)
+	}
+
+	if got := rep.Candidates[1].Evidence.State; got != EvidenceFound {
+		t.Errorf("archive.orders: state = %q, want found", got)
+	}
+}

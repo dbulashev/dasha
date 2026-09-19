@@ -542,7 +542,7 @@
         "notSearched": "—",
         "foundHint": "Over the window {from} — {to}: {plans} plans read this table sequentially, in {nodes} nodes, spending {ms} ms and discarding {rows} rows by filter. Times are measured on the slowest plan of each shape and never multiplied by how often it ran.",
         "notFoundHint": "The plans over the window {from} — {to} were read and none of them reads this table sequentially. That is an argument against the index.",
-        "notSearchedHint": "Nothing looked at the plans: evidence is off, the cluster has no log source, the store did not answer, or the window holds no plan at all. It is an argument neither for the index nor against it.",
+        "notSearchedHint": "Nothing conclusive about the plans: evidence is off, the cluster has no log source, the store did not answer, the window holds no plan at all, or only part of it could be read. It is an argument neither for the index nor against it.",
         "partial": "The window was read only in part, so the numbers are a lower bound."
       }
     },
