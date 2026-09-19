@@ -75,7 +75,8 @@ func (s *Storage) SaveInsightsScan(ctx context.Context, scan logs.Scan, groups [
 }
 
 // GetInsightsScan returns the stored summary with the same groups the scan
-// answered with: the first top by total time, plus the top by slowest run.
+// answered with: at most top of them, taken by total time and by slowest run in
+// turn.
 func (s *Storage) GetInsightsScan(ctx context.Context, id uuid.UUID, top int) (logs.Scan, error) {
 	scan := logs.Scan{ID: id} //nolint:exhaustruct
 
@@ -101,16 +102,22 @@ func (s *Storage) GetInsightsScan(ctx context.Context, id uuid.UUID, top int) (l
 	}
 
 	rows, err := s.pool.Query(ctx, `
-		WITH by_max AS (
-		    SELECT ord FROM log_insights_groups
+		WITH ranked AS (
+		    SELECT ord,
+		           row_number() OVER (ORDER BY ord) AS by_sum,
+		           row_number() OVER (ORDER BY max_ms DESC, ord) AS by_max
+		    FROM log_insights_groups
 		    WHERE scan_id = $1
-		    ORDER BY max_ms DESC, ord
+		),
+		picked AS (
+		    SELECT ord FROM ranked
+		    ORDER BY least(by_sum, by_max), by_sum
 		    LIMIT $2
 		)
 		SELECT group_row, plan
 		FROM log_insights_groups
-		WHERE scan_id = $1 AND (ord < $3 OR ord IN (SELECT ord FROM by_max))
-		ORDER BY ord`, id, top, top)
+		WHERE scan_id = $1 AND ord IN (SELECT ord FROM picked)
+		ORDER BY ord`, id, top)
 	if err != nil {
 		return logs.Scan{}, fmt.Errorf("storage: get insights scan groups: %w", err)
 	}
@@ -191,6 +198,43 @@ func (s *Storage) ListInsightsGroups(ctx context.Context, q logs.GroupsQuery) (l
 	}
 
 	return page, nil
+}
+
+// AllInsightsGroups returns every group of a scan without its plan tree, ranked
+// by total time.
+func (s *Storage) AllInsightsGroups(ctx context.Context, id uuid.UUID) ([]insights.GroupRow, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT group_row
+		FROM log_insights_groups
+		WHERE scan_id = $1
+		ORDER BY ord`, id)
+	if err != nil {
+		return nil, fmt.Errorf("storage: list all insights groups: %w", err)
+	}
+	defer rows.Close()
+
+	var out []insights.GroupRow
+
+	for rows.Next() {
+		var row []byte
+
+		if err := rows.Scan(&row); err != nil {
+			return nil, fmt.Errorf("storage: scan insights group row: %w", err)
+		}
+
+		var gr insights.GroupRow
+		if err := json.Unmarshal(row, &gr); err != nil {
+			return nil, fmt.Errorf("storage: unmarshal plan group: %w", err)
+		}
+
+		out = append(out, gr)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("storage: read insights groups: %w", err)
+	}
+
+	return out, nil
 }
 
 // GetInsightsGroup returns one group of a scan with its plan tree.

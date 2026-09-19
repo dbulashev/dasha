@@ -58,47 +58,50 @@ type InsightsQuery struct {
 	Host     string
 }
 
-// InsightsResult is one read of a window. Covered spans the records read;
-// PlansCovered spans those read while the plan budget lasted. EmptyReason is
-// set when Plans holds no group. ScanID is uuid.Nil when no snapshot was stored.
-type InsightsResult struct {
+// ScanResult is one read of a window, by either scanning endpoint. Covered
+// spans the records read; PlansCovered spans those read while the plan budget
+// lasted. Categories are counted by an insights scan only. NarrowedBy names the
+// filters the log store executed itself. EmptyReason is set when Plans holds no
+// group. ScanID is uuid.Nil when no snapshot was stored.
+type ScanResult struct {
 	ScanID         uuid.UUID
 	Scanned        int
 	Partial        bool
 	PartialReasons []string
 	Covered        Span
 	PlansCovered   Span
+	NarrowedBy     []string
 	Categories     []insights.CategorySummary
 	Plans          insights.PlansSummary
 	EmptyReason    string
+	Configuration  *Configuration
 }
 
 // Insights reads the window once: every record is classified, and a record
 // carrying a plan is also parsed. Only the host is pushed down: the categories
 // need every record.
-func (s *service) Insights(ctx context.Context, q InsightsQuery) (InsightsResult, error) {
+func (s *service) Insights(ctx context.Context, q InsightsQuery) (ScanResult, error) {
 	if !s.insights.IsEnabled() {
-		return InsightsResult{}, ErrDisabled
+		return ScanResult{}, ErrDisabled
 	}
 
 	b, err := s.resolve(ctx, q.Cluster, q.Stream)
 	if err != nil {
-		return InsightsResult{}, err
+		return ScanResult{}, err
 	}
 
 	if err := validateWindow(b.cluster, q.From, q.To, q.Host); err != nil {
-		return InsightsResult{}, err
+		return ScanResult{}, err
 	}
 
 	s.logRead(ctx, "log insights", q.Cluster, b.sourceName, q.Stream)
 
-	params := source.StreamParams{
+	params := source.StreamParams{ //nolint:exhaustruct
 		Cluster: b.cluster,
 		Stream:  q.Stream,
 		From:    q.From,
 		To:      q.To,
-		Filter:  source.Filter{Severities: nil, Host: q.Host},
-		Token:   "",
+		Filter:  source.Filter{Host: q.Host}, //nolint:exhaustruct
 	}
 
 	fm := b.fields
@@ -111,14 +114,11 @@ func (s *service) Insights(ctx context.Context, q InsightsQuery) (InsightsResult
 		})
 	}
 
-	limits := scanLimits{
-		MaxRecords:     s.insights.MaxRecords,
-		MaxBytes:       s.insights.MaxBytes,
-		MaxRecordBytes: int64(s.insights.MaxPlanBytes),
-		CapRecord: func(rec source.Record) bool {
-			return classify(rec) == insights.CategoryPlan
-		},
-	}
+	limits := s.scanBudget(func(rec source.Record) bool {
+		return classify(rec) == insights.CategoryPlan
+	})
+
+	configuration := s.configurationAsync(ctx, b.cluster, q.Host)
 
 	scanCtx, cancel := context.WithTimeout(ctx, time.Duration(s.cfg.TimeoutSeconds)*time.Second)
 	defer cancel()
@@ -126,12 +126,9 @@ func (s *service) Insights(ctx context.Context, q InsightsQuery) (InsightsResult
 	var covered, plansCovered Span
 
 	categories := insights.NewCategoryCounts()
-	plans := insights.NewPlans(insights.PlanLimits{
-		MaxPlanBytes: s.insights.MaxPlanBytes,
-		MaxPlans:     s.insights.MaxPlans,
-	})
+	plans := s.newPlans()
 
-	st, err := s.scan(scanCtx, b.provider, params, limits, func(rec source.Record) bool {
+	st, scanErr := s.scan(scanCtx, b.provider, params, limits, func(rec source.Record) bool {
 		text := rec.Fields[fm.Text]
 		code := classify(rec)
 
@@ -152,6 +149,63 @@ func (s *service) Insights(ctx context.Context, q InsightsQuery) (InsightsResult
 		return true
 	})
 
+	summary := plans.Summary()
+
+	reasons, err := partialReasons(st, scanErr, limits, summary.BudgetExhausted)
+	if err != nil {
+		return ScanResult{}, err
+	}
+
+	res := ScanResult{ //nolint:exhaustruct
+		Scanned:        st.Records,
+		Partial:        len(reasons) > 0,
+		PartialReasons: reasons,
+		Covered:        covered,
+		PlansCovered:   plansCovered,
+		Categories:     categories.Summary(insightsTopTemplates),
+		Plans:          summary,
+		EmptyReason:    emptyReason(st, scanErr != nil, summary),
+		Configuration:  configuration(),
+	}
+
+	ranked := summary.Groups
+	res.Plans.Groups = insights.TopGroups(ranked, insightsTopGroups)
+
+	res.ScanID = s.saveScan(Scan{ //nolint:exhaustruct
+		Kind:    ScanInsights,
+		Cluster: q.Cluster,
+		Stream:  q.Stream,
+		Host:    q.Host,
+		From:    q.From,
+		To:      q.To,
+		Result:  res,
+	}, ranked)
+
+	return res, nil
+}
+
+// scanBudget bounds one read by the configured limits. capRecord marks the
+// records charged at most MaxPlanBytes: a plan an order of magnitude larger
+// than a log line would otherwise eat the whole byte budget.
+func (s *service) scanBudget(capRecord func(source.Record) bool) scanLimits {
+	return scanLimits{
+		MaxRecords:     s.insights.MaxRecords,
+		MaxBytes:       s.insights.MaxBytes,
+		MaxRecordBytes: int64(s.insights.MaxPlanBytes),
+		CapRecord:      capRecord,
+	}
+}
+
+func (s *service) newPlans() *insights.Plans {
+	return insights.NewPlans(insights.PlanLimits{
+		MaxPlanBytes: s.insights.MaxPlanBytes,
+		MaxPlans:     s.insights.MaxPlans,
+	})
+}
+
+// partialReasons says why a read covered less than the whole window. A failure
+// that left nothing to report comes back as an error instead.
+func partialReasons(st scanStats, err error, limits scanLimits, planBudgetExhausted bool) ([]string, error) {
 	var reasons []string
 
 	if err != nil {
@@ -161,7 +215,7 @@ func (s *service) Insights(ctx context.Context, q InsightsQuery) (InsightsResult
 		case errors.Is(err, ErrTimeout) && st.Records > 0:
 			reasons = append(reasons, PartialTimeout)
 		default:
-			return InsightsResult{}, err
+			return nil, err
 		}
 	}
 
@@ -175,28 +229,11 @@ func (s *service) Insights(ctx context.Context, q InsightsQuery) (InsightsResult
 		}
 	}
 
-	summary := plans.Summary()
-	if summary.BudgetExhausted {
+	if planBudgetExhausted {
 		reasons = append(reasons, PartialPlans)
 	}
 
-	res := InsightsResult{ //nolint:exhaustruct
-		Scanned:        st.Records,
-		Partial:        len(reasons) > 0,
-		PartialReasons: reasons,
-		Covered:        covered,
-		PlansCovered:   plansCovered,
-		Categories:     categories.Summary(insightsTopTemplates),
-		Plans:          summary,
-		EmptyReason:    emptyReason(st, err != nil, summary),
-	}
-
-	ranked := summary.Groups
-	res.Plans.Groups = insights.TopGroups(ranked, insightsTopGroups)
-
-	res.ScanID = s.saveInsightsScan(q, res, ranked)
-
-	return res, nil
+	return reasons, nil
 }
 
 func emptyReason(st scanStats, interrupted bool, p insights.PlansSummary) string {

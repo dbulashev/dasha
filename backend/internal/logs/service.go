@@ -106,7 +106,11 @@ type Service interface {
 	// SourceName is the name of the source bound to a cluster, empty when none.
 	SourceName(ctx context.Context, cluster string) string
 	// Insights classifies every record of a window and summarizes its plans.
-	Insights(ctx context.Context, q InsightsQuery) (InsightsResult, error)
+	Insights(ctx context.Context, q InsightsQuery) (ScanResult, error)
+	// Plans reads a window for auto_explain records alone.
+	Plans(ctx context.Context, q PlansQuery) (ScanResult, error)
+	// Compare puts the plans of two windows side by side.
+	Compare(ctx context.Context, q CompareQuery) (CompareResult, error)
 	// Snapshot returns a stored scan; the three snapshot methods read the
 	// storage only, never the log source.
 	Snapshot(ctx context.Context, id uuid.UUID) (Scan, error)
@@ -120,6 +124,7 @@ type service struct {
 	cfg       config.LogSearchConfig
 	insights  config.LogInsightsConfig
 	snapshots SnapshotStore
+	settings  ClusterSettings
 	logger    *zap.Logger
 
 	pendingMu sync.Mutex
@@ -133,6 +138,7 @@ func NewService(
 	cfg config.LogSearchConfig,
 	insightsCfg config.LogInsightsConfig,
 	snapshots SnapshotStore,
+	settings ClusterSettings,
 	logger *zap.Logger,
 ) Service {
 	return &service{ //nolint:exhaustruct
@@ -141,6 +147,7 @@ func NewService(
 		cfg:       cfg.WithDefaults(),
 		insights:  insightsCfg.WithDefaults(),
 		snapshots: snapshots,
+		settings:  settings,
 		logger:    logger,
 		pending:   make(map[uuid.UUID]chan struct{}),
 	}
@@ -164,7 +171,7 @@ func (s *service) Search(ctx context.Context, q SearchQuery) (SearchResult, erro
 		Stream:  q.Stream,
 		From:    q.From,
 		To:      q.To,
-		Filter: source.Filter{
+		Filter: source.Filter{ //nolint:exhaustruct
 			Severities: severities,
 			Host:       q.Host,
 		},

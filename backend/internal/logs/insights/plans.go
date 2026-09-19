@@ -56,8 +56,11 @@ type GroupRow struct {
 	Durations   DurationStats
 	First, Last time.Time
 	QueryText   string
-	Findings    []explain.Finding
-	Dormant     []explain.Dormant
+	// Indexes are the indexes the sample plan reads; a listing has no tree to
+	// look them up in.
+	Indexes  []string
+	Findings []explain.Finding
+	Dormant  []explain.Dormant
 }
 
 // Row splits the plan tree off the group.
@@ -72,9 +75,24 @@ func (g PlanGroup) Row() GroupRow {
 		First:      g.First,
 		Last:       g.Last,
 		QueryText:  g.Sample.QueryText,
+		Indexes:    planIndexes(&g.Sample),
 		Findings:   g.Findings,
 		Dormant:    g.Dormant,
 	}
+}
+
+func planIndexes(p *explain.Plan) []string {
+	var out []string
+
+	p.Walk(func(_ []int, n *explain.Node) bool {
+		if n.IndexName != "" && !slices.Contains(out, n.IndexName) {
+			out = append(out, n.IndexName)
+		}
+
+		return true
+	})
+
+	return out
 }
 
 // WithPlan puts a tree back under its row.
@@ -310,8 +328,10 @@ func (a *Plans) Summary() PlansSummary {
 	return s
 }
 
-// TopGroups keeps the groups among the top by total time or among the top by
-// slowest run, in the order Summary ranked them. A non-positive top keeps all.
+// TopGroups keeps at most top groups: those among the top by total time and
+// those among the top by slowest run, in the order Summary ranked them. The two
+// rankings take turns, so neither spends the cap alone. A non-positive top
+// keeps all.
 func TopGroups(groups []PlanGroup, top int) []PlanGroup {
 	if top <= 0 || len(groups) <= top {
 		return groups
@@ -327,12 +347,28 @@ func TopGroups(groups []PlanGroup, top int) []PlanGroup {
 	})
 
 	keep := make([]bool, len(groups))
-	for i := range top {
-		keep[i] = true
-		keep[byMax[i]] = true
+	kept := 0
+
+	mark := func(i int) {
+		if !keep[i] {
+			keep[i] = true
+			kept++
+		}
 	}
 
-	out := make([]PlanGroup, 0, 2*top)
+	for i := range groups {
+		if kept >= top {
+			break
+		}
+
+		mark(i)
+
+		if kept < top {
+			mark(byMax[i])
+		}
+	}
+
+	out := make([]PlanGroup, 0, top)
 
 	for i, g := range groups {
 		if keep[i] {

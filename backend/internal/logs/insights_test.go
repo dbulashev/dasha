@@ -55,6 +55,18 @@ func newInsightsServiceWithSnapshots(
 ) Service {
 	t.Helper()
 
+	return newInsightsServiceWithSettings(t, p, cfg, snapshots, nil)
+}
+
+func newInsightsServiceWithSettings(
+	t *testing.T,
+	p *fakeProvider,
+	cfg config.LogInsightsConfig,
+	snapshots SnapshotStore,
+	settings ClusterSettings,
+) Service {
+	t.Helper()
+
 	reg := source.NewRegistry()
 	reg.Register("main", p)
 
@@ -66,20 +78,41 @@ func newInsightsServiceWithSnapshots(
 		}},
 	})
 
-	return NewService(clusters, reg, config.LogSearchConfig{}, cfg, snapshots, zap.NewNop())
+	return NewService(clusters, reg, config.LogSearchConfig{}, cfg, snapshots, settings, zap.NewNop())
 }
 
 func insightsQuery() InsightsQuery {
 	return InsightsQuery{Cluster: "prod", Stream: testStream, From: testWindow.from, To: testWindow.to}
 }
 
-func category(res InsightsResult, code string) (insights.CategorySummary, bool) {
+func category(res ScanResult, code string) (insights.CategorySummary, bool) {
 	i := slices.IndexFunc(res.Categories, func(c insights.CategorySummary) bool { return c.Code == code })
 	if i < 0 {
 		return insights.CategorySummary{}, false
 	}
 
 	return res.Categories[i], true
+}
+
+func TestInsightsReportsThePlanLoggingSetupWithoutNarrowing(t *testing.T) {
+	t.Parallel()
+
+	p := &fakeProvider{fields: testFieldMap(t), records: insightsRecords()}
+	svc := newInsightsServiceWithSettings(t, p, config.LogInsightsConfig{}, nil, planSettings("log"))
+
+	res, err := svc.Insights(context.Background(), insightsQuery())
+	if err != nil {
+		t.Fatalf("insights: %v", err)
+	}
+
+	c := res.Configuration
+	if c == nil || c.Instance != "db-1" || !c.AutoExplain {
+		t.Errorf("configuration = %+v, want the diagnosis of one host", c)
+	}
+
+	if len(p.filter.Severities) != 0 {
+		t.Errorf("severities = %v, want none: the categories need every record", p.filter.Severities)
+	}
 }
 
 func TestInsightsClassifiesAndGroupsInOneRead(t *testing.T) {

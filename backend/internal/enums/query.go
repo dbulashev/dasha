@@ -88,6 +88,7 @@ package enums
 //	settings/analyze_settings
 //	settings/autovacuum_settings
 //	settings/pg_settings
+//	settings/plan_log_settings
 //	statio/snapshot
 //	tables/caching
 //	tables/describe_bloat

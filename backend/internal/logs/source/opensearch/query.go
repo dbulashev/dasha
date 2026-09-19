@@ -39,8 +39,8 @@ type searchRequest struct {
 	TrackTotalHits bool             `json:"track_total_hits"`
 }
 
-// buildSearch assembles the bounded query. Only filters that cannot drop a
-// matching record are pushed down: the time range, severity and host.
+// buildSearch assembles the bounded query from the filter Narrow has already
+// reduced to what the index can execute without dropping a matching record.
 func buildSearch(
 	fm source.FieldMap,
 	selector map[string]string,
@@ -65,6 +65,18 @@ func buildSearch(
 
 	if f.Host != "" {
 		filters = append(filters, hostFilter(fm, f.Host))
+	}
+
+	if f.QueryID != nil {
+		filters = append(filters, map[string]any{
+			"term": map[string]any{fm.Keyword(fm.QueryID): *f.QueryID},
+		})
+	}
+
+	for _, phrase := range f.Contains {
+		filters = append(filters, map[string]any{
+			"match_phrase": map[string]any{fm.Text: phrase},
+		})
 	}
 
 	for _, k := range sortedKeys(selector) {

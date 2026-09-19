@@ -597,6 +597,10 @@ const (
 	DefaultLogInsightsMaxPlans     = 5000
 )
 
+// DefaultLogInsightsCompareRateLimit is 1 comparison per minute with a burst of
+// 3: one request of it costs two reads of a foreign log store.
+var DefaultLogInsightsCompareRateLimit = RateLimitConfig{RequestsPerSecond: 1.0 / 60, Burst: 3}
+
 // LogInsightsConfig bounds one scan of the log insights summary. The upstream
 // timeout and the rate limits are the ones of log_search.
 type LogInsightsConfig struct {
@@ -609,6 +613,10 @@ type LogInsightsConfig struct {
 	MaxPlanBytes int `mapstructure:"max_plan_bytes"`
 	// MaxPlans caps the plan records parsed in one scan.
 	MaxPlans int `mapstructure:"max_plans"`
+	// CompareRateLimit throttles GET /api/logs/plans/compare, which reads two
+	// windows per request. Unset = built-in default; requests_per_second <= 0
+	// disables it.
+	CompareRateLimit *RateLimitConfig `mapstructure:"compare_rate_limit"`
 }
 
 // IsEnabled reports the flag with its default applied: an absent key means on.
@@ -630,6 +638,11 @@ func (c LogInsightsConfig) WithDefaults() LogInsightsConfig {
 
 	if c.MaxPlans <= 0 {
 		c.MaxPlans = DefaultLogInsightsMaxPlans
+	}
+
+	if c.CompareRateLimit == nil {
+		rl := DefaultLogInsightsCompareRateLimit
+		c.CompareRateLimit = &rl
 	}
 
 	return c

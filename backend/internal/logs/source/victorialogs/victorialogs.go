@@ -107,6 +107,18 @@ func (p *Provider) Fields(stream string) source.FieldMap {
 	return p.streams[stream].fields
 }
 
+// Narrow keeps every filter part the store can execute. VictoriaLogs holds
+// each field as a string and indexes it for both exact and word matching, so
+// only a query_id the stream does not carry is dropped.
+func (p *Provider) Narrow(_ context.Context, sp source.StreamParams) source.Filter {
+	f := sp.Filter
+	if p.streams[sp.Stream].fields.QueryID == "" {
+		f.QueryID = nil
+	}
+
+	return f
+}
+
 // Stream reads the range in batches, resuming from the cursor of the last
 // record handed out. Reading runs from new to old: VictoriaLogs serves the N
 // most recent records of a window cheaply, while sorting a whole window
@@ -279,7 +291,7 @@ func (p *Provider) Check(ctx context.Context, cluster config.Cluster, stream str
 	}
 
 	now := time.Now()
-	expr := d.logsQL(source.Filter{Severities: nil, Host: ""}, now.Add(-checkWindow), now)
+	expr := d.logsQL(source.Filter{}, now.Add(-checkWindow), now) //nolint:exhaustruct
 
 	res := source.CheckResult{
 		Target:    d.target(),

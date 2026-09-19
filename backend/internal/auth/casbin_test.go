@@ -46,6 +46,8 @@ func TestCasbinEnforcer_Policies(t *testing.T) {
 		{"viewer", "/api/logs", "GET", true},
 		{"viewer", "/api/logs/check", "GET", false},
 		{"viewer", "/api/logs/insights", "GET", true},
+		{"viewer", "/api/logs/plans", "GET", true},
+		{"viewer", "/api/logs/plans/compare", "GET", true},
 		{"viewer", "/api/logs/scans/6f1c0b9e-0f8e-4a1d-9a7e-2f0e7c0f1a2b/groups", "GET", true},
 		{"admin", "/api/logs/check", "GET", true},
 	}

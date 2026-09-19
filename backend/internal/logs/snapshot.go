@@ -10,8 +10,12 @@ import (
 	"github.com/dbulashev/dasha/internal/logs/insights"
 )
 
-// ScanInsights is the kind of a snapshot taken by Insights.
-const ScanInsights = "insights"
+// Kinds of snapshot, by the endpoint that took it.
+const (
+	ScanInsights = "insights"
+	ScanPlans    = "plans"
+	ScanCompare  = "compare"
+)
 
 // How a listing of groups is ordered.
 const (
@@ -43,7 +47,7 @@ type Scan struct {
 	Host      string
 	From, To  time.Time
 	CreatedAt time.Time
-	Result    InsightsResult
+	Result    ScanResult
 }
 
 // GroupsQuery pages the plan groups of one snapshot.
@@ -69,6 +73,9 @@ type SnapshotStore interface {
 	GetInsightsScan(ctx context.Context, id uuid.UUID, top int) (Scan, error)
 	ListInsightsGroups(ctx context.Context, q GroupsQuery) (GroupPage, error)
 	GetInsightsGroup(ctx context.Context, id uuid.UUID, ord int) (insights.PlanGroup, error)
+	// AllInsightsGroups returns every group of a scan without its plan tree, for
+	// a comparison that has to walk the whole ranking.
+	AllInsightsGroups(ctx context.Context, id uuid.UUID) ([]insights.GroupRow, error)
 }
 
 func (s *service) Snapshot(ctx context.Context, id uuid.UUID) (Scan, error) {
@@ -144,38 +151,25 @@ func pageBounds(limit, offset int) (int, int) {
 	return min(limit, maxGroupPageSize), max(offset, 0)
 }
 
-// saveInsightsScan stores the scan under a fresh id, all its groups included.
-// The write runs in the background, so the answer does not wait for thousands of
-// rows to land; a read of the id waits for it instead. Best-effort: with no
-// storage, or with too many writes in flight, the response carries no scan id
-// and the scan itself stands.
-func (s *service) saveInsightsScan(
-	q InsightsQuery,
-	res InsightsResult,
-	groups []insights.PlanGroup,
-) uuid.UUID {
+// saveScan stores the scan under a fresh id, all its groups included. The write
+// runs in the background, so the answer does not wait for thousands of rows to
+// land; a read of the id waits for it instead. Best-effort: with no storage, or
+// with too many writes in flight, the response carries no scan id and the scan
+// itself stands.
+func (s *service) saveScan(scan Scan, groups []insights.PlanGroup) uuid.UUID {
 	if s.snapshots == nil {
 		return uuid.Nil
 	}
 
-	scan := Scan{
-		ID:        uuid.New(),
-		Kind:      ScanInsights,
-		Cluster:   q.Cluster,
-		Stream:    q.Stream,
-		Host:      q.Host,
-		From:      q.From,
-		To:        q.To,
-		CreatedAt: time.Now().UTC(),
-		Result:    res,
-	}
+	scan.ID = uuid.New()
+	scan.CreatedAt = time.Now().UTC()
 	scan.Result.ScanID = scan.ID
 	scan.Result.Plans.Groups = nil
 
 	done, ok := s.trackSnapshot(scan.ID)
 	if !ok {
 		s.logger.Warn("log insights: snapshot skipped, writes in flight",
-			zap.String("cluster", q.Cluster), zap.Int("pending", maxPendingSnapshots))
+			zap.String("cluster", scan.Cluster), zap.Int("pending", maxPendingSnapshots))
 
 		return uuid.Nil
 	}

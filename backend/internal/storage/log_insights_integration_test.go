@@ -81,7 +81,7 @@ func insightsTestScan(id uuid.UUID) logs.Scan {
 		From:      from,
 		To:        from.Add(15 * time.Minute),
 		CreatedAt: from.Add(15 * time.Minute),
-		Result: logs.InsightsResult{
+		Result: logs.ScanResult{
 			ScanID:  id,
 			Scanned: 4200,
 			Plans:   insights.PlansSummary{Records: 12, Parsed: 12, TotalGroups: 3},
@@ -102,7 +102,7 @@ func TestInsightsScanRoundTrip(t *testing.T) {
 
 	require.NoError(t, s.SaveInsightsScan(ctx, insightsTestScan(id), groups))
 
-	scan, err := s.GetInsightsScan(ctx, id, 1)
+	scan, err := s.GetInsightsScan(ctx, id, 2)
 	require.NoError(t, err)
 
 	assert.Equal(t, logs.ScanInsights, scan.Kind)
@@ -117,6 +117,11 @@ func TestInsightsScanRoundTrip(t *testing.T) {
 	assert.Equal(t, 0, scan.Result.Plans.Groups[0].Ord)
 	assert.Equal(t, 1, scan.Result.Plans.Groups[1].Ord)
 	assert.Equal(t, "Seq Scan", scan.Result.Plans.Groups[0].Sample.Root.Children[0].Type)
+
+	one, err := s.GetInsightsScan(ctx, id, 1)
+	require.NoError(t, err)
+	require.Len(t, one.Result.Plans.Groups, 1)
+	assert.Equal(t, 0, one.Result.Plans.Groups[0].Ord)
 }
 
 func TestInsightsGroupsPageAndFilter(t *testing.T) {
@@ -156,6 +161,36 @@ func TestInsightsGroupsPageAndFilter(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, group.HasQueryID)
 	assert.Equal(t, "Aggregate", group.Sample.Root.Type)
+}
+
+func TestInsightsAllGroupsCarryTheirIndexes(t *testing.T) {
+	s := newInsightsTestStorage(t)
+	ctx := t.Context()
+
+	id := uuid.New()
+	indexed := insightsTestGroup(1, 77, true, 200, 150)
+	indexed.Sample.Root.Children = []explain.Node{{ //nolint:exhaustruct
+		Type:      "Index Scan",
+		Relation:  "orders",
+		IndexName: "orders_status_idx",
+	}}
+
+	groups := []insights.PlanGroup{insightsTestGroup(0, 42, true, 300, 30), indexed}
+
+	require.NoError(t, s.SaveInsightsScan(ctx, insightsTestScan(id), groups))
+
+	all, err := s.AllInsightsGroups(ctx, id)
+	require.NoError(t, err)
+	require.Len(t, all, 2)
+	assert.Equal(t, 0, all[0].Ord)
+	assert.Empty(t, all[0].Indexes)
+
+	// A comparison reads the rows alone and has no tree to look the index up in.
+	assert.Equal(t, []string{"orders_status_idx"}, all[1].Indexes)
+
+	none, err := s.AllInsightsGroups(ctx, uuid.New())
+	require.NoError(t, err)
+	assert.Empty(t, none)
 }
 
 func TestInsightsScanNotFound(t *testing.T) {

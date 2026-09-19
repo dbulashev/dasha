@@ -388,24 +388,52 @@ log_insights:
   max_bytes: 67108864     # bytes read per request
   max_plan_bytes: 2097152 # a larger plan is counted but not parsed
   max_plans: 5000         # plans parsed per request
+  compare_rate_limit:     # GET /api/logs/plans/compare, per user
+    requests_per_second: 0.016
+    burst: 3
 ```
 
 If a limit is reached before the end of the interval, the response says which part of the interval
 the summary covers: the latest records for VictoriaLogs, the earliest for OpenSearch. If `max_plans`
 runs out first, the plans cover a shorter part than the categories.
 
+`GET /api/logs/plans` returns the plans alone, over the whole interval or for one `query_id`. The log
+store is handed a narrowing filter: the level `auto_explain` writes with, then the statement id, then
+the word `plan`. The level is sent only when `auto_explain.log_level` was read from every host the
+scan covers. The `narrowed_by` field of the response lists what the store executed itself; a filter
+it cannot run is not sent, and Dasha reads a wider window instead. The records the store
+returns are filtered on the Dasha side regardless. A log stream without a `query_id` role answers 400
+to a request for one; `GET /api/logs/check` shows which roles are missing.
+
+`GET /api/logs/plans/compare` reads two intervals and lists the statements whose plans changed for
+the worse: a plan shape the baseline interval did not hold, an index it read and the current one does
+not, a p95 at least twice as high. A statement only one of the intervals holds is left out. The
+durations of each side are those of the shape that took the most time in that interval, and the ratio
+of two truncated intervals is marked `partial`. The current interval comes from `from` and `to`, or
+from a stored scan named in `scan_id`; the baseline interval is read only when the current one found
+a plan, and with `scan_id` it is read for the host the stored scan covers — a `host` naming another
+one answers 400. One request costs two reads of the log store: it counts against the `rate_limit` of
+its source like every other log endpoint, and against `compare_rate_limit` besides. Both reads
+together stay within the `timeout_seconds` of a single one.
+
+The `configuration` block of the response carries what Dasha read from `pg_settings` of one host,
+named in `instance`: whether `auto_explain` is loaded, its `auto_explain.log_min_duration`,
+`auto_explain.log_analyze`, `auto_explain.log_format`, `auto_explain.log_level`, and
+`compute_query_id`. A cluster that did not answer leaves the block out, and the scan runs anyway.
+
 Plans reach the log when `auto_explain` is loaded through `shared_preload_libraries` and
 `auto_explain.log_format` is `text` or `json`. Only queries slower than
 `auto_explain.log_min_duration` make it into the summary. Plan checks based on actual row counts and
-timings need `auto_explain.log_analyze = on`. Plans are masked for credentials only, as in the log
-search; query literals stay as they are.
+timings need `auto_explain.log_analyze = on`. Tying a plan to a statement needs
+`compute_query_id = on` and a `query_id` role on the log stream. Plans are masked for credentials
+only, as in the log search; query literals stay as they are.
 
 A large plan may never reach Dasha. VictoriaLogs drops lines longer than `-insert.maxLineSizeBytes`
 (256 KiB by default, 2 MB at most), and the Fluent Bit `tail` input with `Skip_Long_Lines` on skips
 lines longer than `Buffer_Max_Size`. If the delivery agent truncates long lines, a text plan arrives
 without its end and a json plan fails to parse.
 
-With snapshot storage configured (`storage.dsn`), every summary is stored as a snapshot and the
+With snapshot storage configured (`storage.dsn`), every scan is stored as a snapshot and the
 response carries `scan_id`. `GET /api/logs/scans/{scan_id}` repeats the same numbers,
 `.../groups` lists every plan group — the summary itself carries the top ones only — and
 `.../groups/{ord}` hands out one plan tree. None of them reads the log source again, so refining a

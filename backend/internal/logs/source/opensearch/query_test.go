@@ -270,3 +270,30 @@ func TestStreamsFromConfigRejectsIncompleteFieldMap(t *testing.T) {
 		t.Errorf("error does not name the stream: %v", err)
 	}
 }
+
+func TestBuildSearchPushesDownQueryIDAndPhrase(t *testing.T) {
+	t.Parallel()
+
+	fm := testFieldMap(t)
+	from := time.Date(2026, 9, 5, 10, 0, 0, 0, time.UTC)
+	id := int64(-4452854032459450605)
+
+	req := buildSearch(fm, nil,
+		source.Filter{QueryID: &id, Contains: []string{"plan"}}, from, from.Add(time.Hour), 500, false)
+
+	raw, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	body := string(raw)
+
+	for _, want := range []string{
+		`"term":{"query_id":-4452854032459450605}`,
+		`"match_phrase":{"message":"plan"}`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("query body misses %s\ngot: %s", want, body)
+		}
+	}
+}

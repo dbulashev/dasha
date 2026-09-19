@@ -177,6 +177,8 @@ const (
 	QuerySettingsAutovacuumSettings Query = "settings/autovacuum_settings"
 	// QuerySettingsPgSettings is a Query of type settings/pg_settings.
 	QuerySettingsPgSettings Query = "settings/pg_settings"
+	// QuerySettingsPlanLogSettings is a Query of type settings/plan_log_settings.
+	QuerySettingsPlanLogSettings Query = "settings/plan_log_settings"
 	// QueryStatioSnapshot is a Query of type statio/snapshot.
 	QueryStatioSnapshot Query = "statio/snapshot"
 	// QueryTablesCaching is a Query of type tables/caching.
@@ -301,6 +303,7 @@ var _QueryNames = []string{
 	string(QuerySettingsAnalyzeSettings),
 	string(QuerySettingsAutovacuumSettings),
 	string(QuerySettingsPgSettings),
+	string(QuerySettingsPlanLogSettings),
 	string(QueryStatioSnapshot),
 	string(QueryTablesCaching),
 	string(QueryTablesDescribeBloat),
@@ -414,6 +417,7 @@ func QueryValues() []Query {
 		QuerySettingsAnalyzeSettings,
 		QuerySettingsAutovacuumSettings,
 		QuerySettingsPgSettings,
+		QuerySettingsPlanLogSettings,
 		QueryStatioSnapshot,
 		QueryTablesCaching,
 		QueryTablesDescribeBloat,
@@ -531,6 +535,7 @@ var _QueryValue = map[string]Query{
 	"settings/analyze_settings":                     QuerySettingsAnalyzeSettings,
 	"settings/autovacuum_settings":                  QuerySettingsAutovacuumSettings,
 	"settings/pg_settings":                          QuerySettingsPgSettings,
+	"settings/plan_log_settings":                    QuerySettingsPlanLogSettings,
 	"statio/snapshot":                               QueryStatioSnapshot,
 	"tables/caching":                                QueryTablesCaching,
 	"tables/describe_bloat":                         QueryTablesDescribeBloat,

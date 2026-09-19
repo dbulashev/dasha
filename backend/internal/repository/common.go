@@ -90,6 +90,7 @@ type Repository interface {
 	GetPgSettings(ctx context.Context, clusterName, instanceName string, limit, offset int) ([]dto.PgSetting, error)
 	GetAutovacuumSettings(ctx context.Context, clusterName, instanceName string) ([]dto.PgSetting, error)
 	GetSettingsAnalyze(ctx context.Context, clusterName, instanceName string) ([]dto.SettingsNotification, error)
+	GetPlanLogSettings(ctx context.Context, clusterName, instanceName string) (map[string]string, error)
 	GetMaintenanceAutovacuumFreezeMaxAge(
 		ctx context.Context,
 		clusterName,

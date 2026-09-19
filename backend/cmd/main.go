@@ -209,7 +209,10 @@ func dashaExec(cmd *cobra.Command, _ []string) error {
 	}
 
 	logsRL := auth.NewPathRateLimiter(
-		[]string{"/api/logs", "/api/logs/check", "/api/logs/insights"},
+		[]string{
+			"/api/logs", "/api/logs/check", "/api/logs/insights",
+			"/api/logs/plans", "/api/logs/plans/compare",
+		},
 		auth.RateLimitGroup{User: logSearch.RateLimit, Admin: logSearch.AdminRateLimit},
 		groups,
 		func(c echo.Context) string {
@@ -220,8 +223,25 @@ func dashaExec(cmd *cobra.Command, _ []string) error {
 
 	defer logsRL.Stop()
 
+	// A comparison reads two windows, so it carries a limit of its own on top of
+	// the budget its source is given.
+	compareLimit := container.Config().LogInsights.CompareRateLimit
+	compareRL := auth.NewPathRateLimiter(
+		[]string{"/api/logs/plans/compare"},
+		auth.RateLimitGroup{User: compareLimit, Admin: compareLimit},
+		nil,
+		nil,
+		logger,
+	)
+
+	defer compareRL.Stop()
+
+	logsRateLimit := func(next echo.HandlerFunc) echo.HandlerFunc {
+		return logsRL.Middleware(compareRL.Middleware(next))
+	}
+
 	d := http.NewDashaHandlers(container.Config(), container.Repository(), st, container.Metrics(), logsSvc)
-	svc := http.New(d, mw, authMW.RequireHTTPS, authMW.RateLimit, logsRL.Middleware, authMW.Auth, authMW.Casbin, logger)
+	svc := http.New(d, mw, authMW.RequireHTTPS, authMW.RateLimit, logsRateLimit, authMW.Auth, authMW.Casbin, logger)
 
 	if container.Config().Auth.Mode == config.AuthModeOIDC {
 		auth.RegisterBFFRoutes(svc.Echo, authMW.OIDCProvider, authMW.SessionManager, deps.NewLoginRecorder(st), logger)
