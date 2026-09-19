@@ -31,6 +31,10 @@ func (p stubProvider) Stream(context.Context, source.StreamParams, func(source.R
 	return nil
 }
 
+func (p stubProvider) Narrow(_ context.Context, sp source.StreamParams) source.Filter {
+	return sp.Filter
+}
+
 func (p stubProvider) Check(context.Context, config.Cluster, string) (source.CheckResult, error) {
 	return source.CheckResult{}, nil
 }

@@ -56,8 +56,11 @@ type GroupRow struct {
 	Durations   DurationStats
 	First, Last time.Time
 	QueryText   string
-	Findings    []explain.Finding
-	Dormant     []explain.Dormant
+	// Indexes are the indexes the sample plan reads; a listing has no tree to
+	// look them up in.
+	Indexes  []string
+	Findings []explain.Finding
+	Dormant  []explain.Dormant
 }
 
 // Row splits the plan tree off the group.
@@ -72,9 +75,26 @@ func (g PlanGroup) Row() GroupRow {
 		First:      g.First,
 		Last:       g.Last,
 		QueryText:  g.Sample.QueryText,
+		Indexes:    planIndexes(&g.Sample),
 		Findings:   g.Findings,
 		Dormant:    g.Dormant,
 	}
+}
+
+// A plan that reads no index gives an empty list, never nil: a group carrying
+// no list at all is a group whose indexes are unknown.
+func planIndexes(p *explain.Plan) []string {
+	out := []string{}
+
+	p.Walk(func(_ []int, n *explain.Node) bool {
+		if n.IndexName != "" && !slices.Contains(out, n.IndexName) {
+			out = append(out, n.IndexName)
+		}
+
+		return true
+	})
+
+	return out
 }
 
 // WithPlan puts a tree back under its row.
@@ -120,6 +140,18 @@ type PlansSummary struct {
 	Groups          []PlanGroup
 	Dormant         []DormantRule
 	BudgetExhausted bool
+}
+
+// PlanWindow is the plans of one window as another feature asks for them:
+// every group, and whether the window was read whole. Partial makes the counts
+// lower bounds rather than totals.
+type PlanWindow struct {
+	Groups  []PlanGroup
+	Partial bool
+	// PlanRecords counts the auto_explain records the window held, including the
+	// ones a filter on the statement dropped. With none, the window is silent
+	// about every statement rather than negative about the ones asked for.
+	PlanRecords int
 }
 
 // A nested statement shares the query id of its caller, so the normalized query
@@ -310,8 +342,10 @@ func (a *Plans) Summary() PlansSummary {
 	return s
 }
 
-// TopGroups keeps the groups among the top by total time or among the top by
-// slowest run, in the order Summary ranked them. A non-positive top keeps all.
+// TopGroups keeps at most top groups: those among the top by total time and
+// those among the top by slowest run, in the order Summary ranked them. The two
+// rankings take turns, so neither spends the cap alone. A non-positive top
+// keeps all.
 func TopGroups(groups []PlanGroup, top int) []PlanGroup {
 	if top <= 0 || len(groups) <= top {
 		return groups
@@ -327,12 +361,28 @@ func TopGroups(groups []PlanGroup, top int) []PlanGroup {
 	})
 
 	keep := make([]bool, len(groups))
-	for i := range top {
-		keep[i] = true
-		keep[byMax[i]] = true
+	kept := 0
+
+	mark := func(i int) {
+		if !keep[i] {
+			keep[i] = true
+			kept++
+		}
 	}
 
-	out := make([]PlanGroup, 0, 2*top)
+	for i := range groups {
+		if kept >= top {
+			break
+		}
+
+		mark(i)
+
+		if kept < top {
+			mark(byMax[i])
+		}
+	}
+
+	out := make([]PlanGroup, 0, top)
 
 	for i, g := range groups {
 		if keep[i] {

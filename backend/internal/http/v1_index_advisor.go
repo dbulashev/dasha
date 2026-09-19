@@ -85,8 +85,37 @@ func indexAdvisorCandidate(c indexadvisor.Candidate) serverhttp.IndexAdvisorCand
 			IdxScans: c.Writes.IdxScans,
 		},
 		Warnings:       mapstruct.SliceMap(c.Warnings, indexAdvisorWarning),
+		Evidence:       indexAdvisorEvidence(c.Evidence),
 		PlannerChecked: c.PlannerChecked,
 	}
+}
+
+// indexAdvisorEvidence carries the counts only once something looked at the
+// plans. An unsearched candidate answers with the state alone: zeros beside it
+// would read as "no plans scan this table", which is the other answer entirely.
+func indexAdvisorEvidence(e indexadvisor.Evidence) serverhttp.IndexAdvisorEvidence {
+	state := e.State
+	if state == "" {
+		state = indexadvisor.EvidenceNotSearched
+	}
+
+	out := serverhttp.IndexAdvisorEvidence{ //nolint:exhaustruct
+		State: serverhttp.IndexAdvisorEvidenceState(state),
+	}
+
+	if state == indexadvisor.EvidenceNotSearched {
+		return out
+	}
+
+	out.Plans = shortcut.Ptr(e.Plans)
+	out.SeqScanNodes = shortcut.Ptr(e.SeqScanNodes)
+	out.ActualTimeMs = shortcut.Ptr(e.ActualTimeMs)
+	out.RowsRemoved = shortcut.Ptr(e.RowsRemoved)
+	out.WindowFrom = shortcut.Ptr(e.From)
+	out.WindowTo = shortcut.Ptr(e.To)
+	out.Partial = shortcut.Ptr(e.Partial)
+
+	return out
 }
 
 func indexAdvisorCovered(q indexadvisor.CoveredQuery) serverhttp.IndexAdvisorCoveredQuery {

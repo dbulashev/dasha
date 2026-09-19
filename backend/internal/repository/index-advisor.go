@@ -13,6 +13,7 @@ import (
 
 	"github.com/dbulashev/dasha/internal/enums"
 	"github.com/dbulashev/dasha/internal/indexadvisor"
+	"github.com/dbulashev/dasha/internal/logs/source"
 	"github.com/dbulashev/dasha/internal/pkg/sanitize"
 	"github.com/dbulashev/dasha/internal/query"
 	"github.com/dbulashev/dasha/internal/sqlparse"
@@ -77,9 +78,74 @@ func (p *PgxPool) GetIndexAdvisorReport(
 	}
 
 	rep := indexadvisor.Build(workload, cat, p.indexAdvisorConfig)
+	p.attachPlanEvidence(ctx, clusterName, databaseName, &rep)
 	rep.DurationMs = time.Since(started).Milliseconds()
 
 	return rep, nil
+}
+
+// attachPlanEvidence asks the log source for the plans of the statements the
+// candidates cover and folds them into the report.
+//
+// Everything about it is best effort, and every way it can fail leaves the
+// candidates as Build left them — evidence not searched. An absent log source,
+// a disabled feature and a store that will not answer are all reasons to say
+// nothing about the plans, never reasons to fail a report the workload and the
+// catalog already answered in full.
+func (p *PgxPool) attachPlanEvidence(
+	ctx context.Context, clusterName, databaseName string, rep *indexadvisor.Report,
+) {
+	if p.planEvidence == nil {
+		return
+	}
+
+	src := p.planEvidence()
+	if src == nil {
+		return
+	}
+
+	ids := indexAdvisorCoveredIDs(rep.Candidates)
+	if len(ids) == 0 {
+		return
+	}
+
+	to := time.Now()
+	from := to.Add(-p.indexAdvisorConfig.WithDefaults().EvidenceWindow)
+
+	window, err := src.PlansForQueryIDs(
+		ctx, clusterName, source.StreamPostgreSQL, databaseName, from, to, ids)
+	if err != nil {
+		p.logger.Debug("index advisor plan evidence unavailable",
+			zap.String("cluster", clusterName), zap.Error(err))
+
+		return
+	}
+
+	indexadvisor.AttachEvidence(rep, window, from, to)
+}
+
+// indexAdvisorCoveredIDs are the statement identifiers of every candidate, each
+// once: one scan of the window answers the whole report.
+func indexAdvisorCoveredIDs(candidates []indexadvisor.Candidate) []int64 {
+	seen := map[int64]struct{}{}
+
+	var out []int64
+
+	for i := range candidates {
+		for _, q := range candidates[i].Covered {
+			for _, id := range q.QueryIDs {
+				if _, ok := seen[id]; ok {
+					continue
+				}
+
+				seen[id] = struct{}{}
+
+				out = append(out, id)
+			}
+		}
+	}
+
+	return out
 }
 
 // indexAdvisorHost is a host that answered, kept with the version its queries

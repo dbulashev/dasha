@@ -50,6 +50,10 @@ type Record struct {
 type Filter struct {
 	Severities []string
 	Host       string
+	// QueryID selects the records of one statement.
+	QueryID *int64
+	// Contains are phrases the text field must hold.
+	Contains []string
 }
 
 // StreamParams configures a single read.
@@ -91,6 +95,13 @@ type Provider interface {
 	// reads, so a cursor resumes by skipping the records already delivered at
 	// that timestamp rather than by position.
 	Stream(ctx context.Context, p StreamParams, fn func(Record) bool) error
+	// Narrow returns the part of p.Filter the provider pushes down to the
+	// store. A part it cannot push down without dropping a matching record —
+	// a phrase on a field the store indexes as a keyword matches nothing — is
+	// left out, and the caller pays a larger scan for it. Stream applies
+	// whatever filter it is handed, so asking first tells a caller what really
+	// narrowed a read.
+	Narrow(ctx context.Context, p StreamParams) Filter
 	// Check probes the source for a cluster and stream.
 	Check(ctx context.Context, cluster config.Cluster, stream string) (CheckResult, error)
 }

@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -33,6 +34,8 @@ type Provider struct {
 	batchSize      int
 	maxBoundaryIDs int
 	logger         *zap.Logger
+	// fieldTypeCache maps an expanded index pattern to fieldTypeEntry.
+	fieldTypeCache sync.Map
 }
 
 // New validates the source configuration and builds its client. A field map
@@ -69,7 +72,7 @@ func New(cfg config.LogSourceConfig, global config.LogSearchConfig, logger *zap.
 		maxBoundaryIDs = max(config.DefaultLogSourceMaxBoundaryIDs, batchSize)
 	}
 
-	return &Provider{
+	return &Provider{ //nolint:exhaustruct
 		client:         c,
 		streams:        streams,
 		names:          names,
@@ -258,9 +261,8 @@ func (p *Provider) Check(ctx context.Context, cluster config.Cluster, stream str
 		Types:     map[string]string{},
 	}
 
-	var caps fieldCapsResponse
-	if err := p.client.JSON(ctx, "GET",
-		"/"+url.PathEscape(index)+"/_field_caps?fields=*", nil, &caps); err != nil {
+	caps, err := p.fieldCaps(ctx, index)
+	if err != nil {
 		return source.CheckResult{}, err
 	}
 
@@ -286,7 +288,7 @@ func (p *Provider) Check(ctx context.Context, cluster config.Cluster, stream str
 	slices.Sort(res.Missing)
 
 	now := time.Now()
-	req := buildSearch(def.fields, selector, source.Filter{Severities: nil, Host: ""},
+	req := buildSearch(def.fields, selector, source.Filter{}, //nolint:exhaustruct
 		now.Add(-checkWindow), now, 1, true)
 
 	var resp searchResponse

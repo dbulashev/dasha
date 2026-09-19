@@ -72,6 +72,7 @@ function candidate(over: Partial<IndexAdvisorCandidate> = {}): IndexAdvisorCandi
     table_rows: 1_000_000,
     writes: { inserted: 1, updated: 2, deleted: 3, seq_scans: 4, idx_scans: 5 },
     warnings: [],
+    evidence: { state: 'not_searched' },
     planner_checked: false,
     ...over,
   }

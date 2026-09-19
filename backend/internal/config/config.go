@@ -14,6 +14,7 @@ import (
 	"github.com/go-viper/mapstructure/v2"
 
 	"github.com/dbulashev/dasha/internal/indexadvisor"
+	"github.com/dbulashev/dasha/internal/logs/stream"
 	"github.com/dbulashev/dasha/internal/metrics"
 	"github.com/dbulashev/dasha/internal/schemalint"
 )
@@ -249,8 +250,8 @@ const (
 
 // Stream names the log API serves; a source may declare no others.
 const (
-	LogStreamPostgreSQL = "postgresql"
-	LogStreamPooler     = "pooler"
+	LogStreamPostgreSQL = stream.PostgreSQL
+	LogStreamPooler     = stream.Pooler
 )
 
 // LogSourceConfig describes one log store.
@@ -597,6 +598,10 @@ const (
 	DefaultLogInsightsMaxPlans     = 5000
 )
 
+// DefaultLogInsightsCompareRateLimit is 1 comparison per minute with a burst of
+// 3: one request of it costs two reads of a foreign log store.
+var DefaultLogInsightsCompareRateLimit = RateLimitConfig{RequestsPerSecond: 1.0 / 60, Burst: 3}
+
 // LogInsightsConfig bounds one scan of the log insights summary. The upstream
 // timeout and the rate limits are the ones of log_search.
 type LogInsightsConfig struct {
@@ -609,6 +614,14 @@ type LogInsightsConfig struct {
 	MaxPlanBytes int `mapstructure:"max_plan_bytes"`
 	// MaxPlans caps the plan records parsed in one scan.
 	MaxPlans int `mapstructure:"max_plans"`
+	// CompareRateLimit throttles GET /api/logs/plans/compare, which reads two
+	// windows per request. Unset = built-in default; requests_per_second <= 0
+	// disables it.
+	CompareRateLimit *RateLimitConfig `mapstructure:"compare_rate_limit"`
+	// IndexAdvisorEvidence lets the index advisor report spend a log scan on the
+	// plans of its candidates. Off by default: with it on, the report's answer
+	// and its latency start to depend on a log store that is not Dasha's.
+	IndexAdvisorEvidence bool `mapstructure:"index_advisor_evidence"`
 }
 
 // IsEnabled reports the flag with its default applied: an absent key means on.
@@ -630,6 +643,11 @@ func (c LogInsightsConfig) WithDefaults() LogInsightsConfig {
 
 	if c.MaxPlans <= 0 {
 		c.MaxPlans = DefaultLogInsightsMaxPlans
+	}
+
+	if c.CompareRateLimit == nil {
+		rl := DefaultLogInsightsCompareRateLimit
+		c.CompareRateLimit = &rl
 	}
 
 	return c

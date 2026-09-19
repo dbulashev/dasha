@@ -18,6 +18,7 @@ import (
 // fakeSnapshots records what the service handed it; err makes every write fail.
 type fakeSnapshots struct {
 	SnapshotStore
+	mu     sync.Mutex
 	calls  int
 	saved  []Scan
 	groups [][]insights.PlanGroup
@@ -25,6 +26,9 @@ type fakeSnapshots struct {
 }
 
 func (f *fakeSnapshots) SaveInsightsScan(_ context.Context, scan Scan, groups []insights.PlanGroup) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	f.calls++
 
 	if f.err != nil {

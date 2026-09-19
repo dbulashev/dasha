@@ -71,6 +71,17 @@ func (p *Provider) Fields(stream string) source.FieldMap {
 	return fm
 }
 
+// Narrow keeps severity and host. The service reads logs through StreamLogs,
+// whose filter expression is the only one Yandex MDB offers; it is not
+// documented to match a numeric column or a substring of the message, so a
+// query_id or a phrase is filtered on the Dasha side after a full scan.
+func (p *Provider) Narrow(_ context.Context, sp source.StreamParams) source.Filter {
+	return source.Filter{ //nolint:exhaustruct
+		Severities: sp.Filter.Severities,
+		Host:       sp.Filter.Host,
+	}
+}
+
 func (p *Provider) Stream(ctx context.Context, sp source.StreamParams, fn func(source.Record) bool) error {
 	sdk, params, err := p.params(sp)
 	if err != nil {
@@ -101,7 +112,7 @@ func (p *Provider) Check(ctx context.Context, cluster config.Cluster, stream str
 		Stream:  stream,
 		From:    now.Add(-checkWindow),
 		To:      now,
-		Filter:  source.Filter{},
+		Filter:  source.Filter{}, //nolint:exhaustruct
 		Token:   "",
 	})
 	if err != nil {

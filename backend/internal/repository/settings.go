@@ -185,3 +185,49 @@ func (p *PgxPool) getSettingsAnalyze(ctx context.Context, serverVersion int, poo
 
 	return ret, nil
 }
+
+// GetPlanLogSettings reads the settings that decide whether plans reach the log
+// at all. auto_explain registers its own settings only while it is loaded, so
+// their absence is the answer to whether it is.
+func (p *PgxPool) GetPlanLogSettings(ctx context.Context, clusterName, instanceName string) (map[string]string, error) {
+	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, "")
+	if err != nil {
+		return nil, fmt.Errorf("GetPlanLogSettings | %w", err)
+	}
+
+	vNum, err := p.getServerVersionNum(ctx, pool)
+	if err != nil {
+		return nil, fmt.Errorf("get server version | %w", err)
+	}
+
+	qStr, err := query.Get(vNum, enums.QuerySettingsPlanLogSettings, nil)
+	if err != nil {
+		return nil, fmt.Errorf("GetPlanLogSettings | %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	rows, err := pool.Query(ctx, qStr)
+	if err != nil {
+		return nil, fmt.Errorf("GetPlanLogSettings | %w", err)
+	}
+
+	ret := map[string]string{}
+
+	for rows.Next() {
+		var name, setting string
+
+		if err := rows.Scan(&name, &setting); err != nil {
+			return nil, fmt.Errorf("GetPlanLogSettings | %w", err)
+		}
+
+		ret[name] = setting
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("GetPlanLogSettings | %w", err)
+	}
+
+	return ret, nil
+}

@@ -2627,6 +2627,176 @@ paths:
                 $ref: '#/components/schemas/ErrorMessage'
         '504':
           description: upstream timeout with nothing read
+  /api/logs/plans:
+    get:
+      operationId: getLogsPlans
+      description: >-
+        The auto_explain plans of one window, grouped by query id and plan shape,
+        optionally of one query_id only. The log store is asked to narrow the read
+        to plan records, since they are rare among ordinary log lines and an
+        unnarrowed scan spends its budget on everything else; narrowed_by says
+        what it executed, and the records it returns are filtered here regardless.
+        Plans come from records above auto_explain.log_min_duration, so they
+        describe the slow tail, not the whole workload. Answers 404 when
+        log_insights is disabled.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - in: query
+          name: service_type
+          required: true
+          schema:
+            type: string
+            enum: [postgresql, pooler]
+        - in: query
+          name: from
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: to
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: host
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: query_id
+          description: >-
+            keep the plans of this statement only, as a string to preserve int64
+            precision in JavaScript. A stream whose field map has no query_id role
+            answers 400; GET /api/logs/check lists the role as missing.
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: limit
+          description: plan groups the answer carries; the snapshot keeps them all
+          required: false
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogInsights'
+        '400':
+          description: invalid parameters
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: logs not supported for this cluster
+        '502':
+          description: The log source failed or is misconfigured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '504':
+          description: upstream timeout with nothing read
+  /api/logs/plans/compare:
+    get:
+      operationId: getLogsPlansCompare
+      description: >-
+        Compare the auto_explain plans of two windows and list the statements
+        whose plans changed for the worse: a plan shape that appeared, an index
+        the current window no longer reads, a p95 that grew by a factor. A
+        statement only one window holds is left out, since a first appearance is
+        no regression. The durations of each side are those of the shape that
+        took the most time in that window. The current window is read like
+        GET /api/logs/plans, or taken from a stored scan through scan_id; the
+        baseline window is read only when the current one found a plan. One
+        request costs two reads of the log store and is rate-limited apart from
+        the other log endpoints. Answers 404 when log_insights is disabled.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - in: query
+          name: service_type
+          required: true
+          schema:
+            type: string
+            enum: [postgresql, pooler]
+        - in: query
+          name: from
+          description: start of the current window; required unless scan_id names a stored scan, and rejected together with it
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: to
+          description: end of the current window
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: scan_id
+          description: >-
+            a stored scan to take the current window from, instead of reading it
+            again; its numbers are the ones that scan answered with
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: baseline_from
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: baseline_to
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: host
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: query_id
+          description: compare the plans of this statement only, as a string to preserve int64 precision in JavaScript
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: limit
+          description: statements the answer carries, worst first
+          required: false
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LogPlanComparison'
+        '400':
+          description: invalid parameters
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: logs not supported for this cluster, or no snapshot storage for scan_id
+        '502':
+          description: The log source failed or is misconfigured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '504':
+          description: upstream timeout with nothing read
   /api/logs/scans/{scan_id}:
     get:
       operationId: getLogsScan
@@ -3416,11 +3586,11 @@ components:
           type: integer
     LogInsights:
       type: object
+      description: One read of a window, by GET /api/logs/insights or GET /api/logs/plans.
       required:
         - scanned
         - partial
         - partial_reasons
-        - categories
         - plans
       properties:
         scanned:
@@ -3446,9 +3616,23 @@ components:
           description: latest record read; absent when nothing was read
         categories:
           type: array
-          description: event categories seen in the window, most frequent first
+          description: >-
+            event categories seen in the window, most frequent first; absent on a
+            plans scan, which reads the window for plan records alone
           items:
             $ref: '#/components/schemas/LogCategory'
+        narrowed_by:
+          type: array
+          description: >-
+            what the log store filtered on itself, so an empty result is not
+            mistaken for an empty window: severity=<values> is the level
+            auto_explain logs with, query_id an exact match on the statement id,
+            text the phrase of a plan record. A store that cannot run a filter
+            without dropping matching records leaves it out and Dasha scans wider.
+          items:
+            type: string
+        configuration:
+          $ref: '#/components/schemas/LogPlanConfiguration'
         plans:
           $ref: '#/components/schemas/LogPlansSummary'
         scan_id:
@@ -3473,7 +3657,7 @@ components:
       properties:
         kind:
           type: string
-          enum: [insights]
+          enum: [insights, plans, compare]
         cluster_name:
           type: string
         service_type:
@@ -3490,6 +3674,173 @@ components:
         created_at:
           type: string
           format: date-time
+    LogPlanComparison:
+      type: object
+      description: Two windows of plans side by side, by GET /api/logs/plans/compare.
+      required:
+        - partial
+        - current
+        - regressions
+      properties:
+        partial:
+          type: boolean
+          description: >-
+            one of the two windows was cut short by a limit or a timeout, so the
+            ratios compare two samples of unknown size
+        current:
+          $ref: '#/components/schemas/LogComparedWindow'
+        baseline:
+          $ref: '#/components/schemas/LogComparedWindow'
+        regressions:
+          type: array
+          description: statements whose plans changed for the worse, worst first
+          items:
+            $ref: '#/components/schemas/LogPlanRegression'
+    LogPlanRegressionReason:
+      type: string
+      description: >-
+        new_shape - a plan shape the baseline window did not hold; lost_index -
+        an index the baseline window read and this one does not; slower - p95
+        grew at least twofold, over a shape both windows hold at least 20 plans
+        of. Below that count a p95 by nearest rank is the slowest run, and the
+        reason is left out however large the ratio.
+      enum: [new_shape, lost_index, slower]
+    LogComparedWindow:
+      type: object
+      description: >-
+        One side of a comparison. The baseline side is absent when the current
+        window found no plan: there was nothing to compare it against, so it was
+        not read. The summary of a window carries no plan groups; read them by
+        its scan_id.
+      required:
+        - from
+        - to
+        - summary
+      properties:
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        summary:
+          $ref: '#/components/schemas/LogInsights'
+    LogPlanRegression:
+      type: object
+      description: >-
+        One statement whose plans differ between the windows. current and
+        baseline hold the durations of the shape that took the most time in each
+        window: percentiles of two shapes cannot be merged after the fact.
+      required:
+        - query_text
+        - reasons
+        - severity
+        - added_hashes
+        - removed_hashes
+        - added_indexes
+        - lost_indexes
+        - current
+        - baseline
+        - current_count
+        - baseline_count
+        - p50_ratio
+        - p95_ratio
+      properties:
+        query_id:
+          type: string
+          description: >-
+            query_id of the log record as string to preserve int64 precision in
+            JavaScript; absent when the records carry none, and the statement is
+            then tied to the baseline window by its normalized text
+        query_text:
+          type: string
+        query_text_omitted_bytes:
+          type: integer
+          description: bytes of query_text left out of the response
+        reasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/LogPlanRegressionReason'
+        severity:
+          type: string
+          enum: [HIGH, MEDIUM, LOW]
+        added_hashes:
+          type: array
+          items:
+            type: string
+        removed_hashes:
+          type: array
+          items:
+            type: string
+        added_indexes:
+          type: array
+          items:
+            type: string
+        lost_indexes:
+          type: array
+          items:
+            type: string
+        current:
+          $ref: '#/components/schemas/PlanDurationStats'
+        baseline:
+          $ref: '#/components/schemas/PlanDurationStats'
+        current_count:
+          type: integer
+          description: >-
+            plans of the dominant shape in the current window, which is what its
+            percentiles and the ratios are measured over
+        baseline_count:
+          type: integer
+          description: plans of the dominant shape in the baseline window
+        p50_ratio:
+          type: number
+          format: double
+          description: current p50 over baseline p50; 0 when the baseline measured nothing
+        p95_ratio:
+          type: number
+          format: double
+          description: current p95 over baseline p95; 0 when the baseline measured nothing
+    LogPlanConfiguration:
+      type: object
+      description: >-
+        What pg_settings says about plan logging on one host of the cluster.
+        Absent when no host answered: the setup is a diagnosis, not a
+        precondition of the scan.
+      required:
+        - instance
+        - auto_explain
+      properties:
+        instance:
+          type: string
+          description: the host these settings were read from
+        auto_explain:
+          type: boolean
+          description: >-
+            auto_explain is loaded, so it registers its settings. With it off no
+            plan reaches the log and the rest of this block is absent.
+        log_min_duration_ms:
+          type: integer
+          description: >-
+            auto_explain.log_min_duration: statements faster than this are not
+            logged. -1 logs nothing, 0 logs every statement.
+        log_analyze:
+          type: boolean
+          description: >-
+            auto_explain.log_analyze: off leaves the plan without measured rows
+            and times, and the checks that need them do not run.
+        log_format:
+          type: string
+          description: auto_explain.log_format; Dasha parses text and json
+          enum: [text, json, xml, yaml]
+        log_level:
+          type: string
+          description: auto_explain.log_level, the severity the plans carry in the log
+        compute_query_id:
+          type: string
+          description: >-
+            off leaves every plan record without a statement id, so plans cannot
+            be tied to the query report
+          enum: ["off", "on", auto, regress]
     LogInsightsPartialReason:
       type: string
       description: >-
@@ -4446,6 +4797,7 @@ components:
         - table_rows
         - writes
         - warnings
+        - evidence
         - planner_checked
       properties:
         schema:
@@ -4503,6 +4855,8 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/IndexAdvisorWarning'
+        evidence:
+          $ref: '#/components/schemas/IndexAdvisorEvidence'
         planner_checked:
           description: >-
             False throughout this step. A client must carry the caveat: the recommendation
@@ -4613,7 +4967,11 @@ components:
             does not serve the statements, but names lists it so the reader can decide
             between a new index and a rewritten one. many_indexes — the table already
             carries params.indexes indexes, so one more is unlikely to be the best trade
-            available.
+            available. stale_statistics — a logged plan of a covered statement estimated
+            the rows of this table params.ratio times wrong, so the statistics that decided
+            the key order and the partial predicate are the ones the planner already reads
+            wrong; ANALYZE, default_statistics_target or extended statistics come before
+            CREATE INDEX.
           type: string
           enum:
             - write_heavy
@@ -4624,6 +4982,7 @@ components:
             - matview
             - similar_index
             - many_indexes
+            - stale_statistics
         params:
           description: >-
             Numbers the wording of this code quotes, keyed by name. Which keys are present
@@ -4639,6 +4998,66 @@ components:
           type: array
           items:
             type: string
+
+    IndexAdvisorEvidence:
+      description: >-
+        What the plans auto_explain wrote over a recent window say about this candidate.
+        Off unless log_insights.index_advisor_evidence is set, and silent whenever the log
+        source cannot be read: the report is built from pg_stat_statements and the catalog
+        alone, exactly as it is on a cluster with no logs at all.
+      type: object
+      required:
+        - state
+      properties:
+        state:
+          description: >-
+            found — plans over the window scan this table sequentially while running the
+            statements the candidate covers. not_found — every plan of the window was
+            read and none of them does, which is an argument against the index.
+            not_searched — nothing looked or nothing conclusive came back: evidence is
+            off, the cluster has no log source, the store did not answer, the window
+            holds no plan at all, only part of it could be read, or a scan of this table
+            name carries no schema while the report holds the name in two. A client must
+            not render not_searched as not_found; the first says nothing about the
+            database.
+          type: string
+          enum:
+            - not_searched
+            - not_found
+            - found
+        plans:
+          description: >-
+            Plan records over the window that scan this table sequentially, counted per
+            record rather than per shape.
+          type: integer
+        seq_scan_nodes:
+          description: >-
+            Sequential scans of this table across the sampled plans — one sample per
+            shape, the slowest of it.
+          type: integer
+        actual_time_ms:
+          description: >-
+            Time those nodes spent, across all loops, summed over the sampled plans. It is
+            the weight of the sampled executions, NOT extrapolated to every record behind
+            them. Zero where auto_explain.log_analyze is off: the scans are known, their
+            cost is not.
+          type: number
+          format: double
+        rows_removed:
+          description: Rows the filters of those nodes discarded, across all loops.
+          type: number
+          format: double
+        window_from:
+          type: string
+          format: date-time
+        window_to:
+          type: string
+          format: date-time
+        partial:
+          description: >-
+            The window was read only in part — the scan hit its record or byte budget, or
+            the store gave up — so every count here is a lower bound.
+          type: boolean
 
     IndexAdvisorNotParsed:
       type: object

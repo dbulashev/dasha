@@ -7,6 +7,7 @@ import (
 	"io"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -67,10 +68,10 @@ func (d streamDef) target() string {
 	return strings.Join(parts, " ")
 }
 
-// logsQL assembles the expression of one read. Only filters that cannot drop a
-// matching record are pushed down: the time range, severity and host. User
-// input reaches the expression as a quoted value and only after validation —
-// severities come from the field map, hosts from the cluster.
+// logsQL assembles the expression of one read from the filter Narrow has
+// already reduced to what the store can execute. User input reaches the
+// expression as a quoted value and only after validation — severities come from
+// the field map, hosts from the cluster, query_id is a number.
 func (d streamDef) logsQL(f source.Filter, from, to time.Time) string {
 	var parts []string
 
@@ -92,6 +93,14 @@ func (d streamDef) logsQL(f source.Filter, from, to time.Time) string {
 
 	if f.Host != "" {
 		parts = append(parts, hostFilter(d.fields, f.Host))
+	}
+
+	if f.QueryID != nil {
+		parts = append(parts, quote(d.fields.QueryID)+":="+quote(strconv.FormatInt(*f.QueryID, 10)))
+	}
+
+	for _, phrase := range f.Contains {
+		parts = append(parts, quote(d.fields.Text)+":"+quote(phrase))
 	}
 
 	for _, k := range sortedKeys(d.selector) {

@@ -3,6 +3,7 @@ package insights
 import (
 	"math"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -228,7 +229,7 @@ func TestTopGroupsKeepsTheSlowestRunToo(t *testing.T) {
 		{Hash: "small", Durations: DurationStats{Sum: 20, Max: 5}},
 	}
 
-	got := TopGroups(groups, 1)
+	got := TopGroups(groups, 2)
 
 	hashes := make([]string, 0, len(got))
 	for _, g := range got {
@@ -237,6 +238,22 @@ func TestTopGroupsKeepsTheSlowestRunToo(t *testing.T) {
 
 	if !slices.Equal(hashes, []string{"wide", "spike"}) {
 		t.Errorf("top = %v, want wide (total) and spike (slowest run)", hashes)
+	}
+}
+
+func TestTopGroupsAnswersWithNoMoreThanTheCap(t *testing.T) {
+	t.Parallel()
+
+	groups := make([]PlanGroup, 20)
+	for i := range groups {
+		groups[i] = PlanGroup{ //nolint:exhaustruct
+			Hash:      strconv.Itoa(i),
+			Durations: DurationStats{Sum: float64(20 - i), Max: float64(i)}, //nolint:exhaustruct
+		}
+	}
+
+	if got := TopGroups(groups, 5); len(got) != 5 {
+		t.Errorf("top = %d groups, want the 5 asked for", len(got))
 	}
 }
 
@@ -252,5 +269,16 @@ func TestDurationStats(t *testing.T) {
 
 	if one := durationStats([]float64{7}); one.P50 != 7 || one.P95 != 7 {
 		t.Errorf("single run = %+v", one)
+	}
+}
+
+func TestRowTellsAnEmptyIndexListFromAnAbsentOne(t *testing.T) {
+	t.Parallel()
+
+	var g PlanGroup
+	g.Sample.Root.Type = "Seq Scan"
+
+	if idx := g.Row().Indexes; idx == nil || len(idx) != 0 {
+		t.Errorf("indexes = %#v, want an empty list: the plan read none", idx)
 	}
 }

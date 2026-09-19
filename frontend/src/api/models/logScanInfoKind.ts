@@ -9,4 +9,6 @@ export type LogScanInfoKind = (typeof LogScanInfoKind)[keyof typeof LogScanInfoK
 
 export const LogScanInfoKind = {
   insights: 'insights',
+  plans: 'plans',
+  compare: 'compare',
 } as const

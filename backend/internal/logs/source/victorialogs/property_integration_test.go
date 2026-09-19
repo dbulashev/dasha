@@ -108,6 +108,10 @@ func (p *replayProvider) Stream(_ context.Context, sp source.StreamParams, fn fu
 	return nil
 }
 
+func (p *replayProvider) Narrow(_ context.Context, sp source.StreamParams) source.Filter {
+	return sp.Filter
+}
+
 func (p *replayProvider) Check(context.Context, config.Cluster, string) (source.CheckResult, error) {
 	return source.CheckResult{}, nil
 }
@@ -130,7 +134,7 @@ func newTestService(t *testing.T, p source.Provider) logs.Service {
 		MaxScan:        1000,
 		MaxPageSize:    1000,
 		TimeoutSeconds: 30,
-	}, config.LogInsightsConfig{}, nil, zap.NewNop())
+	}, config.LogInsightsConfig{}, nil, nil, zap.NewNop())
 }
 
 func testSearch(pageSize int) logs.SearchQuery {

@@ -123,6 +123,9 @@ log_search:
 # GET /api/logs/insights?cluster_name=pg17-cluster&service_type=postgresql&from=…&to=…
 log_insights:
   enabled: true
+  # GET /api/indexes/advisor reads the plans of its candidates over
+  # index_advisor.evidence_window (1 h by default).
+  index_advisor_evidence: true
 
 # Metrics-backed Health Score (demo). Reads from the overlay's VictoriaMetrics
 # (demo/docker-compose.metrics.yaml). Providers are self-managed: pgSCV for PG

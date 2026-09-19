@@ -3,11 +3,11 @@ package insights
 import (
 	"testing"
 
-	"github.com/dbulashev/dasha/internal/config"
+	"github.com/dbulashev/dasha/internal/logs/stream"
 )
 
 func pg(severity, state, text string) Record {
-	return Record{Stream: config.LogStreamPostgreSQL, Severity: severity, SQLState: state, Text: text}
+	return Record{Stream: stream.PostgreSQL, Severity: severity, SQLState: state, Text: text}
 }
 
 func TestClassify(t *testing.T) {
@@ -45,8 +45,8 @@ func TestClassify(t *testing.T) {
 		{"fatal without a state field", pg("FATAL", "", "terminating connection due to administrator command"), CategoryError},
 		{"warning is not an error", pg("WARNING", "01000", "some warning"), CategoryOther},
 		{"plain log", pg("LOG", "00000", "database system is ready to accept connections"), CategoryOther},
-		{"pooler has no postgres categories", Record{Stream: config.LogStreamPooler, Severity: "info", Text: "checkpoint starting: time"}, CategoryOther},
-		{"pooler error", Record{Stream: config.LogStreamPooler, Severity: "error", Text: "server connection failed"}, CategoryError},
+		{"pooler has no postgres categories", Record{Stream: stream.Pooler, Severity: "info", Text: "checkpoint starting: time"}, CategoryOther},
+		{"pooler error", Record{Stream: stream.Pooler, Severity: "error", Text: "server connection failed"}, CategoryError},
 	}
 
 	for _, tt := range tests {

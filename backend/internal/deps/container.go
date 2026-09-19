@@ -61,7 +61,15 @@ func NewContainer() *Container {
 		sources := do.MustInvoke[*source.Registry](i)
 		logger := do.MustInvoke[*zap.Logger](i)
 
-		return provideRepository(*cfg, clusters, sources, logger), nil
+		// The log service is resolved lazily: it needs the repository itself, so
+		// asking for it here would close the loop at startup. By the time a report
+		// calls through, both are built and the container hands back the one
+		// instance.
+		planEvidence := func() repository.PlanEvidenceSource {
+			return do.MustInvoke[logs.Service](i)
+		}
+
+		return provideRepository(*cfg, clusters, sources, planEvidence, logger), nil
 	})
 
 	do.Provide(i, func(_ *do.Injector) (*yandex.Registry, error) {
@@ -89,6 +97,7 @@ func NewContainer() *Container {
 		cfg := do.MustInvoke[*config.Config](i)
 		clusters := do.MustInvoke[config.Clusters](i)
 		sources := do.MustInvoke[*source.Registry](i)
+		repo := do.MustInvoke[repository.Repository](i)
 		logger := do.MustInvoke[*zap.Logger](i)
 
 		st, err := do.Invoke[*storage.Storage](i)
@@ -96,7 +105,9 @@ func NewContainer() *Container {
 			logger.Warn("logs service built before ProvideStorage, insights snapshots stay disabled", zap.Error(err))
 		}
 
-		return logs.NewService(clusters, sources, cfg.LogSearch, cfg.LogInsights, newScanSnapshots(st), logger), nil
+		return logs.NewService(
+			clusters, sources, cfg.LogSearch, cfg.LogInsights, newScanSnapshots(st), repo, logger,
+		), nil
 	})
 
 	do.Provide(i, func(i *do.Injector) (*metrics.Service, error) {
@@ -558,6 +569,7 @@ func provideConfig() (*config.Config, error) {
 
 	c.HealthScore.Metrics = c.HealthScore.Metrics.WithDefaults()
 	c.LogSearch = c.LogSearch.WithDefaults()
+	c.LogInsights = c.LogInsights.WithDefaults()
 
 	if err := c.HealthScore.Metrics.Validate(); err != nil {
 		return nil, fmt.Errorf("provideConfig | health_score.metrics: %w", err)
@@ -586,10 +598,11 @@ func provideRepository(
 	cfg config.Config,
 	clusters config.Clusters,
 	sources *source.Registry,
+	planEvidence func() repository.PlanEvidenceSource,
 	logger *zap.Logger,
 ) repository.Repository {
 	return repository.NewRepositoryPgxPool(
-		clusters, sources, cfg.PgStatsView, cfg.PgssResetFunction,
+		clusters, sources, planEvidence, cfg.PgStatsView, cfg.PgssResetFunction,
 		cfg.DBPool, cfg.SchemaLint, cfg.IndexAdvisor, logger,
 	)
 }

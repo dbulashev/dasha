@@ -1,6 +1,7 @@
 package victorialogs
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -223,5 +224,43 @@ func TestReadRecordsOnATruncatedStream(t *testing.T) {
 
 	if _, err := readRecords(strings.NewReader(body), 10); err == nil {
 		t.Fatal("a truncated stream read as a complete answer")
+	}
+}
+
+func TestLogsQLPushesDownQueryIDAndPhrase(t *testing.T) {
+	t.Parallel()
+
+	d := testStream(t, nil)
+	id := int64(-4452854032459450605)
+
+	got := d.logsQL(source.Filter{QueryID: &id, Contains: []string{"plan"}}, queryFrom, queryTo)
+
+	for _, want := range []string{`"query_id":="-4452854032459450605"`, `"_msg":"plan"`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("logsQL() misses %s\n got %s", want, got)
+		}
+	}
+}
+
+func TestNarrowDropsAQueryIDTheStreamDoesNotCarry(t *testing.T) {
+	t.Parallel()
+
+	withID := testStream(t, nil)
+
+	withoutID := withID
+	withoutID.fields.QueryID = ""
+
+	p := &Provider{streams: map[string]streamDef{"with": withID, "without": withoutID}} //nolint:exhaustruct
+
+	id := int64(7)
+	f := source.Filter{QueryID: &id, Contains: []string{"plan"}}
+
+	if got := p.Narrow(context.Background(), source.StreamParams{Stream: "with", Filter: f}); got.QueryID == nil {
+		t.Errorf("filter = %+v, want the id pushed down", got)
+	}
+
+	got := p.Narrow(context.Background(), source.StreamParams{Stream: "without", Filter: f})
+	if got.QueryID != nil || len(got.Contains) != 1 {
+		t.Errorf("filter = %+v, want the id dropped and the phrase kept", got)
 	}
 }

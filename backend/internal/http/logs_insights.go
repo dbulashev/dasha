@@ -54,7 +54,7 @@ func (s *Handlers) GetLogsInsights(
 	return serverhttp.GetLogsInsights200JSONResponse(mapLogInsights(res)), nil
 }
 
-func mapLogInsights(res logs.InsightsResult) serverhttp.LogInsights {
+func mapLogInsights(res logs.ScanResult) serverhttp.LogInsights {
 	reasons := make([]serverhttp.LogInsightsPartialReason, 0, len(res.PartialReasons))
 	for _, r := range res.PartialReasons {
 		reasons = append(reasons, serverhttp.LogInsightsPartialReason(r))
@@ -64,8 +64,17 @@ func mapLogInsights(res logs.InsightsResult) serverhttp.LogInsights {
 		Scanned:        res.Scanned,
 		Partial:        res.Partial,
 		PartialReasons: reasons,
-		Categories:     mapstruct.SliceMap(res.Categories, mapLogCategory),
 		Plans:          mapLogPlansSummary(res.Plans, res.EmptyReason),
+		Configuration:  mapLogConfiguration(res.Configuration),
+	}
+
+	// A plans scan counts no category, which is not the same as counting none.
+	if res.Categories != nil {
+		out.Categories = shortcut.Ptr(mapstruct.SliceMap(res.Categories, mapLogCategory))
+	}
+
+	if len(res.NarrowedBy) > 0 {
+		out.NarrowedBy = &res.NarrowedBy
 	}
 
 	out.CoveredFrom, out.CoveredTo = spanBounds(res.Covered)
@@ -76,6 +85,33 @@ func mapLogInsights(res logs.InsightsResult) serverhttp.LogInsights {
 	}
 
 	return out
+}
+
+func mapLogConfiguration(c *logs.Configuration) *serverhttp.LogPlanConfiguration {
+	if c == nil {
+		return nil
+	}
+
+	out := serverhttp.LogPlanConfiguration{ //nolint:exhaustruct
+		Instance:    c.Instance,
+		AutoExplain: c.AutoExplain,
+		LogAnalyze:  c.LogAnalyze,
+		LogLevel:    optString(c.LogLevel),
+	}
+
+	if c.LogMinDurationMs != nil {
+		out.LogMinDurationMs = shortcut.Ptr(*c.LogMinDurationMs)
+	}
+
+	if c.LogFormat != "" {
+		out.LogFormat = shortcut.Ptr(serverhttp.LogPlanConfigurationLogFormat(c.LogFormat))
+	}
+
+	if c.ComputeQueryID != "" {
+		out.ComputeQueryId = shortcut.Ptr(serverhttp.LogPlanConfigurationComputeQueryId(c.ComputeQueryID))
+	}
+
+	return &out
 }
 
 func spanBounds(s logs.Span) (*time.Time, *time.Time) {

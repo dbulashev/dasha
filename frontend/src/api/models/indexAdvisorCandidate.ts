@@ -5,6 +5,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { IndexAdvisorCoveredQuery } from './indexAdvisorCoveredQuery'
+import type { IndexAdvisorEvidence } from './indexAdvisorEvidence'
 import type { IndexAdvisorWarning } from './indexAdvisorWarning'
 import type { IndexAdvisorWrites } from './indexAdvisorWrites'
 
@@ -26,6 +27,7 @@ export interface IndexAdvisorCandidate {
   writes: IndexAdvisorWrites
   /** Reasons this candidate may be a bad idea despite ranking well. */
   warnings: IndexAdvisorWarning[]
+  evidence: IndexAdvisorEvidence
   /** False throughout this step. A client must carry the caveat: the recommendation is structural, derived from the statements and the catalog alone. */
   planner_checked: boolean
 }

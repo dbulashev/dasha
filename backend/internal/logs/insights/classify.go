@@ -4,7 +4,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/dbulashev/dasha/internal/config"
+	"github.com/dbulashev/dasha/internal/logs/stream"
 )
 
 // Category codes. They are stable strings: the locale files, MCP and the API
@@ -46,49 +46,49 @@ type Category struct {
 // then what the record says about itself, then the message text. Message texts
 // are the English ones; a server with localized lc_messages lands in other.
 var registry = []Category{
-	{Code: CategoryDeadlock, Stream: config.LogStreamPostgreSQL, Match: func(r Record) bool {
+	{Code: CategoryDeadlock, Stream: stream.PostgreSQL, Match: func(r Record) bool {
 		return stateOr(r, "40P01", "deadlock detected")
 	}},
-	{Code: CategoryLockWait, Stream: config.LogStreamPostgreSQL, Match: func(r Record) bool {
+	{Code: CategoryLockWait, Stream: stream.PostgreSQL, Match: func(r Record) bool {
 		return r.SQLState == "55P03" ||
 			hasAnyPrefix(r.Text, "canceling statement due to lock timeout", "could not obtain lock on") ||
 			(strings.HasPrefix(r.Text, "process ") &&
 				containsAny(r.Text, " still waiting for ", " acquired ", " avoided deadlock ", " detected deadlock "))
 	}},
-	{Code: CategoryConnectionLimit, Stream: config.LogStreamPostgreSQL, Match: func(r Record) bool {
+	{Code: CategoryConnectionLimit, Stream: stream.PostgreSQL, Match: func(r Record) bool {
 		return r.SQLState == "53300" ||
 			hasAnyPrefix(r.Text, "sorry, too many clients already", "remaining connection slots are reserved")
 	}},
-	{Code: CategoryAuthentication, Stream: config.LogStreamPostgreSQL, Match: func(r Record) bool {
+	{Code: CategoryAuthentication, Stream: stream.PostgreSQL, Match: func(r Record) bool {
 		return strings.HasPrefix(r.SQLState, "28") ||
 			hasAnyPrefix(r.Text, "password authentication failed", "no pg_hba.conf entry")
 	}},
-	{Code: CategoryCanceled, Stream: config.LogStreamPostgreSQL, Match: func(r Record) bool {
+	{Code: CategoryCanceled, Stream: stream.PostgreSQL, Match: func(r Record) bool {
 		return stateOr(r, "57014", "canceling statement due to")
 	}},
-	{Code: CategoryPlan, Stream: config.LogStreamPostgreSQL, Match: func(r Record) bool {
+	{Code: CategoryPlan, Stream: stream.PostgreSQL, Match: func(r Record) bool {
 		_, ok := Detect(r.Text, "")
 
 		return ok
 	}},
-	{Code: CategorySlowQuery, Stream: config.LogStreamPostgreSQL, Match: func(r Record) bool {
+	{Code: CategorySlowQuery, Stream: stream.PostgreSQL, Match: func(r Record) bool {
 		return isStatementDuration(r.Text)
 	}},
-	{Code: CategoryCheckpoint, Stream: config.LogStreamPostgreSQL, Match: func(r Record) bool {
+	{Code: CategoryCheckpoint, Stream: stream.PostgreSQL, Match: func(r Record) bool {
 		return hasAnyPrefix(r.Text,
 			"checkpoint starting:", "checkpoint complete:",
 			"restartpoint starting:", "restartpoint complete:",
 			"checkpoints are occurring too frequently", "recovery restart point at")
 	}},
-	{Code: CategoryAutovacuum, Stream: config.LogStreamPostgreSQL, Match: func(r Record) bool {
+	{Code: CategoryAutovacuum, Stream: stream.PostgreSQL, Match: func(r Record) bool {
 		return hasAnyPrefix(r.Text,
 			"automatic vacuum of table", "automatic aggressive vacuum", "automatic analyze of table",
 			"skipping vacuum of", "skipping analyze of")
 	}},
-	{Code: CategoryTempFile, Stream: config.LogStreamPostgreSQL, Match: func(r Record) bool {
+	{Code: CategoryTempFile, Stream: stream.PostgreSQL, Match: func(r Record) bool {
 		return strings.HasPrefix(r.Text, "temporary file: ")
 	}},
-	{Code: CategoryConnection, Stream: config.LogStreamPostgreSQL, Match: func(r Record) bool {
+	{Code: CategoryConnection, Stream: stream.PostgreSQL, Match: func(r Record) bool {
 		return hasAnyPrefix(r.Text,
 			"connection received:", "connection authenticated:", "connection authorized:",
 			"replication connection authorized:", "connection ready:", "disconnection:")

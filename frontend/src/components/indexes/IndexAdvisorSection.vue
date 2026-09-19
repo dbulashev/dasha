@@ -5,6 +5,7 @@ import { getIndexesAdvisor } from '@/api/gen/default/default'
 import type {
   IndexAdvisorCandidate,
   IndexAdvisorCoveredQuery,
+  IndexAdvisorEvidence,
   IndexAdvisorNotParsed,
   IndexAdvisorReport,
   IndexAdvisorSummary,
@@ -17,7 +18,7 @@ import { useExcludeUsersStore } from '@/stores/excludeUsers'
 import { usePrefsStore } from '@/stores/prefs'
 import { ApiError, assertOk } from '@/utils/api'
 import { getErrorMessage } from '@/utils/error'
-import { fmtCompact, fmtInt, fmtPct } from '@/utils/format'
+import { fmtCompact, fmtDateTime, fmtInt, fmtPct } from '@/utils/format'
 import { copyToClipboard, highlightSql, truncateSql } from '@/utils/sql'
 import PaginationControls from '@/components/PaginationControls.vue'
 import SqlDialog from '@/components/queries/SqlDialog.vue'
@@ -116,7 +117,52 @@ const headers = computed(() => [
   { title: t('indexes.advisor.columns'), key: 'columns', sortable: false },
   { title: t('indexes.advisor.weight'), key: 'weight_pct' },
   { title: t('indexes.advisor.tableRows'), key: 'table_rows' },
+  { title: t('indexes.advisor.evidence.header'), key: 'evidence', sortable: false },
 ])
+
+// Nothing looked at the plans on any candidate: the column would be a row of
+// dashes, and the reader would have to hover one to learn the feature is off.
+const showEvidence = computed(() =>
+  candidates.value.some(c => c.evidence?.state && c.evidence.state !== 'not_searched'),
+)
+
+const shownHeaders = computed(() =>
+  showEvidence.value ? headers.value : headers.value.filter(h => h.key !== 'evidence'),
+)
+
+const EVIDENCE_COLOR: Record<string, string> = {
+  found: 'warning',
+  not_found: 'success',
+  not_searched: 'grey',
+}
+
+function evidenceLabel(e?: IndexAdvisorEvidence): string {
+  if (e?.state === 'found') {
+    return t('indexes.advisor.evidence.found', { plans: fmtCompact(e.plans ?? 0) })
+  }
+  return t(`indexes.advisor.evidence.${e?.state === 'not_found' ? 'notFound' : 'notSearched'}`)
+}
+
+// "Looked and found nothing" and "never looked" are different answers, so each
+// state carries its own reading rather than a count the user has to interpret.
+function evidenceHint(e?: IndexAdvisorEvidence): string {
+  if (!e || e.state === 'not_searched') return t('indexes.advisor.evidence.notSearchedHint')
+
+  const window = {
+    from: fmtDateTime(e.window_from),
+    to: fmtDateTime(e.window_to),
+  }
+  if (e.state === 'not_found') return t('indexes.advisor.evidence.notFoundHint', window)
+
+  const hint = t('indexes.advisor.evidence.foundHint', {
+    ...window,
+    plans: fmtCompact(e.plans ?? 0),
+    nodes: fmtCompact(e.seq_scan_nodes ?? 0),
+    ms: fmtInt(e.actual_time_ms ?? 0),
+    rows: fmtCompact(e.rows_removed ?? 0),
+  })
+  return e.partial ? `${hint} ${t('indexes.advisor.evidence.partial')}` : hint
+}
 
 const WARNING_COLOR: Record<string, string> = {
   write_heavy: 'warning',
@@ -127,6 +173,7 @@ const WARNING_COLOR: Record<string, string> = {
   matview: 'info',
   similar_index: 'warning',
   many_indexes: 'warning',
+  stale_statistics: 'warning',
 }
 
 // Every code gets every parameter — vue-i18n drops the ones its phrasing omits.
@@ -144,6 +191,9 @@ function warningText(w: IndexAdvisorWarning): string {
     requested: p.requested ?? 0,
     partitions: p.partitions ?? 0,
     indexes: p.indexes ?? 0,
+    ratio: fmtCompact(p.ratio ?? 0),
+    planRows: fmtCompact(p.plan_rows ?? 0),
+    actualRows: fmtCompact(p.actual_rows ?? 0),
     names: (w.names ?? []).join(', '),
   })
 }
@@ -325,7 +375,7 @@ function showSql(q: IndexAdvisorCoveredQuery) {
 
       <v-data-table
         v-if="pgssReadable"
-        :headers="headers"
+        :headers="shownHeaders"
         :items="candidates"
         :loading="loading"
         :item-value="rowKey"
@@ -352,6 +402,21 @@ function showSql(q: IndexAdvisorCoveredQuery) {
           </div>
         </template>
         <template #item.table_rows="{ value }">{{ fmtCompact(value) }}</template>
+        <template #item.evidence="{ item }">
+          <v-tooltip :text="evidenceHint(item.evidence)" location="bottom" max-width="420">
+            <template #activator="{ props }">
+              <v-chip
+                v-bind="props"
+                size="x-small"
+                variant="tonal"
+                :color="EVIDENCE_COLOR[item.evidence?.state ?? 'not_searched']"
+              >
+                {{ evidenceLabel(item.evidence) }}
+                <v-icon v-if="item.evidence?.partial" end size="x-small">mdi-alert-outline</v-icon>
+              </v-chip>
+            </template>
+          </v-tooltip>
+        </template>
         <template #expanded-row="{ columns, item }">
           <tr>
             <td :colspan="columns.length" class="py-3">

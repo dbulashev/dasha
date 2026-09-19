@@ -4,6 +4,7 @@
 
 ### Features
 - **Log search in OpenSearch, Elasticsearch and VictoriaLogs**
+- **Index recommendations can be backed by the plans in the log.** A candidate shows how many plans over the last hour read its table sequentially, what those nodes cost and how many rows their filters discarded. "No such plan was found" and "the plans were never read" are shown apart, so neither a cluster without a log source nor a window `auto_explain` wrote no plan to reads as a verdict against the index. A plan that misestimated the rows of the table raises a warning that puts `ANALYZE` before `CREATE INDEX`. Off until `log_insights.index_advisor_evidence` is set.
 
 ### UX
 - **Health Score is open to the viewer role**, not to admins only.

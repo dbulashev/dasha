@@ -34,7 +34,11 @@ type fakeProvider struct {
 	hang bool
 	// check is what Check answers with.
 	check source.CheckResult
-	calls int
+	// narrow drops the filter parts this store cannot run; nil keeps them all.
+	narrow func(source.Filter) source.Filter
+	// filter is what the last read was handed.
+	filter source.Filter
+	calls  int
 }
 
 func (p *fakeProvider) Streams() []string { return []string{testStream} }
@@ -47,8 +51,17 @@ func (p *fakeProvider) Fields(stream string) source.FieldMap {
 	return p.fields
 }
 
+func (p *fakeProvider) Narrow(_ context.Context, sp source.StreamParams) source.Filter {
+	if p.narrow == nil {
+		return sp.Filter
+	}
+
+	return p.narrow(sp.Filter)
+}
+
 func (p *fakeProvider) Stream(ctx context.Context, sp source.StreamParams, fn func(source.Record) bool) error {
 	p.calls++
+	p.filter = sp.Filter
 
 	start := 0
 
@@ -137,7 +150,7 @@ func newTestService(t *testing.T, p *fakeProvider, cfg config.LogSearchConfig) S
 		}},
 	})
 
-	return NewService(clusters, reg, cfg, config.LogInsightsConfig{}, nil, zap.NewNop())
+	return NewService(clusters, reg, cfg, config.LogInsightsConfig{}, nil, nil, zap.NewNop())
 }
 
 func testQuery() SearchQuery {

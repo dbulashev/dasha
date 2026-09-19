@@ -513,7 +513,8 @@
         "wide_index": "The statements asked for more columns than the key may hold: {columns} of {requested} kept. A long key costs more to maintain, so the tail was cut.",
         "matview": "This is a materialized view: a plain REFRESH rewrites it whole and rebuilds every index on it, so the cost of an index follows the refresh rate. The other way round, REFRESH ... CONCURRENTLY does not work at all without a unique index over plain column names covering every row: a partial or expression index does not count.",
         "similar_index": "Existing indexes already hold every column of this candidate, in another order or behind other columns: {names}. They do not serve the statements, but rebuilding one of them may be cheaper than adding another index.",
-        "many_indexes": "The table already carries {indexes} indexes, and every write maintains all of them. Before adding one more, it is worth checking whether any of them are unused or duplicate each other."
+        "many_indexes": "The table already carries {indexes} indexes, and every write maintains all of them. Before adding one more, it is worth checking whether any of them are unused or duplicate each other.",
+        "stale_statistics": "Plans from the log estimated the rows of this table {ratio} times wrong ({planRows} planned against {actualRows} actual). The key order and the partial predicate were chosen from the same statistics the planner already reads wrong. ANALYZE, default_statistics_target or extended statistics come first, the index after."
       },
       "notParsed": {
         "empty": "the statement text was empty",
@@ -533,6 +534,16 @@
         "table_too_small": "the table is too small: a sequential scan is cheaper than an index here",
         "already_indexed": "an existing index already serves the statement — the healthy outcome",
         "no_indexable_predicate": "the statement has nothing an index would help with"
+      },
+      "evidence": {
+        "header": "Evidence",
+        "found": "Plans with a Seq Scan: {plans}",
+        "notFound": "none",
+        "notSearched": "—",
+        "foundHint": "Over the window {from} — {to}: {plans} plans read this table sequentially, in {nodes} nodes, spending {ms} ms and discarding {rows} rows by filter. Times are measured on the slowest plan of each shape and never multiplied by how often it ran.",
+        "notFoundHint": "The plans over the window {from} — {to} were read and none of them reads this table sequentially. That is an argument against the index.",
+        "notSearchedHint": "Nothing conclusive about the plans: evidence is off, the cluster has no log source, the store did not answer, the window holds no plan at all, or only part of it could be read. It is an argument neither for the index nor against it.",
+        "partial": "The window was read only in part, so the numbers are a lower bound."
       }
     },
     "report": {

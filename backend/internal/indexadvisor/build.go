@@ -983,6 +983,7 @@ func (b *builder) candidate(key RelKey, d *draft) Candidate {
 		TableRows:      rel.Rows,
 		Writes:         writes,
 		Warnings:       b.warningsFor(d, rel.Kind, weight, t, partitions),
+		Evidence:       Evidence{State: EvidenceNotSearched}, //nolint:exhaustruct
 		PlannerChecked: false,
 	}
 }

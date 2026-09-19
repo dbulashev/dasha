@@ -87,6 +87,8 @@ import type {
   GetLogsCheckParams,
   GetLogsInsightsParams,
   GetLogsParams,
+  GetLogsPlansCompareParams,
+  GetLogsPlansParams,
   GetLogsScanGroupsParams,
   GetMaintenanceAutovacuumFreezeMaxAgeParams,
   GetMaintenanceAutovacuumSummaryParams,
@@ -169,6 +171,7 @@ import type {
   ListPersonalTokensParams,
   LockSnapshot,
   LogInsights,
+  LogPlanComparison,
   LogPlanGroup,
   LogPlanGroupPage,
   LogSearchResult,
@@ -10604,6 +10607,256 @@ export function useGetLogsInsights<
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetLogsInsightsQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * The auto_explain plans of one window, grouped by query id and plan shape, optionally of one query_id only. The log store is asked to narrow the read to plan records, since they are rare among ordinary log lines and an unnarrowed scan spends its budget on everything else; narrowed_by says what it executed, and the records it returns are filtered here regardless. Plans come from records above auto_explain.log_min_duration, so they describe the slow tail, not the whole workload. Answers 404 when log_insights is disabled.
+ */
+export type getLogsPlansResponse200 = {
+  data: LogInsights
+  status: 200
+}
+
+export type getLogsPlansResponse400 = {
+  data: void
+  status: 400
+}
+
+export type getLogsPlansResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getLogsPlansResponse501 = {
+  data: void
+  status: 501
+}
+
+export type getLogsPlansResponse502 = {
+  data: ErrorMessage
+  status: 502
+}
+
+export type getLogsPlansResponse504 = {
+  data: void
+  status: 504
+}
+
+export type getLogsPlansResponseSuccess = getLogsPlansResponse200 & {
+  headers: Headers
+}
+export type getLogsPlansResponseError = (
+  | getLogsPlansResponse400
+  | getLogsPlansResponse404
+  | getLogsPlansResponse501
+  | getLogsPlansResponse502
+  | getLogsPlansResponse504
+) & {
+  headers: Headers
+}
+
+export type getLogsPlansResponse = getLogsPlansResponseSuccess | getLogsPlansResponseError
+
+export const getGetLogsPlansUrl = (params: GetLogsPlansParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0 ? `/api/logs/plans?${stringifiedParams}` : `/api/logs/plans`
+}
+
+export const getLogsPlans = async (
+  params: GetLogsPlansParams,
+  options?: RequestInit,
+): Promise<getLogsPlansResponse> => {
+  return customFetch<getLogsPlansResponse>(getGetLogsPlansUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetLogsPlansQueryKey = (params?: MaybeRef<GetLogsPlansParams>) => {
+  return ['api', 'logs', 'plans', ...(params ? [params] : [])] as const
+}
+
+export const getGetLogsPlansQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLogsPlans>>,
+  TError = void | NotFoundResponse | ErrorMessage,
+>(
+  params: MaybeRef<GetLogsPlansParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getLogsPlans>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetLogsPlansQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getLogsPlans>>> = ({ signal }) =>
+    getLogsPlans(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getLogsPlans>>,
+    TError,
+    TData
+  >
+}
+
+export type GetLogsPlansQueryResult = NonNullable<Awaited<ReturnType<typeof getLogsPlans>>>
+export type GetLogsPlansQueryError = void | NotFoundResponse | ErrorMessage
+
+export function useGetLogsPlans<
+  TData = Awaited<ReturnType<typeof getLogsPlans>>,
+  TError = void | NotFoundResponse | ErrorMessage,
+>(
+  params: MaybeRef<GetLogsPlansParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getLogsPlans>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLogsPlansQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Compare the auto_explain plans of two windows and list the statements whose plans changed for the worse: a plan shape that appeared, an index the current window no longer reads, a p95 that grew by a factor. A statement only one window holds is left out, since a first appearance is no regression. The durations of each side are those of the shape that took the most time in that window. The current window is read like GET /api/logs/plans, or taken from a stored scan through scan_id; the baseline window is read only when the current one found a plan. One request costs two reads of the log store and is rate-limited apart from the other log endpoints. Answers 404 when log_insights is disabled.
+ */
+export type getLogsPlansCompareResponse200 = {
+  data: LogPlanComparison
+  status: 200
+}
+
+export type getLogsPlansCompareResponse400 = {
+  data: void
+  status: 400
+}
+
+export type getLogsPlansCompareResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getLogsPlansCompareResponse501 = {
+  data: void
+  status: 501
+}
+
+export type getLogsPlansCompareResponse502 = {
+  data: ErrorMessage
+  status: 502
+}
+
+export type getLogsPlansCompareResponse504 = {
+  data: void
+  status: 504
+}
+
+export type getLogsPlansCompareResponseSuccess = getLogsPlansCompareResponse200 & {
+  headers: Headers
+}
+export type getLogsPlansCompareResponseError = (
+  | getLogsPlansCompareResponse400
+  | getLogsPlansCompareResponse404
+  | getLogsPlansCompareResponse501
+  | getLogsPlansCompareResponse502
+  | getLogsPlansCompareResponse504
+) & {
+  headers: Headers
+}
+
+export type getLogsPlansCompareResponse =
+  | getLogsPlansCompareResponseSuccess
+  | getLogsPlansCompareResponseError
+
+export const getGetLogsPlansCompareUrl = (params: GetLogsPlansCompareParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/logs/plans/compare?${stringifiedParams}`
+    : `/api/logs/plans/compare`
+}
+
+export const getLogsPlansCompare = async (
+  params: GetLogsPlansCompareParams,
+  options?: RequestInit,
+): Promise<getLogsPlansCompareResponse> => {
+  return customFetch<getLogsPlansCompareResponse>(getGetLogsPlansCompareUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetLogsPlansCompareQueryKey = (params?: MaybeRef<GetLogsPlansCompareParams>) => {
+  return ['api', 'logs', 'plans', 'compare', ...(params ? [params] : [])] as const
+}
+
+export const getGetLogsPlansCompareQueryOptions = <
+  TData = Awaited<ReturnType<typeof getLogsPlansCompare>>,
+  TError = void | NotFoundResponse | ErrorMessage,
+>(
+  params: MaybeRef<GetLogsPlansCompareParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getLogsPlansCompare>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetLogsPlansCompareQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getLogsPlansCompare>>> = ({ signal }) =>
+    getLogsPlansCompare(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getLogsPlansCompare>>,
+    TError,
+    TData
+  >
+}
+
+export type GetLogsPlansCompareQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getLogsPlansCompare>>
+>
+export type GetLogsPlansCompareQueryError = void | NotFoundResponse | ErrorMessage
+
+export function useGetLogsPlansCompare<
+  TData = Awaited<ReturnType<typeof getLogsPlansCompare>>,
+  TError = void | NotFoundResponse | ErrorMessage,
+>(
+  params: MaybeRef<GetLogsPlansCompareParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getLogsPlansCompare>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetLogsPlansCompareQueryOptions(params, options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
 

@@ -61,16 +61,24 @@ const (
 	Override HealthScoreWeightsSource = "override"
 )
 
+// Defines values for IndexAdvisorEvidenceState.
+const (
+	Found       IndexAdvisorEvidenceState = "found"
+	NotFound    IndexAdvisorEvidenceState = "not_found"
+	NotSearched IndexAdvisorEvidenceState = "not_searched"
+)
+
 // Defines values for IndexAdvisorWarningCode.
 const (
-	LowWeight     IndexAdvisorWarningCode = "low_weight"
-	ManyIndexes   IndexAdvisorWarningCode = "many_indexes"
-	Matview       IndexAdvisorWarningCode = "matview"
-	PartitionRoot IndexAdvisorWarningCode = "partition_root"
-	SimilarIndex  IndexAdvisorWarningCode = "similar_index"
-	StatsMissing  IndexAdvisorWarningCode = "stats_missing"
-	WideIndex     IndexAdvisorWarningCode = "wide_index"
-	WriteHeavy    IndexAdvisorWarningCode = "write_heavy"
+	LowWeight       IndexAdvisorWarningCode = "low_weight"
+	ManyIndexes     IndexAdvisorWarningCode = "many_indexes"
+	Matview         IndexAdvisorWarningCode = "matview"
+	PartitionRoot   IndexAdvisorWarningCode = "partition_root"
+	SimilarIndex    IndexAdvisorWarningCode = "similar_index"
+	StaleStatistics IndexAdvisorWarningCode = "stale_statistics"
+	StatsMissing    IndexAdvisorWarningCode = "stats_missing"
+	WideIndex       IndexAdvisorWarningCode = "wide_index"
+	WriteHeavy      IndexAdvisorWarningCode = "write_heavy"
 )
 
 // Defines values for IndexVerdictReasonCode.
@@ -118,11 +126,41 @@ const (
 
 // Defines values for LogInsightsPartialReason.
 const (
-	Bytes   LogInsightsPartialReason = "bytes"
-	Plans   LogInsightsPartialReason = "plans"
-	Records LogInsightsPartialReason = "records"
-	Source  LogInsightsPartialReason = "source"
-	Timeout LogInsightsPartialReason = "timeout"
+	LogInsightsPartialReasonBytes   LogInsightsPartialReason = "bytes"
+	LogInsightsPartialReasonPlans   LogInsightsPartialReason = "plans"
+	LogInsightsPartialReasonRecords LogInsightsPartialReason = "records"
+	LogInsightsPartialReasonSource  LogInsightsPartialReason = "source"
+	LogInsightsPartialReasonTimeout LogInsightsPartialReason = "timeout"
+)
+
+// Defines values for LogPlanConfigurationComputeQueryId.
+const (
+	Auto    LogPlanConfigurationComputeQueryId = "auto"
+	Off     LogPlanConfigurationComputeQueryId = "off"
+	On      LogPlanConfigurationComputeQueryId = "on"
+	Regress LogPlanConfigurationComputeQueryId = "regress"
+)
+
+// Defines values for LogPlanConfigurationLogFormat.
+const (
+	LogPlanConfigurationLogFormatJson LogPlanConfigurationLogFormat = "json"
+	LogPlanConfigurationLogFormatText LogPlanConfigurationLogFormat = "text"
+	LogPlanConfigurationLogFormatXml  LogPlanConfigurationLogFormat = "xml"
+	LogPlanConfigurationLogFormatYaml LogPlanConfigurationLogFormat = "yaml"
+)
+
+// Defines values for LogPlanRegressionSeverity.
+const (
+	LogPlanRegressionSeverityHIGH   LogPlanRegressionSeverity = "HIGH"
+	LogPlanRegressionSeverityLOW    LogPlanRegressionSeverity = "LOW"
+	LogPlanRegressionSeverityMEDIUM LogPlanRegressionSeverity = "MEDIUM"
+)
+
+// Defines values for LogPlanRegressionReason.
+const (
+	LostIndex LogPlanRegressionReason = "lost_index"
+	NewShape  LogPlanRegressionReason = "new_shape"
+	Slower    LogPlanRegressionReason = "slower"
 )
 
 // Defines values for LogPlansSummaryEmptyReason.
@@ -137,7 +175,9 @@ const (
 
 // Defines values for LogScanInfoKind.
 const (
-	Insights LogScanInfoKind = "insights"
+	LogScanInfoKindCompare  LogScanInfoKind = "compare"
+	LogScanInfoKindInsights LogScanInfoKind = "insights"
+	LogScanInfoKindPlans    LogScanInfoKind = "plans"
 )
 
 // Defines values for LogScanInfoServiceType.
@@ -185,9 +225,9 @@ const (
 
 // Defines values for PlanFindingSeverity.
 const (
-	PlanFindingSeverityHIGH   PlanFindingSeverity = "HIGH"
-	PlanFindingSeverityLOW    PlanFindingSeverity = "LOW"
-	PlanFindingSeverityMEDIUM PlanFindingSeverity = "MEDIUM"
+	HIGH   PlanFindingSeverity = "HIGH"
+	LOW    PlanFindingSeverity = "LOW"
+	MEDIUM PlanFindingSeverity = "MEDIUM"
 )
 
 // Defines values for PlanMissingRequirement.
@@ -209,8 +249,8 @@ const (
 
 // Defines values for PlanSummaryFormat.
 const (
-	Json PlanSummaryFormat = "json"
-	Text PlanSummaryFormat = "text"
+	PlanSummaryFormatJson PlanSummaryFormat = "json"
+	PlanSummaryFormatText PlanSummaryFormat = "text"
 )
 
 // Defines values for RoleChangeTriggerDirection.
@@ -309,6 +349,18 @@ const (
 const (
 	GetLogsInsightsParamsServiceTypePooler     GetLogsInsightsParamsServiceType = "pooler"
 	GetLogsInsightsParamsServiceTypePostgresql GetLogsInsightsParamsServiceType = "postgresql"
+)
+
+// Defines values for GetLogsPlansParamsServiceType.
+const (
+	GetLogsPlansParamsServiceTypePooler     GetLogsPlansParamsServiceType = "pooler"
+	GetLogsPlansParamsServiceTypePostgresql GetLogsPlansParamsServiceType = "postgresql"
+)
+
+// Defines values for GetLogsPlansCompareParamsServiceType.
+const (
+	GetLogsPlansCompareParamsServiceTypePooler     GetLogsPlansCompareParamsServiceType = "pooler"
+	GetLogsPlansCompareParamsServiceTypePostgresql GetLogsPlansCompareParamsServiceType = "postgresql"
 )
 
 // Defines values for GetLogsScanGroupsParamsOrder.
@@ -999,6 +1051,9 @@ type IndexAdvisorCandidate struct {
 	// Ddl Statement suggested to the user, or a short script when the table is partitioned: PostgreSQL rejects CREATE INDEX CONCURRENTLY on a partitioned table, so the script creates the root index with ON ONLY — invalid and holding no lock — then builds an index on every partition concurrently and attaches each one, which turns the root index valid with the last. The statements go one at a time, as psql sends them: CREATE INDEX CONCURRENTLY cannot run inside a transaction block. Dasha never executes DDL.
 	Ddl string `json:"ddl"`
 
+	// Evidence What the plans auto_explain wrote over a recent window say about this candidate. Off unless log_insights.index_advisor_evidence is set, and silent whenever the log source cannot be read: the report is built from pg_stat_statements and the catalog alone, exactly as it is on a cluster with no logs at all.
+	Evidence IndexAdvisorEvidence `json:"evidence"`
+
 	// PlannerChecked False throughout this step. A client must carry the caveat: the recommendation is structural, derived from the statements and the catalog alone.
 	PlannerChecked bool `json:"planner_checked"`
 
@@ -1042,6 +1097,32 @@ type IndexAdvisorCoveredQuery struct {
 	QueryIds  []string `json:"query_ids"`
 	WeightPct float64  `json:"weight_pct"`
 }
+
+// IndexAdvisorEvidence What the plans auto_explain wrote over a recent window say about this candidate. Off unless log_insights.index_advisor_evidence is set, and silent whenever the log source cannot be read: the report is built from pg_stat_statements and the catalog alone, exactly as it is on a cluster with no logs at all.
+type IndexAdvisorEvidence struct {
+	// ActualTimeMs Time those nodes spent, across all loops, summed over the sampled plans. It is the weight of the sampled executions, NOT extrapolated to every record behind them. Zero where auto_explain.log_analyze is off: the scans are known, their cost is not.
+	ActualTimeMs *float64 `json:"actual_time_ms,omitempty"`
+
+	// Partial The window was read only in part — the scan hit its record or byte budget, or the store gave up — so every count here is a lower bound.
+	Partial *bool `json:"partial,omitempty"`
+
+	// Plans Plan records over the window that scan this table sequentially, counted per record rather than per shape.
+	Plans *int `json:"plans,omitempty"`
+
+	// RowsRemoved Rows the filters of those nodes discarded, across all loops.
+	RowsRemoved *float64 `json:"rows_removed,omitempty"`
+
+	// SeqScanNodes Sequential scans of this table across the sampled plans — one sample per shape, the slowest of it.
+	SeqScanNodes *int `json:"seq_scan_nodes,omitempty"`
+
+	// State found — plans over the window scan this table sequentially while running the statements the candidate covers. not_found — every plan of the window was read and none of them does, which is an argument against the index. not_searched — nothing looked or nothing conclusive came back: evidence is off, the cluster has no log source, the store did not answer, the window holds no plan at all, only part of it could be read, or a scan of this table name carries no schema while the report holds the name in two. A client must not render not_searched as not_found; the first says nothing about the database.
+	State      IndexAdvisorEvidenceState `json:"state"`
+	WindowFrom *time.Time                `json:"window_from,omitempty"`
+	WindowTo   *time.Time                `json:"window_to,omitempty"`
+}
+
+// IndexAdvisorEvidenceState found — plans over the window scan this table sequentially while running the statements the candidate covers. not_found — every plan of the window was read and none of them does, which is an argument against the index. not_searched — nothing looked or nothing conclusive came back: evidence is off, the cluster has no log source, the store did not answer, the window holds no plan at all, only part of it could be read, or a scan of this table name carries no schema while the report holds the name in two. A client must not render not_searched as not_found; the first says nothing about the database.
+type IndexAdvisorEvidenceState string
 
 // IndexAdvisorNotParsed defines model for IndexAdvisorNotParsed.
 type IndexAdvisorNotParsed struct {
@@ -1095,7 +1176,7 @@ type IndexAdvisorSummary struct {
 
 // IndexAdvisorWarning defines model for IndexAdvisorWarning.
 type IndexAdvisorWarning struct {
-	// Code write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. partition_root — the table is partitioned: the root index cannot be built with CONCURRENTLY, so the DDL goes through ON ONLY plus a concurrent build and an ATTACH per partition, and every partition pays for the index; params.partitions counts them. stats_missing — no pg_stats row for some of the columns, so their order is the order the statement wrote them and an IS NULL filter may have been left out of the index. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires a unique index over plain column names covering every row, so a partial or expression index does not enable it. similar_index — an existing index already holds every column of the candidate, in another order or behind other columns; it does not serve the statements, but names lists it so the reader can decide between a new index and a rewritten one. many_indexes — the table already carries params.indexes indexes, so one more is unlikely to be the best trade available.
+	// Code write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. partition_root — the table is partitioned: the root index cannot be built with CONCURRENTLY, so the DDL goes through ON ONLY plus a concurrent build and an ATTACH per partition, and every partition pays for the index; params.partitions counts them. stats_missing — no pg_stats row for some of the columns, so their order is the order the statement wrote them and an IS NULL filter may have been left out of the index. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires a unique index over plain column names covering every row, so a partial or expression index does not enable it. similar_index — an existing index already holds every column of the candidate, in another order or behind other columns; it does not serve the statements, but names lists it so the reader can decide between a new index and a rewritten one. many_indexes — the table already carries params.indexes indexes, so one more is unlikely to be the best trade available. stale_statistics — a logged plan of a covered statement estimated the rows of this table params.ratio times wrong, so the statistics that decided the key order and the partial predicate are the ones the planner already reads wrong; ANALYZE, default_statistics_target or extended statistics come before CREATE INDEX.
 	Code IndexAdvisorWarningCode `json:"code"`
 
 	// Names Objects the wording of this code quotes — existing index names, for the codes that point at one. Absent when the code names nothing.
@@ -1105,7 +1186,7 @@ type IndexAdvisorWarning struct {
 	Params *map[string]float64 `json:"params,omitempty"`
 }
 
-// IndexAdvisorWarningCode write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. partition_root — the table is partitioned: the root index cannot be built with CONCURRENTLY, so the DDL goes through ON ONLY plus a concurrent build and an ATTACH per partition, and every partition pays for the index; params.partitions counts them. stats_missing — no pg_stats row for some of the columns, so their order is the order the statement wrote them and an IS NULL filter may have been left out of the index. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires a unique index over plain column names covering every row, so a partial or expression index does not enable it. similar_index — an existing index already holds every column of the candidate, in another order or behind other columns; it does not serve the statements, but names lists it so the reader can decide between a new index and a rewritten one. many_indexes — the table already carries params.indexes indexes, so one more is unlikely to be the best trade available.
+// IndexAdvisorWarningCode write_heavy — the analyzed workload writes the table far more often than it runs the statements the index would serve, so the index may cost more than it saves. low_weight — the covered statements are a marginal share of the load. partition_root — the table is partitioned: the root index cannot be built with CONCURRENTLY, so the DDL goes through ON ONLY plus a concurrent build and an ATTACH per partition, and every partition pays for the index; params.partitions counts them. stats_missing — no pg_stats row for some of the columns, so their order is the order the statement wrote them and an IS NULL filter may have been left out of the index. wide_index — the statements asked for more columns than the key may hold. matview — the relation is a materialized view: a plain REFRESH rewrites it and rebuilds every index on it, while REFRESH CONCURRENTLY requires a unique index over plain column names covering every row, so a partial or expression index does not enable it. similar_index — an existing index already holds every column of the candidate, in another order or behind other columns; it does not serve the statements, but names lists it so the reader can decide between a new index and a rewritten one. many_indexes — the table already carries params.indexes indexes, so one more is unlikely to be the best trade available. stale_statistics — a logged plan of a covered statement estimated the rows of this table params.ratio times wrong, so the statistics that decided the key order and the partial predicate are the ones the planner already reads wrong; ANALYZE, default_statistics_target or extended statistics come before CREATE INDEX.
 type IndexAdvisorWarningCode string
 
 // IndexAdvisorWrites What maintaining an index on this table would cost, from pg_stat_user_tables. Scans are the other side of the trade: they are what an index would serve.
@@ -1382,6 +1463,15 @@ type LogCategoryTemplate struct {
 	Template  string    `json:"template"`
 }
 
+// LogComparedWindow One side of a comparison. The baseline side is absent when the current window found no plan: there was nothing to compare it against, so it was not read. The summary of a window carries no plan groups; read them by its scan_id.
+type LogComparedWindow struct {
+	From time.Time `json:"from"`
+
+	// Summary One read of a window, by GET /api/logs/insights or GET /api/logs/plans.
+	Summary LogInsights `json:"summary"`
+	To      time.Time   `json:"to"`
+}
+
 // LogEntry defines model for LogEntry.
 type LogEntry struct {
 	// Count dedup only - number of matched records in the group
@@ -1405,16 +1495,22 @@ type LogEntry struct {
 	User      *string   `json:"user,omitempty"`
 }
 
-// LogInsights defines model for LogInsights.
+// LogInsights One read of a window, by GET /api/logs/insights or GET /api/logs/plans.
 type LogInsights struct {
-	// Categories event categories seen in the window, most frequent first
-	Categories []LogCategory `json:"categories"`
+	// Categories event categories seen in the window, most frequent first; absent on a plans scan, which reads the window for plan records alone
+	Categories *[]LogCategory `json:"categories,omitempty"`
+
+	// Configuration What pg_settings says about plan logging on one host of the cluster. Absent when no host answered: the setup is a diagnosis, not a precondition of the scan.
+	Configuration *LogPlanConfiguration `json:"configuration,omitempty"`
 
 	// CoveredFrom earliest record read; absent when nothing was read. A scan cut by its budget keeps the newest records on VictoriaLogs and the oldest on OpenSearch.
 	CoveredFrom *time.Time `json:"covered_from,omitempty"`
 
 	// CoveredTo latest record read; absent when nothing was read
 	CoveredTo *time.Time `json:"covered_to,omitempty"`
+
+	// NarrowedBy what the log store filtered on itself, so an empty result is not mistaken for an empty window: severity=<values> is the level auto_explain logs with, query_id an exact match on the statement id, text the phrase of a plan record. A store that cannot run a filter without dropping matching records leaves it out and Dasha scans wider.
+	NarrowedBy *[]string `json:"narrowed_by,omitempty"`
 
 	// Partial the summary covers less than the whole window
 	Partial        bool                       `json:"partial"`
@@ -1433,6 +1529,51 @@ type LogInsights struct {
 
 // LogInsightsPartialReason records and bytes - the scan budget of log_insights ran out; timeout - the source did not answer in time; source - the source stopped before the end of the window; plans - max_plans plan records were parsed and the rest were only counted.
 type LogInsightsPartialReason string
+
+// LogPlanComparison Two windows of plans side by side, by GET /api/logs/plans/compare.
+type LogPlanComparison struct {
+	// Baseline One side of a comparison. The baseline side is absent when the current window found no plan: there was nothing to compare it against, so it was not read. The summary of a window carries no plan groups; read them by its scan_id.
+	Baseline *LogComparedWindow `json:"baseline,omitempty"`
+
+	// Current One side of a comparison. The baseline side is absent when the current window found no plan: there was nothing to compare it against, so it was not read. The summary of a window carries no plan groups; read them by its scan_id.
+	Current LogComparedWindow `json:"current"`
+
+	// Partial one of the two windows was cut short by a limit or a timeout, so the ratios compare two samples of unknown size
+	Partial bool `json:"partial"`
+
+	// Regressions statements whose plans changed for the worse, worst first
+	Regressions []LogPlanRegression `json:"regressions"`
+}
+
+// LogPlanConfiguration What pg_settings says about plan logging on one host of the cluster. Absent when no host answered: the setup is a diagnosis, not a precondition of the scan.
+type LogPlanConfiguration struct {
+	// AutoExplain auto_explain is loaded, so it registers its settings. With it off no plan reaches the log and the rest of this block is absent.
+	AutoExplain bool `json:"auto_explain"`
+
+	// ComputeQueryId off leaves every plan record without a statement id, so plans cannot be tied to the query report
+	ComputeQueryId *LogPlanConfigurationComputeQueryId `json:"compute_query_id,omitempty"`
+
+	// Instance the host these settings were read from
+	Instance string `json:"instance"`
+
+	// LogAnalyze auto_explain.log_analyze: off leaves the plan without measured rows and times, and the checks that need them do not run.
+	LogAnalyze *bool `json:"log_analyze,omitempty"`
+
+	// LogFormat auto_explain.log_format; Dasha parses text and json
+	LogFormat *LogPlanConfigurationLogFormat `json:"log_format,omitempty"`
+
+	// LogLevel auto_explain.log_level, the severity the plans carry in the log
+	LogLevel *string `json:"log_level,omitempty"`
+
+	// LogMinDurationMs auto_explain.log_min_duration: statements faster than this are not logged. -1 logs nothing, 0 logs every statement.
+	LogMinDurationMs *int `json:"log_min_duration_ms,omitempty"`
+}
+
+// LogPlanConfigurationComputeQueryId off leaves every plan record without a statement id, so plans cannot be tied to the query report
+type LogPlanConfigurationComputeQueryId string
+
+// LogPlanConfigurationLogFormat auto_explain.log_format; Dasha parses text and json
+type LogPlanConfigurationLogFormat string
 
 // LogPlanGroup Plans of one statement with one shape. Nested statements share the query_id of the statement that ran them, so the normalized query text is part of the grouping.
 type LogPlanGroup struct {
@@ -1487,6 +1628,47 @@ type LogPlanGroupRow struct {
 	// QueryTextOmittedBytes bytes of query_text left out of the response
 	QueryTextOmittedBytes *int `json:"query_text_omitted_bytes,omitempty"`
 }
+
+// LogPlanRegression One statement whose plans differ between the windows. current and baseline hold the durations of the shape that took the most time in each window: percentiles of two shapes cannot be merged after the fact.
+type LogPlanRegression struct {
+	AddedHashes  []string `json:"added_hashes"`
+	AddedIndexes []string `json:"added_indexes"`
+
+	// Baseline exact over the plans of the group; percentiles by nearest rank
+	Baseline PlanDurationStats `json:"baseline"`
+
+	// BaselineCount plans of the dominant shape in the baseline window
+	BaselineCount int `json:"baseline_count"`
+
+	// Current exact over the plans of the group; percentiles by nearest rank
+	Current PlanDurationStats `json:"current"`
+
+	// CurrentCount plans of the dominant shape in the current window, which is what its percentiles and the ratios are measured over
+	CurrentCount int      `json:"current_count"`
+	LostIndexes  []string `json:"lost_indexes"`
+
+	// P50Ratio current p50 over baseline p50; 0 when the baseline measured nothing
+	P50Ratio float64 `json:"p50_ratio"`
+
+	// P95Ratio current p95 over baseline p95; 0 when the baseline measured nothing
+	P95Ratio float64 `json:"p95_ratio"`
+
+	// QueryId query_id of the log record as string to preserve int64 precision in JavaScript; absent when the records carry none, and the statement is then tied to the baseline window by its normalized text
+	QueryId   *string `json:"query_id,omitempty"`
+	QueryText string  `json:"query_text"`
+
+	// QueryTextOmittedBytes bytes of query_text left out of the response
+	QueryTextOmittedBytes *int                      `json:"query_text_omitted_bytes,omitempty"`
+	Reasons               []LogPlanRegressionReason `json:"reasons"`
+	RemovedHashes         []string                  `json:"removed_hashes"`
+	Severity              LogPlanRegressionSeverity `json:"severity"`
+}
+
+// LogPlanRegressionSeverity defines model for LogPlanRegression.Severity.
+type LogPlanRegressionSeverity string
+
+// LogPlanRegressionReason new_shape - a plan shape the baseline window did not hold; lost_index - an index the baseline window read and this one does not; slower - p95 grew at least twofold, over a shape both windows hold at least 20 plans of. Below that count a p95 by nearest rank is the slowest run, and the reason is left out however large the ratio.
+type LogPlanRegressionReason string
 
 // LogPlansSummary defines model for LogPlansSummary.
 type LogPlansSummary struct {
@@ -3093,6 +3275,51 @@ type GetLogsInsightsParams struct {
 // GetLogsInsightsParamsServiceType defines parameters for GetLogsInsights.
 type GetLogsInsightsParamsServiceType string
 
+// GetLogsPlansParams defines parameters for GetLogsPlans.
+type GetLogsPlansParams struct {
+	ClusterName ClusterName                   `form:"cluster_name" json:"cluster_name"`
+	ServiceType GetLogsPlansParamsServiceType `form:"service_type" json:"service_type"`
+	From        time.Time                     `form:"from" json:"from"`
+	To          time.Time                     `form:"to" json:"to"`
+	Host        *string                       `form:"host,omitempty" json:"host,omitempty"`
+
+	// QueryId keep the plans of this statement only, as a string to preserve int64 precision in JavaScript. A stream whose field map has no query_id role answers 400; GET /api/logs/check lists the role as missing.
+	QueryId *string `form:"query_id,omitempty" json:"query_id,omitempty"`
+
+	// Limit plan groups the answer carries; the snapshot keeps them all
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetLogsPlansParamsServiceType defines parameters for GetLogsPlans.
+type GetLogsPlansParamsServiceType string
+
+// GetLogsPlansCompareParams defines parameters for GetLogsPlansCompare.
+type GetLogsPlansCompareParams struct {
+	ClusterName ClusterName                          `form:"cluster_name" json:"cluster_name"`
+	ServiceType GetLogsPlansCompareParamsServiceType `form:"service_type" json:"service_type"`
+
+	// From start of the current window; required unless scan_id names a stored scan, and rejected together with it
+	From *time.Time `form:"from,omitempty" json:"from,omitempty"`
+
+	// To end of the current window
+	To *time.Time `form:"to,omitempty" json:"to,omitempty"`
+
+	// ScanId a stored scan to take the current window from, instead of reading it again; its numbers are the ones that scan answered with
+	ScanId       *openapi_types.UUID `form:"scan_id,omitempty" json:"scan_id,omitempty"`
+	BaselineFrom time.Time           `form:"baseline_from" json:"baseline_from"`
+	BaselineTo   time.Time           `form:"baseline_to" json:"baseline_to"`
+	Host         *string             `form:"host,omitempty" json:"host,omitempty"`
+
+	// QueryId compare the plans of this statement only, as a string to preserve int64 precision in JavaScript
+	QueryId *string `form:"query_id,omitempty" json:"query_id,omitempty"`
+
+	// Limit statements the answer carries, worst first
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// GetLogsPlansCompareParamsServiceType defines parameters for GetLogsPlansCompare.
+type GetLogsPlansCompareParamsServiceType string
+
 // GetLogsScanGroupsParams defines parameters for GetLogsScanGroups.
 type GetLogsScanGroupsParams struct {
 	// QueryId keep the groups of this query_id only
@@ -3782,6 +4009,12 @@ type ClientInterface interface {
 
 	// GetLogsInsights request
 	GetLogsInsights(ctx context.Context, params *GetLogsInsightsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetLogsPlans request
+	GetLogsPlans(ctx context.Context, params *GetLogsPlansParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetLogsPlansCompare request
+	GetLogsPlansCompare(ctx context.Context, params *GetLogsPlansCompareParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetLogsScan request
 	GetLogsScan(ctx context.Context, scanId ScanID, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -4767,6 +5000,30 @@ func (c *Client) GetLogsCheck(ctx context.Context, params *GetLogsCheckParams, r
 
 func (c *Client) GetLogsInsights(ctx context.Context, params *GetLogsInsightsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetLogsInsightsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetLogsPlans(ctx context.Context, params *GetLogsPlansParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetLogsPlansRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetLogsPlansCompare(ctx context.Context, params *GetLogsPlansCompareParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetLogsPlansCompareRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -10318,6 +10575,312 @@ func NewGetLogsInsightsRequest(server string, params *GetLogsInsightsParams) (*h
 	return req, nil
 }
 
+// NewGetLogsPlansRequest generates requests for GetLogsPlans
+func NewGetLogsPlansRequest(server string, params *GetLogsPlansParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/logs/plans")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, params.ClusterName); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "service_type", runtime.ParamLocationQuery, params.ServiceType); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "from", runtime.ParamLocationQuery, params.From); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "to", runtime.ParamLocationQuery, params.To); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.Host != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "host", runtime.ParamLocationQuery, *params.Host); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.QueryId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "query_id", runtime.ParamLocationQuery, *params.QueryId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetLogsPlansCompareRequest generates requests for GetLogsPlansCompare
+func NewGetLogsPlansCompareRequest(server string, params *GetLogsPlansCompareParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/logs/plans/compare")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, params.ClusterName); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "service_type", runtime.ParamLocationQuery, params.ServiceType); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.From != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "from", runtime.ParamLocationQuery, *params.From); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.To != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "to", runtime.ParamLocationQuery, *params.To); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.ScanId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "scan_id", runtime.ParamLocationQuery, *params.ScanId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "baseline_from", runtime.ParamLocationQuery, params.BaselineFrom); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "baseline_to", runtime.ParamLocationQuery, params.BaselineTo); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.Host != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "host", runtime.ParamLocationQuery, *params.Host); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.QueryId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "query_id", runtime.ParamLocationQuery, *params.QueryId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetLogsScanRequest generates requests for GetLogsScan
 func NewGetLogsScanRequest(server string, scanId ScanID) (*http.Request, error) {
 	var err error
@@ -14247,6 +14810,12 @@ type ClientWithResponsesInterface interface {
 	// GetLogsInsightsWithResponse request
 	GetLogsInsightsWithResponse(ctx context.Context, params *GetLogsInsightsParams, reqEditors ...RequestEditorFn) (*GetLogsInsightsResponse, error)
 
+	// GetLogsPlansWithResponse request
+	GetLogsPlansWithResponse(ctx context.Context, params *GetLogsPlansParams, reqEditors ...RequestEditorFn) (*GetLogsPlansResponse, error)
+
+	// GetLogsPlansCompareWithResponse request
+	GetLogsPlansCompareWithResponse(ctx context.Context, params *GetLogsPlansCompareParams, reqEditors ...RequestEditorFn) (*GetLogsPlansCompareResponse, error)
+
 	// GetLogsScanWithResponse request
 	GetLogsScanWithResponse(ctx context.Context, scanId ScanID, reqEditors ...RequestEditorFn) (*GetLogsScanResponse, error)
 
@@ -15856,6 +16425,52 @@ func (r GetLogsInsightsResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetLogsInsightsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetLogsPlansResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *LogInsights
+	JSON502      *ErrorMessage
+}
+
+// Status returns HTTPResponse.Status
+func (r GetLogsPlansResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetLogsPlansResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetLogsPlansCompareResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *LogPlanComparison
+	JSON502      *ErrorMessage
+}
+
+// Status returns HTTPResponse.Status
+func (r GetLogsPlansCompareResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetLogsPlansCompareResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -17539,6 +18154,24 @@ func (c *ClientWithResponses) GetLogsInsightsWithResponse(ctx context.Context, p
 		return nil, err
 	}
 	return ParseGetLogsInsightsResponse(rsp)
+}
+
+// GetLogsPlansWithResponse request returning *GetLogsPlansResponse
+func (c *ClientWithResponses) GetLogsPlansWithResponse(ctx context.Context, params *GetLogsPlansParams, reqEditors ...RequestEditorFn) (*GetLogsPlansResponse, error) {
+	rsp, err := c.GetLogsPlans(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetLogsPlansResponse(rsp)
+}
+
+// GetLogsPlansCompareWithResponse request returning *GetLogsPlansCompareResponse
+func (c *ClientWithResponses) GetLogsPlansCompareWithResponse(ctx context.Context, params *GetLogsPlansCompareParams, reqEditors ...RequestEditorFn) (*GetLogsPlansCompareResponse, error) {
+	rsp, err := c.GetLogsPlansCompare(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetLogsPlansCompareResponse(rsp)
 }
 
 // GetLogsScanWithResponse request returning *GetLogsScanResponse
@@ -19670,6 +20303,72 @@ func ParseGetLogsInsightsResponse(rsp *http.Response) (*GetLogsInsightsResponse,
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest LogInsights
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
+		var dest ErrorMessage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON502 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetLogsPlansResponse parses an HTTP response from a GetLogsPlansWithResponse call
+func ParseGetLogsPlansResponse(rsp *http.Response) (*GetLogsPlansResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetLogsPlansResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest LogInsights
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 502:
+		var dest ErrorMessage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON502 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetLogsPlansCompareResponse parses an HTTP response from a GetLogsPlansCompareWithResponse call
+func ParseGetLogsPlansCompareResponse(rsp *http.Response) (*GetLogsPlansCompareResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetLogsPlansCompareResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest LogPlanComparison
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
