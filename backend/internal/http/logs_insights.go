@@ -283,7 +283,9 @@ func mapPlanNode(n *explain.Node, timing bool) serverhttp.PlanNode {
 	out.Filter, out.FilterOmittedBytes = clipOpt(n.Filter, planConditionLimit)
 	out.IndexCond, out.IndexCondOmittedBytes = clipOpt(n.IndexCond, planConditionLimit)
 	out.RecheckCond, out.RecheckCondOmittedBytes = clipOpt(n.RecheckCond, planConditionLimit)
-	out.JoinCond, out.JoinCondOmittedBytes = clipOpt(n.JoinCond, planConditionLimit)
+	out.HashCond, out.HashCondOmittedBytes = clipOpt(n.HashCond, planConditionLimit)
+	out.MergeCond, out.MergeCondOmittedBytes = clipOpt(n.MergeCond, planConditionLimit)
+	out.JoinFilter, out.JoinFilterOmittedBytes = clipOpt(n.JoinFilter, planConditionLimit)
 
 	if len(n.SortKey) > 0 {
 		out.SortKey = shortcut.Ptr(n.SortKey)

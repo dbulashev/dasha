@@ -259,8 +259,9 @@ func (a *Plans) Exhausted() bool {
 }
 
 // Summary evaluates the rules once per group and returns every group ranked by
-// total time. TopGroups cuts the ranking down to what a response carries.
-func (a *Plans) Summary() PlansSummary {
+// total time. TopGroups cuts the ranking down to what a response carries. env
+// carries what the cluster knows and the plan does not, such as work_mem.
+func (a *Plans) Summary(env explain.Context) PlansSummary {
 	s := PlansSummary{
 		Records:         a.records,
 		Parsed:          a.parsed,
@@ -285,7 +286,7 @@ func (a *Plans) Summary() PlansSummary {
 		g.Durations = durationStats(acc.durations)
 
 		maskPlan(&g.Sample)
-		g.Findings, g.Dormant = explain.Evaluate(&g.Sample, explain.Context{})
+		g.Findings, g.Dormant = explain.Evaluate(&g.Sample, env)
 
 		for _, d := range g.Dormant {
 			rule, ok := dormant[d.Code]
@@ -441,7 +442,9 @@ func maskPlan(p *explain.Plan) {
 		n.Filter = sanitize.SQL(n.Filter)
 		n.IndexCond = sanitize.SQL(n.IndexCond)
 		n.RecheckCond = sanitize.SQL(n.RecheckCond)
-		n.JoinCond = sanitize.SQL(n.JoinCond)
+		n.HashCond = sanitize.SQL(n.HashCond)
+		n.MergeCond = sanitize.SQL(n.MergeCond)
+		n.JoinFilter = sanitize.SQL(n.JoinFilter)
 
 		return true
 	})

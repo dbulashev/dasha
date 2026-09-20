@@ -4,8 +4,8 @@ import { useI18n } from 'vue-i18n'
 import { getLogs } from '@/api/gen/default/default'
 import type { GetLogsParams, LogEntry, LogSearchResult } from '@/api/models'
 import { ApiError, assertOk } from '@/utils/api'
-import { getErrorMessage } from '@/utils/error'
 import { useClusterInfo } from '@/composables/useClusterInfo'
+import { logErrorText } from './errors'
 import LogFilterBar from './LogFilterBar.vue'
 import LogHistogramChart from './LogHistogramChart.vue'
 import LogResultsTable from './LogResultsTable.vue'
@@ -68,32 +68,6 @@ function startRateLimitCountdown() {
   }, 1000)
 }
 
-function mapError(err: unknown): string {
-  if (err instanceof ApiError) {
-    switch (err.status) {
-      case 400:
-        return t('logs.error.badRequest')
-      case 404:
-        return t('logs.error.notFound')
-      case 501:
-        return t('logs.error.unsupported')
-      case 502:
-        return t('logs.error.upstream')
-      case 504:
-        return t('logs.error.timeout')
-    }
-  }
-  // A bare fetch rejection (not an ApiError) means no HTTP response arrived —
-  // the connection dropped or the request outran the browser/proxy while the
-  // backend was still waiting on Yandex Cloud. Give a clearer hint than the raw
-  // "Failed to fetch".
-  const msg = getErrorMessage(err)
-  if (/failed to fetch|networkerror|load failed|network request failed/i.test(msg)) {
-    return t('logs.error.network')
-  }
-  return msg
-}
-
 async function runSearch(filters: LogFilters, append: boolean) {
   if (!clusterName.value) return
   // Buttons are disabled via :loading, but guard against overlapping calls
@@ -122,6 +96,7 @@ async function runSearch(filters: LogFilters, append: boolean) {
       exclude: filters.excludes.length ? filters.excludes : undefined,
       database: filters.database || undefined,
       user: filters.user || undefined,
+      query_id: filters.queryId || undefined,
       dedup: filters.dedup,
       page_size: filters.pageSize,
       page_token: append ? nextToken.value : undefined,
@@ -140,7 +115,7 @@ async function runSearch(filters: LogFilters, append: boolean) {
     if (err instanceof ApiError && err.status === 429) {
       startRateLimitCountdown()
     } else {
-      errorMsg.value = mapError(err)
+      errorMsg.value = logErrorText(err, t)
     }
     if (!append) {
       // A fresh search failed: drop the previous search's result state so
@@ -163,7 +138,7 @@ function onLoadMore() {
   if (lastFilters.value) runSearch(lastFilters.value, true)
 }
 
-function onDrill(field: 'severity' | 'user' | 'database' | 'host', value: string) {
+function onDrill(field: 'severity' | 'user' | 'database' | 'host' | 'queryId', value: string) {
   filterBar.value?.applyDrill(field, value)
 }
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
+import type { RouteLocationRaw } from 'vue-router'
 import type { QueryReport } from '@/api/models/index'
 import { fmtBytes, fmtMs as fmtMsUtil, fmtPct, fmtInt } from '@/utils/format'
 import { highlightSql, copyToClipboard, truncateSql, SQL_PREVIEW_MAX } from '@/utils/sql'
@@ -11,6 +12,7 @@ const props = defineProps<{
   item: QueryReport
   sortBy: ReportSortKey
   showDatabase?: boolean
+  plansLink?: RouteLocationRaw | null
 }>()
 
 const emit = defineEmits<{
@@ -56,6 +58,15 @@ function fmtMs(ms: number | null | undefined): string {
       <v-chip v-if="props.showDatabase && item.Datname" size="x-small" variant="tonal" label prepend-icon="mdi-database">
         {{ item.Datname }}
       </v-chip>
+      <v-btn
+        v-if="props.plansLink"
+        :to="props.plansLink"
+        size="x-small"
+        variant="text"
+        prepend-icon="mdi-file-tree-outline"
+      >
+        {{ t('logs.insights.fromQuery') }}
+      </v-btn>
       <template v-if="item.Usernames && item.Usernames.length">
         <span class="text-caption text-medium-emphasis ml-2">{{ t('report.users', item.Usernames.length) }}:</span>
         <v-chip v-for="u in item.Usernames" :key="u" size="x-small" variant="tonal" label>{{ u }}</v-chip>

@@ -155,9 +155,10 @@ func (s *Storage) ListInsightsGroups(ctx context.Context, q logs.GroupsQuery) (l
 	err := s.pool.QueryRow(ctx, `
 		SELECT
 		    (SELECT COUNT(*) FROM log_insights_groups
-		     WHERE scan_id = $1 AND ($2::bigint IS NULL OR query_id = $2)),
+		     WHERE scan_id = $1 AND ($2::bigint IS NULL OR query_id = $2)
+		       AND `+insightsFindingsFilter+`),
 		    EXISTS (SELECT 1 FROM log_insights_scans WHERE scan_id = $1)`,
-		q.ScanID, q.QueryID).Scan(&page.Total, &exists)
+		q.ScanID, q.QueryID, q.WithFindings).Scan(&page.Total, &exists)
 	if err != nil {
 		return logs.GroupPage{}, fmt.Errorf("storage: count insights groups: %w", err)
 	}
@@ -170,9 +171,10 @@ func (s *Storage) ListInsightsGroups(ctx context.Context, q logs.GroupsQuery) (l
 		SELECT group_row
 		FROM log_insights_groups
 		WHERE scan_id = $1 AND ($2::bigint IS NULL OR query_id = $2)
+		  AND `+insightsFindingsFilter+`
 		ORDER BY `+insightsGroupOrder(q.Order)+`
-		LIMIT $3 OFFSET $4`,
-		q.ScanID, q.QueryID, q.Limit, q.Offset)
+		LIMIT $4 OFFSET $5`,
+		q.ScanID, q.QueryID, q.WithFindings, q.Limit, q.Offset)
 	if err != nil {
 		return logs.GroupPage{}, fmt.Errorf("storage: list insights groups: %w", err)
 	}
@@ -290,6 +292,17 @@ func insightsQueryID(g insights.PlanGroup) any {
 
 	return g.QueryID
 }
+
+// insightsFindingsFilter keeps every group unless the request asked for the ones
+// a rule fired on. A group without findings stores them as json null, and the
+// length is taken inside a CASE: the order of AND is not guaranteed, so a guard
+// beside the call would not stop it from running on a scalar.
+const insightsFindingsFilter = `(NOT $3::bool
+    OR jsonb_array_length(
+        CASE jsonb_typeof(group_row->'Findings')
+            WHEN 'array' THEN group_row->'Findings'
+            ELSE '[]'::jsonb
+        END) > 0)`
 
 // insightsGroupOrder maps the validated order of a request to SQL; ord is the
 // rank by total time, so sum needs no second column.

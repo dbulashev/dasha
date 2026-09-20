@@ -53,10 +53,11 @@ func (s *Handlers) GetLogsScanGroups(
 	p := req.Params
 
 	q := logs.GroupsQuery{ //nolint:exhaustruct
-		ScanID: req.ScanId,
-		Order:  string(deref(p.Order)),
-		Limit:  deref(p.Limit),
-		Offset: deref(p.Offset),
+		ScanID:       req.ScanId,
+		WithFindings: deref(p.WithFindings),
+		Order:        string(deref(p.Order)),
+		Limit:        deref(p.Limit),
+		Offset:       deref(p.Offset),
 	}
 
 	if p.QueryId != nil {

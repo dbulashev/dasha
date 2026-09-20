@@ -11,6 +11,10 @@ export type GetLogsScanGroupsParams = {
    * keep the groups of this query_id only
    */
   query_id?: string
+  /**
+   * keep the groups whose plan tripped at least one rule
+   */
+  with_findings?: boolean
   order?: GetLogsScanGroupsOrder
   limit?: number
   offset?: number

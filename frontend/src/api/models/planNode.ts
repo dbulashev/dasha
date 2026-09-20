@@ -37,8 +37,13 @@ export interface PlanNode {
   index_cond_omitted_bytes?: number
   recheck_cond?: string
   recheck_cond_omitted_bytes?: number
-  join_cond?: string
-  join_cond_omitted_bytes?: number
+  hash_cond?: string
+  hash_cond_omitted_bytes?: number
+  merge_cond?: string
+  merge_cond_omitted_bytes?: number
+  /** the node's own qual, which a merge or hash join prints beside its condition */
+  join_filter?: string
+  join_filter_omitted_bytes?: number
   sort_key?: string[]
   rows_removed_by_filter?: number
   rows_removed_by_join_filter?: number

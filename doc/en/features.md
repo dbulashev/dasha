@@ -90,6 +90,14 @@
 - Per-user rate limiting, configurable per source so a metered cloud API and a local index do not share one budget (`log_search.rate_limit`, separate admin limit)
 - `GET /api/logs/check` (admin) reports the resolved index name or LogsQL expression, the mapped fields found and missing, and one masked sample record
 
+## Log Insights
+- The `/log-insights` page reads a window once and shows what the logs hold: event categories (deadlocks, lock waits, cancellations, checkpoints, autovacuum, temporary files, errors) with their share, the frequent message templates of each, and a mark on the categories whose records arrived in a burst
+- The `auto_explain` plans of the same read are grouped by statement and plan shape: count, total and slowest time, p50/p95, and a plan tree marking what the rules found — a sequential scan of a large table, a row estimate off by orders of magnitude, a sort that went to disk, a node repeated far more often than planned
+- A scan is kept as a snapshot: its link opens the same numbers for as long as the snapshot lives (a day), and the group table pages through the whole snapshot without reading the log store again
+- A comparison against a baseline window (the preceding period, a day or a week earlier, or a custom one) lists the statements whose plans got worse: a new plan shape, an index no longer read, a p95 that grew
+- The query report opens the plans of one `queryid`. An empty result names its cause: `auto_explain` is not loaded, `auto_explain.log_min_duration` is -1, the plan format is not parsed, `compute_query_id` is off
+- Switched off globally with `log_insights.enabled`
+
 ## Authentication & Authorization
 - Three modes: `none` (open), `token` (static API keys), `oidc` (OpenID Connect)
 - OIDC: BFF pattern with encrypted session cookies (Keycloak, Google, any OIDC provider)

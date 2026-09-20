@@ -229,7 +229,7 @@ func evalIndexCandidateJoin(p *Plan, _ Context) []Finding {
 		}
 
 		// A cross join has nothing an index could serve.
-		if n.JoinCond == "" && inner.Filter == "" {
+		if n.HashCond == "" && n.MergeCond == "" && n.JoinFilter == "" && inner.Filter == "" {
 			return
 		}
 

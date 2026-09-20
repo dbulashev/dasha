@@ -85,8 +85,10 @@ type Dormant struct {
 // not silence: a user with log_analyze = off has to see that half the catalog
 // never ran, and why.
 func Evaluate(p *Plan, ctx Context) (findings []Finding, dormant []Dormant) {
-	if ctx.WorkMemKB == nil {
-		ctx.WorkMemKB = planWorkMemKB(p)
+	// The plan's own setting is the one the statement ran with; what the caller
+	// knows is the instance default and stands in only where nothing was printed.
+	if kb := planWorkMemKB(p); kb != nil {
+		ctx.WorkMemKB = kb
 	}
 
 	for _, rule := range registry {
@@ -110,10 +112,10 @@ func Evaluate(p *Plan, ctx Context) (findings []Finding, dormant []Dormant) {
 	return findings, dormant
 }
 
-// planWorkMemKB reads the setting the plan printed itself, which is all the log
-// track has: it holds no connection to ask.
+// planWorkMemKB reads the setting the plan printed itself. auto_explain prints
+// it only where it differs from the built-in default.
 func planWorkMemKB(p *Plan) *int64 {
-	kb, ok := parseMemKB(p.Settings["work_mem"])
+	kb, ok := ParseMemKB(p.Settings["work_mem"])
 	if !ok {
 		return nil
 	}
@@ -121,9 +123,9 @@ func planWorkMemKB(p *Plan) *int64 {
 	return &kb
 }
 
-// parseMemKB reads a memory setting as PostgreSQL shows it. A bare number is in
+// ParseMemKB reads a memory setting as PostgreSQL shows it. A bare number is in
 // the setting's own unit, kB for work_mem.
-func parseMemKB(v string) (int64, bool) {
+func ParseMemKB(v string) (int64, bool) {
 	v = strings.TrimSpace(v)
 	mult := int64(1)
 

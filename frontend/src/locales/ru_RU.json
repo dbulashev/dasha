@@ -735,6 +735,7 @@
         "host": "Хост",
         "database": "База данных",
         "user": "Пользователь",
+        "queryId": "queryid",
         "message": "Поиск по тексту",
         "exclude": "Исключить (grep -v)",
         "copyRange": "Скопировать период (формат Grafana)",
@@ -748,6 +749,7 @@
             "canceled": "Отменённые запросы",
             "connections": "Ошибки подключения (FATAL)",
             "slow": "Медленные запросы (duration)",
+            "plan": "Планы (auto_explain)",
             "errors": "Ошибки (ERROR+)"
         },
         "copy": {
@@ -755,7 +757,13 @@
             "all": "Всё",
             "query": "Только query",
             "message": "Только сообщение",
-            "exclude": "В исключения"
+            "exclude": "В исключения",
+            "queryId": "Только queryid",
+            "plan": "Только план"
+        },
+        "planDialog": {
+            "title": "План auto_explain",
+            "open": "План"
         },
         "drill": "Кликните, чтобы отфильтровать",
         "moreFilters": "Ещё фильтры",
@@ -774,6 +782,7 @@
         "partial": "Показаны не все записи: достигнут лимит сканирования ({scanned}). Уточните фильтры или сузьте период.",
         "range": {
             "1h": "1 час",
+            "3h": "3 часа",
             "6h": "6 часов",
             "24h": "24 часа",
             "7d": "7 дней",
@@ -798,10 +807,163 @@
             "badRequest": "Некорректные параметры запроса логов",
             "notFound": "Кластер не найден",
             "rateLimited": "Слишком частые запросы к логам — повторите через {seconds} с",
-            "upstream": "Ошибка обращения к API Yandex Cloud",
-            "timeout": "Превышено время ожидания ответа от Yandex Cloud",
+            "upstream": "Ошибка при обращении к источнику логов",
+            "timeout": "Источник логов не ответил вовремя",
             "unsupported": "Поиск по логам недоступен для этого кластера",
-            "network": "Сервер не ответил (сетевая ошибка или обрыв соединения). Возможно, Yandex Cloud отвечает слишком долго — повторите запрос или сузьте период."
+            "network": "Сервер не ответил: сетевая ошибка или обрыв соединения. Возможно, источник логов отвечает слишком долго — повторите запрос или сузьте период."
+        },
+        "menuSearch": "Поиск",
+        "menuInsights": "Анализ",
+        "insights": {
+            "scan": "Анализировать",
+            "tabs": {
+                "categories": "Категории событий",
+                "plans": "Планы",
+                "compare": "Сравнение окон"
+            },
+            "about": {
+                "toggle": "Как устроен анализ логов",
+                "sourceTitle": "Откуда берутся данные",
+                "sourceRecords": "Записи auto_explain в логе кластера, прочитанные через привязанный к нему источник.",
+                "sourceThreshold": "Запись появляется только выше auto_explain.log_min_duration: сводка описывает медленный хвост, а не всю нагрузку.",
+                "sourceScan": "Страница — одно чтение окна в пределах log_insights.max_records, max_bytes, max_plans; усечённое окно помечено, и все числа в нём — нижняя граница.",
+                "sourceSnapshot": "Скан сохраняется под scan_id и читается обратно без обращения к источнику; снимки чистит демон раз в сутки.",
+                "sourceMasking": "Литералы маскируются sanitize.SQL в тексте запроса и в условиях узлов; значения внутри плана не скрываются.",
+                "groupsTitle": "Группы и числа",
+                "groupKey": "Группа — один запрос с одной формой плана: query_id + хеш плана + нормализованный текст.",
+                "groupSample": "Образец группы — самая долгая её запись; правила, дерево и буферы берутся из него.",
+                "groupTop": "В ответе топ по суммарному времени и топ по самому долгому прогону, в снимке — все группы.",
+                "thNumber": "Число",
+                "thHow": "Как считается",
+                "numbers": {
+                    "count": {
+                        "name": "count",
+                        "how": "планов в группе"
+                    },
+                    "percentiles": {
+                        "name": "p50 / p95",
+                        "how": "по длительностям группы, по ближайшему рангу"
+                    },
+                    "sumMax": {
+                        "name": "sum / max",
+                        "how": "точно по тем же длительностям"
+                    },
+                    "rows": {
+                        "name": "строк",
+                        "how": "plan_rows → actual.rows × loops (узел измеряет один проход)"
+                    },
+                    "buffers": {
+                        "name": "буферы",
+                        "how": "блоков × 8 КиБ, накопительно с дочерними узлами"
+                    },
+                    "cost": {
+                        "name": "стоимость",
+                        "how": "startup..total, единицы планировщика, к миллисекундам отношения не имеют"
+                    }
+                },
+                "rulesTitle": "Правила",
+                "thRule": "Правило",
+                "thSeverity": "Severity",
+                "thNeeds": "Требует",
+                "thWhen": "Срабатывает",
+                "rulesDormant": "Правило, для которого в плане нет нужных данных, попадает в спящие, а не пропускается молча: actual и timing дают auto_explain.log_analyze, work_mem — сам план или pg_settings кластера.",
+                "compareTitle": "Сравнение окон",
+                "compareShape": "Запрос сравнивается по форме, набравшей больше всего времени в каждом окне: перцентили двух форм не складываются.",
+                "compareBoth": "Запрос, который есть только в одном окне, в список не попадает — первое появление не регрессия.",
+                "compareCost": "Одно сравнение — два чтения источника, у него отдельный лимит частоты, не общий с поиском.",
+                "thReason": "Причина",
+                "categoriesTitle": "Категории событий",
+                "categoryOrder": "Запись относится к категории по SQLSTATE, если поток его несёт, затем по виду самой записи (план, длительность запроса), затем по английскому тексту сообщения; other — всё, что не совпало.",
+                "categoryTemplates": "Шаблоны — частые сообщения категории, где переменные части заменены на <*>.",
+                "categoryBurst": "Пометка всплеска означает, что записи категории уложились в 10% окна."
+            },
+            "hint": "Выберите период и запустите анализ: одно чтение окна считает записи по категориям и сводит планы auto_explain.",
+            "disabled": "Анализ логов выключен в этой установке или недоступен для кластера.",
+            "scanGone": "Сохранённого скана больше нет, снимки живут сутки. Запустите анализ заново.",
+            "scannedRecords": "прочитано записей: {records}",
+            "partial": "Окно прочитано частично: {reasons}",
+            "partialReason": {
+                "records": "лимит записей",
+                "bytes": "лимит байт",
+                "timeout": "таймаут источника",
+                "source": "источник остановился раньше",
+                "plans": "лимит планов"
+            },
+            "snapshotAt": "Снимок от {at}",
+            "copyLink": "Скопировать ссылку",
+            "queryIdFilter": "Только планы queryid {queryId}",
+            "clearQueryId": "Все запросы",
+            "fromQuery": "Планы из логов",
+            "burst": "за {minutes} мин",
+            "firstSeen": "Первая запись",
+            "categories": {
+                "category": "Категория",
+                "share": "Доля"
+            },
+            "plans": {
+                "counts": "групп: {groups} · разобрано {parsed} из {records}",
+                "query": "Запрос",
+                "count": "Планов",
+                "sum": "Суммарно",
+                "findings": "Проблемы",
+                "onlyFindings": "Только с проблемами",
+                "empty": "Планов за окно нет",
+                "copyQueryId": "Скопировать queryid",
+                "findInLogs": "Найти в логах",
+                "shape": "хеш"
+            },
+            "order": {
+                "label": "Сортировка",
+                "sum": "Суммарное время",
+                "max": "Самый долгий",
+                "count": "Количество"
+            },
+            "notParsedTitle": "Не разобрано",
+            "notParsed": {
+                "unsupported_plan_format": "формат не поддержан",
+                "empty_plan": "пустой план",
+                "parse_error": "ошибка разбора",
+                "plan_too_large": "план слишком велик",
+                "plan_budget_exhausted": "исчерпан лимит планов"
+            },
+            "dormantGroups": "{code}: не проверялось на {groups} группах, нет {missing}",
+            "emptyReason": {
+                "no_records": "За окно нет записей.",
+                "no_plan_records": "За окно нет записей auto_explain.",
+                "unsupported_plan_format": "Планы в формате, который Dasha не разбирает: поддерживаются text и json.",
+                "not_parsed": "Записи с планами нашлись, ни одна не разобралась.",
+                "budget_exhausted": "Бюджет скана закончился раньше, чем встретился план.",
+                "source_unavailable": "Источник логов не ответил."
+            },
+            "setup": {
+                "noExtension": "auto_explain не загружен на {instance}: планы в лог не попадают.",
+                "loggingOff": "auto_explain.log_min_duration на {instance} равен -1: планы не пишутся.",
+                "format": "auto_explain.log_format = {format}; Dasha разбирает text и json.",
+                "noAnalyze": "log_analyze выключен: в планах нет фактических строк и времени.",
+                "noQueryId": "compute_query_id выключен: планы не связаны с запросами.",
+                "someWithoutQueryId": "Планов без идентификатора запроса: {n}.",
+                "threshold": "Порог auto_explain: {ms} мс. Более быстрые запросы в лог не попадают."
+            },
+            "compare": {
+                "baseline": "База",
+                "previous": "Предыдущий период",
+                "dayAgo": "Тот же период сутками раньше",
+                "weekAgo": "Тот же период неделей раньше",
+                "run": "Сравнить",
+                "partial": "Одно из окон прочитано не полностью, отношения посчитаны по выборкам неизвестного размера.",
+                "current": "Текущее",
+                "plans": "планов: {n}",
+                "count": "Планов",
+                "noCurrentPlans": "В текущем окне планов нет, база не читалась.",
+                "noRegressions": "Запросов, которым стало хуже, нет.",
+                "reasons": "Причины",
+                "indexes": "Индексы",
+                "reason": {
+                    "new_shape": "новая форма",
+                    "lost_index": "потерян индекс",
+                    "slower": "вырос p95"
+                }
+            }
         }
     },
     "Replication": "Репликация",
@@ -1854,5 +2016,62 @@
         "play": "Включить авто-обновление",
         "stop": "Остановить авто-обновление",
         "refresh": "Обновить сейчас"
+    },
+    "plan": {
+        "node": {
+            "rows": "строк",
+            "omitted": "обрезано {bytes} Б",
+            "rowsRemoved": "отброшено фильтром",
+            "heapFetches": "обращений к таблице",
+            "buffers": "буферы",
+            "cost": "стоимость",
+            "rowsPlanned": "план",
+            "rowsActual": "факт",
+            "rowsRemovedByJoin": "отброшено условием соединения"
+        },
+        "missing": {
+            "actual": "фактических строк",
+            "timing": "времени узлов",
+            "buffers": "буферов",
+            "work_mem": "work_mem"
+        },
+        "dormantRule": "{code}: не проверялось, нет {missing}",
+        "noFindings": "Проблем в плане нет.",
+        "generic": "обобщённый план",
+        "planningTime": "Планирование",
+        "executionTime": "Выполнение",
+        "withoutData": "План без {missing}"
+    },
+    "planFinding": {
+        "seq_scan_large": "Последовательное чтение с фильтром: оценка {planRows} строк, стоимость {totalCost}",
+        "cost_hotspot": "На узел приходится {costShare} стоимости плана ({selfCost} из {totalCost})",
+        "nested_loop_blowup": "Nested Loop: {outerRows} × {innerRows} = {pairs} пар строк",
+        "index_candidate_join": "Внутренняя сторона читается без индекса: {innerRows} строк за проход, проходов {outerRows}",
+        "sort_estimate_spill": "Оценка {estimated} не помещается в work_mem {workMem}",
+        "cte_materialize": "Материализация {planRows} строк, стоимость {totalCost}",
+        "row_misestimate": "Оценка расходится в {ratio} раз: план {planRows}, факт {actualRows} за проход",
+        "sort_spill_actual": "Сортировка ушла на диск: {sortMethod}, {sortSpace}",
+        "filter_discards_rows": "Фильтр отбросил {rowsRemoved} строк, {removedShare} прочитанных",
+        "heap_fetches_high": "Index Only Scan обратился к таблице {heapFetches} раз на {actualRows} строк",
+        "loops_blowup": "Узел выполнен {loops} раз вместо ожидаемых {expectedLoops}, в {ratio} раз больше",
+        "bitmap_lossy": "Битовая карта огрублена: неточных блоков {lossyBlocks}, точных {exactBlocks}",
+        "workers_not_launched": "Запущено {workersLaunched} из {workersPlanned} параллельных процессов",
+        "jit_overhead": "JIT занял {timeMs} мс, {timeShare} времени запроса",
+        "trigger_time": "Триггеры заняли {timeMs} мс, {timeShare} времени запроса"
+    },
+    "logCategory": {
+        "deadlock": "Взаимоблокировки",
+        "lock_wait": "Ожидание блокировок",
+        "connection_limit": "Предел соединений",
+        "authentication": "Аутентификация",
+        "canceled": "Отменённые запросы",
+        "plan": "Планы (auto_explain)",
+        "slow_query": "Медленные запросы",
+        "checkpoint": "Контрольные точки",
+        "autovacuum": "Автоочистка",
+        "temp_file": "Временные файлы",
+        "connection": "Соединения",
+        "error": "Ошибки",
+        "other": "Прочее"
     }
 }

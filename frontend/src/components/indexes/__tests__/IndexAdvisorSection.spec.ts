@@ -295,6 +295,7 @@ describe('IndexAdvisorSection', () => {
     resolves(report({ candidates: [candidate()], total: 1 }))
     const wrapper = await render()
 
+    await openDetails(wrapper)
     expect(wrapper.text()).toContain('host1, host2')
   })
 

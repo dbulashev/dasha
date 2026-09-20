@@ -7,7 +7,7 @@
 import type { LogPlanGroupRow } from './logPlanGroupRow'
 
 export interface LogPlanGroupPage {
-  /** groups the scan holds, after query_id is applied */
+  /** groups matching query_id and with_findings, before the page is cut */
   total: number
   items: LogPlanGroupRow[]
 }

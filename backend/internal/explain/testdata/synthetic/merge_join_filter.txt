@@ -1,0 +1,11 @@
+Merge Semi Join  (cost=2542.58..20874.93 rows=7223 width=61) (actual time=60.715..60.715 rows=0 loops=1)
+  Merge Cond: (newdata.* *= newdata2.*)
+  Join Filter: (newdata2.ctid <> newdata.ctid)
+  Rows Removed by Join Filter: 14519
+  Buffers: shared hit=3, local hit=256
+  ->  Sort  (cost=1271.29..1307.41 rows=14446 width=67) (actual time=25.667..26.391 rows=14519 loops=1)
+        Sort Key: newdata.* USING *<
+        Sort Method: quicksort  Memory: 1663kB
+        ->  Seq Scan on pg_temp_16826 newdata  (cost=0.00..273.19 rows=14446 width=67) (actual time=0.009..3.308 rows=14519 loops=1)
+              Filter: (newdata.* IS NOT NULL)
+              Rows Removed by Filter: 0
