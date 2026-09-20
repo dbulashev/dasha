@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.8.1
 
 ### Features
 - **Log Insights page.** Read of a window shows what the logs hold: event categories with their frequent message templates, and the `auto_explain` plans grouped by statement and plan shape, with a plan tree marking a sequential scan of a large table, a row estimate off by orders of magnitude or a sort that went to disk. Comparison against an earlier window lists the statements whose plans got worse. The query report opens the plans of one statement, and an empty result names what to switch on.
