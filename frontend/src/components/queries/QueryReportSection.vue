@@ -18,7 +18,7 @@ const props = defineProps<{
   snapshotData?: QueryReport[] | null
 }>()
 
-const { clusterName, databaseName, hostName } = useClusterInfo()
+const { clusterName, currentCluster, databaseName, hostName } = useClusterInfo()
 const route = useRoute()
 const { t } = useI18n()
 const { onError } = useViewError()
@@ -163,6 +163,23 @@ function showSqlDialog(item: QueryReport) {
   sqlDialogText.value = item.Query
   sqlDialogVisible.value = true
 }
+
+// Plans of this statement from auto_explain records. The window is the one a
+// deep link into the log search uses: rare events need more than an hour.
+function plansLink(item: QueryReport) {
+  if (!currentCluster.value?.supports_logs) return null
+
+  return {
+    name: 'log-insights',
+    params: { clustername: clusterName.value ?? '' },
+    query: {
+      ...(hostName.value ? { host: hostName.value } : {}),
+      ...(databaseName.value ? { db: databaseName.value } : {}),
+      query_id: String(item.QueryID),
+      range: '24h',
+    },
+  }
+}
 </script>
 
 <template>
@@ -223,6 +240,7 @@ function showSqlDialog(item: QueryReport) {
           :item="item"
           :show-database="isInstanceScope"
           :sort-by="reportSortBy"
+          :plans-link="plansLink(item)"
           @show-sql="showSqlDialog"
         />
         <div v-if="visibleItems.length < sortedItems.length" class="d-flex justify-center">

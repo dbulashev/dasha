@@ -273,11 +273,19 @@ func TestSortEstimateSpill_FallsBackToPlanSettings(t *testing.T) {
 		t.Errorf("the finding quotes the setting the plan printed: %+v", f.Params)
 	}
 
-	live := int64(1 << 20)
+	// The caller knows the instance default; the plan printed the value its own
+	// session ran with, and that is the threshold the sort actually met.
+	instance := int64(1 << 20)
 
-	findings, _ = Evaluate(&p, Context{WorkMemKB: &live})
-	if _, fired := codes(findings)[RuleSortEstimateSpill]; fired {
-		t.Error("the caller's work_mem outranks the one in the plan")
+	findings, _ = Evaluate(&p, Context{WorkMemKB: &instance})
+
+	f, ok = codes(findings)[RuleSortEstimateSpill]
+	if !ok {
+		t.Fatal("the plan's own work_mem outranks the instance default")
+	}
+
+	if f.Params[ParamWorkMemKB] != int64(4096) {
+		t.Errorf("the finding quotes the setting the plan printed: %+v", f.Params)
 	}
 }
 
@@ -285,14 +293,14 @@ func TestParseMemKB(t *testing.T) {
 	sizes := map[string]int64{"8kB": 8, "4MB": 4096, "1GB": 1 << 20, "2TB": 2 << 30, "4096": 4096}
 
 	for in, want := range sizes {
-		got, ok := parseMemKB(in)
+		got, ok := ParseMemKB(in)
 		if !ok || got != want {
 			t.Errorf("%s: %d (%v), want %d", in, got, ok, want)
 		}
 	}
 
 	for _, in := range []string{"", "on", "-1", "abc"} {
-		if _, ok := parseMemKB(in); ok {
+		if _, ok := ParseMemKB(in); ok {
 			t.Errorf("%q is not a size", in)
 		}
 	}

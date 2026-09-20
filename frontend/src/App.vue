@@ -114,6 +114,7 @@ const replicationLink = computed(() => withQuery("replication"));
 const ioLink = computed(() => withQuery("io"));
 const settingsLink = computed(() => withQuery("settings"));
 const logsLink = computed(() => withQuery("logs"));
+const logInsightsLink = computed(() => withQuery("log-insights"));
 const autoSnapshotLink = computed(() => withQuery("auto-snapshot"));
 
 const hasLogSearchClusters = computed(() => clusterStore.hasLogSearchClusters);
@@ -171,6 +172,10 @@ const tablesGroupOpen = computed(() => {
 
 const indexesGroupOpen = computed(() => {
   return route.path.includes('/indexes')
+})
+
+const logsGroupOpen = computed(() => {
+  return route.path.includes('/logs') || route.path.includes('/log-insights')
 })
 
 watch(() => route.path, () => {
@@ -260,7 +265,13 @@ watch(() => route.path, () => {
           <v-list-item v-if="!isReplica" :title="t('Maintenance')" prepend-icon="mdi-wrench-outline" link :to="maintenanceLink"></v-list-item>
           <v-list-item v-if="!isReplica" :title="t('schemaLint.page.menuItem')" prepend-icon="mdi-clipboard-check-outline" link :to="schemaLintLink"></v-list-item>
           <v-list-item :title="t('Settings')" prepend-icon="mdi-database-settings-outline" link :to="settingsLink"></v-list-item>
-          <v-list-item v-if="hasLogSearchClusters" :title="t('Logs')" prepend-icon="mdi-text-box-search-outline" link :to="logsLink"></v-list-item>
+          <v-list-group v-if="hasLogSearchClusters" value="logs" :model-value="logsGroupOpen">
+            <template #activator="{ props }">
+              <v-list-item v-bind="props" :title="t('Logs')" prepend-icon="mdi-text-box-search-outline"></v-list-item>
+            </template>
+            <v-list-item :title="t('logs.menuSearch')" link :to="logsLink"></v-list-item>
+            <v-list-item :title="t('logs.menuInsights')" link :to="logInsightsLink"></v-list-item>
+          </v-list-group>
           <v-list-item v-if="autosnapshotVisible" :title="t('autosnapshot.menu')" prepend-icon="mdi-camera-timer" link :to="autoSnapshotLink"></v-list-item>
         </v-list>
       </v-navigation-drawer>

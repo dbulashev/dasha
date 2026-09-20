@@ -506,8 +506,12 @@ func setTextAttr(n *Node, key, value, raw string) {
 		n.IndexCond = value
 	case "Recheck Cond":
 		n.RecheckCond = value
-	case "Hash Cond", "Merge Cond", "Join Filter":
-		n.JoinCond = value
+	case "Hash Cond":
+		n.HashCond = value
+	case "Merge Cond":
+		n.MergeCond = value
+	case "Join Filter":
+		n.JoinFilter = value
 	case "Rows Removed by Filter":
 		n.RowsRemovedByFilter = ptrFloat(parseFloat(value))
 	case "Rows Removed by Join Filter":
@@ -539,8 +543,12 @@ func appendToAttr(n *Node, key, line string) {
 		n.IndexCond += " " + line
 	case "Recheck Cond":
 		n.RecheckCond += " " + line
-	case "Hash Cond", "Merge Cond", "Join Filter":
-		n.JoinCond += " " + line
+	case "Hash Cond":
+		n.HashCond += " " + line
+	case "Merge Cond":
+		n.MergeCond += " " + line
+	case "Join Filter":
+		n.JoinFilter += " " + line
 	}
 }
 

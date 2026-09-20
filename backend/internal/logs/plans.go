@@ -168,7 +168,7 @@ func (s *service) scanPlans(
 		return true
 	})
 
-	summary := plans.Summary()
+	summary := plans.Summary(planContext(logging.Config))
 
 	reasons, err := partialReasons(st, scanErr, limits, summary.BudgetExhausted)
 	if err != nil {

@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/dbulashev/dasha/internal/config"
+	"github.com/dbulashev/dasha/internal/explain"
 	"github.com/dbulashev/dasha/internal/logs/source"
 )
 
@@ -22,6 +23,7 @@ const (
 	settingLogFormat      = "auto_explain.log_format"
 	settingLogLevel       = "auto_explain.log_level"
 	settingComputeQueryID = "compute_query_id"
+	settingWorkMem        = "work_mem"
 )
 
 // settingsTimeout bounds the diagnosis: a cluster that does not answer must not
@@ -45,6 +47,20 @@ type Configuration struct {
 	LogFormat        string
 	LogLevel         string
 	ComputeQueryID   string
+	// WorkMemKB is the instance default, not the value a logged statement ran
+	// with: auto_explain.log_settings prints work_mem only where it differs from
+	// the built-in default, and a plan that printed it carries the session value.
+	WorkMemKB *int64
+}
+
+// planContext is what the cluster adds to a plan read from the log. A plan that
+// printed work_mem itself keeps its own value.
+func planContext(cfg *Configuration) explain.Context {
+	if cfg == nil {
+		return explain.Context{}
+	}
+
+	return explain.Context{WorkMemKB: cfg.WorkMemKB} //nolint:exhaustruct
 }
 
 // planLogging is what the cluster answered about plan logging: the diagnosis of
@@ -164,6 +180,10 @@ func scanHosts(cluster config.Cluster, host string) []string {
 func newConfiguration(values map[string]string) *Configuration {
 	cfg := &Configuration{ //nolint:exhaustruct
 		ComputeQueryID: values[settingComputeQueryID],
+	}
+
+	if kb, ok := explain.ParseMemKB(values[settingWorkMem]); ok {
+		cfg.WorkMemKB = &kb
 	}
 
 	for name := range values {

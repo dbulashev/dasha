@@ -2465,6 +2465,16 @@ paths:
           schema:
             type: string
         - in: query
+          name: query_id
+          description: >-
+            keep the records of this statement, as a string to preserve int64
+            precision in JavaScript. The store filters on the field where it can,
+            and the records it returns are checked here regardless. A stream whose
+            field map has no query_id role answers 400.
+          required: false
+          schema:
+            type: string
+        - in: query
           name: message
           description: Substrings that must all be present in the message (case-insensitive, AND).
           required: false
@@ -2832,6 +2842,13 @@ paths:
           required: false
           schema:
             type: string
+        - in: query
+          name: with_findings
+          description: keep the groups whose plan tripped at least one rule
+          required: false
+          schema:
+            type: boolean
+            default: false
         - in: query
           name: order
           required: false
@@ -4269,9 +4286,18 @@ components:
           type: string
         recheck_cond_omitted_bytes:
           type: integer
-        join_cond:
+        hash_cond:
           type: string
-        join_cond_omitted_bytes:
+        hash_cond_omitted_bytes:
+          type: integer
+        merge_cond:
+          type: string
+        merge_cond_omitted_bytes:
+          type: integer
+        join_filter:
+          description: the node's own qual, which a merge or hash join prints beside its condition
+          type: string
+        join_filter_omitted_bytes:
           type: integer
         sort_key:
           type: array

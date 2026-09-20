@@ -91,8 +91,12 @@ type Node struct {
 	Filter      string
 	IndexCond   string
 	RecheckCond string
-	JoinCond    string
-	SortKey     []string
+	// A merge join prints both its merge condition and its own join filter, so
+	// one field for all three would drop one of them.
+	HashCond   string
+	MergeCond  string
+	JoinFilter string
+	SortKey    []string
 	// A join node counts the two apart: the join condition and the node's own
 	// qual each throw rows away.
 	RowsRemovedByFilter     *float64

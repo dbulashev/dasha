@@ -35,6 +35,26 @@ func TestConfigurationReadsTheAutoExplainSetup(t *testing.T) {
 	}
 }
 
+// A plan prints work_mem only where it differs from the built-in default, so
+// the rules that need it read the instance value off pg_settings.
+func TestConfigurationCarriesWorkMem(t *testing.T) {
+	t.Parallel()
+
+	c := newConfiguration(map[string]string{settingWorkMem: "4096"})
+
+	if c.WorkMemKB == nil || *c.WorkMemKB != 4096 {
+		t.Fatalf("work_mem = %v, want 4096 kB", c.WorkMemKB)
+	}
+
+	if ctx := planContext(c); ctx.WorkMemKB == nil || *ctx.WorkMemKB != 4096 {
+		t.Errorf("plan context = %+v, want work_mem from the cluster", ctx)
+	}
+
+	if ctx := planContext(nil); ctx.WorkMemKB != nil {
+		t.Errorf("plan context = %+v, want nothing without a diagnosis", ctx)
+	}
+}
+
 // Without the library loaded PostgreSQL knows none of its settings, and that
 // absence is the whole diagnosis.
 func TestConfigurationWithoutAutoExplainLoaded(t *testing.T) {

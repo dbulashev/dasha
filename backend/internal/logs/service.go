@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -52,6 +53,7 @@ type SearchQuery struct {
 	From, To   time.Time
 	Severities []string // pushed down to the source (allowlist)
 	Host       string   // pushed down to the source (validated against cluster hosts)
+	QueryID    *int64   // pushed down where the store can, checked here regardless
 	Include    []string // Dasha-side substrings on message, all must match (AND)
 	Exclude    []string // Dasha-side negative substrings on message (grep -v)
 	Database   string   // Dasha-side substring (case-insensitive)
@@ -179,6 +181,7 @@ func (s *service) Search(ctx context.Context, q SearchQuery) (SearchResult, erro
 		Filter: source.Filter{ //nolint:exhaustruct
 			Severities: severities,
 			Host:       q.Host,
+			QueryID:    q.QueryID,
 		},
 		Token: q.PageToken,
 	}
@@ -311,6 +314,11 @@ func (s *service) validate(cluster config.Cluster, fm source.FieldMap, q SearchQ
 	// window and silently under-count.
 	if q.Dedup && q.PageToken != "" {
 		return nil, fmt.Errorf("%w: page_token cannot be combined with dedup", ErrInvalid)
+	}
+
+	// A stream without the role would answer empty for every statement asked for.
+	if q.QueryID != nil && fm.QueryID == "" {
+		return nil, fmt.Errorf("%w: stream %q carries no query_id", ErrInvalid, q.Stream)
 	}
 
 	severities := make([]string, 0, len(q.Severities))
@@ -558,6 +566,10 @@ func (s *service) toEntry(
 		if containsFold(rec.Fields[fm.Text], ex) {
 			return Entry{}, false //nolint:exhaustruct
 		}
+	}
+
+	if q.QueryID != nil && rec.Fields[fm.QueryID] != strconv.FormatInt(*q.QueryID, 10) {
+		return Entry{}, false //nolint:exhaustruct
 	}
 
 	if q.Database != "" && !containsFold(rec.Fields[fm.Database], q.Database) {

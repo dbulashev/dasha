@@ -6,6 +6,10 @@ import vueJsx from '@vitejs/plugin-vue-jsx'
 import vueDevTools from 'vite-plugin-vue-devtools'
 import ViteFonts from 'unplugin-fonts/vite'
 
+// Backend the dev server proxies to: a demo stand or a remote install instead of
+// a local backend.
+const apiTarget = process.env.DASHA_API ?? 'http://localhost:8000'
+
 // https://vite.dev/config/
 export default defineConfig({
   build: {
@@ -41,16 +45,18 @@ export default defineConfig({
     // default; the OIDC demo issuer is reached via the "keycloak" hostname
     // (127.0.0.1 keycloak in /etc/hosts), so allow it. Does not affect the
     // production build (served by nginx).
-    allowedHosts: ['keycloak'],
+    allowedHosts: ['keycloak', ...(process.env.DASHA_DEV_HOSTS?.split(',') ?? [])],
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: apiTarget,
         changeOrigin: true,
         secure: false,
-        timeout: 10000,
+        // A log scan reads its whole window before answering: a day of records
+        // takes tens of seconds, and the backend bounds itself anyway.
+        timeout: 120000,
       },
       '/auth': {
-        target: 'http://localhost:8000',
+        target: apiTarget,
         changeOrigin: true,
         secure: false,
         timeout: 10000,

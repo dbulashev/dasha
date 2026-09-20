@@ -32,6 +32,7 @@
 [Проверки схемы](doc/ru/features.md#проверки-схемы) ·
 [Health Score](doc/ru/features.md#health-score) ·
 [Поиск по логам](doc/ru/features.md#поиск-по-логам) ·
+[Анализ логов](doc/ru/features.md#анализ-логов) ·
 [Аутентификация и авторизация](doc/ru/features.md#аутентификация-и-авторизация) ·
 [Инфраструктура](doc/ru/features.md#инфраструктура) ·
 [Пользовательские настройки](doc/ru/features.md#пользовательские-настройки) ·

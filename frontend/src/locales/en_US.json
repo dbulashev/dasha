@@ -735,6 +735,7 @@
     "host": "Host",
     "database": "Database",
     "user": "User",
+    "queryId": "queryid",
     "message": "Search in text",
     "exclude": "Exclude (grep -v)",
     "copyRange": "Copy the time range (Grafana format)",
@@ -748,6 +749,7 @@
       "canceled": "Cancelled queries",
       "connections": "Connection errors (FATAL)",
       "slow": "Slow queries (duration)",
+      "plan": "Plans (auto_explain)",
       "errors": "Errors (ERROR+)"
     },
     "copy": {
@@ -755,7 +757,13 @@
       "all": "Everything",
       "query": "Query only",
       "message": "Message only",
-      "exclude": "To exclusions"
+      "exclude": "To exclusions",
+      "queryId": "queryid only",
+      "plan": "plan only"
+    },
+    "planDialog": {
+      "title": "auto_explain plan",
+      "open": "Plan"
     },
     "drill": "Click to filter",
     "moreFilters": "More filters",
@@ -774,6 +782,7 @@
     "partial": "Not all records are shown: the scan limit was reached ({scanned}). Narrow the filters or shorten the period.",
     "range": {
       "1h": "1 hour",
+      "3h": "3 hours",
       "6h": "6 hours",
       "24h": "24 hours",
       "7d": "7 days",
@@ -798,10 +807,163 @@
       "badRequest": "Invalid log query parameters",
       "notFound": "Cluster not found",
       "rateLimited": "Too many log requests — try again in {seconds} s",
-      "upstream": "Error calling the Yandex Cloud API",
-      "timeout": "Timed out waiting for a response from Yandex Cloud",
+      "upstream": "The log source returned an error",
+      "timeout": "Timed out waiting for the log source",
       "unsupported": "Log search is not available for this cluster",
-      "network": "The server did not respond (network error or dropped connection). Yandex Cloud may be taking too long — retry the request or shorten the period."
+      "network": "The server did not respond (network error or dropped connection). The log source may be taking too long — retry the request or shorten the period."
+    },
+    "menuSearch": "Search",
+    "menuInsights": "Insights",
+    "insights": {
+      "scan": "Analyze",
+      "tabs": {
+        "categories": "Event categories",
+        "plans": "Plans",
+        "compare": "Window comparison"
+      },
+      "about": {
+        "toggle": "How log analysis works",
+        "sourceTitle": "Where the data comes from",
+        "sourceRecords": "auto_explain records in the cluster log, read through the log source bound to it.",
+        "sourceThreshold": "A record exists only above auto_explain.log_min_duration: the summary describes the slow tail, not the whole workload.",
+        "sourceScan": "One page = one read of the window, bounded by log_insights.max_records, max_bytes, max_plans; a window cut short is marked partial and every count is a lower bound.",
+        "sourceSnapshot": "A scan is stored under scan_id and read back without touching the log source; the daemon clears the snapshots once a day.",
+        "sourceMasking": "Literals are masked by sanitize.SQL in the query text and in node conditions; values inside the plan are not hidden.",
+        "groupsTitle": "Groups and numbers",
+        "groupKey": "A group is one statement with one plan shape: query_id + plan hash + normalized query text.",
+        "groupSample": "The sample of a group is its slowest record; rules, tree and buffers come from it.",
+        "groupTop": "The answer carries the top by total time and the top by slowest run; the snapshot keeps every group.",
+        "thNumber": "Number",
+        "thHow": "How it is computed",
+        "numbers": {
+          "count": {
+            "name": "count",
+            "how": "plans in the group"
+          },
+          "percentiles": {
+            "name": "p50 / p95",
+            "how": "over the durations of the group, by nearest rank"
+          },
+          "sumMax": {
+            "name": "sum / max",
+            "how": "exact over the same durations"
+          },
+          "rows": {
+            "name": "rows",
+            "how": "plan_rows → actual.rows × loops (the node measures one pass)"
+          },
+          "buffers": {
+            "name": "buffers",
+            "how": "blocks × 8 KiB, cumulative with the children of the node"
+          },
+          "cost": {
+            "name": "cost",
+            "how": "startup..total, planner units, no relation to milliseconds"
+          }
+        },
+        "rulesTitle": "Rules",
+        "thRule": "Rule",
+        "thSeverity": "Severity",
+        "thNeeds": "Needs",
+        "thWhen": "Fires when",
+        "rulesDormant": "A rule whose requirement the plan does not carry is reported as dormant instead of silently skipped: actual and timing come from auto_explain.log_analyze, work_mem from the plan or from pg_settings of the cluster.",
+        "compareTitle": "Window comparison",
+        "compareShape": "A statement is compared through the shape that took the most time in each window: percentiles of two shapes cannot be merged.",
+        "compareBoth": "A statement only one window holds is left out — a first appearance is no regression.",
+        "compareCost": "One comparison is two reads of the log source and carries a limit of its own, apart from the search.",
+        "thReason": "Reason",
+        "categoriesTitle": "Event categories",
+        "categoryOrder": "A record is matched by SQLSTATE where the stream carries it, then by the record itself (a plan, a statement duration), then by the English message text; other is whatever matched nothing.",
+        "categoryTemplates": "Templates are the frequent messages of a category with the variable parts replaced by <*>.",
+        "categoryBurst": "The burst mark means the records of the category landed within 10% of the window."
+      },
+      "hint": "Pick a period and run the analysis: one read of the window counts the records by category and summarizes the auto_explain plans it holds.",
+      "disabled": "Log analysis is switched off in this installation, or unavailable for this cluster.",
+      "scanGone": "The stored scan is gone: snapshots live for a day. Run the analysis again.",
+      "scannedRecords": "{records} records read",
+      "partial": "Window read in part: {reasons}",
+      "partialReason": {
+        "records": "record budget",
+        "bytes": "byte budget",
+        "timeout": "source timeout",
+        "source": "source stopped early",
+        "plans": "plan budget"
+      },
+      "snapshotAt": "Snapshot of {at}",
+      "copyLink": "Copy link",
+      "queryIdFilter": "Plans of queryid {queryId} only",
+      "clearQueryId": "All statements",
+      "fromQuery": "Plans from logs",
+      "burst": "within {minutes} min",
+      "firstSeen": "First seen",
+      "categories": {
+        "category": "Category",
+        "share": "Share"
+      },
+      "plans": {
+        "counts": "{groups} groups · {parsed} of {records} records parsed",
+        "query": "Statement",
+        "count": "Plans",
+        "sum": "Total",
+        "findings": "Issues",
+        "onlyFindings": "Only with issues",
+        "empty": "No plans in this window",
+        "copyQueryId": "Copy queryid",
+        "findInLogs": "Find in logs",
+        "shape": "hash"
+      },
+      "order": {
+        "label": "Sort by",
+        "sum": "Total time",
+        "max": "Slowest run",
+        "count": "Count"
+      },
+      "notParsedTitle": "Not parsed",
+      "notParsed": {
+        "unsupported_plan_format": "format not supported",
+        "empty_plan": "empty plan",
+        "parse_error": "parse error",
+        "plan_too_large": "plan too large",
+        "plan_budget_exhausted": "plan budget spent"
+      },
+      "dormantGroups": "{code}: not evaluated on {groups} groups, no {missing}",
+      "emptyReason": {
+        "no_records": "The window holds no records.",
+        "no_plan_records": "The window holds no auto_explain records.",
+        "unsupported_plan_format": "The plans are in a format Dasha does not parse; text and json are parsed.",
+        "not_parsed": "Plan records were found, none of them parsed.",
+        "budget_exhausted": "The scan budget ran out before a plan was read.",
+        "source_unavailable": "The log source did not answer."
+      },
+      "setup": {
+        "noExtension": "auto_explain is not loaded on {instance}: no plan reaches the log.",
+        "loggingOff": "auto_explain.log_min_duration on {instance} is -1: nothing is logged.",
+        "format": "auto_explain.log_format is {format}; Dasha parses text and json.",
+        "noAnalyze": "log_analyze is off: plans carry no measured rows or times.",
+        "noQueryId": "compute_query_id is off: plans carry no statement id.",
+        "someWithoutQueryId": "Plans without a statement id: {n}.",
+        "threshold": "auto_explain threshold: {ms} ms. Faster statements never reach the log."
+      },
+      "compare": {
+        "baseline": "Baseline",
+        "previous": "Preceding period",
+        "dayAgo": "Same period a day earlier",
+        "weekAgo": "Same period a week earlier",
+        "run": "Compare",
+        "partial": "One of the windows was cut short; the ratios compare two samples of unknown size.",
+        "current": "Current",
+        "plans": "{n} plans",
+        "count": "Plans",
+        "noCurrentPlans": "The current window holds no plans, so the baseline was not read.",
+        "noRegressions": "No statement got worse.",
+        "reasons": "Reasons",
+        "indexes": "Indexes",
+        "reason": {
+          "new_shape": "new shape",
+          "lost_index": "index lost",
+          "slower": "p95 grew"
+        }
+      }
     }
   },
   "Replication": "Replication",
@@ -1854,5 +2016,62 @@
     "play": "Start auto-refresh",
     "stop": "Stop auto-refresh",
     "refresh": "Refresh now"
+  },
+  "plan": {
+    "node": {
+      "rows": "rows",
+      "omitted": "{bytes} B cut",
+      "rowsRemoved": "rows removed by filter",
+      "heapFetches": "heap fetches",
+      "buffers": "buffers",
+      "cost": "cost",
+      "rowsPlanned": "planned",
+      "rowsActual": "actual",
+      "rowsRemovedByJoin": "rows removed by the join filter"
+    },
+    "missing": {
+      "actual": "measured rows",
+      "timing": "node timing",
+      "buffers": "buffers",
+      "work_mem": "work_mem"
+    },
+    "dormantRule": "{code}: not evaluated, no {missing}",
+    "noFindings": "No issues in this plan.",
+    "generic": "generic plan",
+    "planningTime": "Planning",
+    "executionTime": "Execution",
+    "withoutData": "Plan without {missing}"
+  },
+  "planFinding": {
+    "seq_scan_large": "Sequential scan with a filter: {planRows} rows estimated, cost {totalCost}",
+    "cost_hotspot": "{costShare} of the plan cost is in this node ({selfCost} of {totalCost})",
+    "nested_loop_blowup": "Nested Loop over {outerRows} × {innerRows} = {pairs} row pairs",
+    "index_candidate_join": "The inner side is read without an index: {innerRows} rows per pass, {outerRows} passes",
+    "sort_estimate_spill": "Estimated {estimated} does not fit in work_mem {workMem}",
+    "cte_materialize": "Materialized {planRows} rows, cost {totalCost}",
+    "row_misestimate": "Estimate off by {ratio}×: {planRows} planned, {actualRows} measured per pass",
+    "sort_spill_actual": "Sort went to disk: {sortMethod}, {sortSpace}",
+    "filter_discards_rows": "The filter discarded {rowsRemoved} rows, {removedShare} of those read",
+    "heap_fetches_high": "Index Only Scan went to the table {heapFetches} times for {actualRows} rows",
+    "loops_blowup": "The node ran {loops} times instead of the expected {expectedLoops}, {ratio}×",
+    "bitmap_lossy": "Bitmap turned lossy: {lossyBlocks} lossy blocks, {exactBlocks} exact",
+    "workers_not_launched": "{workersLaunched} of {workersPlanned} parallel workers started",
+    "jit_overhead": "JIT took {timeMs} ms, {timeShare} of the statement",
+    "trigger_time": "Triggers took {timeMs} ms, {timeShare} of the statement"
+  },
+  "logCategory": {
+    "deadlock": "Deadlocks",
+    "lock_wait": "Lock waits",
+    "connection_limit": "Connection limit",
+    "authentication": "Authentication",
+    "canceled": "Cancelled statements",
+    "plan": "Plans (auto_explain)",
+    "slow_query": "Slow statements",
+    "checkpoint": "Checkpoints",
+    "autovacuum": "Autovacuum",
+    "temp_file": "Temporary files",
+    "connection": "Connections",
+    "error": "Errors",
+    "other": "Other"
   }
 }

@@ -152,7 +152,8 @@ func (s *service) Insights(ctx context.Context, q InsightsQuery) (ScanResult, er
 		return true
 	})
 
-	summary := plans.Summary()
+	diag := configuration()
+	summary := plans.Summary(planContext(diag))
 
 	reasons, err := partialReasons(st, scanErr, limits, summary.BudgetExhausted)
 	if err != nil {
@@ -169,7 +170,7 @@ func (s *service) Insights(ctx context.Context, q InsightsQuery) (ScanResult, er
 		Plans:          summary,
 		PlanRecords:    summary.Records,
 		EmptyReason:    emptyReason(st, scanErr != nil, summary),
-		Configuration:  configuration(),
+		Configuration:  diag,
 	}
 
 	ranked := summary.Groups

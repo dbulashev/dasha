@@ -163,6 +163,31 @@ func TestInsightsGroupsPageAndFilter(t *testing.T) {
 	assert.Equal(t, "Aggregate", group.Sample.Root.Type)
 }
 
+// A group a rule never fired on stores its findings as json null, which the
+// length of an array cannot be taken of.
+func TestInsightsGroupsWithFindingsOnly(t *testing.T) {
+	s := newInsightsTestStorage(t)
+	ctx := t.Context()
+
+	id := uuid.New()
+	quiet := insightsTestGroup(2, 0, false, 100, 10)
+	quiet.Findings = nil
+
+	require.NoError(t, s.SaveInsightsScan(ctx, insightsTestScan(id),
+		[]insights.PlanGroup{insightsTestGroup(1, 42, true, 300, 200), quiet}))
+
+	all, err := s.ListInsightsGroups(ctx, logs.GroupsQuery{ScanID: id, Order: logs.GroupOrderSum, Limit: 10})
+	require.NoError(t, err)
+	assert.Equal(t, 2, all.Total)
+
+	withFindings, err := s.ListInsightsGroups(ctx,
+		logs.GroupsQuery{ScanID: id, WithFindings: true, Order: logs.GroupOrderSum, Limit: 10})
+	require.NoError(t, err)
+	assert.Equal(t, 1, withFindings.Total)
+	require.Len(t, withFindings.Rows, 1)
+	assert.Equal(t, 1, withFindings.Rows[0].Ord)
+}
+
 func TestInsightsAllGroupsCarryTheirIndexes(t *testing.T) {
 	s := newInsightsTestStorage(t)
 	ctx := t.Context()

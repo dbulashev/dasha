@@ -1956,16 +1956,22 @@ type PlanNode struct {
 	Filter *string `json:"filter,omitempty"`
 
 	// FilterOmittedBytes bytes cut from the end of filter; absent when it is complete
-	FilterOmittedBytes      *int      `json:"filter_omitted_bytes,omitempty"`
-	HeapBlocksExact         *float64  `json:"heap_blocks_exact,omitempty"`
-	HeapBlocksLossy         *float64  `json:"heap_blocks_lossy,omitempty"`
-	HeapFetches             *float64  `json:"heap_fetches,omitempty"`
-	IndexCond               *string   `json:"index_cond,omitempty"`
-	IndexCondOmittedBytes   *int      `json:"index_cond_omitted_bytes,omitempty"`
-	IndexName               *string   `json:"index_name,omitempty"`
-	JoinCond                *string   `json:"join_cond,omitempty"`
-	JoinCondOmittedBytes    *int      `json:"join_cond_omitted_bytes,omitempty"`
+	FilterOmittedBytes    *int     `json:"filter_omitted_bytes,omitempty"`
+	HashCond              *string  `json:"hash_cond,omitempty"`
+	HashCondOmittedBytes  *int     `json:"hash_cond_omitted_bytes,omitempty"`
+	HeapBlocksExact       *float64 `json:"heap_blocks_exact,omitempty"`
+	HeapBlocksLossy       *float64 `json:"heap_blocks_lossy,omitempty"`
+	HeapFetches           *float64 `json:"heap_fetches,omitempty"`
+	IndexCond             *string  `json:"index_cond,omitempty"`
+	IndexCondOmittedBytes *int     `json:"index_cond_omitted_bytes,omitempty"`
+	IndexName             *string  `json:"index_name,omitempty"`
+
+	// JoinFilter the node's own qual, which a merge or hash join prints beside its condition
+	JoinFilter              *string   `json:"join_filter,omitempty"`
+	JoinFilterOmittedBytes  *int      `json:"join_filter_omitted_bytes,omitempty"`
 	JoinType                *string   `json:"join_type,omitempty"`
+	MergeCond               *string   `json:"merge_cond,omitempty"`
+	MergeCondOmittedBytes   *int      `json:"merge_cond_omitted_bytes,omitempty"`
 	Operation               *string   `json:"operation,omitempty"`
 	Parallel                bool      `json:"parallel"`
 	ParentRelationship      *string   `json:"parent_relationship,omitempty"`
@@ -3239,6 +3245,9 @@ type GetLogsParams struct {
 	Severity    *[]string                `form:"severity,omitempty" json:"severity,omitempty"`
 	Host        *string                  `form:"host,omitempty" json:"host,omitempty"`
 
+	// QueryId keep the records of this statement, as a string to preserve int64 precision in JavaScript. The store filters on the field where it can, and the records it returns are checked here regardless. A stream whose field map has no query_id role answers 400.
+	QueryId *string `form:"query_id,omitempty" json:"query_id,omitempty"`
+
 	// Message Substrings that must all be present in the message (case-insensitive, AND).
 	Message *[]string `form:"message,omitempty" json:"message,omitempty"`
 
@@ -3323,10 +3332,13 @@ type GetLogsPlansCompareParamsServiceType string
 // GetLogsScanGroupsParams defines parameters for GetLogsScanGroups.
 type GetLogsScanGroupsParams struct {
 	// QueryId keep the groups of this query_id only
-	QueryId *string                       `form:"query_id,omitempty" json:"query_id,omitempty"`
-	Order   *GetLogsScanGroupsParamsOrder `form:"order,omitempty" json:"order,omitempty"`
-	Limit   *int                          `form:"limit,omitempty" json:"limit,omitempty"`
-	Offset  *int                          `form:"offset,omitempty" json:"offset,omitempty"`
+	QueryId *string `form:"query_id,omitempty" json:"query_id,omitempty"`
+
+	// WithFindings keep the groups whose plan tripped at least one rule
+	WithFindings *bool                         `form:"with_findings,omitempty" json:"with_findings,omitempty"`
+	Order        *GetLogsScanGroupsParamsOrder `form:"order,omitempty" json:"order,omitempty"`
+	Limit        *int                          `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset       *int                          `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
 // GetLogsScanGroupsParamsOrder defines parameters for GetLogsScanGroups.
@@ -10298,6 +10310,22 @@ func NewGetLogsRequest(server string, params *GetLogsParams) (*http.Request, err
 
 		}
 
+		if params.QueryId != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "query_id", runtime.ParamLocationQuery, *params.QueryId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
 		if params.Message != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "message", runtime.ParamLocationQuery, *params.Message); err != nil {
@@ -10947,6 +10975,22 @@ func NewGetLogsScanGroupsRequest(server string, scanId ScanID, params *GetLogsSc
 		if params.QueryId != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "query_id", runtime.ParamLocationQuery, *params.QueryId); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.WithFindings != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "with_findings", runtime.ParamLocationQuery, *params.WithFindings); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
