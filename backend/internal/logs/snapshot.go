@@ -54,9 +54,11 @@ type Scan struct {
 type GroupsQuery struct {
 	ScanID  uuid.UUID
 	QueryID *int64
-	Order   string
-	Limit   int
-	Offset  int
+	// WithFindings keeps the groups a rule fired on, including the count.
+	WithFindings bool
+	Order        string
+	Limit        int
+	Offset       int
 }
 
 // GroupPage is one page of plan groups; Total counts them all.

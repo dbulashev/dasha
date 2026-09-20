@@ -697,6 +697,7 @@
     "host": "Host",
     "database": "Datenbank",
     "user": "Benutzer",
+    "queryId": "queryid",
     "message": "Textsuche",
     "exclude": "Ausschließen (grep -v)",
     "copyRange": "Zeitbereich kopieren (Grafana-Format)",
@@ -710,6 +711,7 @@
       "canceled": "Abgebrochene Abfragen",
       "connections": "Verbindungsfehler (FATAL)",
       "slow": "Langsame Abfragen (duration)",
+      "plan": "Pläne (auto_explain)",
       "errors": "Fehler (ERROR+)"
     },
     "copy": {
@@ -717,7 +719,13 @@
       "all": "Alles",
       "query": "Nur query",
       "message": "Nur Meldung",
-      "exclude": "Zu Ausschlüssen hinzufügen"
+      "exclude": "Zu Ausschlüssen hinzufügen",
+      "queryId": "Nur queryid",
+      "plan": "Nur den Plan"
+    },
+    "planDialog": {
+      "title": "auto_explain-Plan",
+      "open": "Plan"
     },
     "drill": "Klicken, um zu filtern",
     "moreFilters": "Weitere Filter",
@@ -736,6 +744,7 @@
     "partial": "Es werden nicht alle Einträge angezeigt: Scan-Limit erreicht ({scanned}). Bitte Filter verfeinern oder Zeitraum einschränken.",
     "range": {
       "1h": "1 Std",
+      "3h": "3 Stunden",
       "6h": "6 Std",
       "24h": "24 Std",
       "7d": "7 Tage",
@@ -760,10 +769,163 @@
       "badRequest": "Ungültige Log-Suchparameter",
       "notFound": "Cluster nicht gefunden",
       "rateLimited": "Zu viele Log-Anfragen — erneut versuchen in {seconds} s",
-      "upstream": "Fehler beim Zugriff auf die Yandex Cloud API",
-      "timeout": "Zeitüberschreitung bei der Antwort von Yandex Cloud",
+      "upstream": "Fehler beim Zugriff auf die Logquelle",
+      "timeout": "Die Logquelle hat nicht rechtzeitig geantwortet",
       "unsupported": "Die Protokollsuche ist für diesen Cluster nicht verfügbar",
-      "network": "Keine Antwort vom Server (Netzwerkfehler oder Verbindungsabbruch). Möglicherweise antwortet Yandex Cloud zu langsam — bitte erneut versuchen oder den Zeitraum eingrenzen."
+      "network": "Der Server hat nicht geantwortet (Netzwerkfehler oder abgebrochene Verbindung). Möglicherweise braucht die Logquelle zu lange — Anfrage wiederholen oder Zeitraum verkürzen."
+    },
+    "menuSearch": "Suche",
+    "menuInsights": "Analyse",
+    "insights": {
+      "scan": "Analysieren",
+      "tabs": {
+        "categories": "Ereigniskategorien",
+        "plans": "Pläne",
+        "compare": "Fenstervergleich"
+      },
+      "about": {
+        "toggle": "Wie die Loganalyse funktioniert",
+        "sourceTitle": "Woher die Daten kommen",
+        "sourceRecords": "auto_explain-Einträge im Clusterlog, gelesen über die daran gebundene Quelle.",
+        "sourceThreshold": "Ein Eintrag entsteht erst oberhalb von auto_explain.log_min_duration: die Zusammenfassung beschreibt den langsamen Rand, nicht die ganze Last.",
+        "sourceScan": "Eine Seite ist ein Lesen des Fensters innerhalb von log_insights.max_records, max_bytes, max_plans; ein abgeschnittenes Fenster ist markiert und alle Zahlen darin sind Untergrenzen.",
+        "sourceSnapshot": "Ein Scan wird unter scan_id gespeichert und ohne Zugriff auf die Quelle zurückgelesen; die Snapshots räumt der Daemon einmal täglich.",
+        "sourceMasking": "Literale werden von sanitize.SQL im Anfragetext und in den Knotenbedingungen maskiert; Werte im Plan werden nicht verborgen.",
+        "groupsTitle": "Gruppen und Zahlen",
+        "groupKey": "Eine Gruppe ist eine Anweisung mit einer Planform: query_id + Plan-Hash + normalisierter Text.",
+        "groupSample": "Die Stichprobe einer Gruppe ist ihr langsamster Eintrag; Regeln, Baum und Puffer stammen daraus.",
+        "groupTop": "Die Antwort trägt die Top nach Gesamtzeit und nach langsamstem Lauf, der Snapshot alle Gruppen.",
+        "thNumber": "Zahl",
+        "thHow": "Wie berechnet",
+        "numbers": {
+          "count": {
+            "name": "count",
+            "how": "Pläne in der Gruppe"
+          },
+          "percentiles": {
+            "name": "p50 / p95",
+            "how": "über die Dauern der Gruppe, nach nächstem Rang"
+          },
+          "sumMax": {
+            "name": "sum / max",
+            "how": "exakt über dieselben Dauern"
+          },
+          "rows": {
+            "name": "Zeilen",
+            "how": "plan_rows → actual.rows × loops (der Knoten misst einen Durchlauf)"
+          },
+          "buffers": {
+            "name": "Puffer",
+            "how": "Blöcke × 8 KiB, kumulativ mit den Kindknoten"
+          },
+          "cost": {
+            "name": "Kosten",
+            "how": "startup..total, Planner-Einheiten, ohne Bezug zu Millisekunden"
+          }
+        },
+        "rulesTitle": "Regeln",
+        "thRule": "Regel",
+        "thSeverity": "Severity",
+        "thNeeds": "Braucht",
+        "thWhen": "Greift bei",
+        "rulesDormant": "Eine Regel, deren Voraussetzung der Plan nicht trägt, wird als schlafend gemeldet statt still übersprungen: actual und timing liefert auto_explain.log_analyze, work_mem der Plan selbst oder pg_settings des Clusters.",
+        "compareTitle": "Fenstervergleich",
+        "compareShape": "Eine Anweisung wird über die Form verglichen, die im jeweiligen Fenster die meiste Zeit hatte: Perzentile zweier Formen lassen sich nicht zusammenführen.",
+        "compareBoth": "Eine Anweisung, die nur ein Fenster kennt, bleibt außen vor — ein erstes Auftreten ist keine Regression.",
+        "compareCost": "Ein Vergleich sind zwei Lesevorgänge der Quelle und hat ein eigenes Ratenlimit, getrennt von der Suche.",
+        "thReason": "Grund",
+        "categoriesTitle": "Ereigniskategorien",
+        "categoryOrder": "Ein Eintrag wird über SQLSTATE zugeordnet, wo der Stream ihn trägt, dann über die Art des Eintrags (Plan, Anfragedauer), dann über den englischen Meldungstext; other ist alles Übrige.",
+        "categoryTemplates": "Vorlagen sind die häufigen Meldungen einer Kategorie mit <*> an den variablen Stellen.",
+        "categoryBurst": "Die Burst-Markierung heißt: die Einträge der Kategorie lagen innerhalb von 10% des Fensters."
+      },
+      "hint": "Zeitraum wählen und Analyse starten: ein Lesen des Fensters zählt die Einträge nach Kategorie und fasst die auto_explain-Pläne zusammen.",
+      "disabled": "Die Loganalyse ist in dieser Installation abgeschaltet oder für diesen Cluster nicht verfügbar.",
+      "scanGone": "Der gespeicherte Scan ist weg, Snapshots leben einen Tag. Analyse erneut starten.",
+      "scannedRecords": "gelesene Einträge: {records}",
+      "partial": "Fenster nur teilweise gelesen: {reasons}",
+      "partialReason": {
+        "records": "Eintragsbudget",
+        "bytes": "Bytebudget",
+        "timeout": "Zeitüberschreitung der Quelle",
+        "source": "Quelle hat früher gestoppt",
+        "plans": "Planbudget"
+      },
+      "snapshotAt": "Snapshot vom {at}",
+      "copyLink": "Link kopieren",
+      "queryIdFilter": "Nur Pläne der queryid {queryId}",
+      "clearQueryId": "Alle Anweisungen",
+      "fromQuery": "Pläne aus den Logs",
+      "burst": "in {minutes} Min.",
+      "firstSeen": "Erster Eintrag",
+      "categories": {
+        "category": "Kategorie",
+        "share": "Anteil"
+      },
+      "plans": {
+        "counts": "Gruppen: {groups} · {parsed} von {records} Einträgen geparst",
+        "query": "Anweisung",
+        "count": "Pläne",
+        "sum": "Gesamt",
+        "findings": "Probleme",
+        "onlyFindings": "Nur mit Problemen",
+        "empty": "Keine Pläne in diesem Fenster",
+        "copyQueryId": "queryid kopieren",
+        "findInLogs": "In den Logs suchen",
+        "shape": "Hash"
+      },
+      "order": {
+        "label": "Sortieren nach",
+        "sum": "Gesamtzeit",
+        "max": "Langsamster Lauf",
+        "count": "Anzahl"
+      },
+      "notParsedTitle": "Nicht geparst",
+      "notParsed": {
+        "unsupported_plan_format": "Format nicht unterstützt",
+        "empty_plan": "leerer Plan",
+        "parse_error": "Parse-Fehler",
+        "plan_too_large": "Plan zu groß",
+        "plan_budget_exhausted": "Planbudget aufgebraucht"
+      },
+      "dormantGroups": "{code}: auf {groups} Gruppen nicht geprüft, {missing} fehlt",
+      "emptyReason": {
+        "no_records": "Das Fenster enthält keine Einträge.",
+        "no_plan_records": "Das Fenster enthält keine auto_explain-Einträge.",
+        "unsupported_plan_format": "Die Pläne liegen in einem Format vor, das Dasha nicht parst; text und json werden geparst.",
+        "not_parsed": "Plan-Einträge gefunden, keiner davon geparst.",
+        "budget_exhausted": "Das Scan-Budget endete, bevor ein Plan gelesen wurde.",
+        "source_unavailable": "Die Logquelle hat nicht geantwortet."
+      },
+      "setup": {
+        "noExtension": "auto_explain ist auf {instance} nicht geladen: kein Plan erreicht das Log.",
+        "loggingOff": "auto_explain.log_min_duration auf {instance} ist -1: es wird nichts geloggt.",
+        "format": "auto_explain.log_format ist {format}; Dasha parst text und json.",
+        "noAnalyze": "log_analyze ist aus: Pläne enthalten keine gemessenen Zeilen und Zeiten.",
+        "noQueryId": "compute_query_id ist aus: Pläne tragen keine Anweisungs-ID.",
+        "someWithoutQueryId": "Pläne ohne Anweisungs-ID: {n}.",
+        "threshold": "auto_explain-Schwelle: {ms} ms. Schnellere Anweisungen erreichen das Log nicht."
+      },
+      "compare": {
+        "baseline": "Basis",
+        "previous": "Vorheriger Zeitraum",
+        "dayAgo": "Gleicher Zeitraum einen Tag früher",
+        "weekAgo": "Gleicher Zeitraum eine Woche früher",
+        "run": "Vergleichen",
+        "partial": "Eines der Fenster wurde abgeschnitten; die Verhältnisse vergleichen zwei Stichproben unbekannter Größe.",
+        "current": "Aktuell",
+        "plans": "Pläne: {n}",
+        "count": "Pläne",
+        "noCurrentPlans": "Das aktuelle Fenster enthält keine Pläne, die Basis wurde nicht gelesen.",
+        "noRegressions": "Keine Anweisung ist schlechter geworden.",
+        "reasons": "Gründe",
+        "indexes": "Indexe",
+        "reason": {
+          "new_shape": "neue Form",
+          "lost_index": "Index verloren",
+          "slower": "p95 gestiegen"
+        }
+      }
     }
   },
   "Replication": "Replikation",
@@ -1816,5 +1978,62 @@
     "play": "Auto-Aktualisierung starten",
     "stop": "Auto-Aktualisierung stoppen",
     "refresh": "Jetzt aktualisieren"
+  },
+  "plan": {
+    "node": {
+      "rows": "Zeilen",
+      "omitted": "{bytes} B abgeschnitten",
+      "rowsRemoved": "vom Filter verworfen",
+      "heapFetches": "Heap-Zugriffe",
+      "buffers": "Puffer",
+      "cost": "Kosten",
+      "rowsPlanned": "geplant",
+      "rowsActual": "gemessen",
+      "rowsRemovedByJoin": "vom Join-Filter verworfen"
+    },
+    "missing": {
+      "actual": "gemessene Zeilen",
+      "timing": "Knotenzeiten",
+      "buffers": "Puffer",
+      "work_mem": "work_mem"
+    },
+    "dormantRule": "{code}: nicht geprüft, {missing} fehlt",
+    "noFindings": "Keine Probleme in diesem Plan.",
+    "generic": "generischer Plan",
+    "planningTime": "Planung",
+    "executionTime": "Ausführung",
+    "withoutData": "Plan ohne {missing}"
+  },
+  "planFinding": {
+    "seq_scan_large": "Sequentieller Scan mit Filter: geschätzt {planRows} Zeilen, Kosten {totalCost}",
+    "cost_hotspot": "Auf diesen Knoten entfallen {costShare} der Plankosten ({selfCost} von {totalCost})",
+    "nested_loop_blowup": "Nested Loop: {outerRows} × {innerRows} = {pairs} Zeilenpaare",
+    "index_candidate_join": "Die innere Seite wird ohne Index gelesen: {innerRows} Zeilen pro Durchlauf, {outerRows} Durchläufe",
+    "sort_estimate_spill": "Schätzung {estimated} passt nicht in work_mem {workMem}",
+    "cte_materialize": "Materialisierung von {planRows} Zeilen, Kosten {totalCost}",
+    "row_misestimate": "Schätzung um das {ratio}-fache daneben: Plan {planRows}, gemessen {actualRows} pro Durchlauf",
+    "sort_spill_actual": "Sortierung ging auf die Platte: {sortMethod}, {sortSpace}",
+    "filter_discards_rows": "Der Filter verwarf {rowsRemoved} Zeilen, {removedShare} der gelesenen",
+    "heap_fetches_high": "Index Only Scan griff {heapFetches} mal auf die Tabelle zu, für {actualRows} Zeilen",
+    "loops_blowup": "Der Knoten lief {loops} mal statt der erwarteten {expectedLoops}, {ratio}×",
+    "bitmap_lossy": "Bitmap wurde ungenau: {lossyBlocks} ungenaue Blöcke, {exactBlocks} genaue",
+    "workers_not_launched": "{workersLaunched} von {workersPlanned} parallelen Prozessen gestartet",
+    "jit_overhead": "JIT brauchte {timeMs} ms, {timeShare} der Anweisung",
+    "trigger_time": "Trigger brauchten {timeMs} ms, {timeShare} der Anweisung"
+  },
+  "logCategory": {
+    "deadlock": "Deadlocks",
+    "lock_wait": "Sperrwartezeiten",
+    "connection_limit": "Verbindungslimit",
+    "authentication": "Authentifizierung",
+    "canceled": "Abgebrochene Anweisungen",
+    "plan": "Pläne (auto_explain)",
+    "slow_query": "Langsame Anweisungen",
+    "checkpoint": "Checkpoints",
+    "autovacuum": "Autovacuum",
+    "temp_file": "Temporäre Dateien",
+    "connection": "Verbindungen",
+    "error": "Fehler",
+    "other": "Sonstige"
   }
 }

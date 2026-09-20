@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/dbulashev/dasha/gen/serverhttp"
 	"github.com/dbulashev/dasha/internal/logs"
@@ -21,7 +22,7 @@ func (s *Handlers) GetLogs(
 ) (serverhttp.GetLogsResponseObject, error) {
 	p := req.Params
 
-	q := logs.SearchQuery{
+	q := logs.SearchQuery{ //nolint:exhaustruct
 		Cluster:    string(p.ClusterName),
 		Stream:     string(p.ServiceType),
 		From:       p.From,
@@ -35,6 +36,15 @@ func (s *Handlers) GetLogs(
 		Dedup:      deref(p.Dedup),
 		PageSize:   deref(p.PageSize),
 		PageToken:  deref(p.PageToken),
+	}
+
+	if p.QueryId != nil {
+		id, err := strconv.ParseInt(*p.QueryId, 10, 64)
+		if err != nil {
+			return serverhttp.GetLogs400Response{}, nil
+		}
+
+		q.QueryID = &id
 	}
 
 	res, err := s.logs.Search(ctx, q)

@@ -120,7 +120,9 @@ func compareNodes(t *testing.T, path string, text, js *Node) {
 		{"plan width", text.PlanWidth, js.PlanWidth},
 		{"filter", text.Filter, js.Filter},
 		{"index cond", text.IndexCond, js.IndexCond},
-		{"join cond", text.JoinCond, js.JoinCond},
+		{"hash cond", text.HashCond, js.HashCond},
+		{"merge cond", text.MergeCond, js.MergeCond},
+		{"join filter", text.JoinFilter, js.JoinFilter},
 		{"children", len(text.Children), len(js.Children)},
 	}
 
@@ -330,8 +332,30 @@ func TestParseText_MultilineQueryText(t *testing.T) {
 		t.Fatal("no Hash Join node")
 	}
 
-	if !join.Parallel || join.JoinType != "Inner" || join.JoinCond != "(a.k = b.id)" {
+	if !join.Parallel || join.JoinType != "Inner" || join.HashCond != "(a.k = b.id)" {
 		t.Errorf("join: %+v", join)
+	}
+}
+
+// A merge join prints its condition and its own qual as two lines; one field for
+// both would drop whichever came second.
+func TestParseText_MergeJoinKeepsConditionAndFilter(t *testing.T) {
+	p := parseFixture(t, "synthetic/merge_join_filter.txt", SourceLog)
+
+	if p.Root.MergeCond != "(newdata.* *= newdata2.*)" {
+		t.Errorf("merge cond = %q", p.Root.MergeCond)
+	}
+
+	if p.Root.JoinFilter != "(newdata2.ctid <> newdata.ctid)" {
+		t.Errorf("join filter = %q", p.Root.JoinFilter)
+	}
+
+	if p.Root.HashCond != "" {
+		t.Errorf("hash cond = %q, want empty on a merge join", p.Root.HashCond)
+	}
+
+	if p.Root.RowsRemovedByJoinFilter == nil || *p.Root.RowsRemovedByJoinFilter != 14519 {
+		t.Errorf("rows removed by join filter = %v", p.Root.RowsRemovedByJoinFilter)
 	}
 }
 

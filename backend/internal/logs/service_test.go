@@ -482,6 +482,54 @@ func TestSearchPassesCanonicalSeveritiesDown(t *testing.T) {
 	}
 }
 
+// A store that cannot run a term on the statement id has to be read whole: a
+// filter it refused would answer empty instead of narrowing.
+func TestSearchPushesTheQueryIDDownOnlyWhereTheStoreRunsIt(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name   string
+		narrow func(source.Filter) source.Filter
+		down   bool
+	}{
+		{name: "store runs it", narrow: nil, down: true},
+		{
+			name:   "store refuses it",
+			narrow: func(f source.Filter) source.Filter { f.QueryID = nil; return f },
+			down:   false,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			recs := records(4)
+			for i := range recs {
+				recs[i].Fields["query_id"] = []string{"-42", "7"}[i%2]
+			}
+
+			p := &fakeProvider{fields: testFieldMap(t), records: recs, narrow: tt.narrow}
+			svc := newTestService(t, p, config.LogSearchConfig{})
+
+			id := int64(-42)
+			q := testQuery()
+			q.QueryID = &id
+
+			res, err := svc.Search(context.Background(), q)
+			if err != nil {
+				t.Fatalf("search: %v", err)
+			}
+
+			if (p.filter.QueryID != nil) != tt.down {
+				t.Errorf("filter carried query_id = %v, want pushed down = %v", p.filter.QueryID, tt.down)
+			}
+
+			if len(res.Items) != 2 {
+				t.Errorf("items = %d, want the 2 records of the statement", len(res.Items))
+			}
+		})
+	}
+}
+
 func TestSearchRejectsUnknownClusterAndStream(t *testing.T) {
 	t.Parallel()
 

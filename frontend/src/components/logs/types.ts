@@ -14,6 +14,8 @@ export interface LogFilters {
   excludes: string[]
   database: string
   user: string
+  // Statement identifier as a string: int64 does not survive a JS number.
+  queryId: string
   dedup: boolean
   pageSize: number
   // Display order of chronological (non-dedup) results: 'desc' = newest first.
@@ -60,8 +62,10 @@ export const LOG_PRESETS: LogPreset[] = [
   { id: 'canceled', message: 'canceling statement', severities: ['ERROR'] },
   // auth/connection failures land at FATAL ("password authentication failed", pg_hba)
   { id: 'connections', message: '', severities: ['FATAL'] },
-  // log_min_duration_statement output
+  // log_min_duration_statement output, which auto_explain records share
   { id: 'slow', message: 'duration:', severities: ['LOG'] },
+  // auto_explain records alone: the plan follows the duration in the same line
+  { id: 'plan', message: 'plan:', severities: ['LOG'] },
   { id: 'errors', message: '', severities: ['ERROR', 'FATAL', 'PANIC'] },
 ]
 

@@ -8,12 +8,19 @@ import { copyToClipboard } from '@/utils/sql'
 import { fromDateTimeInput, toDateTimeInput, withZoneLabel } from '@/utils/format'
 import { LOG_PRESETS, severityOptions, type LogFilters, type LogOrder, type LogPreset } from './types'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   hosts: string[]
   streams: string[]
   sourceSeverities?: Record<string, string[]>
   loading: boolean
-}>()
+  // window mode keeps the period, the service type and the host: an Insights
+  // scan pushes nothing else down, and the record filters would be inert.
+  mode?: 'search' | 'window'
+  autoSubmit?: boolean
+  submitLabel?: string
+}>(), { mode: 'search', autoSubmit: true })
+
+const windowOnly = computed(() => props.mode === 'window')
 
 const emit = defineEmits<{
   search: [filters: LogFilters]
@@ -31,6 +38,7 @@ const includes = ref<string[]>([])
 const excludes = ref<string[]>([])
 const database = ref<string>('')
 const user = ref<string>('')
+const queryId = ref<string>('')
 const dedup = ref<boolean>(false)
 const pageSize = ref<number>(100)
 const order = ref<LogOrder>('desc')
@@ -68,6 +76,7 @@ watch([serviceTypeItems, serviceType], normalizeServiceType, { immediate: true, 
 
 const rangeItems = computed(() => [
   { value: '1h', title: t('logs.range.1h') },
+  { value: '3h', title: t('logs.range.3h') },
   { value: '6h', title: t('logs.range.6h') },
   { value: '24h', title: t('logs.range.24h') },
   { value: '7d', title: t('logs.range.7d') },
@@ -142,6 +151,7 @@ watch([serviceType, includes, severities], () => {
 
 const rangeMs: Record<string, number> = {
   '1h': 60 * 60 * 1000,
+  '3h': 3 * 60 * 60 * 1000,
   '6h': 6 * 60 * 60 * 1000,
   '24h': 24 * 60 * 60 * 1000,
   '7d': 7 * 24 * 60 * 60 * 1000,
@@ -240,7 +250,7 @@ async function pasteGrafanaRange() {
 // Host/database/user are rarely used — they live behind a spoiler that opens
 // automatically whenever any of them holds a value (restored state, drill-down).
 const moreOpen = ref(false)
-const hasMoreValues = computed(() => !!(host.value || database.value || user.value))
+const hasMoreValues = computed(() => !!(host.value || database.value || user.value || queryId.value))
 
 watch(hasMoreValues, v => {
   if (v) moreOpen.value = true
@@ -255,6 +265,7 @@ function clearFilters() {
   excludes.value = []
   database.value = ''
   user.value = ''
+  queryId.value = ''
   dedup.value = false
 }
 
@@ -265,14 +276,18 @@ function clearFilters() {
 
 type FilterState = Record<string, string | string[]>
 
-const STORAGE_KEY = 'dasha:logs:filters'
+const storageKey = computed(() => (windowOnly.value ? 'dasha:logs:window' : 'dasha:logs:filters'))
 
 // Query-string keys owned by this form; everything else in route.query
-// (cluster context like host/db) is preserved untouched on updates.
-const LOG_QUERY_KEYS = [
-  'service', 'range', 'from', 'to', 'severity', 'log_host',
-  'message', 'exclude', 'database', 'user', 'dedup', 'page_size', 'order', 'preset',
+// (cluster context like host/db, a scan id) is preserved untouched on updates.
+const WINDOW_QUERY_KEYS = ['service', 'range', 'from', 'to', 'log_host']
+
+const SEARCH_QUERY_KEYS = [
+  ...WINDOW_QUERY_KEYS, 'severity',
+  'message', 'exclude', 'database', 'user', 'query_id', 'dedup', 'page_size', 'order', 'preset',
 ]
+
+const queryKeys = computed(() => (windowOnly.value ? WINDOW_QUERY_KEYS : SEARCH_QUERY_KEYS))
 
 function toState(): FilterState {
   const s: FilterState = {}
@@ -295,6 +310,7 @@ function toState(): FilterState {
   if (excludes.value.length) s.exclude = [...excludes.value]
   if (database.value) s.database = database.value
   if (user.value) s.user = user.value
+  if (queryId.value) s.query_id = queryId.value
   if (dedup.value) s.dedup = '1'
   if (pageSize.value !== 100) s.page_size = String(pageSize.value)
   if (order.value !== 'desc') s.order = order.value
@@ -310,7 +326,10 @@ function asStr(v: unknown): string {
   return typeof v === 'string' ? v : ''
 }
 
-function applyState(s: FilterState) {
+function applyState(raw: FilterState) {
+  const s = windowOnly.value
+    ? Object.fromEntries(Object.entries(raw).filter(([k]) => WINDOW_QUERY_KEYS.includes(k)))
+    : raw
   const svc = asStr(s.service)
   serviceType.value = svc === 'pooler' ? 'pooler' : 'postgresql'
   const r = asStr(s.range)
@@ -330,6 +349,7 @@ function applyState(s: FilterState) {
   excludes.value = asArr(s.exclude)
   database.value = asStr(s.database)
   user.value = asStr(s.user)
+  queryId.value = asStr(s.query_id)
   dedup.value = asStr(s.dedup) === '1'
   const ps = Number(asStr(s.page_size))
   pageSize.value = pageSizeItems.includes(ps) ? ps : 100
@@ -338,7 +358,7 @@ function applyState(s: FilterState) {
 
 function syncQuery(state: FilterState) {
   const rest = Object.fromEntries(
-    Object.entries(route.query).filter(([k]) => !LOG_QUERY_KEYS.includes(k)),
+    Object.entries(route.query).filter(([k]) => !queryKeys.value.includes(k)),
   )
   router.replace({ query: { ...rest, ...state } })
 }
@@ -346,7 +366,7 @@ function syncQuery(state: FilterState) {
 onMounted(() => {
   const q = route.query as LocationQuery
   const presetId = asStr(q.preset)
-  if (presetId && LOG_PRESETS.some(p => p.id === presetId)) {
+  if (!windowOnly.value && presetId && LOG_PRESETS.some(p => p.id === presetId)) {
     preset.value = presetId
     // The preset watcher fires asynchronously; apply now so the deep link
     // searches with the preset already in place. Deep links investigate rare
@@ -357,22 +377,19 @@ onMounted(() => {
     return
   }
 
-  if (LOG_QUERY_KEYS.some(k => q[k] != null)) {
+  if (queryKeys.value.some(k => q[k] != null)) {
     applyState(q as FilterState)
-    onSubmit()
+    if (props.autoSubmit) onSubmit()
     return
   }
 
   // No shared link — restore the last used filters, but don't auto-search:
   // every search costs an upstream Yandex API scan.
   try {
-    const saved = localStorage.getItem(STORAGE_KEY)
+    const saved = localStorage.getItem(storageKey.value)
     if (saved) {
-      // Never restore concrete dates from a snapshot (incl. ones written
-      // before date-stripping was added): a stale window would silently
-      // search the wrong period.
-      const { range: r, from: _from, to: _to, ...rest } = JSON.parse(saved) as FilterState
-      applyState(r && r !== 'custom' ? { ...rest, range: r } : rest)
+      const { range: _range, from: _from, to: _to, ...rest } = JSON.parse(saved) as FilterState
+      applyState(rest)
     }
   } catch {
     // Corrupted snapshot — start clean.
@@ -403,6 +420,7 @@ function onSubmit() {
     excludes: (excludes.value ?? []).map(s => s.trim()).filter(Boolean),
     database: (database.value ?? '').trim(),
     user: (user.value ?? '').trim(),
+    queryId: (queryId.value ?? '').trim(),
     dedup: dedup.value,
     pageSize: pageSize.value,
     order: order.value,
@@ -412,12 +430,12 @@ function onSubmit() {
   appliedKey.value = currentKey.value
   syncQuery(state)
   try {
-    // Concrete dates are session context, not a preference: restoring a stale
-    // custom range days later would silently search the wrong window. Shared
-    // links (the URL above) keep them; the snapshot drops them.
-    const { from: _from, to: _to, ...persisted } = state
-    if (persisted.range === 'custom') delete persisted.range
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted))
+    // The period is session context, not a preference: a restored day-wide
+    // window silently costs a full read on the next visit, and restored dates
+    // would search the wrong one outright. Shared links (the URL above) keep
+    // both; the snapshot drops them.
+    const { from: _from, to: _to, range: _range, ...persisted } = state
+    localStorage.setItem(storageKey.value, JSON.stringify(persisted))
   } catch {
     // Storage full/unavailable — persistence is best-effort.
   }
@@ -428,7 +446,7 @@ function onSubmit() {
 // ---------------------------------------------------------------------------
 // Drill-down entry points used by the results table and the histogram.
 
-function applyDrill(field: 'severity' | 'user' | 'database' | 'host', value: string) {
+function applyDrill(field: 'severity' | 'user' | 'database' | 'host' | 'queryId', value: string) {
   if (!value) return
   switch (field) {
     case 'severity':
@@ -443,6 +461,9 @@ function applyDrill(field: 'severity' | 'user' | 'database' | 'host', value: str
     case 'host':
       if (!props.hosts.includes(value)) return
       host.value = value
+      break
+    case 'queryId':
+      queryId.value = value
       break
   }
   onSubmit()
@@ -543,7 +564,34 @@ defineExpose({ applyDrill, addExclude, applyAbsoluteRange })
         </template>
       </v-row>
 
-      <v-row dense align="center" class="mt-1">
+      <v-row v-if="windowOnly" dense align="center" class="mt-1">
+        <v-col cols="12" sm="6" md="3">
+          <v-select
+            v-model="host"
+            :items="props.hosts"
+            :label="t('logs.host')"
+            clearable
+            density="compact"
+            hide-details
+          />
+        </v-col>
+        <v-spacer />
+        <v-col cols="12" sm="auto" class="text-right">
+          <v-badge :model-value="dirty" dot color="error">
+            <v-btn
+              color="primary"
+              :loading="props.loading"
+              :disabled="rangeError"
+              prepend-icon="mdi-magnify"
+              @click="onSubmit"
+            >
+              {{ props.submitLabel ?? t('logs.search') }}
+            </v-btn>
+          </v-badge>
+        </v-col>
+      </v-row>
+
+      <v-row v-if="!windowOnly" dense align="center" class="mt-1">
         <v-col cols="12" sm="6" md="2">
           <v-select
             v-model="preset"
@@ -596,7 +644,7 @@ defineExpose({ applyDrill, addExclude, applyAbsoluteRange })
         </v-col>
       </v-row>
 
-      <v-expand-transition>
+      <v-expand-transition v-if="!windowOnly">
         <div v-show="moreOpen">
           <v-row dense align="center" class="mt-1">
             <v-col cols="12" sm="6" md="3">
@@ -631,11 +679,22 @@ defineExpose({ applyDrill, addExclude, applyAbsoluteRange })
                 @keyup.enter="onSubmit"
               />
             </v-col>
+            <v-col cols="12" sm="6" md="3">
+              <v-text-field
+                v-model="queryId"
+                :label="t('logs.queryId')"
+                clearable
+                density="compact"
+                hide-details
+                autocomplete="off"
+                @keyup.enter="onSubmit"
+              />
+            </v-col>
           </v-row>
         </div>
       </v-expand-transition>
 
-      <v-row dense align="center" class="mt-1">
+      <v-row v-if="!windowOnly" dense align="center" class="mt-1">
         <v-col cols="12" sm="6" md="3">
           <v-combobox
             v-model="excludes"
@@ -696,11 +755,13 @@ defineExpose({ applyDrill, addExclude, applyAbsoluteRange })
               prepend-icon="mdi-magnify"
               @click="onSubmit"
             >
-              {{ t('logs.search') }}
+              {{ props.submitLabel ?? t('logs.search') }}
             </v-btn>
           </v-badge>
         </v-col>
       </v-row>
+
+      <slot name="meta" />
     </v-card-text>
   </v-card>
 </template>

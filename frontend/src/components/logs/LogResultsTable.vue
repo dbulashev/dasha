@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { LogEntry } from '@/api/models'
 import { fmtDateTime } from '@/utils/format'
 import { highlightSql, copyToClipboard } from '@/utils/sql'
+import LogPlanDialog from './LogPlanDialog.vue'
 import '@/assets/sql-highlight.css'
 import { severityColor } from './types'
 
@@ -21,7 +22,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   loadMore: []
-  filter: [field: 'severity' | 'user' | 'database' | 'host', value: string]
+  filter: [field: 'severity' | 'user' | 'database' | 'host' | 'queryId', value: string]
   exclude: [text: string]
 }>()
 
@@ -85,12 +86,13 @@ function highlightText(text: string | undefined): string {
 }
 
 // Field-map keys that drill into a search filter on click.
-const DRILL_KEYS: Record<string, 'user' | 'database' | 'host'> = {
+const DRILL_KEYS: Record<string, 'user' | 'database' | 'host' | 'queryId'> = {
   user_name: 'user',
   user: 'user',
   database_name: 'database',
   db: 'database',
   hostname: 'host',
+  query_id: 'queryId',
 }
 
 // SQL-bearing keys get their own highlighted blocks instead of inline pairs.
@@ -110,11 +112,36 @@ function sqlRows(item: LogEntry): Array<[string, string]> {
   return SQL_FIELD_KEYS.filter(k => f[k]).map(k => [k, f[k]] as [string, string])
 }
 
-function copyEntry(item: LogEntry, what: 'all' | 'query' | 'message') {
+// An auto_explain record is "duration: <ms> ms  plan:" followed by the plan, the
+// same prefix the backend detector splits on.
+const PLAN_PREFIX = /^duration: [\d.]+ ms {2}plan:\s*/
+
+function planBody(item: LogEntry): string {
+  const text = item.text ?? ''
+  const head = PLAN_PREFIX.exec(text)
+
+  return head ? text.slice(head[0].length) : ''
+}
+
+const planDialog = ref(false)
+const planText = ref('')
+const planQueryId = ref('')
+
+function showPlan(item: LogEntry) {
+  planText.value = planBody(item)
+  planQueryId.value = item.fields?.query_id ?? ''
+  planDialog.value = true
+}
+
+function copyEntry(item: LogEntry, what: 'all' | 'query' | 'message' | 'queryId' | 'plan') {
   const f = item.fields ?? {}
   let text = ''
   if (what === 'query') {
     text = f.query ?? ''
+  } else if (what === 'queryId') {
+    text = f.query_id ?? ''
+  } else if (what === 'plan') {
+    text = planBody(item)
   } else if (what === 'message') {
     text = item.text || f.message || ''
   } else {
@@ -202,6 +229,17 @@ function copyEntry(item: LogEntry, what: 'all' | 'query' | 'message') {
                     <template v-else>{{ v }}</template>
                   </span>
                 </div>
+                <v-btn
+                  v-if="planBody(item)"
+                  size="x-small"
+                  variant="text"
+                  prepend-icon="mdi-file-tree-outline"
+                  height="32"
+                  class="me-1"
+                  @click="showPlan(item)"
+                >
+                  {{ t('logs.planDialog.open') }}
+                </v-btn>
                 <v-menu>
                   <template #activator="{ props: menuProps }">
                     <v-btn
@@ -221,6 +259,15 @@ function copyEntry(item: LogEntry, what: 'all' | 'query' | 'message') {
                     </v-list-item>
                     <v-list-item @click="copyEntry(item, 'message')">
                       <v-list-item-title>{{ t('logs.copy.message') }}</v-list-item-title>
+                    </v-list-item>
+                    <v-list-item
+                      :disabled="!item.fields?.query_id"
+                      @click="copyEntry(item, 'queryId')"
+                    >
+                      <v-list-item-title>{{ t('logs.copy.queryId') }}</v-list-item-title>
+                    </v-list-item>
+                    <v-list-item :disabled="!planBody(item)" @click="copyEntry(item, 'plan')">
+                      <v-list-item-title>{{ t('logs.copy.plan') }}</v-list-item-title>
                     </v-list-item>
                     <v-divider />
                     <!-- For dedup rows item.text is the masked template ("<*>"),
@@ -256,6 +303,8 @@ function copyEntry(item: LogEntry, what: 'all' | 'query' | 'message') {
         </v-btn>
       </div>
     </v-card-text>
+
+    <LogPlanDialog v-model="planDialog" :plan="planText" :query-id="planQueryId" />
   </v-card>
 </template>
 

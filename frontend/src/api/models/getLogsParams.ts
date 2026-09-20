@@ -15,6 +15,10 @@ export type GetLogsParams = {
   severity?: string[]
   host?: string
   /**
+   * keep the records of this statement, as a string to preserve int64 precision in JavaScript. The store filters on the field where it can, and the records it returns are checked here regardless. A stream whose field map has no query_id role answers 400.
+   */
+  query_id?: string
+  /**
    * Substrings that must all be present in the message (case-insensitive, AND).
    */
   message?: string[]
