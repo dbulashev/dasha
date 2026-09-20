@@ -1601,7 +1601,7 @@ type LogPlanGroup struct {
 type LogPlanGroupPage struct {
 	Items []LogPlanGroupRow `json:"items"`
 
-	// Total groups the scan holds, after query_id is applied
+	// Total groups matching query_id and with_findings, before the page is cut
 	Total int `json:"total"`
 }
 

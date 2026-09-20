@@ -144,27 +144,39 @@ watch(
   { immediate: true },
 )
 
+// A row opened while another is still loading: only the last request may write
+// the panel.
+let planRequest = 0
+
 async function toggleRow(row: GroupRow) {
+  const req = ++planRequest
+
   if (expandedOrd.value === row.ord) {
     expandedOrd.value = null
+    planLoading.value = false
     return
   }
 
   expandedOrd.value = row.ord
   highlight.value = null
   expandedPlan.value = row.plan ?? null
-  if (row.plan || !props.scanId) return
+  if (row.plan || !props.scanId) {
+    planLoading.value = false
+    return
+  }
 
   planLoading.value = true
   try {
     const res = await getLogsScanGroup(props.scanId, row.ord)
+    if (req !== planRequest) return
     expandedPlan.value = assertOk<LogPlanGroup>(res).plan
   } catch (err) {
+    if (req !== planRequest) return
     if (err instanceof ApiError && err.status === 404) emit('scanGone')
     else errorMsg.value = getErrorMessage(err)
     expandedOrd.value = null
   } finally {
-    planLoading.value = false
+    if (req === planRequest) planLoading.value = false
   }
 }
 

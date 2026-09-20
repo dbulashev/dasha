@@ -46,12 +46,35 @@ func TestConfigurationCarriesWorkMem(t *testing.T) {
 		t.Fatalf("work_mem = %v, want 4096 kB", c.WorkMemKB)
 	}
 
-	if ctx := planContext(c); ctx.WorkMemKB == nil || *ctx.WorkMemKB != 4096 {
+	l := planLogging{WorkMemKB: c.WorkMemKB} //nolint:exhaustruct
+	if ctx := planContext(l); ctx.WorkMemKB == nil || *ctx.WorkMemKB != 4096 {
 		t.Errorf("plan context = %+v, want work_mem from the cluster", ctx)
 	}
 
-	if ctx := planContext(nil); ctx.WorkMemKB != nil {
+	if ctx := planContext(planLogging{}); ctx.WorkMemKB != nil { //nolint:exhaustruct
 		t.Errorf("plan context = %+v, want nothing without a diagnosis", ctx)
+	}
+}
+
+// A plan does not say which host ran it, so a scan over several of them judges
+// one against work_mem only where every host reported the same value.
+func TestSharedWorkMemNeedsEveryHostToAgree(t *testing.T) {
+	t.Parallel()
+
+	withWorkMem := func(v string) *Configuration {
+		return newConfiguration(map[string]string{settingWorkMem: v})
+	}
+
+	if kb := sharedWorkMemKB([]*Configuration{withWorkMem("4096"), withWorkMem("4MB")}); kb == nil || *kb != 4096 {
+		t.Errorf("work_mem = %v, want 4096 kB", kb)
+	}
+
+	if kb := sharedWorkMemKB([]*Configuration{withWorkMem("4096"), withWorkMem("16MB")}); kb != nil {
+		t.Errorf("work_mem = %v, want nothing while the hosts differ", *kb)
+	}
+
+	if kb := sharedWorkMemKB([]*Configuration{withWorkMem("4096"), newConfiguration(nil)}); kb != nil {
+		t.Errorf("work_mem = %v, want nothing while a host reported none", *kb)
 	}
 }
 

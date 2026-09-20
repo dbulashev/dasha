@@ -45,7 +45,10 @@ export default defineConfig({
     // default; the OIDC demo issuer is reached via the "keycloak" hostname
     // (127.0.0.1 keycloak in /etc/hosts), so allow it. Does not affect the
     // production build (served by nginx).
-    allowedHosts: ['keycloak', ...(process.env.DASHA_DEV_HOSTS?.split(',') ?? [])],
+    allowedHosts: [
+      'keycloak',
+      ...(process.env.DASHA_DEV_HOSTS?.split(',').map(h => h.trim()).filter(Boolean) ?? []),
+    ],
     proxy: {
       '/api': {
         target: apiTarget,

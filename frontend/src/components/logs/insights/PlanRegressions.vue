@@ -180,8 +180,8 @@ onMounted(() => {
   compare()
 })
 
-function regressionKey(r: LogPlanRegression): string {
-  return r.query_id ?? r.query_text.slice(0, 80)
+function regressionKey(r: LogPlanRegression, i: number): string {
+  return `${i}:${r.query_id ?? r.query_text.slice(0, 80)}`
 }
 
 const sqlDialog = ref(false)
@@ -282,8 +282,8 @@ function showSql(r: LogPlanRegression) {
 
         <template v-else>
           <RegressionCard
-            v-for="r in result.regressions"
-            :key="regressionKey(r)"
+            v-for="(r, i) in result.regressions"
+            :key="regressionKey(r, i)"
             :item="r"
             class="mt-3"
             @show-sql="showSql"

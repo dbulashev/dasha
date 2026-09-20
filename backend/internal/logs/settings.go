@@ -55,12 +55,8 @@ type Configuration struct {
 
 // planContext is what the cluster adds to a plan read from the log. A plan that
 // printed work_mem itself keeps its own value.
-func planContext(cfg *Configuration) explain.Context {
-	if cfg == nil {
-		return explain.Context{}
-	}
-
-	return explain.Context{WorkMemKB: cfg.WorkMemKB} //nolint:exhaustruct
+func planContext(l planLogging) explain.Context {
+	return explain.Context{WorkMemKB: l.WorkMemKB} //nolint:exhaustruct
 }
 
 // planLogging is what the cluster answered about plan logging: the diagnosis of
@@ -69,6 +65,10 @@ func planContext(cfg *Configuration) explain.Context {
 type planLogging struct {
 	Config *Configuration
 	Levels []string
+	// WorkMemKB is the default a plan that printed none is judged against. A
+	// plan carries no host, so a scan over several of them has it only where
+	// every host reported the same value.
+	WorkMemKB *int64
 }
 
 // readSettings reads plan-logging settings off the given hosts. A host that
@@ -103,30 +103,18 @@ func (s *service) readSettings(ctx context.Context, cluster config.Cluster, host
 	return out, len(out) == len(hosts)
 }
 
-// configuration is the diagnosis alone, off the host a scan was asked for or
-// the first of the cluster. An unreachable cluster leaves it nil and the scan
-// runs regardless.
-func (s *service) configuration(ctx context.Context, cluster config.Cluster, host string) *Configuration {
-	cfgs, _ := s.readSettings(ctx, cluster, diagnosisHost(cluster, host))
-	if len(cfgs) == 0 {
-		return nil
-	}
-
-	return cfgs[0]
-}
-
-// configurationAsync reads the diagnosis while the caller scans: a scan that
-// does not narrow by it must not wait for the cluster before reading the log.
-func (s *service) configurationAsync(
+// planLoggingAsync reads the settings while the caller scans: a scan that does
+// not narrow by them must not wait for the cluster before reading the log.
+func (s *service) planLoggingAsync(
 	ctx context.Context,
 	cluster config.Cluster,
 	host string,
-) func() *Configuration {
-	done := make(chan *Configuration, 1)
+) func() planLogging {
+	done := make(chan planLogging, 1)
 
-	go func() { done <- s.configuration(ctx, cluster, host) }()
+	go func() { done <- s.planLogging(ctx, cluster, host) }()
 
-	return func() *Configuration { return <-done }
+	return func() planLogging { return <-done }
 }
 
 // planLogging adds the levels of every host the scan covers to the diagnosis.
@@ -144,6 +132,8 @@ func (s *service) planLogging(ctx context.Context, cluster config.Cluster, host 
 		return out
 	}
 
+	out.WorkMemKB = sharedWorkMemKB(cfgs)
+
 	for _, cfg := range cfgs {
 		if cfg.LogLevel != "" && !slices.Contains(out.Levels, cfg.LogLevel) {
 			out.Levels = append(out.Levels, cfg.LogLevel)
@@ -153,13 +143,21 @@ func (s *service) planLogging(ctx context.Context, cluster config.Cluster, host 
 	return out
 }
 
-func diagnosisHost(cluster config.Cluster, host string) []string {
-	hosts := scanHosts(cluster, host)
-	if len(hosts) == 0 {
+// sharedWorkMemKB is the work_mem the hosts agree on; one that differs leaves
+// the plans of the scan with no default to fall back on.
+func sharedWorkMemKB(cfgs []*Configuration) *int64 {
+	kb := cfgs[0].WorkMemKB
+	if kb == nil {
 		return nil
 	}
 
-	return hosts[:1]
+	for _, cfg := range cfgs[1:] {
+		if cfg.WorkMemKB == nil || *cfg.WorkMemKB != *kb {
+			return nil
+		}
+	}
+
+	return kb
 }
 
 // scanHosts are the hosts a scan reads, which is the whole cluster unless one

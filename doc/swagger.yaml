@@ -4068,7 +4068,7 @@ components:
       properties:
         total:
           type: integer
-          description: groups the scan holds, after query_id is applied
+          description: groups matching query_id and with_findings, before the page is cut
         items:
           type: array
           items:

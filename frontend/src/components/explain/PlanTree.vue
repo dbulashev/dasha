@@ -57,6 +57,19 @@ const rows = computed(() => flat.value.filter(r => !hidden(r.key)))
 
 const highlightKey = computed(() => (props.highlight ? pathKey(props.highlight) : null))
 
+// A finding may name a node inside a subtree the reader collapsed.
+watch(highlightKey, key => {
+  if (!key || collapsed.value.size === 0) return
+
+  const next = new Set(collapsed.value)
+  next.delete('')
+
+  const parts = key.split('.')
+  for (let i = 1; i < parts.length; i++) next.delete(parts.slice(0, i).join('.'))
+
+  if (next.size !== collapsed.value.size) collapsed.value = next
+})
+
 // PostgreSQL's own labels: a merge join prints its condition and its qual as two
 // separate lines, and reading them under one name would hide half the node.
 function cond(node: PlanNode): { label: string; value: string; omitted?: number }[] {

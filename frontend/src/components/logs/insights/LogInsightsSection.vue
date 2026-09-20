@@ -309,7 +309,9 @@ function copyLink() {
     <div class="d-flex align-center flex-wrap ga-2">
       <span>{{ t('logs.insights.queryIdFilter', { queryId }) }}</span>
       <v-spacer />
-      <v-btn size="small" variant="text" @click="setQueryId('')">{{ t('logs.insights.clearQueryId') }}</v-btn>
+      <v-btn size="small" variant="text" :disabled="loading" @click="setQueryId('')">
+        {{ t('logs.insights.clearQueryId') }}
+      </v-btn>
     </div>
   </v-alert>
 

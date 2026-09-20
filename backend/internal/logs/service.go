@@ -186,6 +186,12 @@ func (s *service) Search(ctx context.Context, q SearchQuery) (SearchResult, erro
 		Token: q.PageToken,
 	}
 
+	// A term on a field the store indexes as text matches no record at all, so
+	// the statement id goes down only where the store says it can run it.
+	if q.QueryID != nil {
+		params.Filter.QueryID = narrow(ctx, b.provider, params).QueryID
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(s.cfg.TimeoutSeconds)*time.Second)
 	defer cancel()
 
