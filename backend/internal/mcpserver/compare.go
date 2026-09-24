@@ -17,8 +17,8 @@ const (
 	compareFloorLimit   = 5
 	compareQueryBytes   = 200
 
-	// verdictChangePct is the growth of calls or of the mean time per call that
-	// names it as the cause.
+	// verdictChangePct is the growth of calls, or of the interval's mean time per
+	// call over A's, that names it as the cause.
 	verdictChangePct = 20.0
 
 	compareNext = "query_report(queryid) for the full text and both sides' metrics"
@@ -42,7 +42,8 @@ var compareSorts = map[string]func(compareDelta) float64{
 	"io_time":           func(d compareDelta) float64 { return d.IoTimeMs },
 }
 
-// compareDelta is B minus A; a side missing from one snapshot counts as zero.
+// compareDelta is B minus A, except MeanExecTimeMs (intervalMean minus A's
+// mean); a side missing from one snapshot counts as zero.
 type compareDelta struct {
 	Calls          int64   `json:"calls"`
 	ExecTimeMs     float64 `json:"exec_time_ms"`
@@ -133,15 +134,17 @@ func (r *compareResult) take(limit int) {
 
 func compareItem(it apiclient.QueryCompareItem) compareEntry {
 	left, right := sideOf(it.Left), sideOf(it.Right)
+	query := strings.Join(strings.Fields(it.Query), " ")
+	mean := intervalMean(left, right)
 
 	e := compareEntry{ //nolint:exhaustruct
 		QueryID:    it.QueryID,
-		QueryTrunc: truncQuery(it.Query),
-		QueryLen:   len(it.Query),
+		QueryTrunc: truncQuery(query),
+		QueryLen:   len(query),
 		Delta: compareDelta{
 			Calls:          right.calls - left.calls,
 			ExecTimeMs:     right.exec - left.exec,
-			MeanExecTimeMs: right.mean - left.mean,
+			MeanExecTimeMs: mean - left.mean,
 			Rows:           right.rows - left.rows,
 			IoTimeMs:       right.io - left.io,
 		},
@@ -160,7 +163,7 @@ func compareItem(it apiclient.QueryCompareItem) compareEntry {
 		e.ChangePct = &compareChange{
 			Calls:          pctChange(float64(left.calls), float64(right.calls)),
 			ExecTimeMs:     pctChange(left.exec, right.exec),
-			MeanExecTimeMs: pctChange(left.mean, right.mean),
+			MeanExecTimeMs: pctChange(left.mean, mean),
 		}
 		e.Verdict = verdictOf(e.Delta, e.ChangePct)
 	}
@@ -204,29 +207,24 @@ func sideOf(m *apiclient.QueryReportMetrics) compareSide {
 		return compareSide{} //nolint:exhaustruct
 	}
 
-	deref := func(p *float64) float64 {
-		if p == nil {
-			return 0
-		}
-
-		return *p
-	}
-
-	derefInt := func(p *int64) int64 {
-		if p == nil {
-			return 0
-		}
-
-		return *p
-	}
-
 	return compareSide{
-		calls: derefInt(m.Calls),
-		rows:  derefInt(m.Rows),
+		calls: deref(m.Calls),
+		rows:  deref(m.Rows),
 		exec:  deref(m.ExecTimeMs),
 		mean:  deref(m.MeanExecTimeMs),
 		io:    deref(m.IoTimeMs),
 	}
+}
+
+// intervalMean is the mean time per call of the calls made between A and B.
+func intervalMean(left, right compareSide) float64 {
+	calls, exec := right.calls-left.calls, right.exec-left.exec
+	if calls <= 0 || exec < 0 {
+		// counters were reset between the snapshots: B holds a period of its own
+		return right.mean
+	}
+
+	return exec / float64(calls)
 }
 
 func pctChange(a, b float64) *float64 {
@@ -240,7 +238,6 @@ func pctChange(a, b float64) *float64 {
 }
 
 func truncQuery(q string) string {
-	q = strings.Join(strings.Fields(q), " ")
 	if len(q) <= compareQueryBytes {
 		return q
 	}

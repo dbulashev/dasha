@@ -31,10 +31,10 @@ func cmpItem(id string, left, right *apiclient.QueryReportMetrics) apiclient.Que
 func cmpFixture() []apiclient.QueryCompareItem {
 	return []apiclient.QueryCompareItem{
 		cmpItem("more", cmpSide(1000, 1000, 10, 5), cmpSide(2000, 2000, 20, 10)),
-		cmpItem("slower", cmpSide(1000, 1000, 10, 5), cmpSide(1000, 4000, 10, 400)),
+		cmpItem("slower", cmpSide(1000, 1000, 10, 5), cmpSide(1100, 3100, 10, 400)),
 		cmpItem("added", nil, cmpSide(10, 300, 5000, 1)),
 		cmpItem("removed", cmpSide(10, 50, 1, 3), nil),
-		cmpItem("stable", cmpSide(1000, 1000, 10, 5), cmpSide(1050, 1060, 10, 5)),
+		cmpItem("stable", cmpSide(1000, 1000, 10, 5), cmpSide(1050, 1050, 10, 5)),
 	}
 }
 
@@ -63,8 +63,8 @@ func TestQueryCompare_Verdicts(t *testing.T) {
 	}
 
 	s := entryByID(r, "slower")
-	if s.Delta.ExecTimeMs != 3000 || s.Delta.MeanExecTimeMs != 3 || s.ChangePct == nil ||
-		*s.ChangePct.MeanExecTimeMs != 300 || *s.ChangePct.Calls != 0 {
+	if s.Delta.ExecTimeMs != 2100 || s.Delta.MeanExecTimeMs != 20 || s.ChangePct == nil ||
+		*s.ChangePct.MeanExecTimeMs != 2000 || *s.ChangePct.Calls != 10 {
 		t.Errorf("slower delta = %+v change = %+v", s.Delta, s.ChangePct)
 	}
 
@@ -95,6 +95,23 @@ func TestQueryCompare_SlowerAndMoreCalls(t *testing.T) {
 
 	if v := entryByID(r, "less").Verdict; v != verdictLessLoad {
 		t.Errorf("less = %s", v)
+	}
+}
+
+func TestQueryCompare_IntervalMean(t *testing.T) {
+	t.Parallel()
+
+	r := buildCompare([]apiclient.QueryCompareItem{
+		cmpItem("hot", cmpSide(1_000_000, 1_000_000, 1, 0), cmpSide(1_010_000, 1_100_000, 1, 0)),
+		cmpItem("reset", cmpSide(1000, 1000, 1, 0), cmpSide(500, 2000, 1, 0)),
+	}, compareSortExecTime, compareDefaultLimit)
+
+	if h := entryByID(r, "hot"); h.Verdict != verdictSlower || h.Delta.MeanExecTimeMs != 9 {
+		t.Errorf("hot = %s, delta = %+v", h.Verdict, h.Delta)
+	}
+
+	if v := entryByID(r, "reset").Verdict; v != verdictSlower {
+		t.Errorf("reset = %s, want B's own mean against A's", v)
 	}
 }
 
@@ -145,8 +162,14 @@ func TestQueryCompare_TruncQuery(t *testing.T) {
 		t.Errorf("query_trunc = %q (%d bytes)", e.QueryTrunc, len(e.QueryTrunc))
 	}
 
-	if !utf8.ValidString(e.QueryTrunc) || e.QueryLen != len(long) {
-		t.Errorf("query_len = %d, want %d", e.QueryLen, len(long))
+	want := len(strings.Join(strings.Fields(long), " "))
+	if !utf8.ValidString(e.QueryTrunc) || e.QueryLen != want {
+		t.Errorf("query_len = %d, want %d", e.QueryLen, want)
+	}
+
+	short := compareItem(apiclient.QueryCompareItem{QueryID: "2", Query: "select\n\t\t1"}) //nolint:exhaustruct
+	if short.QueryLen != len(short.QueryTrunc) {
+		t.Errorf("unclipped text: query_len = %d, query_trunc = %q", short.QueryLen, short.QueryTrunc)
 	}
 }
 

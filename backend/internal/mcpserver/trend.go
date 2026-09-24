@@ -16,9 +16,11 @@ const (
 	healthTrendFloorPoints = 12
 	healthTrendMaxDips     = 10
 
-	// categoryDipPoints is how far a category must sit below its window median
-	// to count as having dragged the score down.
+	// categoryDipPoints is how far a category must sit below its reference to
+	// count as having dragged the score down.
 	categoryDipPoints = 5.0
+	// categoryRefPercentile of a category over the window is its reference.
+	categoryRefPercentile = 0.9
 
 	healthTrendNext = "get_health_recommendations for the dip window, then health_details(rule_id); " +
 		"points=N for the series"
@@ -120,7 +122,7 @@ func buildHealthTrend(
 		baselineAt[b.Time.UTC()] = b.Value
 	}
 
-	refs := categoryMedians(series)
+	refs := categoryReferences(series)
 
 	out := &healthTrendResult{ //nolint:exhaustruct
 		Window: healthTrendWindow{
@@ -181,9 +183,9 @@ func baselineStats(h *apiclient.HealthScoreHistory) healthTrendBaseline {
 	return out
 }
 
-// categoryMedians is the per-category reference: the API carries a seasonal
+// categoryReferences is the per-category reference: the API carries a seasonal
 // baseline for the total score only.
-func categoryMedians(series []apiclient.HealthScoreHistoryPoint) map[string]float64 {
+func categoryReferences(series []apiclient.HealthScoreHistoryPoint) map[string]float64 {
 	vals := map[string][]float64{}
 
 	for _, p := range series {
@@ -195,13 +197,7 @@ func categoryMedians(series []apiclient.HealthScoreHistoryPoint) map[string]floa
 	out := make(map[string]float64, len(vals))
 	for k, v := range vals {
 		slices.Sort(v)
-
-		n := len(v)
-		if n%2 == 1 {
-			out[k] = v[n/2]
-		} else {
-			out[k] = (v[n/2-1] + v[n/2]) / 2
-		}
+		out[k] = v[int(math.Ceil(categoryRefPercentile*float64(len(v))))-1]
 	}
 
 	return out
@@ -340,7 +336,7 @@ func dipRuns(
 }
 
 // decimate splits the series into n buckets and keeps the lowest-score point of
-// each: a dip matters more than a smoothed average.
+// each.
 func (r *healthTrendResult) decimate(n int) []healthTrendPoint {
 	total := len(r.series)
 	n = min(n, total)

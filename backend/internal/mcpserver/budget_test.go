@@ -14,6 +14,7 @@ import (
 type fakeShaped struct {
 	Items []int `json:"items"`
 	total int
+	floor int
 }
 
 func newFakeShaped(n int) fakeShaped {
@@ -22,17 +23,17 @@ func newFakeShaped(n int) fakeShaped {
 		items[i] = 1000 + i
 	}
 
-	return fakeShaped{Items: items, total: n}
+	return fakeShaped{Items: items, total: n} //nolint:exhaustruct
 }
 
 func (f fakeShaped) shrink() (shapedResult, string, bool) {
-	if len(f.Items) <= 1 {
+	if len(f.Items) <= max(f.floor, 1) {
 		return nil, "lower limit", false
 	}
 
-	n := len(f.Items) / 2
+	n := max(len(f.Items)/2, f.floor)
 
-	return fakeShaped{Items: f.Items[:n], total: f.total}, "limit=" + strconv.Itoa(n), true
+	return fakeShaped{Items: f.Items[:n], total: f.total, floor: f.floor}, "limit=" + strconv.Itoa(n), true
 }
 
 func (f fakeShaped) note() *shapeNote {
@@ -138,7 +139,10 @@ func TestJSONResult_ShrinkFloorRefusesWithToolHint(t *testing.T) {
 
 	ctx, rec := budgetCtx(10)
 
-	res, _, _ := jsonResult(ctx)(newFakeShaped(50), nil)
+	f := newFakeShaped(60000)
+	f.floor = 50000
+
+	res, _, _ := jsonResult(ctx)(f, nil)
 	if !res.IsError {
 		t.Fatalf("payload that cannot fit must be refused")
 	}
@@ -149,6 +153,24 @@ func TestJSONResult_ShrinkFloorRefusesWithToolHint(t *testing.T) {
 
 	if !rec.refused {
 		t.Errorf("refusal not recorded")
+	}
+}
+
+func TestJSONResult_ShrinkFloorUnderUnshapedCeiling(t *testing.T) {
+	t.Parallel()
+
+	ctx, rec := budgetCtx(10)
+
+	res, _, _ := jsonResult(ctx)(newFakeShaped(50), nil)
+	if res.IsError || rec.refused {
+		t.Fatalf("a floor result under the unshaped ceiling must be returned: %s", contentText(res.Content[0]))
+	}
+
+	var n struct {
+		Shaped shapeNote `json:"shaped"`
+	}
+	if err := json.Unmarshal([]byte(contentText(res.Content[0])), &n); err != nil || n.Shaped.Reason != shapeBudget {
+		t.Errorf("note = %s", contentText(res.Content[0]))
 	}
 }
 

@@ -21,7 +21,7 @@ type DashaClient struct {
 	api   *apiclient.ClientWithResponses
 	token string // the identity bound to this client (stdio default, or per-request via withToken)
 	// slowAPI carries the same identity on a longer deadline, for the reports
-	// Dasha builds on demand (index_advisor) rather than serving from a cache.
+	// Dasha builds on demand (index_advisor, table bloat) rather than serving from a cache.
 	slowAPI *apiclient.ClientWithResponses
 	logger  *zap.Logger
 
@@ -843,10 +843,14 @@ func (d *DashaClient) TableDescribe(
 func (d *DashaClient) TableDescribeBloat(
 	ctx context.Context, cluster, instance, database, schema, table string,
 ) (*apiclient.TableDescribeBloat, error) {
-	r, err := d.api.GetTablesDescribeBloatWithResponse(ctx, &apiclient.GetTablesDescribeBloatParams{
+	r, err := d.slowAPI.GetTablesDescribeBloatWithResponse(ctx, &apiclient.GetTablesDescribeBloatParams{
 		ClusterName: cluster, Instance: instance, Database: database, Schema: schema, Table: table,
 	}, d.editor(ctx))
 	if err != nil {
+		if isTimeout(err) {
+			return nil, fmt.Errorf("%w: %w", errQueryTimeout, err)
+		}
+
 		return nil, wrapErr("describe_table", err)
 	}
 
@@ -857,6 +861,8 @@ func (d *DashaClient) TableDescribeBloat(
 		return nil, fmt.Errorf("%w: %s", errObjectLocked, r.JSON423.Message)
 	case r.JSON504 != nil:
 		return nil, fmt.Errorf("%w: %s", errQueryTimeout, r.JSON504.Message)
+	case r.StatusCode() == http.StatusInternalServerError:
+		return nil, fmt.Errorf("%w: %w", errBloatFailed, statusError("describe_table", r.HTTPResponse))
 	default:
 		return nil, statusError("describe_table", r.HTTPResponse)
 	}

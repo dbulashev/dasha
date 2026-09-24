@@ -49,6 +49,29 @@ func buildFixtureTrend(points int) *healthTrendResult {
 	return buildHealthTrend(trendFixture(), trendT0, trendT0.Add(24*time.Hour), 300, time.Hour, points)
 }
 
+func TestCategoryReferences_LongDegradation(t *testing.T) {
+	t.Parallel()
+
+	series := make([]apiclient.HealthScoreHistoryPoint, 0, 24)
+	for i := range 24 {
+		storage := 90.0
+		if i >= 6 && i < 23 {
+			storage = 40
+		}
+
+		series = append(series, apiclient.HealthScoreHistoryPoint{Categories: trendCats(storage)}) //nolint:exhaustruct
+	}
+
+	refs := categoryReferences(series)
+	if refs["storage"] != 90 {
+		t.Errorf("storage reference = %v, want its healthy level 90", refs["storage"])
+	}
+
+	if got := categoriesBelow(series[10], refs); !slices.Equal(got, []string{"storage"}) {
+		t.Errorf("categories below = %v", got)
+	}
+}
+
 func TestHealthTrend_SummaryFindsDip(t *testing.T) {
 	t.Parallel()
 

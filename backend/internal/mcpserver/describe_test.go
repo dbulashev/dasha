@@ -46,11 +46,18 @@ func TestBloatFailure(t *testing.T) {
 	}{
 		{fmt.Errorf("%w: held", errObjectLocked), bloatLockTimeout},
 		{fmt.Errorf("%w: slow", errQueryTimeout), bloatTimeout},
-		{errors.New("dasha: describe_table returned status 500"), bloatError},
+		{fmt.Errorf("%w: %w", errQueryTimeout, context.DeadlineExceeded), bloatTimeout},
+		{fmt.Errorf("%w: status 500", errBloatFailed), bloatError},
 	} {
 		u := bloatFailure(tc.err)
-		if u.Unavailable != tc.want || u.Hint == "" || u.Detail != tc.err.Error() {
+		if u == nil || u.Unavailable != tc.want || u.Hint == "" || u.Detail != tc.err.Error() {
 			t.Errorf("%v: %+v, want %s", tc.err, u, tc.want)
+		}
+	}
+
+	for _, err := range []error{nil, errors.New("dasha: rate limited (429) on describe_table"), errNotFound} {
+		if u := bloatFailure(err); u != nil {
+			t.Errorf("%v must stay a bloat_error, got %+v", err, u)
 		}
 	}
 }
@@ -212,5 +219,26 @@ func TestE2E_DescribeTableBloat(t *testing.T) {
 				t.Errorf("bloat endpoint called = %v, want %v", got, tc.bloatCalled)
 			}
 		})
+	}
+}
+
+func TestE2E_DescribeTableAllUnauthorized(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(srv.Close)
+
+	res, err := connect(t, srv.URL).CallTool(context.Background(), &mcp.CallToolParams{ //nolint:exhaustruct
+		Name:      "describe_table",
+		Arguments: map[string]any{"cluster": "demo", "instance": "h1", "database": "app", "table": "events"},
+	})
+	if err != nil {
+		t.Fatalf("CallTool: %v", err)
+	}
+
+	if !res.IsError {
+		t.Errorf("every section failed, want IsError: %s", firstText(res))
 	}
 }

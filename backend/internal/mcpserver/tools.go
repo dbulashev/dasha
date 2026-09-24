@@ -246,7 +246,7 @@ type searchLogsArgs struct {
 	Since       string   `json:"since,omitempty" jsonschema:"Look-back window ending now, e.g. '15m', '1h', '24h' (default '1h'); ignored when from/to are set"`
 	From        string   `json:"from,omitempty" jsonschema:"Window start, RFC3339 (e.g. 2026-07-10T12:00:00Z); set together with to"`
 	To          string   `json:"to,omitempty" jsonschema:"Window end, RFC3339; set together with from"`
-	Severity    []string `json:"severity,omitempty" jsonschema:"Severities to include; the values a cluster accepts per stream are listed in log_severities of list_clusters. PostgreSQL uses upper-case (ERROR, FATAL, PANIC, WARNING, LOG)"`
+	Severity    []string `json:"severity,omitempty" jsonschema:"Severities to include; the values a cluster accepts per stream are listed in log_severities of list_clusters(cluster=<exact name>). PostgreSQL uses upper-case (ERROR, FATAL, PANIC, WARNING, LOG)"`
 	Host        string   `json:"host,omitempty" jsonschema:"Optional: restrict to one cluster host"`
 	Message     []string `json:"message,omitempty" jsonschema:"Substrings that must all be present in the message (AND, case-insensitive)"`
 	Exclude     []string `json:"exclude,omitempty" jsonschema:"Drop records whose message contains any of these substrings (grep -v)"`
@@ -557,7 +557,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			"range='24h' (default), '7d' or '30d'. Answers with a summary: score min/max/avg/last; dips — runs " +
 			"of points more than the configured drop below the seasonal baseline, each at its deepest point " +
 			"with worst_category and categories_below_baseline (categories more than 5 points under their " +
-			"median over the window; the seasonal baseline covers the total score only), up to 10 deepest, " +
+			"90th percentile over the window; the seasonal baseline covers the total score only), up to 10 deepest, " +
 			"dips_total counting all; periods — the minimum per hour (24h), 6 hours (7d) or day (30d) with " +
 			"its worst category. points=N adds the series decimated to N buckets holding the lowest point of " +
 			"each, with per-category scores. Dips need baseline.available. Metrics-backed mode only.",
@@ -567,7 +567,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 		}
 
 		if a.Points < 0 || a.Points > healthTrendMaxPoints {
-			return errResult("points must be 200 or less"), nil, nil
+			return errResult("points must be between 1 and 200"), nil, nil
 		}
 
 		return jsonResult(ctx)(healthTrend(ctx, c, a))
@@ -649,18 +649,19 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			"with live stats, is refused rather than answered with invented matches; list_snapshots reports " +
 			"the generation as json_version. Get IDs from list_snapshots. " +
 			"Answers which query changed and how: summary compared/returned/added/removed, then queries ranked " +
-			"by the delta of sort (default exec_time), each with delta (B minus A: calls, exec_time_ms, " +
-			"mean_exec_time_ms, rows, io_time_ms), change_pct against A, and verdict — 'slower' (mean time per " +
-			"call up 20% or more), 'more_calls' (calls up 20% or more), 'slower_and_more_calls', 'less_load', " +
-			"'stable', 'added' (only in B), 'removed' (only in A). The query text is clipped (query_len is the " +
-			"full length); query_report(queryid) gives the full text and both sides' metrics.",
+			"by the delta of sort (default exec_time), each with delta (B minus A: calls, exec_time_ms, rows, " +
+			"io_time_ms; mean_exec_time_ms is the mean of the calls made between A and B minus A's mean), " +
+			"change_pct against A, and verdict — 'slower' (that interval mean 20% or more above A's), " +
+			"'more_calls' (calls up 20% or more), 'slower_and_more_calls', 'less_load', 'stable', 'added' " +
+			"(only in B), 'removed' (only in A). The query text is whitespace-collapsed and clipped (query_len " +
+			"is its unclipped length); query_report(queryid) gives the full text and both sides' metrics.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a queryCompareArgs) (*mcp.CallToolResult, any, error) {
 		if _, ok := compareSorts[a.Sort]; a.Sort != "" && !ok {
 			return errResult("sort must be 'exec_time', 'calls', 'rows' or 'io_time'"), nil, nil
 		}
 
 		if a.Limit < 0 || a.Limit > compareMaxLimit {
-			return errResult("limit must be 100 or less"), nil, nil
+			return errResult("limit must be between 1 and 100"), nil, nil
 		}
 
 		return jsonResult(ctx)(queryCompare(ctx, c, a))
@@ -715,42 +716,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			"transaction's lock blocked the scan), 'timeout', or 'error' (usually the pgstattuple extension is " +
 			"missing or not executable). Over the size budget the partition list is shortened first.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a describeTableArgs) (*mcp.CallToolResult, any, error) {
-		schema := a.Schema
-		if schema == "" {
-			schema = "public"
-		}
-
-		partitionLimit := a.Limit
-		if partitionLimit <= 0 {
-			partitionLimit = defaultPartitionLimit
-		}
-
-		out := tableSections{}
-
-		d, err := c.TableDescribe(ctx, a.Cluster, a.Instance, a.Database, schema, a.Table)
-		section(out, "table", d, err)
-
-		if skip := bloatSkipped(d); skip != nil {
-			out["bloat"] = skip
-		} else {
-			bl, bErr := c.TableDescribeBloat(ctx, a.Cluster, a.Instance, a.Database, schema, a.Table)
-			if bErr != nil && !errors.Is(bErr, errNotFound) {
-				out["bloat"] = bloatFailure(bErr)
-			} else {
-				section(out, "bloat", bl, bErr)
-			}
-		}
-
-		pt, err := c.TableDescribePartitions(ctx, a.Cluster, a.Instance, a.Database, schema, a.Table, partitionLimit)
-		section(out, "partitions", pt, err)
-
-		re, err := c.TableDescribeRowEstimate(ctx, a.Cluster, a.Instance, a.Database, schema, a.Table)
-		section(out, "row_estimate", re, err)
-
-		vs, err := c.TableDescribeVacuumStats(ctx, a.Cluster, a.Instance, a.Database, schema, a.Table)
-		section(out, "vacuum_stats", vs, err)
-
-		return sectionsResult(ctx, out)
+		return sectionsResult(ctx, describeTable(ctx, c, a))
 	})
 
 	addTool(s, &mcp.Tool{
@@ -764,8 +730,8 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 	addTool(s, &mcp.Tool{
 		Name: "search_logs",
 		Description: "Search PostgreSQL server or connection-pooler logs of a cluster whose logs Dasha can " +
-			"reach (supports_logs=true in list_clusters; log_streams lists the streams it serves). Every call " +
-			"reaches the log store and is rate-limited per user (the operator sets the limit per source) — " +
+			"reach (supports_logs=true in list_clusters; log_streams of list_clusters(cluster=<exact name>) " +
+			"lists the streams it serves). Every call reaches the log store and is rate-limited per user (the operator sets the limit per source) — " +
 			"make each call count: keep the default dedup=true overview, a narrow window (since='1h') and " +
 			"severity/message filters, and refine with one follow-up call instead of paging raw records. " +
 			"After a 429 back off before retrying.",

@@ -136,13 +136,13 @@ func TestListClusters_DoesNotReorderInput(t *testing.T) {
 	}
 }
 
-func TestListClusters_OverBudgetRefusesWithHint(t *testing.T) {
+func TestListClusters_OverBudgetReturnedUnderUnshapedCeiling(t *testing.T) {
 	t.Parallel()
 
 	ctx, rec := budgetCtx(256)
 
 	res, _, _ := renderResult(ctx, buildListClusters(clusterListFixture(), "", true), nil)
-	if !res.IsError || !rec.refused || !strings.Contains(contentText(res.Content[0]), "pass cluster") {
+	if res.IsError || rec.refused {
 		t.Errorf("result = %s", contentText(res.Content[0]))
 	}
 }
