@@ -156,17 +156,18 @@ func TestBudgetFor(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		tool   string
+		shaped bool
 		budget int
 		want   int
 	}{
-		{"io_summary", 0, defaultMaxResultBytes},
-		{"io_summary", 32 << 10, 32 << 10},
-		{"schema_lint", 32 << 10, unshapedResultBytes},
-		{"schema_lint", 1 << 20, 1 << 20},
+		{true, 0, defaultMaxResultBytes},
+		{true, 32 << 10, 32 << 10},
+		{false, 0, unshapedResultBytes},
+		{false, 32 << 10, unshapedResultBytes},
+		{false, 1 << 20, 1 << 20},
 	} {
-		if got := budgetFor(tc.tool, tc.budget); got != tc.want {
-			t.Errorf("budgetFor(%q, %d) = %d, want %d", tc.tool, tc.budget, got, tc.want)
+		if got := budgetFor(tc.shaped, tc.budget); got != tc.want {
+			t.Errorf("budgetFor(%v, %d) = %d, want %d", tc.shaped, tc.budget, got, tc.want)
 		}
 	}
 }

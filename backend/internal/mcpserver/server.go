@@ -14,16 +14,16 @@ import (
 // args via json/jsonschema struct tags. lang selects the knowledge-base
 // language ("en"/"ru"; unknown values fall back to "en").
 func NewMCPServer(client *DashaClient, version, lang string) *mcp.Server {
-	return newServer(client, version, lang, nil, newToolStats())
+	return newServer(client, version, lang, nil)
 }
 
 // newServer builds the server with shared options. cache is nil for stdio (one
 // server for the process) or a shared *mcp.SchemaCache for HTTP (a server per
 // token), where it avoids re-deriving every tool's schema by reflection. The
 // instructions, prompt playbooks and knowledge-base resources come in lang
-// ("en"/"ru"; unknown falls back to "en"). stats is shared by every server of
-// the process.
-func newServer(client *DashaClient, version, lang string, cache *mcp.SchemaCache, stats *toolStats) *mcp.Server {
+// ("en"/"ru"; unknown falls back to "en"). Tool stats are per server: tool-stats
+// is read without a Dasha call, so it must not span tokens.
+func newServer(client *DashaClient, version, lang string, cache *mcp.SchemaCache) *mcp.Server {
 	if !validLang(lang) {
 		lang = kbDefaultLang
 	}
@@ -41,6 +41,7 @@ func newServer(client *DashaClient, version, lang string, cache *mcp.SchemaCache
 	registerTools(s, client)
 	registerPrompts(s, t)
 	registerResources(s, lang)
+	stats := newToolStats()
 	registerStatsResource(s, stats, client.maxResultBytes)
 
 	// Each call wraps the previous chain: logging ends up outermost and sees the

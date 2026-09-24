@@ -17,7 +17,8 @@ import (
 const fleetFixture = `[
  {"name":"acme-prod","source":"yandex-mdb","instances":[{"host_name":"h1"},{"host_name":"h2"}],"databases":["stock","cart"]},
  {"name":"acme-prod-dr","source":"yandex-mdb","instances":[{"host_name":"h9"}],"databases":["stock","cart"]},
- {"name":"billing","source":"static","instances":[{"host_name":"b1"}],"databases":["ledger"]}
+ {"name":"billing","source":"static","instances":[{"host_name":"b1"}],"databases":["ledger"]},
+ {"name":"bare","source":"static","instances":[],"databases":[]}
 ]`
 
 func fleet(t *testing.T) []apiclient.Cluster {
@@ -42,11 +43,15 @@ func TestResolveTarget_Scopes(t *testing.T) {
 		scope  string
 		first  string
 	}{
-		{"cluster", callTarget{Cluster: "acme prod"}, scopeCluster, "acme-prod"},                                 //nolint:exhaustruct
-		{"instance", callTarget{Cluster: "acme-prod", Instance: "h3"}, scopeInstance, "h1"},                      //nolint:exhaustruct
-		{"database", callTarget{Cluster: "acme-prod", Instance: "h1", Database: "stok"}, scopeDatabase, "stock"}, //nolint:exhaustruct
-		{"feature", callTarget{Cluster: "acme-prod", Instance: "h1", Database: "stock"}, scopeFeature, ""},       //nolint:exhaustruct
-		{"feature without instance", callTarget{Cluster: "billing", Database: "ledger"}, scopeFeature, ""},       //nolint:exhaustruct
+		{"cluster", callTarget{Cluster: "acme prod"}, scopeCluster, "acme-prod"},                                        //nolint:exhaustruct
+		{"instance", callTarget{Cluster: "acme-prod", Instance: "h3"}, scopeInstance, "h1"},                             //nolint:exhaustruct
+		{"database", callTarget{Cluster: "acme-prod", Instance: "h1", Database: "stok"}, scopeDatabase, "stock"},        //nolint:exhaustruct
+		{"feature", callTarget{Cluster: "acme-prod", Instance: "h1", Database: "stock"}, scopeFeature, ""},              //nolint:exhaustruct
+		{"feature without instance", callTarget{Cluster: "billing", Database: "ledger"}, scopeFeature, ""},              //nolint:exhaustruct
+		{"unlisted databases", callTarget{Cluster: "bare", Instance: "x1", Database: "stok"}, scopeObject, ""},          //nolint:exhaustruct
+		{"unlisted instances", callTarget{Cluster: "bare", Instance: "x9"}, scopeObject, ""},                            //nolint:exhaustruct
+		{"object", callTarget{Cluster: "acme-prod", Instance: "h1", Database: "stock", Table: "nope"}, scopeObject, ""}, //nolint:exhaustruct
+		{"object after cluster", callTarget{Cluster: "acme prod", Table: "nope"}, scopeCluster, "acme-prod"},            //nolint:exhaustruct
 	} {
 		ans := resolveTarget(tc.target, cl)
 		if ans.Scope != tc.scope {
@@ -80,8 +85,8 @@ func TestResolveTarget_ClusterCandidatesCarryDistinguishingFields(t *testing.T) 
 		t.Errorf("did_you_mean = %+v, want %+v", cands, want)
 	}
 
-	if ans.Total != 3 {
-		t.Errorf("total = %d, want 3", ans.Total)
+	if ans.Total != 4 {
+		t.Errorf("total = %d, want 4", ans.Total)
 	}
 }
 
@@ -201,6 +206,81 @@ func TestE2E_ToolStatsResource(t *testing.T) {
 	if st.Calls != 2 || st.MaxBytes == 0 {
 		t.Errorf("list_clusters stats = %+v", st)
 	}
+}
+
+func TestHTTP_ToolStatsPerToken(t *testing.T) {
+	t.Parallel()
+
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(fleetFixture))
+	}))
+	defer backend.Close()
+
+	base, err := NewDashaClient(Config{DashaURL: backend.URL}) //nolint:exhaustruct
+	if err != nil {
+		t.Fatalf("NewDashaClient: %v", err)
+	}
+
+	srv := httptest.NewServer(HTTPHandler(base, "test", "en"))
+	defer srv.Close()
+
+	ctx := context.Background()
+	alice, bob := connectHTTP(t, srv.URL, "alice"), connectHTTP(t, srv.URL, "bob")
+
+	if _, err := alice.CallTool(ctx, &mcp.CallToolParams{Name: "list_clusters"}); err != nil { //nolint:exhaustruct
+		t.Fatalf("CallTool: %v", err)
+	}
+
+	for _, tc := range []struct {
+		name  string
+		cs    *mcp.ClientSession
+		calls int
+	}{{"alice", alice, 1}, {"bob", bob, 0}} {
+		rr, err := tc.cs.ReadResource(ctx, &mcp.ReadResourceParams{URI: toolStatsURI}) //nolint:exhaustruct
+		if err != nil {
+			t.Fatalf("%s ReadResource: %v", tc.name, err)
+		}
+
+		var view toolStatsView
+		if err := json.Unmarshal([]byte(rr.Contents[0].Text), &view); err != nil {
+			t.Fatalf("stats are not JSON: %v", err)
+		}
+
+		if got := view.Tools["list_clusters"].Calls; got != tc.calls {
+			t.Errorf("%s sees %d list_clusters calls, want %d", tc.name, got, tc.calls)
+		}
+	}
+}
+
+type bearerTransport string
+
+func (b bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	req.Header.Set("Authorization", "Bearer "+string(b))
+
+	return http.DefaultTransport.RoundTrip(req)
+}
+
+func connectHTTP(t *testing.T, url, token string) *mcp.ClientSession {
+	t.Helper()
+
+	transport := &mcp.StreamableClientTransport{ //nolint:exhaustruct
+		Endpoint:             url,
+		HTTPClient:           &http.Client{Transport: bearerTransport(token)}, //nolint:exhaustruct
+		MaxRetries:           -1,
+		DisableStandaloneSSE: true,
+	}
+
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: "test-client", Version: "v0"}, nil). //nolint:exhaustruct
+												Connect(context.Background(), transport, nil)
+	if err != nil {
+		t.Fatalf("client connect: %v", err)
+	}
+
+	t.Cleanup(func() { _ = cs.Close() })
+
+	return cs
 }
 
 func connect(t *testing.T, url string) *mcp.ClientSession {

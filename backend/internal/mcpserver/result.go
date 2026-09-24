@@ -18,27 +18,16 @@ const (
 	maxShrinkSteps = 32
 )
 
-// unshapedTools keep the pre-budget ceiling until their result shape is worked
-// out; a tool leaves this list together with its first shapedResult.
-var unshapedTools = map[string]bool{
-	"unused_index_report": true,
-	"hot_tables":          true,
-	"index_advisor":       true,
-	"connections":         true,
-	"query_report":        true,
-	"schema_lint":         true,
-	"health_trend":        true,
-	"list_clusters":       true,
-	"query_compare":       true,
-	"describe_table":      true,
-}
+// shapedTools narrow their own result and live under the configured budget; the
+// rest keep unshapedResultBytes. A tool joins together with its shapedResult.
+var shapedTools = map[string]bool{}
 
-func budgetFor(tool string, budget int) int {
+func budgetFor(shaped bool, budget int) int {
 	if budget <= 0 {
 		budget = defaultMaxResultBytes
 	}
 
-	if unshapedTools[tool] && budget < unshapedResultBytes {
+	if !shaped && budget < unshapedResultBytes {
 		return unshapedResultBytes
 	}
 
@@ -171,7 +160,7 @@ func shapedContent(note string, body []byte) *mcp.CallToolResult {
 func oversizedResult(size, limit int, hint string) *mcp.CallToolResult {
 	if hint == "" {
 		hint = "narrow the request — target a single database, use a more specific tool, " +
-			"or a smaller range — the full result exceeds the response size limit"
+			"a smaller range, limit or page_size — the full result exceeds the response size limit"
 	}
 
 	b, _ := json.Marshal(map[string]any{

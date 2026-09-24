@@ -82,17 +82,16 @@ func budgetMiddleware(client *DashaClient, stats *toolStats) mcp.Middleware {
 			}
 
 			rec.tool = p.Name
-			rec.budget = budgetFor(p.Name, client.maxResultBytes)
+			rec.budget = budgetFor(shapedTools[p.Name], client.maxResultBytes)
 			rec.args = p.Arguments
 			rec.client = client
 
 			res, err := next(ctx, method, req)
 
-			if r, ok := res.(*mcp.CallToolResult); ok {
+			if r, ok := res.(*mcp.CallToolResult); ok && r != nil {
 				rec.bytes = contentBytes(r)
+				stats.record(rec)
 			}
-
-			stats.record(rec)
 
 			return res, err
 		}
@@ -127,7 +126,7 @@ type toolStat struct {
 	buckets  [len(sizeBuckets) + 1]int
 }
 
-// toolStats is one per process: in HTTP mode a server is built per token.
+// toolStats is one per server: per process in stdio, per token in HTTP mode.
 type toolStats struct {
 	mu    sync.Mutex
 	since time.Time
@@ -224,10 +223,10 @@ func registerStatsResource(s *mcp.Server, stats *toolStats, budget int) {
 		Name:  "tool-stats",
 		Title: "Tool result sizes",
 		Description: "Operator telemetry, not diagnostics: per-tool call count, result size (average, maximum, " +
-			"histogram), how often a result was narrowed or refused, since this server process started.",
+			"histogram), how often a result was narrowed or refused, for this identity since the server started.",
 		MIMEType: "application/json",
 	}, func(_ context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
-		b, err := json.Marshal(stats.snapshot(budgetFor("", budget)))
+		b, err := json.Marshal(stats.snapshot(budgetFor(true, budget)))
 		if err != nil {
 			return nil, fmt.Errorf("mcp: encode tool stats: %w", err)
 		}

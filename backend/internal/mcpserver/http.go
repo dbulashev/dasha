@@ -33,14 +33,13 @@ func HTTPHandler(base *DashaClient, version, lang string) http.Handler {
 	// schemas are identical for every identity, so derive them once by reflection
 	// rather than per token.
 	schemas := mcp.NewSchemaCache()
-	stats := newToolStats()
 	cache := newServerCache(maxCachedServers)
 
 	return mcp.NewStreamableHTTPHandler(func(req *http.Request) *mcp.Server {
 		token := tokenFromRequest(req)
 
 		return cache.get(tokenCacheKey(token), func() *mcp.Server {
-			return newServer(base.withToken(token), version, lang, schemas, stats)
+			return newServer(base.withToken(token), version, lang, schemas)
 		})
 	}, &mcp.StreamableHTTPOptions{Stateless: true}) //nolint:exhaustruct
 }

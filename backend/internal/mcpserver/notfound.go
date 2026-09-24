@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+	"strings"
 
 	"github.com/dbulashev/dasha/gen/apiclient"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -18,13 +19,34 @@ const (
 	scopeCluster  = "cluster"
 	scopeInstance = "instance"
 	scopeDatabase = "database"
+	scopeObject   = "object"
 	scopeFeature  = "feature"
 )
 
 type callTarget struct {
-	Cluster  string `json:"cluster"`
-	Instance string `json:"instance"`
-	Database string `json:"database"`
+	Cluster   string `json:"cluster"`
+	Instance  string `json:"instance"`
+	Database  string `json:"database"`
+	Schema    string `json:"schema"`
+	Table     string `json:"table"`
+	SnapshotA string `json:"snapshot_a"`
+	SnapshotB string `json:"snapshot_b"`
+}
+
+// objectArgs names the arguments the call carried that Dasha also answers 404
+// for when they point at nothing and that /clusters cannot verify.
+func (t callTarget) objectArgs() []string {
+	var out []string
+
+	for _, a := range []struct{ name, v string }{
+		{"schema", t.Schema}, {"table", t.Table}, {"snapshot_a", t.SnapshotA}, {"snapshot_b", t.SnapshotB},
+	} {
+		if a.v != "" {
+			out = append(out, a.name)
+		}
+	}
+
+	return out
 }
 
 type clusterCandidate struct {
@@ -77,6 +99,8 @@ func resolveTarget(t callTarget, clusters []apiclient.Cluster) notFoundAnswer {
 
 	cl := clusters[i]
 
+	var unverified []string
+
 	if t.Instance != "" {
 		hosts := make([]string, 0)
 
@@ -84,13 +108,32 @@ func resolveTarget(t callTarget, clusters []apiclient.Cluster) notFoundAnswer {
 			hosts = append(hosts, deref(inst.HostName))
 		}
 
-		if !slices.Contains(hosts, t.Instance) {
+		switch {
+		case len(hosts) == 0:
+			unverified = append(unverified, "instance")
+		case !slices.Contains(hosts, t.Instance):
 			return memberMiss(scopeInstance, t.Cluster, t.Instance, hosts)
 		}
 	}
 
-	if dbs := deref(cl.Databases); t.Database != "" && len(dbs) > 0 && !slices.Contains(dbs, t.Database) {
-		return memberMiss(scopeDatabase, t.Cluster, t.Database, dbs)
+	if t.Database != "" {
+		dbs := deref(cl.Databases)
+
+		switch {
+		case len(dbs) == 0:
+			unverified = append(unverified, "database")
+		case !slices.Contains(dbs, t.Database):
+			return memberMiss(scopeDatabase, t.Cluster, t.Database, dbs)
+		}
+	}
+
+	if args := slices.Concat(unverified, t.objectArgs()); len(args) > 0 {
+		return notFoundAnswer{ //nolint:exhaustruct
+			Error: "not_found",
+			Scope: scopeObject,
+			Hint: "the cluster exists: either " + strings.Join(args, ", ") + " names nothing that exists " +
+				"there, or the endpoint behind this tool is disabled in Dasha's configuration",
+		}
 	}
 
 	return notFoundAnswer{ //nolint:exhaustruct
