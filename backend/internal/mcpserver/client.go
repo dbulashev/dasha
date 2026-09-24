@@ -24,6 +24,8 @@ type DashaClient struct {
 	// Dasha builds on demand (index_advisor) rather than serving from a cache.
 	slowAPI *apiclient.ClientWithResponses
 	logger  *zap.Logger
+
+	maxResultBytes int
 }
 
 // NewDashaClient builds a client against the configured Dasha API.
@@ -44,7 +46,13 @@ func NewDashaClient(cfg Config) (*DashaClient, error) {
 		return nil, fmt.Errorf("mcp: build dasha client: %w", err)
 	}
 
-	return &DashaClient{api: api, slowAPI: slowAPI, token: cfg.Token, logger: cfg.Logger}, nil
+	return &DashaClient{
+		api:            api,
+		slowAPI:        slowAPI,
+		token:          cfg.Token,
+		logger:         cfg.Logger,
+		maxResultBytes: cfg.MaxResultBytes,
+	}, nil
 }
 
 // refuseCrossOriginRedirect stops a redirect that leaves the origin of the
@@ -378,8 +386,8 @@ func (d *DashaClient) UnusedIndexReport(ctx context.Context, cluster, database s
 // workload of every host of the cluster. Takes no instance: pg_stat_statements
 // is per-host and is not replicated, so a single-host answer would rank the
 // candidates against a load it never saw. It runs on the slow client — the
-// report is built on demand, never cached — and maps the two ambiguous
-// outcomes itself, since the shared mapping reads 404 as an unknown target.
+// report is built on demand, never cached — and maps both timeout outcomes
+// to one retryable error.
 func (d *DashaClient) IndexAdvisor(
 	ctx context.Context, cluster, database string, excludeUsers []string, limit int,
 ) (*apiclient.IndexAdvisorReport, error) {
@@ -401,9 +409,9 @@ func (d *DashaClient) IndexAdvisor(
 	if r.JSON200 == nil && r.HTTPResponse != nil {
 		switch r.HTTPResponse.StatusCode {
 		case http.StatusNotFound:
-			return nil, errors.New("dasha: index advisor returned 404 on index_advisor — either the " +
-				"cluster/database is unknown (check list_clusters), or the index_advisor feature is disabled " +
-				"in Dasha's configuration. It never means \"no candidates\"")
+			return nil, fmt.Errorf("%w on index_advisor — either the cluster/database is unknown (check "+
+				"list_clusters), or the index_advisor feature is disabled in Dasha's configuration. It never "+
+				"means \"no candidates\"", errNotFound)
 		case http.StatusGatewayTimeout:
 			return nil, errAdvisorTimeout
 		}
@@ -1008,7 +1016,8 @@ func statusError(op string, resp *http.Response) error {
 			"rejected the request before authorising it (auth.require_https answers 403 when the call does "+
 			"not arrive as HTTPS and carries no X-Forwarded-Proto)", op)
 	case http.StatusNotFound:
-		return fmt.Errorf("dasha: not found (404) — unknown cluster/instance/database")
+		return fmt.Errorf("%w on %s — unknown cluster/instance/database, or the feature is disabled in "+
+			"Dasha's configuration", errNotFound, op)
 	case http.StatusTooManyRequests:
 		return fmt.Errorf("dasha: rate limited (429) on %s — pause before retrying instead of calling again immediately", op)
 	default:

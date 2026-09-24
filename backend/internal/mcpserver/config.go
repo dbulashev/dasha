@@ -33,6 +33,10 @@ type Config struct {
 	// connection is dropped before Dasha can answer.
 	SlowTimeout time.Duration
 
+	// MaxResultBytes is the size budget of one tool result; keep it below the
+	// client's inline limit, above which the client moves a result to a file.
+	MaxResultBytes int
+
 	// Logger receives per-call observability (method, tool, duration, error);
 	// arguments and tokens are never logged. Nil disables logging.
 	Logger *zap.Logger
@@ -46,6 +50,10 @@ func (c Config) withDefaults() Config {
 
 	if c.SlowTimeout <= 0 {
 		c.SlowTimeout = 90 * time.Second
+	}
+
+	if c.MaxResultBytes <= 0 {
+		c.MaxResultBytes = defaultMaxResultBytes
 	}
 
 	if c.Logger == nil {
