@@ -75,14 +75,15 @@ type healthTrendPoint struct {
 }
 
 type healthTrendResult struct {
-	Window    healthTrendWindow   `json:"window"`
-	Score     *healthTrendScore   `json:"score,omitempty"`
-	Dips      []healthTrendDip    `json:"dips"`
-	DipsTotal int                 `json:"dips_total"`
-	Periods   []healthTrendPeriod `json:"periods"`
-	Baseline  healthTrendBaseline `json:"baseline"`
-	Points    []healthTrendPoint  `json:"points,omitempty"`
-	Next      string              `json:"next"`
+	Window                 healthTrendWindow   `json:"window"`
+	Score                  *healthTrendScore   `json:"score,omitempty"`
+	Dips                   []healthTrendDip    `json:"dips"`
+	DipsTotal              int                 `json:"dips_total"`
+	Periods                []healthTrendPeriod `json:"periods"`
+	Baseline               healthTrendBaseline `json:"baseline"`
+	CategoryRefUnavailable bool                `json:"category_reference_unavailable,omitempty"`
+	Points                 []healthTrendPoint  `json:"points,omitempty"`
+	Next                   string              `json:"next"`
 
 	series     []apiclient.HealthScoreHistoryPoint
 	baselineAt map[time.Time]float64
@@ -122,7 +123,7 @@ func buildHealthTrend(
 		baselineAt[b.Time.UTC()] = b.Value
 	}
 
-	refs := categoryReferences(series)
+	refs := categoryReferences(series, h.Dips)
 
 	out := &healthTrendResult{ //nolint:exhaustruct
 		Window: healthTrendWindow{
@@ -138,6 +139,7 @@ func buildHealthTrend(
 	}
 
 	out.Dips, out.DipsTotal = dipRuns(series, h.Dips, refs)
+	out.CategoryRefUnavailable = len(series) > 0 && len(refs) == 0
 
 	if points > 0 {
 		out.Points = out.decimate(points)
@@ -183,12 +185,23 @@ func baselineStats(h *apiclient.HealthScoreHistory) healthTrendBaseline {
 	return out
 }
 
-// categoryReferences is the per-category reference: the API carries a seasonal
-// baseline for the total score only.
-func categoryReferences(series []apiclient.HealthScoreHistoryPoint) map[string]float64 {
+// categoryReferences is the per-category reference over the points outside
+// dips: the API carries a seasonal baseline for the total score only.
+func categoryReferences(
+	series []apiclient.HealthScoreHistoryPoint, dips []apiclient.HealthScoreHistoryDip,
+) map[string]float64 {
+	inDip := make(map[time.Time]bool, len(dips))
+	for _, d := range dips {
+		inDip[d.Time.UTC()] = true
+	}
+
 	vals := map[string][]float64{}
 
 	for _, p := range series {
+		if inDip[p.Time.UTC()] {
+			continue
+		}
+
 		for k, v := range p.Categories {
 			vals[k] = append(vals[k], v)
 		}

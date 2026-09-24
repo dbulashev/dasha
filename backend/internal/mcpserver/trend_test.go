@@ -62,13 +62,45 @@ func TestCategoryReferences_LongDegradation(t *testing.T) {
 		series = append(series, apiclient.HealthScoreHistoryPoint{Categories: trendCats(storage)}) //nolint:exhaustruct
 	}
 
-	refs := categoryReferences(series)
+	refs := categoryReferences(series, nil)
 	if refs["storage"] != 90 {
 		t.Errorf("storage reference = %v, want its healthy level 90", refs["storage"])
 	}
 
 	if got := categoriesBelow(series[10], refs); !slices.Equal(got, []string{"storage"}) {
 		t.Errorf("categories below = %v", got)
+	}
+}
+
+func TestCategoryReferences_SkipDips(t *testing.T) {
+	t.Parallel()
+
+	var (
+		series []apiclient.HealthScoreHistoryPoint
+		dips   []apiclient.HealthScoreHistoryDip
+	)
+
+	for i := range 24 {
+		at := trendT0.Add(time.Duration(i) * time.Hour)
+		storage := 90.0
+
+		if i > 0 {
+			storage = 40
+			dips = append(dips, apiclient.HealthScoreHistoryDip{Time: at, Value: 50, Baseline: 92, Drop: 42})
+		}
+
+		series = append(series, apiclient.HealthScoreHistoryPoint{Time: at, Categories: trendCats(storage)}) //nolint:exhaustruct
+	}
+
+	if refs := categoryReferences(series, dips); refs["storage"] != 90 {
+		t.Errorf("storage reference = %v, want the level outside dips 90", refs["storage"])
+	}
+
+	h := &apiclient.HealthScoreHistory{Points: series[1:], Dips: dips, BaselineAvailable: true} //nolint:exhaustruct
+
+	r := buildHealthTrend(h, trendT0, trendT0.Add(24*time.Hour), 3600, time.Hour, 0)
+	if !r.CategoryRefUnavailable || len(r.Dips) != 1 || r.Dips[0].WorstCategory != "" {
+		t.Errorf("all-dip window: unavailable = %v, dips = %+v", r.CategoryRefUnavailable, r.Dips)
 	}
 }
 

@@ -557,7 +557,8 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			"range='24h' (default), '7d' or '30d'. Answers with a summary: score min/max/avg/last; dips — runs " +
 			"of points more than the configured drop below the seasonal baseline, each at its deepest point " +
 			"with worst_category and categories_below_baseline (categories more than 5 points under their " +
-			"90th percentile over the window; the seasonal baseline covers the total score only), up to 10 deepest, " +
+			"90th percentile over the window's non-dip points; the seasonal baseline covers the total score " +
+			"only; category_reference_unavailable=true when every point is a dip), up to 10 deepest, " +
 			"dips_total counting all; periods — the minimum per hour (24h), 6 hours (7d) or day (30d) with " +
 			"its worst category. points=N adds the series decimated to N buckets holding the lowest point of " +
 			"each, with per-category scores. Dips need baseline.available. Metrics-backed mode only.",
