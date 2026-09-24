@@ -196,6 +196,7 @@ type healthTrendArgs struct {
 	Cluster  string `json:"cluster" jsonschema:"Dasha cluster name"`
 	Instance string `json:"instance" jsonschema:"Dasha instance / host name"`
 	Range    string `json:"range,omitempty" jsonschema:"Time window: '24h' (default), '7d' or '30d'"`
+	Points   int    `json:"points,omitempty" jsonschema:"Also return the series decimated to this many buckets, the lowest-score point of each, with per-category scores (max 200). Omit for the summary alone"`
 }
 
 type queryReportArgs struct {
@@ -547,17 +548,24 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 
 	addTool(s, &mcp.Tool{
 		Name: "health_trend",
-		Description: "Get the health-score time series for a cluster/instance: per-timestamp score, the " +
-			"seasonal baseline and detected dips. range='24h' (default), '7d' or '30d'. Metrics-backed mode only.",
+		Description: "When the health score degraded, how deep, and which category went first. " +
+			"range='24h' (default), '7d' or '30d'. Answers with a summary: score min/max/avg/last; dips — runs " +
+			"of points more than the configured drop below the seasonal baseline, each at its deepest point " +
+			"with worst_category and categories_below_baseline (categories more than 5 points under their " +
+			"median over the window; the seasonal baseline covers the total score only), up to 10 deepest, " +
+			"dips_total counting all; periods — the minimum per hour (24h), 6 hours (7d) or day (30d) with " +
+			"its worst category. points=N adds the series decimated to N buckets holding the lowest point of " +
+			"each, with per-category scores. Dips need baseline.available. Metrics-backed mode only.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a healthTrendArgs) (*mcp.CallToolResult, any, error) {
-		span, step := trendWindow(a.Range)
-		if span == 0 {
+		if span, _ := trendWindow(a.Range); span == 0 {
 			return errResult("range must be '24h', '7d' or '30d'"), nil, nil
 		}
 
-		to := time.Now()
+		if a.Points < 0 || a.Points > healthTrendMaxPoints {
+			return errResult("points must be 200 or less"), nil, nil
+		}
 
-		return jsonResult(ctx)(c.HealthTrend(ctx, a.Cluster, a.Instance, to.Add(-span), to, step))
+		return jsonResult(ctx)(healthTrend(ctx, c, a))
 	})
 
 	addTool(s, &mcp.Tool{

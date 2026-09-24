@@ -519,7 +519,9 @@ func (d *DashaClient) BlockedQueries(ctx context.Context, cluster, instance, dat
 
 // HealthTrend returns the health-score time series (points, seasonal baseline,
 // dips) over [from, to] at the given step (seconds). Metrics-backed mode only.
-func (d *DashaClient) HealthTrend(ctx context.Context, cluster, instance string, from, to time.Time, step int) (any, error) {
+func (d *DashaClient) HealthTrend(
+	ctx context.Context, cluster, instance string, from, to time.Time, step int,
+) (*apiclient.HealthScoreHistory, error) {
 	r, err := d.api.GetHealthScoreHistoryWithResponse(ctx, &apiclient.GetHealthScoreHistoryParams{
 		ClusterName: cluster, Instance: instance, From: from, To: to, StepSeconds: &step,
 	}, d.editor(ctx))
@@ -527,7 +529,11 @@ func (d *DashaClient) HealthTrend(ctx context.Context, cluster, instance string,
 		return nil, wrapErr("health_trend", err)
 	}
 
-	return pick(r.JSON200, r.HTTPResponse, "health_trend")
+	if r.JSON200 == nil {
+		return nil, statusError("health_trend", r.HTTPResponse)
+	}
+
+	return r.JSON200, nil
 }
 
 // HealthDatabases returns per-database health scores (incl. the worst).

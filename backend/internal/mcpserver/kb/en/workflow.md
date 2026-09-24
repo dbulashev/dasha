@@ -94,7 +94,8 @@ per-database tools also need `database`.
 - If a result is refused as too large — narrow (one database, smaller limit,
   shorter window), do not retry as-is.
 - health_trend needs metrics mode; a 404/error there is not an instance
-  problem.
+  problem. Its summary already holds the dips, the categories behind them
+  and per-period minimums: do not pull the series to recompute them.
 - Report format: 3-5 findings, each = fact (numbers from tools) + cause +
   one concrete action, worst first. Never invent metrics that are not in the
   tool output.

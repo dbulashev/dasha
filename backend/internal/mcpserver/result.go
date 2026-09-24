@@ -20,7 +20,9 @@ const (
 
 // shapedTools narrow their own result and live under the configured budget; the
 // rest keep unshapedResultBytes. A tool joins together with its shapedResult.
-var shapedTools = map[string]bool{}
+var shapedTools = map[string]bool{
+	"health_trend": true,
+}
 
 func budgetFor(shaped bool, budget int) int {
 	if budget <= 0 {
