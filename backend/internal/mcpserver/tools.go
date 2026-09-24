@@ -13,8 +13,10 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// noArgs is the empty argument set for tools that take no parameters.
-type noArgs struct{}
+type listClustersArgs struct {
+	Cluster       string `json:"cluster,omitempty" jsonschema:"Filter by name: every word must occur in the cluster name, in any order, ignoring case and - _ . separators ('shop prod' finds shop-prod and shop-prod-dr). An exact name returns that cluster in full"`
+	WithInstances bool   `json:"with_instances,omitempty" jsonschema:"Return the matched clusters in full: host names, database names, log streams and severities"`
+}
 
 type instanceArgs struct {
 	Cluster  string `json:"cluster" jsonschema:"Dasha cluster name (from list_clusters)"`
@@ -215,6 +217,8 @@ type queryCompareArgs struct {
 	SnapshotA    string   `json:"snapshot_a" jsonschema:"Baseline snapshot ID (UUID, from list_snapshots)"`
 	SnapshotB    string   `json:"snapshot_b,omitempty" jsonschema:"Optional: second snapshot ID; omit to compare snapshot_a vs. live stats"`
 	ExcludeUsers []string `json:"exclude_users,omitempty" jsonschema:"Optional: usernames to exclude"`
+	Sort         string   `json:"sort,omitempty" jsonschema:"Rank by the B-minus-A delta of: 'exec_time' (default), 'calls', 'rows' or 'io_time'"`
+	Limit        int      `json:"limit,omitempty" jsonschema:"Max queries to return, largest delta first (default 20, max 100)"`
 }
 
 type describeTableArgs struct {
@@ -283,12 +287,13 @@ type ioTrendArgs struct {
 func registerTools(s *mcp.Server, c *DashaClient) {
 	addTool(s, &mcp.Tool{
 		Name: "list_clusters",
-		Description: "List the PostgreSQL clusters Dasha manages, with their hosts. " +
-			"Use this first to choose a (cluster, instance) target for the other tools.",
-	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ noArgs) (*mcp.CallToolResult, any, error) {
-		out, err := c.Clusters(ctx)
-
-		return jsonResult(ctx)(out, err)
+		Description: "List the PostgreSQL clusters Dasha manages. Use this first to choose a (cluster, instance) " +
+			"target for the other tools. By default one row per cluster: name, source, host and database " +
+			"counts, supports_logs. cluster filters by name words; an exact name, or with_instances=true, " +
+			"returns details — host names, database names, log_streams and log_severities. When nothing " +
+			"matches, did_you_mean lists similar names; the call never answers for a cluster you did not name.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, a listClustersArgs) (*mcp.CallToolResult, any, error) {
+		return jsonResult(ctx)(listClusters(ctx, c, a))
 	})
 
 	addTool(s, &mcp.Tool{
@@ -642,14 +647,23 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			"matched by queryid within a database. A snapshot stored before per-database attribution can only " +
 			"be compared against another one of its own generation — pairing it with a newer snapshot, or " +
 			"with live stats, is refused rather than answered with invented matches; list_snapshots reports " +
-			"the generation as json_version. Get IDs from list_snapshots.",
+			"the generation as json_version. Get IDs from list_snapshots. " +
+			"Answers which query changed and how: summary compared/returned/added/removed, then queries ranked " +
+			"by the delta of sort (default exec_time), each with delta (B minus A: calls, exec_time_ms, " +
+			"mean_exec_time_ms, rows, io_time_ms), change_pct against A, and verdict — 'slower' (mean time per " +
+			"call up 20% or more), 'more_calls' (calls up 20% or more), 'slower_and_more_calls', 'less_load', " +
+			"'stable', 'added' (only in B), 'removed' (only in A). The query text is clipped (query_len is the " +
+			"full length); query_report(queryid) gives the full text and both sides' metrics.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a queryCompareArgs) (*mcp.CallToolResult, any, error) {
-		var b *string
-		if a.SnapshotB != "" {
-			b = &a.SnapshotB
+		if _, ok := compareSorts[a.Sort]; a.Sort != "" && !ok {
+			return errResult("sort must be 'exec_time', 'calls', 'rows' or 'io_time'"), nil, nil
 		}
 
-		return jsonResult(ctx)(c.QueryCompare(ctx, a.Cluster, a.Instance, a.Database, a.Scope, a.SnapshotA, b, a.ExcludeUsers))
+		if a.Limit < 0 || a.Limit > compareMaxLimit {
+			return errResult("limit must be 100 or less"), nil, nil
+		}
+
+		return jsonResult(ctx)(queryCompare(ctx, c, a))
 	})
 
 	addTool(s, &mcp.Tool{
@@ -695,7 +709,11 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 	addTool(s, &mcp.Tool{
 		Name: "describe_table",
 		Description: "Describe one table in depth: layout, estimated bloat, partitions, row-count estimate and " +
-			"autovacuum/analyze stats. schema defaults to 'public'.",
+			"autovacuum/analyze stats. schema defaults to 'public'. When bloat cannot be measured, the bloat " +
+			"section says why instead of holding numbers: unavailable='partitioned_parent' (the parent stores " +
+			"no rows — describe a partition), 'not_a_heap' (a view or foreign table), 'lock_timeout' (another " +
+			"transaction's lock blocked the scan), 'timeout', or 'error' (usually the pgstattuple extension is " +
+			"missing or not executable). Over the size budget the partition list is shortened first.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a describeTableArgs) (*mcp.CallToolResult, any, error) {
 		schema := a.Schema
 		if schema == "" {
@@ -707,13 +725,21 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			partitionLimit = defaultPartitionLimit
 		}
 
-		out := map[string]any{}
+		out := tableSections{}
 
 		d, err := c.TableDescribe(ctx, a.Cluster, a.Instance, a.Database, schema, a.Table)
 		section(out, "table", d, err)
 
-		bl, err := c.TableDescribeBloat(ctx, a.Cluster, a.Instance, a.Database, schema, a.Table)
-		section(out, "bloat", bl, err)
+		if skip := bloatSkipped(d); skip != nil {
+			out["bloat"] = skip
+		} else {
+			bl, bErr := c.TableDescribeBloat(ctx, a.Cluster, a.Instance, a.Database, schema, a.Table)
+			if bErr != nil && !errors.Is(bErr, errNotFound) {
+				out["bloat"] = bloatFailure(bErr)
+			} else {
+				section(out, "bloat", bl, bErr)
+			}
+		}
 
 		pt, err := c.TableDescribePartitions(ctx, a.Cluster, a.Instance, a.Database, schema, a.Table, partitionLimit)
 		section(out, "partitions", pt, err)

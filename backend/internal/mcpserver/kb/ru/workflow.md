@@ -2,8 +2,8 @@
 
 Жалоба → цепочка инструментов. Выполняйте шаги по порядку, один tool на шаг;
 останавливайтесь раньше, если причина найдена. Сначала возьмите
-(cluster, instance) из `list_clusters` — per-database инструментам нужна ещё
-`database`.
+(cluster, instance) из `list_clusters` (точное имя в `cluster` покажет хосты
+и базы) — per-database инструментам нужна ещё `database`.
 
 ## «База тормозит»
 1. `get_health_score` — score ≥80: смотреть в приложение, не в БД (доложить
@@ -46,7 +46,8 @@
 4. `wait_events` на мастере — давление на запись WAL тоже раздувает lag.
 
 ## «Приложение сыплет ошибками»
-1. Кластеры, у которых в `log_streams` есть postgresql (см. list_clusters):
+1. Кластеры, у которых в `log_streams` есть postgresql (list_clusters с
+   точным именем кластера):
    `search_logs` с severity=["ERROR","FATAL"], dedup включён, узкое окно
    (since="1h"). Один вызов со всеми фильтрами — эндпоинт rate-limited.
 2. Сопоставить шаблоны ошибок с `blocked_queries` (дедлоки, lock timeout)

@@ -722,7 +722,7 @@ func (d *DashaClient) QueryCompare(
 	cluster, instance, database, scope, snapshotA string,
 	snapshotB *string,
 	excludeUsers []string,
-) (any, error) {
+) ([]apiclient.QueryCompareItem, error) {
 	a, err := uuid.Parse(snapshotA)
 	if err != nil {
 		return nil, fmt.Errorf("mcp: query_compare: invalid snapshot_a %q: %w", snapshotA, err)
@@ -751,7 +751,11 @@ func (d *DashaClient) QueryCompare(
 		return nil, fmt.Errorf("mcp: query_compare: %s", r.JSON409.Message)
 	}
 
-	return pick(r.JSON200, r.HTTPResponse, "query_compare")
+	if r.JSON200 == nil {
+		return nil, statusError("query_compare", r.HTTPResponse)
+	}
+
+	return *r.JSON200, nil
 }
 
 // TransactionIdDanger reports per-table transaction-id age vs. the wraparound
@@ -818,7 +822,9 @@ func (d *DashaClient) ConnectionStatActivity(ctx context.Context, cluster, insta
 }
 
 // TableDescribe returns the column/index/constraint layout of one table.
-func (d *DashaClient) TableDescribe(ctx context.Context, cluster, instance, database, schema, table string) (any, error) {
+func (d *DashaClient) TableDescribe(
+	ctx context.Context, cluster, instance, database, schema, table string,
+) (*apiclient.TableDescribe, error) {
 	r, err := d.api.GetTablesDescribeWithResponse(ctx, &apiclient.GetTablesDescribeParams{
 		ClusterName: cluster, Instance: instance, Database: database, Schema: schema, Table: table,
 	}, d.editor(ctx))
@@ -826,11 +832,17 @@ func (d *DashaClient) TableDescribe(ctx context.Context, cluster, instance, data
 		return nil, wrapErr("describe_table", err)
 	}
 
-	return pick(r.JSON200, r.HTTPResponse, "describe_table")
+	if r.JSON200 == nil {
+		return nil, statusError("describe_table", r.HTTPResponse)
+	}
+
+	return r.JSON200, nil
 }
 
 // TableDescribeBloat returns the estimated bloat of one table.
-func (d *DashaClient) TableDescribeBloat(ctx context.Context, cluster, instance, database, schema, table string) (any, error) {
+func (d *DashaClient) TableDescribeBloat(
+	ctx context.Context, cluster, instance, database, schema, table string,
+) (*apiclient.TableDescribeBloat, error) {
 	r, err := d.api.GetTablesDescribeBloatWithResponse(ctx, &apiclient.GetTablesDescribeBloatParams{
 		ClusterName: cluster, Instance: instance, Database: database, Schema: schema, Table: table,
 	}, d.editor(ctx))
@@ -838,13 +850,24 @@ func (d *DashaClient) TableDescribeBloat(ctx context.Context, cluster, instance,
 		return nil, wrapErr("describe_table", err)
 	}
 
-	return pick(r.JSON200, r.HTTPResponse, "describe_table")
+	switch {
+	case r.JSON200 != nil:
+		return r.JSON200, nil
+	case r.JSON423 != nil:
+		return nil, fmt.Errorf("%w: %s", errObjectLocked, r.JSON423.Message)
+	case r.JSON504 != nil:
+		return nil, fmt.Errorf("%w: %s", errQueryTimeout, r.JSON504.Message)
+	default:
+		return nil, statusError("describe_table", r.HTTPResponse)
+	}
 }
 
 // TableDescribePartitions returns up to limit partitions of one partitioned
 // table (heavily partitioned tables can have thousands — the cap keeps the
 // result within the response size limit).
-func (d *DashaClient) TableDescribePartitions(ctx context.Context, cluster, instance, database, schema, table string, limit int) (any, error) {
+func (d *DashaClient) TableDescribePartitions(
+	ctx context.Context, cluster, instance, database, schema, table string, limit int,
+) ([]apiclient.TableDescribePartition, error) {
 	r, err := d.api.GetTablesDescribePartitionsWithResponse(ctx, &apiclient.GetTablesDescribePartitionsParams{
 		ClusterName: cluster, Instance: instance, Database: database, Schema: schema, Table: table, Limit: &limit,
 	}, d.editor(ctx))
@@ -852,7 +875,11 @@ func (d *DashaClient) TableDescribePartitions(ctx context.Context, cluster, inst
 		return nil, wrapErr("describe_table", err)
 	}
 
-	return pick(r.JSON200, r.HTTPResponse, "describe_table")
+	if r.JSON200 == nil {
+		return nil, statusError("describe_table", r.HTTPResponse)
+	}
+
+	return *r.JSON200, nil
 }
 
 // TableDescribeRowEstimate returns the estimated vs. exact row count of one table.
@@ -898,7 +925,7 @@ func (d *DashaClient) SearchLogs(ctx context.Context, params *apiclient.GetLogsP
 				"needed filter into that one call")
 		case http.StatusNotImplemented:
 			return nil, errors.New("dasha: log search is unavailable for this cluster or stream (501) — " +
-				"check supports_logs in list_clusters, and that log_streams lists the service_type you asked for")
+				"check supports_logs and log_streams in list_clusters(cluster=<exact name>) for the service_type you asked for")
 		case http.StatusBadRequest:
 			return nil, errors.New("dasha: invalid log search parameters (400) — e.g. page_token combined " +
 				"with dedup, or an unknown severity value")

@@ -21,7 +21,10 @@ const (
 // shapedTools narrow their own result and live under the configured budget; the
 // rest keep unshapedResultBytes. A tool joins together with its shapedResult.
 var shapedTools = map[string]bool{
-	"health_trend": true,
+	"describe_table": true,
+	"health_trend":   true,
+	"list_clusters":  true,
+	"query_compare":  true,
 }
 
 func budgetFor(shaped bool, budget int) int {
@@ -195,7 +198,7 @@ func section(out map[string]any, key string, v any, err error) {
 // sectionsResult renders a composite result, but marks it IsError when EVERY
 // section failed (e.g. a permission error on every sub-request) so the model
 // does not treat an all-errors payload as usable data.
-func sectionsResult(ctx context.Context, out map[string]any) (*mcp.CallToolResult, any, error) {
+func sectionsResult[M ~map[string]any](ctx context.Context, out M) (*mcp.CallToolResult, any, error) {
 	allFailed := len(out) > 0
 	allNotFound := allFailed
 
