@@ -154,7 +154,7 @@ func TestServerCache_LRUEvictionAndReuse(t *testing.T) {
 	build := func() *mcp.Server {
 		builds++
 
-		return newServer(client, "test", "en", nil)
+		return newServer(client, "test", "en", nil, newToolStats())
 	}
 
 	cache.get("a", build)

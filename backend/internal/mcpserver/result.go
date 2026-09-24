@@ -1,54 +1,187 @@
 package mcpserver
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// maxResultBytes caps a single tool's JSON result so one call cannot flood the
-// model's context window (and the transport). An oversized result is refused
-// with a hint to narrow the request, rather than returning truncated — and thus
-// invalid — JSON the model cannot parse.
-const maxResultBytes = 256 * 1024
+const (
+	defaultMaxResultBytes = 64 << 10
+	unshapedResultBytes   = 256 << 10
+
+	// maxShrinkSteps stops a shrink() that never reaches its floor.
+	maxShrinkSteps = 32
+)
+
+// unshapedTools keep the pre-budget ceiling until their result shape is worked
+// out; a tool leaves this list together with its first shapedResult.
+var unshapedTools = map[string]bool{
+	"unused_index_report": true,
+	"hot_tables":          true,
+	"index_advisor":       true,
+	"connections":         true,
+	"query_report":        true,
+	"schema_lint":         true,
+	"health_trend":        true,
+	"list_clusters":       true,
+	"query_compare":       true,
+	"describe_table":      true,
+}
+
+func budgetFor(tool string, budget int) int {
+	if budget <= 0 {
+		budget = defaultMaxResultBytes
+	}
+
+	if unshapedTools[tool] && budget < unshapedResultBytes {
+		return unshapedResultBytes
+	}
+
+	return budget
+}
+
+// shapedResult is a tool answer that knows how to narrow itself.
+type shapedResult interface {
+	// shrink returns a narrower form and the step name; once nothing is left to
+	// narrow it returns ok=false and the string names the parameter to reduce.
+	shrink() (shapedResult, string, bool)
+	note() *shapeNote
+}
+
+const (
+	shapeDefaultView = "default_view"
+	shapeBudget      = "budget"
+)
+
+type shapeNote struct {
+	Reason string   `json:"reason"`
+	Folded string   `json:"folded,omitempty"`
+	Total  int      `json:"total,omitempty"`
+	Full   string   `json:"full,omitempty"`
+	Steps  []string `json:"budget_steps,omitempty"`
+}
+
+type toolResultFunc func(payload any, err error) (*mcp.CallToolResult, any, error)
 
 // jsonResult renders a payload as compact JSON text, or maps an error to an
 // isError tool result the model can read and react to (rather than a protocol
-// error it cannot see).
-func jsonResult(payload any, err error) (*mcp.CallToolResult, any, error) {
+// error it cannot see). A result over the call's budget is narrowed by the
+// payload's own shrink(), or refused when the payload cannot narrow itself.
+// It is curried so a (value, error) call can be passed straight in.
+func jsonResult(ctx context.Context) toolResultFunc {
+	return func(payload any, err error) (*mcp.CallToolResult, any, error) {
+		return renderResult(ctx, payload, err)
+	}
+}
+
+func renderResult(ctx context.Context, payload any, err error) (*mcp.CallToolResult, any, error) {
+	rec := recordFrom(ctx)
+
 	if err != nil {
+		if errors.Is(err, errNotFound) {
+			return rec.explainNotFound(ctx, err.Error()), nil, nil
+		}
+
 		return errResult(err.Error()), nil, nil
 	}
 
-	b, mErr := json.Marshal(payload)
-	if mErr != nil {
-		return errResult(fmt.Sprintf("mcp: encode result: %v", mErr)), nil, nil
+	budget := rec.budgetOrDefault()
+	shaped, _ := payload.(shapedResult)
+
+	var steps []string
+
+	for {
+		b, mErr := json.Marshal(payload)
+		if mErr != nil {
+			return errResult(fmt.Sprintf("mcp: encode result: %v", mErr)), nil, nil
+		}
+
+		note, nErr := noteBlock(shaped, steps)
+		if nErr != nil {
+			return errResult(fmt.Sprintf("mcp: encode result note: %v", nErr)), nil, nil
+		}
+
+		size := len(b) + len(note)
+		if size <= budget {
+			rec.markShaped(note != "", steps)
+
+			return shapedContent(note, b), nil, nil
+		}
+
+		hint := ""
+
+		if shaped != nil && len(steps) < maxShrinkSteps {
+			next, step, ok := shaped.shrink()
+			if ok {
+				shaped, payload, steps = next, next, append(steps, step)
+
+				continue
+			}
+
+			hint = step
+		}
+
+		rec.markRefused()
+
+		return oversizedResult(size, budget, hint), nil, nil
+	}
+}
+
+func noteBlock(shaped shapedResult, steps []string) (string, error) {
+	var n shapeNote
+
+	if shaped != nil {
+		if p := shaped.note(); p != nil {
+			n = *p
+		}
 	}
 
-	if len(b) > maxResultBytes {
-		return oversizedResult(len(b)), nil, nil
+	if len(steps) > 0 {
+		n.Reason = shapeBudget
+		n.Steps = steps
+	}
+
+	if n.Reason == "" {
+		return "", nil
+	}
+
+	b, err := json.Marshal(map[string]shapeNote{"shaped": n})
+
+	return string(b), err
+}
+
+func shapedContent(note string, body []byte) *mcp.CallToolResult {
+	content := make([]mcp.Content, 0, 2)
+	if note != "" {
+		content = append(content, &mcp.TextContent{Text: note})
 	}
 
 	return &mcp.CallToolResult{
-		Content: []mcp.Content{&mcp.TextContent{Text: string(b)}},
-	}, nil, nil
+		Content: append(content, &mcp.TextContent{Text: string(body)}),
+	}
 }
 
 // oversizedResult tells the model the result was too large to return and how to
 // get a smaller one, as a structured isError payload it can act on.
-func oversizedResult(size int) *mcp.CallToolResult {
-	msg := fmt.Sprintf(
-		`{"error":"result too large","bytes":%d,"limit":%d,`+
-			`"suggestion":"narrow the request — target a single database, use a more specific tool, `+
-			`or a smaller range — the full result exceeds the response size limit"}`,
-		size, maxResultBytes)
-
-	return &mcp.CallToolResult{
-		IsError: true,
-		Content: []mcp.Content{&mcp.TextContent{Text: msg}},
+func oversizedResult(size, limit int, hint string) *mcp.CallToolResult {
+	if hint == "" {
+		hint = "narrow the request — target a single database, use a more specific tool, " +
+			"or a smaller range — the full result exceeds the response size limit"
 	}
+
+	b, _ := json.Marshal(map[string]any{
+		"error":      "result too large",
+		"bytes":      size,
+		"limit":      limit,
+		"suggestion": hint,
+	})
+
+	return errResult(string(b))
 }
 
 func errResult(msg string) *mcp.CallToolResult {
@@ -71,24 +204,34 @@ func section(out map[string]any, key string, v any, err error) {
 // sectionsResult renders a composite result, but marks it IsError when EVERY
 // section failed (e.g. a permission error on every sub-request) so the model
 // does not treat an all-errors payload as usable data.
-func sectionsResult(out map[string]any) (*mcp.CallToolResult, any, error) {
+func sectionsResult(ctx context.Context, out map[string]any) (*mcp.CallToolResult, any, error) {
 	allFailed := len(out) > 0
-	for k := range out {
+	allNotFound := allFailed
+
+	for k, v := range out {
 		if !strings.HasSuffix(k, "_error") {
 			allFailed = false
 
 			break
 		}
-	}
 
-	if allFailed {
-		b, err := json.Marshal(out)
-		if err != nil {
-			return errResult(fmt.Sprintf("mcp: encode result: %v", err)), nil, nil
+		if msg, _ := v.(string); !strings.HasPrefix(msg, errNotFound.Error()) {
+			allNotFound = false
 		}
-
-		return errResult(string(b)), nil, nil
 	}
 
-	return jsonResult(out, nil)
+	if !allFailed {
+		return renderResult(ctx, out, nil)
+	}
+
+	b, err := json.Marshal(out)
+	if err != nil {
+		return errResult(fmt.Sprintf("mcp: encode result: %v", err)), nil, nil
+	}
+
+	if allNotFound {
+		return recordFrom(ctx).explainNotFound(ctx, string(b)), nil, nil
+	}
+
+	return errResult(string(b)), nil, nil
 }

@@ -176,12 +176,12 @@ func TestE2E_ResourcesAndPrompts(t *testing.T) {
 		t.Fatalf("ListResources: %v", err)
 	}
 
-	if len(lr.Resources) != len(kbResourceNames) {
-		t.Fatalf("ListResources returned %d resources, want %d", len(lr.Resources), len(kbResourceNames))
+	if len(lr.Resources) != len(kbResourceNames)+1 {
+		t.Fatalf("ListResources returned %d resources, want %d", len(lr.Resources), len(kbResourceNames)+1)
 	}
 
 	for _, r := range lr.Resources {
-		if !strings.HasPrefix(r.URI, "dasha://kb/") {
+		if r.URI != toolStatsURI && !strings.HasPrefix(r.URI, "dasha://kb/") {
 			t.Errorf("resource URI %q lacks the dasha://kb/ prefix", r.URI)
 		}
 	}

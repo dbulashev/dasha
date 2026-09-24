@@ -287,7 +287,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, _ noArgs) (*mcp.CallToolResult, any, error) {
 		out, err := c.Clusters(ctx)
 
-		return jsonResult(out, err)
+		return jsonResult(ctx)(out, err)
 	})
 
 	addTool(s, &mcp.Tool{
@@ -297,7 +297,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a instanceArgs) (*mcp.CallToolResult, any, error) {
 		out, err := c.HealthScore(ctx, a.Cluster, a.Instance)
 
-		return jsonResult(out, err)
+		return jsonResult(ctx)(out, err)
 	})
 
 	addTool(s, &mcp.Tool{
@@ -319,7 +319,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 
 		out, err := c.Recommendations(ctx, a.Cluster, a.Instance, db)
 
-		return jsonResult(out, err)
+		return jsonResult(ctx)(out, err)
 	})
 
 	addTool(s, &mcp.Tool{
@@ -342,14 +342,14 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			return errResult("detail " + strconv.Quote(d.name) + " is per-database — pass database"), nil, nil
 		}
 
-		return jsonResult(d.fetch(ctx, c, a))
+		return jsonResult(ctx)(d.fetch(ctx, c, a))
 	})
 
 	addTool(s, &mcp.Tool{
 		Name:        "get_instance_info",
 		Description: "Get the PostgreSQL server version and recovery state (primary vs standby) for a cluster/instance.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a instanceArgs) (*mcp.CallToolResult, any, error) {
-		return jsonResult(c.InstanceInfo(ctx, a.Cluster, a.Instance))
+		return jsonResult(ctx)(c.InstanceInfo(ctx, a.Cluster, a.Instance))
 	})
 
 	addTool(s, &mcp.Tool{
@@ -363,9 +363,9 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a topQueriesArgs) (*mcp.CallToolResult, any, error) {
 		switch a.By {
 		case "", "time":
-			return jsonResult(c.TopQueriesByTime(ctx, a.Cluster, a.Instance, a.Database))
+			return jsonResult(ctx)(c.TopQueriesByTime(ctx, a.Cluster, a.Instance, a.Database))
 		case "wal":
-			return jsonResult(c.TopQueriesByWal(ctx, a.Cluster, a.Instance, a.Database))
+			return jsonResult(ctx)(c.TopQueriesByWal(ctx, a.Cluster, a.Instance, a.Database))
 		default:
 			return errResult("by must be 'time' or 'wal'"), nil, nil
 		}
@@ -378,7 +378,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			"blocks progress: every wait_event_type except Client, Timeout and Activity, which are the idle " +
 			"background of any healthy instance.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a dbArgs) (*mcp.CallToolResult, any, error) {
-		return jsonResult(c.RunningQueries(ctx, a.Cluster, a.Instance, a.Database))
+		return jsonResult(ctx)(c.RunningQueries(ctx, a.Cluster, a.Instance, a.Database))
 	})
 
 	addTool(s, &mcp.Tool{
@@ -390,11 +390,11 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a listIndexesArgs) (*mcp.CallToolResult, any, error) {
 		switch a.Kind {
 		case "", "missing":
-			return jsonResult(c.IndexesMissing(ctx, a.Cluster, a.Instance, a.Database))
+			return jsonResult(ctx)(c.IndexesMissing(ctx, a.Cluster, a.Instance, a.Database))
 		case "unused":
-			return jsonResult(c.IndexesUnused(ctx, a.Cluster, a.Instance, a.Database))
+			return jsonResult(ctx)(c.IndexesUnused(ctx, a.Cluster, a.Instance, a.Database))
 		case "usage":
-			return jsonResult(c.IndexesUsage(ctx, a.Cluster, a.Instance, a.Database))
+			return jsonResult(ctx)(c.IndexesUsage(ctx, a.Cluster, a.Instance, a.Database))
 		default:
 			return errResult("kind must be 'missing', 'unused' or 'usage'"), nil, nil
 		}
@@ -414,7 +414,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			"summed into the verdict: never suggest dropping a partition's child index — PostgreSQL refuses, and " +
 			"its HINT points at the parent, which would strip the index off EVERY partition.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a unusedIndexReportArgs) (*mcp.CallToolResult, any, error) {
-		return jsonResult(c.UnusedIndexReport(ctx, a.Cluster, a.Database, a.Limit))
+		return jsonResult(ctx)(c.UnusedIndexReport(ctx, a.Cluster, a.Database, a.Limit))
 	})
 
 	addTool(s, &mcp.Tool{
@@ -444,22 +444,22 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			"covered_queries carries fingerprints, call counts and the per-host queryid, not the statement text: " +
 			"set include_queries=true for the text (clipped), or feed query_id_by_host into query_report on that " +
 			"host. " +
-			"A 404 means the cluster/database is unknown OR the index_advisor feature is disabled in Dasha's " +
-			"configuration — never \"nothing to suggest\". The report is built on demand and never cached; on a " +
+			"not_found is never \"nothing to suggest\": its scope names the unknown name, or 'feature' when the " +
+			"index advisor is disabled in Dasha's configuration. The report is built on demand and never cached; on a " +
 			"large workload the call takes tens of seconds. " +
 			"Dasha NEVER executes DDL. The ddl is a proposal for a human to run, after checking " +
 			"unused_index_report on the same database — a new index laid on top of redundant ones nobody removed " +
 			"is not an improvement. " +
 			"Read dasha://kb/index-advisor before interpreting the numbers.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a indexAdvisorArgs) (*mcp.CallToolResult, any, error) {
-		return jsonResult(indexAdvisor(ctx, c, a))
+		return jsonResult(ctx)(indexAdvisor(ctx, c, a))
 	})
 
 	addTool(s, &mcp.Tool{
 		Name:        "top_tables",
 		Description: "List the largest tables in a database by total size.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a dbArgs) (*mcp.CallToolResult, any, error) {
-		return jsonResult(c.TopTables(ctx, a.Cluster, a.Instance, a.Database))
+		return jsonResult(ctx)(c.TopTables(ctx, a.Cluster, a.Instance, a.Database))
 	})
 
 	addTool(s, &mcp.Tool{
@@ -486,7 +486,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			return errResult("level must be 'error', 'warning' or 'notice'"), nil, nil
 		}
 
-		return jsonResult(c.SchemaLint(ctx, a.Cluster, a.Instance, a.Database, a.Level, a.Limit))
+		return jsonResult(ctx)(c.SchemaLint(ctx, a.Cluster, a.Instance, a.Database, a.Level, a.Limit))
 	})
 
 	addTool(s, &mcp.Tool{
@@ -497,7 +497,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			"checks that did not run there, and failed=true means the database could not be read at all. " +
 			"The sweep is capped in the number of databases, so a very large instance may be reported only in part.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a instanceArgs) (*mcp.CallToolResult, any, error) {
-		return jsonResult(c.SchemaLintSummary(ctx, a.Cluster, a.Instance))
+		return jsonResult(ctx)(c.SchemaLintSummary(ctx, a.Cluster, a.Instance))
 	})
 
 	addTool(s, &mcp.Tool{
@@ -517,7 +517,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			return errResult("class must be 'reads', 'writes' or 'io'"), nil, nil
 		}
 
-		return jsonResult(c.HotTables(ctx, a.Cluster, a.Database, a.Class, a.Limit))
+		return jsonResult(ctx)(c.HotTables(ctx, a.Cluster, a.Database, a.Class, a.Limit))
 	})
 
 	addTool(s, &mcp.Tool{
@@ -531,7 +531,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			return errResult("class must be 'reads' or 'io'"), nil, nil
 		}
 
-		return jsonResult(c.HotIndexes(ctx, a.Cluster, a.Database, a.Class, a.Limit))
+		return jsonResult(ctx)(c.HotIndexes(ctx, a.Cluster, a.Database, a.Class, a.Limit))
 	})
 
 	addTool(s, &mcp.Tool{
@@ -542,7 +542,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			"database is reported as a relation OID, since names resolve through the catalog of the " +
 			"database being read.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a blockedQueriesArgs) (*mcp.CallToolResult, any, error) {
-		return jsonResult(c.BlockedQueries(ctx, a.Cluster, a.Instance, a.Database, a.Scope))
+		return jsonResult(ctx)(c.BlockedQueries(ctx, a.Cluster, a.Instance, a.Database, a.Scope))
 	})
 
 	addTool(s, &mcp.Tool{
@@ -557,14 +557,14 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 
 		to := time.Now()
 
-		return jsonResult(c.HealthTrend(ctx, a.Cluster, a.Instance, to.Add(-span), to, step))
+		return jsonResult(ctx)(c.HealthTrend(ctx, a.Cluster, a.Instance, to.Add(-span), to, step))
 	})
 
 	addTool(s, &mcp.Tool{
 		Name:        "health_databases",
 		Description: "Get per-database health scores for a cluster/instance, including the worst-scoring database.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a instanceArgs) (*mcp.CallToolResult, any, error) {
-		return jsonResult(c.HealthDatabases(ctx, a.Cluster, a.Instance))
+		return jsonResult(ctx)(c.HealthDatabases(ctx, a.Cluster, a.Instance))
 	})
 
 	addTool(s, &mcp.Tool{
@@ -583,7 +583,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 		cf, err := c.ReplicationConfig(ctx, a.Cluster, a.Instance)
 		section(out, "config", cf, err)
 
-		return sectionsResult(out)
+		return sectionsResult(ctx, out)
 	})
 
 	addTool(s, &mcp.Tool{
@@ -591,7 +591,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 		Description: "Analyse the PostgreSQL configuration (pg_settings) for a cluster/instance and return " +
 			"findings and suggested adjustments.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a instanceArgs) (*mcp.CallToolResult, any, error) {
-		return jsonResult(c.SettingsAnalyze(ctx, a.Cluster, a.Instance))
+		return jsonResult(ctx)(c.SettingsAnalyze(ctx, a.Cluster, a.Instance))
 	})
 
 	addTool(s, &mcp.Tool{
@@ -599,7 +599,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 		Description: "Get the current wait events (grouped by type/event) for a cluster/instance — what " +
 			"backends are waiting on right now.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a instanceArgs) (*mcp.CallToolResult, any, error) {
-		return jsonResult(c.WaitEvents(ctx, a.Cluster, a.Instance))
+		return jsonResult(ctx)(c.WaitEvents(ctx, a.Cluster, a.Instance))
 	})
 
 	addTool(s, &mcp.Tool{
@@ -614,7 +614,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			"of top_queries. Rows are the top of each metric per database, so pass queryid to pull in a " +
 			"statement that leads none of them. Requires pg_stat_statements.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a queryReportArgs) (*mcp.CallToolResult, any, error) {
-		return jsonResult(c.QueryReport(ctx, a.Cluster, a.Instance, a.Database, a.Queryid, a.ExcludeUsers))
+		return jsonResult(ctx)(c.QueryReport(ctx, a.Cluster, a.Instance, a.Database, a.Queryid, a.ExcludeUsers))
 	})
 
 	addTool(s, &mcp.Tool{
@@ -624,7 +624,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			"only the database it was read through. Use this to obtain the snapshot IDs that query_compare " +
 			"needs. Requires snapshot storage.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a listSnapshotsArgs) (*mcp.CallToolResult, any, error) {
-		return jsonResult(c.Snapshots(ctx, a.Cluster, a.Instance))
+		return jsonResult(ctx)(c.Snapshots(ctx, a.Cluster, a.Instance))
 	})
 
 	addTool(s, &mcp.Tool{
@@ -641,7 +641,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			b = &a.SnapshotB
 		}
 
-		return jsonResult(c.QueryCompare(ctx, a.Cluster, a.Instance, a.Database, a.Scope, a.SnapshotA, b, a.ExcludeUsers))
+		return jsonResult(ctx)(c.QueryCompare(ctx, a.Cluster, a.Instance, a.Database, a.Scope, a.SnapshotA, b, a.ExcludeUsers))
 	})
 
 	addTool(s, &mcp.Tool{
@@ -657,7 +657,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 		fz, err := c.AutovacuumFreezeMaxAge(ctx, a.Cluster, a.Instance)
 		section(out, "autovacuum_freeze_max_age", fz, err)
 
-		return sectionsResult(out)
+		return sectionsResult(ctx, out)
 	})
 
 	addTool(s, &mcp.Tool{
@@ -681,7 +681,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 		act, err := c.ConnectionStatActivity(ctx, a.Cluster, a.Instance, limit)
 		section(out, "activity", act, err)
 
-		return sectionsResult(out)
+		return sectionsResult(ctx, out)
 	})
 
 	addTool(s, &mcp.Tool{
@@ -716,7 +716,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 		vs, err := c.TableDescribeVacuumStats(ctx, a.Cluster, a.Instance, a.Database, schema, a.Table)
 		section(out, "vacuum_stats", vs, err)
 
-		return sectionsResult(out)
+		return sectionsResult(ctx, out)
 	})
 
 	addTool(s, &mcp.Tool{
@@ -724,7 +724,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 		Description: "Scan every cluster/instance Dasha manages and return the worst-scoring instances " +
 			"(health score, ascending). One call instead of looping list_clusters + get_health_score.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a fleetHealthArgs) (*mcp.CallToolResult, any, error) {
-		return jsonResult(fleetHealth(ctx, c, a.Limit))
+		return jsonResult(ctx)(fleetHealth(ctx, c, a.Limit))
 	})
 
 	addTool(s, &mcp.Tool{
@@ -741,7 +741,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			return errResult(errMsg), nil, nil
 		}
 
-		return jsonResult(c.SearchLogs(ctx, params))
+		return jsonResult(ctx)(c.SearchLogs(ctx, params))
 	})
 
 	addTool(s, &mcp.Tool{
@@ -772,7 +772,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			"from values is zero. Needs snapshot storage (501 otherwise). " +
 			"Read dasha://kb/pg-stat-io before interpreting the numbers.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a ioSummaryArgs) (*mcp.CallToolResult, any, error) {
-		return jsonResult(ioSummary(ctx, c, a))
+		return jsonResult(ctx)(ioSummary(ctx, c, a))
 	})
 
 	addTool(s, &mcp.Tool{
@@ -795,7 +795,7 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			"meta.track_wal_io_timing before attributing them, and split them with io_summary group_by=full. " +
 			"Read dasha://kb/pg-stat-io before interpreting the numbers.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a ioTrendArgs) (*mcp.CallToolResult, any, error) {
-		return jsonResult(ioTrend(ctx, c, a))
+		return jsonResult(ctx)(ioTrend(ctx, c, a))
 	})
 }
 

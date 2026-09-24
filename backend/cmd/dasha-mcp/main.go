@@ -20,6 +20,7 @@ import (
 	"os"
 	"os/signal"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -44,6 +45,7 @@ type options struct {
 	timeout     time.Duration
 	slowTimeout time.Duration
 	lang        string
+	maxResult   int
 }
 
 func main() {
@@ -79,6 +81,9 @@ func Execute(ctx context.Context) error {
 	f.DurationVar(&opts.slowTimeout, "slow-timeout", 90*time.Second,
 		"timeout for reports Dasha builds on demand (index_advisor); keep it above the server's index_advisor.timeout")
 	f.StringVar(&opts.lang, "lang", "", "knowledge-base language: en|ru (default: $DASHA_MCP_LANG or en)")
+	f.IntVar(&opts.maxResult, "max-result-bytes", 0,
+		"size budget of one tool result; keep it below the client's inline limit "+
+			"(default: $DASHA_MCP_MAX_RESULT_BYTES or 65536)")
 
 	return cmd.ExecuteContext(ctx)
 }
@@ -102,12 +107,18 @@ func run(ctx context.Context, opts options) error {
 		return fmt.Errorf("unsupported lang %q (supported: %s)", lang, strings.Join(mcpserver.SupportedLangs(), ", "))
 	}
 
+	maxResult, err := resolveMaxResult(opts.maxResult)
+	if err != nil {
+		return err
+	}
+
 	client, err := mcpserver.NewDashaClient(mcpserver.Config{
-		DashaURL:    opts.dashaURL,
-		Token:       os.Getenv("DASHA_MCP_TOKEN"),
-		Timeout:     opts.timeout,
-		SlowTimeout: opts.slowTimeout,
-		Logger:      logger,
+		DashaURL:       opts.dashaURL,
+		Token:          os.Getenv("DASHA_MCP_TOKEN"),
+		Timeout:        opts.timeout,
+		SlowTimeout:    opts.slowTimeout,
+		MaxResultBytes: maxResult,
+		Logger:         logger,
 	})
 	if err != nil {
 		return fmt.Errorf("build Dasha client: %w", err)
@@ -135,6 +146,28 @@ func run(ctx context.Context, opts options) error {
 	}
 
 	return nil
+}
+
+func resolveMaxResult(flag int) (int, error) {
+	if flag != 0 {
+		if flag < 0 {
+			return 0, fmt.Errorf("--max-result-bytes must be positive, got %d", flag)
+		}
+
+		return flag, nil
+	}
+
+	env := os.Getenv("DASHA_MCP_MAX_RESULT_BYTES")
+	if env == "" {
+		return 0, nil
+	}
+
+	n, err := strconv.Atoi(env)
+	if err != nil || n <= 0 {
+		return 0, fmt.Errorf("DASHA_MCP_MAX_RESULT_BYTES must be a positive integer, got %q", env)
+	}
+
+	return n, nil
 }
 
 // serveHTTP runs the streamable-HTTP transport until the context is cancelled,

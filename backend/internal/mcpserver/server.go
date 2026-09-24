@@ -14,15 +14,16 @@ import (
 // args via json/jsonschema struct tags. lang selects the knowledge-base
 // language ("en"/"ru"; unknown values fall back to "en").
 func NewMCPServer(client *DashaClient, version, lang string) *mcp.Server {
-	return newServer(client, version, lang, nil)
+	return newServer(client, version, lang, nil, newToolStats())
 }
 
 // newServer builds the server with shared options. cache is nil for stdio (one
 // server for the process) or a shared *mcp.SchemaCache for HTTP (a server per
 // token), where it avoids re-deriving every tool's schema by reflection. The
 // instructions, prompt playbooks and knowledge-base resources come in lang
-// ("en"/"ru"; unknown falls back to "en").
-func newServer(client *DashaClient, version, lang string, cache *mcp.SchemaCache) *mcp.Server {
+// ("en"/"ru"; unknown falls back to "en"). stats is shared by every server of
+// the process.
+func newServer(client *DashaClient, version, lang string, cache *mcp.SchemaCache, stats *toolStats) *mcp.Server {
 	if !validLang(lang) {
 		lang = kbDefaultLang
 	}
@@ -40,8 +41,12 @@ func newServer(client *DashaClient, version, lang string, cache *mcp.SchemaCache
 	registerTools(s, client)
 	registerPrompts(s, t)
 	registerResources(s, lang)
+	registerStatsResource(s, stats, client.maxResultBytes)
 
+	// Each call wraps the previous chain: logging ends up outermost and sees the
+	// final result size.
 	s.AddReceivingMiddleware(forwardedProtoMiddleware())
+	s.AddReceivingMiddleware(budgetMiddleware(client, stats))
 
 	if client.logger != nil {
 		s.AddReceivingMiddleware(loggingMiddleware(client.logger))
@@ -76,6 +81,13 @@ func loggingMiddleware(logger *zap.Logger) mcp.Middleware {
 	return func(next mcp.MethodHandler) mcp.MethodHandler {
 		return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
 			start := time.Now()
+
+			var rec *callRecord
+			if _, ok := req.GetParams().(*mcp.CallToolParamsRaw); ok {
+				rec = &callRecord{} //nolint:exhaustruct
+				ctx = withRecord(ctx, rec)
+			}
+
 			res, err := next(ctx, method, req)
 
 			fields := []zap.Field{
@@ -85,7 +97,11 @@ func loggingMiddleware(logger *zap.Logger) mcp.Middleware {
 
 			switch p := req.GetParams().(type) {
 			case *mcp.CallToolParamsRaw:
-				fields = append(fields, zap.String("tool", p.Name))
+				fields = append(fields,
+					zap.String("tool", p.Name),
+					zap.Int("result_bytes", rec.bytes),
+					zap.Bool("shaped", rec.shaped),
+					zap.String("step", rec.lastStep()))
 			case *mcp.GetPromptParams:
 				fields = append(fields, zap.String("prompt", p.Name))
 			case *mcp.ReadResourceParams:

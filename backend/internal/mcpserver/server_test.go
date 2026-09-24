@@ -1,6 +1,7 @@
 package mcpserver
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -29,7 +30,7 @@ func textOf(t *testing.T, res *mcp.CallToolResult) string {
 func TestJSONResult_Success(t *testing.T) {
 	t.Parallel()
 
-	res, _, err := jsonResult(map[string]int{"a": 1}, nil)
+	res, _, err := jsonResult(context.Background())(map[string]int{"a": 1}, nil)
 	if err != nil {
 		t.Fatalf("unexpected protocol error: %v", err)
 	}
@@ -46,7 +47,7 @@ func TestJSONResult_Success(t *testing.T) {
 func TestJSONResult_Error(t *testing.T) {
 	t.Parallel()
 
-	res, _, err := jsonResult(nil, errors.New("boom"))
+	res, _, err := jsonResult(context.Background())(nil, errors.New("boom"))
 	if err != nil {
 		t.Fatalf("jsonResult must not surface a protocol error: %v", err)
 	}
@@ -63,9 +64,9 @@ func TestJSONResult_Error(t *testing.T) {
 func TestJSONResult_OversizedRefused(t *testing.T) {
 	t.Parallel()
 
-	big := strings.Repeat("x", maxResultBytes+1)
+	big := strings.Repeat("x", defaultMaxResultBytes+1)
 
-	res, _, err := jsonResult(map[string]string{"blob": big}, nil)
+	res, _, err := jsonResult(context.Background())(map[string]string{"blob": big}, nil)
 	if err != nil {
 		t.Fatalf("unexpected protocol error: %v", err)
 	}
@@ -83,7 +84,7 @@ func TestJSONResult_OversizedRefused(t *testing.T) {
 func TestJSONResult_UnderLimitPasses(t *testing.T) {
 	t.Parallel()
 
-	res, _, err := jsonResult(map[string]string{"ok": "small"}, nil)
+	res, _, err := jsonResult(context.Background())(map[string]string{"ok": "small"}, nil)
 	if err != nil {
 		t.Fatalf("unexpected protocol error: %v", err)
 	}
@@ -126,7 +127,7 @@ func TestSectionsResult_AllFailedIsError(t *testing.T) {
 	section(allFailed, "status", nil, errors.New("access denied"))
 	section(allFailed, "slots", nil, errors.New("access denied"))
 
-	res, _, err := sectionsResult(allFailed)
+	res, _, err := sectionsResult(context.Background(), allFailed)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -145,7 +146,7 @@ func TestSectionsResult_PartialSuccessNotError(t *testing.T) {
 	section(out, "status", "ok", nil)
 	section(out, "slots", nil, errors.New("denied"))
 
-	res, _, err := sectionsResult(out)
+	res, _, err := sectionsResult(context.Background(), out)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
