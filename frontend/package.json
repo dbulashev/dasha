@@ -33,7 +33,7 @@
   },
   "devDependencies": {
     "@mdi/font": "^7.4.47",
-    "@playwright/test": "^1.62.1",
+    "@playwright/test": "^1.63.0",
     "@tsconfig/node22": "^22.0.6",
     "@types/jsdom": "^28.0.3",
     "@types/node": "^26.6.1",
