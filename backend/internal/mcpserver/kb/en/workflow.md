@@ -1,8 +1,9 @@
 # Diagnostic workflows
 
 Complaint → tool chain. Execute steps in order, one tool per step; stop early
-when the cause is found. Get (cluster, instance) from `list_clusters` first —
-per-database tools also need `database`.
+when the cause is found. Get (cluster, instance) from `list_clusters` first
+(an exact `cluster` lists its hosts and databases) — per-database tools also
+need `database`.
 
 ## "The database is slow"
 1. `get_health_score` — score ≥80: look at the app, not the DB (report and stop).
@@ -43,7 +44,8 @@ per-database tools also need `database`.
 4. `wait_events` on the primary — WAL-write pressure also inflates lag.
 
 ## "Application reports errors"
-1. Clusters whose `log_streams` include postgresql (see list_clusters):
+1. Clusters whose `log_streams` include postgresql (list_clusters with the
+   exact cluster name):
    `search_logs` with severity=["ERROR","FATAL"], dedup on, a narrow window
    (since="1h"). One call with all filters — the endpoint is rate-limited.
 2. Match error templates against `blocked_queries` (deadlocks, lock timeouts)
@@ -94,7 +96,8 @@ per-database tools also need `database`.
 - If a result is refused as too large — narrow (one database, smaller limit,
   shorter window), do not retry as-is.
 - health_trend needs metrics mode; a 404/error there is not an instance
-  problem.
+  problem. Its summary already holds the dips, the categories behind them
+  and per-period minimums: do not pull the series to recompute them.
 - Report format: 3-5 findings, each = fact (numbers from tools) + cause +
   one concrete action, worst first. Never invent metrics that are not in the
   tool output.

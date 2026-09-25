@@ -79,7 +79,7 @@ func Execute(ctx context.Context) error {
 	f.StringVar(&opts.httpAddr, "http", "", "listen address for HTTP/SSE transport (e.g. :8765); empty = stdio")
 	f.DurationVar(&opts.timeout, "timeout", 15*time.Second, "per-request timeout for Dasha API calls")
 	f.DurationVar(&opts.slowTimeout, "slow-timeout", 90*time.Second,
-		"timeout for reports Dasha builds on demand (index_advisor); keep it above the server's index_advisor.timeout")
+		"timeout for reports Dasha builds on demand (index_advisor, describe_table bloat); keep it above the server's index_advisor.timeout")
 	f.StringVar(&opts.lang, "lang", "", "knowledge-base language: en|ru (default: $DASHA_MCP_LANG or en)")
 	f.IntVar(&opts.maxResult, "max-result-bytes", 0,
 		"size budget of one tool result; keep it below the client's inline limit "+

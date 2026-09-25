@@ -89,7 +89,7 @@ func TestE2E_ListAndCallTool(t *testing.T) {
 		t.Fatalf("list_clusters returned IsError: %s", firstText(res))
 	}
 
-	if got := firstText(res); !strings.Contains(got, "demo") {
+	if got := contentText(res.Content[len(res.Content)-1]); !strings.Contains(got, "demo") {
 		t.Errorf("result = %q, want it to contain cluster 'demo'", got)
 	}
 }

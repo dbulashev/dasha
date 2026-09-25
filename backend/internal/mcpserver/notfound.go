@@ -146,6 +146,26 @@ func resolveTarget(t callTarget, clusters []apiclient.Cluster) notFoundAnswer {
 }
 
 func clusterMiss(given string, clusters []apiclient.Cluster) notFoundAnswer {
+	cands := similarClusters(given, clusters)
+
+	ans := notFoundAnswer{ //nolint:exhaustruct
+		Error: "not_found",
+		Scope: scopeCluster,
+		Given: given,
+		Total: len(clusters),
+		Hint:  "call again with an exact cluster name from did_you_mean",
+	}
+
+	if len(cands) == 0 {
+		ans.Hint = "no similar cluster name; call list_clusters"
+	} else {
+		ans.DidYouMean = cands
+	}
+
+	return ans
+}
+
+func similarClusters(given string, clusters []apiclient.Cluster) []clusterCandidate {
 	byName := make(map[string]apiclient.Cluster, len(clusters))
 	names := make([]string, 0, len(clusters))
 
@@ -168,21 +188,7 @@ func clusterMiss(given string, clusters []apiclient.Cluster) notFoundAnswer {
 		})
 	}
 
-	ans := notFoundAnswer{ //nolint:exhaustruct
-		Error: "not_found",
-		Scope: scopeCluster,
-		Given: given,
-		Total: len(clusters),
-		Hint:  "call again with an exact cluster name from did_you_mean",
-	}
-
-	if len(cands) == 0 {
-		ans.Hint = "no similar cluster name; call list_clusters"
-	} else {
-		ans.DidYouMean = cands
-	}
-
-	return ans
+	return cands
 }
 
 // memberMiss lists the cluster's own hosts or databases; with no similar name

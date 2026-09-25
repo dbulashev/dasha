@@ -20,7 +20,12 @@ const (
 
 // shapedTools narrow their own result and live under the configured budget; the
 // rest keep unshapedResultBytes. A tool joins together with its shapedResult.
-var shapedTools = map[string]bool{}
+var shapedTools = map[string]bool{
+	"describe_table": true,
+	"health_trend":   true,
+	"list_clusters":  true,
+	"query_compare":  true,
+}
 
 func budgetFor(shaped bool, budget int) int {
 	if budget <= 0 {
@@ -57,11 +62,8 @@ type shapeNote struct {
 
 type toolResultFunc func(payload any, err error) (*mcp.CallToolResult, any, error)
 
-// jsonResult renders a payload as compact JSON text, or maps an error to an
-// isError tool result the model can read and react to (rather than a protocol
-// error it cannot see). A result over the call's budget is narrowed by the
-// payload's own shrink(), or refused when the payload cannot narrow itself.
-// It is curried so a (value, error) call can be passed straight in.
+// jsonResult renders a payload as compact JSON text, or an error as an isError
+// tool result. A result over the call's budget is narrowed by its own shrink().
 func jsonResult(ctx context.Context) toolResultFunc {
 	return func(payload any, err error) (*mcp.CallToolResult, any, error) {
 		return renderResult(ctx, payload, err)
@@ -110,6 +112,13 @@ func renderResult(ctx context.Context, payload any, err error) (*mcp.CallToolRes
 				shaped, payload, steps = next, next, append(steps, step)
 
 				continue
+			}
+
+			// at its floor a shaped result gets the unshaped tools' ceiling
+			if size <= unshapedResultBytes {
+				rec.markShaped(note != "", steps)
+
+				return shapedContent(note, b), nil, nil
 			}
 
 			hint = step
@@ -193,7 +202,7 @@ func section(out map[string]any, key string, v any, err error) {
 // sectionsResult renders a composite result, but marks it IsError when EVERY
 // section failed (e.g. a permission error on every sub-request) so the model
 // does not treat an all-errors payload as usable data.
-func sectionsResult(ctx context.Context, out map[string]any) (*mcp.CallToolResult, any, error) {
+func sectionsResult[M ~map[string]any](ctx context.Context, out M) (*mcp.CallToolResult, any, error) {
 	allFailed := len(out) > 0
 	allNotFound := allFailed
 

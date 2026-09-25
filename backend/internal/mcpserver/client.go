@@ -21,7 +21,7 @@ type DashaClient struct {
 	api   *apiclient.ClientWithResponses
 	token string // the identity bound to this client (stdio default, or per-request via withToken)
 	// slowAPI carries the same identity on a longer deadline, for the reports
-	// Dasha builds on demand (index_advisor) rather than serving from a cache.
+	// Dasha builds on demand (index_advisor, table bloat) rather than serving from a cache.
 	slowAPI *apiclient.ClientWithResponses
 	logger  *zap.Logger
 
@@ -519,7 +519,9 @@ func (d *DashaClient) BlockedQueries(ctx context.Context, cluster, instance, dat
 
 // HealthTrend returns the health-score time series (points, seasonal baseline,
 // dips) over [from, to] at the given step (seconds). Metrics-backed mode only.
-func (d *DashaClient) HealthTrend(ctx context.Context, cluster, instance string, from, to time.Time, step int) (any, error) {
+func (d *DashaClient) HealthTrend(
+	ctx context.Context, cluster, instance string, from, to time.Time, step int,
+) (*apiclient.HealthScoreHistory, error) {
 	r, err := d.api.GetHealthScoreHistoryWithResponse(ctx, &apiclient.GetHealthScoreHistoryParams{
 		ClusterName: cluster, Instance: instance, From: from, To: to, StepSeconds: &step,
 	}, d.editor(ctx))
@@ -527,7 +529,11 @@ func (d *DashaClient) HealthTrend(ctx context.Context, cluster, instance string,
 		return nil, wrapErr("health_trend", err)
 	}
 
-	return pick(r.JSON200, r.HTTPResponse, "health_trend")
+	if r.JSON200 == nil {
+		return nil, statusError("health_trend", r.HTTPResponse)
+	}
+
+	return r.JSON200, nil
 }
 
 // HealthDatabases returns per-database health scores (incl. the worst).
@@ -716,7 +722,7 @@ func (d *DashaClient) QueryCompare(
 	cluster, instance, database, scope, snapshotA string,
 	snapshotB *string,
 	excludeUsers []string,
-) (any, error) {
+) ([]apiclient.QueryCompareItem, error) {
 	a, err := uuid.Parse(snapshotA)
 	if err != nil {
 		return nil, fmt.Errorf("mcp: query_compare: invalid snapshot_a %q: %w", snapshotA, err)
@@ -745,7 +751,11 @@ func (d *DashaClient) QueryCompare(
 		return nil, fmt.Errorf("mcp: query_compare: %s", r.JSON409.Message)
 	}
 
-	return pick(r.JSON200, r.HTTPResponse, "query_compare")
+	if r.JSON200 == nil {
+		return nil, statusError("query_compare", r.HTTPResponse)
+	}
+
+	return *r.JSON200, nil
 }
 
 // TransactionIdDanger reports per-table transaction-id age vs. the wraparound
@@ -812,7 +822,9 @@ func (d *DashaClient) ConnectionStatActivity(ctx context.Context, cluster, insta
 }
 
 // TableDescribe returns the column/index/constraint layout of one table.
-func (d *DashaClient) TableDescribe(ctx context.Context, cluster, instance, database, schema, table string) (any, error) {
+func (d *DashaClient) TableDescribe(
+	ctx context.Context, cluster, instance, database, schema, table string,
+) (*apiclient.TableDescribe, error) {
 	r, err := d.api.GetTablesDescribeWithResponse(ctx, &apiclient.GetTablesDescribeParams{
 		ClusterName: cluster, Instance: instance, Database: database, Schema: schema, Table: table,
 	}, d.editor(ctx))
@@ -820,25 +832,48 @@ func (d *DashaClient) TableDescribe(ctx context.Context, cluster, instance, data
 		return nil, wrapErr("describe_table", err)
 	}
 
-	return pick(r.JSON200, r.HTTPResponse, "describe_table")
+	if r.JSON200 == nil {
+		return nil, statusError("describe_table", r.HTTPResponse)
+	}
+
+	return r.JSON200, nil
 }
 
 // TableDescribeBloat returns the estimated bloat of one table.
-func (d *DashaClient) TableDescribeBloat(ctx context.Context, cluster, instance, database, schema, table string) (any, error) {
-	r, err := d.api.GetTablesDescribeBloatWithResponse(ctx, &apiclient.GetTablesDescribeBloatParams{
+func (d *DashaClient) TableDescribeBloat(
+	ctx context.Context, cluster, instance, database, schema, table string,
+) (*apiclient.TableDescribeBloat, error) {
+	r, err := d.slowAPI.GetTablesDescribeBloatWithResponse(ctx, &apiclient.GetTablesDescribeBloatParams{
 		ClusterName: cluster, Instance: instance, Database: database, Schema: schema, Table: table,
 	}, d.editor(ctx))
 	if err != nil {
+		if isTimeout(err) {
+			return nil, fmt.Errorf("%w: %w", errQueryTimeout, err)
+		}
+
 		return nil, wrapErr("describe_table", err)
 	}
 
-	return pick(r.JSON200, r.HTTPResponse, "describe_table")
+	switch {
+	case r.JSON200 != nil:
+		return r.JSON200, nil
+	case r.JSON423 != nil:
+		return nil, fmt.Errorf("%w: %s", errObjectLocked, r.JSON423.Message)
+	case r.JSON504 != nil:
+		return nil, fmt.Errorf("%w: %s", errQueryTimeout, r.JSON504.Message)
+	case r.StatusCode() == http.StatusInternalServerError:
+		return nil, fmt.Errorf("%w: %w", errBloatFailed, statusError("describe_table", r.HTTPResponse))
+	default:
+		return nil, statusError("describe_table", r.HTTPResponse)
+	}
 }
 
 // TableDescribePartitions returns up to limit partitions of one partitioned
 // table (heavily partitioned tables can have thousands — the cap keeps the
 // result within the response size limit).
-func (d *DashaClient) TableDescribePartitions(ctx context.Context, cluster, instance, database, schema, table string, limit int) (any, error) {
+func (d *DashaClient) TableDescribePartitions(
+	ctx context.Context, cluster, instance, database, schema, table string, limit int,
+) ([]apiclient.TableDescribePartition, error) {
 	r, err := d.api.GetTablesDescribePartitionsWithResponse(ctx, &apiclient.GetTablesDescribePartitionsParams{
 		ClusterName: cluster, Instance: instance, Database: database, Schema: schema, Table: table, Limit: &limit,
 	}, d.editor(ctx))
@@ -846,7 +881,11 @@ func (d *DashaClient) TableDescribePartitions(ctx context.Context, cluster, inst
 		return nil, wrapErr("describe_table", err)
 	}
 
-	return pick(r.JSON200, r.HTTPResponse, "describe_table")
+	if r.JSON200 == nil {
+		return nil, statusError("describe_table", r.HTTPResponse)
+	}
+
+	return *r.JSON200, nil
 }
 
 // TableDescribeRowEstimate returns the estimated vs. exact row count of one table.
@@ -892,7 +931,7 @@ func (d *DashaClient) SearchLogs(ctx context.Context, params *apiclient.GetLogsP
 				"needed filter into that one call")
 		case http.StatusNotImplemented:
 			return nil, errors.New("dasha: log search is unavailable for this cluster or stream (501) — " +
-				"check supports_logs in list_clusters, and that log_streams lists the service_type you asked for")
+				"check supports_logs and log_streams in list_clusters(cluster=<exact name>) for the service_type you asked for")
 		case http.StatusBadRequest:
 			return nil, errors.New("dasha: invalid log search parameters (400) — e.g. page_token combined " +
 				"with dedup, or an unknown severity value")
