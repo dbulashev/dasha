@@ -99,10 +99,12 @@ func (c Config) roleExclusion() string {
 
 // DatasourceConfig describes the TSDB endpoint.
 type DatasourceConfig struct {
-	URL           string        `mapstructure:"url"`
-	Auth          AuthConfig    `mapstructure:"auth"`
-	Timeout       time.Duration `mapstructure:"timeout"`
-	QueryCacheTTL time.Duration `mapstructure:"query_cache_ttl"`
+	URL     string        `mapstructure:"url"`
+	Auth    AuthConfig    `mapstructure:"auth"`
+	Timeout time.Duration `mapstructure:"timeout"`
+	// MaxQueryBytes caps one glued query; keep it under vmselect -search.maxQueryLen.
+	MaxQueryBytes  int `mapstructure:"max_query_bytes"`
+	MaxConcurrency int `mapstructure:"max_concurrency"`
 }
 
 // AuthConfig holds datasource credentials. Treat token/password as secrets:
@@ -122,6 +124,7 @@ type AuthConfig struct {
 type BaselineConfig struct {
 	Window     time.Duration `mapstructure:"window"`
 	MinHistory time.Duration `mapstructure:"min_history"`
+	CacheTTL   time.Duration `mapstructure:"cache_ttl"`
 }
 
 // DipsConfig sets dip-detection thresholds.
@@ -167,12 +170,14 @@ func Default() Config {
 	return Config{
 		Enabled: false,
 		Datasource: DatasourceConfig{
-			Timeout:       10 * time.Second,
-			QueryCacheTTL: 30 * time.Second,
+			Timeout:        10 * time.Second,
+			MaxQueryBytes:  14000,
+			MaxConcurrency: 4,
 		},
 		Baseline: BaselineConfig{
 			Window:     28 * 24 * time.Hour,
 			MinHistory: 14 * 24 * time.Hour,
+			CacheTTL:   30 * time.Minute,
 		},
 		Dips:         DipsConfig{ScorePoints: 10, LatencyFactor: 2.0},
 		Floor:        FloorConfig{WraparoundLeft: 200_000_000},
@@ -204,8 +209,12 @@ func (c Config) WithDefaults() Config {
 		c.Datasource.Timeout = d.Datasource.Timeout
 	}
 
-	if c.Datasource.QueryCacheTTL <= 0 {
-		c.Datasource.QueryCacheTTL = d.Datasource.QueryCacheTTL
+	if c.Datasource.MaxQueryBytes <= 0 {
+		c.Datasource.MaxQueryBytes = d.Datasource.MaxQueryBytes
+	}
+
+	if c.Datasource.MaxConcurrency <= 0 {
+		c.Datasource.MaxConcurrency = d.Datasource.MaxConcurrency
 	}
 
 	if c.Baseline.Window <= 0 {
@@ -214,6 +223,10 @@ func (c Config) WithDefaults() Config {
 
 	if c.Baseline.MinHistory <= 0 {
 		c.Baseline.MinHistory = d.Baseline.MinHistory
+	}
+
+	if c.Baseline.CacheTTL <= 0 {
+		c.Baseline.CacheTTL = d.Baseline.CacheTTL
 	}
 
 	if c.Dips.ScorePoints <= 0 {
@@ -277,6 +290,18 @@ func (c Config) Validate() error {
 
 	if c.Baseline.Window <= 0 || c.Baseline.MinHistory <= 0 || c.Baseline.MinHistory > c.Baseline.Window {
 		return fmt.Errorf("%w: baseline window/min_history out of range", ErrInvalidConfig)
+	}
+
+	if c.Baseline.CacheTTL < time.Minute {
+		return fmt.Errorf("%w: baseline.cache_ttl must be at least 1m", ErrInvalidConfig)
+	}
+
+	if c.Datasource.MaxQueryBytes < 1024 {
+		return fmt.Errorf("%w: datasource.max_query_bytes must be at least 1024", ErrInvalidConfig)
+	}
+
+	if c.Datasource.MaxConcurrency < 1 {
+		return fmt.Errorf("%w: datasource.max_concurrency must be at least 1", ErrInvalidConfig)
 	}
 
 	for _, k := range []string{SelectorPgSCV, SelectorYCNativeHost, SelectorYCNativePooler, SelectorPgBouncer} {

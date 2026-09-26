@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Performance
+- **Health Score in metrics mode loads faster.** The card reads all its signals from the datasource in one request; the seasonal baseline is refreshed every 30 minutes.
+
+### Configuration
+- `health_score.metrics.datasource.query_cache_ttl` is removed; `health_score.metrics.baseline.cache_ttl` sets how long the seasonal baseline is kept. New `datasource.max_query_bytes` and `datasource.max_concurrency` bound the batched datasource requests.
+
 ## v1.8.1
 
 ### Features
