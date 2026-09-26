@@ -35,6 +35,10 @@ const (
 
 var ErrNotFound = errors.New("not found")
 
+// ErrPoolBusy means every connection of the pool stayed taken until the
+// caller's deadline.
+var ErrPoolBusy = errors.New("connection pool busy")
+
 type Repository interface {
 	Clusters(ctx context.Context) ([]dto.ClusterInfo, error)
 	GetCommonSummary(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.CommonSummary, error)
@@ -190,6 +194,8 @@ type PgxPool struct {
 	poolConfig            config.PoolConfig
 	schemaLintConfig      schemalint.Config
 	sequenceHeadroomCache sync.Map // cluster/instance/database → sequenceHeadroomEntry
+	serverVersions        sync.Map // *pgxpool.Pool → serverVersionEntry
+	healthDBConcurrency   int
 	indexAdvisorConfig    indexadvisor.Config
 	sqlParserOnce         sync.Once
 	sqlParser             sqlparse.Parser // built on first use, see indexAdvisorParser
@@ -223,6 +229,7 @@ func NewRepositoryPgxPool(
 	poolCfg config.PoolConfig,
 	schemaLintCfg schemalint.Config,
 	indexAdvisorCfg indexadvisor.Config,
+	healthDBConcurrency int,
 	logger *zap.Logger,
 ) Repository {
 	return &PgxPool{
@@ -237,6 +244,7 @@ func NewRepositoryPgxPool(
 		poolConfig:          poolCfg,
 		schemaLintConfig:    schemaLintCfg,
 		indexAdvisorConfig:  indexAdvisorCfg,
+		healthDBConcurrency: healthDBConcurrency,
 	}
 }
 

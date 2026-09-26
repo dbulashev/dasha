@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -11,7 +12,22 @@ import (
 	"github.com/dbulashev/dasha/internal/query"
 )
 
+// serverVersionTTL bounds the per-pool version cache; a major upgrade restarts
+// the server and the pool is rebuilt anyway.
+const serverVersionTTL = 10 * time.Minute
+
+type serverVersionEntry struct {
+	num       int
+	expiresAt time.Time
+}
+
 func (p *PgxPool) getServerVersionNum(ctx context.Context, pool *pgxpool.Pool) (int, error) {
+	if cached, ok := p.serverVersions.Load(pool); ok {
+		if e, valid := cached.(serverVersionEntry); valid && time.Now().Before(e.expiresAt) {
+			return e.num, nil
+		}
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
@@ -31,6 +47,8 @@ func (p *PgxPool) getServerVersionNum(ctx context.Context, pool *pgxpool.Pool) (
 	if err != nil {
 		return 0, fmt.Errorf("getServerVersionNum | %w", err)
 	}
+
+	p.serverVersions.Store(pool, serverVersionEntry{num: versionInt, expiresAt: time.Now().Add(serverVersionTTL)})
 
 	return versionInt, nil
 }

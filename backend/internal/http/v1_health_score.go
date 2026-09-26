@@ -2,64 +2,27 @@ package http
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/dbulashev/dasha/gen/serverhttp"
-	"github.com/dbulashev/dasha/internal/config"
-	"github.com/dbulashev/dasha/internal/dto"
-	"github.com/dbulashev/dasha/internal/health"
+	"github.com/dbulashev/dasha/internal/healthscore"
 	"github.com/dbulashev/dasha/internal/metrics"
-	"github.com/dbulashev/dasha/internal/repository"
 )
 
 func (s *Handlers) GetHealthScore(
 	ctx context.Context,
 	req serverhttp.GetHealthScoreRequestObject,
 ) (serverhttp.GetHealthScoreResponseObject, error) {
-	weights, err := s.loadHealthWeights(ctx, req.Params.ClusterName)
+	score, err := s.scorer.Score(ctx, metrics.TargetRef{Cluster: req.Params.ClusterName, Instance: req.Params.Instance}, nil)
+	if healthscore.IsNotFound(err) {
+		return serverhttp.GetHealthScore404Response{}, nil
+	}
+
 	if err != nil {
-		return nil, fmt.Errorf("GetHealthScore | loadHealthWeights | %w", err)
+		return nil, fmt.Errorf("GetHealthScore | %w", err)
 	}
 
-	var (
-		result          health.Result
-		source          = "snapshot"
-		metricsDegraded bool
-	)
-
-	// Prefer the metrics-backed score when the datasource is configured and the
-	// target is mapped; otherwise fall back to the SQL snapshot (graceful). The
-	// metrics raw is overlaid with catalog/GUC facts so the score stays in
-	// lockstep with its recommendations (score<->rules parity).
-	walManaged := s.walLevelManaged(ctx, req.Params.ClusterName)
-
-	if raw, matched, ok := s.metricsRawWithCatalog(ctx, req.Params.ClusterName, req.Params.Instance); ok {
-		raw.WalLevelManaged = walManaged
-		s.overlaySequenceExhaustion(ctx, &raw, req.Params.ClusterName, req.Params.Instance, "")
-		result = health.CalculateWithWeights(raw, weights)
-		source = "metrics"
-		// Resolved but no series matched any selector — the metrics score is built
-		// from absent signals (looks green), so flag it for the UI instead of
-		// silently hiding the gap.
-		metricsDegraded = matched == 0
-	}
-
-	if source == "snapshot" {
-		m, err := s.repo.GetHealthScoreMetrics(ctx, req.Params.ClusterName, req.Params.Instance, "")
-		if errors.Is(err, repository.ErrNotFound) {
-			return serverhttp.GetHealthScore404Response{}, nil
-		}
-
-		if err != nil {
-			return nil, fmt.Errorf("GetHealthScore | %w", err)
-		}
-
-		raw := rawFromSnapshot(m)
-		raw.WalLevelManaged = walManaged
-		s.overlaySequenceExhaustion(ctx, &raw, req.Params.ClusterName, req.Params.Instance, "")
-		result = health.CalculateWithWeights(raw, weights)
-	}
+	result := score.Result
 
 	categories := make([]serverhttp.HealthScoreCategory, 0, len(result.Categories))
 	for _, c := range result.Categories {
@@ -72,7 +35,8 @@ func (s *Handlers) GetHealthScore(
 		})
 	}
 
-	src := source
+	src := string(score.Source)
+	metricsDegraded := score.MetricsDegraded
 
 	return serverhttp.GetHealthScore200JSONResponse{
 		Score:           result.Score,
@@ -84,280 +48,6 @@ func (s *Handlers) GetHealthScore(
 	}, nil
 }
 
-// overlaySequenceExhaustion fills the sequence headroom the SQL snapshot does
-// not carry, reading it from the schema-lint report (cached, so the health score
-// does not pay for a catalog sweep on every poll).
-//
-// The database argument carries the caller's scope straight through: empty means
-// the whole instance, which is what the gauge and the instance-wide
-// recommendations measure, and a name means that database's drill-down. Passing
-// a single database where the caller meant the instance is how the gauge and the
-// recommendation below it end up disagreeing about the same sequence.
-//
-// Left alone when the metrics datasource already supplied the signal, and
-// skipped on standbys, where the report is not produced at all. A failure is
-// silent by design: an unavailable schema-lint report must not take down the
-// score, and the metric stays at "no signal" rather than a made-up value.
-func (s *Handlers) overlaySequenceExhaustion(ctx context.Context, raw *health.RawMetrics, cluster, instance, database string) {
-	// The rule reads its thresholds from the same configuration the page uses,
-	// so overriding sequence_thresholds moves both together.
-	raw.SequenceThresholds = s.cfg.SchemaLint.SequenceThresholds
-
-	if raw.InRecovery || raw.SequenceExhaustionMax > 0 {
-		return
-	}
-
-	worst, known, err := s.repo.GetSequenceHeadroom(ctx, cluster, instance, database)
-	if err != nil || !known {
-		return
-	}
-
-	raw.SequenceExhaustionMax = worst
-}
-
-// walLevelManaged reports whether the cluster's provider fixes wal_level
-// (Yandex MDB forces logical), so the wasted-overhead rule must not fire.
-func (s *Handlers) walLevelManaged(ctx context.Context, clusterName string) bool {
-	clusters, err := s.repo.Clusters(ctx)
-	if err != nil {
-		return false
-	}
-
-	for _, c := range clusters {
-		if c.Name.String() == clusterName {
-			return c.Source == config.SourceYandexMDB
-		}
-	}
-
-	return false
-}
-
-// rawFromSnapshot maps the SQL snapshot onto the score engine's input. Shared by
-// the snapshot scoring/recommendation paths and the metrics-mode catalog overlay.
-func rawFromSnapshot(m *dto.HealthScoreMetrics) health.RawMetrics {
-	return health.RawMetrics{
-		InRecovery:                 m.InRecovery,
-		Database:                   m.Database,
-		TotalConnections:           m.TotalConnections,
-		ActiveConnections:          m.ActiveConnections,
-		IdleInTransaction:          m.IdleInTransaction,
-		IdleInTransactionDatabase:  m.IdleInTransactionDatabase,
-		LongestTransactionSeconds:  m.LongestTransactionSeconds,
-		LongestTransactionDatabase: m.LongestTransactionDatabase,
-		MaxConnections:             m.MaxConnections,
-		CacheHitRatio:              m.CacheHitRatio,
-		CacheSampleBlocks:          m.CacheSampleBlocks,
-		TrackIoTimingEnabled:       m.TrackIoTimingEnabled,
-		MaxDeadRatio:               m.MaxDeadRatio,
-		AvgDeadRatio:               m.AvgDeadRatio,
-		TablesHighBloat:            m.TablesHighBloat,
-		ReplicaCount:               m.ReplicaCount,
-		MaxReplayLagSeconds:        m.MaxReplayLagSeconds,
-		MaxLagBytes:                m.MaxLagBytes,
-		DisconnectedReplicas:       m.DisconnectedReplicas,
-		MaxXidAge:                  m.MaxXidAge,
-		VacuumBacklogTables:        m.VacuumBacklogTables,
-		MaxOverdueVacuumAgeHours:   m.MaxOverdueVacuumAgeHours,
-		TablesNeverVacuumed:        m.TablesNeverVacuumed,
-		AutovacuumEnabled:          m.AutovacuumEnabled,
-		TrackCountsEnabled:         m.TrackCountsEnabled,
-		TablesWithAutovacuumOff:    m.TablesWithAutovacuumOff,
-		MaxRelfrozenxidAge:         m.MaxRelfrozenxidAge,
-		HorizonLagXids:             m.HorizonLagXids,
-		HorizonDatabase:            m.HorizonDatabase,
-		TimedCheckpoints:           m.TimedCheckpoints,
-		RequestedCheckpoints:       m.RequestedCheckpoints,
-		ActiveLockWaiters:          m.ActiveLockWaiters,
-		LongestLockWaitSeconds:     m.LongestLockWaitSeconds,
-		UngrantedLocks:             m.UngrantedLocks,
-		DeadlocksTotal:             m.DeadlocksTotal,
-		HeavyweightLocksTotal:      m.HeavyweightLocksTotal,
-		MaxLocksPerTransaction:     m.MaxLocksPerTransaction,
-		HotUpdateRatio:             m.HotUpdateRatio,
-		NewpageUpdateRatio:         m.NewpageUpdateRatio,
-		StalePlannerStatsTables:    m.StalePlannerStatsTables,
-		WalLevel:                   m.WalLevel,
-		LogicalSlotsActive:         m.LogicalSlotsActive,
-	}
-}
-
-// overlayCatalogFacts fills metrics-derived RawMetrics with catalog/GUC facts a
-// Prometheus-style datasource cannot express (per-table autovacuum/vacuum state,
-// relfrozenxid age, planner-stat drift, GUCs, wal_level, MVCC horizon, lock-pool
-// sizing, in-recovery). Time-series-derived fields keep their metrics values;
-// only the gaps the collector leaves neutral are written, so catalog-only rules
-// (e.g. tables_with_autovacuum_off) keep firing — and the score keeps penalising
-// them — even when a datasource is configured.
-func overlayCatalogFacts(raw *health.RawMetrics, m *dto.HealthScoreMetrics) {
-	raw.InRecovery = m.InRecovery
-	raw.Database = m.Database
-
-	// Connections — longest transaction is a catalog/activity fact, not scraped.
-	raw.LongestTransactionSeconds = m.LongestTransactionSeconds
-
-	// Which database each activity-derived finding belongs to: pg_stat_activity
-	// only, so the datasource never carries it.
-	raw.LongestTransactionDatabase = m.LongestTransactionDatabase
-	raw.IdleInTransactionDatabase = m.IdleInTransactionDatabase
-
-	// Performance — track_io_timing GUC.
-	raw.TrackIoTimingEnabled = m.TrackIoTimingEnabled
-
-	// Storage — bloat-table count and newpage-update ratio.
-	raw.TablesHighBloat = m.TablesHighBloat
-	raw.NewpageUpdateRatio = m.NewpageUpdateRatio
-
-	// Maintenance — per-table autovacuum/vacuum state, relfrozenxid, GUCs.
-	// The vacuum queue (backlog + overdue age) is snapshot-only (no metrics
-	// signal), so it must be overlaid here or both vacuum rules would silently
-	// drop out in metrics mode and break score↔rules parity.
-	raw.VacuumBacklogTables = m.VacuumBacklogTables
-	raw.MaxOverdueVacuumAgeHours = m.MaxOverdueVacuumAgeHours
-	raw.TablesNeverVacuumed = m.TablesNeverVacuumed
-	raw.TablesWithAutovacuumOff = m.TablesWithAutovacuumOff
-	raw.MaxRelfrozenxidAge = m.MaxRelfrozenxidAge
-	raw.StalePlannerStatsTables = m.StalePlannerStatsTables
-	raw.AutovacuumEnabled = m.AutovacuumEnabled
-	raw.TrackCountsEnabled = m.TrackCountsEnabled
-
-	// Horizon — oldest backend_xmin pinning VACUUM.
-	raw.HorizonLagXids = m.HorizonLagXids
-	raw.HorizonDatabase = m.HorizonDatabase
-
-	// WAL / checkpoint configuration.
-	raw.WalLevel = m.WalLevel
-	raw.LogicalSlotsActive = m.LogicalSlotsActive
-
-	// Locks — heavyweight-pool sizing and longest wait (catalog/activity).
-	raw.LongestLockWaitSeconds = m.LongestLockWaitSeconds
-	raw.HeavyweightLocksTotal = m.HeavyweightLocksTotal
-	raw.MaxLocksPerTransaction = m.MaxLocksPerTransaction
-}
-
-// overlaySignalGaps backfills, from the SQL snapshot, every field whose signal
-// the datasource did not carry. ToRawMetrics seeds absent inputs to a neutral
-// (healthy-reading) value — 100% cache hit, zero dead ratio, no wraparound age —
-// which is right while nothing better is known, but the snapshot read a few
-// lines up holds the real numbers. Without this, partial coverage scores green
-// and silently drops the matching rules: a target where only the node/pooler
-// role resolves still reports matched > 0, so the degraded flag never trips.
-func overlaySignalGaps(raw *health.RawMetrics, m *dto.HealthScoreMetrics, sig metrics.Signals) {
-	// The five below feed metricsInstanceWideRules, which drop the database
-	// attribution because a datasource series aggregates every database. The
-	// snapshot values are per-database (pg_statio_user_tables,
-	// pg_stat_user_tables, datfrozenxid of current_database()), so a rule fed
-	// from here must keep naming the database it was read from.
-	if !sig.Has(metrics.SigCacheHitRatio) {
-		raw.CacheHitRatio = m.CacheHitRatio
-		raw.CacheSampleBlocks = m.CacheSampleBlocks
-		raw.MarkSnapshotBacked("low_cache_hit_ratio")
-	}
-
-	if !sig.Has(metrics.SigMaxDeadRatio) {
-		raw.MaxDeadRatio = m.MaxDeadRatio
-		raw.MarkSnapshotBacked("high_max_dead_ratio")
-	}
-
-	if !sig.Has(metrics.SigAvgDeadRatio) {
-		raw.AvgDeadRatio = m.AvgDeadRatio
-		raw.MarkSnapshotBacked("high_avg_dead_ratio")
-	}
-
-	if !sig.Has(metrics.SigHotUpdateRatio) {
-		raw.HotUpdateRatio = m.HotUpdateRatio
-		raw.MarkSnapshotBacked("low_hot_update_ratio")
-	}
-
-	if !sig.Has(metrics.SigXactsLeftWrap) {
-		raw.MaxXidAge = m.MaxXidAge
-		raw.MarkSnapshotBacked("xid_wraparound_risk")
-	}
-
-	if !sig.Has(metrics.SigDeadlocksTotal) {
-		raw.DeadlocksTotal = m.DeadlocksTotal
-	}
-
-	if !sig.Has(metrics.SigLocksNotGranted) {
-		raw.UngrantedLocks = m.UngrantedLocks
-	}
-
-	if !sig.Has(metrics.SigActiveLockWaiters) {
-		raw.ActiveLockWaiters = m.ActiveLockWaiters
-	}
-
-	if !sig.Has(metrics.SigTotalConns) {
-		raw.TotalConnections = m.TotalConnections
-	}
-
-	if !sig.Has(metrics.SigActiveConns) {
-		raw.ActiveConnections = m.ActiveConnections
-	}
-
-	if !sig.Has(metrics.SigIdleInTx) {
-		raw.IdleInTransaction = m.IdleInTransaction
-	}
-
-	if !sig.Has(metrics.SigMaxConns) {
-		raw.MaxConnections = m.MaxConnections
-	}
-
-	if !sig.Has(metrics.SigTimedCheckpoints) {
-		raw.TimedCheckpoints = m.TimedCheckpoints
-	}
-
-	if !sig.Has(metrics.SigRequestedCheckpoints) {
-		raw.RequestedCheckpoints = m.RequestedCheckpoints
-	}
-
-	// Replication is one fact split across two signals, and ToRawMetrics infers
-	// ReplicaCount from either — so the snapshot only wins when neither arrived,
-	// otherwise a lag-bytes-only datasource would lose its replica.
-	if !sig.Has(metrics.SigReplLagSeconds) && !sig.Has(metrics.SigReplLagBytes) {
-		raw.ReplicaCount = m.ReplicaCount
-		raw.MaxReplayLagSeconds = m.MaxReplayLagSeconds
-		raw.MaxLagBytes = m.MaxLagBytes
-		raw.DisconnectedReplicas = m.DisconnectedReplicas
-	}
-}
-
-// metricsRawWithCatalog returns the instant metrics-backed RawMetrics enriched
-// with the catalog overlay, or ok=false when the datasource is disabled,
-// unreachable, the target is unmapped, or the catalog snapshot cannot be read
-// (caller then falls back to the pure snapshot). The overlay is mandatory: a
-// metrics-only RawMetrics carries zero-valued catalog/GUC facts that the scorer
-// would misread as "autovacuum off" and similar, so a snapshot read failure
-// must sink the metrics result rather than emit a wrong-but-alive score. The
-// same snapshot then backfills the signals the datasource did not carry, so
-// partial coverage scores off real numbers instead of neutral seeds.
-// The middle return value is the number of datasource signals that matched; 0
-// with ok=true means the target resolved but no selector matched a series, so
-// the score is metrics-backed yet effectively empty (caller flags it degraded).
-func (s *Handlers) metricsRawWithCatalog(ctx context.Context, cluster, instance string) (health.RawMetrics, int, bool) {
-	if !s.metrics.Enabled() {
-		return health.RawMetrics{}, 0, false
-	}
-
-	raw, sig, err := s.metrics.CurrentRaw(ctx, cluster, instance)
-	if err != nil {
-		return health.RawMetrics{}, 0, false
-	}
-
-	// Everything the datasource carries is an instance-wide aggregate, so the
-	// rules it feeds must not be pinned to the catalog snapshot's database —
-	// only the facts overlayCatalogFacts writes back below are per-database.
-	raw.MetricsInstanceWide = true
-
-	m, sErr := s.repo.GetHealthScoreMetrics(ctx, cluster, instance, "")
-	if sErr != nil {
-		return health.RawMetrics{}, 0, false
-	}
-
-	overlayCatalogFacts(&raw, m)
-	overlaySignalGaps(&raw, m, sig)
-
-	return raw, len(sig.Have), true
-}
-
 func (s *Handlers) GetHealthScoreRecommendations(
 	ctx context.Context,
 	req serverhttp.GetHealthScoreRecommendationsRequestObject,
@@ -367,38 +57,14 @@ func (s *Handlers) GetHealthScoreRecommendations(
 		database = *req.Params.Database
 	}
 
-	var raw health.RawMetrics
-
-	// Metrics-backed recommendations at instance scope when available (overlaid
-	// with catalog/GUC facts so catalog-only rules still fire); the per-DB
-	// drill-down (database != "") stays on the SQL snapshot since the collector
-	// is instance-level.
-	useMetrics := false
-
-	if database == "" {
-		if r, _, ok := s.metricsRawWithCatalog(ctx, req.Params.ClusterName, req.Params.Instance); ok {
-			raw = r
-			useMetrics = true
-		}
+	recs, err := s.scorer.Recommendations(ctx, metrics.TargetRef{Cluster: req.Params.ClusterName, Instance: req.Params.Instance}, database)
+	if healthscore.IsNotFound(err) {
+		return serverhttp.GetHealthScoreRecommendations404Response{}, nil
 	}
 
-	if !useMetrics {
-		m, err := s.repo.GetHealthScoreMetrics(ctx, req.Params.ClusterName, req.Params.Instance, database)
-		if errors.Is(err, repository.ErrNotFound) {
-			return serverhttp.GetHealthScoreRecommendations404Response{}, nil
-		}
-
-		if err != nil {
-			return nil, fmt.Errorf("GetHealthScoreRecommendations | %w", err)
-		}
-
-		raw = rawFromSnapshot(m)
+	if err != nil {
+		return nil, fmt.Errorf("GetHealthScoreRecommendations | %w", err)
 	}
-
-	raw.WalLevelManaged = s.walLevelManaged(ctx, req.Params.ClusterName)
-	s.overlaySequenceExhaustion(ctx, &raw, req.Params.ClusterName, req.Params.Instance, database)
-
-	recs := health.Evaluate(raw, database != "")
 
 	out := make([]serverhttp.HealthScoreRecommendation, 0, len(recs))
 	for _, r := range recs {

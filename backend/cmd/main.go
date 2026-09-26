@@ -133,6 +133,7 @@ func autosnapshotExec(cmd *cobra.Command, _ []string) error {
 		cfg.EffectiveAutosnapshotPool(),
 		cfg.SchemaLint,
 		cfg.IndexAdvisor,
+		cfg.HealthScore.DatabaseConcurrency,
 		logger,
 	)
 

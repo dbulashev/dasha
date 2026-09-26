@@ -68,9 +68,9 @@ func (s *Handlers) GetHealthScoreHistory(
 		return serverhttp.GetHealthScoreHistory404Response{}, nil
 	}
 
-	weights, err := s.loadHealthWeights(ctx, req.Params.ClusterName)
+	weights, err := s.scorer.Weights(ctx, req.Params.ClusterName)
 	if err != nil {
-		return nil, fmt.Errorf("GetHealthScoreHistory | loadHealthWeights | %w", err)
+		return nil, fmt.Errorf("GetHealthScoreHistory | Weights | %w", err)
 	}
 
 	step := 5 * time.Minute

@@ -3,6 +3,8 @@ package repository
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
@@ -24,22 +26,37 @@ func (p *PgxPool) GetHealthScoreMetrics(ctx context.Context, clusterName, instan
 		return nil, fmt.Errorf("GetHealthScoreMetrics | %w", err)
 	}
 
+	m, err := p.healthScoreMetrics(ctx, pool)
+	if err != nil {
+		return nil, fmt.Errorf("GetHealthScoreMetrics | %w", err)
+	}
+
+	return m, nil
+}
+
+func (p *PgxPool) healthScoreMetrics(ctx context.Context, pool *pgxpool.Pool) (*dto.HealthScoreMetrics, error) {
 	vNum, err := p.getServerVersionNum(ctx, pool)
 	if err != nil {
 		return nil, fmt.Errorf("get server version | %w", err)
 	}
 
+	qStr, err := query.Get(vNum, enums.QueryCommonHealthScore, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	conn, err := p.acquireConn(ctx, pool)
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Release()
+
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	qStr, err := query.Get(vNum, enums.QueryCommonHealthScore, nil)
-	if err != nil {
-		return nil, fmt.Errorf("GetHealthScoreMetrics | %w", err)
-	}
-
 	var m dto.HealthScoreMetrics
 
-	err = pool.QueryRow(ctx, qStr).Scan(
+	err = conn.QueryRow(ctx, qStr).Scan(
 		&m.InRecovery,
 		&m.Database,
 		&m.TotalConnections,
@@ -84,7 +101,7 @@ func (p *PgxPool) GetHealthScoreMetrics(ctx context.Context, clusterName, instan
 		&m.LogicalSlotsActive,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("GetHealthScoreMetrics | %w", err)
+		return nil, err
 	}
 
 	return &m, nil
@@ -140,21 +157,35 @@ func (p *PgxPool) GetHealthScorePerDatabase(
 		return nil, fmt.Errorf("%w | %s/%s", ErrNotFound, clusterName, instanceName)
 	}
 
+	type collected struct {
+		m   dto.HealthScoreDatabaseMetrics
+		err error
+	}
+
+	got := make([]collected, len(pools))
+
+	forEachLimited(p.healthDatabaseConcurrency(), pools, func(i int, dbp dbPool) {
+		got[i].m, got[i].err = p.collectHealthScorePerDatabase(ctx, dbp.pool, dbp.database)
+	})
+
 	results := make([]dto.HealthScoreDatabaseMetrics, 0, len(pools))
 
-	for _, dbp := range pools {
-		m, err := p.collectHealthScorePerDatabase(ctx, dbp.pool, dbp.database)
-		if err != nil {
+	for i, c := range got {
+		if c.err != nil {
 			p.logger.Warn("GetHealthScorePerDatabase: skip database",
 				zap.String("cluster", clusterName),
-				zap.String("database", dbp.database),
-				zap.Error(err))
+				zap.String("database", pools[i].database),
+				zap.Error(c.err))
 
 			continue
 		}
 
-		results = append(results, m)
+		results = append(results, c.m)
 	}
+
+	slices.SortFunc(results, func(a, b dto.HealthScoreDatabaseMetrics) int {
+		return strings.Compare(a.Database, b.Database)
+	})
 
 	// All per-DB collections failed — surface as error so the handler returns
 	// 5xx instead of an empty list that looks like a valid "no databases" state.
@@ -176,17 +207,23 @@ func (p *PgxPool) collectHealthScorePerDatabase(
 		return dto.HealthScoreDatabaseMetrics{}, fmt.Errorf("get server version | %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
-	defer cancel()
-
 	qStr, err := query.Get(vNum, enums.QueryCommonHealthScorePerDatabase, nil)
 	if err != nil {
 		return dto.HealthScoreDatabaseMetrics{}, fmt.Errorf("query.Get | %w", err)
 	}
 
+	conn, err := p.acquireConn(ctx, pool)
+	if err != nil {
+		return dto.HealthScoreDatabaseMetrics{}, err
+	}
+	defer conn.Release()
+
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	var m dto.HealthScoreDatabaseMetrics
 
-	err = pool.QueryRow(ctx, qStr).Scan(
+	err = conn.QueryRow(ctx, qStr).Scan(
 		&m.Database,
 		&m.SizeBytes,
 		&m.CacheHitRatio,

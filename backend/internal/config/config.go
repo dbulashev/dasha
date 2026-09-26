@@ -776,7 +776,18 @@ func (c Config) EffectiveAutosnapshotPool() PoolConfig {
 
 // HealthScoreConfig groups Health Score settings.
 type HealthScoreConfig struct {
-	Metrics metrics.Config `mapstructure:"metrics"`
+	// DatabaseConcurrency caps how many databases of one instance are read at
+	// once; 0 means the repository default (4).
+	DatabaseConcurrency int            `mapstructure:"database_concurrency"`
+	Metrics             metrics.Config `mapstructure:"metrics"`
+}
+
+func (c HealthScoreConfig) Validate() error {
+	if c.DatabaseConcurrency < 0 {
+		return fmt.Errorf("database_concurrency must be >= 1, got %d", c.DatabaseConcurrency)
+	}
+
+	return nil
 }
 
 // Clusters is the interface for obtaining the current list of clusters.

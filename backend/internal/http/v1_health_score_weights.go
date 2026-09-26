@@ -9,29 +9,6 @@ import (
 	"github.com/dbulashev/dasha/internal/health"
 )
 
-// loadHealthWeights returns per-cluster weights override from storage,
-// or DefaultWeights when no storage is configured / no override exists.
-// A non-nil error is returned only when the storage read itself failed —
-// callers should propagate it (5xx) instead of silently scoring with defaults
-// while the storage backend is misbehaving. The returned Weights is always
-// DefaultWeights when err != nil, so the caller can choose graceful degradation.
-func (s *Handlers) loadHealthWeights(ctx context.Context, clusterName string) (health.Weights, error) {
-	if s.storage == nil {
-		return health.DefaultWeights(), nil
-	}
-
-	rec, err := s.storage.GetHealthWeights(ctx, clusterName)
-	if err != nil {
-		return health.DefaultWeights(), err
-	}
-
-	if rec == nil {
-		return health.DefaultWeights(), nil
-	}
-
-	return rec.Weights, nil
-}
-
 func (s *Handlers) GetHealthScoreWeights(
 	ctx context.Context,
 	req serverhttp.GetHealthScoreWeightsRequestObject,
