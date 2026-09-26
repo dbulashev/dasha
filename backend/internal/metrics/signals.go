@@ -37,7 +37,9 @@ const (
 	// maintenance. Vacuum-queue signals (backlog/overdue age) are intentionally
 	// snapshot-only: they need reltuples + per-table reloptions + autovacuum GUCs,
 	// which the metrics providers don't expose faithfully (see catalog.go).
-	SigXactsLeftWrap SignalKind = "xacts_left_before_wraparound"
+	SigXactsLeftWrap  SignalKind = "xacts_left_before_wraparound"
+	SigAutovacuumOff  SignalKind = "autovacuum_off"   // 1 when the GUC is off
+	SigTrackCountsOff SignalKind = "track_counts_off" // 1 when the GUC is off
 
 	// replication / wal / locks
 	SigReplLagBytes         SignalKind = "repl_lag_bytes"

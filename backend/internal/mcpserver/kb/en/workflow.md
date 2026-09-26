@@ -58,6 +58,8 @@ need `database`.
 
 ## Fleet triage
 1. `fleet_health` — worst instances first (one call, do not loop clusters).
+   With `fleet.incomplete=true` the list may miss instances not scored in time
+   (`fleet.uncomputed`).
 2. Run "The database is slow" flow for the worst 1-2 instances.
 
 ## Care rules (always)

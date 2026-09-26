@@ -237,7 +237,7 @@ type connectionsArgs struct {
 }
 
 type fleetHealthArgs struct {
-	Limit int `json:"limit,omitempty" jsonschema:"How many worst-scoring instances to return (default 5)"`
+	Limit int `json:"limit,omitempty" jsonschema:"How many worst-scoring instances to return (default 5, max 50)"`
 }
 
 type searchLogsArgs struct {
@@ -771,8 +771,10 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 
 	addTool(s, &mcp.Tool{
 		Name: "fleet_health",
-		Description: "Scan every cluster/instance Dasha manages and return the worst-scoring instances " +
-			"(health score, ascending). One call instead of looping list_clusters + get_health_score.",
+		Description: "Worst-scoring instances of every cluster Dasha manages (health score, ascending); each " +
+			"score equals get_health_score for that instance. One call instead of looping list_clusters + " +
+			"get_health_score. When fleet.incomplete=true, some instances were not scored in time; " +
+			"fleet.uncomputed says how many. fleet.metrics_unavailable=true means every score comes from the SQL snapshot.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a fleetHealthArgs) (*mcp.CallToolResult, any, error) {
 		return jsonResult(ctx)(fleetHealth(ctx, c, a.Limit))
 	})

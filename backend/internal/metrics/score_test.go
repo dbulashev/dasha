@@ -145,3 +145,20 @@ func TestToRawMetrics_ReplicaInferredFromLag(t *testing.T) {
 		t.Errorf("lag seconds not mapped: %v", m.MaxReplayLagSeconds)
 	}
 }
+
+func TestToRawMetrics_GUCsOffFloorTheScore(t *testing.T) {
+	for _, sig := range []SignalKind{SigAutovacuumOff, SigTrackCountsOff} {
+		s := NewSignals(time.Now())
+		s.Set(sig, 1)
+
+		if !health.Floored(s.ToRawMetrics()) {
+			t.Errorf("%s=1 does not floor the score", sig)
+		}
+
+		s.Set(sig, 0)
+
+		if health.Floored(s.ToRawMetrics()) {
+			t.Errorf("%s=0 floors the score", sig)
+		}
+	}
+}

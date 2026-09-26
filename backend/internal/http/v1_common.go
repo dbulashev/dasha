@@ -19,7 +19,7 @@ func (s *Handlers) GetAuthInfo(
 ) (serverhttp.GetAuthInfoResponseObject, error) {
 	mode := serverhttp.AuthInfoMode(s.cfg.Auth.Mode)
 	if mode == "" {
-		mode = serverhttp.None
+		mode = serverhttp.AuthInfoModeNone
 	}
 
 	enableReset := s.cfg.EnableQueryStatsReset

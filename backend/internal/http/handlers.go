@@ -1,6 +1,8 @@
 package http
 
 import (
+	"go.uber.org/zap"
+
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/healthscore"
 	"github.com/dbulashev/dasha/internal/logs"
@@ -17,13 +19,19 @@ type Handlers struct {
 	metrics *metrics.Service
 	logs    logs.Service
 	scorer  *healthscore.Scorer
+	fleet   *healthscore.Fleet
 }
 
 // NewDashaHandlers constructs a new Handlers instance from its dependencies.
-func NewDashaHandlers(cfg *config.Config, repo repository.Repository, st *storage.Storage, ms *metrics.Service, logsSvc logs.Service) *Handlers {
+func NewDashaHandlers(
+	cfg *config.Config, repo repository.Repository, st *storage.Storage, ms *metrics.Service, logsSvc logs.Service, logger *zap.Logger,
+) *Handlers {
+	scorer := healthscore.NewScorer(cfg, repo, st, ms)
+
 	return &Handlers{
 		cfg: cfg, repo: repo, storage: st, metrics: ms, logs: logsSvc,
-		scorer: healthscore.NewScorer(cfg, repo, st, ms),
+		scorer: scorer,
+		fleet:  healthscore.NewFleet(cfg, scorer, ms, repo, logger),
 	}
 }
 

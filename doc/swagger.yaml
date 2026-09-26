@@ -295,6 +295,66 @@ paths:
                 $ref: '#/components/schemas/HealthScore'
         '404':
           $ref: '#/components/responses/NotFound'
+  /api/common/health-score/fleet:
+    get:
+      operationId: getHealthScoreFleet
+      description: >-
+        Worst instances of the fleet by health score, ascending. Every score in
+        the list is the one the instance card shows. The overview has a time
+        budget: when incomplete is true, some instances were not scored in time
+        and uncomputed says how many. A result is reused for a short window,
+        computed_at tells its age.
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+          description: Number of instances to return (default 20).
+        - name: cluster_name
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+          description: Clusters to include; empty means the whole fleet.
+        - name: exhaustive
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: >-
+            Score every instance exactly, skipping the prefilter. Allowed only
+            when health_score.fleet.allow_exhaustive is set.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthScoreFleet'
+        '400':
+          description: Unknown cluster in the filter, or exhaustive scan not allowed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '503':
+          description: Too many fleet overviews are being computed; retry later
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying.
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
   /api/common/health-score/recommendations:
     get:
       operationId: getHealthScoreRecommendations
@@ -7387,6 +7447,75 @@ components:
             When true, the maintenance category is dropped from the score and
             its weight is redistributed across the remaining categories — same
             handling as the replication category on instances without replicas.
+
+    HealthScoreFleet:
+      type: object
+      required:
+        - items
+        - instances_total
+        - instances_scored
+        - candidates
+        - uncomputed
+        - incomplete
+        - metrics_unavailable
+        - computed_at
+        - duration_ms
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/HealthScoreFleetItem'
+        instances_total:
+          type: integer
+        instances_scored:
+          type: integer
+        candidates:
+          type: integer
+          description: Instances the metrics prefilter picked for an exact score.
+        uncomputed:
+          type: integer
+          description: Instances left unscored when the time budget ran out.
+        incomplete:
+          type: boolean
+        metrics_unavailable:
+          type: boolean
+          description: The metrics datasource did not answer; every score comes from the SQL snapshot.
+        computed_at:
+          type: string
+          format: date-time
+        duration_ms:
+          type: integer
+          format: int64
+
+    HealthScoreFleetItem:
+      type: object
+      required:
+        - cluster_name
+        - instance
+        - source
+        - in_recovery
+      properties:
+        cluster_name:
+          type: string
+        instance:
+          type: string
+        score:
+          type: number
+          format: double
+          nullable: true
+          description: Null when the instance was not scored; error says why.
+        source:
+          type: string
+          enum:
+            - metrics
+            - snapshot
+            - none
+        in_recovery:
+          type: boolean
+        metrics_degraded:
+          type: boolean
+        error:
+          type: string
 
     HealthScoreXidWraparoundDatabase:
       type: object

@@ -54,6 +54,7 @@ import type {
   GetFksPossibleSimilarParams,
   GetHealthScoreDatabasesParams,
   GetHealthScoreDatasourceStatusParams,
+  GetHealthScoreFleetParams,
   GetHealthScoreHighDeadRatioTablesParams,
   GetHealthScoreHistoryParams,
   GetHealthScoreHorizonBlockingSessionsParams,
@@ -136,6 +137,7 @@ import type {
   HealthScore,
   HealthScoreDatabases,
   HealthScoreDatasourceStatus,
+  HealthScoreFleet,
   HealthScoreHighDeadRatioTable,
   HealthScoreHistory,
   HealthScoreHorizonBlockingSession,
@@ -1622,6 +1624,125 @@ export function useGetHealthScore<
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetHealthScoreQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Worst instances of the fleet by health score, ascending. Every score in the list is the one the instance card shows. The overview has a time budget: when incomplete is true, some instances were not scored in time and uncomputed says how many. A result is reused for a short window, computed_at tells its age.
+ */
+export type getHealthScoreFleetResponse200 = {
+  data: HealthScoreFleet
+  status: 200
+}
+
+export type getHealthScoreFleetResponse400 = {
+  data: ErrorMessage
+  status: 400
+}
+
+export type getHealthScoreFleetResponse503 = {
+  data: ErrorMessage
+  status: 503
+}
+
+export type getHealthScoreFleetResponseSuccess = getHealthScoreFleetResponse200 & {
+  headers: Headers
+}
+export type getHealthScoreFleetResponseError = (
+  | getHealthScoreFleetResponse400
+  | getHealthScoreFleetResponse503
+) & {
+  headers: Headers
+}
+
+export type getHealthScoreFleetResponse =
+  | getHealthScoreFleetResponseSuccess
+  | getHealthScoreFleetResponseError
+
+export const getGetHealthScoreFleetUrl = (params?: GetHealthScoreFleetParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ['cluster_name']
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : v.toString())
+      })
+      return
+    }
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/common/health-score/fleet?${stringifiedParams}`
+    : `/api/common/health-score/fleet`
+}
+
+export const getHealthScoreFleet = async (
+  params?: GetHealthScoreFleetParams,
+  options?: RequestInit,
+): Promise<getHealthScoreFleetResponse> => {
+  return customFetch<getHealthScoreFleetResponse>(getGetHealthScoreFleetUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetHealthScoreFleetQueryKey = (params?: MaybeRef<GetHealthScoreFleetParams>) => {
+  return ['api', 'common', 'health-score', 'fleet', ...(params ? [params] : [])] as const
+}
+
+export const getGetHealthScoreFleetQueryOptions = <
+  TData = Awaited<ReturnType<typeof getHealthScoreFleet>>,
+  TError = ErrorMessage,
+>(
+  params?: MaybeRef<GetHealthScoreFleetParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getHealthScoreFleet>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetHealthScoreFleetQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getHealthScoreFleet>>> = ({ signal }) =>
+    getHealthScoreFleet(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getHealthScoreFleet>>,
+    TError,
+    TData
+  >
+}
+
+export type GetHealthScoreFleetQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getHealthScoreFleet>>
+>
+export type GetHealthScoreFleetQueryError = ErrorMessage
+
+export function useGetHealthScoreFleet<
+  TData = Awaited<ReturnType<typeof getHealthScoreFleet>>,
+  TError = ErrorMessage,
+>(
+  params?: MaybeRef<GetHealthScoreFleetParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getHealthScoreFleet>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetHealthScoreFleetQueryOptions(params, options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
 

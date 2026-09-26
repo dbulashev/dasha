@@ -23,6 +23,12 @@ const (
 	SourceNone     Source = "none"
 )
 
+// ClusterContext holds the per-cluster inputs of a score.
+type ClusterContext struct {
+	Weights         health.Weights
+	WalLevelManaged bool
+}
+
 type InstanceScore struct {
 	Result          health.Result
 	Source          Source
@@ -73,6 +79,11 @@ func (s *Scorer) Score(ctx context.Context, t metrics.TargetRef, pre *metrics.Ra
 		return InstanceScore{}, fmt.Errorf("Score | Weights | %w", err)
 	}
 
+	return s.ScoreWith(ctx, t, pre, ClusterContext{Weights: weights, WalLevelManaged: s.walLevelManaged(ctx, t.Cluster)})
+}
+
+// ScoreWith is Score with the per-cluster inputs already resolved.
+func (s *Scorer) ScoreWith(ctx context.Context, t metrics.TargetRef, pre *metrics.RawResult, cc ClusterContext) (InstanceScore, error) {
 	var in inputs
 	if pre != nil {
 		in = s.read(ctx, t, "", pre)
@@ -80,13 +91,13 @@ func (s *Scorer) Score(ctx context.Context, t metrics.TargetRef, pre *metrics.Ra
 		in = s.coalescedInputs(ctx, t, "")
 	}
 
-	raw, src, matched, err := s.compose(ctx, t, in)
+	raw, src, matched, err := s.compose(in, cc.WalLevelManaged)
 	if err != nil {
 		return InstanceScore{}, fmt.Errorf("Score | %w", err)
 	}
 
 	return InstanceScore{
-		Result: health.CalculateWithWeights(raw, weights),
+		Result: health.CalculateWithWeights(raw, cc.Weights),
 		Source: src,
 		// Resolved but no series matched any selector: the score is built from
 		// absent signals and looks green.
@@ -98,7 +109,7 @@ func (s *Scorer) Score(ctx context.Context, t metrics.TargetRef, pre *metrics.Ra
 // for one database's drill-down, which always reads the SQL snapshot since the
 // datasource is instance-level.
 func (s *Scorer) Recommendations(ctx context.Context, t metrics.TargetRef, database string) ([]health.Recommendation, error) {
-	raw, _, _, err := s.compose(ctx, t, s.coalescedInputs(ctx, t, database))
+	raw, _, _, err := s.compose(s.coalescedInputs(ctx, t, database), s.walLevelManaged(ctx, t.Cluster))
 	if err != nil {
 		return nil, fmt.Errorf("Recommendations | %w", err)
 	}
@@ -110,7 +121,7 @@ func (s *Scorer) Recommendations(ctx context.Context, t metrics.TargetRef, datab
 // snapshot overlay: without it zero-valued catalog facts read as "autovacuum
 // off" and similar, so a failed snapshot sinks the metrics path too. matched is
 // the number of signals the datasource carried.
-func (s *Scorer) compose(ctx context.Context, t metrics.TargetRef, in inputs) (raw health.RawMetrics, src Source, matched int, err error) {
+func (s *Scorer) compose(in inputs, walLevelManaged bool) (raw health.RawMetrics, src Source, matched int, err error) {
 	if in.snapErr != nil {
 		return health.RawMetrics{}, SourceNone, 0, in.snapErr
 	}
@@ -126,7 +137,7 @@ func (s *Scorer) compose(ctx context.Context, t metrics.TargetRef, in inputs) (r
 		raw, src = rawFromSnapshot(in.snap), SourceSnapshot
 	}
 
-	raw.WalLevelManaged = s.walLevelManaged(ctx, t.Cluster)
+	raw.WalLevelManaged = walLevelManaged
 	raw.SequenceThresholds = s.cfg.SchemaLint.SequenceThresholds
 
 	// Standbys never carry the headroom; a failed read leaves "no signal".
@@ -162,8 +173,6 @@ func IsNotFound(err error) bool {
 	return errors.Is(err, repository.ErrNotFound)
 }
 
-// walLevelManaged reports whether the cluster's provider fixes wal_level
-// (Yandex MDB forces logical), so the wasted-overhead rule must not fire.
 func (s *Scorer) walLevelManaged(ctx context.Context, clusterName string) bool {
 	clusters, err := s.repo.Clusters(ctx)
 	if err != nil {
@@ -172,11 +181,17 @@ func (s *Scorer) walLevelManaged(ctx context.Context, clusterName string) bool {
 
 	for _, c := range clusters {
 		if c.Name.String() == clusterName {
-			return c.Source == config.SourceYandexMDB
+			return walLevelFixed(c)
 		}
 	}
 
 	return false
+}
+
+// walLevelFixed reports whether the cluster's provider fixes wal_level (Yandex
+// MDB forces logical), so the wasted-overhead rule must not fire.
+func walLevelFixed(c dto.ClusterInfo) bool {
+	return c.Source == config.SourceYandexMDB
 }
 
 // rawFromSnapshot maps the SQL snapshot onto the score engine's input.
