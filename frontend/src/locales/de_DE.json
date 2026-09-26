@@ -1,6 +1,6 @@
 {
   "Cancel": "Abbrechen",
-  "Home": "Startseite",
+  "Home": "Übersicht",
   "Connections": "Verbindungen",
   "Settings": "Einstellungen",
   "Logs": "Protokolle",
@@ -1284,6 +1284,31 @@
       "allOk": "Alle Tabellen innerhalb der Schwellwerte — Autovacuum hat gerade nichts zu tun.",
       "runningVacuums": "VACUUM läuft",
       "runningAnalyzes": "ANALYZE läuft"
+    }
+  },
+  "fleetHealth": {
+    "title": "Health-Score-Übersicht der Flotte",
+    "menuItem": "Flotte",
+    "analyze": "Analysieren",
+    "clusters": "Cluster",
+    "allClusters": "Alle Cluster",
+    "computedIn": "Berechnet in {duration}",
+    "incomplete": "{scored} von {total} bewertet, rechtzeitig nicht erreicht: {uncomputed}.",
+    "metricsUnavailable": "Die Metrikquelle hat nicht geantwortet: alle Werte stammen aus dem SQL-Snapshot.",
+    "metricsDegraded": "Keine Metrik der Instanz passte zu den Selektoren; der Wert ist zu hoch.",
+    "empty": "Keine Instanzen",
+    "headers": {
+      "cluster": "Cluster",
+      "instance": "Instanz",
+      "score": "Wert",
+      "source": "Quelle",
+      "role": "Rolle",
+      "error": "Fehler"
+    },
+    "source": {
+      "metrics": "Metriken",
+      "snapshot": "SQL-Snapshot",
+      "none": "nicht bewertet"
     }
   },
   "healthScore": {

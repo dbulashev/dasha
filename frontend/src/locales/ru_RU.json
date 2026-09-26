@@ -33,7 +33,7 @@
     "Did you mean: {list}?": "Возможно, вы имели в виду: {list}?",
     "Available clusters: {list}": "Доступные кластеры: {list}",
     "Available hosts: {list}": "Доступные хосты: {list}",
-    "Home": "Главная",
+    "Home": "Сводка",
     "Connections": "Подключения",
     "Settings": "Настройки",
     "Logs": "Логи",
@@ -1322,6 +1322,31 @@
             "allOk": "Все таблицы в пределах порогов — автовакууму сейчас нечего делать.",
             "runningVacuums": "Работает VACUUM",
             "runningAnalyzes": "Работает ANALYZE"
+        }
+    },
+    "fleetHealth": {
+        "title": "Обзорный Health Score по парку",
+        "menuItem": "Парк",
+        "analyze": "Анализ",
+        "clusters": "Кластеры",
+        "allClusters": "Все кластеры",
+        "computedIn": "Рассчитано за {duration}",
+        "incomplete": "Посчитано {scored} из {total}, не успели: {uncomputed}.",
+        "metricsUnavailable": "Источник метрик не ответил: все баллы посчитаны по SQL-снимку.",
+        "metricsDegraded": "Ни одна метрика инстанса не подошла под селекторы, балл завышен.",
+        "empty": "Нет инстансов",
+        "headers": {
+            "cluster": "Кластер",
+            "instance": "Инстанс",
+            "score": "Балл",
+            "source": "Источник",
+            "role": "Роль",
+            "error": "Ошибка"
+        },
+        "source": {
+            "metrics": "метрики",
+            "snapshot": "SQL-снимок",
+            "none": "не посчитан"
         }
     },
     "healthScore": {

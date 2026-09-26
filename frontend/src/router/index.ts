@@ -16,6 +16,11 @@ const router = createRouter({
       component: HomeView,
     },
     {
+      path: '/fleet/:clustername?',
+      name: 'fleet',
+      component: () => import('../views/FleetHealthView.vue'),
+    },
+    {
       path: '/health-score/:clustername?',
       name: 'HealthScore',
       component: () => import('../views/HealthScoreView.vue'),

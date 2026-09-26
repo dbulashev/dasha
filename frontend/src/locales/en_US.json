@@ -33,7 +33,7 @@
   "Did you mean: {list}?": "Did you mean: {list}?",
   "Available clusters: {list}": "Available clusters: {list}",
   "Available hosts: {list}": "Available hosts: {list}",
-  "Home": "Home",
+  "Home": "Summary",
   "Connections": "Connections",
   "Settings": "Settings",
   "Logs": "Logs",
@@ -1322,6 +1322,31 @@
       "allOk": "All tables are within thresholds — autovacuum has nothing to do right now.",
       "runningVacuums": "VACUUM running",
       "runningAnalyzes": "ANALYZE running"
+    }
+  },
+  "fleetHealth": {
+    "title": "Fleet Health Score Overview",
+    "menuItem": "Fleet",
+    "analyze": "Analyze",
+    "clusters": "Clusters",
+    "allClusters": "All clusters",
+    "computedIn": "Computed in {duration}",
+    "incomplete": "Scored {scored} of {total}, not reached in time: {uncomputed}.",
+    "metricsUnavailable": "The metrics datasource did not answer: every score comes from the SQL snapshot.",
+    "metricsDegraded": "No metric of the instance matched the selectors; the score is inflated.",
+    "empty": "No instances",
+    "headers": {
+      "cluster": "Cluster",
+      "instance": "Instance",
+      "score": "Score",
+      "source": "Source",
+      "role": "Role",
+      "error": "Error"
+    },
+    "source": {
+      "metrics": "metrics",
+      "snapshot": "SQL snapshot",
+      "none": "not scored"
     }
   },
   "healthScore": {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { scoreColor } from './scoreColor'
 
 const props = withDefaults(
   defineProps<{
@@ -17,15 +18,6 @@ const { t } = useI18n()
 // Coerce to a finite number so a malformed response never feeds NaN into the
 // SVG transform (which throws an "Invalid keyframe value" warning).
 const safeScore = computed(() => (Number.isFinite(props.score) ? props.score : 0))
-
-// The red band (< 40) is what the backend's critical floor targets
-// (health.criticalScoreCeiling = 30); keep these thresholds in sync with it.
-function scoreColor(score: number): string {
-  if (score >= 95) return 'success'
-  if (score >= 70) return 'warning'
-  if (score >= 40) return 'orange'
-  return 'error'
-}
 
 function scoreLabel(score: number): string {
   if (score >= 95) return t('healthScore.excellent')
