@@ -177,6 +177,23 @@ func (d *DashaClient) HealthScore(ctx context.Context, cluster, instance string)
 	return resp.JSON200, nil
 }
 
+// FleetHealth returns the fleet's worst instances. Dasha answers within its own
+// budget, which the slow deadline covers.
+func (d *DashaClient) FleetHealth(ctx context.Context, limit int) (*apiclient.HealthScoreFleet, error) {
+	resp, err := d.slowAPI.GetHealthScoreFleetWithResponse(ctx, &apiclient.GetHealthScoreFleetParams{
+		Limit: opt(limit),
+	}, d.editor(ctx))
+	if err != nil {
+		return nil, wrapErr("fleet_health", err)
+	}
+
+	if resp.JSON200 == nil {
+		return nil, statusError("fleet_health", resp.HTTPResponse)
+	}
+
+	return resp.JSON200, nil
+}
+
 // Recommendations returns the health-score recommendations; pass a non-nil
 // database for the per-database drill-down.
 func (d *DashaClient) Recommendations(
