@@ -30,7 +30,7 @@ flowchart LR
 | Layer | Stack |
 |-------|-------|
 | Frontend | Vue 3, Vuetify 3, Pinia, TanStack Vue Query, vue-i18n, Vite |
-| Backend | Go 1.26, Echo v4, pgx v5, Casbin, gorilla/securecookie, coreos/go-oidc, Viper, Cobra, Zap, samber/do |
+| Backend | Go 1.27, Echo v4, pgx v5, Casbin, gorilla/securecookie, coreos/go-oidc, Viper, Cobra, Zap, samber/do |
 | Code generation | oapi-codegen (Go server), orval (TypeScript client) |
 | Testing | Vitest, Playwright, testcontainers-go (PG 14-18 matrix) |
 

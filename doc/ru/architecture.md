@@ -30,7 +30,7 @@ flowchart LR
 | Слой | Стек |
 |------|------|
 | Фронтенд | Vue 3, Vuetify 3, Pinia, TanStack Vue Query, vue-i18n, Vite |
-| Бэкенд | Go 1.26, Echo v4, pgx v5, Casbin, gorilla/securecookie, coreos/go-oidc, Viper, Cobra, Zap, samber/do |
+| Бэкенд | Go 1.27, Echo v4, pgx v5, Casbin, gorilla/securecookie, coreos/go-oidc, Viper, Cobra, Zap, samber/do |
 | Кодогенерация | oapi-codegen (Go-сервер), orval (TypeScript-клиент) |
 | Тестирование | Vitest, Playwright, testcontainers-go (матрица PG 14-18) |
 
