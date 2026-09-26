@@ -86,6 +86,24 @@ func TestService_FailedBaselineCachedForAMinute(t *testing.T) {
 	}
 }
 
+func TestService_FailedRefreshKeepsPreviousBaseline(t *testing.T) {
+	s := newTestService(t, &exprClient{
+		value: constValue(1),
+		fail:  func(string) error { return errors.New("vm down") },
+	})
+
+	k := latencyKey()[0]
+	prev := Baseline{Enough: true}
+	prev.ByHourOfWeek[0] = 42
+	s.baseCache[k] = baselineEntry{b: prev, expires: time.Now().Add(-time.Second)}
+
+	got := s.baselines(context.Background(), latencyKey())
+
+	if got[k] != prev {
+		t.Error("a failed refresh must keep the previous baseline")
+	}
+}
+
 func TestService_CancelledRefreshCachesNothing(t *testing.T) {
 	s := newTestService(t, &exprClient{value: constValue(1)})
 
@@ -138,5 +156,43 @@ func TestService_ConcurrentRefreshesCollapse(t *testing.T) {
 
 	if n := rangeCount(st); n != 1 {
 		t.Errorf("want one range request for concurrent refreshes, got %d", n)
+	}
+}
+
+func TestService_WaiterRetriesCancelledFlight(t *testing.T) {
+	g := &gateClient{
+		exprClient: &exprClient{value: constValue(1)},
+		started:    make(chan struct{}),
+		release:    make(chan struct{}),
+	}
+	s := newTestService(t, g)
+
+	waiting := make(chan struct{})
+	s.onFlightWait = func() { close(waiting) }
+
+	ownerCtx, cancel := context.WithCancel(context.Background())
+
+	var (
+		wg  sync.WaitGroup
+		got map[batchKey]Baseline
+	)
+
+	wg.Go(func() { s.baselines(ownerCtx, latencyKey()) })
+
+	<-g.started
+
+	wg.Go(func() { got = s.baselines(context.Background(), latencyKey()) })
+
+	<-waiting
+	cancel()
+	close(g.release)
+	wg.Wait()
+
+	if _, ok := got[latencyKey()[0]]; !ok {
+		t.Error("waiter must refresh a key whose flight was cancelled")
+	}
+
+	if _, ok := s.baseCache[latencyKey()[0]]; !ok {
+		t.Error("retried baseline must be cached")
 	}
 }

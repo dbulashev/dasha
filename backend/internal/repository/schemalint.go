@@ -184,7 +184,8 @@ func (p *PgxPool) GetSequenceHeadroom(
 
 // sequenceHeadroomForPool is the cached per-database probe. Failures are cached
 // too, briefly: the caller polls, and a query that fails every time must not
-// cost its timeout every time.
+// cost its timeout every time. The probe never queues for a connection: with no
+// free slot in the pool it returns the last value, even an expired one.
 func (p *PgxPool) sequenceHeadroomForPool(
 	ctx context.Context,
 	clusterName, instanceName, databaseName string,
@@ -192,10 +193,24 @@ func (p *PgxPool) sequenceHeadroomForPool(
 ) (float64, bool, error) {
 	key := sequenceHeadroomCacheKey(clusterName, instanceName, databaseName)
 
+	var (
+		last    sequenceHeadroomEntry
+		hasLast bool
+	)
+
 	if cached, ok := p.sequenceHeadroomCache.Load(key); ok {
-		if entry, valid := cached.(sequenceHeadroomEntry); valid && time.Now().Before(entry.expiresAt) {
-			return entry.worst, entry.known, nil
+		last, hasLast = cached.(sequenceHeadroomEntry)
+		if hasLast && time.Now().Before(last.expiresAt) {
+			return last.worst, last.known, nil
 		}
+	}
+
+	if !hasFreeConn(pool) {
+		if hasLast {
+			return last.worst, last.known, nil
+		}
+
+		return 0, false, nil
 	}
 
 	worst, known, err := p.readSequenceHeadroom(ctx, pool)
@@ -215,6 +230,9 @@ func (p *PgxPool) sequenceHeadroomForPool(
 }
 
 func (p *PgxPool) readSequenceHeadroom(ctx context.Context, pool *pgxpool.Pool) (float64, bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, schemaLintCheckTimeout)
+	defer cancel()
+
 	vNum, err := p.getServerVersionNum(ctx, pool)
 	if err != nil {
 		return 0, false, err

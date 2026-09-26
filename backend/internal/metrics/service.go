@@ -20,9 +20,13 @@ type Service struct {
 	client  DatasourceClient
 	log     *zap.Logger
 
+	collector *Collector
+
 	mu         sync.Mutex
 	baseCache  map[batchKey]baselineEntry
 	baseFlight map[batchKey]chan struct{}
+
+	onFlightWait func() // test hook: called before awaiting another caller's refresh
 }
 
 type baselineEntry struct {
@@ -63,7 +67,7 @@ func NewService(cfg Config, meta MetadataProvider, logger *zap.Logger) (*Service
 }
 
 func newService(cfg Config, matcher *Matcher, client DatasourceClient, logger *zap.Logger) *Service {
-	return &Service{
+	s := &Service{
 		cfg:        cfg,
 		matcher:    matcher,
 		catalog:    NewQueryCatalog(),
@@ -72,6 +76,11 @@ func newService(cfg Config, matcher *Matcher, client DatasourceClient, logger *z
 		baseCache:  make(map[batchKey]baselineEntry),
 		baseFlight: make(map[batchKey]chan struct{}),
 	}
+
+	limits := BatchLimits{MaxQueryBytes: cfg.Datasource.MaxQueryBytes, MaxConcurrency: cfg.Datasource.MaxConcurrency}
+	s.collector = NewCollector(s.matcher, s.catalog, s.client, "5m", cfg.roleExclusion(), limits, logger)
+
+	return s
 }
 
 // Enabled reports whether the metrics path is active (nil-safe).
@@ -84,11 +93,10 @@ func (s *Service) ValidateTarget(ctx context.Context, cluster, instance string) 
 	return s.matcher.Validate(ctx, s.client, cluster, instance)
 }
 
-// Collector returns a catalog-driven collector over the configured window.
+// Collector returns the shared catalog-driven collector; its requests count
+// against one datasource.max_concurrency.
 func (s *Service) Collector() *Collector {
-	limits := BatchLimits{MaxQueryBytes: s.cfg.Datasource.MaxQueryBytes, MaxConcurrency: s.cfg.Datasource.MaxConcurrency}
-
-	return NewCollector(s.matcher, s.catalog, s.client, "5m", s.cfg.roleExclusion(), limits, s.log)
+	return s.collector
 }
 
 // CurrentRaw returns the instant signals as health.RawMetrics with the
@@ -138,10 +146,22 @@ func (s *Service) CurrentRawMany(ctx context.Context, targets []TargetRef) map[T
 
 // baselines returns the seasonal baseline per key, refreshing stale ones in one
 // glued range batch at most once per Baseline.CacheTTL. A key already being
-// refreshed by another caller is awaited, not fetched again. A missing or empty
-// baseline disables that regression penalty.
+// refreshed by another caller is awaited, not fetched again; if that refresh was
+// cancelled, the key is refreshed again under ctx. A missing or empty baseline
+// disables that regression penalty.
 func (s *Service) baselines(ctx context.Context, keys []batchKey) map[batchKey]Baseline {
 	out := make(map[batchKey]Baseline, len(keys))
+
+	for pending := s.baselineRound(ctx, keys, out); len(pending) > 0 && ctx.Err() == nil; {
+		pending = s.baselineRound(ctx, pending, out)
+	}
+
+	return out
+}
+
+// baselineRound fills out with the keys it can resolve and returns those left
+// uncached.
+func (s *Service) baselineRound(ctx context.Context, keys []batchKey, out map[batchKey]Baseline) []batchKey {
 	now := time.Now()
 
 	var (
@@ -174,6 +194,10 @@ func (s *Service) baselines(ctx context.Context, keys []batchKey) map[batchKey]B
 		s.refreshBaselines(ctx, mine)
 	}
 
+	if len(waitFor) > 0 && s.onFlightWait != nil {
+		s.onFlightWait()
+	}
+
 	for _, ch := range waitFor {
 		select {
 		case <-ch:
@@ -184,6 +208,8 @@ func (s *Service) baselines(ctx context.Context, keys []batchKey) map[batchKey]B
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	var left []batchKey
+
 	for _, k := range keys {
 		if _, done := out[k]; done {
 			continue
@@ -191,14 +217,17 @@ func (s *Service) baselines(ctx context.Context, keys []batchKey) map[batchKey]B
 
 		if e, ok := s.baseCache[k]; ok {
 			out[k] = e.b
+		} else {
+			left = append(left, k)
 		}
 	}
 
-	return out
+	return left
 }
 
 // refreshBaselines fetches the keys' history and caches the result. A failed key
-// is cached for at most a minute; a cancelled refresh caches nothing.
+// keeps its previous baseline for at most a minute; a cancelled refresh caches
+// nothing.
 func (s *Service) refreshBaselines(ctx context.Context, keys []batchKey) {
 	const step = 30 * time.Minute
 
@@ -218,6 +247,7 @@ func (s *Service) refreshBaselines(ctx context.Context, keys []batchKey) {
 
 			if _, failed := errs[k]; failed {
 				e.expires = now.Add(min(s.cfg.Baseline.CacheTTL, time.Minute))
+				e.b = s.baseCache[k].b
 			} else {
 				e.b = BuildBaseline(pts[k], minPoints)
 			}

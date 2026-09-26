@@ -244,7 +244,7 @@ func TestBatchParity(t *testing.T) {
 	seedParity(t, pairs, end)
 
 	client := NewVMClient(DatasourceConfig{URL: vmURL}, nil)
-	b := &batcher{client: client, maxBytes: 2000, maxConc: 4}
+	b := newBatcher(client, 2000, 4)
 
 	t.Run("instant", func(t *testing.T) {
 		glued, fails := b.instant(ctx, parityItems(pairs), end)

@@ -3,6 +3,7 @@ package metrics
 import (
 	"context"
 	"errors"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -149,7 +150,7 @@ func valueByPrefix(expr string) (float64, bool) {
 
 func TestBatcher_PacksWithinLimit(t *testing.T) {
 	client := &exprClient{value: valueByPrefix}
-	b := &batcher{client: client, maxBytes: 1024, maxConc: 2}
+	b := newBatcher(client, 1024, 2)
 
 	vals, fails := b.instant(context.Background(), sizedItems(10, 280), time.Now())
 	if len(fails) != 0 {
@@ -176,7 +177,7 @@ func TestBatcher_PacksWithinLimit(t *testing.T) {
 
 func TestBatcher_SharedExprAnswersAllKeys(t *testing.T) {
 	client := &exprClient{value: constValue(7)}
-	b := &batcher{client: client, maxBytes: 1024, maxConc: 1}
+	b := newBatcher(client, 1024, 1)
 
 	a := batchKey{Target: TargetRef{Cluster: "c", Instance: "a"}, Signal: SigLoadAvg15}
 	c := batchKey{Target: TargetRef{Cluster: "c", Instance: "b"}, Signal: SigLoadAvg15}
@@ -190,7 +191,7 @@ func TestBatcher_SharedExprAnswersAllKeys(t *testing.T) {
 
 func TestBatcher_OversizedExprGoesBare(t *testing.T) {
 	client := &exprClient{value: valueByPrefix}
-	b := &batcher{client: client, maxBytes: 1024, maxConc: 1}
+	b := newBatcher(client, 1024, 1)
 
 	items := sizedItems(1, 1100)
 
@@ -220,7 +221,7 @@ func TestBatcher_PartialFailure(t *testing.T) {
 			return nil
 		},
 	}
-	b := &batcher{client: client, maxBytes: 1024, maxConc: 4}
+	b := newBatcher(client, 1024, 4)
 
 	items := sizedItems(5, 600)
 
@@ -236,6 +237,92 @@ func TestBatcher_PartialFailure(t *testing.T) {
 
 	if len(vals) != 4 {
 		t.Errorf("want 4 answered keys, got %d", len(vals))
+	}
+}
+
+func TestBatcher_RejectedGluedRequestIsBisected(t *testing.T) {
+	client := &exprClient{
+		value: valueByPrefix,
+		fail: func(q string) error {
+			if strings.Contains(q, "m3_") {
+				return &StatusError{Code: http.StatusUnprocessableEntity, Body: "bad"}
+			}
+
+			return nil
+		},
+	}
+	b := newBatcher(client, 1<<16, 1)
+
+	items := sizedItems(8, 50)
+
+	vals, fails := b.instant(context.Background(), items, time.Now())
+
+	if len(fails) != 1 || len(fails[0].Keys) != 1 || fails[0].Keys[0] != items[3].Keys[0] {
+		t.Fatalf("want item 3 alone to fail, got %+v", fails)
+	}
+
+	if len(vals) != 7 {
+		t.Errorf("want 7 answered keys, got %d", len(vals))
+	}
+}
+
+func TestBatcher_TransientGluedFailureNotSplit(t *testing.T) {
+	boom := errors.New("boom")
+	client := &exprClient{
+		value: valueByPrefix,
+		fail:  func(string) error { return boom },
+	}
+	b := newBatcher(client, 1<<16, 1)
+
+	_, fails := b.instant(context.Background(), sizedItems(8, 50), time.Now())
+
+	if len(client.queries) != 1 {
+		t.Errorf("want one request, got %d", len(client.queries))
+	}
+
+	if len(fails) != 1 || len(fails[0].Keys) != 8 {
+		t.Errorf("want all 8 keys in one failure, got %+v", fails)
+	}
+}
+
+func TestBatcher_GlobalRejectionStopsAfterOneSplit(t *testing.T) {
+	client := &exprClient{
+		value: valueByPrefix,
+		fail: func(string) error {
+			return &StatusError{Code: http.StatusBadRequest, Body: "bad"}
+		},
+	}
+	b := newBatcher(client, 1<<16, 1)
+
+	_, fails := b.instant(context.Background(), sizedItems(8, 50), time.Now())
+
+	if len(client.queries) != 3 {
+		t.Errorf("want the request and its two halves, got %d requests", len(client.queries))
+	}
+
+	if len(fails) != 1 || len(fails[0].Keys) != 8 {
+		t.Errorf("want all 8 keys in one failure, got %+v", fails)
+	}
+}
+
+func TestBatcher_SingleTargetRejectionNotSplit(t *testing.T) {
+	client := &exprClient{
+		value: valueByPrefix,
+		fail: func(string) error {
+			return &StatusError{Code: http.StatusUnprocessableEntity, Body: "bad"}
+		},
+	}
+	b := newBatcher(client, 1<<16, 1)
+
+	items := sizedItems(8, 50)
+	for i := range items {
+		items[i].Keys[0].Target = TargetRef{Cluster: "c", Instance: "one"}
+	}
+
+	b.instant(context.Background(), items, time.Now())
+
+	if len(client.queries) != 1 {
+		t.Errorf("want one request for a single target, got %d", len(client.queries))
 	}
 }
 
@@ -311,5 +398,46 @@ func TestCollector_InstantManyUnmappedTarget(t *testing.T) {
 
 	if !out[good].Has(SigXactsLeftWrap) {
 		t.Error("mapped target lost its signal")
+	}
+}
+
+// peakClient records the peak number of concurrent instant requests.
+type peakClient struct {
+	*exprClient
+	mu        sync.Mutex
+	cur, peak int
+}
+
+func (c *peakClient) QueryInstant(ctx context.Context, q string, at time.Time) ([]Sample, error) {
+	c.mu.Lock()
+	c.cur++
+	c.peak = max(c.peak, c.cur)
+	c.mu.Unlock()
+
+	time.Sleep(5 * time.Millisecond)
+
+	defer func() {
+		c.mu.Lock()
+		c.cur--
+		c.mu.Unlock()
+	}()
+
+	return c.exprClient.QueryInstant(ctx, q, at)
+}
+
+func TestBatcher_ConcurrencySharedAcrossCalls(t *testing.T) {
+	client := &peakClient{exprClient: &exprClient{value: valueByPrefix}}
+	b := newBatcher(client, 1024, 2)
+
+	var wg sync.WaitGroup
+
+	for range 4 {
+		wg.Go(func() { b.instant(context.Background(), sizedItems(6, 600), time.Now()) })
+	}
+
+	wg.Wait()
+
+	if client.peak > 2 {
+		t.Errorf("want at most 2 concurrent requests across calls, got %d", client.peak)
 	}
 }

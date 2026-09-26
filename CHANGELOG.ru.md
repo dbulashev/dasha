@@ -3,10 +3,10 @@
 ## Не выпущено
 
 ### Производительность
-- **Health Score в режиме метрик открывается быстрее.** Карточка читает все сигналы из источника метрик одним запросом, сезонная норма пересчитывается раз в 30 минут.
+- **Health Score открывается быстрее** в режиме метрик и на инстансах с большим числом баз.
 
 ### Конфигурация
-- Параметр `health_score.metrics.datasource.query_cache_ttl` удалён, время жизни сезонной нормы задаёт `health_score.metrics.baseline.cache_ttl`. Новые `datasource.max_query_bytes` и `datasource.max_concurrency` ограничивают пакетные запросы к источнику метрик.
+- Параметр `health_score.metrics.datasource.query_cache_ttl` удалён, время жизни сезонной нормы задаёт `health_score.metrics.baseline.cache_ttl`. Новые `health_score.metrics.datasource.max_query_bytes` и `health_score.metrics.datasource.max_concurrency` ограничивают пакетные запросы к источнику метрик. Новый `health_score.database_concurrency` задаёт, сколько баз одного инстанса читается одновременно (по умолчанию 4).
 
 ## v1.8.1
 

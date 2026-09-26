@@ -35,6 +35,9 @@ func (p *PgxPool) GetHealthScoreMetrics(ctx context.Context, clusterName, instan
 }
 
 func (p *PgxPool) healthScoreMetrics(ctx context.Context, pool *pgxpool.Pool) (*dto.HealthScoreMetrics, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	vNum, err := p.getServerVersionNum(ctx, pool)
 	if err != nil {
 		return nil, fmt.Errorf("get server version | %w", err)
@@ -50,9 +53,6 @@ func (p *PgxPool) healthScoreMetrics(ctx context.Context, pool *pgxpool.Pool) (*
 		return nil, err
 	}
 	defer conn.Release()
-
-	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
-	defer cancel()
 
 	var m dto.HealthScoreMetrics
 
@@ -202,6 +202,9 @@ func (p *PgxPool) collectHealthScorePerDatabase(
 	pool *pgxpool.Pool,
 	databaseName string,
 ) (dto.HealthScoreDatabaseMetrics, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
 	vNum, err := p.getServerVersionNum(ctx, pool)
 	if err != nil {
 		return dto.HealthScoreDatabaseMetrics{}, fmt.Errorf("get server version | %w", err)
@@ -217,9 +220,6 @@ func (p *PgxPool) collectHealthScorePerDatabase(
 		return dto.HealthScoreDatabaseMetrics{}, err
 	}
 	defer conn.Release()
-
-	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
-	defer cancel()
 
 	var m dto.HealthScoreDatabaseMetrics
 

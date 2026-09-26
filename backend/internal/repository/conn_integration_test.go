@@ -90,3 +90,49 @@ func TestServerVersion_ReadOncePerPool(t *testing.T) {
 	require.NoError(t, err, "a cached version needs no connection")
 	assert.Equal(t, first, again)
 }
+
+func TestForgetPool_DropsServerVersion(t *testing.T) {
+	t.Parallel()
+
+	pool := singleConnPool(t)
+	p := NewTestPgxPool(pool, zap.NewNop())
+
+	_, err := p.getServerVersionNum(t.Context(), pool)
+	require.NoError(t, err)
+
+	p.forgetPool(pool)
+
+	_, cached := p.serverVersions.Load(pool)
+	assert.False(t, cached)
+}
+
+func TestSequenceHeadroom_BusyPoolServesLastValue(t *testing.T) {
+	t.Parallel()
+
+	pool := singleConnPool(t)
+	p := NewTestPgxPool(pool, zap.NewNop())
+
+	key := sequenceHeadroomCacheKey("c", "i", "db")
+
+	held, err := pool.Acquire(t.Context())
+	require.NoError(t, err)
+	t.Cleanup(held.Release)
+
+	start := time.Now()
+
+	worst, known, err := p.sequenceHeadroomForPool(t.Context(), "c", "i", "db", pool)
+	require.NoError(t, err)
+	assert.False(t, known, "no value yet")
+	assert.Zero(t, worst)
+	assert.Less(t, time.Since(start), time.Second, "a busy pool must not be waited on")
+
+	_, stored := p.sequenceHeadroomCache.Load(key)
+	assert.False(t, stored, "a skipped probe must not be cached")
+
+	p.storeSequenceHeadroom(key, 0.9, true, -time.Minute)
+
+	worst, known, err = p.sequenceHeadroomForPool(t.Context(), "c", "i", "db", pool)
+	require.NoError(t, err)
+	assert.True(t, known)
+	assert.InDelta(t, 0.9, worst, 1e-9, "an expired value is served while the pool is busy")
+}

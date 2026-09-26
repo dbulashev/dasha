@@ -784,7 +784,7 @@ type HealthScoreConfig struct {
 
 func (c HealthScoreConfig) Validate() error {
 	if c.DatabaseConcurrency < 0 {
-		return fmt.Errorf("database_concurrency must be >= 1, got %d", c.DatabaseConcurrency)
+		return fmt.Errorf("database_concurrency must be >= 1, or 0 for the default, got %d", c.DatabaseConcurrency)
 	}
 
 	return nil

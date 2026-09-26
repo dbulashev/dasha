@@ -184,6 +184,7 @@ config:
   # a target is unmatched. Durations are Go strings (e.g. 10s, 672h).
   # Validate label matching at: GET /api/common/health-score/datasource/status
   # health_score:
+  #   # database_concurrency: 4  # databases of one instance read at once
   #   metrics:
   #     enabled: true
   #     datasource:

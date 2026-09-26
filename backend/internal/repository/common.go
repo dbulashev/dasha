@@ -544,6 +544,7 @@ func (p *PgxPool) ensurePool(ctx context.Context) error {
 
 	for _, pool := range duplicates {
 		p.logger.Debug("duplicate pool closed after a concurrent connect")
+		p.forgetPool(pool)
 
 		go pool.Close()
 	}
@@ -691,13 +692,11 @@ func (p *PgxPool) extensionSchema(ctx context.Context, pool *pgxpool.Pool, ext s
 	return quoted
 }
 
-// forgetPool drops the per-pool caches of a pool that is being closed. Both are
-// keyed by the pool pointer, so without this a cluster whose hosts or databases
-// churn — service discovery, a config reload — accumulates entries no lookup can
-// ever reach again.
+// forgetPool drops the caches keyed by the pointer of a pool that is being closed.
 func (p *PgxPool) forgetPool(pool *pgxpool.Pool) {
 	p.resolvedPgStatsView.Delete(pool)
 	p.resolvedStatsSources.Delete(pool)
+	p.serverVersions.Delete(pool)
 
 	p.resolvedExtSchemas.Range(func(k, _ any) bool {
 		if key, ok := k.(extSchemaKey); ok && key.pool == pool {
