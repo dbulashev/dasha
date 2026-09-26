@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { scoreColor } from './scoreColor'
 import { useRouter } from 'vue-router'
 import { getHealthScoreDatabases } from '@/api/gen/default/default'
 import type { HealthScoreDatabase, HealthScoreDatabases } from '@/api/models/index'
@@ -41,15 +42,6 @@ const headers = computed(() => [
   { title: t('healthScore.databases.headers.size'), key: 'size_bytes' },
   { title: t('healthScore.databases.headers.score'), key: 'score' },
 ])
-
-// The red band (< 40) is what the backend's critical floor targets
-// (health.criticalScoreCeiling = 30); keep these thresholds in sync with it.
-function scoreColor(score: number): string {
-  if (score >= 95) return 'success'
-  if (score >= 70) return 'warning'
-  if (score >= 40) return 'orange'
-  return 'error'
-}
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return bytes + ' B'

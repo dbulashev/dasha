@@ -14,6 +14,14 @@ services:
       - { name: service_id, value: "pg18-master" }
       - { name: container, value: "pg18-master" }
 
+  "pg18-replica:5432":
+    service_type: "postgres"
+    conninfo: "postgres://demo:demo@pg18-replica:5432/demo"
+    target_labels:
+      - { name: cluster, value: "demo" }
+      - { name: service_id, value: "pg18-replica" }
+      - { name: container, value: "pg18-replica" }
+
   "pg17-master:5432":
     service_type: "postgres"
     conninfo: "postgres://demo:demo@pg17-master:5432/demo"

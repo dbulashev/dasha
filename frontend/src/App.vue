@@ -80,6 +80,7 @@ function withQuery(base: string) {
   };
 }
 
+const fleetLink = computed(() => withQuery("fleet"));
 const mainLink = computed(() => withQuery("main"));
 const healthScoreLink = computed(() => withQuery("health-score"));
 const connectionsLink = computed(() => withQuery("connections"));
@@ -163,6 +164,19 @@ watch(
   { immediate: true },
 )
 
+const fleetPage = computed(() => route.name === 'fleet')
+
+// Admin-only during the fleet overview's trial period.
+watch(
+  [fleetPage, isAdmin, () => authStore.initialized],
+  ([fleet, admin, ready]) => {
+    if (ready && fleet && !admin) {
+      router.replace({ path: `/main/${currentCluster.value}`, query: route.query })
+    }
+  },
+  { immediate: true },
+)
+
 const drawer = ref(true)
 
 const tablesGroupOpen = computed(() => {
@@ -213,9 +227,12 @@ watch(() => route.path, () => {
             <v-divider vertical class="mx-2 app-brand-divider" />
             <span class="app-brand-sub">PostgreSQL Dashboard</span>
           </span>
-          <HostRoleLabel />
+          <HostRoleLabel v-if="!fleetPage" />
         </v-toolbar-title>
-        <cluster-host-db-selector class="ml-4 mr-2" />
+        <!-- The selector root is d-flex (display: flex !important), which beats v-show. -->
+        <div v-show="!fleetPage" style="display: contents">
+          <cluster-host-db-selector class="ml-4 mr-2" />
+        </div>
         <template v-slot:append>
           <v-btn
             v-if="settingsInToolbar"
@@ -234,6 +251,10 @@ watch(() => route.path, () => {
         :location="$vuetify.display.mobile ? 'bottom' : undefined"
         >
         <v-list nav>
+          <template v-if="isAdmin">
+            <v-list-item :title="t('fleetHealth.menuItem')" prepend-icon="mdi-server-network" link :to="fleetLink"></v-list-item>
+            <v-divider class="my-1" />
+          </template>
           <v-list-item :title="t('Home')"  prepend-icon="mdi-sigma" link :to="mainLink"></v-list-item>
           <v-list-item :title="t('healthScore.page.menuItem')" prepend-icon="mdi-heart-pulse" link :to="healthScoreLink"></v-list-item>
           <v-list-item :title="t('Connections')" prepend-icon="mdi-connection" link :to="connectionsLink"></v-list-item>

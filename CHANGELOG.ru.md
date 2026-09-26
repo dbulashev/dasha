@@ -2,11 +2,25 @@
 
 ## Не выпущено
 
+### Фичи
+- **Страница «Парк»**: инстансы с самым низким Health Score по всем кластерам, с фильтром по кластерам и переходом в карточку инстанса. Пока доступна только админам.
+- **Три MCP-инструмента по планам из логов**: `plan_insights`, `query_plans` и `plan_regressions`, и страница базы знаний о том, как их читать.
+- **Длинные ответы MCP сжимаются под бюджет размера**: `health_trend`, `query_compare`, `list_clusters`, `describe_table` и инструменты планов отдают краткий вид и называют параметр для полного.
+- **На неизвестное имя кластера, хоста или базы MCP отвечает похожими именами.**
+- **MCP-ресурс `dasha://mcp/tool-stats`**: число вызовов и размер ответов по каждому инструменту.
+
+### UX
+- Пункт меню **«Главная»** переименован в **«Сводка»**.
+
 ### Производительность
 - **Health Score открывается быстрее** в режиме метрик и на инстансах с большим числом баз.
 
+### Багфиксы
+- **Исправлен таймаут MCP-инструмента `fleet_health` на большом парке.**
+
 ### Конфигурация
-- Параметр `health_score.metrics.datasource.query_cache_ttl` удалён, время жизни сезонной нормы задаёт `health_score.metrics.baseline.cache_ttl`. Новые `health_score.metrics.datasource.max_query_bytes` и `health_score.metrics.datasource.max_concurrency` ограничивают пакетные запросы к источнику метрик. Новый `health_score.database_concurrency` задаёт, сколько баз одного инстанса читается одновременно (по умолчанию 4).
+- Параметр `health_score.metrics.datasource.query_cache_ttl` удалён, время жизни сезонной нормы задаёт `health_score.metrics.baseline.cache_ttl`. Новые `health_score.metrics.datasource.max_query_bytes` и `health_score.metrics.datasource.max_concurrency` ограничивают пакетные запросы к источнику метрик. Новый `health_score.database_concurrency` задаёт, сколько баз одного инстанса читается одновременно (по умолчанию 4). Новая секция `health_score.fleet` задаёт ограничения обзора парка.
+- `dasha-mcp`: новый `--max-result-bytes` (`DASHA_MCP_MAX_RESULT_BYTES`, по умолчанию 64 КБ) задаёт бюджет размера одного ответа инструмента.
 
 ## v1.8.1
 

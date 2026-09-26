@@ -156,6 +156,12 @@ health_score:
         service: pg18-master
         host: pg18-master
         container: pg18-master
+      - cluster: pg18-cluster
+        instance: pg18-replica
+        env: demo
+        service: pg18-replica
+        host: pg18-replica
+        container: pg18-replica
       - cluster: pg17-cluster
         instance: pg17-master
         env: demo

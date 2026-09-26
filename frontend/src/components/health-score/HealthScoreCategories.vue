@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { scoreColor } from './scoreColor'
 import type { HealthScoreCategory } from '@/api/models/index'
 import { fmtBytes, fmtNum } from '@/utils/format'
 
@@ -13,16 +14,6 @@ const { t } = useI18n()
 const visibleCategories = computed(() =>
   (props.categories ?? []).filter((c) => c.weight > 0),
 )
-
-// The red band (< 40) is what the backend's critical floor targets
-// (health.criticalScoreCeiling = 30). Keep these thresholds in sync with the
-// other scoreColor copies (HealthScoreGauge, HealthScoreDatabases) and the floor.
-function scoreColor(score: number): string {
-  if (score >= 95) return 'success'
-  if (score >= 70) return 'warning'
-  if (score >= 40) return 'orange'
-  return 'error'
-}
 
 function categoryLabel(name: string): string {
   return t(`healthScore.categories.${name}`)
