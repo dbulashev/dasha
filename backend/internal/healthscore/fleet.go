@@ -222,11 +222,12 @@ func (f *Fleet) join(ctx context.Context, exhaustive bool, targets []metrics.Tar
 // run computes the flight, publishes it, then spends the rest of the budget on
 // the sweep.
 func (f *Fleet) run(ctx context.Context, key string, fl *fleetFlight, exhaustive bool, targets []metrics.TargetRef, walFixed map[string]bool) {
-	defer func() {
+	release := sync.OnceFunc(func() {
 		f.mu.Lock()
 		f.computing--
 		f.mu.Unlock()
-	}()
+	})
+	defer release()
 
 	var once sync.Once
 
@@ -267,6 +268,7 @@ func (f *Fleet) run(ctx context.Context, key string, fl *fleetFlight, exhaustive
 	clusters := f.clusterInputs(ctx, walFixed)
 	res, sweep := f.compute(ctx, targets, clusters, exhaustive, start, stats)
 	publish(res, nil)
+	release()
 
 	if f.sweeping.CompareAndSwap(false, true) {
 		defer f.sweeping.Store(false)
