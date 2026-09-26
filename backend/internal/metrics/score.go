@@ -79,6 +79,14 @@ func (s Signals) ToRawMetrics() health.RawMetrics {
 		m.MaxXidAge = age
 	}
 
+	if v, ok := s.Get(SigAutovacuumOff); ok && v > 0 {
+		m.AutovacuumEnabled = false
+	}
+
+	if v, ok := s.Get(SigTrackCountsOff); ok && v > 0 {
+		m.TrackCountsEnabled = false
+	}
+
 	if v, ok := s.Get(SigLoadAvg15); ok {
 		m.LoadAvg15 = v
 	}

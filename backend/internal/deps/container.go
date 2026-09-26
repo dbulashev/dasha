@@ -568,6 +568,7 @@ func provideConfig() (*config.Config, error) {
 	}
 
 	c.HealthScore.Metrics = c.HealthScore.Metrics.WithDefaults()
+	c.HealthScore.Fleet = c.HealthScore.Fleet.WithDefaults()
 	c.LogSearch = c.LogSearch.WithDefaults()
 	c.LogInsights = c.LogInsights.WithDefaults()
 

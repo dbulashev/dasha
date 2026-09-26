@@ -82,6 +82,9 @@ func NewQueryCatalog() *QueryCatalog {
 		{ProviderPgSCV, SigActiveConns}: `sum(postgres_activity_connections_in_flight{%[1]s,state="active"})`,
 		{ProviderPgSCV, SigIdleInTx}:    `sum(postgres_activity_connections_in_flight{%[1]s,state="idle in transaction"})`,
 		{ProviderPgSCV, SigMaxConns}:    `max(postgres_service_settings_info{%[1]s,name="max_connections"})`,
+		// pgSCV exports boolean GUCs as 1/0.
+		{ProviderPgSCV, SigAutovacuumOff}:  `min(postgres_service_settings_info{%[1]s,name="autovacuum"}) == bool 0`,
+		{ProviderPgSCV, SigTrackCountsOff}: `min(postgres_service_settings_info{%[1]s,name="track_counts"}) == bool 0`,
 
 		// wal/checkpoint — requested checkpoints rate
 		{ProviderPgSCV, SigCheckpointsReqRate}: `sum(rate(postgres_checkpoints_total{%[1]s,type="req"}[%[2]s]))`,

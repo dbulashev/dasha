@@ -114,6 +114,11 @@ func (s *Service) CurrentRaw(ctx context.Context, cluster, instance string) (hea
 	return r.Raw, r.Signals, r.Err
 }
 
+// InstantMany collects sigs for every target at the current time.
+func (s *Service) InstantMany(ctx context.Context, targets []TargetRef, sigs ...SignalKind) (map[TargetRef]Signals, map[TargetRef]error) {
+	return s.Collector().InstantMany(ctx, targets, time.Now(), sigs...)
+}
+
 // CurrentRawMany is CurrentRaw for many targets in glued requests.
 func (s *Service) CurrentRawMany(ctx context.Context, targets []TargetRef) map[TargetRef]RawResult {
 	sigs, errs := s.Collector().InstantMany(ctx, targets, time.Now())

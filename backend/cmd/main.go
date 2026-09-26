@@ -243,7 +243,7 @@ func dashaExec(cmd *cobra.Command, _ []string) error {
 		return logsRL.Middleware(compareRL.Middleware(next))
 	}
 
-	d := http.NewDashaHandlers(container.Config(), container.Repository(), st, container.Metrics(), logsSvc)
+	d := http.NewDashaHandlers(container.Config(), container.Repository(), st, container.Metrics(), logsSvc, logger)
 	svc := http.New(d, mw, authMW.RequireHTTPS, authMW.RateLimit, logsRateLimit, authMW.Auth, authMW.Casbin, logger)
 
 	if container.Config().Auth.Mode == config.AuthModeOIDC {

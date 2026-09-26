@@ -74,6 +74,20 @@ var CoreSignals = []SignalKind{
 	SigPoolerServers, SigPoolerPoolSize,
 }
 
+// PrefilterSignals ranks a fleet without SQL: every floor condition plus the
+// heaviest categories. Everything else reads as healthy, so the estimate is
+// optimistic and only good for ordering.
+var PrefilterSignals = []SignalKind{
+	SigXactsLeftWrap, SigChecksumFailRate, SigDiskUsedRatio, SigSeqExhaustionMax,
+	SigAutovacuumOff, SigTrackCountsOff,
+	SigTotalConns, SigMaxConns, SigIdleInTx,
+	SigReplLagSeconds, SigReplLagBytes,
+	SigCacheHitRatio,
+	SigMaxDeadRatio,
+	SigLocksNotGranted,
+	SigPoolerServers, SigPoolerPoolSize,
+}
+
 // signalRole maps a signal to the provider-role that serves it.
 func signalRole(s SignalKind) Role {
 	switch s {

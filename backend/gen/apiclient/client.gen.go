@@ -37,15 +37,22 @@ const (
 
 // Defines values for AuthInfoMode.
 const (
-	None  AuthInfoMode = "none"
-	Oidc  AuthInfoMode = "oidc"
-	Token AuthInfoMode = "token"
+	AuthInfoModeNone  AuthInfoMode = "none"
+	AuthInfoModeOidc  AuthInfoMode = "oidc"
+	AuthInfoModeToken AuthInfoMode = "token"
 )
 
 // Defines values for AuthInfoPatMinRole.
 const (
 	AuthInfoPatMinRoleAdmin  AuthInfoPatMinRole = "admin"
 	AuthInfoPatMinRoleViewer AuthInfoPatMinRole = "viewer"
+)
+
+// Defines values for HealthScoreFleetItemSource.
+const (
+	HealthScoreFleetItemSourceMetrics  HealthScoreFleetItemSource = "metrics"
+	HealthScoreFleetItemSourceNone     HealthScoreFleetItemSource = "none"
+	HealthScoreFleetItemSourceSnapshot HealthScoreFleetItemSource = "snapshot"
 )
 
 // Defines values for HealthScoreRecommendationSeverity.
@@ -730,6 +737,40 @@ type HealthScoreDatasourceStatus struct {
 	Roles   []HealthScoreDatasourceRole `json:"roles"`
 	Target  string                      `json:"target"`
 }
+
+// HealthScoreFleet defines model for HealthScoreFleet.
+type HealthScoreFleet struct {
+	// Candidates Instances the metrics prefilter picked for an exact score.
+	Candidates      int                    `json:"candidates"`
+	ComputedAt      time.Time              `json:"computed_at"`
+	DurationMs      int64                  `json:"duration_ms"`
+	Incomplete      bool                   `json:"incomplete"`
+	InstancesScored int                    `json:"instances_scored"`
+	InstancesTotal  int                    `json:"instances_total"`
+	Items           []HealthScoreFleetItem `json:"items"`
+
+	// MetricsUnavailable The metrics datasource did not answer; every score comes from the SQL snapshot.
+	MetricsUnavailable bool `json:"metrics_unavailable"`
+
+	// Uncomputed Instances left unscored when the time budget ran out.
+	Uncomputed int `json:"uncomputed"`
+}
+
+// HealthScoreFleetItem defines model for HealthScoreFleetItem.
+type HealthScoreFleetItem struct {
+	ClusterName     string  `json:"cluster_name"`
+	Error           *string `json:"error,omitempty"`
+	InRecovery      bool    `json:"in_recovery"`
+	Instance        string  `json:"instance"`
+	MetricsDegraded *bool   `json:"metrics_degraded,omitempty"`
+
+	// Score Null when the instance was not scored; error says why.
+	Score  *float64                   `json:"score"`
+	Source HealthScoreFleetItemSource `json:"source"`
+}
+
+// HealthScoreFleetItemSource defines model for HealthScoreFleetItem.Source.
+type HealthScoreFleetItemSource string
 
 // HealthScoreHighDeadRatioTable defines model for HealthScoreHighDeadRatioTable.
 type HealthScoreHighDeadRatioTable struct {
@@ -2881,6 +2922,18 @@ type GetHealthScoreXidWraparoundDatabasesParams struct {
 	Offset      *int        `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
+// GetHealthScoreFleetParams defines parameters for GetHealthScoreFleet.
+type GetHealthScoreFleetParams struct {
+	// Limit Number of instances to return (default 20).
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// ClusterName Clusters to include; empty means the whole fleet.
+	ClusterName *[]string `form:"cluster_name,omitempty" json:"cluster_name,omitempty"`
+
+	// Exhaustive Score every instance exactly, skipping the prefilter. Allowed only when health_score.fleet.allow_exhaustive is set.
+	Exhaustive *bool `form:"exhaustive,omitempty" json:"exhaustive,omitempty"`
+}
+
 // GetHealthScoreHistoryParams defines parameters for GetHealthScoreHistory.
 type GetHealthScoreHistoryParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
@@ -3894,6 +3947,9 @@ type ClientInterface interface {
 	// GetHealthScoreXidWraparoundDatabases request
 	GetHealthScoreXidWraparoundDatabases(ctx context.Context, params *GetHealthScoreXidWraparoundDatabasesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetHealthScoreFleet request
+	GetHealthScoreFleet(ctx context.Context, params *GetHealthScoreFleetParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetHealthScoreHistory request
 	GetHealthScoreHistory(ctx context.Context, params *GetHealthScoreHistoryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -4496,6 +4552,18 @@ func (c *Client) GetHealthScoreTablesAutovacuumOff(ctx context.Context, params *
 
 func (c *Client) GetHealthScoreXidWraparoundDatabases(ctx context.Context, params *GetHealthScoreXidWraparoundDatabasesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetHealthScoreXidWraparoundDatabasesRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetHealthScoreFleet(ctx context.Context, params *GetHealthScoreFleetParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetHealthScoreFleetRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -6956,6 +7024,87 @@ func NewGetHealthScoreXidWraparoundDatabasesRequest(server string, params *GetHe
 		if params.Offset != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetHealthScoreFleetRequest generates requests for GetHealthScoreFleet
+func NewGetHealthScoreFleetRequest(server string, params *GetHealthScoreFleetParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/common/health-score/fleet")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.ClusterName != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, *params.ClusterName); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Exhaustive != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "exhaustive", runtime.ParamLocationQuery, *params.Exhaustive); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -14726,6 +14875,9 @@ type ClientWithResponsesInterface interface {
 	// GetHealthScoreXidWraparoundDatabasesWithResponse request
 	GetHealthScoreXidWraparoundDatabasesWithResponse(ctx context.Context, params *GetHealthScoreXidWraparoundDatabasesParams, reqEditors ...RequestEditorFn) (*GetHealthScoreXidWraparoundDatabasesResponse, error)
 
+	// GetHealthScoreFleetWithResponse request
+	GetHealthScoreFleetWithResponse(ctx context.Context, params *GetHealthScoreFleetParams, reqEditors ...RequestEditorFn) (*GetHealthScoreFleetResponse, error)
+
 	// GetHealthScoreHistoryWithResponse request
 	GetHealthScoreHistoryWithResponse(ctx context.Context, params *GetHealthScoreHistoryParams, reqEditors ...RequestEditorFn) (*GetHealthScoreHistoryResponse, error)
 
@@ -15542,6 +15694,29 @@ func (r GetHealthScoreXidWraparoundDatabasesResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetHealthScoreXidWraparoundDatabasesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetHealthScoreFleetResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *HealthScoreFleet
+	JSON400      *ErrorMessage
+}
+
+// Status returns HTTPResponse.Status
+func (r GetHealthScoreFleetResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetHealthScoreFleetResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -17814,6 +17989,15 @@ func (c *ClientWithResponses) GetHealthScoreXidWraparoundDatabasesWithResponse(c
 	return ParseGetHealthScoreXidWraparoundDatabasesResponse(rsp)
 }
 
+// GetHealthScoreFleetWithResponse request returning *GetHealthScoreFleetResponse
+func (c *ClientWithResponses) GetHealthScoreFleetWithResponse(ctx context.Context, params *GetHealthScoreFleetParams, reqEditors ...RequestEditorFn) (*GetHealthScoreFleetResponse, error) {
+	rsp, err := c.GetHealthScoreFleet(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetHealthScoreFleetResponse(rsp)
+}
+
 // GetHealthScoreHistoryWithResponse request returning *GetHealthScoreHistoryResponse
 func (c *ClientWithResponses) GetHealthScoreHistoryWithResponse(ctx context.Context, params *GetHealthScoreHistoryParams, reqEditors ...RequestEditorFn) (*GetHealthScoreHistoryResponse, error) {
 	rsp, err := c.GetHealthScoreHistory(ctx, params, reqEditors...)
@@ -19245,6 +19429,39 @@ func ParseGetHealthScoreXidWraparoundDatabasesResponse(rsp *http.Response) (*Get
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetHealthScoreFleetResponse parses an HTTP response from a GetHealthScoreFleetWithResponse call
+func ParseGetHealthScoreFleetResponse(rsp *http.Response) (*GetHealthScoreFleetResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetHealthScoreFleetResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest HealthScoreFleet
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorMessage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
 
 	}
 

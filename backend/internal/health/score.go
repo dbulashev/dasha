@@ -269,6 +269,11 @@ func CalculateWithWeights(m RawMetrics, w Weights) Result {
 	}
 }
 
+// Floored reports whether a catastrophic condition clamps the score into the red.
+func Floored(m RawMetrics) bool {
+	return criticalCeiling(m) < 100
+}
+
 // criticalCeiling returns the maximum score allowed in the presence of a
 // catastrophic condition, or 100 when none applies.
 //

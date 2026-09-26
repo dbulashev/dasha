@@ -779,12 +779,94 @@ type HealthScoreConfig struct {
 	// DatabaseConcurrency caps how many databases of one instance are read at
 	// once; 0 means the repository default (4).
 	DatabaseConcurrency int            `mapstructure:"database_concurrency"`
+	Fleet               FleetConfig    `mapstructure:"fleet"`
 	Metrics             metrics.Config `mapstructure:"metrics"`
 }
 
 func (c HealthScoreConfig) Validate() error {
 	if c.DatabaseConcurrency < 0 {
 		return fmt.Errorf("database_concurrency must be >= 1, or 0 for the default, got %d", c.DatabaseConcurrency)
+	}
+
+	if err := c.Fleet.Validate(); err != nil {
+		return fmt.Errorf("fleet: %w", err)
+	}
+
+	return nil
+}
+
+const (
+	DefaultFleetBudget              = 10 * time.Second
+	DefaultFleetLimit               = 20
+	MaxFleetLimit                   = 50
+	DefaultFleetCandidateMargin     = 15
+	DefaultFleetStickyTTL           = time.Hour
+	DefaultFleetResultTTL           = time.Minute
+	DefaultFleetSnapshotConcurrency = 8
+	DefaultFleetInstanceTimeout     = 5 * time.Second
+)
+
+// FleetConfig bounds the fleet-wide worst-instances overview.
+type FleetConfig struct {
+	Budget       time.Duration `mapstructure:"budget"`
+	DefaultLimit int           `mapstructure:"default_limit"`
+	// CandidateMargin is how many instances past the limit get an exact score
+	// on the estimate alone; nil means the default, 0 is allowed.
+	CandidateMargin     *int          `mapstructure:"candidate_margin"`
+	StickyTTL           time.Duration `mapstructure:"sticky_ttl"`
+	ResultTTL           time.Duration `mapstructure:"result_ttl"`
+	SnapshotConcurrency int           `mapstructure:"snapshot_concurrency"`
+	InstanceTimeout     time.Duration `mapstructure:"instance_timeout"`
+	AllowExhaustive     bool          `mapstructure:"allow_exhaustive"`
+}
+
+// WithDefaults returns a copy with unset (<=0) fields filled from defaults.
+func (c FleetConfig) WithDefaults() FleetConfig {
+	if c.Budget <= 0 {
+		c.Budget = DefaultFleetBudget
+	}
+
+	if c.DefaultLimit <= 0 {
+		c.DefaultLimit = DefaultFleetLimit
+	}
+
+	if c.CandidateMargin == nil {
+		m := DefaultFleetCandidateMargin
+		c.CandidateMargin = &m
+	}
+
+	if c.StickyTTL <= 0 {
+		c.StickyTTL = DefaultFleetStickyTTL
+	}
+
+	if c.ResultTTL <= 0 {
+		c.ResultTTL = DefaultFleetResultTTL
+	}
+
+	if c.SnapshotConcurrency <= 0 {
+		c.SnapshotConcurrency = DefaultFleetSnapshotConcurrency
+	}
+
+	if c.InstanceTimeout <= 0 {
+		c.InstanceTimeout = DefaultFleetInstanceTimeout
+	}
+
+	return c
+}
+
+func (c FleetConfig) Validate() error {
+	c = c.WithDefaults()
+
+	if c.Budget <= c.InstanceTimeout {
+		return fmt.Errorf("budget (%s) must exceed instance_timeout (%s)", c.Budget, c.InstanceTimeout)
+	}
+
+	if *c.CandidateMargin < 0 {
+		return fmt.Errorf("candidate_margin must be >= 0, got %d", *c.CandidateMargin)
+	}
+
+	if c.DefaultLimit > MaxFleetLimit {
+		return fmt.Errorf("default_limit must be <= %d, got %d", MaxFleetLimit, c.DefaultLimit)
 	}
 
 	return nil
