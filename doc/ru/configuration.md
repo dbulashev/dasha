@@ -4,7 +4,7 @@
 
 ## Требования
 
-- Go 1.27+
+- Go 1.27.1+
 - Node.js 22+ и npm
 - PostgreSQL 14+ или Postgres Pro (вместо `pg_stat_statements` используется `pgpro_stats`)
 - Docker и Docker Compose для демо-лаборатории
