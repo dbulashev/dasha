@@ -797,6 +797,7 @@ func (c HealthScoreConfig) Validate() error {
 
 const (
 	DefaultFleetBudget              = 10 * time.Second
+	MaxFleetBudget                  = 25 * time.Second // below the HTTP server's 30s write timeout
 	DefaultFleetLimit               = 20
 	MaxFleetLimit                   = 50
 	DefaultFleetCandidateMargin     = 15
@@ -804,20 +805,22 @@ const (
 	DefaultFleetResultTTL           = time.Minute
 	DefaultFleetSnapshotConcurrency = 8
 	DefaultFleetInstanceTimeout     = 5 * time.Second
+	DefaultFleetMaxComputations     = 4
 )
 
 // FleetConfig bounds the fleet-wide worst-instances overview.
 type FleetConfig struct {
 	Budget       time.Duration `mapstructure:"budget"`
 	DefaultLimit int           `mapstructure:"default_limit"`
-	// CandidateMargin is how many instances past the limit get an exact score
-	// on the estimate alone; nil means the default, 0 is allowed.
+	// CandidateMargin is how many instances past MaxFleetLimit get an exact
+	// score on the estimate alone; nil means the default, 0 is allowed.
 	CandidateMargin     *int          `mapstructure:"candidate_margin"`
 	StickyTTL           time.Duration `mapstructure:"sticky_ttl"`
 	ResultTTL           time.Duration `mapstructure:"result_ttl"`
 	SnapshotConcurrency int           `mapstructure:"snapshot_concurrency"`
 	InstanceTimeout     time.Duration `mapstructure:"instance_timeout"`
 	AllowExhaustive     bool          `mapstructure:"allow_exhaustive"`
+	MaxComputations     int           `mapstructure:"max_computations"`
 }
 
 // WithDefaults returns a copy with unset (<=0) fields filled from defaults.
@@ -851,11 +854,19 @@ func (c FleetConfig) WithDefaults() FleetConfig {
 		c.InstanceTimeout = DefaultFleetInstanceTimeout
 	}
 
+	if c.MaxComputations <= 0 {
+		c.MaxComputations = DefaultFleetMaxComputations
+	}
+
 	return c
 }
 
 func (c FleetConfig) Validate() error {
 	c = c.WithDefaults()
+
+	if c.Budget > MaxFleetBudget {
+		return fmt.Errorf("budget must be <= %s, got %s", MaxFleetBudget, c.Budget)
+	}
 
 	if c.Budget <= c.InstanceTimeout {
 		return fmt.Errorf("budget (%s) must exceed instance_timeout (%s)", c.Budget, c.InstanceTimeout)

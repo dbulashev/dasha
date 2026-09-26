@@ -1645,10 +1645,18 @@ export type getHealthScoreFleetResponse400 = {
   status: 400
 }
 
+export type getHealthScoreFleetResponse503 = {
+  data: ErrorMessage
+  status: 503
+}
+
 export type getHealthScoreFleetResponseSuccess = getHealthScoreFleetResponse200 & {
   headers: Headers
 }
-export type getHealthScoreFleetResponseError = getHealthScoreFleetResponse400 & {
+export type getHealthScoreFleetResponseError = (
+  | getHealthScoreFleetResponse400
+  | getHealthScoreFleetResponse503
+) & {
   headers: Headers
 }
 

@@ -274,7 +274,7 @@ func TestCompose_SequenceHeadroom(t *testing.T) {
 	s := newScorer(&config.Config{}, &fakeRepo{}, nil)
 
 	t.Run("primary takes the headroom", func(t *testing.T) {
-		raw, _, _, err := s.compose(t.Context(), target, inputs{snap: &dto.HealthScoreMetrics{}, seqWorst: 0.9, seqKnown: true})
+		raw, _, _, err := s.compose(inputs{snap: &dto.HealthScoreMetrics{}, seqWorst: 0.9, seqKnown: true}, false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -285,7 +285,7 @@ func TestCompose_SequenceHeadroom(t *testing.T) {
 	})
 
 	t.Run("standby drops it", func(t *testing.T) {
-		raw, _, _, err := s.compose(t.Context(), target, inputs{snap: &dto.HealthScoreMetrics{InRecovery: true}, seqWorst: 0.9, seqKnown: true})
+		raw, _, _, err := s.compose(inputs{snap: &dto.HealthScoreMetrics{InRecovery: true}, seqWorst: 0.9, seqKnown: true}, false)
 		if err != nil {
 			t.Fatal(err)
 		}

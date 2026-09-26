@@ -177,8 +177,7 @@ func (d *DashaClient) HealthScore(ctx context.Context, cluster, instance string)
 	return resp.JSON200, nil
 }
 
-// FleetHealth returns the fleet's worst instances. Dasha answers within its own
-// budget, which the slow deadline covers.
+// FleetHealth returns the fleet's worst instances.
 func (d *DashaClient) FleetHealth(ctx context.Context, limit int) (*apiclient.HealthScoreFleet, error) {
 	resp, err := d.slowAPI.GetHealthScoreFleetWithResponse(ctx, &apiclient.GetHealthScoreFleetParams{
 		Limit: opt(limit),
@@ -1329,6 +1328,12 @@ func statusError(op string, resp *http.Response) error {
 			"Dasha's configuration", errNotFound, op)
 	case http.StatusTooManyRequests:
 		return fmt.Errorf("dasha: rate limited (429) on %s — pause before retrying instead of calling again immediately", op)
+	case http.StatusServiceUnavailable:
+		if ra := resp.Header.Get("Retry-After"); ra != "" {
+			return fmt.Errorf("dasha: busy (503) on %s — retry in %s s", op, ra)
+		}
+
+		return fmt.Errorf("dasha: busy (503) on %s — retry later", op)
 	default:
 		return fmt.Errorf("dasha: %s returned status %d", op, code)
 	}

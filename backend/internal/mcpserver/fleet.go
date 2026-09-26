@@ -5,12 +5,12 @@ import (
 	"time"
 )
 
-// defaultFleetLimit caps how many worst instances fleet_health returns by default.
-const defaultFleetLimit = 5
+const (
+	defaultFleetLimit = 5
+	maxFleetLimit     = 50
+)
 
-// fleetEntry is one instance's health in the fleet ranking. Score is a pointer so
-// a legitimate worst-possible score of 0 is still emitted; it is nil only when
-// the score could not be read, which the Error field then explains.
+// fleetEntry.Score is nil only for an unscored instance; Error says why.
 type fleetEntry struct {
 	Cluster    string   `json:"cluster"`
 	Instance   string   `json:"instance"`
@@ -39,6 +39,8 @@ func fleetHealth(ctx context.Context, c *DashaClient, limit int) (any, error) {
 	if limit <= 0 {
 		limit = defaultFleetLimit
 	}
+
+	limit = min(limit, maxFleetLimit)
 
 	f, err := c.FleetHealth(ctx, limit)
 	if err != nil {

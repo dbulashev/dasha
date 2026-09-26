@@ -40,11 +40,28 @@ func fleetOf(clusters, hostsPer int) fakeClusters {
 }
 
 type fakeFleetScorer struct {
-	delay  time.Duration
-	scores map[metrics.TargetRef]float64 // missing = 90
+	delay   time.Duration
+	scores  map[metrics.TargetRef]float64 // missing = 90
+	panicOn metrics.TargetRef
+
+	inflight, peak atomic.Int32
 }
 
-func (f *fakeFleetScorer) Score(ctx context.Context, t metrics.TargetRef, pre *metrics.RawResult) (InstanceScore, error) {
+func (f *fakeFleetScorer) ScoreWith(ctx context.Context, t metrics.TargetRef, pre *metrics.RawResult, _ ClusterContext) (InstanceScore, error) {
+	if t == f.panicOn {
+		panic("boom")
+	}
+
+	n := f.inflight.Add(1)
+	defer f.inflight.Add(-1)
+
+	for {
+		p := f.peak.Load()
+		if n <= p || f.peak.CompareAndSwap(p, n) {
+			break
+		}
+	}
+
 	if f.delay > 0 {
 		select {
 		case <-time.After(f.delay):
@@ -73,6 +90,7 @@ func (f *fakeFleetScorer) Weights(context.Context, string) (health.Weights, erro
 type fakeFleetMetrics struct {
 	sigs     map[metrics.TargetRef]metrics.Signals // missing = healthy
 	errFor   func(metrics.TargetRef) error
+	hang     bool
 	instant  atomic.Int32
 	rawCalls atomic.Int32
 }
@@ -88,8 +106,19 @@ func healthySignals() metrics.Signals {
 
 func (f *fakeFleetMetrics) Enabled() bool { return true }
 
-func (f *fakeFleetMetrics) InstantMany(_ context.Context, targets []metrics.TargetRef, _ ...metrics.SignalKind) (map[metrics.TargetRef]metrics.Signals, map[metrics.TargetRef]error) {
+func (f *fakeFleetMetrics) InstantMany(ctx context.Context, targets []metrics.TargetRef, _ ...metrics.SignalKind) (map[metrics.TargetRef]metrics.Signals, map[metrics.TargetRef]error) {
 	f.instant.Add(1)
+
+	if f.hang {
+		<-ctx.Done()
+
+		errs := make(map[metrics.TargetRef]error, len(targets))
+		for _, t := range targets {
+			errs[t] = ctx.Err()
+		}
+
+		return nil, errs
+	}
 
 	return f.read(targets)
 }
@@ -166,7 +195,7 @@ func TestFleet_FloorInstanceAlwaysListed(t *testing.T) {
 				t.Fatalf("worst %+v, want %v first", res.Items, bad)
 			}
 
-			if res.Candidates > config.DefaultFleetLimit+1 {
+			if res.Candidates > config.MaxFleetLimit+1 {
 				t.Errorf("candidates %d, want at most the computed limit plus the floor", res.Candidates)
 			}
 
@@ -296,10 +325,110 @@ func TestFleet_ConcurrentCallsShareOneComputation(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		if n := ms.instant.Load(); n != 2 {
-			t.Errorf("larger limit did not recompute: prefilter ran %d times", n)
+		if n := ms.instant.Load(); n != 1 {
+			t.Errorf("larger limit recomputed: prefilter ran %d times", n)
 		}
 	})
+}
+
+func TestFleet_FiltersShareSnapshotPool(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		cfg := fleetCfg(0)
+		cfg.SnapshotConcurrency = 2
+
+		sc := &fakeFleetScorer{delay: time.Second}
+		f := newFleet(cfg, nil, sc, nil, fleetOf(4, 2), nil)
+
+		var wg sync.WaitGroup
+		for _, c := range []string{"c000", "c001", "c002", "c003"} {
+			wg.Go(func() {
+				res, err := f.Worst(t.Context(), FleetRequest{Clusters: []string{c}})
+				if err != nil {
+					t.Error(err)
+
+					return
+				}
+
+				if res.InstancesScored != 2 {
+					t.Errorf("%s: scored %d, want 2", c, res.InstancesScored)
+				}
+			})
+		}
+
+		wg.Wait()
+
+		if p := sc.peak.Load(); p != 2 {
+			t.Errorf("peak concurrent snapshots %d, want the shared pool of 2", p)
+		}
+	})
+}
+
+func TestFleet_BusyOverMaxComputations(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		cfg := fleetCfg(0)
+		cfg.MaxComputations = 1
+
+		f := newFleet(cfg, nil, &fakeFleetScorer{delay: time.Second}, nil, fleetOf(2, 1), nil)
+
+		var wg sync.WaitGroup
+
+		wg.Go(func() {
+			if _, err := f.Worst(t.Context(), FleetRequest{Clusters: []string{"c000"}}); err != nil {
+				t.Error(err)
+			}
+		})
+
+		synctest.Wait()
+
+		if _, err := f.Worst(t.Context(), FleetRequest{Clusters: []string{"c001"}}); !errors.Is(err, ErrFleetBusy) {
+			t.Errorf("second filter: %v, want busy", err)
+		}
+
+		if _, err := f.Worst(t.Context(), FleetRequest{Clusters: []string{"c000"}}); err != nil {
+			t.Errorf("same filter must join the running computation: %v", err)
+		}
+
+		wg.Wait()
+		synctest.Wait()
+
+		if _, err := f.Worst(t.Context(), FleetRequest{Clusters: []string{"c001"}}); err != nil {
+			t.Errorf("after the first finished: %v", err)
+		}
+	})
+}
+
+type swapClusters struct {
+	mu sync.Mutex
+	cl []dto.ClusterInfo
+}
+
+func (s *swapClusters) Clusters(context.Context) ([]dto.ClusterInfo, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.cl, nil
+}
+
+func TestFleet_MembershipChangeBypassesCache(t *testing.T) {
+	cl := &swapClusters{cl: fleetOf(2, 1).clusters}
+	f := newFleet(fleetCfg(0), nil, &fakeFleetScorer{}, nil, cl, nil)
+
+	if res, err := f.Worst(t.Context(), FleetRequest{}); err != nil || res.InstancesTotal != 2 {
+		t.Fatalf("first: total %d err %v", res.InstancesTotal, err)
+	}
+
+	cl.mu.Lock()
+	cl.cl = fleetOf(3, 1).clusters
+	cl.mu.Unlock()
+
+	res, err := f.Worst(t.Context(), FleetRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if res.InstancesTotal != 3 {
+		t.Errorf("total %d after a cluster was added, want 3", res.InstancesTotal)
+	}
 }
 
 func TestFleet_FirstCallerCancelDoesNotBreakSecond(t *testing.T) {
@@ -333,23 +462,18 @@ func TestFleet_FirstCallerCancelDoesNotBreakSecond(t *testing.T) {
 	})
 }
 
-func TestFleet_StickyInstanceStaysCandidate(t *testing.T) {
-	cl := fleetOf(3, 1)
-	a := metrics.TargetRef{Cluster: "c000", Instance: "h0"}
-	x := metrics.TargetRef{Cluster: "c002", Instance: "h0"}
+func TestFleet_KnownScoreKeepsInstanceCandidate(t *testing.T) {
+	n := config.MaxFleetLimit + 10
+	x := metrics.TargetRef{Cluster: fmt.Sprintf("c%03d", n-1), Instance: "h0"}
 
-	worse := healthySignals()
-	worse.Set(metrics.SigCacheHitRatio, 50)
-
-	ms := &fakeFleetMetrics{sigs: map[metrics.TargetRef]metrics.Signals{a: worse}}
-	sc := &fakeFleetScorer{scores: map[metrics.TargetRef]float64{x: 10, a: 50}}
+	ms := &fakeFleetMetrics{}
+	sc := &fakeFleetScorer{scores: map[metrics.TargetRef]float64{x: 10}}
 
 	cfg := fleetCfg(0)
-	cfg.DefaultLimit = 1
 	cfg.AllowExhaustive = true
-	f := newFleet(cfg, nil, sc, ms, cl, nil)
+	f := newFleet(cfg, nil, sc, ms, fleetOf(n, 1), nil)
 
-	if _, err := f.Worst(t.Context(), FleetRequest{Limit: 1, Exhaustive: true}); err != nil {
+	if _, err := f.Worst(t.Context(), FleetRequest{Exhaustive: true}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -359,11 +483,80 @@ func TestFleet_StickyInstanceStaysCandidate(t *testing.T) {
 	}
 
 	if res.Items[0].Target != x {
-		t.Errorf("worst %v, want the sticky %v", res.Items[0].Target, x)
+		t.Errorf("worst %v, want %v by its known score", res.Items[0].Target, x)
 	}
 
-	if res.Candidates != 2 {
-		t.Errorf("candidates %d, want the estimate's pick plus the sticky one", res.Candidates)
+	if res.Candidates >= n {
+		t.Errorf("candidates %d, want fewer than the fleet", res.Candidates)
+	}
+}
+
+func TestFleet_SweepFindsWhatTheEstimateMissed(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		n := config.MaxFleetLimit + 10
+		x := metrics.TargetRef{Cluster: fmt.Sprintf("c%03d", n-1), Instance: "h0"}
+
+		sc := &fakeFleetScorer{scores: map[metrics.TargetRef]float64{x: 10}}
+		f := newFleet(fleetCfg(0), nil, sc, &fakeFleetMetrics{}, fleetOf(n, 1), nil)
+
+		res, err := f.Worst(t.Context(), FleetRequest{Limit: 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if res.Items[0].Target == x {
+			t.Fatalf("%v picked by the estimate; it must start outside the candidates", x)
+		}
+
+		time.Sleep(config.DefaultFleetResultTTL)
+
+		res, err = f.Worst(t.Context(), FleetRequest{Limit: 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if res.Items[0].Target != x {
+			t.Errorf("worst %v, want %v found by the sweep", res.Items[0].Target, x)
+		}
+
+		time.Sleep(config.DefaultFleetBudget) // the second computation's sweep must end inside the bubble
+	})
+}
+
+func TestFleet_HangingDatasourceFallsBackToSnapshot(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ms := &fakeFleetMetrics{hang: true}
+		f := newFleet(fleetCfg(0), nil, &fakeFleetScorer{}, ms, fleetOf(4, 1), nil)
+
+		res, err := f.Worst(t.Context(), FleetRequest{})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if !res.MetricsUnavailable || res.Incomplete || res.InstancesScored != 4 {
+			t.Errorf("metrics_unavailable %v incomplete %v scored %d, want true/false/4",
+				res.MetricsUnavailable, res.Incomplete, res.InstancesScored)
+		}
+	})
+}
+
+func TestFleet_ScorerPanicIsContained(t *testing.T) {
+	bad := metrics.TargetRef{Cluster: "c001", Instance: "h0"}
+	f := newFleet(fleetCfg(0), nil, &fakeFleetScorer{panicOn: bad}, nil, fleetOf(3, 1), nil)
+
+	res, err := f.Worst(t.Context(), FleetRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if res.InstancesScored != 2 {
+		t.Errorf("scored %d, want 2", res.InstancesScored)
+	}
+
+	for _, it := range res.Items {
+		if it.Target == bad && (it.Score != nil || it.Err != errInternal.Error()) {
+			t.Errorf("panicking row %+v", it)
+		}
 	}
 }
 

@@ -5,9 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -21,9 +23,11 @@ import (
 var (
 	ErrUnknownCluster       = errors.New("unknown cluster")
 	ErrExhaustiveNotAllowed = errors.New("exhaustive fleet scan is disabled")
+	ErrFleetBusy            = errors.New("too many fleet overviews in progress")
 
 	errBudgetExceeded = errors.New("budget exceeded")
 	errNoMetrics      = errors.New("no metrics for target")
+	errInternal       = errors.New("internal error")
 )
 
 type FleetRequest struct {
@@ -66,9 +70,15 @@ type ClusterLister interface {
 }
 
 type instanceScorer interface {
-	Score(ctx context.Context, t metrics.TargetRef, pre *metrics.RawResult) (InstanceScore, error)
+	ScoreWith(ctx context.Context, t metrics.TargetRef, pre *metrics.RawResult, cc ClusterContext) (InstanceScore, error)
 	Weights(ctx context.Context, clusterName string) (health.Weights, error)
 }
+
+const (
+	metricsBudgetDivisor = 3
+	sweepChunk           = 32
+	sweepBackoff         = 100 * time.Millisecond
+)
 
 type Fleet struct {
 	cfg           config.FleetConfig
@@ -78,15 +88,21 @@ type Fleet struct {
 	clusters      ClusterLister
 	log           *zap.Logger
 
-	mu      sync.Mutex
-	flights map[string]*fleetFlight
-	known   map[metrics.TargetRef]knownScore
+	mu        sync.Mutex
+	flights   map[string]*fleetFlight
+	known     map[metrics.TargetRef]knownScore
+	computing int
+
+	// slots is the snapshot_concurrency pool shared by every computation.
+	slots    chan struct{}
+	waiting  atomic.Int32
+	sweeping atomic.Bool
 }
 
 type fleetFlight struct {
 	done    chan struct{}
-	limit   int
 	res     FleetResult
+	err     error
 	expires time.Time
 }
 
@@ -96,6 +112,11 @@ type knownScore struct {
 	score float64
 	at    time.Time
 	topAt time.Time
+}
+
+type clusterInputs struct {
+	cc  ClusterContext
+	err error
 }
 
 // NewFleet builds the overview. A nil or disabled ms scores the whole fleet
@@ -117,14 +138,15 @@ func newFleet(cfg config.FleetConfig, seq map[string]float64, scorer instanceSco
 		clusters:      clusters,
 		log:           logger,
 		flights:       make(map[string]*fleetFlight),
+		slots:         make(chan struct{}, cfg.WithDefaults().SnapshotConcurrency),
 		known:         make(map[metrics.TargetRef]knownScore),
 	}
 }
 
-// Worst returns the lowest-scored instances. Concurrent calls with the same
-// cluster filter share one computation, detached from the callers'
-// cancellation, and its result is reused for result_ttl by any call whose limit
-// it covers.
+// Worst returns the lowest-scored instances. Concurrent calls over the same
+// set of instances share one computation of the top MaxFleetLimit, detached
+// from the callers' cancellation and reused for result_ttl. A call that needs a
+// new computation while max_computations are running gets ErrFleetBusy.
 func (f *Fleet) Worst(ctx context.Context, req FleetRequest) (FleetResult, error) {
 	if req.Exhaustive && !f.cfg.AllowExhaustive {
 		return FleetResult{}, ErrExhaustiveNotAllowed
@@ -134,17 +156,24 @@ func (f *Fleet) Worst(ctx context.Context, req FleetRequest) (FleetResult, error
 		req.Limit = f.cfg.DefaultLimit
 	}
 
-	targets, err := f.targets(ctx, req.Clusters)
+	targets, walFixed, err := f.targets(ctx, req.Clusters)
 	if err != nil {
 		return FleetResult{}, err
 	}
 
-	fl := f.join(ctx, req, targets)
+	fl, err := f.join(ctx, req.Exhaustive, targets, walFixed)
+	if err != nil {
+		return FleetResult{}, err
+	}
 
 	select {
 	case <-fl.done:
 	case <-ctx.Done():
 		return FleetResult{}, ctx.Err()
+	}
+
+	if fl.err != nil {
+		return FleetResult{}, fl.err
 	}
 
 	res := fl.res
@@ -153,57 +182,117 @@ func (f *Fleet) Worst(ctx context.Context, req FleetRequest) (FleetResult, error
 	return res, nil
 }
 
-func (f *Fleet) join(ctx context.Context, req FleetRequest, targets []metrics.TargetRef) *fleetFlight {
-	key := flightKey(req)
+// RetryAfter is how long a caller turned away with ErrFleetBusy should wait.
+func (f *Fleet) RetryAfter() time.Duration {
+	return f.cfg.Budget
+}
+
+func (f *Fleet) join(ctx context.Context, exhaustive bool, targets []metrics.TargetRef, walFixed map[string]bool) (*fleetFlight, error) {
+	key := flightKey(exhaustive, targets)
 	now := time.Now()
 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	if fl, ok := f.flights[key]; ok && fl.limit >= req.Limit {
+	if fl, ok := f.flights[key]; ok {
 		select {
 		case <-fl.done:
 			if now.Before(fl.expires) {
-				return fl
+				return fl, nil
 			}
 		default:
-			return fl
+			return fl, nil
 		}
 	}
 
-	fl := &fleetFlight{done: make(chan struct{}), limit: max(req.Limit, f.cfg.DefaultLimit)}
+	if f.computing >= f.cfg.MaxComputations {
+		return nil, ErrFleetBusy
+	}
+
+	f.computing++
+
+	fl := &fleetFlight{done: make(chan struct{})}
 	f.flights[key] = fl
 
-	go func() {
-		fl.res = f.compute(context.WithoutCancel(ctx), targets, fl.limit, req.Exhaustive)
-		fl.expires = time.Now().Add(f.cfg.ResultTTL)
-		close(fl.done)
+	go f.run(context.WithoutCancel(ctx), key, fl, exhaustive, targets, walFixed)
 
-		time.AfterFunc(f.cfg.ResultTTL, func() {
-			f.mu.Lock()
-			defer f.mu.Unlock()
+	return fl, nil
+}
 
-			if f.flights[key] == fl {
-				delete(f.flights, key)
-			}
-		})
+// run computes the flight, publishes it, then spends the rest of the budget on
+// the sweep.
+func (f *Fleet) run(ctx context.Context, key string, fl *fleetFlight, exhaustive bool, targets []metrics.TargetRef, walFixed map[string]bool) {
+	defer func() {
+		f.mu.Lock()
+		f.computing--
+		f.mu.Unlock()
 	}()
 
-	return fl
+	var once sync.Once
+
+	publish := func(res FleetResult, err error) {
+		once.Do(func() {
+			hold := f.cfg.ResultTTL
+			if err != nil {
+				hold = 0
+			}
+
+			fl.res, fl.err, fl.expires = res, err, time.Now().Add(hold)
+			close(fl.done)
+
+			time.AfterFunc(hold, func() {
+				f.mu.Lock()
+				defer f.mu.Unlock()
+
+				if f.flights[key] == fl {
+					delete(f.flights, key)
+				}
+			})
+		})
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			f.log.Error("fleet health: panic", zap.Any("panic", r), zap.Stack("stack"))
+			publish(FleetResult{}, errInternal)
+		}
+	}()
+
+	start := time.Now()
+	stats := &metrics.QueryStats{}
+
+	ctx, cancel := context.WithTimeout(metrics.WithQueryStats(ctx, stats), f.cfg.Budget)
+	defer cancel()
+
+	clusters := f.clusterInputs(ctx, walFixed)
+	res, sweep := f.compute(ctx, targets, clusters, exhaustive, start, stats)
+	publish(res, nil)
+
+	if f.sweeping.CompareAndSwap(false, true) {
+		defer f.sweeping.Store(false)
+
+		f.sweep(ctx, sweep, clusters, start)
+	}
 }
 
-func flightKey(req FleetRequest) string {
-	cl := slices.Clone(req.Clusters)
-	slices.Sort(cl)
-	cl = slices.Compact(cl)
+// flightKey identifies a computation by the instances it covers; targets are
+// sorted.
+func flightKey(exhaustive bool, targets []metrics.TargetRef) string {
+	h := fnv.New64a()
 
-	return fmt.Sprintf("%t\x00%s", req.Exhaustive, strings.Join(cl, "\x00"))
+	for _, t := range targets {
+		fmt.Fprintf(h, "%s\x00%s\x00", t.Cluster, t.Instance)
+	}
+
+	return fmt.Sprintf("%t/%x", exhaustive, h.Sum64())
 }
 
-func (f *Fleet) targets(ctx context.Context, filter []string) ([]metrics.TargetRef, error) {
+// targets lists the filtered fleet and, per cluster, whether its provider fixes
+// wal_level.
+func (f *Fleet) targets(ctx context.Context, filter []string) ([]metrics.TargetRef, map[string]bool, error) {
 	clusters, err := f.clusters.Clusters(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("Fleet | Clusters | %w", err)
+		return nil, nil, fmt.Errorf("Fleet | Clusters | %w", err)
 	}
 
 	want := make(map[string]bool, len(filter))
@@ -213,7 +302,7 @@ func (f *Fleet) targets(ctx context.Context, filter []string) ([]metrics.TargetR
 
 	var out []metrics.TargetRef
 
-	found := make(map[string]bool, len(want))
+	walFixed := make(map[string]bool, len(clusters))
 
 	for _, c := range clusters {
 		name := c.Name.String()
@@ -221,7 +310,7 @@ func (f *Fleet) targets(ctx context.Context, filter []string) ([]metrics.TargetR
 			continue
 		}
 
-		found[name] = true
+		walFixed[name] = walLevelFixed(c)
 
 		for _, inst := range c.Instances {
 			out = append(out, metrics.TargetRef{Cluster: name, Instance: inst.HostName.String()})
@@ -231,7 +320,7 @@ func (f *Fleet) targets(ctx context.Context, filter []string) ([]metrics.TargetR
 	var missing []string
 
 	for name := range want {
-		if !found[name] {
+		if _, found := walFixed[name]; !found {
 			missing = append(missing, name)
 		}
 	}
@@ -239,19 +328,42 @@ func (f *Fleet) targets(ctx context.Context, filter []string) ([]metrics.TargetR
 	if len(missing) > 0 {
 		slices.Sort(missing)
 
-		return nil, fmt.Errorf("%w: %s", ErrUnknownCluster, strings.Join(missing, ", "))
+		return nil, nil, fmt.Errorf("%w: %s", ErrUnknownCluster, strings.Join(missing, ", "))
 	}
 
 	slices.SortFunc(out, compareTargets)
 
-	return out, nil
+	return out, walFixed, nil
+}
+
+func (f *Fleet) clusterInputs(ctx context.Context, walFixed map[string]bool) map[string]clusterInputs {
+	out := make(map[string]clusterInputs, len(walFixed))
+
+	for name, fixed := range walFixed {
+		w, err := f.scorer.Weights(ctx, name)
+		ci := clusterInputs{cc: ClusterContext{Weights: w, WalLevelManaged: fixed}}
+
+		if err != nil {
+			ci.err = fmt.Errorf("Score | Weights | %w", err)
+		}
+
+		out[name] = ci
+	}
+
+	return out
+}
+
+func (f *Fleet) metricsTimeout() time.Duration {
+	return f.cfg.Budget / metricsBudgetDivisor
 }
 
 // fleetPlan is the phase-2 queue: metrics candidates first, then the
-// snapshot-only instances.
+// snapshot-only instances. sweep is the rest of the ranked fleet, stalest
+// known score first.
 type fleetPlan struct {
 	candidates  []metrics.TargetRef
 	sqlOnly     []metrics.TargetRef
+	sweep       []metrics.TargetRef
 	withMetrics int
 	floor       int
 	sticky      int
@@ -260,18 +372,19 @@ type fleetPlan struct {
 	unavailable bool
 }
 
-func (f *Fleet) compute(ctx context.Context, targets []metrics.TargetRef, limit int, exhaustive bool) FleetResult {
-	start := time.Now()
-	stats := &metrics.QueryStats{}
-
-	ctx, cancel := context.WithTimeout(metrics.WithQueryStats(ctx, stats), f.cfg.Budget)
-	defer cancel()
-
-	plan := f.prefilter(ctx, targets, limit, exhaustive)
+func (f *Fleet) compute(
+	ctx context.Context,
+	targets []metrics.TargetRef,
+	clusters map[string]clusterInputs,
+	exhaustive bool,
+	start time.Time,
+	stats *metrics.QueryStats,
+) (FleetResult, []metrics.TargetRef) {
+	plan := f.prefilter(ctx, targets, clusters, exhaustive)
 	phase1 := time.Since(start)
 
-	items := f.scoreAll(ctx, plan)
-	f.remember(items, limit, start)
+	items := f.scoreAll(ctx, plan, clusters, f.acquire)
+	f.remember(items, f.cfg.DefaultLimit, start)
 
 	res := FleetResult{
 		InstancesTotal:     len(targets),
@@ -294,7 +407,7 @@ func (f *Fleet) compute(ctx context.Context, targets []metrics.TargetRef, limit 
 	}
 
 	res.Incomplete = res.Uncomputed > 0
-	res.Items = items[:min(len(items), limit)]
+	res.Items = items[:min(len(items), config.MaxFleetLimit)]
 	res.Duration = time.Since(start)
 
 	counts := stats.Counts()
@@ -314,6 +427,7 @@ func (f *Fleet) compute(ctx context.Context, targets []metrics.TargetRef, limit 
 		zap.Int("floor", plan.floor),
 		zap.Int("sticky", plan.sticky),
 		zap.Int("candidates", len(plan.candidates)),
+		zap.Int("sweep", len(plan.sweep)),
 		zap.Int("vm_instant", counts.Instant),
 		zap.Int("vm_range", counts.Range),
 		zap.Any("vm_status", counts.ByCode),
@@ -325,12 +439,13 @@ func (f *Fleet) compute(ctx context.Context, targets []metrics.TargetRef, limit 
 		zap.Bool("exhaustive", exhaustive),
 	)
 
-	return res
+	return res, plan.sweep
 }
 
-// prefilter splits the fleet into metrics candidates and snapshot-only
-// instances. Exhaustive makes every target a candidate.
-func (f *Fleet) prefilter(ctx context.Context, targets []metrics.TargetRef, limit int, exhaustive bool) fleetPlan {
+// prefilter splits the fleet into metrics candidates, snapshot-only instances
+// and the sweep. Exhaustive makes every target a candidate. An instance ranks
+// by the lower of its metrics estimate and its last exact score.
+func (f *Fleet) prefilter(ctx context.Context, targets []metrics.TargetRef, clusters map[string]clusterInputs, exhaustive bool) fleetPlan {
 	var plan fleetPlan
 
 	if f.metrics == nil || !f.metrics.Enabled() {
@@ -346,7 +461,10 @@ func (f *Fleet) prefilter(ctx context.Context, targets []metrics.TargetRef, limi
 		return plan
 	}
 
-	sigs, errs := f.metrics.InstantMany(ctx, targets, metrics.PrefilterSignals...)
+	mctx, cancel := context.WithTimeout(ctx, f.metricsTimeout())
+	sigs, errs := f.metrics.InstantMany(mctx, targets, metrics.PrefilterSignals...)
+
+	cancel()
 
 	type ranked struct {
 		t     metrics.TargetRef
@@ -360,8 +478,6 @@ func (f *Fleet) prefilter(ctx context.Context, targets []metrics.TargetRef, limi
 		failed    []metrics.TargetRef
 		sqlOnly   []metrics.TargetRef
 	)
-
-	weights := make(map[string]health.Weights)
 
 	for _, t := range targets {
 		if err := errs[t]; err != nil {
@@ -382,16 +498,14 @@ func (f *Fleet) prefilter(ctx context.Context, targets []metrics.TargetRef, limi
 			continue
 		}
 
-		w, ok := weights[t.Cluster]
-		if !ok {
-			w, _ = f.scorer.Weights(ctx, t.Cluster)
-			weights[t.Cluster] = w
-		}
-
 		raw := sig.ToRawMetrics()
 		raw.SequenceThresholds = f.seqThresholds
 
-		rankedAll = append(rankedAll, ranked{t: t, score: health.CalculateWithWeights(raw, w).Score, floor: health.Floored(raw)})
+		rankedAll = append(rankedAll, ranked{
+			t:     t,
+			score: health.CalculateWithWeights(raw, clusters[t.Cluster].cc.Weights).Score,
+			floor: health.Floored(raw),
+		})
 	}
 
 	plan.failed = len(failed)
@@ -403,6 +517,26 @@ func (f *Fleet) prefilter(ctx context.Context, targets []metrics.TargetRef, limi
 	}
 
 	plan.withMetrics = len(targets) - len(sqlOnly)
+
+	now := time.Now()
+	sticky := make(map[metrics.TargetRef]bool)
+
+	f.mu.Lock()
+	for i, r := range rankedAll {
+		k, ok := f.known[r.t]
+		if !ok {
+			continue
+		}
+
+		if now.Sub(k.at) < f.cfg.StickyTTL {
+			rankedAll[i].score = min(r.score, k.score)
+		}
+
+		if now.Sub(k.topAt) < f.cfg.StickyTTL {
+			sticky[r.t] = true
+		}
+	}
+	f.mu.Unlock()
 
 	slices.SortStableFunc(rankedAll, func(a, b ranked) int { return cmp.Compare(a.score, b.score) })
 
@@ -424,17 +558,13 @@ func (f *Fleet) prefilter(ctx context.Context, targets []metrics.TargetRef, limi
 		}
 	}
 
-	now := time.Now()
-
-	f.mu.Lock()
 	for _, r := range rankedAll {
-		if k, ok := f.known[r.t]; ok && now.Sub(k.topAt) < f.cfg.StickyTTL && add(r.t) {
+		if sticky[r.t] && add(r.t) {
 			plan.sticky++
 		}
 	}
-	f.mu.Unlock()
 
-	for _, r := range rankedAll[:min(len(rankedAll), limit+*f.cfg.CandidateMargin)] {
+	for _, r := range rankedAll[:min(len(rankedAll), config.MaxFleetLimit+*f.cfg.CandidateMargin)] {
 		add(r.t)
 	}
 
@@ -446,7 +576,14 @@ func (f *Fleet) prefilter(ctx context.Context, targets []metrics.TargetRef, limi
 		add(t)
 	}
 
+	for _, r := range rankedAll {
+		if !picked[r.t] {
+			plan.sweep = append(plan.sweep, r.t)
+		}
+	}
+
 	plan.sqlOnly = f.byKnownScore(sqlOnly)
+	plan.sweep = f.stalestFirst(plan.sweep)
 
 	return plan
 }
@@ -484,54 +621,130 @@ func (f *Fleet) byKnownScore(targets []metrics.TargetRef) []metrics.TargetRef {
 	return out
 }
 
-// scoreAll scores the plan's queue in order and returns the rows sorted worst
-// first, unscored last. Rows the budget did not reach are marked uncomputed.
-func (f *Fleet) scoreAll(ctx context.Context, plan fleetPlan) []FleetItem {
-	type queued struct {
-		t   metrics.TargetRef
-		pre *metrics.RawResult
+// stalestFirst orders targets by the age of their last exact score, unknown
+// first.
+func (f *Fleet) stalestFirst(targets []metrics.TargetRef) []metrics.TargetRef {
+	at := make(map[metrics.TargetRef]time.Time, len(targets))
+
+	f.mu.Lock()
+	for _, t := range targets {
+		at[t] = f.known[t].at
 	}
+	f.mu.Unlock()
 
-	queue := make([]queued, 0, len(plan.candidates)+len(plan.sqlOnly))
+	slices.SortStableFunc(targets, func(a, b metrics.TargetRef) int { return at[a].Compare(at[b]) })
 
-	if len(plan.candidates) > 0 {
-		raws := f.metrics.CurrentRawMany(ctx, plan.candidates)
+	return targets
+}
 
-		for _, t := range plan.candidates {
-			r, ok := raws[t]
-			if !ok {
-				r = metrics.RawResult{Err: errNoMetrics}
+// sweep exact-scores the instances the prefilter passed over, for the ranking
+// of the next computations.
+func (f *Fleet) sweep(ctx context.Context, targets []metrics.TargetRef, clusters map[string]clusterInputs, at time.Time) {
+	scored := 0
+
+	for chunk := range slices.Chunk(targets, sweepChunk) {
+		if ctx.Err() != nil {
+			break
+		}
+
+		items := f.scoreAll(ctx, fleetPlan{candidates: chunk}, clusters, f.acquireIdle)
+		f.remember(items, 0, at)
+
+		for _, it := range items {
+			if it.Score != nil {
+				scored++
 			}
-
-			queue = append(queue, queued{t: t, pre: &r})
 		}
 	}
 
-	for _, t := range plan.sqlOnly {
-		queue = append(queue, queued{t: t, pre: &metrics.RawResult{Err: errNoMetrics}})
+	if len(targets) > 0 {
+		f.log.Info("fleet health: sweep done", zap.Int("targets", len(targets)), zap.Int("scored", scored))
+	}
+}
+
+type fleetJob struct {
+	i   int
+	t   metrics.TargetRef
+	pre *metrics.RawResult
+}
+
+// scoreAll scores the plan's queue and returns the rows sorted worst first,
+// unscored last. Snapshot-only instances start while the candidates' metrics
+// are read; candidates go first once they are in. Rows the budget did not reach
+// are marked uncomputed.
+func (f *Fleet) scoreAll(ctx context.Context, plan fleetPlan, clusters map[string]clusterInputs, acquire func(context.Context) bool) []FleetItem {
+	cands, sqlOnly := plan.candidates, plan.sqlOnly
+
+	items := make([]FleetItem, 0, len(cands)+len(sqlOnly))
+	for _, t := range slices.Concat(cands, sqlOnly) {
+		items = append(items, uncomputedItem(t))
 	}
 
-	items := make([]FleetItem, len(queue))
-	for i, q := range queue {
-		items[i] = uncomputedItem(q.t)
+	raws := make(chan map[metrics.TargetRef]metrics.RawResult, 1)
+	pending := len(cands) > 0
+
+	if pending {
+		go f.readRaw(ctx, cands, raws)
 	}
 
-	sem := make(chan struct{}, f.cfg.SnapshotConcurrency)
+	var (
+		got    map[metrics.TargetRef]metrics.RawResult
+		ci, si int
+		wg     sync.WaitGroup
+	)
 
-	var wg sync.WaitGroup
+	candidate := func() fleetJob {
+		t := cands[ci]
 
-enqueue:
-	for i, q := range queue {
-		select {
-		case sem <- struct{}{}:
-		case <-ctx.Done():
-			break enqueue
+		r, ok := got[t]
+		if !ok {
+			r = metrics.RawResult{Err: errNoMetrics}
+		}
+
+		ci++
+
+		return fleetJob{i: ci - 1, t: t, pre: &r}
+	}
+
+dispatch:
+	for ci < len(cands) || si < len(sqlOnly) {
+		if !acquire(ctx) {
+			break dispatch
+		}
+
+		if pending {
+			select {
+			case got = <-raws:
+				pending = false
+			default:
+			}
+		}
+
+		var j fleetJob
+
+		switch {
+		case !pending && ci < len(cands):
+			j = candidate()
+		case si < len(sqlOnly):
+			j = fleetJob{i: len(cands) + si, t: sqlOnly[si], pre: &metrics.RawResult{Err: errNoMetrics}}
+			si++
+		default:
+			<-f.slots
+
+			select {
+			case got = <-raws:
+				pending = false
+
+				continue
+			case <-ctx.Done():
+				break dispatch
+			}
 		}
 
 		wg.Go(func() {
-			defer func() { <-sem }()
+			defer func() { <-f.slots }()
 
-			items[i] = f.scoreOne(ctx, q.t, q.pre)
+			items[j.i] = f.scoreOne(ctx, j.t, j.pre, clusters[j.t.Cluster])
 		})
 	}
 
@@ -553,11 +766,78 @@ enqueue:
 	return items
 }
 
-func (f *Fleet) scoreOne(ctx context.Context, t metrics.TargetRef, pre *metrics.RawResult) FleetItem {
+func (f *Fleet) acquire(ctx context.Context) bool {
+	f.waiting.Add(1)
+	defer f.waiting.Add(-1)
+
+	select {
+	case f.slots <- struct{}{}:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+// acquireIdle takes a slot only while no computation is waiting for one.
+func (f *Fleet) acquireIdle(ctx context.Context) bool {
+	for {
+		if f.waiting.Load() == 0 {
+			select {
+			case f.slots <- struct{}{}:
+				return true
+			default:
+			}
+		}
+
+		select {
+		case <-time.After(sweepBackoff):
+		case <-ctx.Done():
+			return false
+		}
+	}
+}
+
+// readRaw always sends one map, nil after a panic.
+func (f *Fleet) readRaw(ctx context.Context, targets []metrics.TargetRef, out chan<- map[metrics.TargetRef]metrics.RawResult) {
+	var raws map[metrics.TargetRef]metrics.RawResult
+
+	defer func() { out <- raws }()
+	defer f.recovered("metrics read")
+
+	mctx, cancel := context.WithTimeout(ctx, f.metricsTimeout())
+	defer cancel()
+
+	raws = f.metrics.CurrentRawMany(mctx, targets)
+}
+
+func (f *Fleet) recovered(where string) {
+	if r := recover(); r != nil {
+		f.log.Error("fleet health: panic", zap.String("in", where), zap.Any("panic", r), zap.Stack("stack"))
+	}
+}
+
+func (f *Fleet) scoreOne(ctx context.Context, t metrics.TargetRef, pre *metrics.RawResult, ci clusterInputs) (it FleetItem) {
+	defer func() {
+		if r := recover(); r != nil {
+			f.log.Error("fleet health: panic",
+				zap.String("cluster", t.Cluster),
+				zap.String("instance", t.Instance),
+				zap.Any("panic", r),
+				zap.Stack("stack"),
+			)
+
+			it = FleetItem{Target: t, Source: SourceNone, Err: errInternal.Error()}
+		}
+	}()
+
+	if ci.err != nil {
+		return FleetItem{Target: t, Source: SourceNone, Err: ci.err.Error()}
+	}
+
 	ictx, cancel := context.WithTimeout(ctx, f.cfg.InstanceTimeout)
 	defer cancel()
 
-	sc, err := f.scorer.Score(ictx, t, pre)
+	sc, err := f.scorer.ScoreWith(ictx, t, pre, ci.cc)
 	if err != nil {
 		if ctx.Err() != nil {
 			return uncomputedItem(t)

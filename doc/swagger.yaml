@@ -344,6 +344,17 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorMessage'
+        '503':
+          description: Too many fleet overviews are being computed; retry later
+          headers:
+            Retry-After:
+              description: Seconds to wait before retrying.
+              schema:
+                type: integer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
   /api/common/health-score/recommendations:
     get:
       operationId: getHealthScoreRecommendations

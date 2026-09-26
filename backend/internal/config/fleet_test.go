@@ -17,6 +17,7 @@ func TestFleetConfigValidate(t *testing.T) {
 		{"zero margin", FleetConfig{CandidateMargin: &zero}, false},
 		{"negative margin", FleetConfig{CandidateMargin: &negative}, true},
 		{"budget not above instance timeout", FleetConfig{Budget: 5 * time.Second, InstanceTimeout: 5 * time.Second}, true},
+		{"budget above max", FleetConfig{Budget: MaxFleetBudget + time.Second}, true},
 		{"limit above api max", FleetConfig{DefaultLimit: MaxFleetLimit + 1}, true},
 	}
 

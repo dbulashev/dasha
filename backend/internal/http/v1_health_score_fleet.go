@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 
 	"github.com/dbulashev/dasha/gen/serverhttp"
 	"github.com/dbulashev/dasha/internal/config"
@@ -31,6 +32,13 @@ func (s *Handlers) GetHealthScoreFleet(
 	res, err := s.fleet.Worst(ctx, fr)
 	if errors.Is(err, healthscore.ErrUnknownCluster) || errors.Is(err, healthscore.ErrExhaustiveNotAllowed) {
 		return serverhttp.GetHealthScoreFleet400JSONResponse{Message: err.Error()}, nil
+	}
+
+	if errors.Is(err, healthscore.ErrFleetBusy) {
+		return serverhttp.GetHealthScoreFleet503JSONResponse{
+			Body:    serverhttp.ErrorMessage{Message: err.Error()},
+			Headers: serverhttp.GetHealthScoreFleet503ResponseHeaders{RetryAfter: int(math.Ceil(s.fleet.RetryAfter().Seconds()))},
+		}, nil
 	}
 
 	if err != nil {

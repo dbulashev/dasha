@@ -186,14 +186,15 @@ config:
   # health_score:
   #   # database_concurrency: 4  # databases of one instance read at once
   #   # fleet:                    # GET /api/common/health-score/fleet
-  #   #   budget: 10s             # the overview answers within it; the rest is marked uncomputed
+  #   #   budget: 10s             # max 25s; the overview answers within it, the rest is marked uncomputed
   #   #   default_limit: 20
-  #   #   candidate_margin: 15    # exact scores past the limit, picked by the estimate
+  #   #   candidate_margin: 15    # exact scores past the top 50, picked by the estimate
   #   #   sticky_ttl: 1h          # a recent top instance stays a candidate this long
   #   #   result_ttl: 60s         # a result is reused this long
-  #   #   snapshot_concurrency: 8
+  #   #   snapshot_concurrency: 8 # SQL snapshots at once, shared by all fleet computations
   #   #   instance_timeout: 5s
   #   #   allow_exhaustive: false # exhaustive=true scores every instance exactly
+  #   #   max_computations: 4     # overviews computed at once; a request over it gets 503
   #   metrics:
   #     enabled: true
   #     datasource:
