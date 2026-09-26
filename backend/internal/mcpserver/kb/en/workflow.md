@@ -14,7 +14,10 @@ need `database`.
    `describe_table` on the worst one to confirm the mechanism before advising.
 3. `top_queries` (by=time) — few calls × high mean_time = plan problem
    (suggest EXPLAIN, indexes); huge calls × low mean_time = frequency problem
-   (suggest caching/batching).
+   (suggest caching/batching). For a plan problem on a cluster with
+   supports_logs: `plan_insights`, then `query_plans(scan_id, query_id)` for
+   the statement's actual plans; `plan_regressions` if it "got slower lately"
+   (dasha://kb/log-plans).
 4. `wait_events` — a dominant event tells the bottleneck class
    (dasha://kb/wait-events).
 5. If storage/maintenance categories are bad: `vacuum_danger`.
@@ -48,6 +51,8 @@ need `database`.
    exact cluster name):
    `search_logs` with severity=["ERROR","FATAL"], dedup on, a narrow window
    (since="1h"). One call with all filters — the endpoint is rate-limited.
+   `plan_insights` counts the same window by category (deadlock, lock_wait,
+   connection_limit, …) when the question is "what kind of errors".
 2. Match error templates against `blocked_queries` (deadlocks, lock timeouts)
    and `get_health_recommendations`.
 

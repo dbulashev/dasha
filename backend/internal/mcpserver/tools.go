@@ -257,6 +257,46 @@ type searchLogsArgs struct {
 	PageToken   string   `json:"page_token,omitempty" jsonschema:"Cursor from a previous dedup=false result to fetch the next page"`
 }
 
+type planInsightsArgs struct {
+	Cluster     string `json:"cluster" jsonschema:"Dasha cluster name; must have supports_logs=true in list_clusters"`
+	ServiceType string `json:"service_type,omitempty" jsonschema:"Log source: 'postgresql' (default, the only one that carries plans) or 'pooler' (event categories only)"`
+	Since       string `json:"since,omitempty" jsonschema:"Look-back window ending now, e.g. '15m', '1h', '24h' (default '1h'); ignored when from/to are set"`
+	From        string `json:"from,omitempty" jsonschema:"Window start, RFC3339; set together with to"`
+	To          string `json:"to,omitempty" jsonschema:"Window end, RFC3339; set together with from"`
+	Host        string `json:"host,omitempty" jsonschema:"Optional: read one cluster host only"`
+	Limit       int    `json:"limit,omitempty" jsonschema:"Plan groups to return, heaviest total time first (default and max 10)"`
+}
+
+type queryPlansArgs struct {
+	Cluster      string `json:"cluster" jsonschema:"Dasha cluster name; must have supports_logs=true in list_clusters"`
+	QueryID      string `json:"query_id,omitempty" jsonschema:"Statement id: query_id of a plan group, or pg_stat_statements queryid. Returns that statement's plans with their trees"`
+	ScanID       string `json:"scan_id,omitempty" jsonschema:"scan_id of an earlier plan_insights, query_plans or plan_regressions result: read that stored scan instead of the logs (same numbers, no log-store call, no rate limit)"`
+	Ord          *int   `json:"ord,omitempty" jsonschema:"With scan_id: one group of that scan by its ord, with its tree"`
+	Trees        int    `json:"trees,omitempty" jsonschema:"With query_id: plan groups returned with a tree, heaviest first (default 3, max 5); the rest come as rows"`
+	Since        string `json:"since,omitempty" jsonschema:"Without scan_id: look-back window ending now, e.g. '1h', '24h' (default '1h'); ignored when from/to are set"`
+	From         string `json:"from,omitempty" jsonschema:"Without scan_id: window start, RFC3339; set together with to"`
+	To           string `json:"to,omitempty" jsonschema:"Without scan_id: window end, RFC3339; set together with from"`
+	Host         string `json:"host,omitempty" jsonschema:"Without scan_id: read one cluster host only"`
+	Order        string `json:"order,omitempty" jsonschema:"scan_id alone: rank groups by 'sum' (total time, default), 'max' (slowest run) or 'count'"`
+	WithFindings bool   `json:"with_findings,omitempty" jsonschema:"scan_id alone: only groups whose plan tripped a rule"`
+	Limit        int    `json:"limit,omitempty" jsonschema:"scan_id alone: groups per page (default 20, max 100)"`
+	Offset       int    `json:"offset,omitempty" jsonschema:"scan_id alone: groups to skip"`
+}
+
+type planRegressionsArgs struct {
+	Cluster       string `json:"cluster" jsonschema:"Dasha cluster name; must have supports_logs=true in list_clusters"`
+	ScanID        string `json:"scan_id,omitempty" jsonschema:"scan_id of a stored scan to take the current window from instead of reading it again (e.g. from plan_insights)"`
+	Since         string `json:"since,omitempty" jsonschema:"Without scan_id: current window ending now, e.g. '1h', '24h' (default '1h'); ignored when from/to are set"`
+	From          string `json:"from,omitempty" jsonschema:"Without scan_id: current window start, RFC3339; set together with to"`
+	To            string `json:"to,omitempty" jsonschema:"Without scan_id: current window end, RFC3339; set together with from"`
+	BaselineShift string `json:"baseline_shift,omitempty" jsonschema:"The baseline is the current window moved back by this, e.g. '24h' (default) or '7d' — same hours of the day or week; at least the window length"`
+	BaselineFrom  string `json:"baseline_from,omitempty" jsonschema:"Explicit baseline start, RFC3339, instead of baseline_shift; set together with baseline_to"`
+	BaselineTo    string `json:"baseline_to,omitempty" jsonschema:"Explicit baseline end, RFC3339"`
+	Host          string `json:"host,omitempty" jsonschema:"Optional: compare one cluster host only"`
+	QueryID       string `json:"query_id,omitempty" jsonschema:"Optional: compare one statement only"`
+	Limit         int    `json:"limit,omitempty" jsonschema:"Regressions to return, worst first (default 10, max 30)"`
+}
+
 // pg_stat_io is instance-wide, so neither I/O tool takes a database: there is
 // nothing to narrow it to.
 type ioSummaryArgs struct {
@@ -440,7 +480,16 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			"index already holds every column of the candidate in another order; names lists it — the answer may " +
 			"be rewriting that index rather than adding one), many_indexes, matview, partition_root (the ddl is " +
 			"then a multi-statement script: CREATE INDEX CONCURRENTLY runs in no transaction block and cannot " +
-			"build a partitioned table's root index directly — hand over every statement, in order). " +
+			"build a partitioned table's root index directly — hand over every statement, in order), " +
+			"stale_statistics (a logged plan of a covered statement misestimated this table's rows params.ratio " +
+			"times — ANALYZE or extended statistics come before CREATE INDEX). " +
+			"evidence is what the auto_explain plans of a recent window say: 'found' (plans scan the table " +
+			"sequentially while running the covered statements — plans, seq_scan_nodes, actual_time_ms, " +
+			"rows_removed), 'not_found' (every plan of the window was read and none does — an argument against " +
+			"the index), 'not_searched' (evidence is off, no log source, the window held no plan or was read in " +
+			"part). not_searched is NEVER an argument against the index, and it is what every candidate carries " +
+			"unless the operator enabled evidence. actual_time_ms covers the sampled plans only and is 0 when " +
+			"log_analyze is off. " +
 			"An empty candidate list is NOT a clean bill of health while gaps is non-empty: part of the workload " +
 			"was never analyzed, and summary (covered_time_pct, not_parsed_count, hosts_without_stats) says how " +
 			"much. Report that instead of \"the database is well indexed\". " +
@@ -743,6 +792,66 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 		}
 
 		return jsonResult(ctx)(c.SearchLogs(ctx, params))
+	})
+
+	addTool(s, &mcp.Tool{
+		Name: "plan_insights",
+		Description: "Read one window of a cluster's logs once and summarize it: every record counted by event " +
+			"category (deadlock, lock_wait, temp_file, checkpoint, autovacuum, connection, error, slow_query, " +
+			"plan, other — other's share is shown, never hidden) with its top message templates, and the " +
+			"auto_explain plans grouped by statement and plan shape, heaviest total time first, each group with " +
+			"its rule findings. Answers \"what happened in the logs\" and \"which slow statements have bad " +
+			"plans\" in one call; search_logs is for reading the records themselves. " +
+			"The plans are ONLY the runs slower than auto_explain.log_min_duration: sum_ms, counts and the " +
+			"ranking describe the slow tail, never the workload — pg_stat_statements (top_queries) measures the " +
+			"load. When window.partial is true the window was read only in part (covered_from..covered_to): " +
+			"totals are lower bounds and a missing statement may lie in the unread part. An empty groups list " +
+			"always carries plans.empty_reason, and configuration says what is switched off (auto_explain not " +
+			"loaded, log_min_duration -1, log_analyze off, compute_query_id off) — report that, never \"no slow " +
+			"queries\". Every call reaches the log store and is rate-limited per user; refine through scan_id " +
+			"with query_plans, which reads the stored scan and no logs. Read dasha://kb/log-plans before " +
+			"interpreting findings.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, a planInsightsArgs) (*mcp.CallToolResult, any, error) {
+		return jsonResult(ctx)(planInsights(ctx, c, a))
+	})
+
+	addTool(s, &mcp.Tool{
+		Name: "query_plans",
+		Description: "The auto_explain plans of one statement, or of a stored scan. query_id: the statement's " +
+			"plan groups (one per plan shape), the heaviest with its slowest plan rendered as an EXPLAIN-like " +
+			"tree — one line per node, conditions and counters below it, findings marked '!!' on the node — plus " +
+			"findings with their params; from the stored scan when scan_id is given, otherwise by reading the " +
+			"window from the logs. scan_id alone pages every group of that scan without trees (order, " +
+			"with_findings, limit, offset); scan_id with ord returns one group's tree. " +
+			"Only runs slower than auto_explain.log_min_duration are here: a statement absent from the plans is " +
+			"not proven fast, and empty_reason says why nothing came back (not_in_scan: the stored scan holds no " +
+			"plan of that query_id). A tree is the slowest sample of its group, not a typical run; " +
+			"capabilities.actual=false means the plan carries estimates only (log_analyze off) and the rules " +
+			"that need measured rows did not run — dormant lists them. Literals in query_text and query_params " +
+			"are the user's own values and are not masked. Long conditions and query text are clipped with the " +
+			"number of bytes cut. Read dasha://kb/log-plans before interpreting findings.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, a queryPlansArgs) (*mcp.CallToolResult, any, error) {
+		return jsonResult(ctx)(queryPlans(ctx, c, a))
+	})
+
+	addTool(s, &mcp.Tool{
+		Name: "plan_regressions",
+		Description: "Compare the auto_explain plans of two windows and list the statements whose plan changed " +
+			"for the worse, worst first: new_shape (a plan shape the baseline did not have), lost_index (an " +
+			"index the baseline read and the current window does not — lost_indexes names it), slower (p95 of " +
+			"the dominant shape grew at least twofold, over at least 20 plans on each side). The baseline is " +
+			"the current window moved back by baseline_shift (default 24h, '7d' for the same hours last week), " +
+			"or baseline_from/baseline_to. A statement present in one window only is left out: a first " +
+			"appearance is no regression. " +
+			"Both windows hold only runs slower than auto_explain.log_min_duration, so a statement that got " +
+			"faster than the threshold simply vanishes from the current side. When partial is true a window was " +
+			"read only in part: p50_ratio and p95_ratio compare samples of unknown size — never quote them as " +
+			"\"N times slower\"; new_shape and lost_index still stand. current.count and baseline.count are the " +
+			"plans behind each ratio. The call reads the logs twice and has its own strict rate limit (about one " +
+			"comparison a minute): pass scan_id of a fresh plan_insights to skip re-reading the current window, " +
+			"and read the plans of both sides with query_plans(scan_id, query_id), which reads no logs.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, a planRegressionsArgs) (*mcp.CallToolResult, any, error) {
+		return jsonResult(ctx)(planRegressions(ctx, c, a))
 	})
 
 	addTool(s, &mcp.Tool{

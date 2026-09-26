@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dbulashev/dasha/internal/explain"
 	"github.com/dbulashev/dasha/internal/health"
 	"github.com/dbulashev/dasha/internal/indexadvisor"
 	"github.com/dbulashev/dasha/internal/sqlparse"
@@ -205,6 +206,43 @@ func TestAdvisorReasons_Classified(t *testing.T) {
 	} {
 		if _, known := advisorReasonGap[code]; !known {
 			t.Errorf("not_parsed code %q is in neither list of advisorReasonGap — renamed, or a new code?", code)
+		}
+	}
+}
+
+func TestKB_CoversEveryPlanRule(t *testing.T) {
+	t.Parallel()
+
+	var codes []string
+	for _, r := range explain.Rules() {
+		codes = append(codes, r.Code)
+	}
+
+	heading := regexp.MustCompile(`(?m)^### ([a-z0-9_]+)$`)
+
+	for _, lang := range kbLangs {
+		path := "kb/" + lang + "/log-plans.md"
+
+		b, err := kbFS.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
+		}
+
+		found := map[string]bool{}
+		for _, m := range heading.FindAllStringSubmatch(string(b), -1) {
+			found[m[1]] = true
+		}
+
+		for _, c := range codes {
+			if !found[c] {
+				t.Errorf("%s: plan rule %q has no '### %s' section", path, c, c)
+			}
+		}
+
+		for c := range found {
+			if !slices.Contains(codes, c) {
+				t.Errorf("%s: section %q matches no plan rule — stale entry?", path, c)
+			}
 		}
 	}
 }

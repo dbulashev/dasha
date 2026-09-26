@@ -952,6 +952,152 @@ func (d *DashaClient) SearchLogs(ctx context.Context, params *apiclient.GetLogsP
 	return r.JSON200, nil
 }
 
+// LogInsights reads one window of cluster logs: event categories and plan groups.
+func (d *DashaClient) LogInsights(ctx context.Context, p *apiclient.GetLogsInsightsParams) (*apiclient.LogInsights, error) {
+	r, err := d.slowAPI.GetLogsInsightsWithResponse(ctx, p, d.editor(ctx))
+	if err != nil {
+		return nil, wrapErr("plan_insights", err)
+	}
+
+	if r.JSON200 == nil {
+		return nil, planLogsError("plan_insights", r.HTTPResponse)
+	}
+
+	return r.JSON200, nil
+}
+
+// LogPlans reads the auto_explain plans of one window, optionally of one query_id.
+func (d *DashaClient) LogPlans(ctx context.Context, p *apiclient.GetLogsPlansParams) (*apiclient.LogInsights, error) {
+	r, err := d.slowAPI.GetLogsPlansWithResponse(ctx, p, d.editor(ctx))
+	if err != nil {
+		return nil, wrapErr("query_plans", err)
+	}
+
+	if r.JSON200 == nil {
+		return nil, planLogsError("query_plans", r.HTTPResponse)
+	}
+
+	return r.JSON200, nil
+}
+
+// LogPlansCompare compares the plans of two windows.
+func (d *DashaClient) LogPlansCompare(
+	ctx context.Context, p *apiclient.GetLogsPlansCompareParams,
+) (*apiclient.LogPlanComparison, error) {
+	r, err := d.slowAPI.GetLogsPlansCompareWithResponse(ctx, p, d.editor(ctx))
+	if err != nil {
+		return nil, wrapErr("plan_regressions", err)
+	}
+
+	if r.JSON200 == nil {
+		if r.HTTPResponse != nil && r.HTTPResponse.StatusCode == http.StatusNotFound && p.ScanId != nil {
+			return nil, scanGoneError(*p.ScanId)
+		}
+
+		return nil, planLogsError("plan_regressions", r.HTTPResponse)
+	}
+
+	return r.JSON200, nil
+}
+
+// LogScan reads a stored scan's summary; it never reaches the log store.
+func (d *DashaClient) LogScan(ctx context.Context, op string, id uuid.UUID) (*apiclient.LogInsights, error) {
+	r, err := d.api.GetLogsScanWithResponse(ctx, id, d.editor(ctx))
+	if err != nil {
+		return nil, wrapErr(op, err)
+	}
+
+	if r.JSON200 == nil {
+		return nil, scanError(op, id, r.HTTPResponse)
+	}
+
+	return r.JSON200, nil
+}
+
+// LogScanGroups pages the plan groups of a stored scan, without trees.
+func (d *DashaClient) LogScanGroups(
+	ctx context.Context, id uuid.UUID, p *apiclient.GetLogsScanGroupsParams,
+) (*apiclient.LogPlanGroupPage, error) {
+	r, err := d.api.GetLogsScanGroupsWithResponse(ctx, id, p, d.editor(ctx))
+	if err != nil {
+		return nil, wrapErr("query_plans", err)
+	}
+
+	if r.JSON200 == nil {
+		return nil, scanError("query_plans", id, r.HTTPResponse)
+	}
+
+	return r.JSON200, nil
+}
+
+func (d *DashaClient) LogScanGroup(ctx context.Context, id uuid.UUID, ord int) (*apiclient.LogPlanGroup, error) {
+	r, err := d.api.GetLogsScanGroupWithResponse(ctx, id, ord, d.editor(ctx))
+	if err != nil {
+		return nil, wrapErr("query_plans", err)
+	}
+
+	if r.JSON200 == nil {
+		if r.HTTPResponse != nil && r.HTTPResponse.StatusCode == http.StatusNotFound {
+			return nil, fmt.Errorf("dasha: scan %s has no group ord=%d, or the scan is gone (404) — "+
+				"query_plans(scan_id) lists the groups it holds", id, ord)
+		}
+
+		return nil, scanError("query_plans", id, r.HTTPResponse)
+	}
+
+	return r.JSON200, nil
+}
+
+// scanError is not errNotFound: a missing snapshot is resolved by scanning
+// again, never by another cluster name.
+func scanError(op string, id uuid.UUID, resp *http.Response) error {
+	if resp == nil {
+		return statusError(op, resp)
+	}
+
+	switch resp.StatusCode {
+	case http.StatusNotFound:
+		return scanGoneError(id)
+	case http.StatusNotImplemented:
+		return fmt.Errorf("dasha: %s cannot read stored scans (501) — Dasha has no snapshot storage; "+
+			"call it with a time window instead of scan_id", op)
+	case http.StatusBadRequest:
+		return fmt.Errorf("dasha: invalid parameters for %s (400) — e.g. a query_id that is not an integer or an ord below 1", op)
+	}
+
+	return statusError(op, resp)
+}
+
+func scanGoneError(id uuid.UUID) error {
+	return fmt.Errorf("dasha: scan %s not found (404) — stored scans are cleared once a day and on a "+
+		"restart of the snapshot daemon, or log_insights is disabled; call plan_insights again for a fresh scan_id", id)
+}
+
+func planLogsError(op string, resp *http.Response) error {
+	if resp == nil {
+		return statusError(op, resp)
+	}
+
+	switch resp.StatusCode {
+	case http.StatusTooManyRequests:
+		return fmt.Errorf("dasha: %s is rate-limited per user to protect the log store (plan_regressions "+
+			"has its own stricter limit, about one comparison a minute) — back off before retrying; a scan_id "+
+			"refinement through query_plans reads no logs and is not limited", op)
+	case http.StatusNotImplemented:
+		return fmt.Errorf("dasha: %s is unavailable for this cluster or stream (501) — check supports_logs "+
+			"and log_streams in list_clusters(cluster=<exact name>) for the service_type you asked for", op)
+	case http.StatusBadRequest:
+		return fmt.Errorf("dasha: invalid parameters for %s (400) — e.g. query_id on a log stream whose "+
+			"field map carries no query_id, a window the store rejects, or a scan_id of another stream or host", op)
+	case http.StatusBadGateway:
+		return fmt.Errorf("dasha: the log store failed upstream on %s (502) — retry later", op)
+	case http.StatusGatewayTimeout:
+		return fmt.Errorf("dasha: %s timed out before reading anything (504) — narrow the window or pass host", op)
+	}
+
+	return statusError(op, resp)
+}
+
 // maxLogFieldBytes caps any single log field (message text, query, …) in a
 // search_logs result: one multi-megabyte statement would otherwise flood the
 // model's context — or trip the whole-result size cap — while its head is

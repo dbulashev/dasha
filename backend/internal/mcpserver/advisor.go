@@ -92,6 +92,7 @@ type advisorCandidate struct {
 	TableRows           int64                           `json:"table_rows"`
 	Writes              apiclient.IndexAdvisorWrites    `json:"writes"`
 	Warnings            []apiclient.IndexAdvisorWarning `json:"warnings"`
+	Evidence            apiclient.IndexAdvisorEvidence  `json:"evidence"`
 	CoveredQueriesTotal int                             `json:"covered_queries_total"`
 	CoveredQueries      []advisorCoveredQuery           `json:"covered_queries"`
 }
@@ -178,6 +179,7 @@ func advisorCandidateOf(c apiclient.IndexAdvisorCandidate, includeQueries bool) 
 		TableRows:           c.TableRows,
 		Writes:              c.Writes,
 		Warnings:            c.Warnings,
+		Evidence:            c.Evidence,
 		CoveredQueriesTotal: len(c.CoveredQueries),
 		CoveredQueries:      advisorCovered(c.CoveredQueries, includeQueries),
 	}

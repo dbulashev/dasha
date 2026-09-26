@@ -72,6 +72,11 @@ Read them before recommending, not after.
 - `low_weight` — the covered statements hold under one percent
   (`params.weight_pct`) of the analyzed time. Fine as a footnote, wrong as a
   headline recommendation.
+- `stale_statistics` — a logged plan of a covered statement estimated this
+  table's rows `params.ratio` times wrong. The statistics that chose the key
+  order are the ones the planner already reads wrong: `ANALYZE`, a higher
+  statistics target or extended statistics come before `CREATE INDEX`. Present
+  only when evidence is on.
 
 ## not_parsed codes
 
@@ -132,6 +137,32 @@ to propose.
 `summary.covered_time_pct` is how much of the analyzed time the candidates touch
 at all. A low number with an empty `gaps` means the load is elsewhere — indexing
 is not this database's problem.
+
+## Evidence from the logs
+
+`evidence` is what the `auto_explain` plans of a recent window say about the
+candidate, matched by `query_id` to the statements it covers. Three states, and
+they are not interchangeable:
+
+- `found` — plans of the covered statements scan this table sequentially.
+  `plans` counts those plan records, `seq_scan_nodes` the scans in the sampled
+  plans (one sample per shape), `actual_time_ms` the time those scans took in
+  the samples (not extrapolated; 0 when `log_analyze` is off), `rows_removed` the
+  rows their filters threw away. The strongest support a candidate can carry.
+- `not_found` — every plan of the window was read and none of them scans the
+  table. An argument against the index: the statements run without a Seq Scan
+  there, at least on their slow runs.
+- `not_searched` — nobody looked, or nothing conclusive came back: evidence is
+  off (`log_insights.index_advisor_evidence`, off by default), the cluster has
+  no log source, the store did not answer, the window held no plan, or only part
+  of it was read (`partial`). Says nothing about the database, for or against.
+
+Every candidate carries `not_searched` unless the operator enabled evidence.
+Never present it as `not_found`. The plans are only the runs slower than
+`auto_explain.log_min_duration`, so `found` speaks for the slow tail and its
+counts do not grow into a share of the workload; `weight_pct` stays the measure
+of the problem's size. `plan_insights` and `query_plans` show the plans
+themselves.
 
 ## Two different windows
 
