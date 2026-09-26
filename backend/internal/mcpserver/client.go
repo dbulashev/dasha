@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"net/http"
 	"slices"
@@ -1149,7 +1150,8 @@ var dedupSampleFields = map[string]bool{
 }
 
 // compactDedupFields keeps in each dedup group only the fields that add to its
-// text, host, database, user and severity.
+// text, host, database, user and severity. The latest record's message stays
+// once when the template masks values in it (a table name, a size, a wait).
 func compactDedupFields(res *apiclient.LogSearchResult, cluster string) {
 	if !res.Dedup {
 		return
@@ -1163,10 +1165,23 @@ func compactDedupFields(res *apiclient.LogSearchResult, cluster string) {
 
 		shown := []string{cluster, deref(e.Hostname), deref(e.Database), deref(e.User), deref(e.Severity)}
 		text := deref(e.Text)
+		masked := strings.Contains(text, pattern.Placeholder)
 		kept := make(map[string]string, len(*e.Fields))
+		messageKept := false
 
-		for k, v := range *e.Fields {
-			if !redundantDedupField(k, v, text, shown) {
+		for _, k := range slices.Sorted(maps.Keys(*e.Fields)) {
+			v := (*e.Fields)[k]
+
+			if text != "" && pattern.Display(v) == text {
+				if masked && !messageKept {
+					kept[k] = v
+					messageKept = true
+				}
+
+				continue
+			}
+
+			if !redundantDedupField(k, v, shown) {
 				kept[k] = v
 			}
 		}
@@ -1179,17 +1194,15 @@ func compactDedupFields(res *apiclient.LogSearchResult, cluster string) {
 	}
 }
 
-func redundantDedupField(key, value, text string, shown []string) bool {
+func redundantDedupField(key, value string, shown []string) bool {
 	switch {
 	case value == "", strings.HasPrefix(key, "_"), dedupSampleFields[strings.ToLower(key)]:
 		return true
 	case key == "query_id" && value == "0":
 		return true
-	case slices.Contains(shown, value):
-		return true
 	}
 
-	return text != "" && pattern.Display(value) == text
+	return slices.Contains(shown, value)
 }
 
 // maxLogFieldBytes caps any single log field (message text, query, …) in a

@@ -785,7 +785,8 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			"make each call count: keep the default dedup=true overview, a narrow window (since='1h') and " +
 			"severity/message filters, and refine with one follow-up call instead of paging raw records. " +
 			"A dedup group's fields hold only what its text, host, database, user and severity do not say " +
-			"(statement, detail, application_name, …) and come from its latest record. " +
+			"and come from its latest record: statement, detail, application_name, …, and the message itself " +
+			"when the template masks values in it (a table name, a size, a wait time). " +
 			"After a 429 back off before retrying.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a searchLogsArgs) (*mcp.CallToolResult, any, error) {
 		params, errMsg := logsParams(a)

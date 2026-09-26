@@ -345,7 +345,9 @@ func TestCompactDedupFields(t *testing.T) {
 
 	compactDedupFields(res, "pg-a")
 
-	want := map[string]string{"statement": "SELECT 1", "application_name": "psql", "backend_type": "client backend"}
+	want := map[string]string{
+		"_msg": raw, "statement": "SELECT 1", "application_name": "psql", "backend_type": "client backend",
+	}
 	got := *res.Items[0].Fields
 
 	if len(got) != len(want) {
