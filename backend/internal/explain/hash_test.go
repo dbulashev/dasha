@@ -71,6 +71,37 @@ func TestHash_Format(t *testing.T) {
 	}
 }
 
+func appendOf(parallel bool, relations ...string) Node {
+	n := Node{Type: "Append", Parallel: parallel} //nolint:exhaustruct
+	for _, rel := range relations {
+		n.Children = append(n.Children, Node{Type: "Seq Scan", Relation: rel, Parallel: parallel}) //nolint:exhaustruct
+	}
+
+	return n
+}
+
+func TestHash_ParallelAppendIgnoresChildOrder(t *testing.T) {
+	a := appendOf(true, "metrics_p0", "metrics_p1", "metrics_p2")
+	b := appendOf(true, "metrics_p1", "metrics_p0", "metrics_p2")
+
+	if Hash(a) != Hash(b) {
+		t.Error("Parallel Append orders children by cost; their order is not part of the shape")
+	}
+
+	if Hash(a) == Hash(appendOf(true, "metrics_p0", "metrics_p1", "metrics_p3")) {
+		t.Error("the set of children is still part of the shape")
+	}
+}
+
+func TestHash_AppendKeepsChildOrder(t *testing.T) {
+	a := appendOf(false, "metrics_p0", "metrics_p1")
+	b := appendOf(false, "metrics_p1", "metrics_p0")
+
+	if Hash(a) == Hash(b) {
+		t.Error("a plain Append follows partition bounds; reordered children are another shape")
+	}
+}
+
 func cloneNode(n *Node) *Node {
 	out := *n
 	out.Children = make([]Node, len(n.Children))

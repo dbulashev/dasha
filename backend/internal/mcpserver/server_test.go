@@ -2,6 +2,7 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -319,6 +320,98 @@ func TestTruncateLogEntries(t *testing.T) {
 
 	if (*res.Items[0].Fields)["message"] != "ok" {
 		t.Errorf("short field values must be unchanged")
+	}
+}
+
+func TestCompactDedupFields(t *testing.T) {
+	t.Parallel()
+
+	raw := "temporary file: path \"base/pgsql_tmp/pgsql_tmp42.0\", size 1024"
+	text := "temporary file: path <*>, size <*>"
+	host, db, user, sev := "pg-a-1", "shop", "app", "LOG"
+	fields := map[string]string{
+		"_msg": raw, "_stream": "{app=\"postgres\"}", "_time": "2026-01-01T00:00:00Z",
+		"message": raw, "host": host, "dbname": db, "user": user, "error_severity": sev,
+		"cluster": "pg-a", "pid": "1193", "session_id": "6ab73465.4a9", "line_num": "14",
+		"vxid": "53/10", "txid": "0", "timestamp": "2026-01-01 00:00:00.000 UTC", "query_id": "0",
+		"remote_host": "", "statement": "SELECT 1", "application_name": "psql", "backend_type": "client backend",
+	}
+	res := &apiclient.LogSearchResult{ //nolint:exhaustruct
+		Dedup: true,
+		Items: []apiclient.LogEntry{{ //nolint:exhaustruct
+			Text: &text, Hostname: &host, Database: &db, User: &user, Severity: &sev, Fields: &fields,
+		}},
+	}
+
+	compactDedupFields(res, "pg-a")
+
+	want := map[string]string{"statement": "SELECT 1", "application_name": "psql", "backend_type": "client backend"}
+	got := *res.Items[0].Fields
+
+	if len(got) != len(want) {
+		t.Fatalf("fields = %v, want %v", got, want)
+	}
+
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("fields[%q] = %q, want %q", k, got[k], v)
+		}
+	}
+}
+
+func TestCompactDedupFieldsKeepsRawRecords(t *testing.T) {
+	t.Parallel()
+
+	fields := map[string]string{"pid": "1", "_msg": "x"}
+	res := &apiclient.LogSearchResult{ //nolint:exhaustruct
+		Items: []apiclient.LogEntry{{Fields: &fields}}, //nolint:exhaustruct
+	}
+
+	compactDedupFields(res, "pg-a")
+
+	if len(*res.Items[0].Fields) != 2 {
+		t.Errorf("raw records must keep every field, got %v", *res.Items[0].Fields)
+	}
+}
+
+func TestCompactDedupFieldsDropsEmptyMap(t *testing.T) {
+	t.Parallel()
+
+	text := "checkpoint starting: time"
+	fields := map[string]string{"message": text, "pid": "31"}
+	res := &apiclient.LogSearchResult{ //nolint:exhaustruct
+		Dedup: true,
+		Items: []apiclient.LogEntry{{Text: &text, Fields: &fields}}, //nolint:exhaustruct
+	}
+
+	compactDedupFields(res, "pg-a")
+
+	if res.Items[0].Fields != nil {
+		t.Errorf("a group with nothing to add must carry no fields, got %v", *res.Items[0].Fields)
+	}
+}
+
+func TestDedupGroupsDropTimestamp(t *testing.T) {
+	t.Parallel()
+
+	last := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	count, text := 3, "checkpoint starting: time"
+	res := &apiclient.LogSearchResult{ //nolint:exhaustruct
+		Dedup: true,
+		Items: []apiclient.LogEntry{{Timestamp: last, LastSeen: &last, Count: &count, Text: &text}}, //nolint:exhaustruct
+	}
+
+	out, err := json.Marshal(dedupGroups(res))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if strings.Contains(string(out), `"timestamp"`) {
+		t.Errorf("a dedup group must not repeat last_seen as timestamp: %s", out)
+	}
+
+	if !strings.Contains(string(out), `"last_seen":"2026-01-01T00:00:00Z"`) {
+		t.Errorf("last_seen must stay: %s", out)
 	}
 }
 

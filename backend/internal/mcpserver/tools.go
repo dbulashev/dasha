@@ -784,6 +784,8 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			"lists the streams it serves). Every call reaches the log store and is rate-limited per user (the operator sets the limit per source) — " +
 			"make each call count: keep the default dedup=true overview, a narrow window (since='1h') and " +
 			"severity/message filters, and refine with one follow-up call instead of paging raw records. " +
+			"A dedup group's fields hold only what its text, host, database, user and severity do not say " +
+			"(statement, detail, application_name, …) and come from its latest record. " +
 			"After a 429 back off before retrying.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a searchLogsArgs) (*mcp.CallToolResult, any, error) {
 		params, errMsg := logsParams(a)
@@ -797,9 +799,10 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 	addTool(s, &mcp.Tool{
 		Name: "plan_insights",
 		Description: "Read one window of a cluster's logs once and summarize it: every record counted by event " +
-			"category (deadlock, lock_wait, temp_file, checkpoint, autovacuum, connection, error, slow_query, " +
-			"plan, other — other's share is shown, never hidden) with its top message templates, and the " +
-			"auto_explain plans grouped by statement and plan shape, heaviest total time first, each group with " +
+			"category (deadlock, lock_wait, canceled, connection_limit, authentication, error, temp_file, " +
+			"checkpoint, autovacuum, connection, slow_query, plan, other — other's share is shown, never hidden) " +
+			"with its top message templates, and the auto_explain plans grouped by statement and plan shape, " +
+			"heaviest total time first, each group with " +
 			"its rule findings. Answers \"what happened in the logs\" and \"which slow statements have bad " +
 			"plans\" in one call; search_logs is for reading the records themselves. " +
 			"The plans are ONLY the runs slower than auto_explain.log_min_duration: sum_ms, counts and the " +

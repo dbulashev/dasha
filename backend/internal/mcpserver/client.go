@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/dbulashev/dasha/gen/apiclient"
+	"github.com/dbulashev/dasha/internal/logs/pattern"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -947,7 +949,12 @@ func (d *DashaClient) SearchLogs(ctx context.Context, params *apiclient.GetLogsP
 		return nil, statusError("search_logs", r.HTTPResponse)
 	}
 
+	compactDedupFields(r.JSON200, params.ClusterName)
 	truncateLogEntries(r.JSON200)
+
+	if r.JSON200.Dedup {
+		return dedupGroups(r.JSON200), nil
+	}
 
 	return r.JSON200, nil
 }
@@ -1096,6 +1103,93 @@ func planLogsError(op string, resp *http.Response) error {
 	}
 
 	return statusError(op, resp)
+}
+
+type logGroups struct {
+	Dedup   bool       `json:"dedup"`
+	Items   []logGroup `json:"items"`
+	Partial bool       `json:"partial"`
+	Scanned *int       `json:"scanned,omitempty"`
+}
+
+// logGroup is apiclient.LogEntry without timestamp, which in a group repeats last_seen.
+type logGroup struct {
+	Count     *int               `json:"count,omitempty"`
+	FirstSeen *time.Time         `json:"first_seen,omitempty"`
+	LastSeen  *time.Time         `json:"last_seen,omitempty"`
+	Hostname  *string            `json:"hostname,omitempty"`
+	Database  *string            `json:"database,omitempty"`
+	User      *string            `json:"user,omitempty"`
+	Severity  *string            `json:"severity,omitempty"`
+	Text      *string            `json:"text,omitempty"`
+	Fields    *map[string]string `json:"fields,omitempty"`
+}
+
+func dedupGroups(res *apiclient.LogSearchResult) logGroups {
+	items := make([]logGroup, 0, len(res.Items))
+	for _, e := range res.Items {
+		items = append(items, logGroup{
+			Count: e.Count, FirstSeen: e.FirstSeen, LastSeen: e.LastSeen,
+			Hostname: e.Hostname, Database: e.Database, User: e.User, Severity: e.Severity,
+			Text: e.Text, Fields: e.Fields,
+		})
+	}
+
+	return logGroups{Dedup: true, Items: items, Partial: res.Partial, Scanned: res.Scanned}
+}
+
+// dedupSampleFields identify the one record a dedup group was sampled from,
+// not the group.
+var dedupSampleFields = map[string]bool{
+	"pid": true, "process_id": true, "leader_pid": true,
+	"session_id": true, "session_line_num": true, "line_num": true,
+	"session_start": true, "session_start_time": true,
+	"vxid": true, "virtual_transaction_id": true, "txid": true, "transaction_id": true,
+	"remote_port": true, "timestamp": true, "log_time": true,
+}
+
+// compactDedupFields keeps in each dedup group only the fields that add to its
+// text, host, database, user and severity.
+func compactDedupFields(res *apiclient.LogSearchResult, cluster string) {
+	if !res.Dedup {
+		return
+	}
+
+	for i := range res.Items {
+		e := &res.Items[i]
+		if e.Fields == nil {
+			continue
+		}
+
+		shown := []string{cluster, deref(e.Hostname), deref(e.Database), deref(e.User), deref(e.Severity)}
+		text := deref(e.Text)
+		kept := make(map[string]string, len(*e.Fields))
+
+		for k, v := range *e.Fields {
+			if !redundantDedupField(k, v, text, shown) {
+				kept[k] = v
+			}
+		}
+
+		if len(kept) == 0 {
+			e.Fields = nil
+		} else {
+			e.Fields = &kept
+		}
+	}
+}
+
+func redundantDedupField(key, value, text string, shown []string) bool {
+	switch {
+	case value == "", strings.HasPrefix(key, "_"), dedupSampleFields[strings.ToLower(key)]:
+		return true
+	case key == "query_id" && value == "0":
+		return true
+	case slices.Contains(shown, value):
+		return true
+	}
+
+	return text != "" && pattern.Display(value) == text
 }
 
 // maxLogFieldBytes caps any single log field (message text, query, …) in a
