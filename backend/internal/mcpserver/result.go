@@ -21,10 +21,13 @@ const (
 // shapedTools narrow their own result and live under the configured budget; the
 // rest keep unshapedResultBytes. A tool joins together with its shapedResult.
 var shapedTools = map[string]bool{
-	"describe_table": true,
-	"health_trend":   true,
-	"list_clusters":  true,
-	"query_compare":  true,
+	"describe_table":   true,
+	"health_trend":     true,
+	"list_clusters":    true,
+	"plan_insights":    true,
+	"plan_regressions": true,
+	"query_compare":    true,
+	"query_plans":      true,
 }
 
 func budgetFor(shaped bool, budget int) int {

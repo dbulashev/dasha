@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"hash"
+	"slices"
 	"strconv"
 )
 
@@ -34,6 +35,23 @@ func hashNode(h hash.Hash, n *Node) {
 	write(h, n.ParentRel)
 	write(h, strconv.FormatBool(n.Parallel))
 	write(h, strconv.Itoa(len(n.Children)))
+
+	// Parallel Append orders its children by cost, so near-equal partitions swap
+	// places between runs of one plan.
+	if n.Type == "Append" && n.Parallel {
+		subs := make([]string, len(n.Children))
+		for i := range n.Children {
+			subs[i] = Hash(n.Children[i])
+		}
+
+		slices.Sort(subs)
+
+		for _, sub := range subs {
+			write(h, sub)
+		}
+
+		return
+	}
 
 	for i := range n.Children {
 		hashNode(h, &n.Children[i])

@@ -4,13 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/dbulashev/dasha/gen/apiclient"
+	"github.com/dbulashev/dasha/internal/logs/pattern"
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
@@ -947,9 +950,259 @@ func (d *DashaClient) SearchLogs(ctx context.Context, params *apiclient.GetLogsP
 		return nil, statusError("search_logs", r.HTTPResponse)
 	}
 
+	compactDedupFields(r.JSON200, params.ClusterName)
 	truncateLogEntries(r.JSON200)
 
+	if r.JSON200.Dedup {
+		return dedupGroups(r.JSON200), nil
+	}
+
 	return r.JSON200, nil
+}
+
+// LogInsights reads one window of cluster logs: event categories and plan groups.
+func (d *DashaClient) LogInsights(ctx context.Context, p *apiclient.GetLogsInsightsParams) (*apiclient.LogInsights, error) {
+	r, err := d.slowAPI.GetLogsInsightsWithResponse(ctx, p, d.editor(ctx))
+	if err != nil {
+		return nil, wrapErr("plan_insights", err)
+	}
+
+	if r.JSON200 == nil {
+		return nil, planLogsError("plan_insights", r.HTTPResponse)
+	}
+
+	return r.JSON200, nil
+}
+
+// LogPlans reads the auto_explain plans of one window, optionally of one query_id.
+func (d *DashaClient) LogPlans(ctx context.Context, p *apiclient.GetLogsPlansParams) (*apiclient.LogInsights, error) {
+	r, err := d.slowAPI.GetLogsPlansWithResponse(ctx, p, d.editor(ctx))
+	if err != nil {
+		return nil, wrapErr("query_plans", err)
+	}
+
+	if r.JSON200 == nil {
+		return nil, planLogsError("query_plans", r.HTTPResponse)
+	}
+
+	return r.JSON200, nil
+}
+
+// LogPlansCompare compares the plans of two windows.
+func (d *DashaClient) LogPlansCompare(
+	ctx context.Context, p *apiclient.GetLogsPlansCompareParams,
+) (*apiclient.LogPlanComparison, error) {
+	r, err := d.slowAPI.GetLogsPlansCompareWithResponse(ctx, p, d.editor(ctx))
+	if err != nil {
+		return nil, wrapErr("plan_regressions", err)
+	}
+
+	if r.JSON200 == nil {
+		if r.HTTPResponse != nil && r.HTTPResponse.StatusCode == http.StatusNotFound && p.ScanId != nil {
+			return nil, scanGoneError(*p.ScanId)
+		}
+
+		return nil, planLogsError("plan_regressions", r.HTTPResponse)
+	}
+
+	return r.JSON200, nil
+}
+
+// LogScan reads a stored scan's summary; it never reaches the log store.
+func (d *DashaClient) LogScan(ctx context.Context, op string, id uuid.UUID) (*apiclient.LogInsights, error) {
+	r, err := d.api.GetLogsScanWithResponse(ctx, id, d.editor(ctx))
+	if err != nil {
+		return nil, wrapErr(op, err)
+	}
+
+	if r.JSON200 == nil {
+		return nil, scanError(op, id, r.HTTPResponse)
+	}
+
+	return r.JSON200, nil
+}
+
+// LogScanGroups pages the plan groups of a stored scan, without trees.
+func (d *DashaClient) LogScanGroups(
+	ctx context.Context, id uuid.UUID, p *apiclient.GetLogsScanGroupsParams,
+) (*apiclient.LogPlanGroupPage, error) {
+	r, err := d.api.GetLogsScanGroupsWithResponse(ctx, id, p, d.editor(ctx))
+	if err != nil {
+		return nil, wrapErr("query_plans", err)
+	}
+
+	if r.JSON200 == nil {
+		return nil, scanError("query_plans", id, r.HTTPResponse)
+	}
+
+	return r.JSON200, nil
+}
+
+func (d *DashaClient) LogScanGroup(ctx context.Context, id uuid.UUID, ord int) (*apiclient.LogPlanGroup, error) {
+	r, err := d.api.GetLogsScanGroupWithResponse(ctx, id, ord, d.editor(ctx))
+	if err != nil {
+		return nil, wrapErr("query_plans", err)
+	}
+
+	if r.JSON200 == nil {
+		if r.HTTPResponse != nil && r.HTTPResponse.StatusCode == http.StatusNotFound {
+			return nil, fmt.Errorf("dasha: scan %s has no group ord=%d, or the scan is gone (404) — "+
+				"query_plans(scan_id) lists the groups it holds", id, ord)
+		}
+
+		return nil, scanError("query_plans", id, r.HTTPResponse)
+	}
+
+	return r.JSON200, nil
+}
+
+// scanError is not errNotFound: a missing snapshot is resolved by scanning
+// again, never by another cluster name.
+func scanError(op string, id uuid.UUID, resp *http.Response) error {
+	if resp == nil {
+		return statusError(op, resp)
+	}
+
+	switch resp.StatusCode {
+	case http.StatusNotFound:
+		return scanGoneError(id)
+	case http.StatusNotImplemented:
+		return fmt.Errorf("dasha: %s cannot read stored scans (501) — Dasha has no snapshot storage; "+
+			"call it with a time window instead of scan_id", op)
+	case http.StatusBadRequest:
+		return fmt.Errorf("dasha: invalid parameters for %s (400) — e.g. a query_id that is not an integer or an ord below 1", op)
+	}
+
+	return statusError(op, resp)
+}
+
+func scanGoneError(id uuid.UUID) error {
+	return fmt.Errorf("dasha: scan %s not found (404) — stored scans are cleared once a day and on a "+
+		"restart of the snapshot daemon, or log_insights is disabled; call plan_insights again for a fresh scan_id", id)
+}
+
+func planLogsError(op string, resp *http.Response) error {
+	if resp == nil {
+		return statusError(op, resp)
+	}
+
+	switch resp.StatusCode {
+	case http.StatusTooManyRequests:
+		return fmt.Errorf("dasha: %s is rate-limited per user to protect the log store (plan_regressions "+
+			"has its own stricter limit, about one comparison a minute) — back off before retrying; a scan_id "+
+			"refinement through query_plans reads no logs and is not limited", op)
+	case http.StatusNotImplemented:
+		return fmt.Errorf("dasha: %s is unavailable for this cluster or stream (501) — check supports_logs "+
+			"and log_streams in list_clusters(cluster=<exact name>) for the service_type you asked for", op)
+	case http.StatusBadRequest:
+		return fmt.Errorf("dasha: invalid parameters for %s (400) — e.g. query_id on a log stream whose "+
+			"field map carries no query_id, a window the store rejects, or a scan_id of another stream or host", op)
+	case http.StatusBadGateway:
+		return fmt.Errorf("dasha: the log store failed upstream on %s (502) — retry later", op)
+	case http.StatusGatewayTimeout:
+		return fmt.Errorf("dasha: %s timed out before reading anything (504) — narrow the window or pass host", op)
+	}
+
+	return statusError(op, resp)
+}
+
+type logGroups struct {
+	Dedup   bool       `json:"dedup"`
+	Items   []logGroup `json:"items"`
+	Partial bool       `json:"partial"`
+	Scanned *int       `json:"scanned,omitempty"`
+}
+
+// logGroup is apiclient.LogEntry without timestamp, which in a group repeats last_seen.
+type logGroup struct {
+	Count     *int               `json:"count,omitempty"`
+	FirstSeen *time.Time         `json:"first_seen,omitempty"`
+	LastSeen  *time.Time         `json:"last_seen,omitempty"`
+	Hostname  *string            `json:"hostname,omitempty"`
+	Database  *string            `json:"database,omitempty"`
+	User      *string            `json:"user,omitempty"`
+	Severity  *string            `json:"severity,omitempty"`
+	Text      *string            `json:"text,omitempty"`
+	Fields    *map[string]string `json:"fields,omitempty"`
+}
+
+func dedupGroups(res *apiclient.LogSearchResult) logGroups {
+	items := make([]logGroup, 0, len(res.Items))
+	for _, e := range res.Items {
+		items = append(items, logGroup{
+			Count: e.Count, FirstSeen: e.FirstSeen, LastSeen: e.LastSeen,
+			Hostname: e.Hostname, Database: e.Database, User: e.User, Severity: e.Severity,
+			Text: e.Text, Fields: e.Fields,
+		})
+	}
+
+	return logGroups{Dedup: true, Items: items, Partial: res.Partial, Scanned: res.Scanned}
+}
+
+// dedupSampleFields identify the one record a dedup group was sampled from,
+// not the group.
+var dedupSampleFields = map[string]bool{
+	"pid": true, "process_id": true, "leader_pid": true,
+	"session_id": true, "session_line_num": true, "line_num": true,
+	"session_start": true, "session_start_time": true,
+	"vxid": true, "virtual_transaction_id": true, "txid": true, "transaction_id": true,
+	"remote_port": true, "timestamp": true, "log_time": true,
+}
+
+// compactDedupFields keeps in each dedup group only the fields that add to its
+// text, host, database, user and severity. The latest record's message stays
+// once when the template masks values in it (a table name, a size, a wait).
+func compactDedupFields(res *apiclient.LogSearchResult, cluster string) {
+	if !res.Dedup {
+		return
+	}
+
+	for i := range res.Items {
+		e := &res.Items[i]
+		if e.Fields == nil {
+			continue
+		}
+
+		shown := []string{cluster, deref(e.Hostname), deref(e.Database), deref(e.User), deref(e.Severity)}
+		text := deref(e.Text)
+		masked := strings.Contains(text, pattern.Placeholder)
+		kept := make(map[string]string, len(*e.Fields))
+		messageKept := false
+
+		for _, k := range slices.Sorted(maps.Keys(*e.Fields)) {
+			v := (*e.Fields)[k]
+
+			if text != "" && pattern.Display(v) == text {
+				if masked && !messageKept {
+					kept[k] = v
+					messageKept = true
+				}
+
+				continue
+			}
+
+			if !redundantDedupField(k, v, shown) {
+				kept[k] = v
+			}
+		}
+
+		if len(kept) == 0 {
+			e.Fields = nil
+		} else {
+			e.Fields = &kept
+		}
+	}
+}
+
+func redundantDedupField(key, value string, shown []string) bool {
+	switch {
+	case value == "", strings.HasPrefix(key, "_"), dedupSampleFields[strings.ToLower(key)]:
+		return true
+	case key == "query_id" && value == "0":
+		return true
+	}
+
+	return slices.Contains(shown, value)
 }
 
 // maxLogFieldBytes caps any single log field (message text, query, …) in a

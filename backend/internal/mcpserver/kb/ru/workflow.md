@@ -14,7 +14,10 @@
    затем `describe_table` по худшей — подтвердить механизм, прежде чем советовать.
 3. `top_queries` (by=time) — мало calls × высокий mean_time = проблема плана
    (предложить EXPLAIN, индексы); огромные calls × низкий mean_time =
-   проблема частоты (кэширование/батчинг).
+   проблема частоты (кэширование/батчинг). При проблеме плана на кластере с
+   supports_logs: `plan_insights`, затем `query_plans(scan_id, query_id)` —
+   фактические планы запроса; `plan_regressions`, если он «в последнее время
+   замедлился» (dasha://kb/log-plans).
 4. `wait_events` — доминирующее событие указывает класс узкого места
    (dasha://kb/wait-events).
 5. Если плохи storage/maintenance: `vacuum_danger`.
@@ -50,6 +53,8 @@
    точным именем кластера):
    `search_logs` с severity=["ERROR","FATAL"], dedup включён, узкое окно
    (since="1h"). Один вызов со всеми фильтрами — эндпоинт rate-limited.
+   `plan_insights` раскладывает то же окно по категориям (deadlock, lock_wait,
+   connection_limit, …), когда вопрос «какие ошибки».
 2. Сопоставить шаблоны ошибок с `blocked_queries` (дедлоки, lock timeout)
    и `get_health_recommendations`.
 

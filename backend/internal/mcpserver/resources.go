@@ -83,6 +83,13 @@ func registerResources(s *mcp.Server, lang string) {
 				"and what an empty or incomplete result actually says.",
 		},
 		{
+			"log-plans", "Reading plans from the logs",
+			"Read before interpreting plan_insights / query_plans / plan_regressions results: why the " +
+				"plans describe the slow tail and not the workload, what a partial window forbids, what " +
+				"each empty_reason and configuration flag means, every finding code with its threshold " +
+				"and first action, and when a regression ratio can be quoted.",
+		},
+		{
 			"workflow", "Diagnostic workflows",
 			"Read when unsure which tool to call next: complaint-to-tool-chain playbooks " +
 				"(slow database, everything hangs, disk filling, replica lag, app errors, fleet " +
