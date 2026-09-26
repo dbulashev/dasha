@@ -10,7 +10,7 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 [![Docker Backend](https://img.shields.io/docker/v/dbulashev/dasha-backend?label=backend&sort=semver)](https://hub.docker.com/r/dbulashev/dasha-backend)
 [![Docker Frontend](https://img.shields.io/docker/v/dbulashev/dasha-frontend?label=frontend&sort=semver)](https://hub.docker.com/r/dbulashev/dasha-frontend)
 ![License](https://img.shields.io/badge/license-GPLv3-blue)
-![Go](https://img.shields.io/badge/Go-1.26-00ADD8)
+![Go](https://img.shields.io/badge/Go-1.27-00ADD8)
 ![Vue](https://img.shields.io/badge/Vue-3.5-4FC08D)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14--18-336791)
 
