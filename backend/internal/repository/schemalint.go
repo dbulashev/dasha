@@ -132,33 +132,44 @@ func (p *PgxPool) GetSequenceHeadroom(
 	ctx, cancel := context.WithTimeout(ctx, schemaLintHeadroomTimeout)
 	defer cancel()
 
+	type probe struct {
+		worst float64
+		known bool
+		err   error
+	}
+
+	probes := make([]probe, len(pools))
+
+	forEachLimited(p.healthDatabaseConcurrency(), pools, func(i int, dbp schemaLintDBPool) {
+		if ctx.Err() != nil {
+			return
+		}
+
+		probes[i].worst, probes[i].known, probes[i].err = p.sequenceHeadroomForPool(ctx, clusterName, instanceName, dbp.database, dbp.pool)
+	})
+
 	var (
 		worst    float64
 		known    bool
 		firstErr error
 	)
 
-	for _, dbp := range pools {
-		if ctx.Err() != nil {
-			break
-		}
-
-		w, ok, err := p.sequenceHeadroomForPool(ctx, clusterName, instanceName, dbp.database, dbp.pool)
-		if err != nil {
+	for _, pr := range probes {
+		if pr.err != nil {
 			if firstErr == nil {
-				firstErr = err
+				firstErr = pr.err
 			}
 
 			continue
 		}
 
-		if !ok {
+		if !pr.known {
 			continue
 		}
 
 		known = true
-		if w > worst {
-			worst = w
+		if pr.worst > worst {
+			worst = pr.worst
 		}
 	}
 
@@ -173,7 +184,8 @@ func (p *PgxPool) GetSequenceHeadroom(
 
 // sequenceHeadroomForPool is the cached per-database probe. Failures are cached
 // too, briefly: the caller polls, and a query that fails every time must not
-// cost its timeout every time.
+// cost its timeout every time. The probe never queues for a connection: with no
+// free slot in the pool it returns the last value, even an expired one.
 func (p *PgxPool) sequenceHeadroomForPool(
 	ctx context.Context,
 	clusterName, instanceName, databaseName string,
@@ -181,10 +193,24 @@ func (p *PgxPool) sequenceHeadroomForPool(
 ) (float64, bool, error) {
 	key := sequenceHeadroomCacheKey(clusterName, instanceName, databaseName)
 
+	var (
+		last    sequenceHeadroomEntry
+		hasLast bool
+	)
+
 	if cached, ok := p.sequenceHeadroomCache.Load(key); ok {
-		if entry, valid := cached.(sequenceHeadroomEntry); valid && time.Now().Before(entry.expiresAt) {
-			return entry.worst, entry.known, nil
+		last, hasLast = cached.(sequenceHeadroomEntry)
+		if hasLast && time.Now().Before(last.expiresAt) {
+			return last.worst, last.known, nil
 		}
+	}
+
+	if !hasFreeConn(pool) {
+		if hasLast {
+			return last.worst, last.known, nil
+		}
+
+		return 0, false, nil
 	}
 
 	worst, known, err := p.readSequenceHeadroom(ctx, pool)
@@ -204,6 +230,9 @@ func (p *PgxPool) sequenceHeadroomForPool(
 }
 
 func (p *PgxPool) readSequenceHeadroom(ctx context.Context, pool *pgxpool.Pool) (float64, bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, schemaLintCheckTimeout)
+	defer cancel()
+
 	vNum, err := p.getServerVersionNum(ctx, pool)
 	if err != nil {
 		return 0, false, err
@@ -214,12 +243,18 @@ func (p *PgxPool) readSequenceHeadroom(ctx context.Context, pool *pgxpool.Pool) 
 		return 0, false, err
 	}
 
+	conn, err := p.acquireConn(ctx, pool)
+	if err != nil {
+		return 0, false, err
+	}
+	defer conn.Release()
+
 	var in schemalint.Inputs
 
 	// Truncation is deliberately ignored here: the query orders by free_pct with
 	// nulls first, so the capped rows are the ones furthest from their ceiling.
 	// The worst sequence is always in what was read.
-	if _, err := p.runSchemaLintQuery(ctx, pool, qStr, enums.QuerySchemaLintSequencesUsage, &in); err != nil {
+	if _, err := p.runSchemaLintQuery(ctx, conn, qStr, enums.QuerySchemaLintSequencesUsage, &in); err != nil {
 		return 0, false, err
 	}
 
@@ -471,7 +506,7 @@ var borrowedQueries = map[enums.Query]bool{
 
 func (p *PgxPool) runSchemaLintQuery(
 	ctx context.Context,
-	pool *pgxpool.Pool,
+	pool querier,
 	qStr string,
 	q enums.Query,
 	in *schemalint.Inputs,

@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -85,5 +86,50 @@ func TestVMClient_QueryError(t *testing.T) {
 
 	if _, err := c.QueryInstant(context.Background(), "x", time.Time{}); err == nil {
 		t.Fatal("expected error on status=error response")
+	}
+}
+
+func TestVMClient_PostsFormQuery(t *testing.T) {
+	var method, query string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method = r.Method
+		_ = r.ParseForm()
+		query = r.PostForm.Get("query")
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"status":"success","data":{"resultType":"vector","result":[]}}`))
+	}))
+	defer srv.Close()
+
+	c := NewVMClient(DatasourceConfig{URL: srv.URL}, nil)
+
+	if _, err := c.QueryInstant(context.Background(), `up{a="b"} or x`, time.Time{}); err != nil {
+		t.Fatalf("QueryInstant: %v", err)
+	}
+
+	if method != http.MethodPost || query != `up{a="b"} or x` {
+		t.Errorf("want POST with the query in the form, got %s %q", method, query)
+	}
+}
+
+func TestVMClient_StatusErrorCountedByCode(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "too many", http.StatusTooManyRequests)
+	}))
+	defer srv.Close()
+
+	c := countingClient{inner: NewVMClient(DatasourceConfig{URL: srv.URL}, nil)}
+	st := &QueryStats{}
+
+	_, err := c.QueryInstant(WithQueryStats(context.Background(), st), "x", time.Time{})
+
+	var se *StatusError
+	if !errors.As(err, &se) || se.Code != http.StatusTooManyRequests {
+		t.Fatalf("want StatusError 429, got %v", err)
+	}
+
+	if got := st.Counts(); got.Instant != 1 || got.ByCode[http.StatusTooManyRequests] != 1 {
+		t.Errorf("want one instant request counted under 429, got %+v", got)
 	}
 }

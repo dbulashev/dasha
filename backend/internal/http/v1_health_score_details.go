@@ -24,9 +24,9 @@ func (s *Handlers) GetHealthScoreDatabases(
 		return nil, fmt.Errorf("GetHealthScoreDatabases | %w", err)
 	}
 
-	weights, err := s.loadHealthWeights(ctx, req.Params.ClusterName)
+	weights, err := s.scorer.Weights(ctx, req.Params.ClusterName)
 	if err != nil {
-		return nil, fmt.Errorf("GetHealthScoreDatabases | loadHealthWeights | %w", err)
+		return nil, fmt.Errorf("GetHealthScoreDatabases | Weights | %w", err)
 	}
 
 	// Mirror the instance-level behaviour: drop maintenance per-DB on

@@ -204,6 +204,7 @@ Score потребляет **нормализованный набор сигн�
 
 ```yaml
 health_score:
+  database_concurrency: 4   # сколько баз одного инстанса читается одновременно
   metrics:
     enabled: true
     datasource:

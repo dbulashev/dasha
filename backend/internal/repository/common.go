@@ -35,6 +35,10 @@ const (
 
 var ErrNotFound = errors.New("not found")
 
+// ErrPoolBusy means every connection of the pool stayed taken until the
+// caller's deadline.
+var ErrPoolBusy = errors.New("connection pool busy")
+
 type Repository interface {
 	Clusters(ctx context.Context) ([]dto.ClusterInfo, error)
 	GetCommonSummary(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.CommonSummary, error)
@@ -190,6 +194,8 @@ type PgxPool struct {
 	poolConfig            config.PoolConfig
 	schemaLintConfig      schemalint.Config
 	sequenceHeadroomCache sync.Map // cluster/instance/database → sequenceHeadroomEntry
+	serverVersions        sync.Map // *pgxpool.Pool → serverVersionEntry
+	healthDBConcurrency   int
 	indexAdvisorConfig    indexadvisor.Config
 	sqlParserOnce         sync.Once
 	sqlParser             sqlparse.Parser // built on first use, see indexAdvisorParser
@@ -223,6 +229,7 @@ func NewRepositoryPgxPool(
 	poolCfg config.PoolConfig,
 	schemaLintCfg schemalint.Config,
 	indexAdvisorCfg indexadvisor.Config,
+	healthDBConcurrency int,
 	logger *zap.Logger,
 ) Repository {
 	return &PgxPool{
@@ -237,6 +244,7 @@ func NewRepositoryPgxPool(
 		poolConfig:          poolCfg,
 		schemaLintConfig:    schemaLintCfg,
 		indexAdvisorConfig:  indexAdvisorCfg,
+		healthDBConcurrency: healthDBConcurrency,
 	}
 }
 
@@ -536,6 +544,7 @@ func (p *PgxPool) ensurePool(ctx context.Context) error {
 
 	for _, pool := range duplicates {
 		p.logger.Debug("duplicate pool closed after a concurrent connect")
+		p.forgetPool(pool)
 
 		go pool.Close()
 	}
@@ -683,13 +692,11 @@ func (p *PgxPool) extensionSchema(ctx context.Context, pool *pgxpool.Pool, ext s
 	return quoted
 }
 
-// forgetPool drops the per-pool caches of a pool that is being closed. Both are
-// keyed by the pool pointer, so without this a cluster whose hosts or databases
-// churn — service discovery, a config reload — accumulates entries no lookup can
-// ever reach again.
+// forgetPool drops the caches keyed by the pointer of a pool that is being closed.
 func (p *PgxPool) forgetPool(pool *pgxpool.Pool) {
 	p.resolvedPgStatsView.Delete(pool)
 	p.resolvedStatsSources.Delete(pool)
+	p.serverVersions.Delete(pool)
 
 	p.resolvedExtSchemas.Range(func(k, _ any) bool {
 		if key, ok := k.(extSchemaKey); ok && key.pool == pool {

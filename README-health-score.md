@@ -204,6 +204,7 @@ The baseline and the dips appear as history accumulates; until there is enough, 
 
 ```yaml
 health_score:
+  database_concurrency: 4   # databases of one instance read at once
   metrics:
     enabled: true
     datasource:

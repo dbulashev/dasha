@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Performance
+- **Health Score loads faster** in metrics mode and on instances with many databases.
+
+### Configuration
+- `health_score.metrics.datasource.query_cache_ttl` is removed; `health_score.metrics.baseline.cache_ttl` sets how long the seasonal baseline is kept. New `health_score.metrics.datasource.max_query_bytes` and `health_score.metrics.datasource.max_concurrency` bound the batched datasource requests. New `health_score.database_concurrency` sets how many databases of one instance are read at once (default 4).
+
 ## v1.8.1
 
 ### Features

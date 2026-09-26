@@ -9,23 +9,27 @@ import (
 // sigUncatalogued has no catalog template under any provider.
 const sigUncatalogued SignalKind = "test_uncatalogued"
 
-// valueClient returns a fixed value for any non-empty expression.
+// valueClient returns a fixed value for every term of a query.
 type valueClient struct{ v float64 }
 
 func (c valueClient) QueryInstant(_ context.Context, expr string, _ time.Time) ([]Sample, error) {
-	if expr == "" {
-		return nil, nil
+	var out []Sample
+
+	for _, t := range splitGlued(expr) {
+		out = append(out, Sample{Value: c.v, Labels: t.labels()})
 	}
 
-	return []Sample{{Value: c.v, Labels: map[string]string{}}}, nil
+	return out, nil
 }
 
 func (c valueClient) QueryRange(_ context.Context, expr string, _ Range) ([]Series, error) {
-	if expr == "" {
-		return nil, nil
+	var out []Series
+
+	for _, t := range splitGlued(expr) {
+		out = append(out, Series{Labels: t.labels(), Points: []SeriesPoint{{Time: time.Unix(100, 0), Value: c.v}}})
 	}
 
-	return []Series{{Points: []SeriesPoint{{Time: time.Unix(100, 0), Value: c.v}}}}, nil
+	return out, nil
 }
 
 func newTestCollector(t *testing.T, v float64) *Collector {
@@ -36,7 +40,7 @@ func newTestCollector(t *testing.T, v float64) *Collector {
 		t.Fatalf("NewMatcher: %v", err)
 	}
 
-	return NewCollector(m, NewQueryCatalog(), valueClient{v: v}, "5m", "", nil)
+	return NewCollector(m, NewQueryCatalog(), valueClient{v: v}, "5m", "", BatchLimits{}, nil)
 }
 
 func TestCollector_InstantCollectsCataloguedSignals(t *testing.T) {

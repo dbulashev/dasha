@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
@@ -43,6 +44,16 @@ type Series struct {
 type DatasourceClient interface {
 	QueryInstant(ctx context.Context, expr string, at time.Time) ([]Sample, error)
 	QueryRange(ctx context.Context, expr string, r Range) ([]Series, error)
+}
+
+// StatusError is a non-200 answer from the datasource.
+type StatusError struct {
+	Code int
+	Body string
+}
+
+func (e *StatusError) Error() string {
+	return fmt.Sprintf("metrics: datasource returned %d: %s", e.Code, e.Body)
 }
 
 // VMClient is the HTTP implementation of DatasourceClient.
@@ -180,7 +191,7 @@ func (c *VMClient) QueryRange(ctx context.Context, expr string, r Range) ([]Seri
 	return out, nil
 }
 
-// do issues the GET request and returns the decoded data envelope.
+// do POSTs the form-encoded query and returns the decoded data envelope.
 func (c *VMClient) do(ctx context.Context, path string, q url.Values) (apiResponseData, error) {
 	var zero apiResponseData
 
@@ -188,12 +199,12 @@ func (c *VMClient) do(ctx context.Context, path string, q url.Values) (apiRespon
 		return zero, fmt.Errorf("metrics: datasource url is not configured")
 	}
 
-	endpoint := c.baseURL + path + "?" + q.Encode()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, strings.NewReader(q.Encode()))
 	if err != nil {
 		return zero, fmt.Errorf("metrics: build request: %w", err)
 	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	switch c.auth.Type {
 	case "bearer":
@@ -214,7 +225,7 @@ func (c *VMClient) do(ctx context.Context, path string, q url.Values) (apiRespon
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return zero, fmt.Errorf("metrics: datasource returned %d: %s", resp.StatusCode, truncate(string(body), 200))
+		return zero, &StatusError{Code: resp.StatusCode, Body: truncate(string(body), 200)}
 	}
 
 	var ar apiResponse

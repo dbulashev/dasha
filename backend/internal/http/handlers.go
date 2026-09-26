@@ -2,6 +2,7 @@ package http
 
 import (
 	"github.com/dbulashev/dasha/internal/config"
+	"github.com/dbulashev/dasha/internal/healthscore"
 	"github.com/dbulashev/dasha/internal/logs"
 	"github.com/dbulashev/dasha/internal/metrics"
 	"github.com/dbulashev/dasha/internal/repository"
@@ -15,11 +16,15 @@ type Handlers struct {
 	storage *storage.Storage
 	metrics *metrics.Service
 	logs    logs.Service
+	scorer  *healthscore.Scorer
 }
 
 // NewDashaHandlers constructs a new Handlers instance from its dependencies.
 func NewDashaHandlers(cfg *config.Config, repo repository.Repository, st *storage.Storage, ms *metrics.Service, logsSvc logs.Service) *Handlers {
-	return &Handlers{cfg: cfg, repo: repo, storage: st, metrics: ms, logs: logsSvc}
+	return &Handlers{
+		cfg: cfg, repo: repo, storage: st, metrics: ms, logs: logsSvc,
+		scorer: healthscore.NewScorer(cfg, repo, st, ms),
+	}
 }
 
 // maxLimit caps a client-supplied pagination limit so a SQL LIMIT can never be

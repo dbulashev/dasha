@@ -184,12 +184,14 @@ config:
   # a target is unmatched. Durations are Go strings (e.g. 10s, 672h).
   # Validate label matching at: GET /api/common/health-score/datasource/status
   # health_score:
+  #   # database_concurrency: 4  # databases of one instance read at once
   #   metrics:
   #     enabled: true
   #     datasource:
   #       url: "http://victoria-metrics.monitoring.svc:8428"  # VictoriaMetrics / Prometheus base URL
   #       # timeout: 10s
-  #       # query_cache_ttl: 30s
+  #       # max_query_bytes: 14000  # one batched query; keep under vmselect -search.maxQueryLen
+  #       # max_concurrency: 4       # batched queries in flight
   #       # auth:                            # datasource credentials — treat as secret
   #       #   type: bearer                    # none | bearer | basic
   #       #   token_from_env: DASHA_METRICS_DATASOURCE_TOKEN        # bearer: env-injected token
@@ -242,7 +244,7 @@ config:
   #     #   `folder` when your metrics carry cluster="<env>" matching that key.
   #
   #     # Tuning (optional; sensible defaults shown):
-  #     # baseline: { window: 672h, min_history: 336h }  # seasonal baseline window / min history
+  #     # baseline: { window: 672h, min_history: 336h, cache_ttl: 30m }  # seasonal baseline window / min history / refresh period
   #     # dips:     { score_points: 10, latency_factor: 2.0 }
   #     # floor:    { wraparound_left: 200000000 }        # xacts-left below this -> critical
   #

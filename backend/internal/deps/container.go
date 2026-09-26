@@ -571,6 +571,10 @@ func provideConfig() (*config.Config, error) {
 	c.LogSearch = c.LogSearch.WithDefaults()
 	c.LogInsights = c.LogInsights.WithDefaults()
 
+	if err := c.HealthScore.Validate(); err != nil {
+		return nil, fmt.Errorf("provideConfig | health_score: %w", err)
+	}
+
 	if err := c.HealthScore.Metrics.Validate(); err != nil {
 		return nil, fmt.Errorf("provideConfig | health_score.metrics: %w", err)
 	}
@@ -603,7 +607,7 @@ func provideRepository(
 ) repository.Repository {
 	return repository.NewRepositoryPgxPool(
 		clusters, sources, planEvidence, cfg.PgStatsView, cfg.PgssResetFunction,
-		cfg.DBPool, cfg.SchemaLint, cfg.IndexAdvisor, logger,
+		cfg.DBPool, cfg.SchemaLint, cfg.IndexAdvisor, cfg.HealthScore.DatabaseConcurrency, logger,
 	)
 }
 
