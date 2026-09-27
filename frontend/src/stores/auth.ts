@@ -10,6 +10,19 @@ interface UserInfo {
 }
 
 const RETURN_URL_KEY = 'dasha_return_url'
+const LOGIN_REDIRECT_AT_KEY = 'dasha_login_redirect_at'
+const LOGIN_LOOP_WINDOW_MS = 15_000
+
+// `/\` is checked separately: browsers normalise it to `//`, a foreign host.
+export function isSafeReturnUrl(url: string): boolean {
+  if (!url.startsWith('/') || url.startsWith('//') || url.startsWith('/\\')) return false
+  try {
+    const parsed = new URL(url, window.location.origin)
+    return parsed.origin === window.location.origin && !parsed.pathname.startsWith('/auth/')
+  } catch {
+    return false
+  }
+}
 
 export const useAuthStore = defineStore('auth', () => {
   const mode = ref<string>(AuthInfoMode.none)
@@ -19,6 +32,7 @@ export const useAuthStore = defineStore('auth', () => {
   const enableQueryStatsReset = ref(false)
   const patEnabled = ref(false)
   const patMinRole = ref('admin')
+  let redirecting = false
 
   const isAuthenticated = computed(() => mode.value === AuthInfoMode.none || user.value !== null)
   const requiresLogin = computed(() => mode.value !== AuthInfoMode.none && !user.value)
@@ -82,19 +96,37 @@ export const useAuthStore = defineStore('auth', () => {
     initialized.value = true
   }
 
+  function saveReturnUrl() {
+    sessionStorage.setItem(RETURN_URL_KEY, window.location.pathname + window.location.search)
+    sessionStorage.setItem(LOGIN_REDIRECT_AT_KEY, String(Date.now()))
+  }
+
   function doLoginRedirect() {
     if (oidcLoginUrl.value) {
-      sessionStorage.setItem(RETURN_URL_KEY, window.location.pathname + window.location.search)
+      saveReturnUrl()
       window.location.href = oidcLoginUrl.value
     }
   }
 
+  function handleUnauthorized() {
+    if (mode.value !== AuthInfoMode.oidc || !oidcLoginUrl.value || redirecting) return
+
+    const lastRedirectAt = Number(sessionStorage.getItem(LOGIN_REDIRECT_AT_KEY))
+    if (lastRedirectAt && Date.now() - lastRedirectAt < LOGIN_LOOP_WINDOW_MS) {
+      user.value = null
+      return
+    }
+
+    redirecting = true
+    user.value = null
+    saveReturnUrl()
+    window.location.href = oidcLoginUrl.value
+  }
+
   function consumeReturnUrl(): string | null {
     const url = sessionStorage.getItem(RETURN_URL_KEY)
-    if (url) {
-      sessionStorage.removeItem(RETURN_URL_KEY)
-    }
-    return url
+    sessionStorage.removeItem(RETURN_URL_KEY)
+    return url && isSafeReturnUrl(url) ? url : null
   }
 
   async function logout() {
@@ -118,5 +150,5 @@ export const useAuthStore = defineStore('auth', () => {
     window.location.href = '/'
   }
 
-  return { mode, oidcLoginUrl, user, initialized, isAuthenticated, requiresLogin, isAdmin, enableQueryStatsReset, patEnabled, patMinRole, canManageTokens, canAdminTokens, init, doLoginRedirect, consumeReturnUrl, logout }
+  return { mode, oidcLoginUrl, user, initialized, isAuthenticated, requiresLogin, isAdmin, enableQueryStatsReset, patEnabled, patMinRole, canManageTokens, canAdminTokens, init, doLoginRedirect, handleUnauthorized, consumeReturnUrl, logout }
 })
