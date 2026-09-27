@@ -163,6 +163,9 @@ worst databases, kill horizon-holding transactions.
 ### relfrozenxid_age_outlier
 Max per-table relfrozenxid age; same thresholds as xid_wraparound_risk.
 Tables skipped by autovacuum freeze — find via `vacuum_danger`, VACUUM FREEZE them.
+Cold tables (no writes for the whole cold window) are rated separately by age over
+their effective autovacuum_freeze_max_age: LOW ≥0.9, MED ≥1.0, HIGH at
+vacuum_failsafe_age. The worse tier wins; `context.cold` marks the cold one.
 
 ### stale_vacuum
 Oldest table already past its autovacuum threshold but not vacuumed.
@@ -201,6 +204,12 @@ LOW ≥3, MED ≥5, HIGH ≥10. Bad plans likely: run ANALYZE by hand and find o
 autoanalyze never reached the table (autovacuum_enabled=false, workers busy on
 large tables). Cold tables below the threshold are not counted: autoanalyze is
 not supposed to run for them.
+
+### cold_tables_maintenance
+Advisory, does not affect the score; LOW. Cold tables (no writes for the whole
+cold window) with >10% dead rows (>10k rows), never vacuumed (>10k rows), or
+age(relfrozenxid) ≥ vacuum_freeze_table_age. Up to 5 in `context.objects`, the
+rest in `more`. Autovacuum will not reach them: run VACUUM (FREEZE, ANALYZE) once.
 
 ## horizon (weight 0.10)
 

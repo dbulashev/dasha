@@ -127,6 +127,18 @@ func TestHealthScore_ColdTablesExcluded(t *testing.T) {
 	assert.Zero(t, perDB.MaxDeadRatio)
 	assert.Zero(t, perDB.TablesNeverVacuumed)
 
+	list, total, err := p.healthScoreColdTables(ctx, pool, cold, 2)
+	require.NoError(t, err)
+	assert.Equal(t, 3, total, "every target has about 30 percent dead rows")
+	require.Len(t, list, 2)
+
+	for _, r := range list {
+		assert.InDelta(t, 30.0, r.DeadRatio, 2)
+		assert.True(t, r.NeverVacuumed)
+		assert.Positive(t, r.SizeBytes)
+		assert.Contains(t, []int{1, 2, 3}, r.Idx)
+	}
+
 	_, err = pool.Exec(ctx, `INSERT INTO cold_plain VALUES (0)`)
 	require.NoError(t, err)
 

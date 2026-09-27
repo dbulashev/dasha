@@ -84,6 +84,16 @@ type ColdArgs struct {
 	Writes  []int64
 }
 
+// HealthScoreColdTable is a cold table autovacuum will not reach. Idx is its
+// 1-based position in the ColdArgs the query was given.
+type HealthScoreColdTable struct {
+	Idx             int
+	DeadRatio       float64
+	NeverVacuumed   bool
+	RelfrozenxidAge int64
+	SizeBytes       int64
+}
+
 type HealthScoreMetrics struct {
 	// InRecovery is true when pg_is_in_recovery() returns true.
 	// Standbys cannot run autovacuum/ANALYZE, so the maintenance category

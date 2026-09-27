@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/dbulashev/dasha/internal/dto"
+	"github.com/dbulashev/dasha/internal/health"
 	"github.com/dbulashev/dasha/internal/hotobjects"
 	"github.com/dbulashev/dasha/internal/metrics"
 )
@@ -61,4 +63,32 @@ func TestColdCacheNoStorage(t *testing.T) {
 	var s Scorer
 
 	assert.Equal(t, hotobjects.ColdNoStorage, s.ColdTables(t.Context(), metrics.TargetRef{}).Status) //nolint:exhaustruct
+}
+
+func TestBuildColdFacts(t *testing.T) {
+	t.Parallel()
+
+	captured := time.Date(2026, 9, 27, 3, 0, 0, 0, time.UTC)
+	set := hotobjects.ColdSet{ //nolint:exhaustruct
+		CapturedAt: captured,
+		Tables: []hotobjects.ColdTable{
+			{Schema: "public", Table: "a", QuietSince: captured.Add(-41*24*time.Hour - time.Hour)},
+			{Schema: "archive", Table: "b", QuietSince: captured.Add(-8 * 24 * time.Hour)},
+		},
+	}
+
+	rows := []dto.HealthScoreColdTable{
+		{Idx: 2, DeadRatio: 14.2, RelfrozenxidAge: 171_000_000, SizeBytes: 1 << 30},
+		{Idx: 1, NeverVacuumed: true},
+		{Idx: 9},
+	}
+
+	got := buildColdFacts(set, 7, rows, 15)
+
+	assert.Equal(t, 7, got.WindowDays)
+	assert.Equal(t, []health.ColdMaintenanceTable{
+		{Schema: "archive", Table: "b", SizeBytes: 1 << 30, DeadRatio: 14.2, RelfrozenxidAge: 171_000_000, NoWritesDays: 8},
+		{Schema: "public", Table: "a", NeverVacuumed: true, NoWritesDays: 41},
+	}, got.Tables, "order kept, unknown idx dropped")
+	assert.Equal(t, 13, got.More)
 }

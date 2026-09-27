@@ -111,9 +111,15 @@ func (s *Scorer) ScoreWith(ctx context.Context, t metrics.TargetRef, pre *metric
 // for one database's drill-down, which always reads the SQL snapshot since the
 // datasource is instance-level.
 func (s *Scorer) Recommendations(ctx context.Context, t metrics.TargetRef, database string) ([]health.Recommendation, error) {
-	raw, _, _, err := s.compose(s.coalescedInputs(ctx, t, database), s.walLevelManaged(ctx, t.Cluster))
+	in := s.coalescedInputs(ctx, t, database)
+
+	raw, _, _, err := s.compose(in, s.walLevelManaged(ctx, t.Cluster))
 	if err != nil {
 		return nil, fmt.Errorf("Recommendations | %w", err)
+	}
+
+	if !raw.InRecovery {
+		raw.Cold = s.coldFacts(ctx, t, raw.Database, in.cold)
 	}
 
 	return health.Evaluate(raw, database != ""), nil
@@ -134,7 +140,6 @@ func (s *Scorer) compose(in inputs, walLevelManaged bool) (raw health.RawMetrics
 		raw.MetricsInstanceWide = true
 		overlayCatalogFacts(&raw, in.snap)
 		overlaySignalGaps(&raw, in.snap, r.Signals)
-		overlayColdDeadRatios(&raw, in.snap, in.cold)
 		src, matched = SourceMetrics, len(r.Signals.Have)
 	} else {
 		raw, src = rawFromSnapshot(in.snap), SourceSnapshot

@@ -168,6 +168,9 @@ primary и walreceiver; неактивный слот копит WAL (риск �
 ### relfrozenxid_age_outlier
 Макс. возраст relfrozenxid таблицы; пороги как у xid_wraparound_risk.
 Таблицы, пропущенные autovacuum freeze — найти через `vacuum_danger`, VACUUM FREEZE.
+Холодные таблицы (без записи всё окно холодности) оцениваются отдельно: возраст к
+их эффективному autovacuum_freeze_max_age, LOW ≥0.9, MED ≥1.0, HIGH на
+vacuum_failsafe_age. Берётся худшая ступень, у холодной `context.cold`.
 
 ### stale_vacuum
 Старейшая таблица, уже превысившая порог autovacuum, но давно не чищенная.
@@ -206,6 +209,13 @@ LOW ≥3, MED ≥5, HIGH ≥10. Вероятны плохие планы: ANALYZ
 почему автоанализ не дошёл до таблицы (autovacuum_enabled=false, воркеры заняты
 крупными таблицами). Холодные таблицы ниже порога не считаются: для них
 автоанализ и не должен запускаться.
+
+### cold_tables_maintenance
+Информационное, на балл не влияет; LOW. Холодные таблицы (без записи всё окно
+холодности) с мёртвыми строками >10 % (>10 тыс. строк), ни разу не
+вакуумированные (>10 тыс. строк) или с age(relfrozenxid) ≥ vacuum_freeze_table_age.
+До 5 в `context.objects`, остальные в `more`. Автовакуум до них не дойдёт:
+один раз VACUUM (FREEZE, ANALYZE).
 
 ## horizon (вес 0.10)
 

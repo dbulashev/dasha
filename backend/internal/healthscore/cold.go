@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/dbulashev/dasha/internal/dto"
+	"github.com/dbulashev/dasha/internal/health"
 	"github.com/dbulashev/dasha/internal/hotobjects"
 	"github.com/dbulashev/dasha/internal/metrics"
 )
@@ -13,6 +14,7 @@ import (
 const (
 	coldCacheTTL    = 5 * time.Minute
 	coldReadTimeout = 2 * time.Second
+	coldListLimit   = 5
 )
 
 type ColdStore interface {
@@ -77,20 +79,66 @@ func ColdArgs(sets hotobjects.ColdSets) map[string]dto.ColdArgs {
 			continue
 		}
 
-		a := dto.ColdArgs{
-			Schemas: make([]string, len(set.Tables)),
-			Tables:  make([]string, len(set.Tables)),
-			Writes:  make([]int64, len(set.Tables)),
-		}
-
-		for i, t := range set.Tables {
-			a.Schemas[i], a.Tables[i], a.Writes[i] = t.Schema, t.Table, t.Writes
-		}
-
-		out[db] = a
+		out[db] = coldArgsOf(set)
 	}
 
 	return out
+}
+
+func coldArgsOf(set hotobjects.ColdSet) dto.ColdArgs {
+	a := dto.ColdArgs{
+		Schemas: make([]string, len(set.Tables)),
+		Tables:  make([]string, len(set.Tables)),
+		Writes:  make([]int64, len(set.Tables)),
+	}
+
+	for i, t := range set.Tables {
+		a.Schemas[i], a.Tables[i], a.Writes[i] = t.Schema, t.Table, t.Writes
+	}
+
+	return a
+}
+
+// coldFacts reads the database's cold tables that need a manual VACUUM; nil
+// when the marker is unavailable or the read fails.
+func (s *Scorer) coldFacts(ctx context.Context, t metrics.TargetRef, database string, sets hotobjects.ColdSets) *health.ColdFacts {
+	if !hasColdTables(sets, database) {
+		return nil
+	}
+
+	set := sets.For(database)
+
+	rows, total, err := s.repo.GetHealthScoreColdTables(ctx, t.Cluster, t.Instance, database, coldArgsOf(set), coldListLimit)
+	if err != nil {
+		return nil
+	}
+
+	return buildColdFacts(set, sets.WindowDays, rows, total)
+}
+
+func buildColdFacts(set hotobjects.ColdSet, windowDays int, rows []dto.HealthScoreColdTable, total int) *health.ColdFacts {
+	facts := &health.ColdFacts{WindowDays: windowDays, Tables: make([]health.ColdMaintenanceTable, 0, len(rows)), More: 0}
+
+	for _, r := range rows {
+		if r.Idx < 1 || r.Idx > len(set.Tables) {
+			continue
+		}
+
+		src := set.Tables[r.Idx-1]
+		facts.Tables = append(facts.Tables, health.ColdMaintenanceTable{
+			Schema:          src.Schema,
+			Table:           src.Table,
+			SizeBytes:       r.SizeBytes,
+			DeadRatio:       r.DeadRatio,
+			NeverVacuumed:   r.NeverVacuumed,
+			RelfrozenxidAge: r.RelfrozenxidAge,
+			NoWritesDays:    int(set.CapturedAt.Sub(src.QuietSince) / (24 * time.Hour)),
+		})
+	}
+
+	facts.More = max(total-len(facts.Tables), 0)
+
+	return facts
 }
 
 // hasColdTables reports whether the scored database has cold tables excluded

@@ -57,6 +57,7 @@ type Repository interface {
 	GetDatabaseUsers(ctx context.Context, clusterName, instanceName string) ([]string, error)
 	GetHealthScoreMetrics(ctx context.Context, clusterName, instanceName, databaseName string, cold map[string]dto.ColdArgs) (*dto.HealthScoreMetrics, error)
 	GetHealthScorePerDatabase(ctx context.Context, clusterName, instanceName string, cold map[string]dto.ColdArgs) ([]dto.HealthScoreDatabaseMetrics, error)
+	GetHealthScoreColdTables(ctx context.Context, clusterName, instanceName, databaseName string, cold dto.ColdArgs, limit int) ([]dto.HealthScoreColdTable, int, error)
 	GetHealthScoreXidWraparoundDatabases(ctx context.Context, clusterName, instanceName string, limit, offset int) ([]dto.HealthScoreXidWraparoundDatabase, error)
 	GetHealthScoreTablesAutovacuumOff(ctx context.Context, clusterName, instanceName, databaseName string, limit, offset int) ([]dto.HealthScoreTableReloption, error)
 	GetHealthScoreLowHotUpdateTables(ctx context.Context, clusterName, instanceName, databaseName string, limit, offset int) ([]dto.HealthScoreLowHotUpdateTable, error)

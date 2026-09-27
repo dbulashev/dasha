@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/dbulashev/dasha/internal/dto"
-	"github.com/dbulashev/dasha/internal/health"
 	"github.com/dbulashev/dasha/internal/hotobjects"
 	"github.com/dbulashev/dasha/internal/metrics"
 )
@@ -180,35 +179,6 @@ func coldSetsFor(database string, tables ...hotobjects.ColdTable) hotobjects.Col
 	return hotobjects.ColdSets{ //nolint:exhaustruct
 		WindowDays: 7,
 		ByDatabase: map[string]hotobjects.ColdSet{database: {Database: database, Status: hotobjects.ColdAvailable, Tables: tables}}, //nolint:exhaustruct
-	}
-}
-
-func TestOverlayColdDeadRatios(t *testing.T) {
-	snap := snapshotFixture()
-	archive := hotobjects.ColdTable{Schema: "public", Table: "archive", QuietSince: time.Now(), Writes: 5}
-
-	raw := health.RawMetrics{MaxDeadRatio: 1, AvgDeadRatio: 1} //nolint:exhaustruct
-	overlayColdDeadRatios(&raw, snap, coldSetsFor("app_db", archive))
-
-	if raw.MaxDeadRatio != snap.MaxDeadRatio || raw.AvgDeadRatio != snap.AvgDeadRatio {
-		t.Errorf("dead ratios not taken from the snapshot: %v/%v", raw.MaxDeadRatio, raw.AvgDeadRatio)
-	}
-
-	if !raw.SnapshotBackedRules["high_max_dead_ratio"] || !raw.SnapshotBackedRules["high_avg_dead_ratio"] {
-		t.Errorf("dead-ratio rules not marked snapshot-backed: %v", raw.SnapshotBackedRules)
-	}
-
-	for name, sets := range map[string]hotobjects.ColdSets{
-		"other database": coldSetsFor("other_db", archive),
-		"no cold tables": coldSetsFor("app_db"),
-		"unavailable":    {Status: hotobjects.ColdDisabled}, //nolint:exhaustruct
-	} {
-		raw := health.RawMetrics{MaxDeadRatio: 1, AvgDeadRatio: 1} //nolint:exhaustruct
-		overlayColdDeadRatios(&raw, snap, sets)
-
-		if raw.MaxDeadRatio != 1 || raw.AvgDeadRatio != 1 || raw.SnapshotBackedRules != nil {
-			t.Errorf("%s: datasource ratios replaced", name)
-		}
 	}
 }
 

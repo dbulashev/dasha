@@ -15,6 +15,8 @@ const (
 	QueryCommonDatabaseUsers Query = "common/database_users"
 	// QueryCommonHealthScore is a Query of type common/health_score.
 	QueryCommonHealthScore Query = "common/health_score"
+	// QueryCommonHealthScoreColdTables is a Query of type common/health_score_cold_tables.
+	QueryCommonHealthScoreColdTables Query = "common/health_score_cold_tables"
 	// QueryCommonHealthScoreHighDeadRatioTables is a Query of type common/health_score_high_dead_ratio_tables.
 	QueryCommonHealthScoreHighDeadRatioTables Query = "common/health_score_high_dead_ratio_tables"
 	// QueryCommonHealthScoreHorizonBlockingSessions is a Query of type common/health_score_horizon_blocking_sessions.
@@ -222,6 +224,7 @@ var ErrInvalidQuery = fmt.Errorf("not a valid Query, try [%s]", strings.Join(_Qu
 var _QueryNames = []string{
 	string(QueryCommonDatabaseUsers),
 	string(QueryCommonHealthScore),
+	string(QueryCommonHealthScoreColdTables),
 	string(QueryCommonHealthScoreHighDeadRatioTables),
 	string(QueryCommonHealthScoreHorizonBlockingSessions),
 	string(QueryCommonHealthScoreLowHotUpdateTables),
@@ -336,6 +339,7 @@ func QueryValues() []Query {
 	return []Query{
 		QueryCommonDatabaseUsers,
 		QueryCommonHealthScore,
+		QueryCommonHealthScoreColdTables,
 		QueryCommonHealthScoreHighDeadRatioTables,
 		QueryCommonHealthScoreHorizonBlockingSessions,
 		QueryCommonHealthScoreLowHotUpdateTables,
@@ -454,6 +458,7 @@ func (x Query) IsValid() bool {
 var _QueryValue = map[string]Query{
 	"common/database_users":                         QueryCommonDatabaseUsers,
 	"common/health_score":                           QueryCommonHealthScore,
+	"common/health_score_cold_tables":               QueryCommonHealthScoreColdTables,
 	"common/health_score_high_dead_ratio_tables":    QueryCommonHealthScoreHighDeadRatioTables,
 	"common/health_score_horizon_blocking_sessions": QueryCommonHealthScoreHorizonBlockingSessions,
 	"common/health_score_low_hot_update_tables":     QueryCommonHealthScoreLowHotUpdateTables,

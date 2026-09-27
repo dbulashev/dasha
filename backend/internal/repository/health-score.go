@@ -273,3 +273,72 @@ func (p *PgxPool) collectHealthScorePerDatabase(
 
 	return m, nil
 }
+
+// GetHealthScoreColdTables returns up to limit cold tables that need a manual
+// VACUUM, worst first, and how many qualified in total.
+func (p *PgxPool) GetHealthScoreColdTables(
+	ctx context.Context,
+	clusterName, instanceName, databaseName string,
+	cold dto.ColdArgs,
+	limit int,
+) ([]dto.HealthScoreColdTable, int, error) {
+	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
+	if err != nil {
+		return nil, 0, fmt.Errorf("GetHealthScoreColdTables | %w", err)
+	}
+
+	rows, total, err := p.healthScoreColdTables(ctx, pool, cold, limit)
+	if err != nil {
+		return nil, 0, fmt.Errorf("GetHealthScoreColdTables | %w", err)
+	}
+
+	return rows, total, nil
+}
+
+func (p *PgxPool) healthScoreColdTables(
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	cold dto.ColdArgs,
+	limit int,
+) ([]dto.HealthScoreColdTable, int, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	vNum, err := p.getServerVersionNum(ctx, pool)
+	if err != nil {
+		return nil, 0, fmt.Errorf("get server version | %w", err)
+	}
+
+	qStr, err := query.Get(vNum, enums.QueryCommonHealthScoreColdTables, healthScoreTemplateData{ColdCTE: query.ColdCTE(1)})
+	if err != nil {
+		return nil, 0, err
+	}
+
+	conn, err := p.acquireConn(ctx, pool)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer conn.Release()
+
+	rows, err := conn.Query(ctx, qStr, append(coldQueryArgs(cold), limit)...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var (
+		out   []dto.HealthScoreColdTable
+		total int
+	)
+
+	for rows.Next() {
+		var r dto.HealthScoreColdTable
+		if err := rows.Scan(&r.Idx, &r.DeadRatio, &r.NeverVacuumed, &r.RelfrozenxidAge, &r.SizeBytes, &total); err != nil {
+			return nil, 0, fmt.Errorf("scan | %w", err)
+		}
+
+		out = append(out, r)
+	}
+
+	return out, total, rows.Err()
+}

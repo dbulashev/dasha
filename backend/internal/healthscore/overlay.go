@@ -3,7 +3,6 @@ package healthscore
 import (
 	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/health"
-	"github.com/dbulashev/dasha/internal/hotobjects"
 	"github.com/dbulashev/dasha/internal/metrics"
 )
 
@@ -60,18 +59,6 @@ func overlayCatalogFacts(raw *health.RawMetrics, m *dto.HealthScoreMetrics) {
 	raw.LongestLockWaitSeconds = m.LongestLockWaitSeconds
 	raw.HeavyweightLocksTotal = m.HeavyweightLocksTotal
 	raw.MaxLocksPerTransaction = m.MaxLocksPerTransaction
-}
-
-// overlayColdDeadRatios takes the dead-tuple ratios from the snapshot when it
-// excluded cold tables: the datasource cannot tell them apart.
-func overlayColdDeadRatios(raw *health.RawMetrics, m *dto.HealthScoreMetrics, cold hotobjects.ColdSets) {
-	if !hasColdTables(cold, m.Database) {
-		return
-	}
-
-	raw.MaxDeadRatio = m.MaxDeadRatio
-	raw.AvgDeadRatio = m.AvgDeadRatio
-	raw.MarkSnapshotBacked("high_max_dead_ratio", "high_avg_dead_ratio")
 }
 
 // overlaySignalGaps backfills, from the SQL snapshot, every field whose signal
