@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/dbulashev/dasha/internal/dto"
+	"github.com/dbulashev/dasha/internal/hotobjects"
 	"github.com/dbulashev/dasha/internal/metrics"
 )
 
@@ -27,6 +28,7 @@ type inputs struct {
 	seqWorst float64
 	seqKnown bool
 	seqErr   error
+	cold     hotobjects.ColdSets
 }
 
 type inputsFlight struct {
@@ -50,7 +52,8 @@ func (s *Scorer) read(ctx context.Context, t metrics.TargetRef, database string,
 	}
 
 	wg.Go(func() {
-		in.snap, in.snapErr = s.repo.GetHealthScoreMetrics(ctx, t.Cluster, t.Instance, database)
+		in.cold = s.ColdTables(ctx, t)
+		in.snap, in.snapErr = s.repo.GetHealthScoreMetrics(ctx, t.Cluster, t.Instance, database, ColdArgs(in.cold))
 	})
 
 	wg.Go(func() {

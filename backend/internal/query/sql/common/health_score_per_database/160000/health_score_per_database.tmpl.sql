@@ -1,4 +1,5 @@
-WITH performance_metrics AS (
+WITH {{.ColdCTE}},
+performance_metrics AS (
     SELECT
         COALESCE(
             round(
@@ -30,10 +31,12 @@ storage_metrics AS (
             AND round(100.0 * n_dead_tup / nullif(n_live_tup + n_dead_tup, 0), 2) > 20
         )::int AS tables_high_bloat
     FROM pg_stat_user_tables
+    WHERE NOT EXISTS (SELECT 1 FROM cold WHERE cold.relid = pg_stat_user_tables.relid)
 ),
 -- Per-table autovacuum eligibility (reloption-aware), see health_score.tmpl.sql.
 table_autovac AS (
     SELECT
+        s.relid,
         s.n_dead_tup,
         s.n_live_tup,
         s.n_ins_since_vacuum,
@@ -76,6 +79,7 @@ maintenance_metrics AS (
             SELECT COUNT(*) FROM table_autovac
             WHERE n_live_tup + n_dead_tup > 10000
               AND last_vacuum IS NULL AND last_autovacuum IS NULL
+              AND NOT EXISTS (SELECT 1 FROM cold WHERE cold.relid = table_autovac.relid)
         )::int AS tables_never_vacuumed
     FROM pg_database
     WHERE datname = current_database()

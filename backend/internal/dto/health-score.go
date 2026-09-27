@@ -77,6 +77,13 @@ type HealthScoreDatabaseMetrics struct {
 	NewpageUpdateRatio float64
 }
 
+// ColdArgs lists one database's cold tables in the order the SQL indexes them.
+type ColdArgs struct {
+	Schemas []string
+	Tables  []string
+	Writes  []int64
+}
+
 type HealthScoreMetrics struct {
 	// InRecovery is true when pg_is_in_recovery() returns true.
 	// Standbys cannot run autovacuum/ANALYZE, so the maintenance category
@@ -124,6 +131,9 @@ type HealthScoreMetrics struct {
 	TrackCountsEnabled       bool
 	TablesWithAutovacuumOff  int
 	MaxRelfrozenxidAge       int64
+	ColdMaxRelfrozenxidAge   int64
+	// ColdFreezeRatio is age(relfrozenxid) over the effective autovacuum_freeze_max_age, worst cold relation.
+	ColdFreezeRatio float64
 
 	// Horizon
 	HorizonLagXids int64

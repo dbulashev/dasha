@@ -134,6 +134,7 @@ func (s *Scorer) compose(in inputs, walLevelManaged bool) (raw health.RawMetrics
 		raw.MetricsInstanceWide = true
 		overlayCatalogFacts(&raw, in.snap)
 		overlaySignalGaps(&raw, in.snap, r.Signals)
+		overlayColdDeadRatios(&raw, in.snap, in.cold)
 		src, matched = SourceMetrics, len(r.Signals.Have)
 	} else {
 		raw, src = rawFromSnapshot(in.snap), SourceSnapshot
@@ -226,6 +227,8 @@ func rawFromSnapshot(m *dto.HealthScoreMetrics) health.RawMetrics {
 		TrackCountsEnabled:         m.TrackCountsEnabled,
 		TablesWithAutovacuumOff:    m.TablesWithAutovacuumOff,
 		MaxRelfrozenxidAge:         m.MaxRelfrozenxidAge,
+		ColdMaxRelfrozenxidAge:     m.ColdMaxRelfrozenxidAge,
+		ColdFreezeRatio:            m.ColdFreezeRatio,
 		HorizonLagXids:             m.HorizonLagXids,
 		HorizonDatabase:            m.HorizonDatabase,
 		TimedCheckpoints:           m.TimedCheckpoints,

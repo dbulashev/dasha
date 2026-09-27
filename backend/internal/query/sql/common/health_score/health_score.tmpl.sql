@@ -1,4 +1,5 @@
-WITH connection_metrics AS (
+WITH {{.ColdCTE}},
+connection_metrics AS (
     SELECT
         COUNT(*) FILTER (WHERE state IS NOT NULL AND pid != pg_backend_pid()) AS total_connections,
         COUNT(*) FILTER (WHERE state = 'active' AND pid != pg_backend_pid()) AS active_connections,
@@ -68,6 +69,7 @@ storage_metrics AS (
             AND round(100.0 * n_dead_tup / nullif(n_live_tup + n_dead_tup, 0), 2) > 20
         )::int AS tables_high_bloat
     FROM pg_stat_user_tables
+    WHERE NOT EXISTS (SELECT 1 FROM cold WHERE cold.relid = pg_stat_user_tables.relid)
 ),
 replication_metrics AS (
     SELECT
@@ -89,6 +91,7 @@ replication_metrics AS (
 -- global GUCs (COALESCE), so custom per-table autovacuum settings are respected.
 table_autovac AS (
     SELECT
+        s.relid,
         s.n_dead_tup,
         s.n_live_tup,
         s.n_ins_since_vacuum,
@@ -160,6 +163,7 @@ maintenance_metrics AS (
             SELECT COUNT(*) FROM table_autovac
             WHERE n_live_tup + n_dead_tup > 10000
               AND last_vacuum IS NULL AND last_autovacuum IS NULL
+              AND NOT EXISTS (SELECT 1 FROM cold WHERE cold.relid = table_autovac.relid)
         )::int AS tables_never_vacuumed
 ),
 -- Horizon: oldest backend_xmin in the cluster pins the MVCC horizon for
@@ -197,9 +201,27 @@ per_table_metrics AS (
                 END
             )
         )::int AS tables_with_autovacuum_off,
-        COALESCE(MAX(age(relfrozenxid))::bigint, 0) AS max_relfrozenxid_age
+        COALESCE(MAX(age(relfrozenxid)) FILTER (
+            WHERE NOT EXISTS (SELECT 1 FROM cold_rel cr WHERE cr.relid = pg_class.oid)
+        )::bigint, 0) AS max_relfrozenxid_age
     FROM pg_class
     WHERE relkind IN ('r','m','t')
+),
+cold_freeze_metrics AS (
+    SELECT
+        COALESCE(MAX(age(c.relfrozenxid)), 0)::bigint AS cold_max_relfrozenxid_age,
+        COALESCE(MAX(age(c.relfrozenxid)::float8 / LEAST(
+            g.freeze_max_age,
+            COALESCE(ro.freeze_max_age, g.freeze_max_age))), 0)::float8 AS cold_freeze_ratio
+    FROM (SELECT DISTINCT relid FROM cold_rel) cr
+    JOIN pg_class c ON c.oid = cr.relid AND c.relkind IN ('r','m','t')
+    CROSS JOIN (
+        SELECT setting::float8 AS freeze_max_age FROM pg_settings WHERE name = 'autovacuum_freeze_max_age'
+    ) g
+    LEFT JOIN LATERAL (
+        SELECT (max(option_value) FILTER (WHERE option_name = 'autovacuum_freeze_max_age'))::float8 AS freeze_max_age
+        FROM pg_options_to_table(c.reloptions)
+    ) ro ON true
 ),
 -- GUC checks for autovacuum hygiene and IO timing tracking.
 -- Pulled from pg_settings (one scan) instead of current_setting() to avoid
@@ -349,7 +371,9 @@ SELECT
     hot.newpage_update_ratio,
     ss.stale_planner_stats_tables,
     wl.wal_level,
-    ls.active_count AS logical_slots_active
+    ls.active_count AS logical_slots_active,
+    cf.cold_max_relfrozenxid_age,
+    cf.cold_freeze_ratio
 FROM connection_metrics c,
      performance_metrics p,
      storage_metrics s,
@@ -366,4 +390,5 @@ FROM connection_metrics c,
      hot_update_metrics hot,
      stale_stats_metric ss,
      wal_level_metric wl,
-     logical_slots ls
+     logical_slots ls,
+     cold_freeze_metrics cf

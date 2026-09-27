@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/hotobjects"
 	"github.com/dbulashev/dasha/internal/metrics"
 )
@@ -65,6 +66,39 @@ func (c *coldCache) get(ctx context.Context, t metrics.TargetRef) hotobjects.Col
 	c.mu.Unlock()
 
 	return sets
+}
+
+// ColdArgs turns the available sets into per-database SQL arguments.
+func ColdArgs(sets hotobjects.ColdSets) map[string]dto.ColdArgs {
+	out := make(map[string]dto.ColdArgs, len(sets.ByDatabase))
+
+	for db, set := range sets.ByDatabase {
+		if set.Status != hotobjects.ColdAvailable || len(set.Tables) == 0 {
+			continue
+		}
+
+		a := dto.ColdArgs{
+			Schemas: make([]string, len(set.Tables)),
+			Tables:  make([]string, len(set.Tables)),
+			Writes:  make([]int64, len(set.Tables)),
+		}
+
+		for i, t := range set.Tables {
+			a.Schemas[i], a.Tables[i], a.Writes[i] = t.Schema, t.Table, t.Writes
+		}
+
+		out[db] = a
+	}
+
+	return out
+}
+
+// hasColdTables reports whether the scored database has cold tables excluded
+// from the snapshot's dead-tuple figures.
+func hasColdTables(sets hotobjects.ColdSets, database string) bool {
+	set := sets.For(database)
+
+	return set.Status == hotobjects.ColdAvailable && len(set.Tables) > 0
 }
 
 // ColdTables returns the instance's cold tables per database.
