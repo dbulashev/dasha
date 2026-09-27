@@ -1,6 +1,9 @@
 package health
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestRegistry_AllRulesEvaluable(t *testing.T) {
 	// All rules must produce nil or a Hit; no panic / no missing severity.
@@ -1058,5 +1061,43 @@ func TestMarkSnapshotBacked_AllocatesAndAccumulates(t *testing.T) {
 
 	if m.SnapshotBackedRules["low_hot_update_ratio"] {
 		t.Error("unmarked rule reads as snapshot-backed")
+	}
+}
+
+func TestEvaluate_AdvisoryRuleLeavesScoreUnchanged(t *testing.T) {
+	m := metricsBackedRaw()
+	want := Calculate(m)
+
+	saved := Registry
+	t.Cleanup(func() { Registry = saved })
+
+	Registry = append([]Rule{{
+		ID: "test_advisory", Category: CategoryStorage, Advisory: true,
+		Evaluate: func(RawMetrics) *Hit { return &Hit{Severity: SeverityHigh, MetricValue: 1} },
+	}}, saved...)
+
+	advisory := make(map[string]bool, len(Registry))
+	for _, r := range Registry {
+		advisory[r.ID] = r.Advisory
+	}
+
+	var found bool
+
+	for _, r := range Evaluate(m, false) {
+		if r.RuleID == "test_advisory" {
+			found = true
+		}
+
+		if r.Advisory != advisory[r.RuleID] {
+			t.Errorf("rule %q: recommendation Advisory = %v, rule Advisory = %v", r.RuleID, r.Advisory, advisory[r.RuleID])
+		}
+	}
+
+	if !found {
+		t.Fatal("test sanity: test_advisory did not fire")
+	}
+
+	if got := Calculate(m); !reflect.DeepEqual(got, want) {
+		t.Errorf("score changed with an advisory rule registered:\n got %+v\nwant %+v", got, want)
 	}
 }

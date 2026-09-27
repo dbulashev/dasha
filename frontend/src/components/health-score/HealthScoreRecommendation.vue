@@ -15,6 +15,8 @@ import { useClusterInfo } from '@/composables/useClusterInfo'
 import { usePaginatedApiLoader } from '@/composables/useApiLoader'
 import PaginationControls from '@/components/PaginationControls.vue'
 import { INLINE_SPECS, RULES_WITH_INLINE_DETAILS } from './inlineDetails'
+import { recObjects } from './recObjects'
+import HealthScoreObjectList from './HealthScoreObjectList.vue'
 import { usePrefsStore } from '@/stores/prefs'
 import { useInstanceInfoStore } from '@/stores/instanceInfo'
 import { IO_MIN_VERSION_NUM } from '@/components/io/types'
@@ -211,7 +213,11 @@ const {
   },
 )
 
-const showExpander = computed(() => hasDetail.value || hasSql.value || hasInline.value)
+const objectList = computed(() => recObjects(props.rec.context))
+
+const showExpander = computed(
+  () => hasDetail.value || hasSql.value || hasInline.value || !!objectList.value,
+)
 
 const severityColor = computed(() => {
   switch (props.rec.severity) {
@@ -262,6 +268,9 @@ async function copySql() {
           {{ rec.severity }}
         </v-chip>
         <span class="text-body-1 font-weight-medium">{{ title }}</span>
+        <v-chip v-if="rec.advisory" variant="outlined" size="small">
+          {{ t('healthScore.page.advisory') }}
+        </v-chip>
         <v-chip
           variant="tonal"
           size="small"
@@ -308,6 +317,13 @@ async function copySql() {
           <div v-if="detail" class="text-body-2 mb-2" style="white-space: pre-line">
             {{ detail }}
           </div>
+
+          <HealthScoreObjectList
+            v-if="objectList"
+            :objects="objectList.objects"
+            :more="objectList.more"
+            class="mb-2"
+          />
 
           <!-- Inline data: typed, paginated table fetched from a details endpoint. -->
           <template v-if="hasInline && inlineSpec">

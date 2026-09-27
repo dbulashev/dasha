@@ -1421,7 +1421,8 @@
     "page": {
       "title": "Health Score",
       "menuItem": "Health Score",
-      "noRecommendations": "All good — nothing critical to report."
+      "noRecommendations": "All good — nothing critical to report.",
+      "advisory": "does not affect the score"
     },
     "about": {
       "toggle": "How the health score works",
@@ -1598,6 +1599,9 @@
       "saveBtn": "Save",
       "resetBtn": "Reset to defaults",
       "updatedAt": "Updated: {ts}"
+    },
+    "hot": {
+      "more": "and {n} more"
     },
     "inline": {
       "title": "Breakdown",

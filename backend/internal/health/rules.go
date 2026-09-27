@@ -99,7 +99,9 @@ type Rule struct {
 	ID           string
 	Category     Category
 	RelatedRoute string
-	Evaluate     func(RawMetrics) *Hit
+	// Advisory rules report a finding without affecting the score.
+	Advisory bool
+	Evaluate func(RawMetrics) *Hit
 }
 
 // Recommendation is one rule's evaluation result, ready to ship over the API.
@@ -116,6 +118,7 @@ type Recommendation struct {
 	Database     string         `json:"database,omitempty"`
 	Context      map[string]any `json:"context,omitempty"`
 	RelatedRoute string         `json:"related_route,omitempty"`
+	Advisory     bool           `json:"advisory,omitempty"`
 }
 
 // instanceOnlyCategories lists categories that have no meaning at the
@@ -205,6 +208,7 @@ func Evaluate(m RawMetrics, databaseScoped bool) []Recommendation {
 			Database:     databaseOf(m, r, hit, databaseScoped),
 			Context:      hit.Context,
 			RelatedRoute: r.RelatedRoute,
+			Advisory:     r.Advisory,
 		})
 	}
 

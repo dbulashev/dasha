@@ -61,17 +61,18 @@ func upsertHotAnchorsTx(
 
 		batch.Queue(`
 			INSERT INTO hot_anchor (cluster_name, instance, database, kind, schema_name, object_name,
-			                        table_name, captured_at, stats_reset, size_bytes, counters, part_sig)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12)
+			                        table_name, captured_at, stats_reset, size_bytes, counters, part_sig, quiet_since)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13)
 			ON CONFLICT (cluster_name, instance, database, kind, schema_name, object_name)
 			DO UPDATE SET table_name = EXCLUDED.table_name,
 			              captured_at = EXCLUDED.captured_at,
 			              stats_reset = EXCLUDED.stats_reset,
 			              size_bytes = EXCLUDED.size_bytes,
 			              counters = EXCLUDED.counters,
-			              part_sig = EXCLUDED.part_sig`,
+			              part_sig = EXCLUDED.part_sig,
+			              quiet_since = EXCLUDED.quiet_since`,
 			clusterName, instance, database, string(r.Kind), r.Schema, r.Object,
-			nullIfEmpty(r.TableName), capturedAt, r.StatsReset, r.SizeBytes, jsonbArg(counters), r.PartSig)
+			nullIfEmpty(r.TableName), capturedAt, r.StatsReset, r.SizeBytes, jsonbArg(counters), r.PartSig, r.QuietSince)
 	}
 
 	br := tx.SendBatch(ctx, batch)
@@ -98,7 +99,7 @@ func (s *Storage) GetHotAnchors(
 	clusterName, instance, database string,
 ) (map[string]hotobjects.AnchorRow, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT kind, schema_name, object_name, COALESCE(table_name, ''), captured_at, stats_reset, size_bytes, part_sig, counters
+		SELECT kind, schema_name, object_name, COALESCE(table_name, ''), captured_at, stats_reset, size_bytes, part_sig, counters, quiet_since
 		FROM hot_anchor
 		WHERE cluster_name = $1 AND instance = $2 AND database = $3`,
 		clusterName, instance, database)
@@ -116,7 +117,7 @@ func (s *Storage) GetHotAnchors(
 			counters []byte
 		)
 
-		if err := rows.Scan(&kind, &a.Schema, &a.Object, &a.TableName, &a.CapturedAt, &a.StatsReset, &a.SizeBytes, &a.PartSig, &counters); err != nil {
+		if err := rows.Scan(&kind, &a.Schema, &a.Object, &a.TableName, &a.CapturedAt, &a.StatsReset, &a.SizeBytes, &a.PartSig, &counters, &a.QuietSince); err != nil {
 			return nil, fmt.Errorf("storage: scan hot anchor: %w", err)
 		}
 
@@ -131,6 +132,165 @@ func (s *Storage) GetHotAnchors(
 	}
 
 	return ret, rows.Err()
+}
+
+// GetLatestHotWindows returns each instance's window from the newest snapshot
+// of the database that has one; instances without such a snapshot are absent.
+func (s *Storage) GetLatestHotWindows(
+	ctx context.Context,
+	clusterName, database string,
+	instances []string,
+	since time.Time,
+) (map[string]hotobjects.HostWindow, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT i.instance, h.win
+		FROM unnest($3::text[]) AS i(instance)
+		CROSS JOIN LATERAL (
+		    SELECT s.windows -> i.instance AS win
+		    FROM hot_snapshot s
+		    WHERE s.cluster_name = $1 AND s.database = $2
+		      AND s.windows ? i.instance
+		      AND s.captured_at >= $4
+		    ORDER BY s.captured_at DESC
+		    LIMIT 1
+		) h`,
+		clusterName, database, instances, since)
+	if err != nil {
+		return nil, fmt.Errorf("storage: get latest hot windows: %w", err)
+	}
+	defer rows.Close()
+
+	ret := make(map[string]hotobjects.HostWindow, len(instances))
+
+	for rows.Next() {
+		var (
+			instance string
+			raw      []byte
+			w        hotobjects.HostWindow
+		)
+
+		if err := rows.Scan(&instance, &raw); err != nil {
+			return nil, fmt.Errorf("storage: scan hot window: %w", err)
+		}
+
+		if err := json.Unmarshal(raw, &w); err != nil {
+			return nil, fmt.Errorf("storage: unmarshal hot window: %w", err)
+		}
+
+		ret[instance] = w
+	}
+
+	return ret, rows.Err()
+}
+
+// GetColdTables returns the cold tables of every database of one instance
+// whose latest snapshot is not older than since, and the configured window.
+func (s *Storage) GetColdTables(ctx context.Context, clusterName, instance string, since time.Time) (hotobjects.ColdSets, error) {
+	rows, err := s.pool.Query(ctx, `
+		WITH cfg AS (
+		    SELECT hot_enabled, hot_cold_window_days AS days,
+		           make_interval(days => hot_cold_window_days) AS win
+		    FROM autosnapshot_config_global
+		    WHERE id = 1
+		),
+		latest AS (
+		    SELECT DISTINCT ON (database)
+		           database, captured_at,
+		           (windows -> $2::text ->> 'observed_since')::timestamptz AS observed_since
+		    FROM hot_snapshot
+		    WHERE cluster_name = $1 AND windows ? $2::text AND captured_at >= $3
+		      AND (SELECT hot_enabled FROM cfg)
+		    ORDER BY database, captured_at DESC
+		)
+		SELECT c.hot_enabled, c.days, l.database, l.captured_at, l.observed_since,
+		       COALESCE(jsonb_agg(jsonb_build_object(
+		           'schema', a.schema_name, 'table', a.object_name,
+		           'quiet_since', a.quiet_since,
+		           'writes', COALESCE((a.counters ->> 'n_tup_ins')::bigint, 0)
+		                   + COALESCE((a.counters ->> 'n_tup_upd')::bigint, 0)
+		                   + COALESCE((a.counters ->> 'n_tup_del')::bigint, 0))
+		           ORDER BY a.schema_name, a.object_name)
+		         FILTER (WHERE a.object_name IS NOT NULL), '[]') AS tables
+		FROM cfg c
+		LEFT JOIN latest l ON true
+		LEFT JOIN hot_anchor a
+		       ON a.cluster_name = $1 AND a.instance = $2::text AND a.database = l.database
+		      AND a.kind = 't'
+		      AND a.quiet_since IS NOT NULL
+		      AND a.quiet_since <= l.captured_at - c.win
+		      AND l.observed_since <= l.captured_at - c.win
+		GROUP BY c.hot_enabled, c.days, l.database, l.captured_at, l.observed_since`,
+		clusterName, instance, since)
+	if err != nil {
+		return hotobjects.ColdSets{}, fmt.Errorf("storage: get cold tables: %w", err)
+	}
+	defer rows.Close()
+
+	ret := hotobjects.ColdSets{Status: hotobjects.ColdDisabled, WindowDays: 0, ByDatabase: map[string]hotobjects.ColdSet{}}
+
+	for rows.Next() {
+		var (
+			enabled       bool
+			database      *string
+			capturedAt    *time.Time
+			observedSince *time.Time
+			tables        []byte
+		)
+
+		if err := rows.Scan(&enabled, &ret.WindowDays, &database, &capturedAt, &observedSince, &tables); err != nil {
+			return hotobjects.ColdSets{}, fmt.Errorf("storage: scan cold tables: %w", err)
+		}
+
+		if enabled {
+			ret.Status = ""
+		}
+
+		if database == nil || capturedAt == nil {
+			continue
+		}
+
+		set := hotobjects.ColdSet{
+			Database:      *database,
+			Status:        hotobjects.ColdStatusOf(*capturedAt, observedSince, time.Duration(ret.WindowDays)*24*time.Hour),
+			CapturedAt:    *capturedAt,
+			ObservedSince: observedSince,
+			Tables:        nil,
+		}
+
+		if set.Status == hotobjects.ColdAvailable {
+			if set.Tables, err = unmarshalColdTables(tables); err != nil {
+				return hotobjects.ColdSets{}, err
+			}
+		}
+
+		ret.ByDatabase[set.Database] = set
+	}
+
+	if err := rows.Err(); err != nil {
+		return hotobjects.ColdSets{}, fmt.Errorf("storage: read cold tables: %w", err)
+	}
+
+	return ret, nil
+}
+
+func unmarshalColdTables(raw []byte) ([]hotobjects.ColdTable, error) {
+	var rows []struct {
+		Schema     string    `json:"schema"`
+		Table      string    `json:"table"`
+		QuietSince time.Time `json:"quiet_since"`
+		Writes     int64     `json:"writes"`
+	}
+
+	if err := json.Unmarshal(raw, &rows); err != nil {
+		return nil, fmt.Errorf("storage: unmarshal cold tables: %w", err)
+	}
+
+	out := make([]hotobjects.ColdTable, len(rows))
+	for i, r := range rows {
+		out[i] = hotobjects.ColdTable{Schema: r.Schema, Table: r.Table, QuietSince: r.QuietSince, Writes: r.Writes}
+	}
+
+	return out, nil
 }
 
 // GetHotAnchorsForObject returns one object's anchors across all hosts — the

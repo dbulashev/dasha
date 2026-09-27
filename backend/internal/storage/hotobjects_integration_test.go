@@ -243,3 +243,171 @@ func TestDropHotPartitionsBefore(t *testing.T) {
 	require.NoError(t, s.pool.QueryRow(ctx, `SELECT to_regclass($1) IS NOT NULL`, name).Scan(&exists))
 	assert.True(t, exists)
 }
+
+func TestHotAnchors_QuietSinceRoundTrip(t *testing.T) {
+	s := newHotTestStorage(t)
+	ctx := t.Context()
+
+	now := time.Now().UTC()
+	quiet := now.Add(-10 * 24 * time.Hour)
+
+	rows := []hotobjects.AnchorRow{
+		{Instance: "h1", Kind: hotobjects.KindTable, Schema: "public", Object: "archive",
+			CapturedAt: now, SizeBytes: 1000, QuietSince: &quiet,
+			Counters: hotobjects.Counters{"n_tup_ins": 5}},
+		{Instance: "h1", Kind: hotobjects.KindIndex, Schema: "public", Object: "archive_pkey", TableName: "archive",
+			CapturedAt: now, SizeBytes: 500,
+			Counters: hotobjects.Counters{"idx_tup_read": 7}},
+	}
+
+	require.NoError(t, s.UpsertHotAnchors(ctx, "c1", "h1", "db", now, rows))
+
+	got, err := s.GetHotAnchors(ctx, "c1", "h1", "db")
+	require.NoError(t, err)
+
+	table := got[hotobjects.Key(hotobjects.KindTable, "public", "archive")]
+	require.NotNil(t, table.QuietSince)
+	assert.Equal(t, quiet.UnixMicro(), table.QuietSince.UnixMicro())
+	assert.Nil(t, got[hotobjects.Key(hotobjects.KindIndex, "public", "archive_pkey")].QuietSince)
+
+	rows[0].QuietSince = nil
+	require.NoError(t, s.UpsertHotAnchors(ctx, "c1", "h1", "db", now.Add(time.Hour), rows[:1]))
+
+	got, err = s.GetHotAnchors(ctx, "c1", "h1", "db")
+	require.NoError(t, err)
+	assert.Nil(t, got[hotobjects.Key(hotobjects.KindTable, "public", "archive")].QuietSince, "upsert overwrites with NULL")
+}
+
+func TestGetLatestHotWindows(t *testing.T) {
+	s := newHotTestStorage(t)
+	ctx := t.Context()
+
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	older, newer := now.Add(-2*time.Hour), now.Add(-time.Hour)
+	observed := now.Add(-30 * 24 * time.Hour)
+
+	first := testSnapshot(older)
+	first.Windows = map[string]hotobjects.HostWindow{
+		"h1": {From: older, To: older, Complete: true, ObservedSince: &observed},
+		"h2": {From: older, To: older, Complete: true, ObservedSince: &observed},
+	}
+	_, err := s.InsertHotSnapshot(ctx, first)
+	require.NoError(t, err)
+
+	// h2 was not sampled in the newer snapshot.
+	second := testSnapshot(newer)
+	second.Windows = map[string]hotobjects.HostWindow{
+		"h1": {From: older, To: newer, Complete: true, ObservedSince: &newer},
+	}
+	_, err = s.InsertHotSnapshot(ctx, second)
+	require.NoError(t, err)
+
+	got, err := s.GetLatestHotWindows(ctx, "c1", "db", []string{"h1", "h2", "h3"}, now.Add(-24*time.Hour))
+	require.NoError(t, err)
+	require.Len(t, got, 2, "h3 has no window")
+
+	require.NotNil(t, got["h1"].ObservedSince)
+	assert.Equal(t, newer.UnixMicro(), got["h1"].ObservedSince.UnixMicro(), "newest snapshot with the host wins")
+
+	require.NotNil(t, got["h2"].ObservedSince)
+	assert.Equal(t, observed.UnixMicro(), got["h2"].ObservedSince.UnixMicro(), "a skipped host falls back to its last window")
+
+	got, err = s.GetLatestHotWindows(ctx, "c1", "db", []string{"h2"}, now.Add(-90*time.Minute))
+	require.NoError(t, err)
+	assert.Empty(t, got, "windows older than since are ignored")
+}
+
+func newColdTestStorage(t *testing.T) *Storage {
+	t.Helper()
+
+	s := newHotTestStorage(t)
+
+	for _, ddl := range []string{
+		createAutosnapshotConfigGlobalSQL, seedAutosnapshotConfigGlobalSQL,
+		addAutosnapshotHotConfigSQL, addAutosnapshotHotColdWindowSQL,
+	} {
+		_, err := s.pool.Exec(t.Context(), ddl)
+		require.NoError(t, err, "config DDL")
+	}
+
+	return s
+}
+
+func coldSnapshot(database string, capturedAt time.Time, windows map[string]hotobjects.HostWindow) hotobjects.Snapshot {
+	snap := testSnapshot(capturedAt)
+	snap.Database = database
+	snap.Windows = windows
+	snap.Top = nil
+
+	return snap
+}
+
+func TestGetColdTables(t *testing.T) {
+	s := newColdTestStorage(t)
+	ctx := t.Context()
+
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	day := 24 * time.Hour
+	captured := now.Add(-time.Hour)
+	longAgo, recent := now.Add(-30*day), now.Add(-day)
+
+	for _, snap := range []hotobjects.Snapshot{
+		coldSnapshot("app", captured, map[string]hotobjects.HostWindow{
+			"h1": {Complete: true, ObservedSince: &longAgo},
+			"h2": {Complete: true, ObservedSince: &longAgo},
+		}),
+		coldSnapshot("fresh", captured, map[string]hotobjects.HostWindow{"h1": {Complete: true, ObservedSince: &recent}}),
+		coldSnapshot("replica", captured, map[string]hotobjects.HostWindow{"h1": {Complete: true}}),
+		coldSnapshot("old", now.Add(-3*day), map[string]hotobjects.HostWindow{"h1": {Complete: true, ObservedSince: &longAgo}}),
+		coldSnapshot("elsewhere", captured, map[string]hotobjects.HostWindow{"h2": {Complete: true, ObservedSince: &longAgo}}),
+	} {
+		_, err := s.InsertHotSnapshot(ctx, snap)
+		require.NoError(t, err)
+	}
+
+	quietLong, quietShort := now.Add(-10*day), now.Add(-2*day)
+	table := func(name string, quiet *time.Time) hotobjects.AnchorRow {
+		return hotobjects.AnchorRow{Kind: hotobjects.KindTable, Schema: "public", Object: name, //nolint:exhaustruct
+			CapturedAt: captured, QuietSince: quiet,
+			Counters: hotobjects.Counters{"n_tup_ins": 5, "n_tup_upd": 2, "n_tup_del": 1, "seq_tup_read": 100}}
+	}
+
+	require.NoError(t, s.UpsertHotAnchors(ctx, "c1", "h1", "app", captured, []hotobjects.AnchorRow{
+		table("archive", &quietLong),
+		table("orders", &quietShort),
+		table("legacy", nil),
+		{Kind: hotobjects.KindIndex, Schema: "public", Object: "archive_pkey", TableName: "archive", //nolint:exhaustruct
+			CapturedAt: captured, QuietSince: &quietLong, Counters: hotobjects.Counters{"idx_tup_read": 1}},
+	}))
+	require.NoError(t, s.UpsertHotAnchors(ctx, "c1", "h2", "app", captured, []hotobjects.AnchorRow{table("h2_only", &quietLong)}))
+	require.NoError(t, s.UpsertHotAnchors(ctx, "c1", "h1", "fresh", captured, []hotobjects.AnchorRow{table("archive", &quietLong)}))
+
+	got, err := s.GetColdTables(ctx, "c1", "h1", now.Add(-hotobjects.ColdMaxAge))
+	require.NoError(t, err)
+	assert.Empty(t, got.Status)
+	assert.Equal(t, 7, got.WindowDays)
+
+	app := got.For("app")
+	assert.Equal(t, hotobjects.ColdAvailable, app.Status)
+	require.Len(t, app.Tables, 1, "only the table quiet for the whole window")
+	assert.Equal(t, "archive", app.Tables[0].Table)
+	assert.EqualValues(t, 8, app.Tables[0].Writes)
+	assert.Equal(t, quietLong.UnixMicro(), app.Tables[0].QuietSince.UnixMicro())
+
+	fresh := got.For("fresh")
+	assert.Equal(t, hotobjects.ColdWarmingUp, fresh.Status)
+	assert.Empty(t, fresh.Tables)
+	require.NotNil(t, fresh.ObservedSince)
+	assert.Equal(t, recent.UnixMicro(), fresh.ObservedSince.UnixMicro())
+
+	assert.Equal(t, hotobjects.ColdStandby, got.For("replica").Status)
+	assert.Equal(t, hotobjects.ColdStale, got.For("old").Status)
+	assert.Equal(t, hotobjects.ColdStale, got.For("elsewhere").Status, "another instance's snapshot")
+
+	_, err = s.pool.Exec(ctx, `UPDATE autosnapshot_config_global SET hot_enabled = false`)
+	require.NoError(t, err)
+
+	got, err = s.GetColdTables(ctx, "c1", "h1", now.Add(-hotobjects.ColdMaxAge))
+	require.NoError(t, err)
+	assert.Equal(t, hotobjects.ColdDisabled, got.For("app").Status)
+}

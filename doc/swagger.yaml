@@ -7660,6 +7660,9 @@ components:
         related_route:
           type: string
           nullable: true
+        advisory:
+          description: The rule reports a finding without affecting the score.
+          type: boolean
 
     HealthScoreRecommendations:
       type: object

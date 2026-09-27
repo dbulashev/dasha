@@ -837,6 +837,8 @@ type HealthScoreLowHotUpdateTable struct {
 
 // HealthScoreRecommendation defines model for HealthScoreRecommendation.
 type HealthScoreRecommendation struct {
+	// Advisory The rule reports a finding without affecting the score.
+	Advisory *bool                   `json:"advisory,omitempty"`
 	Category string                  `json:"category"`
 	Context  *map[string]interface{} `json:"context"`
 

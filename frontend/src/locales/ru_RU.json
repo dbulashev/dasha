@@ -1421,7 +1421,8 @@
         "page": {
             "title": "Health Score",
             "menuItem": "Health Score",
-            "noRecommendations": "Всё хорошо — критичных замечаний нет."
+            "noRecommendations": "Всё хорошо — критичных замечаний нет.",
+            "advisory": "не влияет на балл"
         },
         "about": {
             "toggle": "Как устроен health-score",
@@ -1598,6 +1599,9 @@
             "saveBtn": "Сохранить",
             "resetBtn": "Сбросить к дефолтам",
             "updatedAt": "Обновлено: {ts}"
+        },
+        "hot": {
+            "more": "и ещё {n}"
         },
         "inline": {
             "title": "Детализация",

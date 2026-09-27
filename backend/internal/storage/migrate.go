@@ -203,6 +203,7 @@ CREATE TABLE IF NOT EXISTS hot_anchor (
     size_bytes   bigint NOT NULL,
     counters     jsonb NOT NULL,
     part_sig     text NOT NULL DEFAULT '',
+    quiet_since  timestamptz,
     CONSTRAINT hot_anchor_pkey PRIMARY KEY (cluster_name, instance, database, kind, schema_name, object_name)
 ) WITH (fillfactor = 70)`
 
@@ -210,6 +211,9 @@ CREATE TABLE IF NOT EXISTS hot_anchor (
 	// a change invalidates the interval. Non-indexed → stays HOT-eligible.
 	addHotAnchorPartSigSQL = `
 ALTER TABLE hot_anchor ADD COLUMN IF NOT EXISTS part_sig text NOT NULL DEFAULT ''`
+
+	addHotAnchorQuietSinceSQL = `
+ALTER TABLE hot_anchor ADD COLUMN IF NOT EXISTS quiet_since timestamptz`
 
 	createHotSnapshotSQL = `
 CREATE TABLE IF NOT EXISTS hot_snapshot (
@@ -258,6 +262,10 @@ ALTER TABLE autosnapshot_config_global
     ADD COLUMN IF NOT EXISTS hot_schedule       text    NOT NULL DEFAULT '0 3 * * *',
     ADD COLUMN IF NOT EXISTS hot_top_n          int     NOT NULL DEFAULT 100,
     ADD COLUMN IF NOT EXISTS hot_retention_days int     NOT NULL DEFAULT 180`
+
+	addAutosnapshotHotColdWindowSQL = `
+ALTER TABLE autosnapshot_config_global
+    ADD COLUMN IF NOT EXISTS hot_cold_window_days int NOT NULL DEFAULT 7`
 
 	// Cleans up the pre-release hot_interval column (replaced by hot_schedule
 	// before the feature ever shipped).
@@ -405,12 +413,14 @@ func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
 		createUsersSQL,
 		createHotAnchorSQL,
 		addHotAnchorPartSigSQL,
+		addHotAnchorQuietSinceSQL,
 		createHotSnapshotSQL,
 		createHotSnapshotIdxSQL,
 		createHotTopSQL,
 		createHotTopObjectIdxSQL,
 		addAutosnapshotHotConfigSQL,
 		dropAutosnapshotHotIntervalSQL,
+		addAutosnapshotHotColdWindowSQL,
 		addSnapshotDatabasesSQL,
 		createIOSnapshotSQL,
 		addIOSnapshotWALTimingSQL,

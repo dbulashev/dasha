@@ -49,6 +49,7 @@ type Scorer struct {
 	repo    repository.Repository
 	metrics MetricsSource
 	weights WeightsStore
+	cold    *coldCache
 	cfg     *config.Config
 
 	mu      sync.Mutex
@@ -61,6 +62,7 @@ func NewScorer(cfg *config.Config, repo repository.Repository, st *storage.Stora
 	s := newScorer(cfg, repo, ms)
 	if st != nil {
 		s.weights = st
+		s.cold = newColdCache(st)
 	}
 
 	return s

@@ -56,6 +56,9 @@ type AnchorRow struct {
 	// added/dropped/repartitioned and the summed counters are not comparable.
 	PartSig  string
 	Counters Counters
+	// QuietSince is when snapshots began confirming no writes on this host;
+	// nil for indexes and on a standby.
+	QuietSince *time.Time
 }
 
 // HostWindow is one host's delta window within a snapshot.
@@ -66,6 +69,8 @@ type HostWindow struct {
 	// StatsReset is the host's pg_stat_database.stats_reset at capture time —
 	// the epoch marker: a change between snapshots invalidates the interval.
 	StatsReset *time.Time `json:"stats_reset,omitempty"`
+	// ObservedSince is when this host's unbroken primary observation began; nil on a standby.
+	ObservedSince *time.Time `json:"observed_since,omitempty"`
 }
 
 // Histogram describes the tail (objects outside the top) of one kind within

@@ -268,3 +268,105 @@ func TestRankKey_IndexClasses(t *testing.T) {
 	assert.EqualValues(t, 3, RankKey(KindIndex, ClassIO, c))
 	assert.Zero(t, RankKey(KindIndex, ClassWrites, c), "indexes have no writes class")
 }
+
+func quietAnchor(r AnchorRow, since time.Time) AnchorRow {
+	r.QuietSince = &since
+
+	return r
+}
+
+func quietOf(t *testing.T, rows []AnchorRow, object string) *time.Time {
+	t.Helper()
+
+	for _, r := range rows {
+		if r.Object == object {
+			return r.QuietSince
+		}
+	}
+
+	t.Fatalf("object %q not in rows", object)
+
+	return nil
+}
+
+func TestAdvanceQuiet(t *testing.T) {
+	reset := ts(0)
+	since := ts(1)
+
+	anchors := anchorsOf(ts(10), &reset,
+		quietAnchor(tableRow("public", "idle", 1, Counters{"n_tup_ins": 5, "seq_tup_read": 1}), since),
+		quietAnchor(tableRow("public", "written", 1, Counters{"n_tup_upd": 5}), since),
+		quietAnchor(tableRow("public", "recreated", 1, Counters{"n_tup_ins": 50}), since),
+		quietAnchor(sigRow(tableRow("public", "repart", 1, Counters{"n_tup_ins": 5}), "a"), since),
+		tableRow("public", "legacy", 1, Counters{"n_tup_ins": 5}),
+	)
+
+	sample := HostSample{Instance: "h1", CapturedAt: ts(20), StatsReset: &reset, Rows: []AnchorRow{
+		tableRow("public", "idle", 1, Counters{"n_tup_ins": 5, "seq_tup_read": 90}),
+		tableRow("public", "written", 1, Counters{"n_tup_upd": 6}),
+		tableRow("public", "recreated", 1, Counters{"n_tup_ins": 3}),
+		sigRow(tableRow("public", "repart", 1, Counters{"n_tup_ins": 5}), "b"),
+		tableRow("public", "legacy", 1, Counters{"n_tup_ins": 5}),
+		tableRow("public", "fresh", 1, Counters{"n_tup_ins": 0}),
+		{Kind: KindIndex, Schema: "public", Object: "idle_pkey", Counters: Counters{}}, //nolint:exhaustruct
+	}}
+
+	rows := AdvanceQuiet(BuildInput{Sample: sample, Anchors: anchors}, ts(20)) //nolint:exhaustruct
+
+	assert.Equal(t, since, *quietOf(t, rows, "idle"), "reads do not break quiet")
+
+	for _, obj := range []string{"written", "recreated", "repart", "legacy", "fresh"} {
+		assert.Equal(t, ts(20), *quietOf(t, rows, obj), obj)
+	}
+
+	assert.Nil(t, quietOf(t, rows, "idle_pkey"), "indexes carry no quiet_since")
+}
+
+func TestAdvanceQuiet_EpochBreakAndStandby(t *testing.T) {
+	oldReset, newReset := ts(0), ts(5)
+
+	anchors := anchorsOf(ts(10), &oldReset,
+		quietAnchor(tableRow("public", "idle", 1, Counters{"n_tup_ins": 5}), ts(1)),
+	)
+	rows := []AnchorRow{tableRow("public", "idle", 1, Counters{"n_tup_ins": 5})}
+
+	broken := HostSample{Instance: "h1", CapturedAt: ts(20), StatsReset: &newReset, Rows: rows}
+	got := AdvanceQuiet(BuildInput{Sample: broken, Anchors: anchors}, ts(20)) //nolint:exhaustruct
+	assert.Equal(t, ts(20), *quietOf(t, got, "idle"), "stats reset restarts the count")
+
+	standby := HostSample{Instance: "h1", CapturedAt: ts(20), StatsReset: &oldReset, InRecovery: true, Rows: rows}
+	got = AdvanceQuiet(BuildInput{Sample: standby, Anchors: anchors}, ts(20)) //nolint:exhaustruct
+	assert.Nil(t, quietOf(t, got, "idle"), "a standby stores no quiet_since")
+}
+
+func TestBuildSnapshot_ObservedSince(t *testing.T) {
+	reset := ts(0)
+	anchors := anchorsOf(ts(10), &reset, tableRow("public", "orders", 1, Counters{"n_tup_ins": 1}))
+	rows := []AnchorRow{tableRow("public", "orders", 1, Counters{"n_tup_ins": 2})}
+	prev := &HostWindow{ObservedSince: ptr(ts(2))} //nolint:exhaustruct
+
+	window := func(in BuildInput) HostWindow {
+		return BuildSnapshot("c1", "db", ts(20), []BuildInput{in}, nil, 10).Windows["h1"]
+	}
+
+	primary := HostSample{Instance: "h1", CapturedAt: ts(20), StatsReset: &reset, Rows: rows}
+
+	got := window(BuildInput{Sample: primary, Anchors: anchors, PrevWindow: prev})
+	assert.Equal(t, ts(2), *got.ObservedSince, "complete window carries the start")
+
+	got = window(BuildInput{Sample: primary, Anchors: nil, PrevWindow: prev})
+	assert.Equal(t, ts(20), *got.ObservedSince, "incomplete window restarts")
+
+	got = window(BuildInput{Sample: primary, Anchors: anchors, PrevWindow: &HostWindow{}}) //nolint:exhaustruct
+	assert.Equal(t, ts(20), *got.ObservedSince, "promoted standby restarts")
+
+	got = window(BuildInput{Sample: primary, Anchors: anchors, PrevWindow: nil})
+	assert.Equal(t, ts(20), *got.ObservedSince, "no previous window restarts")
+
+	standby := primary
+	standby.InRecovery = true
+	got = window(BuildInput{Sample: standby, Anchors: anchors, PrevWindow: prev})
+	assert.Nil(t, got.ObservedSince)
+}
+
+func ptr[T any](v T) *T { return &v }

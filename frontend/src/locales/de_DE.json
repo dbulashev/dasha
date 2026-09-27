@@ -1383,7 +1383,8 @@
     "page": {
       "title": "Health Score",
       "menuItem": "Health Score",
-      "noRecommendations": "Alles in Ordnung — keine kritischen Befunde."
+      "noRecommendations": "Alles in Ordnung — keine kritischen Befunde.",
+      "advisory": "beeinflusst die Bewertung nicht"
     },
     "about": {
       "toggle": "Wie der Health Score funktioniert",
@@ -1560,6 +1561,9 @@
       "saveBtn": "Speichern",
       "resetBtn": "Auf Standardwerte zurücksetzen",
       "updatedAt": "Aktualisiert: {ts}"
+    },
+    "hot": {
+      "more": "und {n} weitere"
     },
     "inline": {
       "title": "Detailansicht",
