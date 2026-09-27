@@ -117,6 +117,11 @@ See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
 ## Third-party components
 
+Many of the index, table, maintenance, connection, replication and running/blocked query checks are
+derived from [pghero](https://github.com/ankane/pghero) (MIT, © 2014-2026 Andrew Kane, 2008-2014 Heroku).
+Licence text: [backend/internal/query/LICENSE-pghero](backend/internal/query/LICENSE-pghero);
+per-template attribution: [backend/internal/query/README.md](backend/internal/query/README.md).
+
 The SQL behind **Schema Checks** is derived from [db_verifier](https://github.com/sdblist/db_verifier)
 (MIT, © 2024 Nikonov — licence text in the project's `LICENSE` file), a set of structural checks for
 PostgreSQL. Per-template attribution: [backend/internal/query/README.md](backend/internal/query/README.md).
@@ -126,9 +131,13 @@ The **lock tree** query comes from [postgres_dba](https://github.com/NikolayS/po
 statement without psql version branches. Licence text:
 [backend/internal/query/LICENSE-postgres_dba](backend/internal/query/LICENSE-postgres_dba).
 
-Index bloat estimation descends from [pgsql-bloat-estimation](https://github.com/ioguix/pgsql-bloat-estimation)
+Index bloat estimation, taken from pghero, descends from [pgsql-bloat-estimation](https://github.com/ioguix/pgsql-bloat-estimation)
 (BSD-style — the PostgreSQL licence, © 2015-2019 Jehan-Guillaume (ioguix) de Rorthais; licence text in the
 project's `LICENSE` file).
+
+Table bloat estimation comes from [pgx_scripts](https://github.com/pgexperts/pgx_scripts)
+(BSD 3-Clause, © 2014 PostgreSQL Experts, Inc.) — `bloat/table_bloat_check.sql`. Licence text:
+[backend/internal/query/LICENSE-pgx_scripts](backend/internal/query/LICENSE-pgx_scripts).
 
 ## License
 

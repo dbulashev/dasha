@@ -118,6 +118,12 @@ docker compose up -d
 
 ## Сторонние компоненты
 
+Многие проверки индексов, таблиц, обслуживания, соединений, репликации, а также выполняющихся и
+заблокированных запросов основаны на SQL из [pghero](https://github.com/ankane/pghero)
+(MIT, © 2014-2026 Andrew Kane, 2008-2014 Heroku). Текст лицензии:
+[backend/internal/query/LICENSE-pghero](backend/internal/query/LICENSE-pghero); атрибуция по шаблонам:
+[backend/internal/query/README.md](backend/internal/query/README.md).
+
 SQL для раздела **Проверки схемы** заимствован из проекта [db_verifier](https://github.com/sdblist/db_verifier)
 (MIT, © 2024 Nikonov — текст лицензии в файле `LICENSE` проекта) — набора проверок структуры БД для
 PostgreSQL. Атрибуция по шаблонам: [backend/internal/query/README.md](backend/internal/query/README.md).
@@ -127,9 +133,13 @@ PostgreSQL. Атрибуция по шаблонам: [backend/internal/query/RE
 без psql-ветвлений по версии. Текст лицензии:
 [backend/internal/query/LICENSE-postgres_dba](backend/internal/query/LICENSE-postgres_dba).
 
-Оценка bloat индексов происходит из [pgsql-bloat-estimation](https://github.com/ioguix/pgsql-bloat-estimation)
+Оценка bloat индексов взята из pghero и восходит к [pgsql-bloat-estimation](https://github.com/ioguix/pgsql-bloat-estimation)
 (BSD-подобная лицензия PostgreSQL, © 2015-2019 Jehan-Guillaume (ioguix) de Rorthais; текст лицензии —
 в файле `LICENSE` проекта).
+
+Оценка bloat таблиц взята из [pgx_scripts](https://github.com/pgexperts/pgx_scripts)
+(BSD 3-Clause, © 2014 PostgreSQL Experts, Inc.), файл `bloat/table_bloat_check.sql`. Текст лицензии:
+[backend/internal/query/LICENSE-pgx_scripts](backend/internal/query/LICENSE-pgx_scripts).
 
 ## Лицензия
 
