@@ -11,6 +11,7 @@
 
 ### UX
 - The **Home** menu item is renamed to **Summary**.
+- **After an expired OIDC session and a new sign-in, the same page opens** with the same cluster, host, database and filters.
 
 ### Performance
 - **Health Score loads faster** in metrics mode and on instances with many databases.
