@@ -31,7 +31,7 @@ func (s *Storage) GetAutosnapshotConfig(ctx context.Context) (autosnapshot.Confi
 		       retention_bytes, retention_min_days, min_baseline_active,
 		       capture_locks, lock_probe_count, lock_probe_interval,
 		       reset_query_stats,
-		       hot_enabled, hot_schedule, hot_top_n, hot_retention_days,
+		       hot_enabled, hot_schedule, hot_top_n, hot_retention_days, hot_cold_window_days,
 		       io_enabled, io_schedule, io_retention_days,
 		       defaults, updated_at, updated_by
 		FROM autosnapshot_config_global WHERE id = 1`,
@@ -40,7 +40,7 @@ func (s *Storage) GetAutosnapshotConfig(ctx context.Context) (autosnapshot.Confi
 		&cfg.RetentionBytes, &cfg.RetentionMinDays, &cfg.MinBaselineActive,
 		&cfg.CaptureLocks, &cfg.LockProbeCount, &lockInterval,
 		&cfg.ResetQueryStats,
-		&cfg.HotEnabled, &cfg.HotSchedule, &cfg.HotTopN, &cfg.HotRetentionDays,
+		&cfg.HotEnabled, &cfg.HotSchedule, &cfg.HotTopN, &cfg.HotRetentionDays, &cfg.HotColdWindowDays,
 		&cfg.IOEnabled, &cfg.IOSchedule, &cfg.IORetentionDays,
 		&defaultsJSON, &cfg.UpdatedAt, &cfg.UpdatedBy,
 	)
@@ -135,7 +135,8 @@ func (s *Storage) SetAutosnapshotConfig(ctx context.Context, cfg autosnapshot.Co
 		    reset_query_stats = $10,
 		    hot_enabled = $11, hot_schedule = $12, hot_top_n = $13, hot_retention_days = $14,
 		    io_enabled = $15, io_schedule = $16, io_retention_days = $17,
-		    defaults = $18::jsonb, updated_at = now(), updated_by = $19
+		    defaults = $18::jsonb, updated_at = now(), updated_by = $19,
+		    hot_cold_window_days = $20
 		WHERE id = 1`,
 		cfg.Enabled, cfg.PollInterval, cfg.MaxSnapshotFrequency,
 		cfg.RetentionBytes, cfg.RetentionMinDays, cfg.MinBaselineActive,
@@ -144,6 +145,7 @@ func (s *Storage) SetAutosnapshotConfig(ctx context.Context, cfg autosnapshot.Co
 		cfg.HotEnabled, cfg.HotSchedule, cfg.HotTopN, cfg.HotRetentionDays,
 		cfg.IOEnabled, cfg.IOSchedule, cfg.IORetentionDays,
 		jsonbArg(data), nullStringPtr(updatedBy),
+		cfg.HotColdWindowDays,
 	)
 	if err != nil {
 		return fmt.Errorf("storage: set autosnapshot config: %w", err)

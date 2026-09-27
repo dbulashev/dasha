@@ -139,6 +139,33 @@ func TestHealthScore_ColdTablesExcluded(t *testing.T) {
 		assert.Contains(t, []int{1, 2, 3}, r.Idx)
 	}
 
+	vNum, err := p.getServerVersionNum(ctx, pool)
+	require.NoError(t, err)
+
+	byActivity := func(activity string) map[string]*int {
+		rows, err := p.getMaintenanceInfo(ctx, vNum, pool, nil, activity, cold, 100, 0)
+		require.NoError(t, err)
+
+		out := make(map[string]*int, len(rows))
+		for _, r := range rows {
+			out[r.Table] = r.ColdIdx
+		}
+
+		return out
+	}
+
+	coldRows := byActivity("cold")
+	assert.Len(t, coldRows, 4, "leaves of every cold target")
+	assert.Equal(t, 1, *coldRows["cold_plain"])
+	assert.Equal(t, 2, *coldRows["cold_hash_p0"])
+	assert.Equal(t, 3, *coldRows["cold_range_2025"])
+
+	activeRows := byActivity("active")
+	assert.NotContains(t, activeRows, "cold_plain")
+	assert.Contains(t, activeRows, "cold_hash", "partitioned parents carry no rows of their own")
+
+	assert.Len(t, byActivity("all"), len(coldRows)+len(activeRows))
+
 	_, err = pool.Exec(ctx, `INSERT INTO cold_plain VALUES (0)`)
 	require.NoError(t, err)
 

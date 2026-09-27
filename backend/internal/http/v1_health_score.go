@@ -37,6 +37,7 @@ func (s *Handlers) GetHealthScore(
 
 	src := string(score.Source)
 	metricsDegraded := score.MetricsDegraded
+	cold := coldStatusToAPI(score.Cold, score.ColdWindowDays)
 
 	return serverhttp.GetHealthScore200JSONResponse{
 		Score:           result.Score,
@@ -45,6 +46,7 @@ func (s *Handlers) GetHealthScore(
 		InRecovery:      result.InRecovery,
 		Source:          &src,
 		MetricsDegraded: &metricsDegraded,
+		ColdTables:      &cold,
 	}, nil
 }
 

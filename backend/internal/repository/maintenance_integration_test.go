@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/testinfra"
 )
 
@@ -21,7 +22,7 @@ func TestGetMaintenanceInfo(t *testing.T) {
 	vNum, err := p.getServerVersionNum(ctx, pool)
 	require.NoError(t, err)
 
-	result, err := p.getMaintenanceInfo(ctx, vNum, pool, nil, 30, 0)
+	result, err := p.getMaintenanceInfo(ctx, vNum, pool, nil, "all", dto.ColdArgs{}, 30, 0)
 	require.NoError(t, err)
 	assert.NotEmpty(t, result, "should return maintenance info for fixture tables")
 

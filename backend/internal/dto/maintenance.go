@@ -15,6 +15,7 @@ type MaintenanceInfo struct {
 	LastAutoanalyze *time.Time
 	DeadRows        int64
 	LiveRows        int64
+	ColdIdx         *int // 1-based position in the ColdArgs; nil unless cold
 }
 
 type MaintenanceTransactionIdDanger struct {

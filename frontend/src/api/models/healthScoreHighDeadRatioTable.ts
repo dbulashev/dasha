@@ -11,4 +11,9 @@ export interface HealthScoreHighDeadRatioTable {
   LiveTuples: number
   DeadTuples: number
   DeadRatio: number
+  /**
+   * Whole days without writes; null unless the table is cold.
+   * @nullable
+   */
+  NoWritesDays?: number | null
 }

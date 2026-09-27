@@ -10,6 +10,7 @@ import (
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/health"
+	"github.com/dbulashev/dasha/internal/hotobjects"
 	"github.com/dbulashev/dasha/internal/metrics"
 	"github.com/dbulashev/dasha/internal/repository"
 	"github.com/dbulashev/dasha/internal/storage"
@@ -33,6 +34,9 @@ type InstanceScore struct {
 	Result          health.Result
 	Source          Source
 	MetricsDegraded bool
+	// Cold is the cold-table set of the database the snapshot was read from.
+	Cold           hotobjects.ColdSet
+	ColdWindowDays int
 }
 
 // MetricsSource is the part of *metrics.Service the scorer reads.
@@ -104,6 +108,8 @@ func (s *Scorer) ScoreWith(ctx context.Context, t metrics.TargetRef, pre *metric
 		// Resolved but no series matched any selector: the score is built from
 		// absent signals and looks green.
 		MetricsDegraded: src == SourceMetrics && matched == 0,
+		Cold:            in.cold.For(raw.Database),
+		ColdWindowDays:  in.cold.WindowDays,
 	}, nil
 }
 

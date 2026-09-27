@@ -8,6 +8,7 @@ import (
 	"github.com/dbulashev/dasha/gen/serverhttp"
 	"github.com/dbulashev/dasha/internal/health"
 	"github.com/dbulashev/dasha/internal/healthscore"
+	"github.com/dbulashev/dasha/internal/hotobjects"
 	"github.com/dbulashev/dasha/internal/metrics"
 	"github.com/dbulashev/dasha/internal/pkg/sanitize"
 	"github.com/dbulashev/dasha/internal/repository"
@@ -74,11 +75,18 @@ func (s *Handlers) GetHealthScoreDatabases(
 			})
 		}
 
+		var coldCount *int
+		if set := cold.For(ds.Database); set.Status == hotobjects.ColdAvailable {
+			n := len(set.Tables)
+			coldCount = &n
+		}
+
 		databases = append(databases, serverhttp.HealthScoreDatabase{
-			Database:   ds.Database,
-			SizeBytes:  ds.SizeBytes,
-			Score:      ds.Score,
-			Categories: cats,
+			Database:        ds.Database,
+			SizeBytes:       ds.SizeBytes,
+			Score:           ds.Score,
+			Categories:      cats,
+			ColdTablesCount: coldCount,
 		})
 	}
 
@@ -189,7 +197,12 @@ func (s *Handlers) GetHealthScoreHighDeadRatioTables(
 ) (serverhttp.GetHealthScoreHighDeadRatioTablesResponseObject, error) {
 	limit, offset := paginationDefaults(req.Params.Limit, req.Params.Offset, defaultHealthScoreDetailLimit)
 
-	rows, err := s.repo.GetHealthScoreHighDeadRatioTables(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, limit, offset)
+	target := metrics.TargetRef{Cluster: req.Params.ClusterName, Instance: req.Params.Instance}
+	coldSet := s.scorer.ColdTables(ctx, target).For(req.Params.Database)
+
+	rows, err := s.repo.GetHealthScoreHighDeadRatioTables(
+		ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database,
+		healthscore.ColdArgsOf(coldSet), limit, offset)
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.GetHealthScoreHighDeadRatioTables404Response{}, nil
 	}
@@ -201,11 +214,12 @@ func (s *Handlers) GetHealthScoreHighDeadRatioTables(
 	out := make(serverhttp.GetHealthScoreHighDeadRatioTables200JSONResponse, 0, len(rows))
 	for _, r := range rows {
 		out = append(out, serverhttp.HealthScoreHighDeadRatioTable{
-			Schema:     r.Schema,
-			Table:      r.Table,
-			LiveTuples: r.LiveTuples,
-			DeadTuples: r.DeadTuples,
-			DeadRatio:  r.DeadRatio,
+			Schema:       r.Schema,
+			Table:        r.Table,
+			LiveTuples:   r.LiveTuples,
+			DeadTuples:   r.DeadTuples,
+			DeadRatio:    r.DeadRatio,
+			NoWritesDays: noWritesDays(coldSet, r.ColdIdx),
 		})
 	}
 

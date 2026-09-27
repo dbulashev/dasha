@@ -116,6 +116,7 @@ func (p *PgxPool) GetHealthScoreLowHotUpdateTables(
 func (p *PgxPool) GetHealthScoreHighDeadRatioTables(
 	ctx context.Context,
 	clusterName, instanceName, databaseName string,
+	cold dto.ColdArgs,
 	limit, offset int,
 ) ([]dto.HealthScoreHighDeadRatioTable, error) {
 	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
@@ -131,12 +132,12 @@ func (p *PgxPool) GetHealthScoreHighDeadRatioTables(
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	qStr, err := query.Get(vNum, enums.QueryCommonHealthScoreHighDeadRatioTables, nil)
+	qStr, err := query.Get(vNum, enums.QueryCommonHealthScoreHighDeadRatioTables, healthScoreTemplateData{ColdCTE: query.ColdCTE(1)})
 	if err != nil {
 		return nil, fmt.Errorf("query.Get | %w", err)
 	}
 
-	rows, err := pool.Query(ctx, qStr, limit, offset)
+	rows, err := pool.Query(ctx, qStr, append(coldQueryArgs(cold), limit, offset)...)
 	if err != nil {
 		return nil, fmt.Errorf("pool.Query | %w", err)
 	}
@@ -146,7 +147,7 @@ func (p *PgxPool) GetHealthScoreHighDeadRatioTables(
 
 	for rows.Next() {
 		var r dto.HealthScoreHighDeadRatioTable
-		if err := rows.Scan(&r.Schema, &r.Table, &r.LiveTuples, &r.DeadTuples, &r.DeadRatio); err != nil {
+		if err := rows.Scan(&r.Schema, &r.Table, &r.LiveTuples, &r.DeadTuples, &r.DeadRatio, &r.ColdIdx); err != nil {
 			return nil, fmt.Errorf("scan | %w", err)
 		}
 

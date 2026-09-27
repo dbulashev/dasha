@@ -33,6 +33,7 @@ type HealthScoreHighDeadRatioTable struct {
 	LiveTuples int64
 	DeadTuples int64
 	DeadRatio  float64
+	ColdIdx    *int // 1-based position in the ColdArgs; nil unless cold
 }
 
 // HealthScoreHorizonBlockingSession is one row of the horizon-blocking

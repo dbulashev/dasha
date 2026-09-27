@@ -79,13 +79,14 @@ func ColdArgs(sets hotobjects.ColdSets) map[string]dto.ColdArgs {
 			continue
 		}
 
-		out[db] = coldArgsOf(set)
+		out[db] = ColdArgsOf(set)
 	}
 
 	return out
 }
 
-func coldArgsOf(set hotobjects.ColdSet) dto.ColdArgs {
+// ColdArgsOf is the SQL argument set for one database; Idx in results points into set.Tables.
+func ColdArgsOf(set hotobjects.ColdSet) dto.ColdArgs {
 	a := dto.ColdArgs{
 		Schemas: make([]string, len(set.Tables)),
 		Tables:  make([]string, len(set.Tables)),
@@ -108,7 +109,7 @@ func (s *Scorer) coldFacts(ctx context.Context, t metrics.TargetRef, database st
 
 	set := sets.For(database)
 
-	rows, total, err := s.repo.GetHealthScoreColdTables(ctx, t.Cluster, t.Instance, database, coldArgsOf(set), coldListLimit)
+	rows, total, err := s.repo.GetHealthScoreColdTables(ctx, t.Cluster, t.Instance, database, ColdArgsOf(set), coldListLimit)
 	if err != nil {
 		return nil
 	}

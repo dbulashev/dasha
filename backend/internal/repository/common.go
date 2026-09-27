@@ -61,7 +61,7 @@ type Repository interface {
 	GetHealthScoreXidWraparoundDatabases(ctx context.Context, clusterName, instanceName string, limit, offset int) ([]dto.HealthScoreXidWraparoundDatabase, error)
 	GetHealthScoreTablesAutovacuumOff(ctx context.Context, clusterName, instanceName, databaseName string, limit, offset int) ([]dto.HealthScoreTableReloption, error)
 	GetHealthScoreLowHotUpdateTables(ctx context.Context, clusterName, instanceName, databaseName string, limit, offset int) ([]dto.HealthScoreLowHotUpdateTable, error)
-	GetHealthScoreHighDeadRatioTables(ctx context.Context, clusterName, instanceName, databaseName string, limit, offset int) ([]dto.HealthScoreHighDeadRatioTable, error)
+	GetHealthScoreHighDeadRatioTables(ctx context.Context, clusterName, instanceName, databaseName string, cold dto.ColdArgs, limit, offset int) ([]dto.HealthScoreHighDeadRatioTable, error)
 	GetHealthScoreHorizonBlockingSessions(ctx context.Context, clusterName, instanceName string, limit, offset int) ([]dto.HealthScoreHorizonBlockingSession, error)
 	GetInvalidConstraints(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.InvalidConstraint, error)
 	GetDatabaseHealth(ctx context.Context, clusterName, instanceName, databaseName string) (*dto.DatabaseHealth, error)
@@ -108,6 +108,8 @@ type Repository interface {
 		instanceName,
 		databaseName string,
 		tableName *string,
+		activity string,
+		cold dto.ColdArgs,
 		limit,
 		offset int,
 	) ([]dto.MaintenanceInfo, error)

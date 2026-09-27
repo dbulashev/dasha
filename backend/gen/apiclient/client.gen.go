@@ -48,6 +48,17 @@ const (
 	AuthInfoPatMinRoleViewer AuthInfoPatMinRole = "viewer"
 )
 
+// Defines values for ColdTablesStatusStatus.
+const (
+	ColdTablesStatusStatusAvailable ColdTablesStatusStatus = "available"
+	ColdTablesStatusStatusDisabled  ColdTablesStatusStatus = "disabled"
+	ColdTablesStatusStatusError     ColdTablesStatusStatus = "error"
+	ColdTablesStatusStatusNoStorage ColdTablesStatusStatus = "no_storage"
+	ColdTablesStatusStatusStale     ColdTablesStatusStatus = "stale"
+	ColdTablesStatusStatusStandby   ColdTablesStatusStatus = "standby"
+	ColdTablesStatusStatusWarmingUp ColdTablesStatusStatus = "warming_up"
+)
+
 // Defines values for HealthScoreFleetItemSource.
 const (
 	HealthScoreFleetItemSourceMetrics  HealthScoreFleetItemSource = "metrics"
@@ -377,6 +388,13 @@ const (
 	Sum   GetLogsScanGroupsParamsOrder = "sum"
 )
 
+// Defines values for GetMaintenanceInfoParamsActivity.
+const (
+	Active GetMaintenanceInfoParamsActivity = "active"
+	All    GetMaintenanceInfoParamsActivity = "all"
+	Cold   GetMaintenanceInfoParamsActivity = "cold"
+)
+
 // Defines values for GetQueriesRunningParamsQueryFilterMode.
 const (
 	Like    GetQueriesRunningParamsQueryFilterMode = "like"
@@ -385,9 +403,9 @@ const (
 
 // Defines values for GetSchemaLintParamsLevel.
 const (
-	GetSchemaLintParamsLevelError   GetSchemaLintParamsLevel = "error"
-	GetSchemaLintParamsLevelNotice  GetSchemaLintParamsLevel = "notice"
-	GetSchemaLintParamsLevelWarning GetSchemaLintParamsLevel = "warning"
+	Error   GetSchemaLintParamsLevel = "error"
+	Notice  GetSchemaLintParamsLevel = "notice"
+	Warning GetSchemaLintParamsLevel = "warning"
 )
 
 // ActivitySpikeTrigger defines model for ActivitySpikeTrigger.
@@ -487,6 +505,9 @@ type AutoSnapshotConfig struct {
 	CaptureLocks bool                        `json:"CaptureLocks"`
 	Defaults     AutoSnapshotTriggerDefaults `json:"Defaults"`
 	Enabled      bool                        `json:"Enabled"`
+
+	// HotColdWindowDays Days without writes after which a table counts as cold
+	HotColdWindowDays int `json:"HotColdWindowDays"`
 
 	// HotEnabled Capture hot-objects delta snapshots (tables/indexes activity tops)
 	HotEnabled bool `json:"HotEnabled"`
@@ -591,6 +612,22 @@ type ClusterSnapshotSummary struct {
 	Snapshots int `json:"Snapshots"`
 }
 
+// ColdTablesStatus defines model for ColdTablesStatus.
+type ColdTablesStatus struct {
+	// Count Cold tables in the database; present when status is available.
+	Count *int `json:"count,omitempty"`
+
+	// ObservedDays Days of unbroken history on this instance; present when status is warming_up.
+	ObservedDays *int                   `json:"observed_days,omitempty"`
+	Status       ColdTablesStatusStatus `json:"status"`
+
+	// WindowDays Days without writes after which a table counts as cold.
+	WindowDays int `json:"window_days"`
+}
+
+// ColdTablesStatusStatus defines model for ColdTablesStatus.Status.
+type ColdTablesStatusStatus string
+
 // CommonSummary defines model for CommonSummary.
 type CommonSummary struct {
 	Amount          int64  `json:"Amount"`
@@ -681,6 +718,7 @@ type FksPossibleSimilar struct {
 // HealthScore defines model for HealthScore.
 type HealthScore struct {
 	Categories     []HealthScoreCategory `json:"categories"`
+	ColdTables     *ColdTablesStatus     `json:"cold_tables,omitempty"`
 	HasReplication bool                  `json:"has_replication"`
 
 	// InRecovery True when the instance is a standby (pg_is_in_recovery() = true). When true, the maintenance category is dropped from the score and its weight is redistributed across the remaining categories — same handling as the replication category on instances without replicas.
@@ -706,9 +744,12 @@ type HealthScoreCategory struct {
 // HealthScoreDatabase defines model for HealthScoreDatabase.
 type HealthScoreDatabase struct {
 	Categories []HealthScoreCategory `json:"categories"`
-	Database   string                `json:"database"`
-	Score      float64               `json:"score"`
-	SizeBytes  int64                 `json:"size_bytes"`
+
+	// ColdTablesCount Cold tables excluded from the dead-tuple and never-vacuumed checks; absent when the marker is unavailable.
+	ColdTablesCount *int    `json:"cold_tables_count,omitempty"`
+	Database        string  `json:"database"`
+	Score           float64 `json:"score"`
+	SizeBytes       int64   `json:"size_bytes"`
 }
 
 // HealthScoreDatabases defines model for HealthScoreDatabases.
@@ -777,8 +818,11 @@ type HealthScoreHighDeadRatioTable struct {
 	DeadRatio  float64 `json:"DeadRatio"`
 	DeadTuples int64   `json:"DeadTuples"`
 	LiveTuples int64   `json:"LiveTuples"`
-	Schema     string  `json:"Schema"`
-	Table      string  `json:"Table"`
+
+	// NoWritesDays Whole days without writes; null unless the table is cold.
+	NoWritesDays *int   `json:"NoWritesDays"`
+	Schema       string `json:"Schema"`
+	Table        string `json:"Table"`
 }
 
 // HealthScoreHistory defines model for HealthScoreHistory.
@@ -1836,8 +1880,11 @@ type MaintenanceInfo struct {
 	LastAutovacuum  *time.Time `json:"LastAutovacuum"`
 	LastVacuum      *time.Time `json:"LastVacuum"`
 	LiveRows        int64      `json:"LiveRows"`
-	Schema          string     `json:"Schema"`
-	Table           string     `json:"Table"`
+
+	// NoWritesDays Whole days without writes; null unless the table is cold.
+	NoWritesDays *int   `json:"NoWritesDays"`
+	Schema       string `json:"Schema"`
+	Table        string `json:"Table"`
 }
 
 // MaintenanceTransactionIdDanger defines model for MaintenanceTransactionIdDanger.
@@ -3412,6 +3459,13 @@ type GetMaintenanceAutovacuumSummaryParams struct {
 	Database    Database    `form:"database" json:"database"`
 }
 
+// GetMaintenanceColdStatusParams defines parameters for GetMaintenanceColdStatus.
+type GetMaintenanceColdStatusParams struct {
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance    `form:"instance" json:"instance"`
+	Database    Database    `form:"database" json:"database"`
+}
+
 // GetMaintenanceInfoParams defines parameters for GetMaintenanceInfo.
 type GetMaintenanceInfoParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
@@ -3422,7 +3476,13 @@ type GetMaintenanceInfoParams struct {
 
 	// TableName Filter by table name (case-insensitive substring match)
 	TableName *string `form:"table_name,omitempty" json:"table_name,omitempty"`
+
+	// Activity Filter by write activity. "cold" lists tables with no writes for the whole cold window; empty when the cold-table marker is unavailable (see /api/maintenance/cold-status).
+	Activity *GetMaintenanceInfoParamsActivity `form:"activity,omitempty" json:"activity,omitempty"`
 }
+
+// GetMaintenanceInfoParamsActivity defines parameters for GetMaintenanceInfo.
+type GetMaintenanceInfoParamsActivity string
 
 // GetMaintenanceTransactionIdDangerParams defines parameters for GetMaintenanceTransactionIdDanger.
 type GetMaintenanceTransactionIdDangerParams struct {
@@ -4100,6 +4160,9 @@ type ClientInterface interface {
 
 	// GetMaintenanceAutovacuumSummary request
 	GetMaintenanceAutovacuumSummary(ctx context.Context, params *GetMaintenanceAutovacuumSummaryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetMaintenanceColdStatus request
+	GetMaintenanceColdStatus(ctx context.Context, params *GetMaintenanceColdStatusParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetMaintenanceInfo request
 	GetMaintenanceInfo(ctx context.Context, params *GetMaintenanceInfoParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -5166,6 +5229,18 @@ func (c *Client) GetMaintenanceAutovacuumFreezeMaxAge(ctx context.Context, param
 
 func (c *Client) GetMaintenanceAutovacuumSummary(ctx context.Context, params *GetMaintenanceAutovacuumSummaryParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetMaintenanceAutovacuumSummaryRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetMaintenanceColdStatus(ctx context.Context, params *GetMaintenanceColdStatusParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetMaintenanceColdStatusRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -11381,6 +11456,75 @@ func NewGetMaintenanceAutovacuumSummaryRequest(server string, params *GetMainten
 	return req, nil
 }
 
+// NewGetMaintenanceColdStatusRequest generates requests for GetMaintenanceColdStatus
+func NewGetMaintenanceColdStatusRequest(server string, params *GetMaintenanceColdStatusParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/maintenance/cold-status")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, params.ClusterName); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "instance", runtime.ParamLocationQuery, params.Instance); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "database", runtime.ParamLocationQuery, params.Database); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetMaintenanceInfoRequest generates requests for GetMaintenanceInfo
 func NewGetMaintenanceInfoRequest(server string, params *GetMaintenanceInfoParams) (*http.Request, error) {
 	var err error
@@ -11474,6 +11618,22 @@ func NewGetMaintenanceInfoRequest(server string, params *GetMaintenanceInfoParam
 		if params.TableName != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "table_name", runtime.ParamLocationQuery, *params.TableName); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Activity != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "activity", runtime.ParamLocationQuery, *params.Activity); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -15029,6 +15189,9 @@ type ClientWithResponsesInterface interface {
 	// GetMaintenanceAutovacuumSummaryWithResponse request
 	GetMaintenanceAutovacuumSummaryWithResponse(ctx context.Context, params *GetMaintenanceAutovacuumSummaryParams, reqEditors ...RequestEditorFn) (*GetMaintenanceAutovacuumSummaryResponse, error)
 
+	// GetMaintenanceColdStatusWithResponse request
+	GetMaintenanceColdStatusWithResponse(ctx context.Context, params *GetMaintenanceColdStatusParams, reqEditors ...RequestEditorFn) (*GetMaintenanceColdStatusResponse, error)
+
 	// GetMaintenanceInfoWithResponse request
 	GetMaintenanceInfoWithResponse(ctx context.Context, params *GetMaintenanceInfoParams, reqEditors ...RequestEditorFn) (*GetMaintenanceInfoResponse, error)
 
@@ -16809,6 +16972,28 @@ func (r GetMaintenanceAutovacuumSummaryResponse) StatusCode() int {
 	return 0
 }
 
+type GetMaintenanceColdStatusResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ColdTablesStatus
+}
+
+// Status returns HTTPResponse.Status
+func (r GetMaintenanceColdStatusResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetMaintenanceColdStatusResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetMaintenanceInfoResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -18448,6 +18633,15 @@ func (c *ClientWithResponses) GetMaintenanceAutovacuumSummaryWithResponse(ctx co
 		return nil, err
 	}
 	return ParseGetMaintenanceAutovacuumSummaryResponse(rsp)
+}
+
+// GetMaintenanceColdStatusWithResponse request returning *GetMaintenanceColdStatusResponse
+func (c *ClientWithResponses) GetMaintenanceColdStatusWithResponse(ctx context.Context, params *GetMaintenanceColdStatusParams, reqEditors ...RequestEditorFn) (*GetMaintenanceColdStatusResponse, error) {
+	rsp, err := c.GetMaintenanceColdStatus(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetMaintenanceColdStatusResponse(rsp)
 }
 
 // GetMaintenanceInfoWithResponse request returning *GetMaintenanceInfoResponse
@@ -20777,6 +20971,32 @@ func ParseGetMaintenanceAutovacuumSummaryResponse(rsp *http.Response) (*GetMaint
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest MaintenanceAutovacuumSummary
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetMaintenanceColdStatusResponse parses an HTTP response from a GetMaintenanceColdStatusWithResponse call
+func ParseGetMaintenanceColdStatusResponse(rsp *http.Response) (*GetMaintenanceColdStatusResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetMaintenanceColdStatusResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ColdTablesStatus
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
