@@ -45,6 +45,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.useRealTimers()
+  vi.restoreAllMocks()
 })
 
 describe('handleUnauthorized', () => {
@@ -97,6 +98,25 @@ describe('handleUnauthorized', () => {
     oidcStore().handleUnauthorized()
 
     expect(hrefs).toEqual([LOGIN_URL, LOGIN_URL])
+  })
+
+  it('ignores a redirect timestamp from the future', () => {
+    sessionStorage.setItem('dasha_login_redirect_at', String(Date.now() + 60_000))
+    oidcStore().handleUnauthorized()
+
+    expect(hrefs).toEqual([LOGIN_URL])
+  })
+
+  it('redirects when sessionStorage throws', () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new DOMException('blocked', 'SecurityError')
+    })
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('full', 'QuotaExceededError')
+    })
+    oidcStore().handleUnauthorized()
+
+    expect(hrefs).toEqual([LOGIN_URL])
   })
 })
 

@@ -13,6 +13,24 @@ const RETURN_URL_KEY = 'dasha_return_url'
 const LOGIN_REDIRECT_AT_KEY = 'dasha_login_redirect_at'
 const LOGIN_LOOP_WINDOW_MS = 15_000
 
+// sessionStorage throws when site data is blocked or the quota is exhausted.
+function readSession(key: string): string | null {
+  try {
+    return sessionStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+function writeSession(key: string, value: string | null) {
+  try {
+    if (value === null) sessionStorage.removeItem(key)
+    else sessionStorage.setItem(key, value)
+  } catch {
+    // The login redirect goes ahead without a saved return address.
+  }
+}
+
 // `/\` is checked separately: browsers normalise it to `//`, a foreign host.
 export function isSafeReturnUrl(url: string): boolean {
   if (!url.startsWith('/') || url.startsWith('//') || url.startsWith('/\\')) return false
@@ -97,8 +115,8 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function saveReturnUrl() {
-    sessionStorage.setItem(RETURN_URL_KEY, window.location.pathname + window.location.search)
-    sessionStorage.setItem(LOGIN_REDIRECT_AT_KEY, String(Date.now()))
+    writeSession(RETURN_URL_KEY, window.location.pathname + window.location.search)
+    writeSession(LOGIN_REDIRECT_AT_KEY, String(Date.now()))
   }
 
   function doLoginRedirect() {
@@ -111,8 +129,9 @@ export const useAuthStore = defineStore('auth', () => {
   function handleUnauthorized() {
     if (mode.value !== AuthInfoMode.oidc || !oidcLoginUrl.value || redirecting) return
 
-    const lastRedirectAt = Number(sessionStorage.getItem(LOGIN_REDIRECT_AT_KEY))
-    if (lastRedirectAt && Date.now() - lastRedirectAt < LOGIN_LOOP_WINDOW_MS) {
+    const lastRedirectAt = Number(readSession(LOGIN_REDIRECT_AT_KEY))
+    const elapsed = Date.now() - lastRedirectAt
+    if (lastRedirectAt && elapsed >= 0 && elapsed < LOGIN_LOOP_WINDOW_MS) {
       user.value = null
       return
     }
@@ -124,8 +143,8 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function consumeReturnUrl(): string | null {
-    const url = sessionStorage.getItem(RETURN_URL_KEY)
-    sessionStorage.removeItem(RETURN_URL_KEY)
+    const url = readSession(RETURN_URL_KEY)
+    writeSession(RETURN_URL_KEY, null)
     return url && isSafeReturnUrl(url) ? url : null
   }
 
