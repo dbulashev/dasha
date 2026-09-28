@@ -19,14 +19,19 @@ import (
 // fields (cache_hit_ratio, dead_tuples, vacuum age) reflect the selected
 // database; instance-wide fields (pg_stat_activity, replication, GUCs,
 // pg_database) are unaffected. Pass "" to fall back to the first pool found
-// for the (cluster, instance) pair — the previous behaviour.
-func (p *PgxPool) GetHealthScoreMetrics(ctx context.Context, clusterName, instanceName, databaseName string) (*dto.HealthScoreMetrics, error) {
+// for the (cluster, instance) pair. cold is keyed by database; a missing entry
+// means no cold tables.
+func (p *PgxPool) GetHealthScoreMetrics(
+	ctx context.Context,
+	clusterName, instanceName, databaseName string,
+	cold map[string]dto.ColdArgs,
+) (*dto.HealthScoreMetrics, error) {
 	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
 	if err != nil {
 		return nil, fmt.Errorf("GetHealthScoreMetrics | %w", err)
 	}
 
-	m, err := p.healthScoreMetrics(ctx, pool)
+	m, err := p.healthScoreMetrics(ctx, pool, cold[pool.Config().ConnConfig.Database])
 	if err != nil {
 		return nil, fmt.Errorf("GetHealthScoreMetrics | %w", err)
 	}
@@ -34,7 +39,23 @@ func (p *PgxPool) GetHealthScoreMetrics(ctx context.Context, clusterName, instan
 	return m, nil
 }
 
-func (p *PgxPool) healthScoreMetrics(ctx context.Context, pool *pgxpool.Pool) (*dto.HealthScoreMetrics, error) {
+type healthScoreTemplateData struct {
+	ColdCTE string
+}
+
+func coldQueryArgs(c dto.ColdArgs) []any {
+	return []any{nonNil(c.Schemas), nonNil(c.Tables), nonNil(c.Writes)}
+}
+
+func nonNil[T any](s []T) []T {
+	if s == nil {
+		return []T{}
+	}
+
+	return s
+}
+
+func (p *PgxPool) healthScoreMetrics(ctx context.Context, pool *pgxpool.Pool, cold dto.ColdArgs) (*dto.HealthScoreMetrics, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
@@ -43,7 +64,7 @@ func (p *PgxPool) healthScoreMetrics(ctx context.Context, pool *pgxpool.Pool) (*
 		return nil, fmt.Errorf("get server version | %w", err)
 	}
 
-	qStr, err := query.Get(vNum, enums.QueryCommonHealthScore, nil)
+	qStr, err := query.Get(vNum, enums.QueryCommonHealthScore, healthScoreTemplateData{ColdCTE: query.ColdCTE(1)})
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +77,7 @@ func (p *PgxPool) healthScoreMetrics(ctx context.Context, pool *pgxpool.Pool) (*
 
 	var m dto.HealthScoreMetrics
 
-	err = conn.QueryRow(ctx, qStr).Scan(
+	err = conn.QueryRow(ctx, qStr, coldQueryArgs(cold)...).Scan(
 		&m.InRecovery,
 		&m.Database,
 		&m.TotalConnections,
@@ -99,6 +120,8 @@ func (p *PgxPool) healthScoreMetrics(ctx context.Context, pool *pgxpool.Pool) (*
 		&m.StalePlannerStatsTables,
 		&m.WalLevel,
 		&m.LogicalSlotsActive,
+		&m.ColdMaxRelfrozenxidAge,
+		&m.ColdFreezeRatio,
 	)
 	if err != nil {
 		return nil, err
@@ -114,6 +137,7 @@ func (p *PgxPool) healthScoreMetrics(ctx context.Context, pool *pgxpool.Pool) (*
 func (p *PgxPool) GetHealthScorePerDatabase(
 	ctx context.Context,
 	clusterName, instanceName string,
+	cold map[string]dto.ColdArgs,
 ) ([]dto.HealthScoreDatabaseMetrics, error) {
 	if err := p.ensurePool(ctx); err != nil {
 		return nil, fmt.Errorf("GetHealthScorePerDatabase | %w", err)
@@ -165,7 +189,7 @@ func (p *PgxPool) GetHealthScorePerDatabase(
 	got := make([]collected, len(pools))
 
 	forEachLimited(p.healthDatabaseConcurrency(), pools, func(i int, dbp dbPool) {
-		got[i].m, got[i].err = p.collectHealthScorePerDatabase(ctx, dbp.pool, dbp.database)
+		got[i].m, got[i].err = p.collectHealthScorePerDatabase(ctx, dbp.pool, dbp.database, cold[dbp.database])
 	})
 
 	results := make([]dto.HealthScoreDatabaseMetrics, 0, len(pools))
@@ -201,6 +225,7 @@ func (p *PgxPool) collectHealthScorePerDatabase(
 	ctx context.Context,
 	pool *pgxpool.Pool,
 	databaseName string,
+	cold dto.ColdArgs,
 ) (dto.HealthScoreDatabaseMetrics, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
@@ -210,7 +235,7 @@ func (p *PgxPool) collectHealthScorePerDatabase(
 		return dto.HealthScoreDatabaseMetrics{}, fmt.Errorf("get server version | %w", err)
 	}
 
-	qStr, err := query.Get(vNum, enums.QueryCommonHealthScorePerDatabase, nil)
+	qStr, err := query.Get(vNum, enums.QueryCommonHealthScorePerDatabase, healthScoreTemplateData{ColdCTE: query.ColdCTE(1)})
 	if err != nil {
 		return dto.HealthScoreDatabaseMetrics{}, fmt.Errorf("query.Get | %w", err)
 	}
@@ -223,7 +248,7 @@ func (p *PgxPool) collectHealthScorePerDatabase(
 
 	var m dto.HealthScoreDatabaseMetrics
 
-	err = conn.QueryRow(ctx, qStr).Scan(
+	err = conn.QueryRow(ctx, qStr, coldQueryArgs(cold)...).Scan(
 		&m.Database,
 		&m.SizeBytes,
 		&m.CacheHitRatio,
@@ -247,4 +272,73 @@ func (p *PgxPool) collectHealthScorePerDatabase(
 	}
 
 	return m, nil
+}
+
+// GetHealthScoreColdTables returns up to limit cold tables that need a manual
+// VACUUM, worst first, and how many qualified in total.
+func (p *PgxPool) GetHealthScoreColdTables(
+	ctx context.Context,
+	clusterName, instanceName, databaseName string,
+	cold dto.ColdArgs,
+	limit int,
+) ([]dto.HealthScoreColdTable, int, error) {
+	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
+	if err != nil {
+		return nil, 0, fmt.Errorf("GetHealthScoreColdTables | %w", err)
+	}
+
+	rows, total, err := p.healthScoreColdTables(ctx, pool, cold, limit)
+	if err != nil {
+		return nil, 0, fmt.Errorf("GetHealthScoreColdTables | %w", err)
+	}
+
+	return rows, total, nil
+}
+
+func (p *PgxPool) healthScoreColdTables(
+	ctx context.Context,
+	pool *pgxpool.Pool,
+	cold dto.ColdArgs,
+	limit int,
+) ([]dto.HealthScoreColdTable, int, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	vNum, err := p.getServerVersionNum(ctx, pool)
+	if err != nil {
+		return nil, 0, fmt.Errorf("get server version | %w", err)
+	}
+
+	qStr, err := query.Get(vNum, enums.QueryCommonHealthScoreColdTables, healthScoreTemplateData{ColdCTE: query.ColdCTE(1)})
+	if err != nil {
+		return nil, 0, err
+	}
+
+	conn, err := p.acquireConn(ctx, pool)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer conn.Release()
+
+	rows, err := conn.Query(ctx, qStr, append(coldQueryArgs(cold), limit)...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var (
+		out   []dto.HealthScoreColdTable
+		total int
+	)
+
+	for rows.Next() {
+		var r dto.HealthScoreColdTable
+		if err := rows.Scan(&r.Idx, &r.DeadRatio, &r.NeverVacuumed, &r.RelfrozenxidAge, &r.SizeBytes, &total); err != nil {
+			return nil, 0, fmt.Errorf("scan | %w", err)
+		}
+
+		out = append(out, r)
+	}
+
+	return out, total, rows.Err()
 }

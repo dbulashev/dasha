@@ -10,6 +10,7 @@ import (
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/health"
+	"github.com/dbulashev/dasha/internal/hotobjects"
 	"github.com/dbulashev/dasha/internal/metrics"
 	"github.com/dbulashev/dasha/internal/repository"
 	"github.com/dbulashev/dasha/internal/storage"
@@ -33,6 +34,9 @@ type InstanceScore struct {
 	Result          health.Result
 	Source          Source
 	MetricsDegraded bool
+	// Cold is the cold-table set of the database the snapshot was read from.
+	Cold           hotobjects.ColdSet
+	ColdWindowDays int
 }
 
 // MetricsSource is the part of *metrics.Service the scorer reads.
@@ -49,6 +53,7 @@ type Scorer struct {
 	repo    repository.Repository
 	metrics MetricsSource
 	weights WeightsStore
+	cold    *coldCache
 	cfg     *config.Config
 
 	mu      sync.Mutex
@@ -61,6 +66,7 @@ func NewScorer(cfg *config.Config, repo repository.Repository, st *storage.Stora
 	s := newScorer(cfg, repo, ms)
 	if st != nil {
 		s.weights = st
+		s.cold = newColdCache(st)
 	}
 
 	return s
@@ -102,6 +108,8 @@ func (s *Scorer) ScoreWith(ctx context.Context, t metrics.TargetRef, pre *metric
 		// Resolved but no series matched any selector: the score is built from
 		// absent signals and looks green.
 		MetricsDegraded: src == SourceMetrics && matched == 0,
+		Cold:            in.cold.For(raw.Database),
+		ColdWindowDays:  in.cold.WindowDays,
 	}, nil
 }
 
@@ -109,9 +117,15 @@ func (s *Scorer) ScoreWith(ctx context.Context, t metrics.TargetRef, pre *metric
 // for one database's drill-down, which always reads the SQL snapshot since the
 // datasource is instance-level.
 func (s *Scorer) Recommendations(ctx context.Context, t metrics.TargetRef, database string) ([]health.Recommendation, error) {
-	raw, _, _, err := s.compose(s.coalescedInputs(ctx, t, database), s.walLevelManaged(ctx, t.Cluster))
+	in := s.coalescedInputs(ctx, t, database)
+
+	raw, _, _, err := s.compose(in, s.walLevelManaged(ctx, t.Cluster))
 	if err != nil {
 		return nil, fmt.Errorf("Recommendations | %w", err)
+	}
+
+	if !raw.InRecovery {
+		raw.Cold = s.coldFacts(ctx, t, raw.Database, in.cold)
 	}
 
 	return health.Evaluate(raw, database != ""), nil
@@ -224,6 +238,8 @@ func rawFromSnapshot(m *dto.HealthScoreMetrics) health.RawMetrics {
 		TrackCountsEnabled:         m.TrackCountsEnabled,
 		TablesWithAutovacuumOff:    m.TablesWithAutovacuumOff,
 		MaxRelfrozenxidAge:         m.MaxRelfrozenxidAge,
+		ColdMaxRelfrozenxidAge:     m.ColdMaxRelfrozenxidAge,
+		ColdFreezeRatio:            m.ColdFreezeRatio,
 		HorizonLagXids:             m.HorizonLagXids,
 		HorizonDatabase:            m.HorizonDatabase,
 		TimedCheckpoints:           m.TimedCheckpoints,

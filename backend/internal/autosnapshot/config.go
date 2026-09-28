@@ -57,6 +57,8 @@ type Config struct {
 	HotSchedule      string
 	HotTopN          int `validate:"gte=1,lte=1000"`
 	HotRetentionDays int `validate:"gte=1"`
+	// HotColdWindowDays is how long a table stays without writes before it counts as cold.
+	HotColdWindowDays int `validate:"gte=1,lte=90"`
 	// pg_stat_io snapshots. IOSchedule uses the
 	// same cron parser as HotSchedule.
 	IOEnabled       bool

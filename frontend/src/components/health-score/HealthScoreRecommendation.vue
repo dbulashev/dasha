@@ -14,7 +14,9 @@ import { fmtNum } from '@/utils/format'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { usePaginatedApiLoader } from '@/composables/useApiLoader'
 import PaginationControls from '@/components/PaginationControls.vue'
-import { INLINE_SPECS, RULES_WITH_INLINE_DETAILS } from './inlineDetails'
+import { INLINE_SPECS, RULES_WITH_INLINE_DETAILS, fmtXidAge } from './inlineDetails'
+import { recObjects, type RecObject } from './recObjects'
+import HealthScoreObjectList from './HealthScoreObjectList.vue'
 import { usePrefsStore } from '@/stores/prefs'
 import { useInstanceInfoStore } from '@/stores/instanceInfo'
 import { IO_MIN_VERSION_NUM } from '@/components/io/types'
@@ -128,10 +130,13 @@ const i18nContext = computed<Record<string, unknown>>(() => {
 
 const title = computed(() => t(`${i18nBase.value}.title`, i18nContext.value))
 const short = computed(() => t(`${i18nBase.value}.short`, i18nContext.value))
-const hasDetail = computed(() => te(`${i18nBase.value}.detail`))
-const detail = computed(() =>
-  hasDetail.value ? t(`${i18nBase.value}.detail`, i18nContext.value) : '',
+const detailKey = computed(() =>
+  props.rec.context?.cold === true && te(`${i18nBase.value}.detailCold`)
+    ? `${i18nBase.value}.detailCold`
+    : `${i18nBase.value}.detail`,
 )
+const hasDetail = computed(() => te(detailKey.value))
+const detail = computed(() => (hasDetail.value ? t(detailKey.value, i18nContext.value) : ''))
 
 // Inline detail support: a rule listed in RULES_WITH_INLINE_DETAILS fetches
 // a small typed dataset from the matching /api/.../details endpoint when
@@ -211,7 +216,20 @@ const {
   },
 )
 
-const showExpander = computed(() => hasDetail.value || hasSql.value || hasInline.value)
+const objectList = computed(() => recObjects(props.rec.context))
+
+function coldObjectValue(obj: RecObject): string {
+  const value = t('healthScore.cold.objectValue', {
+    dead: fmtNum(obj.dead_ratio, 1),
+    xid: fmtXidAge(obj.relfrozenxid_age),
+    days: obj.no_writes_days ?? 0,
+  })
+  return obj.never_vacuumed === true ? `${value}, ${t('healthScore.cold.neverVacuumed')}` : value
+}
+
+const showExpander = computed(
+  () => hasDetail.value || hasSql.value || hasInline.value || !!objectList.value,
+)
 
 const severityColor = computed(() => {
   switch (props.rec.severity) {
@@ -262,6 +280,10 @@ async function copySql() {
           {{ rec.severity }}
         </v-chip>
         <span class="text-body-1 font-weight-medium">{{ title }}</span>
+        <span v-if="rec.advisory" class="d-inline-flex align-center ga-1 text-caption text-medium-emphasis">
+          <v-icon size="x-small" icon="mdi-information-outline" />
+          {{ t('healthScore.page.advisory') }}
+        </span>
         <v-chip
           variant="tonal"
           size="small"
@@ -308,6 +330,17 @@ async function copySql() {
           <div v-if="detail" class="text-body-2 mb-2" style="white-space: pre-line">
             {{ detail }}
           </div>
+
+          <HealthScoreObjectList
+            v-if="objectList"
+            :objects="objectList.objects"
+            :more="objectList.more"
+            class="mb-2"
+          >
+            <template v-if="rec.rule_id === 'cold_tables_maintenance'" #value="{ obj }">
+              {{ coldObjectValue(obj) }}
+            </template>
+          </HealthScoreObjectList>
 
           <!-- Inline data: typed, paginated table fetched from a details endpoint. -->
           <template v-if="hasInline && inlineSpec">

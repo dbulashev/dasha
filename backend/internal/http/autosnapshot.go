@@ -103,6 +103,17 @@ func (s *Handlers) PutAutosnapshotConfig(
 		return serverhttp.PutAutosnapshotConfig400Response{}, nil
 	}
 
+	if req.Body.HotColdWindowDays != nil {
+		cfg.HotColdWindowDays = *req.Body.HotColdWindowDays
+	} else {
+		cur, err := s.storage.GetAutosnapshotConfig(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("PutAutosnapshotConfig | current: %w", err)
+		}
+
+		cfg.HotColdWindowDays = cur.HotColdWindowDays
+	}
+
 	if err := cfg.Validate(); err != nil {
 		return serverhttp.PutAutosnapshotConfig400Response{}, nil
 	}
@@ -321,6 +332,7 @@ func configToAPI(cfg autosnapshot.Config) serverhttp.AutoSnapshotConfig {
 		HotSchedule:          cfg.HotSchedule,
 		HotTopN:              cfg.HotTopN,
 		HotRetentionDays:     cfg.HotRetentionDays,
+		HotColdWindowDays:    &cfg.HotColdWindowDays,
 		IOEnabled:            cfg.IOEnabled,
 		IOSchedule:           cfg.IOSchedule,
 		IORetentionDays:      cfg.IORetentionDays,

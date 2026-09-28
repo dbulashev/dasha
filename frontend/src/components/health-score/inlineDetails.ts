@@ -40,7 +40,7 @@ const fmtSeconds = (t: ComposerTranslation) => (v: unknown): string => {
   return v.toFixed(1) + ' ' + unit
 }
 
-const fmtXidAge = (v: unknown): string => {
+export const fmtXidAge = (v: unknown): string => {
   if (typeof v !== 'number' && typeof v !== 'bigint') return String(v ?? '')
   const n = Number(v)
   if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(2) + ' B'
@@ -82,6 +82,11 @@ export const INLINE_SPECS: Record<string, InlineSpec> = {
       { key: 'LiveTuples', title: t('healthScore.inline.col.liveTuples'), format: fmtBigInt },
       { key: 'DeadTuples', title: t('healthScore.inline.col.deadTuples'), format: fmtBigInt },
       { key: 'DeadRatio', title: t('healthScore.inline.col.deadRatio'), format: fmtRatioPct },
+      {
+        key: 'NoWritesDays',
+        title: t('healthScore.inline.col.noWrites'),
+        format: (v) => (typeof v === 'number' ? t('healthScore.cold.noWritesDays', { n: v }) : ''),
+      },
     ],
   },
   horizon_lag_xids: {

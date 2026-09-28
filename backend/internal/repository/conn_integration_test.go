@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/testinfra"
 )
 
@@ -42,7 +43,7 @@ func TestHealthScoreReads_SingleConnPool(t *testing.T) {
 		seqErr  error
 	)
 
-	wg.Go(func() { _, snapErr = p.healthScoreMetrics(ctx, pool) })
+	wg.Go(func() { _, snapErr = p.healthScoreMetrics(ctx, pool, dto.ColdArgs{}) })
 	wg.Go(func() { _, _, seqErr = p.readSequenceHeadroom(ctx, pool) })
 	wg.Wait()
 
@@ -66,7 +67,7 @@ func TestAcquireConn_PoolBusy(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
 	defer cancel()
 
-	_, err = p.healthScoreMetrics(ctx, pool)
+	_, err = p.healthScoreMetrics(ctx, pool, dto.ColdArgs{})
 	assert.ErrorIs(t, err, ErrPoolBusy)
 }
 

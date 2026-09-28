@@ -143,6 +143,10 @@ func (d *Daemon) takeHotSnapshot(ctx context.Context, cfg Config, cl config.Clus
 		return
 	}
 
+	if !d.attachPrevWindows(ctx, cfg, clusterName, database, capturedAt, inputs) {
+		return
+	}
+
 	snap := hotobjects.BuildSnapshot(clusterName, database, capturedAt, inputs, missing, cfg.HotTopN)
 
 	// The snapshot and every host's anchor advance commit together: on failure
@@ -150,7 +154,7 @@ func (d *Daemon) takeHotSnapshot(ctx context.Context, cfg Config, cl config.Clus
 	// interval is lost or (via a stored snapshot with stale anchors) counted twice.
 	anchors := make(map[string][]hotobjects.AnchorRow, len(inputs))
 	for _, in := range inputs {
-		anchors[in.Sample.Instance] = in.Sample.Rows
+		anchors[in.Sample.Instance] = hotobjects.AdvanceQuiet(in, capturedAt)
 	}
 
 	if _, err := d.store.InsertHotSnapshotWithAnchors(ctx, snap, anchors); err != nil {
@@ -166,6 +170,39 @@ func (d *Daemon) takeHotSnapshot(ctx context.Context, cfg Config, cl config.Clus
 		zap.Int("hosts", len(inputs)),
 		zap.Int("hosts_missing", len(missing)),
 		zap.Int("top_entries", len(snap.Top)))
+}
+
+// attachPrevWindows fills each input's PrevWindow. A failed read skips the
+// capture: building without it would restart every host's observation count.
+func (d *Daemon) attachPrevWindows(
+	ctx context.Context,
+	cfg Config,
+	clusterName, database string,
+	capturedAt time.Time,
+	inputs []hotobjects.BuildInput,
+) bool {
+	instances := make([]string, 0, len(inputs))
+	for _, in := range inputs {
+		instances = append(instances, in.Sample.Instance)
+	}
+
+	since := capturedAt.AddDate(0, 0, -cfg.HotRetentionDays)
+
+	prev, err := d.store.GetLatestHotWindows(ctx, clusterName, database, instances, since)
+	if err != nil {
+		d.logger.Warn("hot: read previous windows failed, skipping snapshot",
+			zap.String("cluster", clusterName), zap.String("database", database), zap.Error(err))
+
+		return false
+	}
+
+	for i := range inputs {
+		if w, ok := prev[inputs[i].Sample.Instance]; ok {
+			inputs[i].PrevWindow = &w
+		}
+	}
+
+	return true
 }
 
 // maybeRunHotRetention drops hot-objects partitions older than

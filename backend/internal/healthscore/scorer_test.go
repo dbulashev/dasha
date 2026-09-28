@@ -32,7 +32,7 @@ type fakeRepo struct {
 	seqCalls  atomic.Int32
 }
 
-func (f *fakeRepo) GetHealthScoreMetrics(_ context.Context, _, _, _ string) (*dto.HealthScoreMetrics, error) {
+func (f *fakeRepo) GetHealthScoreMetrics(_ context.Context, _, _, _ string, _ map[string]dto.ColdArgs) (*dto.HealthScoreMetrics, error) {
 	f.snapCalls.Add(1)
 	time.Sleep(f.delay)
 

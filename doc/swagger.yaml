@@ -1601,6 +1601,17 @@ paths:
             type: string
           required: false
           description: Filter by table name (case-insensitive substring match)
+        - in: query
+          name: activity
+          schema:
+            type: string
+            enum: [all, active, cold]
+            default: all
+          required: false
+          description: >-
+            Filter by write activity. "cold" lists tables with no writes for the
+            whole cold window; empty when the cold-table marker is unavailable
+            (see /api/maintenance/cold-status).
       responses:
         '200':
           description: Success
@@ -1612,6 +1623,22 @@ paths:
                   $ref: '#/components/schemas/MaintenanceInfo'
         '404':
           $ref: '#/components/responses/NotFound'
+
+  /api/maintenance/cold-status:
+    get:
+      operationId: getMaintenanceColdStatus
+      summary: Whether the cold-table marker is available for a database
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ColdTablesStatus'
 
   /api/hot/tables:
     get:
@@ -5690,6 +5717,29 @@ components:
         LiveRows:
           type: integer
           format: int64
+        NoWritesDays:
+          type: integer
+          nullable: true
+          description: Whole days without writes; null unless the table is cold.
+
+    ColdTablesStatus:
+      type: object
+      required:
+        - status
+        - window_days
+      properties:
+        status:
+          type: string
+          enum: [available, no_storage, disabled, stale, warming_up, standby, error]
+        window_days:
+          type: integer
+          description: Days without writes after which a table counts as cold.
+        observed_days:
+          type: integer
+          description: Days of unbroken history on this instance; present when status is warming_up.
+        count:
+          type: integer
+          description: Cold tables in the database; present when status is available.
 
     MaintenanceTransactionIdDanger:
       type: object
@@ -7447,6 +7497,8 @@ components:
             When true, the maintenance category is dropped from the score and
             its weight is redistributed across the remaining categories — same
             handling as the replication category on instances without replicas.
+        cold_tables:
+          $ref: '#/components/schemas/ColdTablesStatus'
 
     HealthScoreFleet:
       type: object
@@ -7588,6 +7640,10 @@ components:
         DeadRatio:
           type: number
           format: double
+        NoWritesDays:
+          type: integer
+          nullable: true
+          description: Whole days without writes; null unless the table is cold.
 
     HealthScoreHorizonBlockingSession:
       type: object
@@ -7660,6 +7716,9 @@ components:
         related_route:
           type: string
           nullable: true
+        advisory:
+          description: The rule reports a finding without affecting the score.
+          type: boolean
 
     HealthScoreRecommendations:
       type: object
@@ -7691,6 +7750,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/HealthScoreCategory'
+        cold_tables_count:
+          type: integer
+          description: Cold tables excluded from the dead-tuple and never-vacuumed checks; absent when the marker is unavailable.
 
     HealthScoreDatabases:
       type: object
@@ -8152,6 +8214,11 @@ components:
         HotRetentionDays:
           type: integer
           description: Age-based retention of hot-objects snapshots, days
+        HotColdWindowDays:
+          type: integer
+          minimum: 1
+          maximum: 90
+          description: Days without writes after which a table counts as cold; omitted on PUT keeps the stored value
         IOEnabled:
           type: boolean
           description: Capture pg_stat_io snapshots (the I/O section's history)

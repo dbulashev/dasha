@@ -37,6 +37,7 @@ func (s *Handlers) GetHealthScore(
 
 	src := string(score.Source)
 	metricsDegraded := score.MetricsDegraded
+	cold := coldStatusToAPI(score.Cold, score.ColdWindowDays)
 
 	return serverhttp.GetHealthScore200JSONResponse{
 		Score:           result.Score,
@@ -45,6 +46,7 @@ func (s *Handlers) GetHealthScore(
 		InRecovery:      result.InRecovery,
 		Source:          &src,
 		MetricsDegraded: &metricsDegraded,
+		ColdTables:      &cold,
 	}, nil
 }
 
@@ -86,6 +88,11 @@ func (s *Handlers) GetHealthScoreRecommendations(
 			dbPtr = &db
 		}
 
+		var advisoryPtr *bool
+		if r.Advisory {
+			advisoryPtr = &r.Advisory
+		}
+
 		out = append(out, serverhttp.HealthScoreRecommendation{
 			RuleId:       r.RuleID,
 			Category:     string(r.Category),
@@ -94,6 +101,7 @@ func (s *Handlers) GetHealthScoreRecommendations(
 			Database:     dbPtr,
 			Context:      ctxPtr,
 			RelatedRoute: routePtr,
+			Advisory:     advisoryPtr,
 		})
 	}
 

@@ -1,6 +1,7 @@
 package query
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/dbulashev/dasha/internal/enums"
@@ -249,4 +250,18 @@ func TestFindTemplate_PG17BoundaryBehavior(t *testing.T) {
 		"PG14 should not reference temp_blk_read_time")
 	assert.NotContains(t, pg14, "shared_blk_read_time",
 		"PG14 should not reference shared_blk_read_time")
+}
+
+func TestColdCTE(t *testing.T) {
+	got := ColdCTE(4)
+
+	for _, want := range []string{"$4::text[]", "$5::text[]", "$6::bigint[]", "cold_rel AS ("} {
+		if !strings.Contains(got, want) {
+			t.Errorf("ColdCTE(4) lacks %q", want)
+		}
+	}
+
+	if strings.Contains(got, "$SCHEMAS") || strings.Contains(got, "$1") {
+		t.Errorf("ColdCTE(4) left a placeholder: %s", got)
+	}
 }

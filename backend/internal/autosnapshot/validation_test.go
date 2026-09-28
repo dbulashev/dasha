@@ -18,6 +18,7 @@ func validConfig() Config {
 		HotSchedule:          "0 3 * * *",
 		HotTopN:              100,
 		HotRetentionDays:     180,
+		HotColdWindowDays:    7,
 		IOSchedule:           "*/5 * * * *",
 		IORetentionDays:      30,
 		Defaults:             validDefaults(),
@@ -52,6 +53,8 @@ func TestConfigValidate(t *testing.T) {
 		{"hot_top_n zero", func(c *Config) { c.HotTopN = 0 }, true},
 		{"hot_top_n too high", func(c *Config) { c.HotTopN = 1001 }, true},
 		{"hot_retention_days zero", func(c *Config) { c.HotRetentionDays = 0 }, true},
+		{"hot_cold_window_days zero", func(c *Config) { c.HotColdWindowDays = 0 }, true},
+		{"hot_cold_window_days too high", func(c *Config) { c.HotColdWindowDays = 91 }, true},
 		{
 			name:    "spike_duration at half the window is allowed",
 			mutate:  func(c *Config) { c.Defaults.ActivitySpike.SpikeDuration = 15 * time.Second },

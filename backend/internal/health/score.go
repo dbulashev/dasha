@@ -69,6 +69,10 @@ type RawMetrics struct {
 	TrackCountsEnabled       bool
 	TablesWithAutovacuumOff  int
 	MaxRelfrozenxidAge       int64
+	ColdMaxRelfrozenxidAge   int64
+	ColdFreezeRatio          float64 // age(relfrozenxid) / effective autovacuum_freeze_max_age
+	// Cold is read only for recommendations; nil when unavailable.
+	Cold *ColdFacts
 
 	// Horizon
 	HorizonLagXids int64

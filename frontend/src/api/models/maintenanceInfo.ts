@@ -18,4 +18,9 @@ export interface MaintenanceInfo {
   LastAutoanalyze: string | null
   DeadRows: number
   LiveRows: number
+  /**
+   * Whole days without writes; null unless the table is cold.
+   * @nullable
+   */
+  NoWritesDays?: number | null
 }

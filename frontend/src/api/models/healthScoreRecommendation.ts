@@ -21,4 +21,6 @@ export interface HealthScoreRecommendation {
   context?: HealthScoreRecommendationContext
   /** @nullable */
   related_route?: string | null
+  /** The rule reports a finding without affecting the score. */
+  advisory?: boolean
 }

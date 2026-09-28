@@ -84,6 +84,8 @@ const durationRe = /^(\d+(\.\d+)?(ns|us|µs|ms|s|m|h))+$/
 const durationRule = (v: string) =>
   durationRe.test((v ?? '').trim()) || t('autosnapshot.invalidDuration')
 const positiveRule = (v: number) => (Number(v) >= 0 ? true : t('autosnapshot.mustBePositive'))
+const coldWindowRule = (v: number) =>
+  Number.isInteger(Number(v)) && Number(v) >= 1 && Number(v) <= 90 ? true : t('autosnapshot.hot.coldWindowRange')
 
 // Structural 5-field cron check (numbers, ranges, steps, lists; optional
 // CRON_TZ=/TZ= prefix). The backend does the authoritative parse and answers
@@ -613,6 +615,16 @@ onMounted(() => {
                         :label="t('autosnapshot.hot.retentionDays')"
                         :disabled="!isAdmin || !cfg.HotEnabled"
                         :rules="[positiveRule]"
+                        type="number"
+                        density="compact"
+                      />
+                    </v-col>
+                    <v-col cols="12" sm="6" md="3">
+                      <v-text-field
+                        v-model.number="cfg.HotColdWindowDays"
+                        :label="t('autosnapshot.hot.coldWindowDays')"
+                        :disabled="!isAdmin || !cfg.HotEnabled"
+                        :rules="[coldWindowRule]"
                         type="number"
                         density="compact"
                       />

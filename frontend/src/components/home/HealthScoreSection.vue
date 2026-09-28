@@ -10,6 +10,7 @@ import { useViewError } from '@/composables/useViewError'
 import { fmtDate } from '@/utils/format'
 import HealthScoreGauge from '@/components/health-score/HealthScoreGauge.vue'
 import HealthScoreCategories from '@/components/health-score/HealthScoreCategories.vue'
+import ColdTablesStatusLine from '@/components/health-score/ColdTablesStatusLine.vue'
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
@@ -95,6 +96,7 @@ const ROLLBACK_THRESHOLD = 0.05
             <HealthScoreCategories :categories="data.categories" />
           </div>
         </div>
+        <ColdTablesStatusLine :status="data.cold_tables" class="mb-3" />
 
         <v-divider v-if="dbHealth" class="mb-3" />
         <div v-if="dbHealth" class="d-flex flex-wrap ga-2 align-center">

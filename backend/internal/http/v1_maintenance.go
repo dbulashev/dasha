@@ -7,6 +7,8 @@ import (
 
 	"github.com/dbulashev/dasha/gen/serverhttp"
 	"github.com/dbulashev/dasha/internal/dto"
+	"github.com/dbulashev/dasha/internal/healthscore"
+	"github.com/dbulashev/dasha/internal/metrics"
 	"github.com/dbulashev/dasha/internal/pkg/mapstruct"
 	"github.com/dbulashev/dasha/internal/repository"
 )
@@ -43,12 +45,22 @@ func (s *Handlers) GetMaintenanceInfo(
 ) (serverhttp.GetMaintenanceInfoResponseObject, error) {
 	limit, offset := paginationDefaults(req.Params.Limit, req.Params.Offset, defaultMaintenanceInfoLimit)
 
+	activity := "all"
+	if req.Params.Activity != nil {
+		activity = string(*req.Params.Activity)
+	}
+
+	coldSet := s.scorer.ColdTables(ctx, metrics.TargetRef{Cluster: req.Params.ClusterName, Instance: req.Params.Instance}).
+		For(req.Params.Database)
+
 	data, err := s.repo.GetMaintenanceInfo(
 		ctx,
 		req.Params.ClusterName,
 		req.Params.Instance,
 		req.Params.Database,
 		req.Params.TableName,
+		activity,
+		healthscore.ColdArgsOf(coldSet),
 		limit,
 		offset)
 	if errors.Is(err, repository.ErrNotFound) {
@@ -71,10 +83,20 @@ func (s *Handlers) GetMaintenanceInfo(
 				LastAutoanalyze: t.LastAutoanalyze,
 				DeadRows:        t.DeadRows,
 				LiveRows:        t.LiveRows,
+				NoWritesDays:    noWritesDays(coldSet, t.ColdIdx),
 			}
 		})
 
 	return ret, nil
+}
+
+func (s *Handlers) GetMaintenanceColdStatus(
+	ctx context.Context,
+	req serverhttp.GetMaintenanceColdStatusRequestObject,
+) (serverhttp.GetMaintenanceColdStatusResponseObject, error) {
+	sets := s.scorer.ColdTables(ctx, metrics.TargetRef{Cluster: req.Params.ClusterName, Instance: req.Params.Instance})
+
+	return serverhttp.GetMaintenanceColdStatus200JSONResponse(coldStatusToAPI(sets.For(req.Params.Database), sets.WindowDays)), nil
 }
 
 func (s *Handlers) GetMaintenanceTransactionIdDanger(

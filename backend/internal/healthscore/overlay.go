@@ -41,6 +41,8 @@ func overlayCatalogFacts(raw *health.RawMetrics, m *dto.HealthScoreMetrics) {
 	raw.TablesNeverVacuumed = m.TablesNeverVacuumed
 	raw.TablesWithAutovacuumOff = m.TablesWithAutovacuumOff
 	raw.MaxRelfrozenxidAge = m.MaxRelfrozenxidAge
+	raw.ColdMaxRelfrozenxidAge = m.ColdMaxRelfrozenxidAge
+	raw.ColdFreezeRatio = m.ColdFreezeRatio
 	raw.StalePlannerStatsTables = m.StalePlannerStatsTables
 	raw.AutovacuumEnabled = m.AutovacuumEnabled
 	raw.TrackCountsEnabled = m.TrackCountsEnabled

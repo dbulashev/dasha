@@ -11,4 +11,6 @@ export interface HealthScoreDatabase {
   size_bytes: number
   score: number
   categories: HealthScoreCategory[]
+  /** Cold tables excluded from the dead-tuple and never-vacuumed checks; absent when the marker is unavailable. */
+  cold_tables_count?: number
 }

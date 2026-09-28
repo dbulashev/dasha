@@ -2,6 +2,7 @@ package health
 
 import (
 	"cmp"
+	"math"
 	"sort"
 
 	"github.com/dbulashev/dasha/internal/schemalint"
@@ -99,7 +100,9 @@ type Rule struct {
 	ID           string
 	Category     Category
 	RelatedRoute string
-	Evaluate     func(RawMetrics) *Hit
+	// Advisory rules report a finding without affecting the score.
+	Advisory bool
+	Evaluate func(RawMetrics) *Hit
 }
 
 // Recommendation is one rule's evaluation result, ready to ship over the API.
@@ -116,6 +119,7 @@ type Recommendation struct {
 	Database     string         `json:"database,omitempty"`
 	Context      map[string]any `json:"context,omitempty"`
 	RelatedRoute string         `json:"related_route,omitempty"`
+	Advisory     bool           `json:"advisory,omitempty"`
 }
 
 // instanceOnlyCategories lists categories that have no meaning at the
@@ -205,6 +209,7 @@ func Evaluate(m RawMetrics, databaseScoped bool) []Recommendation {
 			Database:     databaseOf(m, r, hit, databaseScoped),
 			Context:      hit.Context,
 			RelatedRoute: r.RelatedRoute,
+			Advisory:     r.Advisory,
 		})
 	}
 
@@ -497,15 +502,39 @@ var Registry = []Rule{
 	},
 	{
 		// Per-table relfrozenxid age; uses the same thresholds as xid_wraparound_risk
-		// because the underlying PG mechanics are identical.
+		// because the underlying PG mechanics are identical. Cold tables are rated by
+		// their own freeze threshold; the worse tier wins.
 		ID: "relfrozenxid_age_outlier", Category: CategoryMaintenance, RelatedRoute: "/maintenance",
 		Evaluate: func(m RawMetrics) *Hit {
 			sev := severityFor(m.MaxRelfrozenxidAge, xidFailsafeAge, xidFreezeMaxAge, xidFreezeTableAge)
+
+			if cold := coldFreezeSeverity(m); cold != "" && severityRank(cold) < severityRank(sev) {
+				return &Hit{
+					Severity:    cold,
+					MetricValue: float64(m.ColdMaxRelfrozenxidAge),
+					Context:     map[string]any{"cold": true, "freeze_ratio": math.Round(m.ColdFreezeRatio*100) / 100},
+				}
+			}
+
 			if sev == "" {
 				return nil
 			}
 
 			return &Hit{Severity: sev, MetricValue: float64(m.MaxRelfrozenxidAge)}
+		},
+	},
+	{
+		ID: "cold_tables_maintenance", Category: CategoryMaintenance, RelatedRoute: "/maintenance", Advisory: true,
+		Evaluate: func(m RawMetrics) *Hit {
+			if m.Cold == nil || len(m.Cold.Tables) == 0 {
+				return nil
+			}
+
+			return &Hit{
+				Severity:    SeverityLow,
+				MetricValue: float64(len(m.Cold.Tables) + m.Cold.More),
+				Context:     m.Cold.context(),
+			}
 		},
 	},
 	{

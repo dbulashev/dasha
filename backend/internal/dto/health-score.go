@@ -33,6 +33,7 @@ type HealthScoreHighDeadRatioTable struct {
 	LiveTuples int64
 	DeadTuples int64
 	DeadRatio  float64
+	ColdIdx    *int // 1-based position in the ColdArgs; nil unless cold
 }
 
 // HealthScoreHorizonBlockingSession is one row of the horizon-blocking
@@ -75,6 +76,23 @@ type HealthScoreDatabaseMetrics struct {
 	// HOT updates
 	HotUpdateRatio     float64
 	NewpageUpdateRatio float64
+}
+
+// ColdArgs lists one database's cold tables in the order the SQL indexes them.
+type ColdArgs struct {
+	Schemas []string
+	Tables  []string
+	Writes  []int64
+}
+
+// HealthScoreColdTable is a cold table autovacuum will not reach. Idx is its
+// 1-based position in the ColdArgs the query was given.
+type HealthScoreColdTable struct {
+	Idx             int
+	DeadRatio       float64
+	NeverVacuumed   bool
+	RelfrozenxidAge int64
+	SizeBytes       int64
 }
 
 type HealthScoreMetrics struct {
@@ -124,6 +142,9 @@ type HealthScoreMetrics struct {
 	TrackCountsEnabled       bool
 	TablesWithAutovacuumOff  int
 	MaxRelfrozenxidAge       int64
+	ColdMaxRelfrozenxidAge   int64
+	// ColdFreezeRatio is age(relfrozenxid) over the effective autovacuum_freeze_max_age, worst cold relation.
+	ColdFreezeRatio float64
 
 	// Horizon
 	HorizonLagXids int64

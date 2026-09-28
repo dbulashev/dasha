@@ -28,6 +28,7 @@ import type {
   AutoSnapshotStatus,
   Cluster,
   ClusterSnapshotSummary,
+  ColdTablesStatus,
   CommonSummary,
   ConnectionSource,
   ConnectionStatActivity,
@@ -93,6 +94,7 @@ import type {
   GetLogsScanGroupsParams,
   GetMaintenanceAutovacuumFreezeMaxAgeParams,
   GetMaintenanceAutovacuumSummaryParams,
+  GetMaintenanceColdStatusParams,
   GetMaintenanceInfoParams,
   GetMaintenanceTransactionIdDangerParams,
   GetMaintenanceVacuumProgressParams,
@@ -6889,6 +6891,104 @@ export function useGetMaintenanceInfo<
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetMaintenanceInfoQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * @summary Whether the cold-table marker is available for a database
+ */
+export type getMaintenanceColdStatusResponse200 = {
+  data: ColdTablesStatus
+  status: 200
+}
+
+export type getMaintenanceColdStatusResponseSuccess = getMaintenanceColdStatusResponse200 & {
+  headers: Headers
+}
+export type getMaintenanceColdStatusResponse = getMaintenanceColdStatusResponseSuccess
+
+export const getGetMaintenanceColdStatusUrl = (params: GetMaintenanceColdStatusParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/maintenance/cold-status?${stringifiedParams}`
+    : `/api/maintenance/cold-status`
+}
+
+export const getMaintenanceColdStatus = async (
+  params: GetMaintenanceColdStatusParams,
+  options?: RequestInit,
+): Promise<getMaintenanceColdStatusResponse> => {
+  return customFetch<getMaintenanceColdStatusResponse>(getGetMaintenanceColdStatusUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetMaintenanceColdStatusQueryKey = (
+  params?: MaybeRef<GetMaintenanceColdStatusParams>,
+) => {
+  return ['api', 'maintenance', 'cold-status', ...(params ? [params] : [])] as const
+}
+
+export const getGetMaintenanceColdStatusQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMaintenanceColdStatus>>,
+  TError = unknown,
+>(
+  params: MaybeRef<GetMaintenanceColdStatusParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getMaintenanceColdStatus>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetMaintenanceColdStatusQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMaintenanceColdStatus>>> = ({
+    signal,
+  }) => getMaintenanceColdStatus(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMaintenanceColdStatus>>,
+    TError,
+    TData
+  >
+}
+
+export type GetMaintenanceColdStatusQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMaintenanceColdStatus>>
+>
+export type GetMaintenanceColdStatusQueryError = unknown
+
+/**
+ * @summary Whether the cold-table marker is available for a database
+ */
+
+export function useGetMaintenanceColdStatus<
+  TData = Awaited<ReturnType<typeof getMaintenanceColdStatus>>,
+  TError = unknown,
+>(
+  params: MaybeRef<GetMaintenanceColdStatusParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getMaintenanceColdStatus>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMaintenanceColdStatusQueryOptions(params, options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
 

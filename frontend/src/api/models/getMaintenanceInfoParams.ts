@@ -6,6 +6,7 @@
  */
 import type { ClusterNameParameter } from './clusterNameParameter'
 import type { DatabaseParameter } from './databaseParameter'
+import type { GetMaintenanceInfoActivity } from './getMaintenanceInfoActivity'
 import type { InstanceParameter } from './instanceParameter'
 
 export type GetMaintenanceInfoParams = {
@@ -18,4 +19,8 @@ export type GetMaintenanceInfoParams = {
    * Filter by table name (case-insensitive substring match)
    */
   table_name?: string
+  /**
+   * Filter by write activity. "cold" lists tables with no writes for the whole cold window; empty when the cold-table marker is unavailable (see /api/maintenance/cold-status).
+   */
+  activity?: GetMaintenanceInfoActivity
 }

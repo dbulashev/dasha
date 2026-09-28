@@ -4,6 +4,7 @@
  * User API
  * OpenAPI spec version: 1.0.0
  */
+import type { ColdTablesStatus } from './coldTablesStatus'
 import type { HealthScoreCategory } from './healthScoreCategory'
 
 export interface HealthScore {
@@ -16,4 +17,5 @@ export interface HealthScore {
   metrics_degraded?: boolean
   /** True when the instance is a standby (pg_is_in_recovery() = true). When true, the maintenance category is dropped from the score and its weight is redistributed across the remaining categories — same handling as the replication category on instances without replicas. */
   in_recovery: boolean
+  cold_tables?: ColdTablesStatus
 }

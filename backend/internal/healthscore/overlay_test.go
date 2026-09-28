@@ -1,10 +1,12 @@
 package healthscore
 
 import (
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/dbulashev/dasha/internal/dto"
+	"github.com/dbulashev/dasha/internal/hotobjects"
 	"github.com/dbulashev/dasha/internal/metrics"
 )
 
@@ -171,4 +173,30 @@ func TestOverlaySignalGaps_ReplicationIsAllOrNothing(t *testing.T) {
 			t.Errorf("DisconnectedReplicas: expected snapshot 1, got %d", raw.DisconnectedReplicas)
 		}
 	})
+}
+
+func coldSetsFor(database string, tables ...hotobjects.ColdTable) hotobjects.ColdSets {
+	return hotobjects.ColdSets{ //nolint:exhaustruct
+		WindowDays: 7,
+		ByDatabase: map[string]hotobjects.ColdSet{database: {Database: database, Status: hotobjects.ColdAvailable, Tables: tables}}, //nolint:exhaustruct
+	}
+}
+
+func TestColdArgs(t *testing.T) {
+	sets := coldSetsFor("app_db",
+		hotobjects.ColdTable{Schema: "public", Table: "a", Writes: 1},  //nolint:exhaustruct
+		hotobjects.ColdTable{Schema: "archive", Table: "b", Writes: 2}, //nolint:exhaustruct
+	)
+	sets.ByDatabase["warm_db"] = hotobjects.ColdSet{Database: "warm_db", Status: hotobjects.ColdWarmingUp} //nolint:exhaustruct
+
+	got := ColdArgs(sets)
+
+	want := map[string]dto.ColdArgs{"app_db": {
+		Schemas: []string{"public", "archive"},
+		Tables:  []string{"a", "b"},
+		Writes:  []int64{1, 2},
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ColdArgs = %+v, want %+v", got, want)
+	}
 }

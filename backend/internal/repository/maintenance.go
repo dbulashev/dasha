@@ -42,6 +42,8 @@ func (p *PgxPool) GetMaintenanceInfo(
 	instanceName,
 	databaseName string,
 	tableName *string,
+	activity string,
+	cold dto.ColdArgs,
 	limit,
 	offset int,
 ) ([]dto.MaintenanceInfo, error) {
@@ -55,7 +57,7 @@ func (p *PgxPool) GetMaintenanceInfo(
 		return nil, fmt.Errorf("get server version | %w", err)
 	}
 
-	ret, err := p.getMaintenanceInfo(ctx, vNum, pool, tableName, limit, offset)
+	ret, err := p.getMaintenanceInfo(ctx, vNum, pool, tableName, activity, cold, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("getMaintenanceInfo | %w", err)
 	}
@@ -180,18 +182,24 @@ func (p *PgxPool) getMaintenanceInfo(
 	serverVersion int,
 	pool *pgxpool.Pool,
 	tableName *string,
+	activity string,
+	cold dto.ColdArgs,
 	limit,
 	offset int,
 ) ([]dto.MaintenanceInfo, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
-	qStr, err := query.Get(serverVersion, enums.QueryMaintenanceInfo, nil)
+	qStr, err := query.Get(serverVersion, enums.QueryMaintenanceInfo, healthScoreTemplateData{ColdCTE: query.ColdCTE(4)})
 	if err != nil {
 		return nil, fmt.Errorf("getMaintenanceInfo | %w", err)
 	}
 
-	rows, err := pool.Query(ctx, qStr, tableName, limit, offset)
+	if activity == "" {
+		activity = "all"
+	}
+
+	rows, err := pool.Query(ctx, qStr, append(append([]any{tableName, limit, offset}, coldQueryArgs(cold)...), activity)...)
 	if err != nil {
 		return nil, fmt.Errorf("getMaintenanceInfo | %w", err)
 	}
@@ -204,9 +212,10 @@ func (p *PgxPool) getMaintenanceInfo(
 			lastVacuum, lastAutovacuum   pgtype.Timestamp
 			lastAnalyze, lastAutoanalyze pgtype.Timestamp
 			deadRows, liveRows           int64
+			coldIdx                      *int
 		)
 
-		err = rows.Scan(&schema, &table, &lastVacuum, &lastAutovacuum, &lastAnalyze, &lastAutoanalyze, &deadRows, &liveRows)
+		err = rows.Scan(&schema, &table, &lastVacuum, &lastAutovacuum, &lastAnalyze, &lastAutoanalyze, &deadRows, &liveRows, &coldIdx)
 		if err != nil {
 			return nil, fmt.Errorf("getMaintenanceInfo | %w", err)
 		}
@@ -220,6 +229,7 @@ func (p *PgxPool) getMaintenanceInfo(
 			LastAutoanalyze: convertPgTimestampToTime(lastAutoanalyze),
 			DeadRows:        deadRows,
 			LiveRows:        liveRows,
+			ColdIdx:         coldIdx,
 		})
 	}
 

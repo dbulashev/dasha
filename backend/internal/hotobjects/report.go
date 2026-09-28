@@ -76,10 +76,12 @@ type HostSample struct {
 }
 
 // BuildInput pairs a host's fresh sample with its stored anchors (nil on the
-// very first run — no deltas can be computed then).
+// very first run — no deltas can be computed then). PrevWindow is the host's
+// window from the latest snapshot of the database that has one.
 type BuildInput struct {
-	Sample  HostSample
-	Anchors map[string]AnchorRow
+	Sample     HostSample
+	Anchors    map[string]AnchorRow
+	PrevWindow *HostWindow
 }
 
 // aggObject accumulates one object's cluster-wide delta. Hash-partition leaves
@@ -136,10 +138,11 @@ func BuildSnapshot(
 		}
 
 		snap.Windows[in.Sample.Instance] = HostWindow{
-			From:       from,
-			To:         in.Sample.CapturedAt,
-			Complete:   complete,
-			StatsReset: in.Sample.StatsReset,
+			From:          from,
+			To:            in.Sample.CapturedAt,
+			Complete:      complete,
+			StatsReset:    in.Sample.StatsReset,
+			ObservedSince: observedSince(in, complete, capturedAt),
 		}
 
 		for _, row := range in.Sample.Rows {
@@ -196,6 +199,49 @@ func BuildSnapshot(
 	sortTop(snap.Top)
 
 	return snap
+}
+
+func observedSince(in BuildInput, complete bool, capturedAt time.Time) *time.Time {
+	switch {
+	case in.Sample.InRecovery:
+		return nil
+	case complete && in.PrevWindow != nil && in.PrevWindow.ObservedSince != nil:
+		return in.PrevWindow.ObservedSince
+	default:
+		return &capturedAt
+	}
+}
+
+// AdvanceQuiet returns the host's sample rows with QuietSince carried or reset.
+func AdvanceQuiet(in BuildInput, capturedAt time.Time) []AnchorRow {
+	out := make([]AnchorRow, len(in.Sample.Rows))
+	intact := epochIntact(in)
+
+	for i, row := range in.Sample.Rows {
+		row.QuietSince = nil
+
+		if row.Kind == KindTable && !in.Sample.InRecovery {
+			row.QuietSince = quietSince(in, intact, row, capturedAt)
+		}
+
+		out[i] = row
+	}
+
+	return out
+}
+
+func quietSince(in BuildInput, intact bool, row AnchorRow, capturedAt time.Time) *time.Time {
+	anchor, ok := in.Anchors[Key(row.Kind, row.Schema, row.Object)]
+	if !ok || anchor.QuietSince == nil || !intact || anchor.PartSig != row.PartSig {
+		return &capturedAt
+	}
+
+	d, ok := Delta(anchor.Counters, row.Counters)
+	if !ok || RankKey(KindTable, ClassWrites, d) != 0 {
+		return &capturedAt
+	}
+
+	return anchor.QuietSince
 }
 
 // epochIntact reports whether the host's stats epoch matched its anchors.
