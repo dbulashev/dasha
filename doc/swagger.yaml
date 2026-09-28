@@ -8171,7 +8171,6 @@ components:
         - HotSchedule
         - HotTopN
         - HotRetentionDays
-        - HotColdWindowDays
         - IOEnabled
         - IOSchedule
         - IORetentionDays
@@ -8219,7 +8218,7 @@ components:
           type: integer
           minimum: 1
           maximum: 90
-          description: Days without writes after which a table counts as cold
+          description: Days without writes after which a table counts as cold; omitted on PUT keeps the stored value
         IOEnabled:
           type: boolean
           description: Capture pg_stat_io snapshots (the I/O section's history)

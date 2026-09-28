@@ -8,6 +8,7 @@ import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useApiLoader } from '@/composables/useApiLoader'
 import { useViewError } from '@/composables/useViewError'
 import HealthScoreGauge from '@/components/health-score/HealthScoreGauge.vue'
+import ColdTablesStatusLine from '@/components/health-score/ColdTablesStatusLine.vue'
 import HealthScoreCategories from '@/components/health-score/HealthScoreCategories.vue'
 import HealthScoreTrend from '@/components/health-score/HealthScoreTrend.vue'
 import HealthScoreDatabases from '@/components/health-score/HealthScoreDatabases.vue'
@@ -76,6 +77,7 @@ const { items: data, loading } = useApiLoader<HealthScore | null>(
               <HealthScoreCategories :categories="data.categories" />
             </div>
           </div>
+          <ColdTablesStatusLine :status="data.cold_tables" class="mt-2" />
         </template>
       </v-card-text>
     </v-card>

@@ -162,12 +162,14 @@
     "hot": {
       "title": "Heiße Objekte",
       "hint": "Delta-Snapshots der Tabellen-/Indexaktivität: ein exaktes Top pro Metrikklasse plus Rest-Histogramm. Von allen Cluster-Hosts nach Zeitplan gesammelt.",
-      "fieldsHint": "Zeitplan — 5-Feld-Cron, UTC-Zeit (eigene Zone: CRON_TZ=Europe/Moscow 0 3 * * *; Beispiele: 0 3 * * * — täglich um 03:00, */30 * * * * — alle 30 Minuten). Top-Größe — wie viele Objekte pro Metrikklasse namentlich gespeichert werden; der Rest wandert ins Histogramm.",
+      "fieldsHint": "Zeitplan — 5-Feld-Cron, UTC-Zeit (eigene Zone: CRON_TZ=Europe/Moscow 0 3 * * *; Beispiele: 0 3 * * * — täglich um 03:00, */30 * * * * — alle 30 Minuten). Top-Größe — wie viele Objekte pro Metrikklasse namentlich gespeichert werden; der Rest wandert ins Histogramm. Kältefenster: so viele Tage ohne Schreibzugriff machen eine Tabelle kalt.",
       "schedule": "Zeitplan (cron)",
       "scheduleRequired": "Cron-Ausdruck erforderlich",
       "scheduleInvalid": "Kein Cron-Ausdruck: 5 Felder erwartet, z. B. 0 3 * * * oder */30 * * * *",
       "topN": "Top-Größe",
-      "retentionDays": "Aufbewahrung, Tage"
+      "retentionDays": "Aufbewahrung, Tage",
+      "coldWindowDays": "Kältefenster, Tage",
+      "coldWindowRange": "Von 1 bis 90 Tagen"
     },
     "locks": {
       "title": "Sperren",
@@ -1284,6 +1286,11 @@
       "allOk": "Alle Tabellen innerhalb der Schwellwerte — Autovacuum hat gerade nichts zu tun.",
       "runningVacuums": "VACUUM läuft",
       "runningAnalyzes": "ANALYZE läuft"
+    },
+    "activity": {
+      "all": "Alle",
+      "active": "Aktiv",
+      "cold": "Kalt"
     }
   },
   "fleetHealth": {
@@ -1585,7 +1592,8 @@
         "backendType": "Prozesstyp",
         "state": "State",
         "xactDuration": "Transaktionsdauer",
-        "query": "Query"
+        "query": "Query",
+        "noWrites": "Ohne Schreibzugriff"
       },
       "unit": {
         "seconds": "s"
@@ -1679,7 +1687,8 @@
       "relfrozenxid_age_outlier": {
         "title": "Alte Tabelle ohne Freeze",
         "short": "Max. relfrozenxid-Alter: {metric_value}.",
-        "detail": "Im Cluster gibt es Tabellen, die lange nicht von autovacuum freeze bearbeitet wurden."
+        "detail": "Im Cluster gibt es Tabellen, die lange nicht von autovacuum freeze bearbeitet wurden.",
+        "detailCold": "Eine kalte Tabelle nähert sich der erzwungenen Freeze-Schwelle: ihr relfrozenxid-Alter beträgt {freeze_ratio} ihres autovacuum_freeze_max_age. VACUUM FREEZE manuell ausführen, bevor der Anti-Wraparound-Vacuum startet."
       },
       "horizon_lag_xids": {
         "title": "Horizont von langer Transaktion gehalten",
@@ -1793,6 +1802,12 @@
         "title": "Wenig freier Speicher auf dem Host",
         "short": "Plattennutzung: {metric_pct}% (LOW ≥70%, MED ≥80%, HIGH ≥90%). Ab ≥90% wird der Gesamt-Score in den roten Bereich gesenkt.",
         "detail": "Zeigt, wie voll das am stärksten belegte Host-Dateisystem ist (aus pgSCV-/Yandex-Cloud-Metriken).\nLäuft das Daten-Volume voll, kann PostgreSQL nicht mehr schreiben — der Cluster stoppt abrupt, Datenkorruption ist möglich. Deshalb gilt eine Belegung ≥90% auf jeder Rolle (Primary wie Replica) als kritisch: der Gesamt-Score wird in den roten Bereich gezwungen.\nWas tun:\n• Platz freigeben — alte WAL und Logs, temporäre Dateien, veraltete Backups;\n• das Volume vergrößern;\n• Tabellen-/Index-Bloat prüfen;\n• sicherstellen, dass sich WAL nicht wegen inaktiver Replikations-Slots ansammelt."
+      },
+      "cold_tables_maintenance": {
+        "title": "Kalte Tabellen brauchen VACUUM",
+        "short": "Tabellen ohne Schreibzugriff, die Autovacuum nicht erreicht: {metric_value}.",
+        "detail": "In diese Tabellen wurde seit {window_days} Tagen oder länger nicht geschrieben, daher bearbeitet Autovacuum sie nicht. Die Bewertung bleibt unverändert. Ein einmaliges VACUUM (FREEZE, ANALYZE) genügt bis zum nächsten Schreibzugriff.",
+        "sql": "VACUUM (FREEZE, ANALYZE) {worst};"
       }
     },
     "trend": {
@@ -1811,6 +1826,22 @@
       },
       "unavailable": "Kein Trend verfügbar: die Metrik-Datenquelle ist nicht konfiguriert oder die Instanz wurde darin nicht gefunden.",
       "noData": "Keine Daten für den Zeitraum."
+    },
+    "cold": {
+      "count": "Kalte Tabellen: {n}, seit {days}+ Tagen ohne Schreibzugriff",
+      "countHint": "In diese Tabellen wurde das ganze Kältefenster nicht geschrieben. Tote Zeilen und fehlendes VACUUM werden nicht bestraft; das relfrozenxid-Alter wird mit ihrer eigenen Freeze-Schwelle verglichen.",
+      "unavailable": "Markierung kalter Tabellen nicht verfügbar",
+      "reason": {
+        "no_storage": "Snapshot-Speicher ist nicht konfiguriert.",
+        "disabled": "Erfassung heißer Objekte ist in den Auto-Snapshot-Einstellungen aus.",
+        "stale": "Kein Snapshot heißer Objekte in den letzten 48 h.",
+        "warming_up": "Beobachtet seit {observed} von {days} Tagen.",
+        "standby": "Die Markierung wird nur auf dem Primary berechnet.",
+        "error": "Snapshot-Speicher konnte nicht gelesen werden."
+      },
+      "noWritesDays": "{n} T. ohne Schreibzugriff",
+      "neverVacuumed": "nie vakuumiert",
+      "objectValue": "tot {dead} %, relfrozenxid-Alter {xid}, {days} T. ohne Schreibzugriff"
     }
   },
   "prefs": {

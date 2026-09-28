@@ -506,8 +506,8 @@ type AutoSnapshotConfig struct {
 	Defaults     AutoSnapshotTriggerDefaults `json:"Defaults"`
 	Enabled      bool                        `json:"Enabled"`
 
-	// HotColdWindowDays Days without writes after which a table counts as cold
-	HotColdWindowDays int `json:"HotColdWindowDays"`
+	// HotColdWindowDays Days without writes after which a table counts as cold; omitted on PUT keeps the stored value
+	HotColdWindowDays *int `json:"HotColdWindowDays,omitempty"`
 
 	// HotEnabled Capture hot-objects delta snapshots (tables/indexes activity tops)
 	HotEnabled bool `json:"HotEnabled"`

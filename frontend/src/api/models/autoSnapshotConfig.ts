@@ -31,11 +31,11 @@ export interface AutoSnapshotConfig {
   /** Age-based retention of hot-objects snapshots, days */
   HotRetentionDays: number
   /**
-   * Days without writes after which a table counts as cold
+   * Days without writes after which a table counts as cold; omitted on PUT keeps the stored value
    * @minimum 1
    * @maximum 90
    */
-  HotColdWindowDays: number
+  HotColdWindowDays?: number
   /** Capture pg_stat_io snapshots (the I/O section's history) */
   IOEnabled: boolean
   /** Standard 5-field cron expression, UTC unless prefixed with CRON_TZ=<zone> (e.g. "*\/5 * * * *") */

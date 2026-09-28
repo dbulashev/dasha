@@ -184,12 +184,14 @@
     "hot": {
       "title": "Hot objects",
       "hint": "Delta snapshots of table/index activity: an exact top per metric class plus a tail histogram. Collected from every cluster host on a schedule.",
-      "fieldsHint": "Schedule — 5-field cron, UTC time (own zone: CRON_TZ=Europe/Moscow 0 3 * * *; examples: 0 3 * * * — daily at 03:00, */30 * * * * — every half hour). Top size — how many objects are stored by name per metric class; the rest folds into the tail histogram.",
+      "fieldsHint": "Schedule — 5-field cron, UTC time (own zone: CRON_TZ=Europe/Moscow 0 3 * * *; examples: 0 3 * * * — daily at 03:00, */30 * * * * — every half hour). Top size — how many objects are stored by name per metric class; the rest folds into the tail histogram. Cold window — how many days without writes make a table cold.",
       "schedule": "Schedule (cron)",
       "scheduleRequired": "A cron expression is required",
       "scheduleInvalid": "Not a cron expression: 5 fields expected, e.g. 0 3 * * * or */30 * * * *",
       "topN": "Top size",
-      "retentionDays": "Retention, days"
+      "retentionDays": "Retention, days",
+      "coldWindowDays": "Cold window, days",
+      "coldWindowRange": "From 1 to 90 days"
     },
     "locks": {
       "title": "Locks",
@@ -1322,6 +1324,11 @@
       "allOk": "All tables are within thresholds — autovacuum has nothing to do right now.",
       "runningVacuums": "VACUUM running",
       "runningAnalyzes": "ANALYZE running"
+    },
+    "activity": {
+      "all": "All",
+      "active": "Active",
+      "cold": "Cold"
     }
   },
   "fleetHealth": {
@@ -1623,7 +1630,8 @@
         "backendType": "Backend type",
         "state": "State",
         "xactDuration": "Transaction duration",
-        "query": "Query"
+        "query": "Query",
+        "noWrites": "No writes"
       },
       "unit": {
         "seconds": "s"
@@ -1717,7 +1725,8 @@
       "relfrozenxid_age_outlier": {
         "title": "Old table that has not been frozen",
         "short": "Highest relfrozenxid age: {metric_value}.",
-        "detail": "Some tables have not been processed by autovacuum freeze for a long time. Find them and run VACUUM FREEZE."
+        "detail": "Some tables have not been processed by autovacuum freeze for a long time. Find them and run VACUUM FREEZE.",
+        "detailCold": "A cold table is close to the forced freeze threshold: its relfrozenxid age is {freeze_ratio} of its autovacuum_freeze_max_age. Run VACUUM FREEZE by hand before the anti-wraparound vacuum starts."
       },
       "horizon_lag_xids": {
         "title": "The horizon is held back by a long transaction",
@@ -1831,6 +1840,12 @@
         "title": "Low free disk space on the host",
         "short": "Disk utilisation: {metric_pct}% (LOW ≥70%, MED ≥80%, HIGH ≥90%). At ≥90% the overall Health Score is forced into the red zone.",
         "detail": "Shows how full the most-utilised filesystem on the host is (from pgSCV / Yandex Cloud metrics).\nIf the data volume runs out of space, PostgreSQL can no longer write — the cluster stops abruptly and data can be corrupted. That is why ≥90% is treated as critical for any role, primary and replica alike: the overall Health Score is forced into the red zone.\nWhat to do:\n• free up space — old WAL and logs, temporary files, stale backups;\n• grow the volume;\n• check table and index bloat;\n• make sure WAL is not accumulating because of inactive replication slots."
+      },
+      "cold_tables_maintenance": {
+        "title": "Cold tables need a vacuum",
+        "short": "Tables without writes that autovacuum will not reach: {metric_value}.",
+        "detail": "Nothing has been written to these tables for {window_days} days or more, so autovacuum will not process them. The score is not affected. One VACUUM (FREEZE, ANALYZE) is enough: the table needs no maintenance until it is written to again.",
+        "sql": "VACUUM (FREEZE, ANALYZE) {worst};"
       }
     },
     "trend": {
@@ -1849,6 +1864,22 @@
       },
       "unavailable": "No trend available: the metrics datasource is not configured, or the instance was not found in it.",
       "noData": "No data for this period."
+    },
+    "cold": {
+      "count": "Cold tables: {n}, no writes for {days}+ days",
+      "countHint": "No writes to these tables for the whole cold window. Their dead rows and missing vacuum are not penalised; relfrozenxid age is compared with their own freeze threshold.",
+      "unavailable": "Cold-table marker unavailable",
+      "reason": {
+        "no_storage": "Snapshot storage is not configured.",
+        "disabled": "Hot-object capture is off in the auto-snapshot settings.",
+        "stale": "No hot-objects snapshot in the last 48 h.",
+        "warming_up": "Observed for {observed} of {days} days.",
+        "standby": "The marker is computed on the primary only.",
+        "error": "Snapshot storage could not be read."
+      },
+      "noWritesDays": "no writes {n} d",
+      "neverVacuumed": "never vacuumed",
+      "objectValue": "dead {dead} %, relfrozenxid age {xid}, no writes {days} d"
     }
   },
   "prefs": {
