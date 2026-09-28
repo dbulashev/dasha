@@ -76,7 +76,7 @@ func TestColdTablesMaintenance(t *testing.T) {
 		t.Fatalf("want LOW with 17 tables, got %+v", hit)
 	}
 
-	if hit.Context["worst"] != "public.ta" || hit.Context["more"] != 12 || hit.Context["window_days"] != 7 {
+	if hit.Context["worst"] != `"public"."ta"` || hit.Context["more"] != 12 || hit.Context["window_days"] != 7 {
 		t.Errorf("context = %+v", hit.Context)
 	}
 

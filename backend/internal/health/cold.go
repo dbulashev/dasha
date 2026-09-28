@@ -1,6 +1,10 @@
 package health
 
-import "math"
+import (
+	"math"
+
+	"github.com/jackc/pgx/v5"
+)
 
 const (
 	coldFreezeRatioLow    = 0.9
@@ -40,7 +44,7 @@ func (c *ColdFacts) context() map[string]any {
 
 	return map[string]any{
 		"window_days": c.WindowDays,
-		"worst":       c.Tables[0].Schema + "." + c.Tables[0].Table,
+		"worst":       pgx.Identifier{c.Tables[0].Schema, c.Tables[0].Table}.Sanitize(),
 		"objects":     objects,
 		"more":        c.More,
 	}

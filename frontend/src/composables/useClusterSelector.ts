@@ -204,6 +204,11 @@ export function useClusterSelector() {
   watch(selectedCluster, (newCluster, oldCluster) => {
     if (!initialized.value || isSyncing.value || !newCluster) return
     if (newCluster === oldCluster) return
+    // Set from the URL: the URL already carries its own host/db.
+    if (route.params.clustername && String(route.params.clustername) === newCluster) {
+      if (!route.query.host || !route.query.db) pushToUrl()
+      return
+    }
 
     const cluster = clusterStore.clusterList?.find(c => c.name === newCluster)
     if (!cluster) return
