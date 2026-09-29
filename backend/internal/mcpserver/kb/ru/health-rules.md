@@ -36,6 +36,17 @@ snapshot-режиме — с базой. Не читать null как «про�
 последовательность на всём инстансе), база указывается только в детализации
 по базам.
 
+**Холодные таблицы:** таблицы, в которые на мастере не писали (сумма
+n_tup_ins + n_tup_upd + n_tup_del не менялась) дольше порога неактивности,
+по умолчанию 7 дней. Признак требует включённых горячих объектов и хранилища
+снимков; `cold_tables` в get_health_score отдаёт его статус и число холодных
+таблиц в оцениваемой базе. Автовакууму незачем приходить в холодную таблицу,
+поэтому её мёртвые строки и отсутствие вакуума не штрафуются: она не входит в
+high_max_dead_ratio, high_avg_dead_ratio, many_bloated_tables и
+tables_never_vacuumed, её показывает cold_tables_maintenance. В режиме метрик
+оба правила доли мёртвых строк берут значение из datasource и холодные таблицы
+учитывают. Одна запись возвращает таблицу в активные при следующем расчёте.
+
 ## connections (вес 0.15)
 
 ### high_connection_ratio
@@ -93,15 +104,16 @@ LOW >1.5×, MED >3×, HIGH >6×. Планировщик ушёл с индекс
 
 ### high_max_dead_ratio
 Худший dead ratio таблицы. LOW ≥10%, MED ≥20%, HIGH ≥30%.
-Первое: `top_tables` / `describe_table` — VACUUM ANALYZE худшей таблицы.
+Холодные таблицы не учитываются. Первое: `top_tables` / `describe_table` —
+VACUUM ANALYZE худшей таблицы.
 
 ### high_avg_dead_ratio
-Средний dead ratio по таблицам. LOW ≥5%, MED ≥15%, HIGH ≥25%.
+Средний dead ratio по таблицам без холодных. LOW ≥5%, MED ≥15%, HIGH ≥25%.
 Autovacuum не справляется: настроить autovacuum_vacuum_scale_factor / cost_limit.
 
 ### many_bloated_tables
-Таблиц с dead ratio >20%. LOW ≥5, MED ≥10, HIGH ≥20. Первое: `vacuum_danger`
-и VACUUM по списку.
+Таблиц с dead ratio >20%, без холодных. LOW ≥5, MED ≥10, HIGH ≥20.
+Первое: `vacuum_danger` и VACUUM по списку.
 
 ### low_hot_update_ratio
 Доля HOT-обновлений. LOW <80%, MED <65%, HIGH <50%. Не-HOT обновления пишут
@@ -168,7 +180,7 @@ primary и walreceiver; неактивный слот копит WAL (риск �
 ### relfrozenxid_age_outlier
 Макс. возраст relfrozenxid таблицы; пороги как у xid_wraparound_risk.
 Таблицы, пропущенные autovacuum freeze — найти через `vacuum_danger`, VACUUM FREEZE.
-Холодные таблицы (без записи всё окно холодности) оцениваются отдельно: возраст к
+Холодные таблицы (без записи дольше порога неактивности) оцениваются отдельно: возраст к
 их эффективному autovacuum_freeze_max_age, LOW ≥0.9, MED ≥1.0, HIGH на
 vacuum_failsafe_age. Берётся худшая ступень, у холодной `context.cold`.
 
@@ -182,7 +194,8 @@ LOW ≥7 дней, MED ≥21, HIGH ≥60. Autovacuum голодает: ужес�
 Поднять autovacuum_max_workers / cost_limit, снизить cost_delay.
 
 ### tables_never_vacuumed
-Таблиц, ни разу не вакуумированных. LOW ≥1, MED ≥2, HIGH ≥5. VACUUM ANALYZE;
+Таблиц, ни разу не вакуумированных, без холодных. LOW ≥1, MED ≥2, HIGH ≥5.
+VACUUM ANALYZE;
 проверить per-table autovacuum_enabled.
 
 ### autovacuum_disabled
@@ -211,8 +224,8 @@ LOW ≥3, MED ≥5, HIGH ≥10. Вероятны плохие планы: ANALYZ
 автоанализ и не должен запускаться.
 
 ### cold_tables_maintenance
-Информационное, на балл не влияет; LOW. Холодные таблицы (без записи всё окно
-холодности) с мёртвыми строками >10 % (>10 тыс. строк), ни разу не
+Информационное, на балл не влияет; LOW. Холодные таблицы (без записи дольше
+порога неактивности) с мёртвыми строками >10 % (>10 тыс. строк), ни разу не
 вакуумированные (>10 тыс. строк) или с age(relfrozenxid) ≥ vacuum_freeze_table_age.
 До 5 в `context.objects`, остальные в `more`. Автовакуум до них не дойдёт:
 один раз VACUUM (FREEZE, ANALYZE).
