@@ -83,6 +83,7 @@ const RULES_BY_CATEGORY: Record<string, { id: string }[]> = {
     { id: 'track_counts_disabled' },
     { id: 'tables_with_autovacuum_off' },
     { id: 'relfrozenxid_age_outlier' },
+    { id: 'cold_tables_maintenance' },
     { id: 'stale_planner_stats' },
   ],
   horizon: [{ id: 'horizon_lag_xids' }],
@@ -316,6 +317,23 @@ clamp(0 … 100)</pre>
               </v-list-item>
             </v-list>
           </v-card>
+        </section>
+
+        <v-divider class="my-4" />
+
+        <section class="about-section">
+          <h3 class="text-h6 mb-2 d-flex align-center ga-2">
+            <v-icon size="small">mdi-snowflake</v-icon>
+            {{ t('healthScore.about.coldTitle') }}
+          </h3>
+          <p class="text-body-2 mb-3">{{ t('healthScore.about.coldIntro') }}</p>
+          <p class="text-body-2 mb-2">{{ t('healthScore.about.coldRequirements') }}</p>
+          <ul class="text-body-2 ms-4 mb-3">
+            <li>{{ t('healthScore.about.coldReqCapture') }}</li>
+            <li>{{ t('healthScore.about.coldReqFresh') }}</li>
+            <li>{{ t('healthScore.about.coldReqHistory') }}</li>
+          </ul>
+          <p class="text-body-2">{{ t('healthScore.about.coldWindow') }}</p>
         </section>
 
         <v-divider class="my-4" />

@@ -339,7 +339,9 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 	addTool(s, &mcp.Tool{
 		Name: "get_health_score",
 		Description: "Get the instance-level health score (0-100) with per-category breakdown and " +
-			"its source (snapshot or metrics) for a cluster/instance.",
+			"its source (snapshot or metrics) for a cluster/instance. cold_tables reports tables with no " +
+			"writes for longer than the inactivity threshold: they are left out of the dead-ratio rules and " +
+			"tables_never_vacuumed.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a instanceArgs) (*mcp.CallToolResult, any, error) {
 		out, err := c.HealthScore(ctx, a.Cluster, a.Instance)
 
@@ -356,7 +358,9 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			"In metrics mode the rules fed by datasource aggregates (cache hit, dead ratios, HOT, xid age, " +
 			"checksums, disk, regressions) are null as well, and sequence_exhaustion is null at instance " +
 			"scope in either mode — that means no single database owns the number, not that no database " +
-			"is affected.",
+			"is affected. advisory=true marks a finding that does not affect the score. " +
+			"cold_tables_maintenance is advisory and already names its tables in context.objects — " +
+			"no health_details call is needed for it.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a recommendationsArgs) (*mcp.CallToolResult, any, error) {
 		var db *string
 		if a.Database != "" {
@@ -375,6 +379,8 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			"call it whenever a recommendation needs to become an actionable target. Pass the recommendation's " +
 			"rule_id as detail; the per-table drill-downs (tables_autovacuum_off, low_hot_update_tables, " +
 			"high_dead_ratio_tables) also need a database, the instance-wide ones do not. " +
+			"high_dead_ratio_tables lists cold tables last, with NoWritesDays set; they do not count toward " +
+			"the dead-ratio rules. " +
 			"What it returns is a target, not yet a cause: follow up with describe_table on the named table to " +
 			"confirm the mechanism (fillfactor, which indexed column the UPDATE touches) before advising a fix.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a healthDetailsArgs) (*mcp.CallToolResult, any, error) {

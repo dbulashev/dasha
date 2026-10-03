@@ -34,6 +34,18 @@ problem is not in any database". `sequence_exhaustion` is null at instance
 scope in either mode (it is the worst sequence anywhere on the instance) and
 named only in the per-database drill-down.
 
+**Cold tables:** tables with no writes (n_tup_ins + n_tup_upd + n_tup_del
+unchanged) on the primary for longer than the inactivity threshold, 7 days by
+default. The
+marker needs hot objects enabled and the snapshot storage; `cold_tables` in
+get_health_score gives its status and the count for the scored database.
+Autovacuum has no reason to visit a cold table, so its dead rows and missing
+vacuum are not penalized: it is left out of high_max_dead_ratio,
+high_avg_dead_ratio, many_bloated_tables and tables_never_vacuumed and listed
+by cold_tables_maintenance instead. In metrics mode the two dead-ratio rules
+come from the datasource and still include cold tables. A single write makes
+the table active again at the next score.
+
 ## connections (weight 0.15)
 
 ### high_connection_ratio
@@ -91,15 +103,16 @@ is missing/invalid. First: `list_indexes` (kind=usage, then missing); ANALYZE ho
 
 ### high_max_dead_ratio
 Worst table dead-tuple ratio. LOW ≥10%, MED ≥20%, HIGH ≥30%.
-First: `top_tables` / `describe_table` — VACUUM ANALYZE the worst table.
+Cold tables excluded. First: `top_tables` / `describe_table` — VACUUM ANALYZE
+the worst table.
 
 ### high_avg_dead_ratio
-Average dead ratio across tables. LOW ≥5%, MED ≥15%, HIGH ≥25%.
+Average dead ratio across tables, cold tables excluded. LOW ≥5%, MED ≥15%, HIGH ≥25%.
 Autovacuum is not keeping up: tune autovacuum_vacuum_scale_factor / cost_limit.
 
 ### many_bloated_tables
-Tables with dead ratio >20%. LOW ≥5, MED ≥10, HIGH ≥20. First: `vacuum_danger`
-and per-table VACUUM.
+Tables with dead ratio >20%, cold tables excluded. LOW ≥5, MED ≥10, HIGH ≥20.
+First: `vacuum_danger` and per-table VACUUM.
 
 ### low_hot_update_ratio
 Share of HOT updates. LOW <80%, MED <65%, HIGH <50%. Non-HOT updates touch
@@ -163,7 +176,7 @@ worst databases, kill horizon-holding transactions.
 ### relfrozenxid_age_outlier
 Max per-table relfrozenxid age; same thresholds as xid_wraparound_risk.
 Tables skipped by autovacuum freeze — find via `vacuum_danger`, VACUUM FREEZE them.
-Cold tables (no writes for the whole cold window) are rated separately by age over
+Cold tables (no writes for longer than the inactivity threshold) are rated separately by age over
 their effective autovacuum_freeze_max_age: LOW ≥0.9, MED ≥1.0, HIGH at
 vacuum_failsafe_age. The worse tier wins; `context.cold` marks the cold one.
 
@@ -177,7 +190,8 @@ Tables currently eligible for autovacuum (queue depth). LOW ≥6, MED ≥15, HIG
 Raise autovacuum_max_workers / cost_limit, lower cost_delay.
 
 ### tables_never_vacuumed
-Tables never vacuumed at all. LOW ≥1, MED ≥2, HIGH ≥5. Run VACUUM ANALYZE;
+Tables never vacuumed at all, cold tables excluded. LOW ≥1, MED ≥2, HIGH ≥5.
+Run VACUUM ANALYZE;
 check per-table autovacuum_enabled.
 
 ### autovacuum_disabled
@@ -206,8 +220,8 @@ large tables). Cold tables below the threshold are not counted: autoanalyze is
 not supposed to run for them.
 
 ### cold_tables_maintenance
-Advisory, does not affect the score; LOW. Cold tables (no writes for the whole
-cold window) with >10% dead rows (>10k rows), never vacuumed (>10k rows), or
+Advisory, does not affect the score; LOW. Cold tables (no writes for longer
+than the inactivity threshold) with >10% dead rows (>10k rows), never vacuumed (>10k rows), or
 age(relfrozenxid) ≥ vacuum_freeze_table_age. Up to 5 in `context.objects`, the
 rest in `more`. Autovacuum will not reach them: run VACUUM (FREEZE, ANALYZE) once.
 

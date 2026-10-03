@@ -1,8 +1,9 @@
 # Changelog
 
-## Unreleased
+## v1.8.2
 
 ### Features
+- **Health Score does not penalize cold tables**, those with no writes for longer than the inactivity threshold (7 days by default, set in the auto-snapshot settings), for dead rows and missing vacuum. An informational recommendation lists the cold tables that need a single `VACUUM (FREEZE, ANALYZE)`, and the Maintenance page gets an All / Active / Cold filter. Requires hot-object capture.
 - **Three MCP tools for plans from the logs**, `plan_insights`, `query_plans` and `plan_regressions`, with a knowledge-base page on how to read them.
 - **Long MCP results are compacted to fit the result budget**: `health_trend`, `query_compare`, `list_clusters`, `describe_table` and the plan tools return a short view and name the parameter for the full one.
 - **An unknown cluster, host or database name in an MCP call is answered with similar names.**
