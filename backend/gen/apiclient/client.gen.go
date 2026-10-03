@@ -3477,7 +3477,7 @@ type GetMaintenanceInfoParams struct {
 	// TableName Filter by table name (case-insensitive substring match)
 	TableName *string `form:"table_name,omitempty" json:"table_name,omitempty"`
 
-	// Activity Filter by write activity. "cold" lists tables with no writes for the whole cold window; empty when the cold-table marker is unavailable (see /api/maintenance/cold-status).
+	// Activity Filter by write activity. "cold" lists tables with no writes for longer than the inactivity threshold; empty when the cold-table marker is unavailable (see /api/maintenance/cold-status).
 	Activity *GetMaintenanceInfoParamsActivity `form:"activity,omitempty" json:"activity,omitempty"`
 }
 

@@ -20,7 +20,7 @@ export type GetMaintenanceInfoParams = {
    */
   table_name?: string
   /**
-   * Filter by write activity. "cold" lists tables with no writes for the whole cold window; empty when the cold-table marker is unavailable (see /api/maintenance/cold-status).
+   * Filter by write activity. "cold" lists tables with no writes for longer than the inactivity threshold; empty when the cold-table marker is unavailable (see /api/maintenance/cold-status).
    */
   activity?: GetMaintenanceInfoActivity
 }

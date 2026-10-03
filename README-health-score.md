@@ -107,6 +107,8 @@ Each bullet: what's measured / how it's computed, then LOW / MEDIUM / HIGH thres
 - `high_max_dead_ratio` — worst per-table `n_dead_tup / NULLIF(n_live_tup + n_dead_tup, 0)` from `pg_stat_user_tables`, in %. Identifies a table autovacuum can't keep clean. Thresholds ≥10 / ≥20 / ≥30.
 - `high_avg_dead_ratio` — same ratio averaged across tables with > 1000 live tuples. Background bloat level. Thresholds ≥5 / ≥15 / ≥25.
 - `many_bloated_tables` — number of tables with a dead ratio above 20 %, counting only tables over 10,000 rows. Thresholds ≥5 / ≥10 / ≥20.
+
+The three rules above leave out [cold tables](#cold-tables).
 - `low_hot_update_ratio` — `n_tup_hot_upd / NULLIF(n_tup_upd, 0)` over all user tables. Lower means UPDATEs allocate new tuples and rewrite every index, bloating indexes. Thresholds <0.80 / <0.65 / <0.50.
 - `high_newpage_update_ratio` — `n_tup_newpage_upd / NULLIF(n_tup_upd, 0)` (PG 16+). Share of UPDATEs that broke a HOT chain by placing the new tuple on a fresh page. Thresholds ≥0.05 / ≥0.10 / ≥0.20.
 - `sequence_exhaustion` — worst sequence against the ceiling that actually applies: a bigint sequence owned by an `integer` column is measured against 2147483647, not against its own `maxvalue`. Once the values run out, INSERT fails. Thresholds are stated as percent of values still free and are shared with the Schema Checks page (`schema_lint.sequence_thresholds`): <20 % free / <10 % / <5 %. Fed by the metrics datasource when one is configured, otherwise read from the system catalog for every database of the instance.
@@ -120,12 +122,13 @@ Each bullet: what's measured / how it's computed, then LOW / MEDIUM / HIGH thres
 - `xid_wraparound_risk` — `max(age(datfrozenxid))` across `pg_database`. Number of transactions until wraparound forces shutdown. Calibrated against `autovacuum_freeze_max_age=200M` (autovacuum should already be in anti-wraparound mode) and the 2 B hard limit. Thresholds ≥150 M / ≥200 M / ≥1.6 B.
 - `stale_vacuum` — oldest `last_vacuum`/`last_autovacuum` age, in days, **among the backlog tables** (those past their autovacuum trigger). Static / read-mostly tables never enter the queue, so they no longer false-positive. Detects stalled autovacuum. Thresholds ≥7 / ≥21 / ≥60 days.
 - `vacuum_backlog` — tables currently past their autovacuum trigger: `n_dead_tup` over `autovacuum_vacuum_threshold + autovacuum_vacuum_scale_factor·reltuples`, or `n_ins_since_vacuum` over the insert threshold. Per-table `reloptions` override the global GUCs (PostgreSQL's own trigger). The vacuum-queue depth — a deep queue means autovacuum is outpaced. Thresholds ≥6 / ≥15 / ≥30 tables.
-- `tables_never_vacuumed` — tables with both `last_vacuum IS NULL` and `last_autovacuum IS NULL`. Thresholds ≥1 / ≥2 / ≥5.
+- `tables_never_vacuumed` — tables with both `last_vacuum IS NULL` and `last_autovacuum IS NULL`, [cold tables](#cold-tables) excluded. Thresholds ≥1 / ≥2 / ≥5.
 - `autovacuum_disabled` — global GUC `autovacuum=off`. Bloat and XID age grow unchecked. HIGH.
 - `track_counts_disabled` — global GUC `track_counts=off`. Autovacuum has no statistics to act on and effectively stops. HIGH.
 - `tables_with_autovacuum_off` — tables with `autovacuum_enabled=false` in `pg_class.reloptions`. LOW as soon as there is one; the count itself is not graded.
-- `relfrozenxid_age_outlier` — worst per-table `age(relfrozenxid)` from `pg_class`. Per-table flavour of `xid_wraparound_risk`. Thresholds ≥150 M / ≥200 M / ≥1.6 B.
+- `relfrozenxid_age_outlier` — worst per-table `age(relfrozenxid)` from `pg_class`. Per-table flavour of `xid_wraparound_risk`. Thresholds ≥150 M / ≥200 M / ≥1.6 B. [Cold tables](#cold-tables) are rated by age over their own `autovacuum_freeze_max_age`: LOW ≥0.9, MEDIUM ≥1.0, HIGH at `vacuum_failsafe_age`; the worse of the two ratings wins.
 - `stale_planner_stats` — tables whose `n_mod_since_analyze` exceeds their (reloption-aware) auto-analyze threshold and that have not been analyzed in 3 h (planner has outdated stats). Thresholds ≥3 / ≥5 / ≥10 tables.
+- `cold_tables_maintenance` — [cold tables](#cold-tables) with over 10 % dead rows (over 10,000 rows), never vacuumed (over 10,000 rows), or with `age(relfrozenxid)` at `vacuum_freeze_table_age` or above. Up to five tables with the SQL for the worst one. Informational: LOW, no effect on the score.
 
 ### Horizon
 - `horizon_lag_xids` — `txid_current() - min(backend_xmin)` over `pg_stat_activity`. Number of transactions VACUUM cannot reclaim because some session still sees them (long tx, abandoned replication slot, prepared tx). Thresholds ≥1 M / ≥10 M / ≥100 M. The drill-down lists `backend_type` next to each session: an autovacuum worker holding the horizon is doing its job and releases it on its own.
@@ -141,6 +144,30 @@ Each bullet: what's measured / how it's computed, then LOW / MEDIUM / HIGH thres
 - `ungranted_locks` — rows in `pg_locks` with `granted=false`. Queued lock requests piling up behind a holder. Thresholds ≥2 / ≥5 / ≥15.
 - `deadlocks_rate` — the `deadlocks` counter from `pg_stat_database`, accumulating since the last `pg_stat_database_reset`. There is no per-day rate here, so the fact itself is what counts: above zero is already worth a look at the log. LOW when the total is > 0.
 - `lock_pool_saturation` — `count(*) from pg_locks` divided by `max_connections × max_locks_per_transaction` (size of the heavyweight-lock shared pool). Thresholds ≥0.5 / ≥0.6 / ≥0.8.
+
+## Cold tables
+
+A cold table is one nothing has written to on the primary for longer than the inactivity threshold: `n_tup_ins + n_tup_upd + n_tup_del`, summed over the partitions of a partitioned table, has not changed. Autovacuum never gets to such a table, so its dead rows and missing vacuum are not penalized:
+
+| Rule | Cold tables |
+| ---- | ----------- |
+| `high_max_dead_ratio`, `high_avg_dead_ratio`, `many_bloated_tables` | excluded |
+| `tables_never_vacuumed` | excluded |
+| `relfrozenxid_age_outlier` | rated by age over their own `autovacuum_freeze_max_age` |
+| `cold_tables_maintenance` | lists the ones worth a single `VACUUM (FREEZE, ANALYZE)` |
+| `xid_wraparound_risk`, `vacuum_backlog`, `stale_vacuum`, `stale_planner_stats` | unchanged |
+
+The marker is shown under the score, in the "high dead ratio" drill-down and on the Maintenance page, where an All / Active / Cold filter lists the tables.
+
+Requirements:
+
+- snapshot storage and the auto-snapshot daemon with hot-object capture on;
+- a hot-objects snapshot of the database within the last 48 hours;
+- history on this host as the primary at least as long as the threshold. A promotion or `pg_stat_reset()` starts the count again.
+
+The threshold is **Inactivity threshold, days** in the Hot objects block of the auto-snapshot settings: 7 days by default, 1–90. Eligibility is checked at each hot-objects capture: the count starts at the capture that sees the last write, and the table becomes cold at the first capture at least the threshold later. The delay past the threshold depends only on capture timing and stays under two schedule periods; no extra full period is added. One write makes it active again at the next score. With monthly batch loads, set the threshold to 35 days to keep the tables between batches counted.
+
+In metrics mode `high_max_dead_ratio` and `high_avg_dead_ratio` come from the datasource and include cold tables.
 
 ## Per-database detail
 

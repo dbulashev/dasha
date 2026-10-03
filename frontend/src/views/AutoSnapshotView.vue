@@ -623,6 +623,8 @@ onMounted(() => {
                       <v-text-field
                         v-model.number="cfg.HotColdWindowDays"
                         :label="t('autosnapshot.hot.coldWindowDays')"
+                        :hint="t('autosnapshot.hot.coldWindowHint')"
+                        persistent-hint
                         :disabled="!isAdmin || !cfg.HotEnabled"
                         :rules="[coldWindowRule]"
                         type="number"
