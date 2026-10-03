@@ -80,7 +80,7 @@ Where the role comes from:
 - **`mode: none`.** No permission check; every request runs as `admin`.
 - **`mode: token`.** The key's `role` field sets it, `viewer` by default.
 - **Personal token.** Chosen at issue, no higher than the owner's role, and fixed until revoked.
-- **`mode: oidc`.** Read from the ID token claims at the `role_claim` path (`realm_access.roles` by default) at sign-in and at every token refresh. Without `role_mapping`, the value `admin` in the claim gives `admin` and anything else gives `viewer`. With `role_mapping`, claim values map to roles by the table, and `admin` wins when several groups match:
+- **`mode: oidc`.** Read from the ID token claims at the `role_claim` path (`realm_access.roles` by default) at sign-in and at every token refresh. Without `role_mapping`, the value `admin` in the claim gives `admin` and anything else gives `viewer`. With `role_mapping`, each string in the array at the `role_claim` path is matched exactly against the `role_mapping` keys. The strings can be groups, realm roles or any other values. `admin` wins when several keys match. A claim that is not an array matches nothing:
 
   ```yaml
   auth:
@@ -92,10 +92,10 @@ Where the role comes from:
       deny_unmapped: true
   ```
 
-  A user whose groups match no `role_mapping` entry gets `viewer` by default. With `deny_unmapped: true`:
+  A user with no claim value matching a `role_mapping` key gets `viewer` by default. With `deny_unmapped: true`:
 
   - such a user gets 403 "Access denied" and no session;
-  - a user removed from every mapped group is signed out at the next token refresh;
+  - a user whose claim loses every mapped value is signed out at the next token refresh;
   - so is a user whose role cannot be re-checked at refresh because the IdP returned no `id_token` or the token failed verification.
 
   `deny_unmapped` without `role_mapping` is a configuration error.
