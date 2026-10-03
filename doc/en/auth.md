@@ -92,7 +92,7 @@ Where the role comes from:
       deny_unmapped: true
   ```
 
-  A user whose groups match no `role_mapping` entry gets `viewer` by default. With `deny_unmapped: true` they get 403 "Access denied" and no session. A user removed from every mapped group is signed out at the next token refresh. `deny_unmapped` without `role_mapping` is a configuration error.
+  A user whose groups match no `role_mapping` entry gets `viewer` by default. With `deny_unmapped: true` they get 403 "Access denied" and no session. A user removed from every mapped group is signed out at the next token refresh. So is a user whose role cannot be re-checked at refresh because the IdP returned no `id_token` or the token failed verification. `deny_unmapped` without `role_mapping` is a configuration error.
 
 ## Personal Access Tokens (optional)
 

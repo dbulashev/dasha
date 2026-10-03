@@ -175,6 +175,10 @@ func (p *OIDCProvider) Exchange(ctx context.Context, code string) (*oauth2.Token
 	return s.oauth2Cfg.Exchange(ctx, code) //nolint:wrapcheck
 }
 
+func (p *OIDCProvider) DenyUnmapped() bool {
+	return p.cfg.DenyUnmapped
+}
+
 // ExtractRole resolves the Dasha role; ok is false when deny_unmapped rejects the user.
 func (p *OIDCProvider) ExtractRole(claims map[string]any) (role string, ok bool) {
 	role, mapped := extractRoleFromClaims(claims, p.roleClaim, p.roleMapping)

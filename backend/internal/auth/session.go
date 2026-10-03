@@ -174,6 +174,8 @@ func (sm *SessionManager) ValidateAndRefresh(c echo.Context, provider *OIDCProvi
 
 		session.ExpiresAt = newToken.Expiry.Unix()
 
+		roleChecked := false
+
 		if rawID, ok := newToken.Extra("id_token").(string); ok {
 			session.IDToken = rawID
 
@@ -190,8 +192,17 @@ func (sm *SessionManager) ValidateAndRefresh(c echo.Context, provider *OIDCProvi
 					}
 
 					session.UserRole = role
+					roleChecked = true
 				}
 			}
+		}
+
+		if !roleChecked && provider.DenyUnmapped() {
+			sm.logger.Warn("OIDC role could not be re-verified on token refresh; logging user out",
+				zap.String("user", session.UserName))
+			sm.ClearSession(c)
+
+			return nil, fmt.Errorf("role claims unavailable after token refresh") //nolint:goerr113
 		}
 
 		if err := sm.SetSession(c, session); err != nil {
