@@ -165,7 +165,7 @@ Requirements:
 - a hot-objects snapshot of the database within the last 48 hours;
 - history on this host as the primary at least as long as the threshold. A promotion or `pg_stat_reset()` starts the count again.
 
-The threshold is **Inactivity threshold, days** in the Hot objects block of the auto-snapshot settings: 7 days by default, 1–90. A table becomes cold no sooner than the threshold plus one hot-objects schedule period after its last write. One write makes it active again at the next score. With monthly batch loads, set the threshold to 35 days to keep the tables between batches counted.
+The threshold is **Inactivity threshold, days** in the Hot objects block of the auto-snapshot settings: 7 days by default, 1–90. Eligibility is checked at each hot-objects capture: the count starts at the capture that sees the last write, and the table becomes cold at the first capture at least the threshold later. The delay past the threshold depends only on capture timing and stays under two schedule periods; no extra full period is added. One write makes it active again at the next score. With monthly batch loads, set the threshold to 35 days to keep the tables between batches counted.
 
 In metrics mode `high_max_dead_ratio` and `high_avg_dead_ratio` come from the datasource and include cold tables.
 
