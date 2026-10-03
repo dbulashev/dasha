@@ -175,8 +175,9 @@ func (p *OIDCProvider) Exchange(ctx context.Context, code string) (*oauth2.Token
 	return s.oauth2Cfg.Exchange(ctx, code) //nolint:wrapcheck
 }
 
-func (p *OIDCProvider) ExtractRole(claims map[string]any) string {
-	role := extractRoleFromClaims(claims, p.roleClaim, p.roleMapping)
+// ExtractRole resolves the Dasha role; ok is false when deny_unmapped rejects the user.
+func (p *OIDCProvider) ExtractRole(claims map[string]any) (role string, ok bool) {
+	role, mapped := extractRoleFromClaims(claims, p.roleClaim, p.roleMapping)
 
 	val := nestedValue(claims, strings.Split(p.roleClaim, "."))
 
@@ -185,9 +186,14 @@ func (p *OIDCProvider) ExtractRole(claims map[string]any) string {
 		zap.Any("claim_values", val),
 		zap.Any("role_mapping", p.roleMapping),
 		zap.String("resolved_role", role),
+		zap.Bool("mapped", mapped),
 	)
 
-	return role
+	if p.cfg.DenyUnmapped && !mapped {
+		return "", false
+	}
+
+	return role, true
 }
 
 // TokenSource returns a refreshing token source, or nil when discovery has not
@@ -260,12 +266,13 @@ func (p *OIDCProvider) RevokeRefreshToken(ctx context.Context, refreshToken stri
 	return nil
 }
 
-func extractRoleFromClaims(claims map[string]any, claimPath string, roleMapping map[string]string) string {
+// extractRoleFromClaims reports mapped=true only when a role_mapping entry matched.
+func extractRoleFromClaims(claims map[string]any, claimPath string, roleMapping map[string]string) (role string, mapped bool) {
 	val := nestedValue(claims, strings.Split(claimPath, "."))
 
 	roles, ok := val.([]any)
 	if !ok {
-		return defaultRole
+		return defaultRole, false
 	}
 
 	if len(roleMapping) > 0 {
@@ -276,8 +283,8 @@ func extractRoleFromClaims(claims map[string]any, claimPath string, roleMapping 
 				continue
 			}
 
-			if mapped, exists := roleMapping[s]; exists && mapped == config.RoleAdmin {
-				return config.RoleAdmin
+			if m, exists := roleMapping[s]; exists && m == config.RoleAdmin {
+				return config.RoleAdmin, true
 			}
 		}
 
@@ -288,22 +295,22 @@ func extractRoleFromClaims(claims map[string]any, claimPath string, roleMapping 
 				continue
 			}
 
-			if mapped, exists := roleMapping[s]; exists && mapped == config.RoleViewer {
-				return config.RoleViewer
+			if m, exists := roleMapping[s]; exists && m == config.RoleViewer {
+				return config.RoleViewer, true
 			}
 		}
 
-		return defaultRole
+		return defaultRole, false
 	}
 
 	// Default behavior: look for "admin" in claim values.
 	for _, r := range roles {
 		if s, ok := r.(string); ok && s == config.RoleAdmin {
-			return config.RoleAdmin
+			return config.RoleAdmin, false
 		}
 	}
 
-	return defaultRole
+	return defaultRole, false
 }
 
 const defaultRole = config.RoleViewer

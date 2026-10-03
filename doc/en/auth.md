@@ -48,7 +48,7 @@ auth:
 
 In any mode other than `none`, set `auth.require_https: true` in production: Dasha then rejects requests that arrive over plaintext HTTP (`X-Forwarded-Proto: https` from a TLS-terminating proxy counts as secure), and the backend logs a startup warning while the flag is off. It is left out of the examples above because it breaks a local `http://localhost` setup.
 
-Roles are extracted from the OIDC ID token claims at the path specified by `role_claim`. Supported roles: `admin` (full access) and `viewer` (read-only GET requests). If no known role is found, `viewer` is assigned by default.
+The user's role comes from the ID token claims; see [Roles](#roles).
 
 **Generating secrets**
 
@@ -59,6 +59,40 @@ openssl rand -base64 32
 # OIDC client secret (register this value in your OIDC provider)
 openssl rand -base64 32
 ```
+
+## Roles
+
+Dasha has two roles: `viewer` (read) and `admin` (read and change). The server checks permissions by the method and path of each API request, so the limits hold for requests that bypass the UI too.
+
+| Action | `viewer` | `admin` |
+| ------ | :------: | :-----: |
+| All pages and data: clusters, Health Score, queries and their text, tables, indexes, locks, logs and plans | yes | yes |
+| Auto-snapshot settings, global and per cluster | read only | yes |
+| Reset `pg_stat_statements` (also needs `enable_query_stats_reset: true`) | no | yes |
+| Take a query-stats snapshot by hand | no | yes |
+| Change or reset Health Score weights | no | yes |
+| Check the log source connection (`GET /api/logs/check`) | no | yes |
+| Issue and revoke their own personal tokens | with `pat_min_role: viewer` | yes |
+| All tokens and the user directory (*Settings* → *All tokens* / *Users*) | no | yes, from an OIDC session only |
+
+Where the role comes from:
+
+- **`mode: none`.** No permission check; every request runs as `admin`.
+- **`mode: token`.** The key's `role` field sets it, `viewer` by default.
+- **Personal token.** Chosen at issue, no higher than the owner's role, and fixed until revoked.
+- **`mode: oidc`.** Read from the ID token claims at the `role_claim` path (`realm_access.roles` by default) at sign-in and at every token refresh. Without `role_mapping`, the value `admin` in the claim gives `admin` and anything else gives `viewer`. With `role_mapping`, claim values map to roles by the table, and `admin` wins when several groups match:
+
+  ```yaml
+  auth:
+    oidc:
+      role_claim: groups
+      role_mapping:
+        dba_team: admin
+        dev_team: viewer
+      deny_unmapped: true
+  ```
+
+  A user whose groups match no `role_mapping` entry gets `viewer` by default. With `deny_unmapped: true` they get 403 "Access denied" and no session. A user removed from every mapped group is signed out at the next token refresh. `deny_unmapped` without `role_mapping` is a configuration error.
 
 ## Personal Access Tokens (optional)
 

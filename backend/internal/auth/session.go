@@ -180,7 +180,16 @@ func (sm *SessionManager) ValidateAndRefresh(c echo.Context, provider *OIDCProvi
 			if idToken, err := provider.VerifyIDToken(c.Request().Context(), rawID); err == nil {
 				var claims map[string]any
 				if err := idToken.Claims(&claims); err == nil {
-					session.UserRole = provider.ExtractRole(claims)
+					role, ok := provider.ExtractRole(claims)
+					if !ok {
+						sm.logger.Warn("OIDC role mapping no longer matches; logging user out",
+							zap.String("user", session.UserName))
+						sm.ClearSession(c)
+
+						return nil, fmt.Errorf("no role_mapping entry matches the user's claims") //nolint:goerr113
+					}
+
+					session.UserRole = role
 				}
 			}
 		}

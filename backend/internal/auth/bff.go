@@ -44,8 +44,20 @@ func renderOIDCUnavailable(c echo.Context, status int, message string, showRetry
 	c.Response().WriteHeader(status)
 
 	return oidcUnavailableTmpl.Execute(c.Response().Writer, map[string]any{
+		"Title":     "Authentication is unavailable",
 		"Message":   message,
 		"ShowRetry": showRetry,
+	})
+}
+
+func renderAccessDenied(c echo.Context) error {
+	c.Response().Header().Set(echo.HeaderContentType, echo.MIMETextHTMLCharsetUTF8)
+	c.Response().WriteHeader(http.StatusForbidden)
+
+	return oidcUnavailableTmpl.Execute(c.Response().Writer, map[string]any{
+		"Title":     "Access denied",
+		"Message":   "Your account is not in any group that grants access to Dasha. Please contact your administrator.",
+		"ShowRetry": false,
 	})
 }
 
@@ -104,7 +116,19 @@ func callbackHandler(provider *OIDCProvider, sm *SessionManager, rec LoginRecord
 
 		name, _ := claims["preferred_username"].(string)
 		email, _ := claims["email"].(string)
-		role := provider.ExtractRole(claims)
+		role, ok := provider.ExtractRole(claims)
+		if !ok {
+			logger.Warn("OIDC login denied: no role_mapping entry matches the user's claims",
+				zap.String("user", name),
+				zap.String("email", email),
+			)
+
+			if err := provider.RevokeRefreshToken(c.Request().Context(), oauth2Token.RefreshToken); err != nil {
+				logger.Warn("failed to revoke refresh token", zap.Error(err))
+			}
+
+			return renderAccessDenied(c)
+		}
 
 		if err := sm.SetSession(c, &SessionData{
 			RefreshToken: oauth2Token.RefreshToken,

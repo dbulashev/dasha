@@ -103,6 +103,21 @@
       "realmRoles": [
         "viewer"
       ]
+    },
+    {
+      "username": "outsider",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Outsider",
+      "lastName": "User",
+      "email": "outsider@dasha.local",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "outsider",
+          "temporary": false
+        }
+      ]
     }
   ]
 }

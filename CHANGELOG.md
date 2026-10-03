@@ -3,7 +3,6 @@
 ## Unreleased
 
 ### Features
-- **Fleet page**: the instances with the lowest Health Score across all clusters, filterable by cluster, with a link to each instance's card. Admins only for now.
 - **Three MCP tools for plans from the logs**, `plan_insights`, `query_plans` and `plan_regressions`, with a knowledge-base page on how to read them.
 - **Long MCP results are compacted to fit the result budget**: `health_trend`, `query_compare`, `list_clusters`, `describe_table` and the plan tools return a short view and name the parameter for the full one.
 - **An unknown cluster, host or database name in an MCP call is answered with similar names.**
@@ -21,6 +20,7 @@
 
 ### Configuration
 - `health_score.metrics.datasource.query_cache_ttl` is removed; `health_score.metrics.baseline.cache_ttl` sets how long the seasonal baseline is kept. New `health_score.metrics.datasource.max_query_bytes` and `health_score.metrics.datasource.max_concurrency` bound the batched datasource requests. New `health_score.database_concurrency` sets how many databases of one instance are read at once (default 4). The new `health_score.fleet` section limits the fleet overview.
+- `auth.oidc.deny_unmapped` (default `false`): an OIDC user whose groups match no `role_mapping` entry gets 403 Access denied instead of the `viewer` role. A user removed from the mapped groups is signed out at the next token refresh. Requires `role_mapping`.
 - `dasha-mcp`: new `--max-result-bytes` (`DASHA_MCP_MAX_RESULT_BYTES`, default 64 KB) sets the size budget of one tool result.
 
 ## v1.8.1

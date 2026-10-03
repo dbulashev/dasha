@@ -23,6 +23,7 @@ var (
 	errTokenRequired  = errors.New("auth.mode=token requires at least one token")
 	errOIDCRequired   = errors.New("auth.mode=oidc requires oidc section")
 	errOIDCIncomplete = errors.New("oidc requires issuer_url and client_id")
+	errDenyUnmapped   = errors.New("oidc.deny_unmapped requires oidc.role_mapping")
 )
 
 type AuthMode string
@@ -56,6 +57,8 @@ type OIDCConfig struct {
 	RedirectURL         string            `mapstructure:"redirect_url"`
 	RoleClaim           string            `mapstructure:"role_claim"`   // default: "realm_access.roles"
 	RoleMapping         map[string]string `mapstructure:"role_mapping"` // e.g. {"dba_team": "admin", "dev_team": "viewer"}
+	// DenyUnmapped rejects a login whose claim values match no role_mapping entry.
+	DenyUnmapped bool `mapstructure:"deny_unmapped"`
 }
 
 type RateLimitConfig struct {
@@ -101,6 +104,10 @@ func (a *AuthConfig) Validate() error {
 
 		if a.OIDC.IssuerURL == "" || a.OIDC.ClientID == "" {
 			return errOIDCIncomplete
+		}
+
+		if a.OIDC.DenyUnmapped && len(a.OIDC.RoleMapping) == 0 {
+			return errDenyUnmapped
 		}
 	default:
 		return fmt.Errorf("unknown auth.mode: %q", a.Mode)

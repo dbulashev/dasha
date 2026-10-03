@@ -410,3 +410,33 @@ func TestLogSearchWithDefaultsLeavesTheInputAlone(t *testing.T) {
 		t.Errorf("WithDefaults mutated the receiver: %+v", in)
 	}
 }
+
+func TestAuthValidateDenyUnmapped(t *testing.T) {
+	base := OIDCConfig{IssuerURL: "https://idp.example.com/realms/x", ClientID: "dasha"} //nolint:exhaustruct
+
+	noMapping := base
+	noMapping.DenyUnmapped = true
+
+	withMapping := base
+	withMapping.DenyUnmapped = true
+	withMapping.RoleMapping = map[string]string{"dba_team": RoleAdmin}
+
+	tests := []struct {
+		name    string
+		oidc    OIDCConfig
+		wantErr bool
+	}{
+		{name: "off without mapping", oidc: base, wantErr: false},
+		{name: "on without mapping", oidc: noMapping, wantErr: true},
+		{name: "on with mapping", oidc: withMapping, wantErr: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := AuthConfig{Mode: AuthModeOIDC, OIDC: &tt.oidc} //nolint:exhaustruct
+			if err := a.Validate(); (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
