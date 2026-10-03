@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.8.2
+## v1.8.3
 
 ### Features
 - **Health Score does not penalize cold tables**, those with no writes for longer than the inactivity threshold (7 days by default, set in the auto-snapshot settings), for dead rows and missing vacuum. An informational recommendation lists the cold tables that need a single `VACUUM (FREEZE, ANALYZE)`, and the Maintenance page gets an All / Active / Cold filter. Requires hot-object capture.
