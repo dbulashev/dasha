@@ -14,6 +14,11 @@ auth:
     client_secret: "demo-client-secret"
     redirect_url: "http://localhost:3000/auth/callback"
     role_claim: "realm_access.roles"
+    role_mapping:
+      admin: admin
+      viewer: viewer
+    # outsider/outsider has no Dasha realm role and gets 403.
+    deny_unmapped: true
   tokens:
     - name: demo-api
       token: "demo-api-token-for-testing"

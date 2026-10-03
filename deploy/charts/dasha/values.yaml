@@ -121,6 +121,7 @@ config:
   #   #     dba_team: admin
   #   #     team_lead: admin
   #   #     dev_team: viewer
+  #   #   deny_unmapped: false               # true: 403 for users in no role_mapping group (default: viewer)
   #   # cookie_secret_from_env: DASHA_COOKIE_SECRET
   #   # cookie_max_age: 86400
   #   # tokens:  # API keys also work in oidc mode

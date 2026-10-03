@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Authentication unavailable — Dasha</title>
+<title>{{.Title}} — Dasha</title>
 <style>
   html, body { margin: 0; padding: 0; height: 100%; }
   body {
@@ -41,7 +41,7 @@
 <body>
   <div class="empty-state">
     <img src="/dasha-appology.png" alt="">
-    <h1>Authentication is unavailable</h1>
+    <h1>{{.Title}}</h1>
     <p>{{.Message}}</p>
     {{if .ShowRetry}}<p style="margin-top: 16px;"><a href="/auth/login">Try logging in again</a></p>{{end}}
   </div>

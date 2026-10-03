@@ -1,9 +1,8 @@
 # Changelog
 
-## Unreleased
+## v1.8.2
 
 ### Features
-- **Fleet page**: the instances with the lowest Health Score across all clusters, filterable by cluster, with a link to each instance's card. Admins only for now.
 - **Health Score does not penalize cold tables**, those with no writes for longer than the inactivity threshold (7 days by default, set in the auto-snapshot settings), for dead rows and missing vacuum. An informational recommendation lists the cold tables that need a single `VACUUM (FREEZE, ANALYZE)`, and the Maintenance page gets an All / Active / Cold filter. Requires hot-object capture.
 - **Three MCP tools for plans from the logs**, `plan_insights`, `query_plans` and `plan_regressions`, with a knowledge-base page on how to read them.
 - **Long MCP results are compacted to fit the result budget**: `health_trend`, `query_compare`, `list_clusters`, `describe_table` and the plan tools return a short view and name the parameter for the full one.
@@ -22,6 +21,7 @@
 
 ### Configuration
 - `health_score.metrics.datasource.query_cache_ttl` is removed; `health_score.metrics.baseline.cache_ttl` sets how long the seasonal baseline is kept. New `health_score.metrics.datasource.max_query_bytes` and `health_score.metrics.datasource.max_concurrency` bound the batched datasource requests. New `health_score.database_concurrency` sets how many databases of one instance are read at once (default 4). The new `health_score.fleet` section limits the fleet overview.
+- New `auth.oidc.deny_unmapped`, `false` by default, requires `role_mapping`. When `true`, an OIDC user whose groups match no `role_mapping` entry gets 403 Access denied instead of the `viewer` role, and a user removed from the mapped groups is signed out at the next token refresh.
 - `dasha-mcp`: new `--max-result-bytes` (`DASHA_MCP_MAX_RESULT_BYTES`, default 64 KB) sets the size budget of one tool result.
 
 ## v1.8.1

@@ -231,6 +231,7 @@ func TestExtractRoleFromClaims(t *testing.T) {
 		claimPath   string
 		roleMapping map[string]string
 		want        string
+		wantMapped  bool
 	}{
 		{
 			name:      "keycloak admin",
@@ -262,6 +263,7 @@ func TestExtractRoleFromClaims(t *testing.T) {
 			claimPath:   "groups",
 			roleMapping: map[string]string{"dba_team": "admin", "dev_team": "viewer"},
 			want:        "admin",
+			wantMapped:  true,
 		},
 		{
 			name:        "mapping: corporate group to viewer",
@@ -269,6 +271,7 @@ func TestExtractRoleFromClaims(t *testing.T) {
 			claimPath:   "groups",
 			roleMapping: map[string]string{"dba_team": "admin", "dev_team": "viewer"},
 			want:        "viewer",
+			wantMapped:  true,
 		},
 		{
 			name:        "mapping: no matching group",
@@ -283,14 +286,49 @@ func TestExtractRoleFromClaims(t *testing.T) {
 			claimPath:   "groups",
 			roleMapping: map[string]string{"dba_team": "admin", "dev_team": "viewer"},
 			want:        "admin",
+			wantMapped:  true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := extractRoleFromClaims(tt.claims, tt.claimPath, tt.roleMapping)
-			if got != tt.want {
-				t.Errorf("extractRoleFromClaims() = %q, want %q", got, tt.want)
+			got, mapped := extractRoleFromClaims(tt.claims, tt.claimPath, tt.roleMapping)
+			if got != tt.want || mapped != tt.wantMapped {
+				t.Errorf("extractRoleFromClaims() = %q, %v; want %q, %v", got, mapped, tt.want, tt.wantMapped)
+			}
+		})
+	}
+}
+
+func TestExtractRoleDenyUnmapped(t *testing.T) {
+	mapping := map[string]string{"dba_team": "admin", "dev_team": "viewer"}
+
+	tests := []struct {
+		name     string
+		deny     bool
+		claims   map[string]any
+		wantRole string
+		wantOK   bool
+	}{
+		{name: "deny off, unmapped user gets viewer", deny: false, claims: map[string]any{"groups": []any{"sales"}}, wantRole: "viewer", wantOK: true},
+		{name: "deny on, unmapped user rejected", deny: true, claims: map[string]any{"groups": []any{"sales"}}, wantRole: "", wantOK: false},
+		{name: "deny on, missing claim rejected", deny: true, claims: map[string]any{}, wantRole: "", wantOK: false},
+		{name: "deny on, mapped viewer allowed", deny: true, claims: map[string]any{"groups": []any{"dev_team"}}, wantRole: "viewer", wantOK: true},
+		{name: "deny on, mapped admin allowed", deny: true, claims: map[string]any{"groups": []any{"sales", "dba_team"}}, wantRole: "admin", wantOK: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &OIDCProvider{ //nolint:exhaustruct
+				cfg:         config.OIDCConfig{RoleMapping: mapping, DenyUnmapped: tt.deny}, //nolint:exhaustruct
+				roleClaim:   "groups",
+				roleMapping: mapping,
+				logger:      zap.NewNop(),
+			}
+
+			role, ok := p.ExtractRole(tt.claims)
+			if role != tt.wantRole || ok != tt.wantOK {
+				t.Errorf("ExtractRole() = %q, %v; want %q, %v", role, ok, tt.wantRole, tt.wantOK)
 			}
 		})
 	}
