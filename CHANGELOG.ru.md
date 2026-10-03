@@ -21,7 +21,7 @@
 
 ### Конфигурация
 - Параметр `health_score.metrics.datasource.query_cache_ttl` удалён, время жизни сезонной нормы задаёт `health_score.metrics.baseline.cache_ttl`. Новые `health_score.metrics.datasource.max_query_bytes` и `health_score.metrics.datasource.max_concurrency` ограничивают пакетные запросы к источнику метрик. Новый `health_score.database_concurrency` задаёт, сколько баз одного инстанса читается одновременно (по умолчанию 4). Новая секция `health_score.fleet` задаёт ограничения обзора парка.
-- `auth.oidc.deny_unmapped` (по умолчанию `false`): OIDC-пользователь, чьи группы не совпали ни с одной записью `role_mapping`, получает 403 «Доступ запрещён» вместо роли `viewer`. Пользователь, которого убрали из сопоставленных групп, выходит из системы при следующем обновлении токена. Требует `role_mapping`.
+- Новый `auth.oidc.deny_unmapped`, по умолчанию `false`, требует `role_mapping`. При `true` OIDC-пользователь, чьи группы не совпали ни с одной записью `role_mapping`, получает 403 «Доступ запрещён» вместо роли `viewer`, а пользователь, которого убрали из сопоставленных групп, выходит из системы при следующем обновлении токена.
 - `dasha-mcp`: новый `--max-result-bytes` (`DASHA_MCP_MAX_RESULT_BYTES`, по умолчанию 64 КБ) задаёт бюджет размера одного ответа инструмента.
 
 ## v1.8.1
