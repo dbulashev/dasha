@@ -14,7 +14,7 @@ require (
 	github.com/labstack/echo/v4 v4.16.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/oapi-codegen/runtime v1.7.0
-	github.com/pganalyze/pg_query_go/v6 v6.2.2
+	github.com/pganalyze/pg_query_go/v6 v6.2.5
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/samber/do v1.6.0
 	github.com/spf13/cobra v1.10.2
