@@ -629,6 +629,18 @@
     "progressPct": "Progress %",
     "tablespacesTotal": "Tablespaces total",
     "tablespacesStreamed": "Tablespaces streamed",
+    "copy": "COPY",
+    "copyType": "Source / target",
+    "bytesProcessed": "Bytes processed",
+    "bytesProcessedHint": "The byte total is known only for COPY FROM a server-side file; percentage and ETA come from it. For COPY TO from a table, percentage and ETA come from rows (see \"Rows processed\"). For COPY FROM STDIN/PROGRAM and COPY (query) TO there is nothing to compare against, so no percentage or ETA.",
+    "tuplesProcessed": "Rows processed",
+    "tuplesProcessedHint": "For COPY TO the second number is the table row estimate (reltuples) used for the percentage.",
+    "tuplesExcluded": "Rows excluded (WHERE)",
+    "tuplesSkipped": "Rows skipped (ON_ERROR)",
+    "tableSize": "Table size",
+    "elapsed": "Elapsed",
+    "eta": "ETA",
+    "etaHint": "Linear estimate from elapsed time and progress so far; assumes a constant rate.",
     "phases": {
       "vacuum": {
         "initializing": "Initializing",
@@ -682,6 +694,27 @@
         "transferring wal files": "Transferring WAL files"
       }
     }
+  },
+  "slotForecast": {
+    "button": "Slot forecast",
+    "title": "Replication slot invalidation forecast",
+    "description": "Measures the WAL generation rate over the selected window and estimates how long each slot has before it uses up its max_slot_wal_keep_size reserve and is invalidated (wal_status = lost). The measurement does not hold a database connection: it takes two LSN samples by the server clock.",
+    "start": "Start measurement",
+    "restart": "Measure again",
+    "cancel": "Stop",
+    "measuring": "Measuring WAL rate… {n} s left",
+    "noLsn": "The server returned no WAL position: the standby has not replayed any WAL yet.",
+    "walRate": "WAL rate",
+    "window": "Measurement window",
+    "noLimit": "not set (-1)",
+    "retained": "WAL retained",
+    "timeToLost": "Time to invalidation",
+    "lost": "Already lost",
+    "now": "Being invalidated now",
+    "unlimited": "No limit — disk may fill up",
+    "noLoad": "No WAL written in the window — no forecast",
+    "activeHint": "An active consumer keeps advancing the slot, so the forecast is the time left if the consumer stops.",
+    "footnote": "Linear extrapolation of the WAL rate over the window: load spikes, checkpoints and batch jobs can cut the real time sharply."
   },
   "locks": {
     "tree": "Lock tree",

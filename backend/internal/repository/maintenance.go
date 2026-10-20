@@ -321,7 +321,7 @@ func (p *PgxPool) getMaintenanceVacuumProgress(
 	for rows.Next() {
 		var (
 			pid   int32
-			phase string
+			phase pgtype.Text
 		)
 
 		err = rows.Scan(&pid, &phase)
@@ -331,7 +331,7 @@ func (p *PgxPool) getMaintenanceVacuumProgress(
 
 		ret = append(ret, dto.MaintenanceVacuumProgress{
 			Pid:   pid,
-			Phase: phase,
+			Phase: phase.String,
 		})
 	}
 

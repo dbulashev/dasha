@@ -194,6 +194,26 @@ func TestFindTemplate_VersionSelection(t *testing.T) {
 			queryName:     "progress/vacuum",
 			serverVersion: 170000,
 		},
+
+		// progress/copy — dirs: 140000, 170000
+		{
+			name:          "copy_pg13_uses_140000_stub",
+			queryName:     "progress/copy",
+			serverVersion: 130000,
+			wantContains:  "WHERE false",
+		},
+		{
+			name:          "copy_pg16_uses_170000_dir",
+			queryName:     "progress/copy",
+			serverVersion: 160000,
+			wantContains:  "NULL::bigint AS tuples_skipped",
+		},
+		{
+			name:          "copy_pg17_uses_base",
+			queryName:     "progress/copy",
+			serverVersion: 170000,
+			wantContains:  "p.tuples_skipped,",
+		},
 	}
 
 	for _, tt := range tests {

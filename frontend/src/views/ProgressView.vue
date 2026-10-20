@@ -7,6 +7,7 @@ import {
   getProgressCluster,
   getProgressIndex,
   getProgressBaseBackup,
+  getProgressCopy,
 } from '@/api/gen/default/default'
 import type {
   ProgressAnalyze,
@@ -14,6 +15,7 @@ import type {
   ProgressCluster,
   ProgressIndex,
   ProgressBaseBackup,
+  ProgressCopy,
 } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useViewError } from '@/composables/useViewError'
@@ -21,14 +23,16 @@ import { useAutoRefresh } from '@/composables/useAutoRefresh'
 import AutoRefreshControls from '@/components/AutoRefreshControls.vue'
 import { assertOk } from '@/utils/api'
 import { getErrorMessage } from '@/utils/error'
-import { fmtBytes } from '@/utils/format'
+import { fmtBytes, fmtMs } from '@/utils/format'
 import ProgressCard from '@/components/progress/ProgressCard.vue'
 import type { ProgressCardData } from '@/components/progress/ProgressCard.vue'
+import SlotForecastDialog from '@/components/progress/SlotForecastDialog.vue'
 
 const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
 const { onError, clearError } = useViewError()
 const loading = ref(false)
+const slotForecastOpen = ref(false)
 
 // --- Data ---
 const analyzeItems = ref<ProgressAnalyze[]>([])
@@ -36,6 +40,7 @@ const vacuumItems = ref<ProgressVacuum[]>([])
 const clusterItems = ref<ProgressCluster[]>([])
 const indexItems = ref<ProgressIndex[]>([])
 const baseBackupItems = ref<ProgressBaseBackup[]>([])
+const copyItems = ref<ProgressCopy[]>([])
 
 // --- Helpers ---
 const typeConfig = {
@@ -44,6 +49,7 @@ const typeConfig = {
   cluster: { icon: 'mdi-database-refresh', label: 'progress.cluster' },
   index: { icon: 'mdi-format-list-numbered', label: 'progress.index' },
   baseBackup: { icon: 'mdi-backup-restore', label: 'progress.baseBackup' },
+  copy: { icon: 'mdi-database-import', label: 'progress.copy' },
 }
 
 function calcPct(done: number, total: number): number | null {
@@ -55,7 +61,12 @@ function fmtNum(v: number): string {
   return v.toLocaleString()
 }
 
+function fmtSeconds(v: number | null | undefined): string {
+  return v == null ? '—' : fmtMs(v * 1000, t)
+}
+
 function phaseLabel(type: ProgressCardData['type'], phase: string): string {
+  if (!phase) return '—'
   const key = `progress.phases.${type}.${phase}`
   const translated = t(key)
   return translated === key ? phase : translated
@@ -174,6 +185,38 @@ const cards = computed<ProgressCardData[]>(() => {
     })
   }
 
+  for (const item of copyItems.value) {
+    result.push({
+      type: 'copy', ...typeConfig.copy, pid: item.Pid,
+      target: [item.Datname, item.TableName].filter(Boolean).join('.'),
+      phase: item.Command,
+      progress: item.ProgressPercentage ?? null,
+      query: item.Query ?? undefined,
+      metrics: [
+        { label: t('progress.copyType'), value: item.Type },
+        {
+          label: t('progress.bytesProcessed'),
+          value: item.BytesTotal != null
+            ? `${fmtBytes(item.BytesProcessed)} / ${fmtBytes(item.BytesTotal)}`
+            : fmtBytes(item.BytesProcessed),
+          hint: t('progress.bytesProcessedHint'),
+        },
+        {
+          label: t('progress.tuplesProcessed'),
+          value: item.Command === 'COPY TO' && item.TableTuples != null
+            ? `${fmtNum(item.TuplesProcessed)} / ${fmtNum(item.TableTuples)}`
+            : fmtNum(item.TuplesProcessed),
+          hint: t('progress.tuplesProcessedHint'),
+        },
+        ...(item.TuplesExcluded ? [{ label: t('progress.tuplesExcluded'), value: fmtNum(item.TuplesExcluded) }] : []),
+        ...(item.TuplesSkipped ? [{ label: t('progress.tuplesSkipped'), value: fmtNum(item.TuplesSkipped) }] : []),
+        ...(item.TableSize != null ? [{ label: t('progress.tableSize'), value: fmtBytes(item.TableSize) }] : []),
+        { label: t('progress.elapsed'), value: fmtSeconds(item.ElapsedSeconds) },
+        { label: t('progress.eta'), value: fmtSeconds(item.EtaSeconds), hint: t('progress.etaHint') },
+      ],
+    })
+  }
+
   return result
 })
 
@@ -183,20 +226,22 @@ async function loadEverything() {
   loading.value = true
   clearError()
   try {
-    const [aRes, vRes, cRes, iRes, bRes] = await Promise.allSettled([
+    const [aRes, vRes, cRes, iRes, bRes, cpRes] = await Promise.allSettled([
       getProgressAnalyze({ cluster_name: clusterName.value, instance: hostName.value }),
       getProgressVacuum({ cluster_name: clusterName.value, instance: hostName.value }),
       getProgressCluster({ cluster_name: clusterName.value, instance: hostName.value }),
       getProgressIndex({ cluster_name: clusterName.value, instance: hostName.value }),
       getProgressBaseBackup({ cluster_name: clusterName.value, instance: hostName.value }),
+      getProgressCopy({ cluster_name: clusterName.value, instance: hostName.value }),
     ])
     analyzeItems.value = aRes.status === 'fulfilled' ? assertOk(aRes.value) ?? [] : []
     vacuumItems.value = vRes.status === 'fulfilled' ? assertOk(vRes.value) ?? [] : []
     clusterItems.value = cRes.status === 'fulfilled' ? assertOk(cRes.value) ?? [] : []
     indexItems.value = iRes.status === 'fulfilled' ? assertOk(iRes.value) ?? [] : []
     baseBackupItems.value = bRes.status === 'fulfilled' ? assertOk(bRes.value) ?? [] : []
+    copyItems.value = cpRes.status === 'fulfilled' ? assertOk(cpRes.value) ?? [] : []
 
-    const rejected = [aRes, vRes, cRes, iRes, bRes].filter(r => r.status === 'rejected')
+    const rejected = [aRes, vRes, cRes, iRes, bRes, cpRes].filter(r => r.status === 'rejected')
     if (rejected.length) {
       const reason = (rejected[0] as PromiseRejectedResult).reason
       onError(getErrorMessage(reason), reason)
@@ -229,7 +274,13 @@ watch([clusterName, hostName], () => {
       @toggle="autoRefresh.toggle"
       @refresh="loadEverything"
     />
+    <v-spacer />
+    <v-btn variant="tonal" prepend-icon="mdi-timer-sand" @click="slotForecastOpen = true">
+      {{ t('slotForecast.button') }}
+    </v-btn>
   </div>
+
+  <SlotForecastDialog v-model="slotForecastOpen" />
 
   <!-- Loading state -->
   <v-progress-linear v-if="loading && !cards.length" indeterminate class="mb-4" />

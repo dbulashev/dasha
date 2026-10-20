@@ -34,7 +34,9 @@ const { items, loading } = useApiLoader<MaintenanceVacuumProgress[]>(
   <v-card class="mb-4">
     <v-card-title><v-icon start icon="mdi-broom" />{{ t('maintenance.vacuumProgress') }}</v-card-title>
     <v-card-text>
-      <v-data-table :headers="headers" :items="items" :loading="loading" />
+      <v-data-table :headers="headers" :items="items" :loading="loading">
+        <template #item.Phase="{ item }">{{ item.Phase || '—' }}</template>
+      </v-data-table>
     </v-card-text>
   </v-card>
 </template>

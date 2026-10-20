@@ -1,5 +1,7 @@
 package dto
 
+import "time"
+
 type ReplicationStatus struct {
 	Pid              int
 	Usename          string
@@ -15,7 +17,7 @@ type ReplicationStatus struct {
 	ReplayLagSeconds float64
 	ReplayLagBytes   int64
 	SyncState        string
-	SlotName string
+	SlotName         string
 }
 
 type ReplicationConfig struct {
@@ -31,4 +33,27 @@ type ReplicationSlot struct {
 	WalStatus    string
 	SafeWalSize  *int64
 	BacklogBytes *int64
+}
+
+type WalPosition struct {
+	Lsn        *string
+	CapturedAt time.Time
+}
+
+type ReplicationSlotsForecast struct {
+	ElapsedSeconds     *float64
+	WalBytesPerSecond  *float64
+	MaxSlotWalKeepSize *int64
+	Slots              []ReplicationSlotForecast
+}
+
+type ReplicationSlotForecast struct {
+	SlotName      string
+	SlotType      string
+	Database      string
+	Active        bool
+	WalStatus     string
+	RetainedBytes *int64
+	SafeWalSize   *int64
+	SecondsToLost *float64
 }

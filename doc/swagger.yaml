@@ -2363,6 +2363,24 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/progress/copy:
+    get:
+      operationId: getProgressCopy
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProgressCopy'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
   /api/progress/index:
     get:
       operationId: getProgressIndex
@@ -2431,6 +2449,59 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/ReplicationSlot'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/replication/wal-position:
+    get:
+      operationId: getReplicationWalPosition
+      description: >
+        Current WAL position and server time — the starting point of a WAL
+        rate measurement for getReplicationSlotsForecast. On a standby the
+        position is the last replayed LSN.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReplicationWalPosition'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/replication/slots-forecast:
+    get:
+      operationId: getReplicationSlotsForecast
+      description: >
+        Time until each replication slot exhausts its max_slot_wal_keep_size
+        reserve and is invalidated, extrapolated from the WAL rate measured
+        since the position returned by getReplicationWalPosition.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - name: from_lsn
+          in: query
+          required: true
+          description: Lsn returned by getReplicationWalPosition.
+          schema:
+            type: string
+        - name: from_time
+          in: query
+          required: true
+          description: CapturedAt returned by getReplicationWalPosition (server clock).
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReplicationSlotsForecast'
+        '400':
+          description: from_lsn is not a valid LSN
         '404':
           $ref: '#/components/responses/NotFound'
   /api/replication/config:
@@ -6823,6 +6894,81 @@ components:
           type: integer
           format: int64
 
+    ProgressCopy:
+      type: object
+      description: COPY commands in progress (pg_stat_progress_copy, PG 14+; empty on older servers).
+      required:
+        - Pid
+        - Datname
+        - Command
+        - Type
+        - BytesProcessed
+        - TuplesProcessed
+        - TuplesExcluded
+      properties:
+        Pid:
+          type: integer
+          format: int32
+        Datname:
+          type: string
+        TableName:
+          type: string
+          nullable: true
+          description: NULL for COPY (query) TO; an OID when the relation is in another database.
+        Command:
+          type: string
+          description: COPY FROM or COPY TO.
+        Type:
+          type: string
+          description: FILE, PROGRAM, PIPE (STDIN/STDOUT) or CALLBACK.
+        Query:
+          type: string
+          nullable: true
+        BytesProcessed:
+          type: integer
+          format: int64
+        BytesTotal:
+          type: integer
+          format: int64
+          nullable: true
+          description: Source file size for COPY FROM FILE; NULL when unknown.
+        TuplesProcessed:
+          type: integer
+          format: int64
+        TuplesExcluded:
+          type: integer
+          format: int64
+          description: Rows rejected by the WHERE clause.
+        TuplesSkipped:
+          type: integer
+          format: int64
+          nullable: true
+          description: Rows skipped by ON_ERROR ignore (PG 17+).
+        TableSize:
+          type: integer
+          format: int64
+          nullable: true
+          description: Total relation size in bytes; only for relations in the connected database.
+        TableTuples:
+          type: integer
+          format: int64
+          nullable: true
+          description: pg_class.reltuples estimate; NULL if the table was never analyzed.
+        ElapsedSeconds:
+          type: number
+          format: double
+          nullable: true
+        ProgressPercentage:
+          type: number
+          format: double
+          nullable: true
+          description: bytes_processed/bytes_total when the total is known, else tuples_processed/reltuples for COPY TO.
+        EtaSeconds:
+          type: number
+          format: double
+          nullable: true
+          description: Linear extrapolation from elapsed time and progress.
+
     ProgressIndex:
       type: object
       required:
@@ -7435,6 +7581,82 @@ components:
           type: integer
           format: int64
           nullable: true
+
+    ReplicationWalPosition:
+      type: object
+      required:
+        - CapturedAt
+      properties:
+        Lsn:
+          type: string
+          nullable: true
+          description: NULL on a standby that has not replayed any WAL yet.
+        CapturedAt:
+          type: string
+          format: date-time
+
+    ReplicationSlotsForecast:
+      type: object
+      required:
+        - Slots
+      properties:
+        ElapsedSeconds:
+          type: number
+          format: double
+          nullable: true
+          description: Measurement window by the server clock.
+        WalBytesPerSecond:
+          type: number
+          format: double
+          nullable: true
+        MaxSlotWalKeepSize:
+          type: integer
+          format: int64
+          nullable: true
+          description: Bytes; NULL when max_slot_wal_keep_size = -1 (no limit).
+        Slots:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReplicationSlotForecast'
+
+    ReplicationSlotForecast:
+      type: object
+      required:
+        - SlotName
+        - SlotType
+        - Database
+        - Active
+        - WalStatus
+      properties:
+        SlotName:
+          type: string
+        SlotType:
+          type: string
+        Database:
+          type: string
+        Active:
+          type: boolean
+        WalStatus:
+          type: string
+        RetainedBytes:
+          type: integer
+          format: int64
+          nullable: true
+          description: WAL held back by the slot (current LSN − restart_lsn); NULL for a lost slot.
+        SafeWalSize:
+          type: integer
+          format: int64
+          nullable: true
+          description: Bytes that can still be written before the slot is lost; NULL without a limit.
+        SecondsToLost:
+          type: number
+          format: double
+          nullable: true
+          description: >
+            SafeWalSize / WalBytesPerSecond, 0 when the reserve is already used up.
+            NULL without a limit, for a lost slot, or when no WAL was written
+            during the window. For an active slot the consumer keeps advancing
+            restart_lsn, so this is the time left if it stops.
 
     HealthScoreCategory:
       type: object

@@ -133,6 +133,8 @@ const (
 	QueryProgressBaseBackup Query = "progress/base_backup"
 	// QueryProgressCluster is a Query of type progress/cluster.
 	QueryProgressCluster Query = "progress/cluster"
+	// QueryProgressCopy is a Query of type progress/copy.
+	QueryProgressCopy Query = "progress/copy"
 	// QueryProgressIndex is a Query of type progress/index.
 	QueryProgressIndex Query = "progress/index"
 	// QueryProgressVacuum is a Query of type progress/vacuum.
@@ -153,8 +155,12 @@ const (
 	QueryReplicationLag Query = "replication/lag"
 	// QueryReplicationSlots is a Query of type replication/slots.
 	QueryReplicationSlots Query = "replication/slots"
+	// QueryReplicationSlotsForecast is a Query of type replication/slots_forecast.
+	QueryReplicationSlotsForecast Query = "replication/slots_forecast"
 	// QueryReplicationStatus is a Query of type replication/status.
 	QueryReplicationStatus Query = "replication/status"
+	// QueryReplicationWalPosition is a Query of type replication/wal_position.
+	QueryReplicationWalPosition Query = "replication/wal_position"
 	// QuerySchemaLintPartitionRoots is a Query of type schema_lint/partition_roots.
 	QuerySchemaLintPartitionRoots Query = "schema_lint/partition_roots"
 	// QuerySchemaLintPublicCreatePrivileges is a Query of type schema_lint/public_create_privileges.
@@ -283,6 +289,7 @@ var _QueryNames = []string{
 	string(QueryProgressAnalyze),
 	string(QueryProgressBaseBackup),
 	string(QueryProgressCluster),
+	string(QueryProgressCopy),
 	string(QueryProgressIndex),
 	string(QueryProgressVacuum),
 	string(QueryQueriesBlocked),
@@ -293,7 +300,9 @@ var _QueryNames = []string{
 	string(QueryQueriesTop10Chart),
 	string(QueryReplicationLag),
 	string(QueryReplicationSlots),
+	string(QueryReplicationSlotsForecast),
 	string(QueryReplicationStatus),
+	string(QueryReplicationWalPosition),
 	string(QuerySchemaLintPartitionRoots),
 	string(QuerySchemaLintPublicCreatePrivileges),
 	string(QuerySchemaLintRelationsWithoutColumns),
@@ -398,6 +407,7 @@ func QueryValues() []Query {
 		QueryProgressAnalyze,
 		QueryProgressBaseBackup,
 		QueryProgressCluster,
+		QueryProgressCopy,
 		QueryProgressIndex,
 		QueryProgressVacuum,
 		QueryQueriesBlocked,
@@ -408,7 +418,9 @@ func QueryValues() []Query {
 		QueryQueriesTop10Chart,
 		QueryReplicationLag,
 		QueryReplicationSlots,
+		QueryReplicationSlotsForecast,
 		QueryReplicationStatus,
+		QueryReplicationWalPosition,
 		QuerySchemaLintPartitionRoots,
 		QuerySchemaLintPublicCreatePrivileges,
 		QuerySchemaLintRelationsWithoutColumns,
@@ -517,6 +529,7 @@ var _QueryValue = map[string]Query{
 	"progress/analyze":                              QueryProgressAnalyze,
 	"progress/base_backup":                          QueryProgressBaseBackup,
 	"progress/cluster":                              QueryProgressCluster,
+	"progress/copy":                                 QueryProgressCopy,
 	"progress/index":                                QueryProgressIndex,
 	"progress/vacuum":                               QueryProgressVacuum,
 	"queries/blocked":                               QueryQueriesBlocked,
@@ -527,7 +540,9 @@ var _QueryValue = map[string]Query{
 	"queries/top_10_chart":                          QueryQueriesTop10Chart,
 	"replication/lag":                               QueryReplicationLag,
 	"replication/slots":                             QueryReplicationSlots,
+	"replication/slots_forecast":                    QueryReplicationSlotsForecast,
 	"replication/status":                            QueryReplicationStatus,
+	"replication/wal_position":                      QueryReplicationWalPosition,
 	"schema_lint/partition_roots":                   QuerySchemaLintPartitionRoots,
 	"schema_lint/public_create_privileges":          QuerySchemaLintPublicCreatePrivileges,
 	"schema_lint/relations_without_columns":         QuerySchemaLintRelationsWithoutColumns,
