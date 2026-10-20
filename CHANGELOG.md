@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.9.0
 
 ### Features
 - **COPY on the Operation progress page** (PostgreSQL 14+): table, source type, bytes and rows processed, rows excluded and skipped, elapsed time, and a percentage with ETA when the total is known: the file size for `COPY FROM` a server-side file, the row estimate for `COPY TO`.
