@@ -10,7 +10,7 @@
 - **Fixed a 500 on the Maintenance and Operation progress pages** when a running operation reports no phase, for example a VACUUM leader waiting for its parallel index workers.
 
 ### Dependencies
-- **Security updates:** Go toolchain 1.27.1→1.27.2 (net/http, HTTP/2, net/textproto, crypto/tls and html/template fixes, GO-2026-6599…6617), golang.org/x/net 0.58.0→0.60.0 (HTTP/2 denial of service, CVE-2026-78669), source-map-js 1.2.1→1.2.2 (denial of service via malformed source maps, CVE-2026-93749).
+- **Security updates:** Go toolchain 1.27.1→1.27.2 (net/http, HTTP/2, net/textproto, crypto/tls and html/template fixes, GO-2026-6599…6617), golang.org/x/net 0.58.0→0.60.0 (HTTP/2 denial of service, CVE-2026-78669), source-map-js 1.2.1→1.2.2 (denial of service via malformed source maps, CVE-2026-93749), libx11 1.8.13→1.8.14 in the frontend image (heap buffer overflow via a malicious X server, CVE-2026-88806), libxpm 3.5.19→3.5.20 (denial of service via integer underflow, CVE-2026-94287).
 
 ## v1.8.3
 
