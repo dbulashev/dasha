@@ -120,6 +120,52 @@ echo "=== Starting deadlock generator ==="
   done
 ) &
 
+# --- COPY progress generator (Operation progress page, pg_stat_progress_copy) ---
+# COPY_DEMO_ROWS sets the load size (default 300000, ~40 s per load); COPY_GENERATOR=off disables it.
+if [ "${COPY_GENERATOR:-on}" != "off" ]; then
+  echo "=== Starting COPY progress generator ==="
+  copy_rows="${COPY_DEMO_ROWS:-300000}"
+  psql -h pg18-master -U demo -d demo <<SQL
+CREATE TABLE IF NOT EXISTS copy_demo (id integer, payload text);
+CREATE OR REPLACE FUNCTION copy_demo_throttle() RETURNS trigger
+LANGUAGE plpgsql AS \$\$
+BEGIN
+  PERFORM pg_sleep(0.0001);
+  RETURN NEW;
+END
+\$\$;
+CREATE OR REPLACE TRIGGER copy_demo_throttle BEFORE INSERT ON copy_demo
+  FOR EACH ROW EXECUTE FUNCTION copy_demo_throttle();
+COPY (SELECT g, md5(g::text) FROM generate_series(1, $copy_rows) g)
+  TO '/tmp/copy_demo.csv' WITH (FORMAT csv);
+SQL
+  (
+    sleep 30
+    while true; do
+      echo "[$(date)] COPY FROM file into copy_demo"
+      psql -h pg18-master -U demo -d demo \
+        -c "TRUNCATE copy_demo" \
+        -c "COPY copy_demo FROM '/tmp/copy_demo.csv' WITH (FORMAT csv)" \
+        -c "ANALYZE copy_demo" \
+        >/dev/null 2>&1 || true
+      sleep 10
+
+      echo "[$(date)] COPY copy_demo TO PROGRAM (throttled reader)"
+      psql -h pg18-master -U demo -d demo -c \
+        "COPY copy_demo TO PROGRAM 'while [ \"\$(head -c 65536 | wc -c)\" -gt 0 ]; do sleep 0.2; done' WITH (FORMAT csv);" \
+        >/dev/null 2>&1 || true
+      sleep 10
+
+      echo "[$(date)] COPY FROM STDIN into copy_demo"
+      seq 1 $((copy_rows / 3)) | psql -h pg18-master -U demo -d demo -c \
+        "COPY copy_demo (id) FROM STDIN;" >/dev/null 2>&1 || true
+      sleep 60
+    done
+  ) &
+else
+  echo "=== COPY progress generator disabled (COPY_GENERATOR=off) ==="
+fi
+
 echo "=== Starting workload loop ==="
 
 # Disable autovacuum on customer_profiles to accumulate dead tuples for demo

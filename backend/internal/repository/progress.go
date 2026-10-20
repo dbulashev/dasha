@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -69,6 +70,25 @@ func (p *PgxPool) GetProgressCluster(ctx context.Context, clusterName, instanceN
 	return ret, nil
 }
 
+func (p *PgxPool) GetProgressCopy(ctx context.Context, clusterName, instanceName string) ([]dto.ProgressCopy, error) {
+	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, "")
+	if err != nil {
+		return nil, fmt.Errorf("GetProgressCopy | %w", err)
+	}
+
+	vNum, err := p.getServerVersionNum(ctx, pool)
+	if err != nil {
+		return nil, fmt.Errorf("get server version | %w", err)
+	}
+
+	ret, err := p.getProgressCopy(ctx, vNum, pool)
+	if err != nil {
+		return nil, fmt.Errorf("getProgressCopy | %w", err)
+	}
+
+	return ret, nil
+}
+
 func (p *PgxPool) GetProgressIndex(ctx context.Context, clusterName, instanceName string) ([]dto.ProgressIndex, error) {
 	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, "")
 	if err != nil {
@@ -126,7 +146,8 @@ func (p *PgxPool) getProgressAnalyze(ctx context.Context, serverVersion int, poo
 	for rows.Next() {
 		var (
 			pid                                                                 int32
-			datname, tableName, phase, currentChildTable                        string
+			datname, tableName, currentChildTable                               string
+			phase                                                               pgtype.Text
 			sampleBlksTotal, sampleBlksScanned, extStatsTotal, extStatsComputed int64
 		)
 
@@ -140,7 +161,7 @@ func (p *PgxPool) getProgressAnalyze(ctx context.Context, serverVersion int, poo
 			Pid:               pid,
 			Datname:           datname,
 			TableName:         tableName,
-			Phase:             phase,
+			Phase:             phase.String,
 			SampleBlksTotal:   sampleBlksTotal,
 			SampleBlksScanned: sampleBlksScanned,
 			ExtStatsTotal:     extStatsTotal,
@@ -175,7 +196,7 @@ func (p *PgxPool) getProgressBaseBackup(ctx context.Context, serverVersion int, 
 	for rows.Next() {
 		var (
 			pid                                   int32
-			phase                                 string
+			phase                                 pgtype.Text
 			backupTotal, backupStreamed           int64
 			progressPercentage                    pgtype.Float8
 			tablespacesTotal, tablespacesStreamed int64
@@ -194,7 +215,7 @@ func (p *PgxPool) getProgressBaseBackup(ctx context.Context, serverVersion int, 
 
 		ret = append(ret, dto.ProgressBaseBackup{
 			Pid:                 pid,
-			Phase:               phase,
+			Phase:               phase.String,
 			BackupTotal:         backupTotal,
 			BackupStreamed:      backupStreamed,
 			ProgressPercentage:  pct,
@@ -229,7 +250,8 @@ func (p *PgxPool) getProgressCluster(ctx context.Context, serverVersion int, poo
 	for rows.Next() {
 		var (
 			pid                                                                                     int32
-			datname, tableName, command, phase, clusterIndex                                        string
+			datname, tableName, command, clusterIndex                                               string
+			phase                                                                                   pgtype.Text
 			heapTuplesScanned, heapTuplesWritten, heapBlksTotal, heapBlksScanned, indexRebuildCount int64
 		)
 
@@ -245,7 +267,7 @@ func (p *PgxPool) getProgressCluster(ctx context.Context, serverVersion int, poo
 			Datname:           datname,
 			TableName:         tableName,
 			Command:           command,
-			Phase:             phase,
+			Phase:             phase.String,
 			ClusterIndex:      clusterIndex,
 			HeapTuplesScanned: heapTuplesScanned,
 			HeapTuplesWritten: heapTuplesWritten,
@@ -257,6 +279,114 @@ func (p *PgxPool) getProgressCluster(ctx context.Context, serverVersion int, poo
 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("getProgressCluster | %w", err)
+	}
+
+	return ret, nil
+}
+
+func (p *PgxPool) getProgressCopy(ctx context.Context, serverVersion int, pool *pgxpool.Pool) ([]dto.ProgressCopy, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	qStr, err := query.Get(serverVersion, enums.QueryProgressCopy, nil)
+	if err != nil {
+		return nil, fmt.Errorf("getProgressCopy | %w", err)
+	}
+
+	var ret []dto.ProgressCopy
+
+	// pg_total_relation_size waits on an AccessExclusiveLock taken after the pg_locks check.
+	err = p.withLockTimeout(ctx, pool, func(q querier) error {
+		rows, err := q.Query(ctx, qStr)
+		if err != nil {
+			return err
+		}
+
+		ret, err = scanProgressCopy(rows)
+
+		return err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("getProgressCopy | %w", err)
+	}
+
+	return ret, nil
+}
+
+func scanProgressCopy(rows pgx.Rows) ([]dto.ProgressCopy, error) {
+	defer rows.Close()
+
+	ret := make([]dto.ProgressCopy, 0, 10) //nolint:mnd
+
+	for rows.Next() {
+		var (
+			pid                                             int32
+			datname, command, copyType                      pgtype.Text
+			tableName, queryText                            pgtype.Text
+			bytesProcessed, tuplesProcessed, tuplesExcluded int64
+			bytesTotal, tuplesSkipped                       pgtype.Int8
+			tableSize, tableTuples                          pgtype.Int8
+			elapsedSeconds, progressPercentage, etaSeconds  pgtype.Float8
+		)
+
+		err := rows.Scan(&pid, &datname, &tableName, &command, &copyType, &queryText,
+			&bytesProcessed, &bytesTotal, &tuplesProcessed, &tuplesExcluded, &tuplesSkipped,
+			&tableSize, &tableTuples, &elapsedSeconds, &progressPercentage, &etaSeconds)
+		if err != nil {
+			return nil, fmt.Errorf("scan | %w", err)
+		}
+
+		row := dto.ProgressCopy{
+			Pid:             pid,
+			Datname:         datname.String,
+			Command:         command.String,
+			Type:            copyType.String,
+			BytesProcessed:  bytesProcessed,
+			TuplesProcessed: tuplesProcessed,
+			TuplesExcluded:  tuplesExcluded,
+		}
+
+		if tableName.Valid {
+			row.TableName = &tableName.String
+		}
+
+		if queryText.Valid {
+			row.Query = &queryText.String
+		}
+
+		if bytesTotal.Valid {
+			row.BytesTotal = &bytesTotal.Int64
+		}
+
+		if tuplesSkipped.Valid {
+			row.TuplesSkipped = &tuplesSkipped.Int64
+		}
+
+		if tableSize.Valid {
+			row.TableSize = &tableSize.Int64
+		}
+
+		if tableTuples.Valid {
+			row.TableTuples = &tableTuples.Int64
+		}
+
+		if elapsedSeconds.Valid {
+			row.ElapsedSeconds = &elapsedSeconds.Float64
+		}
+
+		if progressPercentage.Valid {
+			row.ProgressPercentage = &progressPercentage.Float64
+		}
+
+		if etaSeconds.Valid {
+			row.EtaSeconds = &etaSeconds.Float64
+		}
+
+		ret = append(ret, row)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("scan | %w", err)
 	}
 
 	return ret, nil
@@ -281,7 +411,8 @@ func (p *PgxPool) getProgressIndex(ctx context.Context, serverVersion int, pool 
 	for rows.Next() {
 		var (
 			pid, currentLockerPid                                                                                        int32
-			datname, tableName, indexName, phase                                                                         string
+			datname, tableName, indexName                                                                                string
+			phase                                                                                                        pgtype.Text
 			lockersTotal, lockersDone, blocksTotal, blocksDone, tuplesTotal, tuplesDone, partitionsTotal, partitionsDone int64
 		)
 
@@ -297,7 +428,7 @@ func (p *PgxPool) getProgressIndex(ctx context.Context, serverVersion int, pool 
 			Datname:          datname,
 			TableName:        tableName,
 			IndexName:        indexName,
-			Phase:            phase,
+			Phase:            phase.String,
 			LockersTotal:     lockersTotal,
 			LockersDone:      lockersDone,
 			CurrentLockerPid: currentLockerPid,
@@ -336,7 +467,8 @@ func (p *PgxPool) getProgressVacuum(ctx context.Context, serverVersion int, pool
 	for rows.Next() {
 		var (
 			pid                                                                int32
-			datname, tableName, phase                                          string
+			datname, tableName                                                 string
+			phase                                                              pgtype.Text
 			heapBlksTotal, heapBlksScanned, heapBlksVacuumed, indexVacuumCount int64
 			numDeadTuples                                                      int64
 			maxDeadTuples, deadTupleBytes, maxDeadTupleBytes                   pgtype.Int8
@@ -354,7 +486,7 @@ func (p *PgxPool) getProgressVacuum(ctx context.Context, serverVersion int, pool
 			Pid:              pid,
 			Datname:          datname,
 			TableName:        tableName,
-			Phase:            phase,
+			Phase:            phase.String,
 			HeapBlksTotal:    heapBlksTotal,
 			HeapBlksScanned:  heapBlksScanned,
 			HeapBlksVacuumed: heapBlksVacuumed,

@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Features
+- **COPY on the Operation progress page** (PostgreSQL 14+): table, source type, bytes and rows processed, rows excluded and skipped, elapsed time, and a percentage with ETA when the total is known: the file size for `COPY FROM` a server-side file, the row estimate for `COPY TO`.
+- **Replication slot invalidation forecast** on the Operation progress page: the WAL rate is measured over a chosen window (30 s to 5 min, with a progress bar and a stop button), and for every slot the page shows the WAL it retains, the remaining `max_slot_wal_keep_size` reserve and the time until it is lost. The measurement takes two LSN samples by the server clock and holds no connection in between.
+
+### Bug Fixes
+- **Fixed a 500 on the Maintenance and Operation progress pages** when a running operation reports no phase, for example a VACUUM leader waiting for its parallel index workers.
+
+### Dependencies
+- **Security updates:** Go toolchain 1.27.1→1.27.2 (net/http, HTTP/2, net/textproto, crypto/tls and html/template fixes, GO-2026-6599…6617), golang.org/x/net 0.58.0→0.60.0 (HTTP/2 denial of service, CVE-2026-78669), source-map-js 1.2.1→1.2.2 (denial of service via malformed source maps, CVE-2026-93749).
+
 ## v1.8.3
 
 ### Features

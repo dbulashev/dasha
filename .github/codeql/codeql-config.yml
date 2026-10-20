@@ -1,0 +1,11 @@
+name: "Dasha CodeQL config"
+
+query-filters:
+  # False positive: pat.Hash SHA-256s a 256-bit crypto/rand token (a personal
+  # access token), not a user-chosen password, so a fast hash is correct — the same
+  # scheme GitHub/GitLab use for PATs (see backend/internal/pkg/pat/pat.go). CodeQL
+  # cannot distinguish a high-entropy token from a password, and inline
+  # `// codeql[...]` suppressions are not honored by code scanning, so exclude the
+  # query. The codebase hashes no user passwords that this rule should catch.
+  - exclude:
+      id: go/weak-sensitive-data-hashing

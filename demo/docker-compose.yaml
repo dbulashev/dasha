@@ -394,9 +394,13 @@ services:
     # LOCK_TABLE_GENERATOR=off keeps locked_table_demo readable at all times
     # (the periodic ACCESS EXCLUSIVE lock is what makes "Describe table" return
     # 423 while it is held).
+    # COPY_GENERATOR=off stops the periodic throttled COPY loads into copy_demo
+    # (the COPY cards on the Operation progress page); COPY_DEMO_ROWS sizes them.
     environment:
       SPIKE_GENERATOR: "${SPIKE_GENERATOR:-on}"
       LOCK_TABLE_GENERATOR: "${LOCK_TABLE_GENERATOR:-on}"
+      COPY_GENERATOR: "${COPY_GENERATOR:-on}"
+      COPY_DEMO_ROWS: "${COPY_DEMO_ROWS:-300000}"
     volumes:
       - ./scripts/workload-generator.sh:/workload-generator.sh:ro
     depends_on:
