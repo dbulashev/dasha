@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.9.1
+
+### Dependencies
+- **Security update:** Go toolchain 1.27.2→1.27.3 (crypto/x509 fix).
+
 ## 1.9.0
 
 ### Features
