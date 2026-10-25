@@ -96,7 +96,7 @@ type PrecheckGroup struct {
 type Relation struct {
 	Key      pathprobe.RelKey
 	Label    string // "c ⋈ o", "upper"
-	PathIDs  []int  // in order of first appearance
+	PathIDs  []int  // in order of first appearance, then the paths without events of their own
 	Precheck []PrecheckGroup
 	Counts   map[Fate]int
 }

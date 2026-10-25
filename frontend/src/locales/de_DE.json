@@ -2317,6 +2317,9 @@
       "startup": "günstiger beim Startup",
       "order_": "seine Sortierung könnte nützlich sein"
     },
-    "ratioHint": "×N: wie viel teurer der Pfad als der gewählte dieser Relation ist ({path}); nicht bei parametrisierten Pfaden, deren Kosten pro Durchlauf gelten."
+    "ratioHint": "×N: wie viel teurer der Pfad als der gewählte dieser Relation ist ({path}); nicht bei parametrisierten Pfaden, deren Kosten pro Durchlauf gelten.",
+    "inputOf": "Eingabe von",
+    "outer": "äußerer",
+    "inner": "innerer"
   }
 }

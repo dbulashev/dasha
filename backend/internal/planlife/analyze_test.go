@@ -156,6 +156,13 @@ func TestDemoJoin_IndexChain(t *testing.T) {
 		t.Errorf("path 14: inner %d fate %s by %d/#%d cause %+v", mj.InnerID, mj.Fate, mj.By, mj.BySeq, mj.Cause)
 	}
 
+	// memoize 13 has no events of its own, yet is listed with its rel
+	for _, r := range a.Relations {
+		if r.Key == "{2}" && (!slices.Contains(r.PathIDs, 13) || r.Counts[FateChildOnly] != 2) {
+			t.Errorf("rel {2}: paths %v counts %v, want memoize 13 and 17 as child_only", r.PathIDs, r.Counts)
+		}
+	}
+
 	// of the join paths over the index, nested loop 11 is the cheapest (86234.27)
 	if ch.Best != 11 || !ch.BestAtFinalLevel {
 		t.Errorf("best %d at final level %t, want 11 true", ch.Best, ch.BestAtFinalLevel)

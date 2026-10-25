@@ -142,7 +142,7 @@ watch(
               {{ t('planLifecycle.paramFrom', { rels: paramText(p, aliases) }) }}
             </div>
             <div v-if="p.outer_path_id != null" class="text-caption text-medium-emphasis">
-              outer: {{ inputText(p.outer_path_id) }} · inner: {{ inputText(p.inner_path_id) }}
+              {{ t('planLifecycle.outer') }}: {{ inputText(p.outer_path_id) }} · {{ t('planLifecycle.inner') }}: {{ inputText(p.inner_path_id) }}
             </div>
             <div v-else-if="childIds(p).length" class="text-caption text-medium-emphasis">
               {{ t('planLifecycle.over') }} {{ childrenText(p) }}
@@ -167,6 +167,12 @@ watch(
               <a href="#" @click.prevent.stop="emit('select', p.by!)">{{ childText(p.by) }}</a>
             </template>
             <div class="text-caption">{{ causeText(p.cause, t) }}</div>
+            <div v-if="p.fate === 'child_only' && p.parents.length" class="text-caption">
+              {{ t('planLifecycle.inputOf') }}
+              <template v-for="(id, i) in p.parents" :key="id">
+                <a href="#" @click.prevent.stop="emit('select', id)">{{ childText(id) }}</a>{{ i < p.parents.length - 1 ? ', ' : '' }}
+              </template>
+            </div>
           </td>
           <td class="text-end">
             {{ fmtCompactFloat(p.rows) }}

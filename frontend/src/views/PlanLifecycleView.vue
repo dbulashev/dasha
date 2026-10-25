@@ -90,13 +90,18 @@ function parseErrorText(e: PlanLifecycleParseError): string {
   })
 }
 
+// a plan replaced while a request is in flight starts another one; only the latest may land
+let generation = 0
+
 async function analyze() {
+  const current = ++generation
   loading.value = true
   error.value = ''
 
   try {
     const plan = planText.value.trim() ? planText.value : undefined
     const res = await analyzePlanLifecycle({ trace: traceText.value, plan })
+    if (current !== generation) return
     switch (res.status) {
       case 200:
         analysis.value = res.data
@@ -119,9 +124,9 @@ async function analyze() {
         error.value = (res.data as { message?: string } | undefined)?.message ?? `HTTP ${res.status}`
     }
   } catch (e) {
-    error.value = e instanceof Error ? e.message : String(e)
+    if (current === generation) error.value = e instanceof Error ? e.message : String(e)
   } finally {
-    loading.value = false
+    if (current === generation) loading.value = false
   }
 }
 
@@ -193,7 +198,8 @@ function alternatives(path: number[]): number {
   const p = id != null ? byId.value.get(id) : undefined
   const r = p ? analysis.value?.relations.find(x => x.key === p.rel) : undefined
   if (!r) return 0
-  return r.path_ids.length - 1 + r.precheck.reduce((n, g) => n + g.count, 0)
+  const own = r.path_ids.filter(i => byId.value.get(i)?.fate !== 'child_only').length
+  return own - 1 + r.precheck.reduce((n, g) => n + g.count, 0)
 }
 
 // index_not_examined is shown on the index tab, next to the list it is about
