@@ -461,7 +461,19 @@ func TestInvariants(t *testing.T) {
 				}
 			}
 
+			listed := map[pathprobe.RelKey]map[int]bool{}
+			for _, r := range a.Relations {
+				listed[r.Key] = map[int]bool{}
+				for _, id := range r.PathIDs {
+					listed[r.Key][id] = true
+				}
+			}
+
 			for _, p := range a.Paths {
+				if p.Rel != "" && !listed[p.Rel][p.ID] {
+					t.Errorf("path %d (%s) is not listed in its rel %s", p.ID, p.Fate, p.Rel)
+				}
+
 				if p.By != 0 {
 					if _, ok := a.Path(p.By); !ok {
 						t.Errorf("path %d lost to %d, which does not exist", p.ID, p.By)

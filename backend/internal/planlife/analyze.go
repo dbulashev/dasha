@@ -193,10 +193,10 @@ func (s *state) relations() []Relation {
 		r.Counts[s.paths[ev.PathID].Fate]++
 	}
 
-	// paths without events of their own (Memoize, Material) belong to their rel too
+	// paths without events in their own rel: Memoize, Material, a chosen path put in place without add_path()
 	for _, id := range s.sortedIDs() {
 		pv := s.paths[id]
-		if pv.Fate != FateChildOnly || pv.Rel == "" {
+		if pv.Rel == "" || seen[pv.Rel][id] {
 			continue
 		}
 
@@ -204,11 +204,13 @@ func (s *state) relations() []Relation {
 		if !ok {
 			i = len(out)
 			index[pv.Rel] = i
+			seen[pv.Rel] = map[int]bool{}
 			out = append(out, Relation{Key: pv.Rel, Label: s.relLabel(pv.Rel), Counts: map[Fate]int{}}) //nolint:exhaustruct
 		}
 
+		seen[pv.Rel][id] = true
 		out[i].PathIDs = append(out[i].PathIDs, id)
-		out[i].Counts[FateChildOnly]++
+		out[i].Counts[pv.Fate]++
 	}
 
 	return out
