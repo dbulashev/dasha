@@ -2235,7 +2235,6 @@
       "subquery_rels": "Einige Pfade liegen in einer Unterabfrage: ihre Relationen sind in der Unterabfrage nummeriert, Aliasse gelten für sie nicht, und das Relationspanel kann sie mit Pfaden der äußeren Abfrage vermischen.",
       "chosen_but_displaced": "Der Pfad ist im endgültigen Plan, im Trace aber verdrängt oder entfernt (Ereignis #{seq}): dieser Fall ist nicht erklärt.",
       "chosen_as_bitmapqual": "Der Pfad wurde aus seiner Relation verdrängt (#{seq}), blieb aber im gewählten Bitmap Heap Scan: im Plan ist es der Bitmap Index Scan.",
-      "plan_query_text_missing": "Der Plan hat keinen Abfragetext (EXPLAIN aus psql): dieselbe Abfrage nur nach der Form des Baums.",
       "partial_paths_unobserved": "Der Plan enthält Gather: pathprobe beobachtet keine partiellen Pfade, ein Teil der Suche ist unsichtbar."
     },
     "inSubquery": "in einer Unterabfrage: Relationsnummern der Unterabfrage",

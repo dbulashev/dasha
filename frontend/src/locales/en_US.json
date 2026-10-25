@@ -2273,7 +2273,6 @@
       "subquery_rels": "Some paths are inside a subquery: their relations are numbered in the subquery, aliases do not apply to them, and the relation panel may mix them with paths of the outer query.",
       "chosen_but_displaced": "The path is in the final plan but displaced or removed in the trace (event #{seq}): this case is not explained.",
       "chosen_as_bitmapqual": "The path was displaced from its relation (#{seq}) but stayed inside the chosen Bitmap Heap Scan: in the plan it is the Bitmap Index Scan.",
-      "plan_query_text_missing": "The plan has no query text (EXPLAIN from psql): it is the same query only by the shape of the tree.",
       "partial_paths_unobserved": "The plan has a Gather: pathprobe does not observe partial paths, part of the search is invisible."
     },
     "inSubquery": "inside a subquery: relation numbers are the subquery's",

@@ -147,8 +147,7 @@ const (
 	CaveatPrecheckNoInputs = "precheck_no_inputs"
 	CaveatIndexNotExamined = "index_not_examined_unobservable"
 	// CaveatSubqueryRels: paths below a SubqueryScan number their rels in the subquery's range table.
-	CaveatSubqueryRels  = "subquery_rels"
-	CaveatPlanQueryText = "plan_query_text_missing"
+	CaveatSubqueryRels = "subquery_rels"
 	// CaveatPartialPaths: the plan has Gather / Gather Merge; pathprobe does not see partial paths.
 	CaveatPartialPaths  = "partial_paths_unobserved"
 	CaveatChosenButLost = "chosen_but_displaced" // Params["seq"], ["kind"]

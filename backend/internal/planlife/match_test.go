@@ -83,7 +83,7 @@ func TestMatch_Demo(t *testing.T) {
 				}
 			}
 
-			if !hasCaveat(a, CaveatPlanQueryText, nil) || hasCaveat(a, CaveatPartialPaths, nil) {
+			if hasCaveat(a, CaveatPartialPaths, nil) {
 				t.Errorf("caveats %+v", a.Caveats)
 			}
 		})
@@ -140,10 +140,6 @@ func TestMatch_QueryText(t *testing.T) {
 		a := AnalyzeWithPlan(tr, &p)
 		if a.Match.QueryText != c.want || a.Match.Status != MatchMismatch {
 			t.Errorf("%q: %+v", c.text, a.Match)
-		}
-
-		if hasCaveat(a, CaveatPlanQueryText, nil) {
-			t.Errorf("%q: plan_query_text_missing with a query text", c.text)
 		}
 	}
 }

@@ -97,10 +97,6 @@ func (s *state) caveats() []Caveat {
 		trace(CaveatIndexNotExamined, nil)
 	}
 
-	if s.a.Match != nil && s.a.Match.QueryText == QueryTextMissing {
-		trace(CaveatPlanQueryText, nil)
-	}
-
 	if s.a.Plan != nil && hasGather(s.a.Plan) {
 		trace(CaveatPartialPaths, nil)
 	}
