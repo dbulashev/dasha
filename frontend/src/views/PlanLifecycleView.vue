@@ -299,7 +299,7 @@ const traceCaveats = computed(
       </v-alert>
 
       <v-alert
-        v-if="analysis.match"
+        v-if="analysis.match && analysis.match.status !== 'match'"
         :type="matchColor(analysis.match)"
         variant="tonal"
         density="compact"
@@ -316,7 +316,7 @@ const traceCaveats = computed(
         <div v-if="analysis.final.status === 'by_plan'" class="text-caption">{{ t('planLifecycle.match.finalByPlan') }}</div>
       </v-alert>
 
-      <v-card variant="tonal" class="mb-3">
+      <v-card variant="outlined" class="mb-3">
         <v-card-text>
           <div class="text-subtitle-2 mb-1">{{ t('planLifecycle.summary.title') }}</div>
           <div v-if="summaryFinal" class="text-body-2"><VerdictText :verdict="summaryFinal" @select="selectPath" /></div>
