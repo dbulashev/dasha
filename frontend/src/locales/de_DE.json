@@ -453,6 +453,18 @@
     "progressPct": "Fortschritt %",
     "tablespacesTotal": "Tablespaces gesamt",
     "tablespacesStreamed": "Tablespaces gestreamt",
+    "copy": "COPY",
+    "copyType": "Quelle / Ziel",
+    "bytesProcessed": "Bytes verarbeitet",
+    "bytesProcessedHint": "Die Gesamtgröße in Bytes ist nur bei COPY FROM aus einer Serverdatei bekannt; daraus werden Prozent und ETA berechnet. Bei COPY TO aus einer Tabelle werden Prozent und ETA aus den Zeilen berechnet (siehe „Zeilen verarbeitet“). Bei COPY FROM STDIN/PROGRAM und COPY (Abfrage) TO gibt es keinen Vergleichswert, daher weder Prozent noch ETA.",
+    "tuplesProcessed": "Zeilen verarbeitet",
+    "tuplesProcessedHint": "Bei COPY TO ist die zweite Zahl die Zeilenschätzung der Tabelle (reltuples), aus der der Prozentwert berechnet wird.",
+    "tuplesExcluded": "Zeilen ausgeschlossen (WHERE)",
+    "tuplesSkipped": "Zeilen übersprungen (ON_ERROR)",
+    "tableSize": "Tabellengröße",
+    "elapsed": "Verstrichen",
+    "eta": "Restzeit (ETA)",
+    "etaHint": "Lineare Schätzung aus verstrichener Zeit und bisherigem Fortschritt; setzt eine konstante Rate voraus.",
     "phases": {
       "vacuum": {
         "initializing": "Initialisierung",
@@ -506,6 +518,27 @@
         "transferring wal files": "WAL-Dateien übertragen"
       }
     }
+  },
+  "slotForecast": {
+    "button": "Slot-Prognose",
+    "title": "Prognose der Invalidierung von Replikationsslots",
+    "description": "Misst die WAL-Erzeugungsrate im gewählten Fenster und schätzt, wann jeder Slot seine max_slot_wal_keep_size-Reserve aufbraucht und invalidiert wird (wal_status = lost). Die Messung hält keine Datenbankverbindung offen: Es werden zwei LSN-Werte nach der Serveruhr erfasst.",
+    "start": "Messung starten",
+    "restart": "Erneut messen",
+    "cancel": "Stoppen",
+    "measuring": "WAL-Rate wird gemessen… noch {n} s",
+    "noLsn": "Der Server hat keine WAL-Position geliefert: Der Standby hat noch kein WAL wiedergegeben.",
+    "walRate": "WAL-Rate",
+    "window": "Messfenster",
+    "noLimit": "nicht gesetzt (-1)",
+    "retained": "Gehaltenes WAL",
+    "timeToLost": "Zeit bis Invalidierung",
+    "lost": "Bereits verloren",
+    "now": "Wird gerade invalidiert",
+    "unlimited": "Kein Limit — Festplatte kann volllaufen",
+    "noLoad": "Kein WAL im Messfenster geschrieben — keine Prognose",
+    "activeHint": "Ein aktiver Consumer schiebt den Slot weiter, daher zeigt die Prognose die Restzeit, falls der Consumer anhält.",
+    "footnote": "Lineare Extrapolation der WAL-Rate im Messfenster: Lastspitzen, Checkpoints und Batch-Jobs können die tatsächliche Zeit stark verkürzen."
   },
   "locks": {
     "tree": "Sperrbaum",

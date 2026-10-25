@@ -36,6 +36,25 @@ type ProgressCluster struct {
 	IndexRebuildCount int64
 }
 
+type ProgressCopy struct {
+	Pid                int32
+	Datname            string
+	TableName          *string
+	Command            string
+	Type               string
+	Query              *string
+	BytesProcessed     int64
+	BytesTotal         *int64
+	TuplesProcessed    int64
+	TuplesExcluded     int64
+	TuplesSkipped      *int64
+	TableSize          *int64
+	TableTuples        *int64
+	ElapsedSeconds     *float64
+	ProgressPercentage *float64
+	EtaSeconds         *float64
+}
+
 type ProgressIndex struct {
 	Pid              int32
 	Datname          string

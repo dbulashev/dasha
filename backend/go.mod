@@ -1,6 +1,6 @@
 module github.com/dbulashev/dasha
 
-go 1.27.1
+go 1.27.3
 
 require (
 	github.com/casbin/casbin/v2 v2.135.0
@@ -11,10 +11,10 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/securecookie v1.1.2
 	github.com/jackc/pgx/v5 v5.11.0
-	github.com/labstack/echo/v4 v4.15.4
+	github.com/labstack/echo/v4 v4.16.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/oapi-codegen/runtime v1.7.0
-	github.com/pganalyze/pg_query_go/v6 v6.2.2
+	github.com/pganalyze/pg_query_go/v6 v6.2.5
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/samber/do v1.6.0
 	github.com/spf13/cobra v1.10.2
@@ -22,11 +22,11 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.44.0
 	github.com/wasilibs/go-pgquery v0.0.0-20260728010200-155ebad2880e
-	github.com/yandex-cloud/go-genproto v0.122.0
+	github.com/yandex-cloud/go-genproto v0.127.0
 	github.com/yandex-cloud/go-sdk v0.36.0
 	go.uber.org/zap v1.28.0
 	golang.org/x/oauth2 v0.37.0
-	golang.org/x/sync v0.23.0
+	golang.org/x/sync v0.24.0
 	golang.org/x/time v0.16.0
 	google.golang.org/protobuf v1.36.12
 )
@@ -118,7 +118,7 @@ require (
 	go.uber.org/multierr v1.10.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/crypto v0.57.0 // indirect
-	golang.org/x/net v0.58.0 // indirect
+	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 	google.golang.org/genproto v0.0.0-20240903143218-8af14fe29dc1 // indirect

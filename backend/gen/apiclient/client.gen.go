@@ -2386,7 +2386,7 @@ type PlanLifecycleRequest struct {
 	// Plan EXPLAIN of the same query, in JSON or text format.
 	Plan *string `json:"plan,omitempty"`
 
-	// Trace pathprobe_json() output as text, as written by pathprobe 9bcf24c or later.
+	// Trace pathprobe_json() output as text.
 	Trace string `json:"trace"`
 }
 
@@ -2559,6 +2559,46 @@ type ProgressCluster struct {
 	Phase             string `json:"Phase"`
 	Pid               int32  `json:"Pid"`
 	TableName         string `json:"TableName"`
+}
+
+// ProgressCopy COPY commands in progress (pg_stat_progress_copy, PG 14+; empty on older servers).
+type ProgressCopy struct {
+	BytesProcessed int64 `json:"BytesProcessed"`
+
+	// BytesTotal Source file size for COPY FROM FILE; NULL when unknown.
+	BytesTotal *int64 `json:"BytesTotal"`
+
+	// Command COPY FROM or COPY TO.
+	Command        string   `json:"Command"`
+	Datname        string   `json:"Datname"`
+	ElapsedSeconds *float64 `json:"ElapsedSeconds"`
+
+	// EtaSeconds Linear extrapolation from elapsed time and progress.
+	EtaSeconds *float64 `json:"EtaSeconds"`
+	Pid        int32    `json:"Pid"`
+
+	// ProgressPercentage bytes_processed/bytes_total when the total is known, else tuples_processed/reltuples for COPY TO.
+	ProgressPercentage *float64 `json:"ProgressPercentage"`
+	Query              *string  `json:"Query"`
+
+	// TableName NULL for COPY (query) TO; an OID when the relation is in another database.
+	TableName *string `json:"TableName"`
+
+	// TableSize Total relation size in bytes; only for relations in the connected database.
+	TableSize *int64 `json:"TableSize"`
+
+	// TableTuples pg_class.reltuples estimate; NULL if the table was never analyzed.
+	TableTuples *int64 `json:"TableTuples"`
+
+	// TuplesExcluded Rows rejected by the WHERE clause.
+	TuplesExcluded  int64 `json:"TuplesExcluded"`
+	TuplesProcessed int64 `json:"TuplesProcessed"`
+
+	// TuplesSkipped Rows skipped by ON_ERROR ignore (PG 17+).
+	TuplesSkipped *int64 `json:"TuplesSkipped"`
+
+	// Type FILE, PROGRAM, PIPE (STDIN/STDOUT) or CALLBACK.
+	Type string `json:"Type"`
 }
 
 // ProgressIndex defines model for ProgressIndex.
@@ -2824,6 +2864,35 @@ type ReplicationSlot struct {
 	WalStatus    *string `json:"WalStatus,omitempty"`
 }
 
+// ReplicationSlotForecast defines model for ReplicationSlotForecast.
+type ReplicationSlotForecast struct {
+	Active   bool   `json:"Active"`
+	Database string `json:"Database"`
+
+	// RetainedBytes WAL held back by the slot (current LSN − restart_lsn); NULL for a lost slot.
+	RetainedBytes *int64 `json:"RetainedBytes"`
+
+	// SafeWalSize Bytes that can still be written before the slot is lost; NULL without a limit.
+	SafeWalSize *int64 `json:"SafeWalSize"`
+
+	// SecondsToLost SafeWalSize / WalBytesPerSecond, 0 when the reserve is already used up. NULL without a limit, for a lost slot, or when no WAL was written during the window. For an active slot the consumer keeps advancing restart_lsn, so this is the time left if it stops.
+	SecondsToLost *float64 `json:"SecondsToLost"`
+	SlotName      string   `json:"SlotName"`
+	SlotType      string   `json:"SlotType"`
+	WalStatus     string   `json:"WalStatus"`
+}
+
+// ReplicationSlotsForecast defines model for ReplicationSlotsForecast.
+type ReplicationSlotsForecast struct {
+	// ElapsedSeconds Measurement window by the server clock.
+	ElapsedSeconds *float64 `json:"ElapsedSeconds"`
+
+	// MaxSlotWalKeepSize Bytes; NULL when max_slot_wal_keep_size = -1 (no limit).
+	MaxSlotWalKeepSize *int64                    `json:"MaxSlotWalKeepSize"`
+	Slots              []ReplicationSlotForecast `json:"Slots"`
+	WalBytesPerSecond  *float64                  `json:"WalBytesPerSecond"`
+}
+
 // ReplicationStatus defines model for ReplicationStatus.
 type ReplicationStatus struct {
 	ApplicationName  string   `json:"ApplicationName"`
@@ -2841,6 +2910,14 @@ type ReplicationStatus struct {
 	Usename          *string  `json:"Usename,omitempty"`
 	WriteLagSeconds  *float64 `json:"WriteLagSeconds,omitempty"`
 	WriteLsn         *string  `json:"WriteLsn,omitempty"`
+}
+
+// ReplicationWalPosition defines model for ReplicationWalPosition.
+type ReplicationWalPosition struct {
+	CapturedAt time.Time `json:"CapturedAt"`
+
+	// Lsn NULL on a standby that has not replayed any WAL yet.
+	Lsn *string `json:"Lsn"`
 }
 
 // RoleChangeTrigger defines model for RoleChangeTrigger.
@@ -3884,6 +3961,12 @@ type GetProgressClusterParams struct {
 	Instance    Instance    `form:"instance" json:"instance"`
 }
 
+// GetProgressCopyParams defines parameters for GetProgressCopy.
+type GetProgressCopyParams struct {
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance    `form:"instance" json:"instance"`
+}
+
 // GetProgressIndexParams defines parameters for GetProgressIndex.
 type GetProgressIndexParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
@@ -4051,8 +4134,26 @@ type GetReplicationSlotsParams struct {
 	Instance    Instance    `form:"instance" json:"instance"`
 }
 
+// GetReplicationSlotsForecastParams defines parameters for GetReplicationSlotsForecast.
+type GetReplicationSlotsForecastParams struct {
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance    `form:"instance" json:"instance"`
+
+	// FromLsn Lsn returned by getReplicationWalPosition.
+	FromLsn string `form:"from_lsn" json:"from_lsn"`
+
+	// FromTime CapturedAt returned by getReplicationWalPosition (server clock).
+	FromTime time.Time `form:"from_time" json:"from_time"`
+}
+
 // GetReplicationStatusParams defines parameters for GetReplicationStatus.
 type GetReplicationStatusParams struct {
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance    `form:"instance" json:"instance"`
+}
+
+// GetReplicationWalPositionParams defines parameters for GetReplicationWalPosition.
+type GetReplicationWalPositionParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
 	Instance    Instance    `form:"instance" json:"instance"`
 }
@@ -4558,6 +4659,9 @@ type ClientInterface interface {
 	// GetProgressCluster request
 	GetProgressCluster(ctx context.Context, params *GetProgressClusterParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetProgressCopy request
+	GetProgressCopy(ctx context.Context, params *GetProgressCopyParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetProgressIndex request
 	GetProgressIndex(ctx context.Context, params *GetProgressIndexParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -4612,8 +4716,14 @@ type ClientInterface interface {
 	// GetReplicationSlots request
 	GetReplicationSlots(ctx context.Context, params *GetReplicationSlotsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetReplicationSlotsForecast request
+	GetReplicationSlotsForecast(ctx context.Context, params *GetReplicationSlotsForecastParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetReplicationStatus request
 	GetReplicationStatus(ctx context.Context, params *GetReplicationStatusParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetReplicationWalPosition request
+	GetReplicationWalPosition(ctx context.Context, params *GetReplicationWalPositionParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetSchemaLint request
 	GetSchemaLint(ctx context.Context, params *GetSchemaLintParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -5723,6 +5833,18 @@ func (c *Client) GetProgressCluster(ctx context.Context, params *GetProgressClus
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetProgressCopy(ctx context.Context, params *GetProgressCopyParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetProgressCopyRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetProgressIndex(ctx context.Context, params *GetProgressIndexParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetProgressIndexRequest(c.Server, params)
 	if err != nil {
@@ -5939,8 +6061,32 @@ func (c *Client) GetReplicationSlots(ctx context.Context, params *GetReplication
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetReplicationSlotsForecast(ctx context.Context, params *GetReplicationSlotsForecastParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetReplicationSlotsForecastRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetReplicationStatus(ctx context.Context, params *GetReplicationStatusParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetReplicationStatusRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetReplicationWalPosition(ctx context.Context, params *GetReplicationWalPositionParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetReplicationWalPositionRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -12407,6 +12553,63 @@ func NewGetProgressClusterRequest(server string, params *GetProgressClusterParam
 	return req, nil
 }
 
+// NewGetProgressCopyRequest generates requests for GetProgressCopy
+func NewGetProgressCopyRequest(server string, params *GetProgressCopyParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/progress/copy")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, params.ClusterName); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "instance", runtime.ParamLocationQuery, params.Instance); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetProgressIndexRequest generates requests for GetProgressIndex
 func NewGetProgressIndexRequest(server string, params *GetProgressIndexParams) (*http.Request, error) {
 	var err error
@@ -13799,6 +14002,87 @@ func NewGetReplicationSlotsRequest(server string, params *GetReplicationSlotsPar
 	return req, nil
 }
 
+// NewGetReplicationSlotsForecastRequest generates requests for GetReplicationSlotsForecast
+func NewGetReplicationSlotsForecastRequest(server string, params *GetReplicationSlotsForecastParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/replication/slots-forecast")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, params.ClusterName); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "instance", runtime.ParamLocationQuery, params.Instance); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "from_lsn", runtime.ParamLocationQuery, params.FromLsn); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "from_time", runtime.ParamLocationQuery, params.FromTime); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetReplicationStatusRequest generates requests for GetReplicationStatus
 func NewGetReplicationStatusRequest(server string, params *GetReplicationStatusParams) (*http.Request, error) {
 	var err error
@@ -13809,6 +14093,63 @@ func NewGetReplicationStatusRequest(server string, params *GetReplicationStatusP
 	}
 
 	operationPath := fmt.Sprintf("/api/replication/status")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, params.ClusterName); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "instance", runtime.ParamLocationQuery, params.Instance); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetReplicationWalPositionRequest generates requests for GetReplicationWalPosition
+func NewGetReplicationWalPositionRequest(server string, params *GetReplicationWalPositionParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/replication/wal-position")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -15655,6 +15996,9 @@ type ClientWithResponsesInterface interface {
 	// GetProgressClusterWithResponse request
 	GetProgressClusterWithResponse(ctx context.Context, params *GetProgressClusterParams, reqEditors ...RequestEditorFn) (*GetProgressClusterResponse, error)
 
+	// GetProgressCopyWithResponse request
+	GetProgressCopyWithResponse(ctx context.Context, params *GetProgressCopyParams, reqEditors ...RequestEditorFn) (*GetProgressCopyResponse, error)
+
 	// GetProgressIndexWithResponse request
 	GetProgressIndexWithResponse(ctx context.Context, params *GetProgressIndexParams, reqEditors ...RequestEditorFn) (*GetProgressIndexResponse, error)
 
@@ -15709,8 +16053,14 @@ type ClientWithResponsesInterface interface {
 	// GetReplicationSlotsWithResponse request
 	GetReplicationSlotsWithResponse(ctx context.Context, params *GetReplicationSlotsParams, reqEditors ...RequestEditorFn) (*GetReplicationSlotsResponse, error)
 
+	// GetReplicationSlotsForecastWithResponse request
+	GetReplicationSlotsForecastWithResponse(ctx context.Context, params *GetReplicationSlotsForecastParams, reqEditors ...RequestEditorFn) (*GetReplicationSlotsForecastResponse, error)
+
 	// GetReplicationStatusWithResponse request
 	GetReplicationStatusWithResponse(ctx context.Context, params *GetReplicationStatusParams, reqEditors ...RequestEditorFn) (*GetReplicationStatusResponse, error)
+
+	// GetReplicationWalPositionWithResponse request
+	GetReplicationWalPositionWithResponse(ctx context.Context, params *GetReplicationWalPositionParams, reqEditors ...RequestEditorFn) (*GetReplicationWalPositionResponse, error)
 
 	// GetSchemaLintWithResponse request
 	GetSchemaLintWithResponse(ctx context.Context, params *GetSchemaLintParams, reqEditors ...RequestEditorFn) (*GetSchemaLintResponse, error)
@@ -17595,6 +17945,28 @@ func (r GetProgressClusterResponse) StatusCode() int {
 	return 0
 }
 
+type GetProgressCopyResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *[]ProgressCopy
+}
+
+// Status returns HTTPResponse.Status
+func (r GetProgressCopyResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetProgressCopyResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetProgressIndexResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -17991,6 +18363,28 @@ func (r GetReplicationSlotsResponse) StatusCode() int {
 	return 0
 }
 
+type GetReplicationSlotsForecastResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ReplicationSlotsForecast
+}
+
+// Status returns HTTPResponse.Status
+func (r GetReplicationSlotsForecastResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetReplicationSlotsForecastResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetReplicationStatusResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -18007,6 +18401,28 @@ func (r GetReplicationStatusResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetReplicationStatusResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetReplicationWalPositionResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ReplicationWalPosition
+}
+
+// Status returns HTTPResponse.Status
+func (r GetReplicationWalPositionResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetReplicationWalPositionResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -19184,6 +19600,15 @@ func (c *ClientWithResponses) GetProgressClusterWithResponse(ctx context.Context
 	return ParseGetProgressClusterResponse(rsp)
 }
 
+// GetProgressCopyWithResponse request returning *GetProgressCopyResponse
+func (c *ClientWithResponses) GetProgressCopyWithResponse(ctx context.Context, params *GetProgressCopyParams, reqEditors ...RequestEditorFn) (*GetProgressCopyResponse, error) {
+	rsp, err := c.GetProgressCopy(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetProgressCopyResponse(rsp)
+}
+
 // GetProgressIndexWithResponse request returning *GetProgressIndexResponse
 func (c *ClientWithResponses) GetProgressIndexWithResponse(ctx context.Context, params *GetProgressIndexParams, reqEditors ...RequestEditorFn) (*GetProgressIndexResponse, error) {
 	rsp, err := c.GetProgressIndex(ctx, params, reqEditors...)
@@ -19346,6 +19771,15 @@ func (c *ClientWithResponses) GetReplicationSlotsWithResponse(ctx context.Contex
 	return ParseGetReplicationSlotsResponse(rsp)
 }
 
+// GetReplicationSlotsForecastWithResponse request returning *GetReplicationSlotsForecastResponse
+func (c *ClientWithResponses) GetReplicationSlotsForecastWithResponse(ctx context.Context, params *GetReplicationSlotsForecastParams, reqEditors ...RequestEditorFn) (*GetReplicationSlotsForecastResponse, error) {
+	rsp, err := c.GetReplicationSlotsForecast(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetReplicationSlotsForecastResponse(rsp)
+}
+
 // GetReplicationStatusWithResponse request returning *GetReplicationStatusResponse
 func (c *ClientWithResponses) GetReplicationStatusWithResponse(ctx context.Context, params *GetReplicationStatusParams, reqEditors ...RequestEditorFn) (*GetReplicationStatusResponse, error) {
 	rsp, err := c.GetReplicationStatus(ctx, params, reqEditors...)
@@ -19353,6 +19787,15 @@ func (c *ClientWithResponses) GetReplicationStatusWithResponse(ctx context.Conte
 		return nil, err
 	}
 	return ParseGetReplicationStatusResponse(rsp)
+}
+
+// GetReplicationWalPositionWithResponse request returning *GetReplicationWalPositionResponse
+func (c *ClientWithResponses) GetReplicationWalPositionWithResponse(ctx context.Context, params *GetReplicationWalPositionParams, reqEditors ...RequestEditorFn) (*GetReplicationWalPositionResponse, error) {
+	rsp, err := c.GetReplicationWalPosition(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetReplicationWalPositionResponse(rsp)
 }
 
 // GetSchemaLintWithResponse request returning *GetSchemaLintResponse
@@ -21689,6 +22132,32 @@ func ParseGetProgressClusterResponse(rsp *http.Response) (*GetProgressClusterRes
 	return response, nil
 }
 
+// ParseGetProgressCopyResponse parses an HTTP response from a GetProgressCopyWithResponse call
+func ParseGetProgressCopyResponse(rsp *http.Response) (*GetProgressCopyResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetProgressCopyResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest []ProgressCopy
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetProgressIndexResponse parses an HTTP response from a GetProgressIndexWithResponse call
 func ParseGetProgressIndexResponse(rsp *http.Response) (*GetProgressIndexResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -22154,6 +22623,32 @@ func ParseGetReplicationSlotsResponse(rsp *http.Response) (*GetReplicationSlotsR
 	return response, nil
 }
 
+// ParseGetReplicationSlotsForecastResponse parses an HTTP response from a GetReplicationSlotsForecastWithResponse call
+func ParseGetReplicationSlotsForecastResponse(rsp *http.Response) (*GetReplicationSlotsForecastResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetReplicationSlotsForecastResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ReplicationSlotsForecast
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetReplicationStatusResponse parses an HTTP response from a GetReplicationStatusWithResponse call
 func ParseGetReplicationStatusResponse(rsp *http.Response) (*GetReplicationStatusResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -22170,6 +22665,32 @@ func ParseGetReplicationStatusResponse(rsp *http.Response) (*GetReplicationStatu
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest []ReplicationStatus
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetReplicationWalPositionResponse parses an HTTP response from a GetReplicationWalPositionWithResponse call
+func ParseGetReplicationWalPositionResponse(rsp *http.Response) (*GetReplicationWalPositionResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetReplicationWalPositionResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ReplicationWalPosition
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

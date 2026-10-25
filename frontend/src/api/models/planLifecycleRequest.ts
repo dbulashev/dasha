@@ -6,7 +6,7 @@
  */
 
 export interface PlanLifecycleRequest {
-  /** pathprobe_json() output as text, as written by pathprobe 9bcf24c or later. */
+  /** pathprobe_json() output as text. */
   trace: string
   /** EXPLAIN of the same query, in JSON or text format. */
   plan?: string

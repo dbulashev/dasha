@@ -105,6 +105,7 @@ import type {
   GetProgressAnalyzeParams,
   GetProgressBaseBackupParams,
   GetProgressClusterParams,
+  GetProgressCopyParams,
   GetProgressIndexParams,
   GetProgressVacuumParams,
   GetQueriesBlockedParams,
@@ -116,8 +117,10 @@ import type {
   GetQueriesTop10ChartParams,
   GetQueryStatsStatusParams,
   GetReplicationConfigParams,
+  GetReplicationSlotsForecastParams,
   GetReplicationSlotsParams,
   GetReplicationStatusParams,
+  GetReplicationWalPositionParams,
   GetSchemaLintParams,
   GetSchemaLintSummaryParams,
   GetSettingsAnalyzeParams,
@@ -199,6 +202,7 @@ import type {
   ProgressAnalyze,
   ProgressBaseBackup,
   ProgressCluster,
+  ProgressCopy,
   ProgressIndex,
   ProgressVacuum,
   PutHealthScoreWeightsParams,
@@ -213,7 +217,9 @@ import type {
   QueryTop10Chart,
   ReplicationConfig,
   ReplicationSlot,
+  ReplicationSlotsForecast,
   ReplicationStatus,
+  ReplicationWalPosition,
   RowEstimate,
   SchemaLintDatabaseSummary,
   SchemaLintReport,
@@ -9674,6 +9680,101 @@ export function useGetProgressCluster<
   return query
 }
 
+export type getProgressCopyResponse200 = {
+  data: ProgressCopy[]
+  status: 200
+}
+
+export type getProgressCopyResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getProgressCopyResponseSuccess = getProgressCopyResponse200 & {
+  headers: Headers
+}
+export type getProgressCopyResponseError = getProgressCopyResponse404 & {
+  headers: Headers
+}
+
+export type getProgressCopyResponse = getProgressCopyResponseSuccess | getProgressCopyResponseError
+
+export const getGetProgressCopyUrl = (params: GetProgressCopyParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/progress/copy?${stringifiedParams}`
+    : `/api/progress/copy`
+}
+
+export const getProgressCopy = async (
+  params: GetProgressCopyParams,
+  options?: RequestInit,
+): Promise<getProgressCopyResponse> => {
+  return customFetch<getProgressCopyResponse>(getGetProgressCopyUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetProgressCopyQueryKey = (params?: MaybeRef<GetProgressCopyParams>) => {
+  return ['api', 'progress', 'copy', ...(params ? [params] : [])] as const
+}
+
+export const getGetProgressCopyQueryOptions = <
+  TData = Awaited<ReturnType<typeof getProgressCopy>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetProgressCopyParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getProgressCopy>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetProgressCopyQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getProgressCopy>>> = ({ signal }) =>
+    getProgressCopy(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getProgressCopy>>,
+    TError,
+    TData
+  >
+}
+
+export type GetProgressCopyQueryResult = NonNullable<Awaited<ReturnType<typeof getProgressCopy>>>
+export type GetProgressCopyQueryError = NotFoundResponse
+
+export function useGetProgressCopy<
+  TData = Awaited<ReturnType<typeof getProgressCopy>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetProgressCopyParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getProgressCopy>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetProgressCopyQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
 export type getProgressIndexResponse200 = {
   data: ProgressIndex[]
   status: 200
@@ -10060,6 +10161,229 @@ export function useGetReplicationSlots<
   },
 ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetReplicationSlotsQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Current WAL position and server time — the starting point of a WAL rate measurement for getReplicationSlotsForecast. On a standby the position is the last replayed LSN.
+
+ */
+export type getReplicationWalPositionResponse200 = {
+  data: ReplicationWalPosition
+  status: 200
+}
+
+export type getReplicationWalPositionResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getReplicationWalPositionResponseSuccess = getReplicationWalPositionResponse200 & {
+  headers: Headers
+}
+export type getReplicationWalPositionResponseError = getReplicationWalPositionResponse404 & {
+  headers: Headers
+}
+
+export type getReplicationWalPositionResponse =
+  | getReplicationWalPositionResponseSuccess
+  | getReplicationWalPositionResponseError
+
+export const getGetReplicationWalPositionUrl = (params: GetReplicationWalPositionParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/replication/wal-position?${stringifiedParams}`
+    : `/api/replication/wal-position`
+}
+
+export const getReplicationWalPosition = async (
+  params: GetReplicationWalPositionParams,
+  options?: RequestInit,
+): Promise<getReplicationWalPositionResponse> => {
+  return customFetch<getReplicationWalPositionResponse>(getGetReplicationWalPositionUrl(params), {
+    ...options,
+    method: 'GET',
+  })
+}
+
+export const getGetReplicationWalPositionQueryKey = (
+  params?: MaybeRef<GetReplicationWalPositionParams>,
+) => {
+  return ['api', 'replication', 'wal-position', ...(params ? [params] : [])] as const
+}
+
+export const getGetReplicationWalPositionQueryOptions = <
+  TData = Awaited<ReturnType<typeof getReplicationWalPosition>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetReplicationWalPositionParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getReplicationWalPosition>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetReplicationWalPositionQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getReplicationWalPosition>>> = ({
+    signal,
+  }) => getReplicationWalPosition(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getReplicationWalPosition>>,
+    TError,
+    TData
+  >
+}
+
+export type GetReplicationWalPositionQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getReplicationWalPosition>>
+>
+export type GetReplicationWalPositionQueryError = NotFoundResponse
+
+export function useGetReplicationWalPosition<
+  TData = Awaited<ReturnType<typeof getReplicationWalPosition>>,
+  TError = NotFoundResponse,
+>(
+  params: MaybeRef<GetReplicationWalPositionParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getReplicationWalPosition>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetReplicationWalPositionQueryOptions(params, options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey
+
+  return query
+}
+
+/**
+ * Time until each replication slot exhausts its max_slot_wal_keep_size reserve and is invalidated, extrapolated from the WAL rate measured since the position returned by getReplicationWalPosition.
+
+ */
+export type getReplicationSlotsForecastResponse200 = {
+  data: ReplicationSlotsForecast
+  status: 200
+}
+
+export type getReplicationSlotsForecastResponse400 = {
+  data: void
+  status: 400
+}
+
+export type getReplicationSlotsForecastResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getReplicationSlotsForecastResponseSuccess = getReplicationSlotsForecastResponse200 & {
+  headers: Headers
+}
+export type getReplicationSlotsForecastResponseError = (
+  | getReplicationSlotsForecastResponse400
+  | getReplicationSlotsForecastResponse404
+) & {
+  headers: Headers
+}
+
+export type getReplicationSlotsForecastResponse =
+  | getReplicationSlotsForecastResponseSuccess
+  | getReplicationSlotsForecastResponseError
+
+export const getGetReplicationSlotsForecastUrl = (params: GetReplicationSlotsForecastParams) => {
+  const normalizedParams = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  })
+
+  const stringifiedParams = normalizedParams.toString()
+
+  return stringifiedParams.length > 0
+    ? `/api/replication/slots-forecast?${stringifiedParams}`
+    : `/api/replication/slots-forecast`
+}
+
+export const getReplicationSlotsForecast = async (
+  params: GetReplicationSlotsForecastParams,
+  options?: RequestInit,
+): Promise<getReplicationSlotsForecastResponse> => {
+  return customFetch<getReplicationSlotsForecastResponse>(
+    getGetReplicationSlotsForecastUrl(params),
+    {
+      ...options,
+      method: 'GET',
+    },
+  )
+}
+
+export const getGetReplicationSlotsForecastQueryKey = (
+  params?: MaybeRef<GetReplicationSlotsForecastParams>,
+) => {
+  return ['api', 'replication', 'slots-forecast', ...(params ? [params] : [])] as const
+}
+
+export const getGetReplicationSlotsForecastQueryOptions = <
+  TData = Awaited<ReturnType<typeof getReplicationSlotsForecast>>,
+  TError = void | NotFoundResponse,
+>(
+  params: MaybeRef<GetReplicationSlotsForecastParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getReplicationSlotsForecast>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {}
+
+  const queryKey = getGetReplicationSlotsForecastQueryKey(params)
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getReplicationSlotsForecast>>> = ({
+    signal,
+  }) => getReplicationSlotsForecast(unref(params), { signal, ...requestOptions })
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getReplicationSlotsForecast>>,
+    TError,
+    TData
+  >
+}
+
+export type GetReplicationSlotsForecastQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getReplicationSlotsForecast>>
+>
+export type GetReplicationSlotsForecastQueryError = void | NotFoundResponse
+
+export function useGetReplicationSlotsForecast<
+  TData = Awaited<ReturnType<typeof getReplicationSlotsForecast>>,
+  TError = void | NotFoundResponse,
+>(
+  params: MaybeRef<GetReplicationSlotsForecastParams>,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof getReplicationSlotsForecast>>, TError, TData>
+    request?: SecondParameter<typeof customFetch>
+  },
+): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetReplicationSlotsForecastQueryOptions(params, options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey }
 

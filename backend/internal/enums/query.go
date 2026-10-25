@@ -66,6 +66,7 @@ package enums
 //	progress/analyze
 //	progress/base_backup
 //	progress/cluster
+//	progress/copy
 //	progress/index
 //	progress/vacuum
 //	queries/blocked
@@ -76,7 +77,9 @@ package enums
 //	queries/top_10_chart
 //	replication/lag
 //	replication/slots
+//	replication/slots_forecast
 //	replication/status
+//	replication/wal_position
 //	schema_lint/partition_roots
 //	schema_lint/public_create_privileges
 //	schema_lint/relations_without_columns

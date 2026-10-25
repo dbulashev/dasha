@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 
 	"github.com/dbulashev/dasha/gen/serverhttp"
 	"github.com/dbulashev/dasha/internal/dto"
@@ -78,6 +79,64 @@ func (s *Handlers) GetReplicationSlots(
 		})
 
 	return ret, nil
+}
+
+var lsnRe = regexp.MustCompile(`^[0-9A-Fa-f]{1,8}/[0-9A-Fa-f]{1,8}$`)
+
+func (s *Handlers) GetReplicationWalPosition(
+	ctx context.Context,
+	req serverhttp.GetReplicationWalPositionRequestObject,
+) (serverhttp.GetReplicationWalPositionResponseObject, error) {
+	pos, err := s.repo.GetReplicationWalPosition(ctx, req.Params.ClusterName, req.Params.Instance)
+	if errors.Is(err, repository.ErrNotFound) {
+		return serverhttp.GetReplicationWalPosition404Response{}, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("GetReplicationWalPosition | %w", err)
+	}
+
+	return serverhttp.GetReplicationWalPosition200JSONResponse{
+		Lsn:        pos.Lsn,
+		CapturedAt: pos.CapturedAt,
+	}, nil
+}
+
+func (s *Handlers) GetReplicationSlotsForecast(
+	ctx context.Context,
+	req serverhttp.GetReplicationSlotsForecastRequestObject,
+) (serverhttp.GetReplicationSlotsForecastResponseObject, error) {
+	if !lsnRe.MatchString(req.Params.FromLsn) {
+		return serverhttp.GetReplicationSlotsForecast400Response{}, nil
+	}
+
+	fc, err := s.repo.GetReplicationSlotsForecast(ctx, req.Params.ClusterName, req.Params.Instance,
+		req.Params.FromLsn, req.Params.FromTime)
+	if errors.Is(err, repository.ErrNotFound) {
+		return serverhttp.GetReplicationSlotsForecast404Response{}, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("GetReplicationSlotsForecast | %w", err)
+	}
+
+	return serverhttp.GetReplicationSlotsForecast200JSONResponse{
+		ElapsedSeconds:     fc.ElapsedSeconds,
+		WalBytesPerSecond:  fc.WalBytesPerSecond,
+		MaxSlotWalKeepSize: fc.MaxSlotWalKeepSize,
+		Slots: mapstruct.SliceMap(fc.Slots, func(t dto.ReplicationSlotForecast) serverhttp.ReplicationSlotForecast {
+			return serverhttp.ReplicationSlotForecast{
+				SlotName:      t.SlotName,
+				SlotType:      t.SlotType,
+				Database:      t.Database,
+				Active:        t.Active,
+				WalStatus:     t.WalStatus,
+				RetainedBytes: t.RetainedBytes,
+				SafeWalSize:   t.SafeWalSize,
+				SecondsToLost: t.SecondsToLost,
+			}
+		}),
+	}, nil
 }
 
 func (s *Handlers) GetReplicationConfig(

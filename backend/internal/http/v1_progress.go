@@ -107,6 +107,45 @@ func (s *Handlers) GetProgressCluster(
 	return ret, nil
 }
 
+func (s *Handlers) GetProgressCopy(
+	ctx context.Context,
+	req serverhttp.GetProgressCopyRequestObject,
+) (serverhttp.GetProgressCopyResponseObject, error) {
+	progress, err := s.repo.GetProgressCopy(ctx, req.Params.ClusterName, req.Params.Instance)
+	if errors.Is(err, repository.ErrNotFound) {
+		return serverhttp.GetProgressCopy404Response{}, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("GetProgressCopy | %w", err)
+	}
+
+	var ret serverhttp.GetProgressCopy200JSONResponse = mapstruct.SliceMap(
+		progress,
+		func(t dto.ProgressCopy) serverhttp.ProgressCopy {
+			return serverhttp.ProgressCopy{
+				Pid:                t.Pid,
+				Datname:            t.Datname,
+				TableName:          t.TableName,
+				Command:            t.Command,
+				Type:               t.Type,
+				Query:              t.Query,
+				BytesProcessed:     t.BytesProcessed,
+				BytesTotal:         t.BytesTotal,
+				TuplesProcessed:    t.TuplesProcessed,
+				TuplesExcluded:     t.TuplesExcluded,
+				TuplesSkipped:      t.TuplesSkipped,
+				TableSize:          t.TableSize,
+				TableTuples:        t.TableTuples,
+				ElapsedSeconds:     t.ElapsedSeconds,
+				ProgressPercentage: t.ProgressPercentage,
+				EtaSeconds:         t.EtaSeconds,
+			}
+		})
+
+	return ret, nil
+}
+
 func (s *Handlers) GetProgressIndex(
 	ctx context.Context,
 	req serverhttp.GetProgressIndexRequestObject,

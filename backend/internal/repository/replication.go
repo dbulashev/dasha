@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -66,8 +67,8 @@ func (p *PgxPool) getReplicationStatus(
 			flushLagSeconds  float64
 			replayLagSeconds float64
 			replayLagBytes   pgtype.Int8
-			syncState pgtype.Text
-			slotName  string
+			syncState        pgtype.Text
+			slotName         string
 		)
 
 		err = rows.Scan(
@@ -95,7 +96,7 @@ func (p *PgxPool) getReplicationStatus(
 			ReplayLagSeconds: replayLagSeconds,
 			ReplayLagBytes:   replayLagBytes.Int64,
 			SyncState:        syncState.String,
-			SlotName: slotName,
+			SlotName:         slotName,
 		})
 	}
 
@@ -182,6 +183,151 @@ func (p *PgxPool) getReplicationSlots(
 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("getReplicationSlots | %w", err)
+	}
+
+	return ret, nil
+}
+
+func (p *PgxPool) GetReplicationWalPosition(ctx context.Context, clusterName, instanceName string) (*dto.WalPosition, error) {
+	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, "")
+	if err != nil {
+		return nil, fmt.Errorf("GetReplicationWalPosition | %w", err)
+	}
+
+	vNum, err := p.getServerVersionNum(ctx, pool)
+	if err != nil {
+		return nil, fmt.Errorf("get server version | %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	qStr, err := query.Get(vNum, enums.QueryReplicationWalPosition, nil)
+	if err != nil {
+		return nil, fmt.Errorf("GetReplicationWalPosition | %w", err)
+	}
+
+	var (
+		lsn pgtype.Text
+		ret dto.WalPosition
+	)
+
+	if err := pool.QueryRow(ctx, qStr).Scan(&lsn, &ret.CapturedAt); err != nil {
+		return nil, fmt.Errorf("GetReplicationWalPosition | %w", err)
+	}
+
+	if lsn.Valid {
+		ret.Lsn = &lsn.String
+	}
+
+	return &ret, nil
+}
+
+func (p *PgxPool) GetReplicationSlotsForecast(
+	ctx context.Context,
+	clusterName, instanceName, fromLsn string,
+	fromTime time.Time,
+) (*dto.ReplicationSlotsForecast, error) {
+	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, "")
+	if err != nil {
+		return nil, fmt.Errorf("GetReplicationSlotsForecast | %w", err)
+	}
+
+	vNum, err := p.getServerVersionNum(ctx, pool)
+	if err != nil {
+		return nil, fmt.Errorf("get server version | %w", err)
+	}
+
+	ret, err := p.getReplicationSlotsForecast(ctx, vNum, pool, fromLsn, fromTime)
+	if err != nil {
+		return nil, fmt.Errorf("getReplicationSlotsForecast | %w", err)
+	}
+
+	return ret, nil
+}
+
+func (p *PgxPool) getReplicationSlotsForecast(
+	ctx context.Context,
+	serverVersion int,
+	pool *pgxpool.Pool,
+	fromLsn string,
+	fromTime time.Time,
+) (*dto.ReplicationSlotsForecast, error) {
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	qStr, err := query.Get(serverVersion, enums.QueryReplicationSlotsForecast, nil)
+	if err != nil {
+		return nil, fmt.Errorf("getReplicationSlotsForecast | %w", err)
+	}
+
+	rows, err := pool.Query(ctx, qStr, fromLsn, fromTime)
+	if err != nil {
+		return nil, fmt.Errorf("getReplicationSlotsForecast | %w", err)
+	}
+
+	ret := &dto.ReplicationSlotsForecast{Slots: make([]dto.ReplicationSlotForecast, 0, 4)} //nolint:mnd
+
+	for rows.Next() {
+		var (
+			elapsedSeconds, walBytesPerSecond pgtype.Float8
+			maxSlotWalKeepSize                pgtype.Int8
+			slotName, slotType                pgtype.Text
+			database, walStatus               pgtype.Text
+			active                            pgtype.Bool
+			retainedBytes, safeWalSize        pgtype.Int8
+			secondsToLost                     pgtype.Float8
+		)
+
+		err = rows.Scan(&elapsedSeconds, &walBytesPerSecond, &maxSlotWalKeepSize,
+			&slotName, &slotType, &database, &active, &walStatus,
+			&retainedBytes, &safeWalSize, &secondsToLost)
+		if err != nil {
+			return nil, fmt.Errorf("getReplicationSlotsForecast | %w", err)
+		}
+
+		if elapsedSeconds.Valid {
+			ret.ElapsedSeconds = &elapsedSeconds.Float64
+		}
+
+		if walBytesPerSecond.Valid {
+			ret.WalBytesPerSecond = &walBytesPerSecond.Float64
+		}
+
+		if maxSlotWalKeepSize.Valid {
+			ret.MaxSlotWalKeepSize = &maxSlotWalKeepSize.Int64
+		}
+
+		// The query always yields one row; a NULL slot_name means there are no slots.
+		if !slotName.Valid {
+			continue
+		}
+
+		item := dto.ReplicationSlotForecast{
+			SlotName:  slotName.String,
+			SlotType:  slotType.String,
+			Database:  database.String,
+			Active:    active.Bool,
+			WalStatus: walStatus.String,
+		}
+
+		if retainedBytes.Valid {
+			item.RetainedBytes = &retainedBytes.Int64
+		}
+
+		if safeWalSize.Valid {
+			item.SafeWalSize = &safeWalSize.Int64
+		}
+
+		if secondsToLost.Valid {
+			item.SecondsToLost = &secondsToLost.Float64
+		}
+
+		ret.Slots = append(ret.Slots, item)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getReplicationSlotsForecast | %w", err)
 	}
 
 	return ret, nil

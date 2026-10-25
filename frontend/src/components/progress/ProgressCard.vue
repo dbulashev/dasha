@@ -2,13 +2,14 @@
 import { useI18n } from 'vue-i18n'
 
 export interface ProgressCardData {
-  type: 'analyze' | 'vacuum' | 'cluster' | 'index' | 'baseBackup'
+  type: 'analyze' | 'vacuum' | 'cluster' | 'index' | 'baseBackup' | 'copy'
   icon: string
   label: string
   pid: number
   target: string
   phase: string
   progress: number | null
+  query?: string
   metrics: { label: string; value: string; hint?: string }[]
 }
 
@@ -40,6 +41,10 @@ const { t } = useI18n()
         rounded
         class="mb-3"
       />
+
+      <div v-if="card.query" class="text-caption text-mono text-medium-emphasis text-truncate mb-2" :title="card.query">
+        {{ card.query }}
+      </div>
 
       <v-row dense>
         <v-col
