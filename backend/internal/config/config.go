@@ -597,6 +597,30 @@ func (a LogSourceAuthConfig) validate(name string) error {
 	return nil
 }
 
+// DefaultPlanLifecycleMaxBody fits a pathprobe trace of 10000 events and a plan.
+const DefaultPlanLifecycleMaxBody = 16 << 20
+
+var DefaultPlanLifecycleRateLimit = RateLimitConfig{RequestsPerSecond: 1, Burst: 5}
+
+type PlanLifecycleConfig struct {
+	MaxBody int64 `mapstructure:"max_body"`
+	// RateLimit: unset = built-in default; requests_per_second <= 0 disables it.
+	RateLimit *RateLimitConfig `mapstructure:"rate_limit"`
+}
+
+func (c PlanLifecycleConfig) WithDefaults() PlanLifecycleConfig {
+	if c.MaxBody <= 0 {
+		c.MaxBody = DefaultPlanLifecycleMaxBody
+	}
+
+	if c.RateLimit == nil {
+		rl := DefaultPlanLifecycleRateLimit
+		c.RateLimit = &rl
+	}
+
+	return c
+}
+
 // Defaults for LogInsightsConfig when values are unset (<= 0).
 const (
 	DefaultLogInsightsMaxRecords   = 50000
@@ -721,6 +745,8 @@ type Config struct {
 
 	// LogInsights bounds the summary of plans and events read from the logs.
 	LogInsights LogInsightsConfig `mapstructure:"log_insights"`
+
+	PlanLifecycle PlanLifecycleConfig `mapstructure:"plan_lifecycle"`
 
 	// PgssResetFunction is an optional custom function (schema-qualified, no args)
 	// to call instead of pg_stat_statements_reset(). Useful when the connecting

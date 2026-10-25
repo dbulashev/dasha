@@ -7,10 +7,12 @@ import (
 	"log"
 	nethttp "net/http"
 	"os/signal"
+	"strconv"
 	"sync"
 	"syscall"
 
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	strictecho "github.com/oapi-codegen/runtime/strictmiddleware/echo"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -24,6 +26,8 @@ import (
 	"github.com/dbulashev/dasha/internal/storage"
 	"github.com/dbulashev/dasha/internal/version"
 )
+
+const planLifecyclePath = "/api/plan-lifecycle/analyze"
 
 func main() {
 	ctx, cancel := signal.NotifyContext(
@@ -239,8 +243,24 @@ func dashaExec(cmd *cobra.Command, _ []string) error {
 
 	defer compareRL.Stop()
 
+	planLifecycle := container.Config().PlanLifecycle
+	planLifecycleRL := auth.NewPathRateLimiter(
+		[]string{planLifecyclePath},
+		auth.RateLimitGroup{User: planLifecycle.RateLimit, Admin: planLifecycle.RateLimit},
+		nil,
+		nil,
+		logger,
+	)
+
+	defer planLifecycleRL.Stop()
+
+	planLifecycleBody := middleware.BodyLimitWithConfig(middleware.BodyLimitConfig{
+		Skipper: func(c echo.Context) bool { return c.Path() != planLifecyclePath },
+		Limit:   strconv.FormatInt(planLifecycle.MaxBody, 10) + "B",
+	})
+
 	logsRateLimit := func(next echo.HandlerFunc) echo.HandlerFunc {
-		return logsRL.Middleware(compareRL.Middleware(next))
+		return logsRL.Middleware(compareRL.Middleware(planLifecycleRL.Middleware(planLifecycleBody(next))))
 	}
 
 	d := http.NewDashaHandlers(container.Config(), container.Repository(), st, container.Metrics(), logsSvc, logger)

@@ -1,0 +1,15 @@
+# Dasha for the planner-trace staging: no auth, for local browsing and for an
+# agent driving a browser (Playwright). The frontend port is bound to
+# 127.0.0.1 only (docker-compose.yaml). No snapshot storage: the plan
+# lifecycle page keeps nothing anyway.
+auth:
+  mode: none
+
+clusters:
+  - name: pathprobe-staging
+    username: demo
+    password: demo
+    databases:
+      - demo
+    hosts:
+      - pg-pathprobe

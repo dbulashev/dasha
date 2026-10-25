@@ -3329,6 +3329,48 @@ paths:
         '504':
           $ref: '#/components/responses/QueryTimeout'
 
+  /api/plan-lifecycle/analyze:
+    post:
+      operationId: analyzePlanLifecycle
+      description: >-
+        Analyze a pathprobe trace (the output of pathprobe_json()) and, if
+        given, an EXPLAIN plan of the same query: which path the planner chose,
+        what happened to every other path and why it lost, where each index took
+        part. Not tied to a cluster and reads no database. The uploaded text is
+        parsed in the request only: it is not stored and not logged, and a parse
+        error names a position, never a part of the input. Rate-limited apart
+        from other endpoints; the body size is limited by
+        plan_lifecycle.max_body.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanLifecycleRequest'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanLifecycleAnalysis'
+        '400':
+          description: The body is not JSON or has no trace
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '413':
+          description: The body is larger than plan_lifecycle.max_body
+        '422':
+          description: The trace or the plan could not be parsed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanLifecycleParseError'
+        '429':
+          description: Rate limit exceeded
+
 components:
   securitySchemes:
     BearerAuth:
@@ -8913,3 +8955,512 @@ components:
             The database could not be read at all. Its counts are zero because nothing
             was checked, not because it is clean.
           type: boolean
+    PlanLifecycleRequest:
+      type: object
+      required:
+        - trace
+      properties:
+        trace:
+          type: string
+          description: pathprobe_json() output as text.
+        plan:
+          type: string
+          description: EXPLAIN of the same query, in JSON or text format.
+    PlanLifecycleParseError:
+      type: object
+      description: Why an input could not be parsed. Carries no part of the input.
+      required:
+        - input
+        - code
+      properties:
+        input:
+          type: string
+          enum: [trace, plan]
+        code:
+          type: string
+          description: trace_syntax, trace_type, trace_not_pathprobe, trace_invalid for the trace; the explain parser's codes for the plan.
+        field:
+          type: string
+          description: path to the field, in the format's own names
+        offset:
+          type: integer
+          format: int64
+          description: byte offset in the input, when known
+    PlanLifecycleAnalysis:
+      type: object
+      required:
+        - query
+        - rels
+        - coverage
+        - limits
+        - final
+        - paths
+        - relations
+        - indexes
+        - timeline
+        - caveats
+      properties:
+        query:
+          type: string
+        rels:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanLifecycleRel'
+        coverage:
+          $ref: '#/components/schemas/PlanLifecycleCoverage'
+        limits:
+          $ref: '#/components/schemas/PlanLifecycleLimits'
+        final:
+          $ref: '#/components/schemas/PlanLifecycleFinal'
+        paths:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanLifecyclePath'
+        relations:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanLifecycleRelation'
+        indexes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanLifecycleIndexChain'
+        timeline:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanLifecycleEvent'
+        caveats:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanLifecycleCaveat'
+        plan:
+          $ref: '#/components/schemas/PlanSummary'
+        match:
+          $ref: '#/components/schemas/PlanLifecycleMatch'
+    PlanLifecycleMatch:
+      type: object
+      description: The final path matched to the uploaded plan; present only with a plan.
+      required:
+        - status
+        - query_text
+        - notes
+        - unmatched
+      properties:
+        status:
+          type: string
+          enum: [match, match_with_notes, mismatch, no_final_path]
+        query_text:
+          type: string
+          enum: [same, differs, missing]
+          description: missing - the plan carries no query text (EXPLAIN from psql)
+        notes:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanLifecycleMatchNote'
+        mismatch:
+          $ref: '#/components/schemas/PlanLifecycleMatchDiff'
+        unmatched:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanLifecycleUnmatched'
+    PlanLifecycleMatchNote:
+      type: object
+      required:
+        - code
+        - path_id
+        - plan_node
+      properties:
+        code:
+          type: string
+          enum: [projection_omitted, subquery_scan_removed, append_removed, append_children_differ]
+        path_id:
+          type: integer
+        plan_node:
+          type: array
+          description: child indexes from the plan root
+          items:
+            type: integer
+    PlanLifecycleMatchDiff:
+      type: object
+      description: The first place where the path tree and the plan disagree.
+      required:
+        - plan_node
+        - path_id
+        - expected
+        - found
+      properties:
+        plan_node:
+          type: array
+          items:
+            type: integer
+        path_id:
+          type: integer
+        expected:
+          type: string
+          description: EXPLAIN node type the path stands for, with the relation or index when those differ
+        found:
+          type: string
+    PlanLifecycleUnmatched:
+      type: object
+      required:
+        - plan_node
+        - reason
+      properties:
+        plan_node:
+          type: array
+          items:
+            type: integer
+        reason:
+          type: string
+          enum: [unknown_shape, no_edges, subplan, partial_paths_unobserved, append_child]
+    PlanLifecycleRel:
+      type: object
+      required:
+        - index
+        - alias
+      properties:
+        index:
+          type: integer
+          description: range table index, as in "{1,2}"
+        alias:
+          type: string
+    PlanLifecycleCoverage:
+      type: object
+      description: >-
+        Planner decision points the run observed. known is false when the trace
+        has no coverage object; a point that is false means the absence of its
+        events proves nothing.
+      required:
+        - known
+        - survived
+        - accepted
+        - rejected
+        - displaced
+        - removed
+        - precheck
+        - excluded
+        - index_build
+      properties:
+        known:
+          type: boolean
+        survived:
+          type: boolean
+        accepted:
+          type: boolean
+        rejected:
+          type: boolean
+        displaced:
+          type: boolean
+        removed:
+          type: boolean
+        precheck:
+          type: boolean
+        excluded:
+          type: boolean
+        index_build:
+          type: boolean
+    PlanLifecycleLimits:
+      type: object
+      required:
+        - max_events
+        - events_truncated
+        - summary_truncated
+      properties:
+        max_events:
+          type: integer
+        events_truncated:
+          type: boolean
+        summary_truncated:
+          type: boolean
+    PlanLifecycleFinal:
+      type: object
+      required:
+        - status
+        - candidates
+        - tree
+      properties:
+        status:
+          type: string
+          enum: [exact, ambiguous, by_plan, none]
+          description: ambiguous - several candidates the trace cannot tell apart, path_id is the cheapest; by_plan - the candidate that matches the uploaded plan
+        path_id:
+          type: integer
+        candidates:
+          type: array
+          items:
+            type: integer
+        tree:
+          type: array
+          description: the final path and all its descendants
+          items:
+            type: integer
+    PlanLifecyclePath:
+      type: object
+      required:
+        - path_id
+        - pathtype
+        - rel
+        - fate
+        - events
+        - parents
+      properties:
+        path_id:
+          type: integer
+        pathtype:
+          type: string
+        rel:
+          type: string
+          description: '"{1,2}", or "?" for an upper relation'
+        subpath_id:
+          type: integer
+        outer_path_id:
+          type: integer
+        inner_path_id:
+          type: integer
+        child_path_ids:
+          type: array
+          description: all inputs of Append, MergeAppend, BitmapAnd, BitmapOr; [left, right] of SetOp, RecursiveUnion
+          items:
+            type: integer
+        in_subquery:
+          type: boolean
+          description: below a SubqueryScan; rel is numbered in the subquery's range table
+        rows:
+          type: number
+          format: double
+          description: row estimate, per loop for a parameterized path; absent for BitmapAnd / BitmapOr
+        required_outer:
+          type: array
+          items:
+            type: integer
+        index_oid:
+          type: integer
+          format: int64
+        index_name:
+          type: string
+        hypothetical_index:
+          type: boolean
+        fate:
+          type: string
+          enum: [chosen, survived, displaced, removed, rejected, child_only, unknown]
+        fate_reason:
+          type: string
+          enum: [displaced_not_covered, removed_not_covered, no_events]
+        by:
+          type: integer
+          description: the displacer, dominator or remover path
+        by_seq:
+          type: integer
+        cause:
+          $ref: '#/components/schemas/PlanLifecycleCause'
+        cost_startup:
+          type: number
+          format: double
+        cost_total:
+          type: number
+          format: double
+        label:
+          type: string
+        kept_reason:
+          type: string
+        events:
+          type: array
+          description: seq of the path's events
+          items:
+            type: integer
+        parents:
+          type: array
+          items:
+            type: integer
+        plan_node:
+          type: array
+          description: child indexes from the plan root to the matched node; absent when not matched
+          items:
+            type: integer
+        rows_ratio:
+          type: number
+          format: double
+          description: estimate vs actual rows of the matched node, when past the row_misestimate thresholds
+    PlanLifecycleCause:
+      type: object
+      required:
+        - code
+      properties:
+        code:
+          type: string
+          enum: [costlier_total, lost_on_startup, lost_not_on_cost, unknown]
+        gap:
+          type: number
+          format: double
+          description: total cost minus the winner's; positive means it lost on total; absent without the winner's cost
+        startup:
+          type: number
+          format: double
+        winner_startup:
+          type: number
+          format: double
+    PlanLifecycleRelation:
+      type: object
+      required:
+        - key
+        - label
+        - path_ids
+        - precheck
+        - counts
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        path_ids:
+          type: array
+          items:
+            type: integer
+        precheck:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanLifecyclePrecheckGroup'
+        counts:
+          type: object
+          description: paths of the relation by fate
+          additionalProperties:
+            type: integer
+    PlanLifecyclePrecheckGroup:
+      type: object
+      required:
+        - method
+        - reason
+        - count
+        - min_cost
+        - max_cost
+      properties:
+        method:
+          type: string
+        reason:
+          type: string
+        count:
+          type: integer
+        min_cost:
+          type: number
+          format: double
+        max_cost:
+          type: number
+          format: double
+    PlanLifecycleIndexChain:
+      type: object
+      required:
+        - index
+        - hypothetical
+        - outcome
+        - leaves
+        - truncated
+      properties:
+        index:
+          type: string
+        oid:
+          type: integer
+          format: int64
+        hypothetical:
+          type: boolean
+        outcome:
+          type: string
+          enum: [in_plan, only_rejected, lost]
+        leaves:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlanLifecycleChainNode'
+        truncated:
+          type: boolean
+        best_path_id:
+          type: integer
+          description: >-
+            The cheapest path over the index at the highest level such paths
+            reached. Absent when the index is in the plan.
+        best_at_final_level:
+          type: boolean
+          description: best_path_id is in the relation of the final path, so their costs compare.
+    PlanLifecycleChainNode:
+      type: object
+      required:
+        - path_id
+        - up
+      properties:
+        path_id:
+          type: integer
+        up:
+          type: array
+          description: paths built on top of this one
+          items:
+            $ref: '#/components/schemas/PlanLifecycleChainNode'
+    PlanLifecycleEvent:
+      type: object
+      required:
+        - seq
+        - src
+        - rel
+        - kind
+        - pathtype
+        - param
+        - origin
+      properties:
+        seq:
+          type: integer
+        src:
+          type: string
+        rel:
+          type: string
+        kind:
+          type: string
+          description: accepted, rejected, displaced, removed, survived, skipped, excluded; other values are passed through
+        pathtype:
+          type: string
+        path_id:
+          type: integer
+        cost_startup:
+          type: number
+          format: double
+        cost_total:
+          type: number
+          format: double
+        gap:
+          type: number
+          format: double
+        param:
+          type: boolean
+        label:
+          type: string
+        kept_reason:
+          type: string
+        origin:
+          type: string
+        skip_reason:
+          type: string
+        by_path_id:
+          type: integer
+          description: the displacer (displaced), dominator (rejected) or remover (removed)
+        by_seq:
+          type: integer
+          description: the winner's accepted event; for removed, the remover's rejected event
+        by_pathtype:
+          type: string
+        disabled_nodes:
+          type: integer
+    PlanLifecycleCaveat:
+      type: object
+      required:
+        - code
+        - scope
+      properties:
+        code:
+          type: string
+          description: a planlife caveat code; texts live in the frontend i18n
+        scope:
+          type: string
+          enum: [trace, relation, path]
+        rel:
+          type: string
+        path_id:
+          type: integer
+        params:
+          type: object
+          additionalProperties:
+            type: string

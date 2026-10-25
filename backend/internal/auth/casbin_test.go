@@ -50,6 +50,11 @@ func TestCasbinEnforcer_Policies(t *testing.T) {
 		{"viewer", "/api/logs/plans/compare", "GET", true},
 		{"viewer", "/api/logs/scans/6f1c0b9e-0f8e-4a1d-9a7e-2f0e7c0f1a2b/groups", "GET", true},
 		{"admin", "/api/logs/check", "GET", true},
+
+		// Uploads for analysis read no cluster: the one POST a viewer may send.
+		{"viewer", "/api/plan-lifecycle/analyze", "POST", true},
+		{"viewer", "/api/plan-lifecycle/other", "POST", false},
+		{"admin", "/api/plan-lifecycle/analyze", "POST", true},
 	}
 
 	for _, tt := range tests {

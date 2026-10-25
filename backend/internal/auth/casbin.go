@@ -41,6 +41,7 @@ p, admin, /api/*, DELETE, allow
 p, viewer, /api/*, GET, allow
 p, viewer, /api/auth/tokens, POST, allow
 p, viewer, /api/auth/tokens/*, DELETE, allow
+p, viewer, /api/plan-lifecycle/analyze, POST, allow
 p, viewer, /api/auth/admin/*, GET, deny
 p, viewer, /api/auth/admin/*, DELETE, deny
 p, viewer, /api/logs/check, GET, deny

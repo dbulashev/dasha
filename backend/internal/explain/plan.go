@@ -10,6 +10,7 @@ type Source string
 const (
 	SourceExplain Source = "explain"
 	SourceLog     Source = "log"
+	SourceUpload  Source = "upload" // pasted or uploaded by the user
 )
 
 // Format is the plan text the parser was handed.

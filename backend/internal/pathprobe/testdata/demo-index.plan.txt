@@ -1,0 +1,7 @@
+ Nested Loop  (cost=5.74..3780.68 rows=1000 width=20)
+   ->  Index Only Scan using pp_customers_pkey on pp_customers c  (cost=0.29..8.48 rows=10 width=8)
+         Index Cond: ((id >= 100) AND (id <= 109))
+   ->  Bitmap Heap Scan on pp_orders o  (cost=5.45..376.22 rows=100 width=20)
+         Recheck Cond: ((c.id = customer_id) AND (customer_id > 0))
+         ->  Bitmap Index Scan on pp_orders_customer_idx  (cost=0.00..5.42 rows=100 width=0)
+               Index Cond: ((customer_id = c.id) AND (customer_id > 0))

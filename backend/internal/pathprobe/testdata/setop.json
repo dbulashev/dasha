@@ -1,0 +1,22 @@
+{
+  "version": "1.1",
+  "query": "SELECT id FROM gr_c INTERSECT SELECT customer_id FROM gr_o",
+  "rels": {"1": "*SELECT* 1", "2": "*SELECT* 2"},
+  "events": [
+    {"seq": 1, "src": "p1", "rel": "{1}", "pathtype": "IndexOnlyScan", "cost_startup": 0.28, "cost_total": 43.27, "kind": "accepted", "path_id": 1, "origin": "real"},
+    {"seq": 2, "src": "p1", "rel": "{1}", "pathtype": "SeqScan", "cost_startup": 0.00, "cost_total": 174.00, "kind": "accepted", "path_id": 2, "origin": "real"},
+    {"seq": 3, "src": "p1", "rel": "{1}", "pathtype": "SubqueryScan", "cost_startup": 0.28, "cost_total": 43.27, "kind": "accepted", "path_id": 3, "origin": "real"},
+    {"seq": 4, "src": "p1", "rel": "{2}", "pathtype": "SubqueryScan", "cost_startup": 0.00, "cost_total": 174.00, "kind": "accepted", "path_id": 4, "origin": "real"},
+    {"seq": 5, "src": "p1", "rel": "?", "pathtype": "SetOp", "cost_startup": 0.28, "cost_total": 246.52, "kind": "accepted", "path_id": 5, "origin": "real"}
+  ],
+  "paths": [
+    {"path_id": 1, "pathtype": "IndexOnlyScan", "rel": "{1}", "rows": 1000, "index_oid": 16410, "index_name": "gr_c_pkey"},
+    {"path_id": 2, "pathtype": "SeqScan", "rel": "{1}", "rows": 10000},
+    {"path_id": 3, "pathtype": "SubqueryScan", "rel": "{1}", "subpath_id": 1, "rows": 1000},
+    {"path_id": 4, "pathtype": "SubqueryScan", "rel": "{2}", "subpath_id": 2, "rows": 10000},
+    {"path_id": 5, "pathtype": "SetOp", "rel": "?", "child_path_ids": [3, 4], "rows": 1000}
+  ],
+  "coverage": {"survived_snapshot": true, "add_path_accepted": true, "add_path_rejected": true, "add_path_displaced": true, "add_path_removed": true, "add_path_precheck": true, "join_excluded": true, "index_build": false},
+  "limits": {"events_truncated": false, "summary_truncated": false, "max_events": 10000, "max_summary_entries": 128},
+  "summary": []
+}

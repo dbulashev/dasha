@@ -248,6 +248,92 @@ const (
 	MEDIUM PlanFindingSeverity = "MEDIUM"
 )
 
+// Defines values for PlanLifecycleCauseCode.
+const (
+	PlanLifecycleCauseCodeCostlierTotal PlanLifecycleCauseCode = "costlier_total"
+	PlanLifecycleCauseCodeLostNotOnCost PlanLifecycleCauseCode = "lost_not_on_cost"
+	PlanLifecycleCauseCodeLostOnStartup PlanLifecycleCauseCode = "lost_on_startup"
+	PlanLifecycleCauseCodeUnknown       PlanLifecycleCauseCode = "unknown"
+)
+
+// Defines values for PlanLifecycleCaveatScope.
+const (
+	PlanLifecycleCaveatScopePath     PlanLifecycleCaveatScope = "path"
+	PlanLifecycleCaveatScopeRelation PlanLifecycleCaveatScope = "relation"
+	PlanLifecycleCaveatScopeTrace    PlanLifecycleCaveatScope = "trace"
+)
+
+// Defines values for PlanLifecycleFinalStatus.
+const (
+	Ambiguous PlanLifecycleFinalStatus = "ambiguous"
+	ByPlan    PlanLifecycleFinalStatus = "by_plan"
+	Exact     PlanLifecycleFinalStatus = "exact"
+	None      PlanLifecycleFinalStatus = "none"
+)
+
+// Defines values for PlanLifecycleIndexChainOutcome.
+const (
+	InPlan       PlanLifecycleIndexChainOutcome = "in_plan"
+	Lost         PlanLifecycleIndexChainOutcome = "lost"
+	OnlyRejected PlanLifecycleIndexChainOutcome = "only_rejected"
+)
+
+// Defines values for PlanLifecycleMatchQueryText.
+const (
+	Differs PlanLifecycleMatchQueryText = "differs"
+	Missing PlanLifecycleMatchQueryText = "missing"
+	Same    PlanLifecycleMatchQueryText = "same"
+)
+
+// Defines values for PlanLifecycleMatchStatus.
+const (
+	Match          PlanLifecycleMatchStatus = "match"
+	MatchWithNotes PlanLifecycleMatchStatus = "match_with_notes"
+	Mismatch       PlanLifecycleMatchStatus = "mismatch"
+	NoFinalPath    PlanLifecycleMatchStatus = "no_final_path"
+)
+
+// Defines values for PlanLifecycleMatchNoteCode.
+const (
+	AppendChildrenDiffer PlanLifecycleMatchNoteCode = "append_children_differ"
+	AppendRemoved        PlanLifecycleMatchNoteCode = "append_removed"
+	ProjectionOmitted    PlanLifecycleMatchNoteCode = "projection_omitted"
+	SubqueryScanRemoved  PlanLifecycleMatchNoteCode = "subquery_scan_removed"
+)
+
+// Defines values for PlanLifecycleParseErrorInput.
+const (
+	PlanLifecycleParseErrorInputPlan  PlanLifecycleParseErrorInput = "plan"
+	PlanLifecycleParseErrorInputTrace PlanLifecycleParseErrorInput = "trace"
+)
+
+// Defines values for PlanLifecyclePathFate.
+const (
+	PlanLifecyclePathFateChildOnly PlanLifecyclePathFate = "child_only"
+	PlanLifecyclePathFateChosen    PlanLifecyclePathFate = "chosen"
+	PlanLifecyclePathFateDisplaced PlanLifecyclePathFate = "displaced"
+	PlanLifecyclePathFateRejected  PlanLifecyclePathFate = "rejected"
+	PlanLifecyclePathFateRemoved   PlanLifecyclePathFate = "removed"
+	PlanLifecyclePathFateSurvived  PlanLifecyclePathFate = "survived"
+	PlanLifecyclePathFateUnknown   PlanLifecyclePathFate = "unknown"
+)
+
+// Defines values for PlanLifecyclePathFateReason.
+const (
+	DisplacedNotCovered PlanLifecyclePathFateReason = "displaced_not_covered"
+	NoEvents            PlanLifecyclePathFateReason = "no_events"
+	RemovedNotCovered   PlanLifecyclePathFateReason = "removed_not_covered"
+)
+
+// Defines values for PlanLifecycleUnmatchedReason.
+const (
+	AppendChild            PlanLifecycleUnmatchedReason = "append_child"
+	NoEdges                PlanLifecycleUnmatchedReason = "no_edges"
+	PartialPathsUnobserved PlanLifecycleUnmatchedReason = "partial_paths_unobserved"
+	Subplan                PlanLifecycleUnmatchedReason = "subplan"
+	UnknownShape           PlanLifecycleUnmatchedReason = "unknown_shape"
+)
+
 // Defines values for PlanMissingRequirement.
 const (
 	Actual  PlanMissingRequirement = "actual"
@@ -2030,6 +2116,293 @@ type PlanJIT struct {
 	OptimizationMs *float64 `json:"optimization_ms,omitempty"`
 	TotalMs        *float64 `json:"total_ms,omitempty"`
 }
+
+// PlanLifecycleAnalysis defines model for PlanLifecycleAnalysis.
+type PlanLifecycleAnalysis struct {
+	Caveats []PlanLifecycleCaveat `json:"caveats"`
+
+	// Coverage Planner decision points the run observed. known is false when the trace has no coverage object; a point that is false means the absence of its events proves nothing.
+	Coverage PlanLifecycleCoverage     `json:"coverage"`
+	Final    PlanLifecycleFinal        `json:"final"`
+	Indexes  []PlanLifecycleIndexChain `json:"indexes"`
+	Limits   PlanLifecycleLimits       `json:"limits"`
+
+	// Match The final path matched to the uploaded plan; present only with a plan.
+	Match *PlanLifecycleMatch `json:"match,omitempty"`
+	Paths []PlanLifecyclePath `json:"paths"`
+
+	// Plan One parsed plan with the rules evaluated on it.
+	Plan      *PlanSummary            `json:"plan,omitempty"`
+	Query     string                  `json:"query"`
+	Relations []PlanLifecycleRelation `json:"relations"`
+	Rels      []PlanLifecycleRel      `json:"rels"`
+	Timeline  []PlanLifecycleEvent    `json:"timeline"`
+}
+
+// PlanLifecycleCause defines model for PlanLifecycleCause.
+type PlanLifecycleCause struct {
+	Code PlanLifecycleCauseCode `json:"code"`
+
+	// Gap total cost minus the winner's; positive means it lost on total; absent without the winner's cost
+	Gap           *float64 `json:"gap,omitempty"`
+	Startup       *float64 `json:"startup,omitempty"`
+	WinnerStartup *float64 `json:"winner_startup,omitempty"`
+}
+
+// PlanLifecycleCauseCode defines model for PlanLifecycleCause.Code.
+type PlanLifecycleCauseCode string
+
+// PlanLifecycleCaveat defines model for PlanLifecycleCaveat.
+type PlanLifecycleCaveat struct {
+	// Code a planlife caveat code; texts live in the frontend i18n
+	Code   string                   `json:"code"`
+	Params *map[string]string       `json:"params,omitempty"`
+	PathId *int                     `json:"path_id,omitempty"`
+	Rel    *string                  `json:"rel,omitempty"`
+	Scope  PlanLifecycleCaveatScope `json:"scope"`
+}
+
+// PlanLifecycleCaveatScope defines model for PlanLifecycleCaveat.Scope.
+type PlanLifecycleCaveatScope string
+
+// PlanLifecycleChainNode defines model for PlanLifecycleChainNode.
+type PlanLifecycleChainNode struct {
+	PathId int `json:"path_id"`
+
+	// Up paths built on top of this one
+	Up []PlanLifecycleChainNode `json:"up"`
+}
+
+// PlanLifecycleCoverage Planner decision points the run observed. known is false when the trace has no coverage object; a point that is false means the absence of its events proves nothing.
+type PlanLifecycleCoverage struct {
+	Accepted   bool `json:"accepted"`
+	Displaced  bool `json:"displaced"`
+	Excluded   bool `json:"excluded"`
+	IndexBuild bool `json:"index_build"`
+	Known      bool `json:"known"`
+	Precheck   bool `json:"precheck"`
+	Rejected   bool `json:"rejected"`
+	Removed    bool `json:"removed"`
+	Survived   bool `json:"survived"`
+}
+
+// PlanLifecycleEvent defines model for PlanLifecycleEvent.
+type PlanLifecycleEvent struct {
+	// ByPathId the displacer (displaced), dominator (rejected) or remover (removed)
+	ByPathId   *int    `json:"by_path_id,omitempty"`
+	ByPathtype *string `json:"by_pathtype,omitempty"`
+
+	// BySeq the winner's accepted event; for removed, the remover's rejected event
+	BySeq         *int     `json:"by_seq,omitempty"`
+	CostStartup   *float64 `json:"cost_startup,omitempty"`
+	CostTotal     *float64 `json:"cost_total,omitempty"`
+	DisabledNodes *int     `json:"disabled_nodes,omitempty"`
+	Gap           *float64 `json:"gap,omitempty"`
+	KeptReason    *string  `json:"kept_reason,omitempty"`
+
+	// Kind accepted, rejected, displaced, removed, survived, skipped, excluded; other values are passed through
+	Kind       string  `json:"kind"`
+	Label      *string `json:"label,omitempty"`
+	Origin     string  `json:"origin"`
+	Param      bool    `json:"param"`
+	PathId     *int    `json:"path_id,omitempty"`
+	Pathtype   string  `json:"pathtype"`
+	Rel        string  `json:"rel"`
+	Seq        int     `json:"seq"`
+	SkipReason *string `json:"skip_reason,omitempty"`
+	Src        string  `json:"src"`
+}
+
+// PlanLifecycleFinal defines model for PlanLifecycleFinal.
+type PlanLifecycleFinal struct {
+	Candidates []int `json:"candidates"`
+	PathId     *int  `json:"path_id,omitempty"`
+
+	// Status ambiguous - several candidates the trace cannot tell apart, path_id is the cheapest; by_plan - the candidate that matches the uploaded plan
+	Status PlanLifecycleFinalStatus `json:"status"`
+
+	// Tree the final path and all its descendants
+	Tree []int `json:"tree"`
+}
+
+// PlanLifecycleFinalStatus ambiguous - several candidates the trace cannot tell apart, path_id is the cheapest; by_plan - the candidate that matches the uploaded plan
+type PlanLifecycleFinalStatus string
+
+// PlanLifecycleIndexChain defines model for PlanLifecycleIndexChain.
+type PlanLifecycleIndexChain struct {
+	// BestAtFinalLevel best_path_id is in the relation of the final path, so their costs compare.
+	BestAtFinalLevel *bool `json:"best_at_final_level,omitempty"`
+
+	// BestPathId The cheapest path over the index at the highest level such paths reached. Absent when the index is in the plan.
+	BestPathId   *int                           `json:"best_path_id,omitempty"`
+	Hypothetical bool                           `json:"hypothetical"`
+	Index        string                         `json:"index"`
+	Leaves       []PlanLifecycleChainNode       `json:"leaves"`
+	Oid          *int64                         `json:"oid,omitempty"`
+	Outcome      PlanLifecycleIndexChainOutcome `json:"outcome"`
+	Truncated    bool                           `json:"truncated"`
+}
+
+// PlanLifecycleIndexChainOutcome defines model for PlanLifecycleIndexChain.Outcome.
+type PlanLifecycleIndexChainOutcome string
+
+// PlanLifecycleLimits defines model for PlanLifecycleLimits.
+type PlanLifecycleLimits struct {
+	EventsTruncated  bool `json:"events_truncated"`
+	MaxEvents        int  `json:"max_events"`
+	SummaryTruncated bool `json:"summary_truncated"`
+}
+
+// PlanLifecycleMatch The final path matched to the uploaded plan; present only with a plan.
+type PlanLifecycleMatch struct {
+	// Mismatch The first place where the path tree and the plan disagree.
+	Mismatch *PlanLifecycleMatchDiff  `json:"mismatch,omitempty"`
+	Notes    []PlanLifecycleMatchNote `json:"notes"`
+
+	// QueryText missing - the plan carries no query text (EXPLAIN from psql)
+	QueryText PlanLifecycleMatchQueryText `json:"query_text"`
+	Status    PlanLifecycleMatchStatus    `json:"status"`
+	Unmatched []PlanLifecycleUnmatched    `json:"unmatched"`
+}
+
+// PlanLifecycleMatchQueryText missing - the plan carries no query text (EXPLAIN from psql)
+type PlanLifecycleMatchQueryText string
+
+// PlanLifecycleMatchStatus defines model for PlanLifecycleMatch.Status.
+type PlanLifecycleMatchStatus string
+
+// PlanLifecycleMatchDiff The first place where the path tree and the plan disagree.
+type PlanLifecycleMatchDiff struct {
+	// Expected EXPLAIN node type the path stands for, with the relation or index when those differ
+	Expected string `json:"expected"`
+	Found    string `json:"found"`
+	PathId   int    `json:"path_id"`
+	PlanNode []int  `json:"plan_node"`
+}
+
+// PlanLifecycleMatchNote defines model for PlanLifecycleMatchNote.
+type PlanLifecycleMatchNote struct {
+	Code   PlanLifecycleMatchNoteCode `json:"code"`
+	PathId int                        `json:"path_id"`
+
+	// PlanNode child indexes from the plan root
+	PlanNode []int `json:"plan_node"`
+}
+
+// PlanLifecycleMatchNoteCode defines model for PlanLifecycleMatchNote.Code.
+type PlanLifecycleMatchNoteCode string
+
+// PlanLifecycleParseError Why an input could not be parsed. Carries no part of the input.
+type PlanLifecycleParseError struct {
+	// Code trace_syntax, trace_type, trace_not_pathprobe, trace_invalid for the trace; the explain parser's codes for the plan.
+	Code string `json:"code"`
+
+	// Field path to the field, in the format's own names
+	Field *string                      `json:"field,omitempty"`
+	Input PlanLifecycleParseErrorInput `json:"input"`
+
+	// Offset byte offset in the input, when known
+	Offset *int64 `json:"offset,omitempty"`
+}
+
+// PlanLifecycleParseErrorInput defines model for PlanLifecycleParseError.Input.
+type PlanLifecycleParseErrorInput string
+
+// PlanLifecyclePath defines model for PlanLifecyclePath.
+type PlanLifecyclePath struct {
+	// By the displacer, dominator or remover path
+	By    *int                `json:"by,omitempty"`
+	BySeq *int                `json:"by_seq,omitempty"`
+	Cause *PlanLifecycleCause `json:"cause,omitempty"`
+
+	// ChildPathIds all inputs of Append, MergeAppend, BitmapAnd, BitmapOr; [left, right] of SetOp, RecursiveUnion
+	ChildPathIds *[]int   `json:"child_path_ids,omitempty"`
+	CostStartup  *float64 `json:"cost_startup,omitempty"`
+	CostTotal    *float64 `json:"cost_total,omitempty"`
+
+	// Events seq of the path's events
+	Events            []int                        `json:"events"`
+	Fate              PlanLifecyclePathFate        `json:"fate"`
+	FateReason        *PlanLifecyclePathFateReason `json:"fate_reason,omitempty"`
+	HypotheticalIndex *bool                        `json:"hypothetical_index,omitempty"`
+
+	// InSubquery below a SubqueryScan; rel is numbered in the subquery's range table
+	InSubquery  *bool   `json:"in_subquery,omitempty"`
+	IndexName   *string `json:"index_name,omitempty"`
+	IndexOid    *int64  `json:"index_oid,omitempty"`
+	InnerPathId *int    `json:"inner_path_id,omitempty"`
+	KeptReason  *string `json:"kept_reason,omitempty"`
+	Label       *string `json:"label,omitempty"`
+	OuterPathId *int    `json:"outer_path_id,omitempty"`
+	Parents     []int   `json:"parents"`
+	PathId      int     `json:"path_id"`
+	Pathtype    string  `json:"pathtype"`
+
+	// PlanNode child indexes from the plan root to the matched node; absent when not matched
+	PlanNode *[]int `json:"plan_node,omitempty"`
+
+	// Rel "{1,2}", or "?" for an upper relation
+	Rel           string `json:"rel"`
+	RequiredOuter *[]int `json:"required_outer,omitempty"`
+
+	// Rows row estimate, per loop for a parameterized path; absent for BitmapAnd / BitmapOr
+	Rows *float64 `json:"rows,omitempty"`
+
+	// RowsRatio estimate vs actual rows of the matched node, when past the row_misestimate thresholds
+	RowsRatio *float64 `json:"rows_ratio,omitempty"`
+	SubpathId *int     `json:"subpath_id,omitempty"`
+}
+
+// PlanLifecyclePathFate defines model for PlanLifecyclePath.Fate.
+type PlanLifecyclePathFate string
+
+// PlanLifecyclePathFateReason defines model for PlanLifecyclePath.FateReason.
+type PlanLifecyclePathFateReason string
+
+// PlanLifecyclePrecheckGroup defines model for PlanLifecyclePrecheckGroup.
+type PlanLifecyclePrecheckGroup struct {
+	Count   int     `json:"count"`
+	MaxCost float64 `json:"max_cost"`
+	Method  string  `json:"method"`
+	MinCost float64 `json:"min_cost"`
+	Reason  string  `json:"reason"`
+}
+
+// PlanLifecycleRel defines model for PlanLifecycleRel.
+type PlanLifecycleRel struct {
+	Alias string `json:"alias"`
+
+	// Index range table index, as in "{1,2}"
+	Index int `json:"index"`
+}
+
+// PlanLifecycleRelation defines model for PlanLifecycleRelation.
+type PlanLifecycleRelation struct {
+	// Counts paths of the relation by fate
+	Counts   map[string]int               `json:"counts"`
+	Key      string                       `json:"key"`
+	Label    string                       `json:"label"`
+	PathIds  []int                        `json:"path_ids"`
+	Precheck []PlanLifecyclePrecheckGroup `json:"precheck"`
+}
+
+// PlanLifecycleRequest defines model for PlanLifecycleRequest.
+type PlanLifecycleRequest struct {
+	// Plan EXPLAIN of the same query, in JSON or text format.
+	Plan *string `json:"plan,omitempty"`
+
+	// Trace pathprobe_json() output as text.
+	Trace string `json:"trace"`
+}
+
+// PlanLifecycleUnmatched defines model for PlanLifecycleUnmatched.
+type PlanLifecycleUnmatched struct {
+	PlanNode []int                        `json:"plan_node"`
+	Reason   PlanLifecycleUnmatchedReason `json:"reason"`
+}
+
+// PlanLifecycleUnmatchedReason defines model for PlanLifecycleUnmatched.Reason.
+type PlanLifecycleUnmatchedReason string
 
 // PlanMissingRequirement defines model for PlanMissingRequirement.
 type PlanMissingRequirement string
@@ -3956,6 +4329,9 @@ type PutAutosnapshotConfigJSONRequestBody = AutoSnapshotConfig
 // PutHealthScoreWeightsJSONRequestBody defines body for PutHealthScoreWeights for application/json ContentType.
 type PutHealthScoreWeightsJSONRequestBody = HealthScoreWeightsUpdate
 
+// AnalyzePlanLifecycleJSONRequestBody defines body for AnalyzePlanLifecycle for application/json ContentType.
+type AnalyzePlanLifecycleJSONRequestBody = PlanLifecycleRequest
+
 // RequestEditorFn  is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
 
@@ -4273,6 +4649,11 @@ type ClientInterface interface {
 
 	// GetMaintenanceVacuumProgress request
 	GetMaintenanceVacuumProgress(ctx context.Context, params *GetMaintenanceVacuumProgressParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AnalyzePlanLifecycleWithBody request with any body
+	AnalyzePlanLifecycleWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	AnalyzePlanLifecycle(ctx context.Context, body AnalyzePlanLifecycleJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetProgressAnalyze request
 	GetProgressAnalyze(ctx context.Context, params *GetProgressAnalyzeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -5387,6 +5768,30 @@ func (c *Client) GetMaintenanceTransactionIdDanger(ctx context.Context, params *
 
 func (c *Client) GetMaintenanceVacuumProgress(ctx context.Context, params *GetMaintenanceVacuumProgressParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetMaintenanceVacuumProgressRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AnalyzePlanLifecycleWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAnalyzePlanLifecycleRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AnalyzePlanLifecycle(ctx context.Context, body AnalyzePlanLifecycleJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAnalyzePlanLifecycleRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -11942,6 +12347,46 @@ func NewGetMaintenanceVacuumProgressRequest(server string, params *GetMaintenanc
 	return req, nil
 }
 
+// NewAnalyzePlanLifecycleRequest calls the generic AnalyzePlanLifecycle builder with application/json body
+func NewAnalyzePlanLifecycleRequest(server string, body AnalyzePlanLifecycleJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAnalyzePlanLifecycleRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewAnalyzePlanLifecycleRequestWithBody generates requests for AnalyzePlanLifecycle with any type of body
+func NewAnalyzePlanLifecycleRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/plan-lifecycle/analyze")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewGetProgressAnalyzeRequest generates requests for GetProgressAnalyze
 func NewGetProgressAnalyzeRequest(server string, params *GetProgressAnalyzeParams) (*http.Request, error) {
 	var err error
@@ -15542,6 +15987,11 @@ type ClientWithResponsesInterface interface {
 	// GetMaintenanceVacuumProgressWithResponse request
 	GetMaintenanceVacuumProgressWithResponse(ctx context.Context, params *GetMaintenanceVacuumProgressParams, reqEditors ...RequestEditorFn) (*GetMaintenanceVacuumProgressResponse, error)
 
+	// AnalyzePlanLifecycleWithBodyWithResponse request with any body
+	AnalyzePlanLifecycleWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AnalyzePlanLifecycleResponse, error)
+
+	AnalyzePlanLifecycleWithResponse(ctx context.Context, body AnalyzePlanLifecycleJSONRequestBody, reqEditors ...RequestEditorFn) (*AnalyzePlanLifecycleResponse, error)
+
 	// GetProgressAnalyzeWithResponse request
 	GetProgressAnalyzeWithResponse(ctx context.Context, params *GetProgressAnalyzeParams, reqEditors ...RequestEditorFn) (*GetProgressAnalyzeResponse, error)
 
@@ -17410,6 +17860,30 @@ func (r GetMaintenanceVacuumProgressResponse) StatusCode() int {
 	return 0
 }
 
+type AnalyzePlanLifecycleResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PlanLifecycleAnalysis
+	JSON400      *ErrorMessage
+	JSON422      *PlanLifecycleParseError
+}
+
+// Status returns HTTPResponse.Status
+func (r AnalyzePlanLifecycleResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AnalyzePlanLifecycleResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetProgressAnalyzeResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -19085,6 +19559,23 @@ func (c *ClientWithResponses) GetMaintenanceVacuumProgressWithResponse(ctx conte
 		return nil, err
 	}
 	return ParseGetMaintenanceVacuumProgressResponse(rsp)
+}
+
+// AnalyzePlanLifecycleWithBodyWithResponse request with arbitrary body returning *AnalyzePlanLifecycleResponse
+func (c *ClientWithResponses) AnalyzePlanLifecycleWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AnalyzePlanLifecycleResponse, error) {
+	rsp, err := c.AnalyzePlanLifecycleWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAnalyzePlanLifecycleResponse(rsp)
+}
+
+func (c *ClientWithResponses) AnalyzePlanLifecycleWithResponse(ctx context.Context, body AnalyzePlanLifecycleJSONRequestBody, reqEditors ...RequestEditorFn) (*AnalyzePlanLifecycleResponse, error) {
+	rsp, err := c.AnalyzePlanLifecycle(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAnalyzePlanLifecycleResponse(rsp)
 }
 
 // GetProgressAnalyzeWithResponse request returning *GetProgressAnalyzeResponse
@@ -21522,6 +22013,46 @@ func ParseGetMaintenanceVacuumProgressResponse(rsp *http.Response) (*GetMaintena
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAnalyzePlanLifecycleResponse parses an HTTP response from a AnalyzePlanLifecycleWithResponse call
+func ParseAnalyzePlanLifecycleResponse(rsp *http.Response) (*AnalyzePlanLifecycleResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AnalyzePlanLifecycleResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PlanLifecycleAnalysis
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorMessage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest PlanLifecycleParseError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
 
 	}
 

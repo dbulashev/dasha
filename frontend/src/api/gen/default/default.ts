@@ -194,6 +194,9 @@ import type {
   PersonalAccessTokenCreate,
   PersonalAccessTokenCreated,
   PgSetting,
+  PlanLifecycleAnalysis,
+  PlanLifecycleParseError,
+  PlanLifecycleRequest,
   PostQueriesResetStatsParams,
   PostSnapshotParams,
   ProgressAnalyze,
@@ -12684,4 +12687,126 @@ export function useGetSchemaLintSummary<
   query.queryKey = unref(queryOptions).queryKey as QueryKey
 
   return query
+}
+
+/**
+ * Analyze a pathprobe trace (the output of pathprobe_json()) and, if given, an EXPLAIN plan of the same query: which path the planner chose, what happened to every other path and why it lost, where each index took part. Not tied to a cluster and reads no database. The uploaded text is parsed in the request only: it is not stored and not logged, and a parse error names a position, never a part of the input. Rate-limited apart from other endpoints; the body size is limited by plan_lifecycle.max_body.
+ */
+export type analyzePlanLifecycleResponse200 = {
+  data: PlanLifecycleAnalysis
+  status: 200
+}
+
+export type analyzePlanLifecycleResponse400 = {
+  data: ErrorMessage
+  status: 400
+}
+
+export type analyzePlanLifecycleResponse413 = {
+  data: void
+  status: 413
+}
+
+export type analyzePlanLifecycleResponse422 = {
+  data: PlanLifecycleParseError
+  status: 422
+}
+
+export type analyzePlanLifecycleResponse429 = {
+  data: void
+  status: 429
+}
+
+export type analyzePlanLifecycleResponseSuccess = analyzePlanLifecycleResponse200 & {
+  headers: Headers
+}
+export type analyzePlanLifecycleResponseError = (
+  | analyzePlanLifecycleResponse400
+  | analyzePlanLifecycleResponse413
+  | analyzePlanLifecycleResponse422
+  | analyzePlanLifecycleResponse429
+) & {
+  headers: Headers
+}
+
+export type analyzePlanLifecycleResponse =
+  | analyzePlanLifecycleResponseSuccess
+  | analyzePlanLifecycleResponseError
+
+export const getAnalyzePlanLifecycleUrl = () => {
+  return `/api/plan-lifecycle/analyze`
+}
+
+export const analyzePlanLifecycle = async (
+  planLifecycleRequest: PlanLifecycleRequest,
+  options?: RequestInit,
+): Promise<analyzePlanLifecycleResponse> => {
+  return customFetch<analyzePlanLifecycleResponse>(getAnalyzePlanLifecycleUrl(), {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(planLifecycleRequest),
+  })
+}
+
+export const getAnalyzePlanLifecycleMutationOptions = <
+  TError = ErrorMessage | void | PlanLifecycleParseError,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof analyzePlanLifecycle>>,
+    TError,
+    { data: PlanLifecycleRequest },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof analyzePlanLifecycle>>,
+  TError,
+  { data: PlanLifecycleRequest },
+  TContext
+> => {
+  const mutationKey = ['analyzePlanLifecycle']
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined }
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof analyzePlanLifecycle>>,
+    { data: PlanLifecycleRequest }
+  > = (props) => {
+    const { data } = props ?? {}
+
+    return analyzePlanLifecycle(data, requestOptions)
+  }
+
+  return { mutationFn, ...mutationOptions }
+}
+
+export type AnalyzePlanLifecycleMutationResult = NonNullable<
+  Awaited<ReturnType<typeof analyzePlanLifecycle>>
+>
+export type AnalyzePlanLifecycleMutationBody = PlanLifecycleRequest
+export type AnalyzePlanLifecycleMutationError = ErrorMessage | void | PlanLifecycleParseError
+
+export const useAnalyzePlanLifecycle = <
+  TError = ErrorMessage | void | PlanLifecycleParseError,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof analyzePlanLifecycle>>,
+    TError,
+    { data: PlanLifecycleRequest },
+    TContext
+  >
+  request?: SecondParameter<typeof customFetch>
+}): UseMutationReturnType<
+  Awaited<ReturnType<typeof analyzePlanLifecycle>>,
+  TError,
+  { data: PlanLifecycleRequest },
+  TContext
+> => {
+  return useMutation(getAnalyzePlanLifecycleMutationOptions(options))
 }

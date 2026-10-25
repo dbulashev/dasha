@@ -1,0 +1,21 @@
+{
+  "version": "1.1",
+  "query": "SELECT * FROM gr_o WHERE customer_id = 1 OR id = 2",
+  "rels": {"1": "gr_o"},
+  "events": [
+    {"seq": 1, "src": "p1", "rel": "{1}", "pathtype": "SeqScan", "cost_startup": 0.00, "cost_total": 224.00, "kind": "accepted", "path_id": 1, "origin": "real"},
+    {"seq": 2, "src": "p1", "rel": "{1}", "pathtype": "BitmapHeapScan", "cost_startup": 8.88, "cost_total": 41.36, "kind": "accepted", "path_id": 2, "origin": "real", "gap_cost": 182.64},
+    {"seq": 3, "src": "p1", "rel": "{1}", "pathtype": "SeqScan", "cost_startup": 0.00, "cost_total": 224.00, "kind": "displaced", "path_id": 1, "displacer_path_id": 2, "displacer_seq": 2, "other_pathtype": "BitmapHeapScan", "gap_cost": 182.64, "origin": "real"},
+    {"seq": 4, "src": "p0", "rel": "{1}", "pathtype": "BitmapHeapScan", "cost_startup": 8.88, "cost_total": 41.36, "kind": "survived", "path_id": 2, "origin": "real"}
+  ],
+  "paths": [
+    {"path_id": 1, "pathtype": "SeqScan", "rel": "{1}", "rows": 10000},
+    {"path_id": 2, "pathtype": "BitmapHeapScan", "rel": "{1}", "subpath_id": 3, "rows": 11},
+    {"path_id": 3, "pathtype": "BitmapOr", "rel": "{1}", "child_path_ids": [4, 5]},
+    {"path_id": 4, "pathtype": "IndexScan", "rel": "{1}", "rows": 10, "index_oid": 16420, "index_name": "gr_o_customer_idx"},
+    {"path_id": 5, "pathtype": "IndexScan", "rel": "{1}", "rows": 1, "index_oid": 16418, "index_name": "gr_o_pkey"}
+  ],
+  "coverage": {"survived_snapshot": true, "add_path_accepted": true, "add_path_rejected": true, "add_path_displaced": true, "add_path_removed": true, "add_path_precheck": true, "join_excluded": true, "index_build": false},
+  "limits": {"events_truncated": false, "summary_truncated": false, "max_events": 10000, "max_summary_entries": 128},
+  "summary": []
+}

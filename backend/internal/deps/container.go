@@ -571,6 +571,7 @@ func provideConfig() (*config.Config, error) {
 	c.HealthScore.Fleet = c.HealthScore.Fleet.WithDefaults()
 	c.LogSearch = c.LogSearch.WithDefaults()
 	c.LogInsights = c.LogInsights.WithDefaults()
+	c.PlanLifecycle = c.PlanLifecycle.WithDefaults()
 
 	if err := c.HealthScore.Validate(); err != nil {
 		return nil, fmt.Errorf("provideConfig | health_score: %w", err)

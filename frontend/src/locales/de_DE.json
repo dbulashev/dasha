@@ -2138,5 +2138,188 @@
     "connection": "Verbindungen",
     "error": "Fehler",
     "other": "Sonstige"
+  },
+  "planLifecycle": {
+    "menu": "Planverlauf",
+    "title": "Planverlauf",
+    "subtitle": "Ein pathprobe-Trace: welchen Pfad der Planer gewählt hat, was mit den anderen geschah und warum sie verloren. Experimentell.",
+    "traceFile": "pathprobe_json()-Trace (.json)",
+    "dropHint": "oder Datei hierher ziehen",
+    "analyze": "Analysieren",
+    "paste": "Trace-Text einfügen",
+    "finalTree": "Endgültiger Pfad",
+    "alternatives": "Alternativen: {n}",
+    "noFinal": "Der Trace bestimmt den endgültigen Pfad nicht.",
+    "upperRel": "obere Ebene",
+    "usingIndex": "über Index",
+    "hypotheticalIndex": "hypothetischer Index",
+    "paramFrom": "parametrisiert durch {rels}",
+    "over": "über",
+    "kept": "behalten: {why}",
+    "lostTo": "verloren gegen",
+    "removedBy": "entfernt durch",
+    "by": "durch",
+    "perLoop": "pro Durchlauf",
+    "noOwnEvents": "keine eigenen Ereignisse",
+    "rowsShort": "{rows} Zeilen",
+    "noIndexes": "Der Trace enthält keine Indexpfade.",
+    "chainTruncated": "Kette gekürzt: zu viele Pfade über dem Index.",
+    "onlyPath": "nur Pfad #{id}",
+    "tab": {
+      "plan": "Plan",
+      "indexes": "Indizes",
+      "timeline": "Verlauf"
+    },
+    "col": {
+      "path": "Pfad",
+      "fate": "Ergebnis",
+      "why": "Warum",
+      "rows": "Zeilen",
+      "cost": "Kosten",
+      "events": "Ereignisse",
+      "rel": "Relation",
+      "event": "Ereignis",
+      "link": "Gewinner"
+    },
+    "fate": {
+      "chosen": "gewählt",
+      "survived": "überlebt",
+      "displaced": "verdrängt",
+      "removed": "entfernt",
+      "rejected": "abgelehnt",
+      "child_only": "nur als Teil",
+      "unknown": "unbekannt"
+    },
+    "fateReason": {
+      "displaced_not_covered": "akzeptiert; Verdrängung nicht beobachtet (log_accepted aus)",
+      "removed_not_covered": "akzeptiert; Entfernung nicht beobachtet (älterer Core-Patch)",
+      "no_events": "keine Ereignisse"
+    },
+    "cause": {
+      "costlier_total": "insgesamt teurer um {gap}",
+      "lost_on_startup": "Gesamtkosten gleich innerhalb von 1% (add_path-Fuzz), Startup entschied: {startup} gegen {winnerStartup}",
+      "lost_not_on_cost": "nicht über die Kosten verloren: Sortierung, Parametrisierung, Zeilen oder parallel safety (der Trace unterscheidet es nicht)",
+      "unknown": "der Trace nennt den Gewinner oder dessen Kosten nicht"
+    },
+    "outcome": {
+      "in_plan": "im Plan",
+      "lost": "gebaut und verloren",
+      "only_rejected": "nur abgelehnte Pfade"
+    },
+    "precheck": {
+      "title": "Vor dem Bau verworfen (precheck)",
+      "hint": "Es wurde kein Pfad erzeugt, daher sind Eingaben und Gewinner unbekannt.",
+      "cost": "Schätzung"
+    },
+    "input": {
+      "trace": "den Trace",
+      "plan": "den Plan"
+    },
+    "error": {
+      "parse": "{input} konnte nicht gelesen werden: {code} ({where})",
+      "tooLarge": "Die Datei ist größer als erlaubt.",
+      "rateLimited": "Zu viele Anfragen, bitte in einer Minute erneut versuchen."
+    },
+    "caveat": {
+      "coverage_missing": "Punkt {point} wurde in diesem Lauf nicht beobachtet: das Fehlen seiner Ereignisse beweist nichts.",
+      "coverage_absent": "Der Trace hat kein coverage-Objekt: was beobachtet wurde, ist unbekannt.",
+      "events_truncated": "Der Trace wurde bei pathprobe.max_events = {max_events} abgeschnitten: Schlüsse aus fehlenden Ereignissen gelten nicht.",
+      "dominator_not_reported": "Abgelehnte Pfade nennen ihren Dominator nicht: der Server wurde mit einem älteren pathprobe-Core-Patch gebaut.",
+      "no_path_graph": "Der Trace hat keine Pfad-IDs: Baum und Verknüpfungen lassen sich nicht bilden.",
+      "unknown_values": "Unbekannte Werte im Trace: {values}.",
+      "final_ambiguous": "Der endgültige Pfad ist nicht eindeutig: Kandidaten {candidates}; der günstigste wird gezeigt.",
+      "final_none": "Der Trace bestimmt den endgültigen Pfad nicht.",
+      "edges_absent": "Dieser Pfadtyp hat immer eine Eingabe, die pathprobe aber nicht erfasst (z. B. GroupingSets als Agg): der Teilbaum wird nicht gezeigt.",
+      "precheck_no_inputs": "Von precheck verworfene Pfade haben keine Eingaben und keinen Gewinner.",
+      "index_not_examined_unobservable": "Aufgeführt sind nur Indizes, über die Pfade gebaut wurden. Ein Index, den der Planer nicht betrachtet hat, ist im Trace nicht sichtbar.",
+      "subquery_rels": "Einige Pfade liegen in einer Unterabfrage: ihre Relationen sind in der Unterabfrage nummeriert, Aliasse gelten für sie nicht, und das Relationspanel kann sie mit Pfaden der äußeren Abfrage vermischen.",
+      "chosen_but_displaced": "Der Pfad ist im endgültigen Plan, im Trace aber verdrängt oder entfernt (Ereignis #{seq}): dieser Fall ist nicht erklärt.",
+      "chosen_as_bitmapqual": "Der Pfad wurde aus seiner Relation verdrängt (#{seq}), blieb aber im gewählten Bitmap Heap Scan: im Plan ist es der Bitmap Index Scan.",
+      "partial_paths_unobserved": "Der Plan enthält Gather: pathprobe beobachtet keine partiellen Pfade, ein Teil der Suche ist unsichtbar."
+    },
+    "inSubquery": "in einer Unterabfrage: Relationsnummern der Unterabfrage",
+    "planFile": "Plan (EXPLAIN), optional",
+    "planHint": "JSON oder Text; mit ANALYZE werden die tatsächlichen Zeilen gezeigt",
+    "removePlan": "Plan entfernen",
+    "pastePlan": "EXPLAIN einfügen",
+    "planPlaceholder": "EXPLAIN (ANALYZE, FORMAT JSON) ... oder ein Textplan",
+    "planTree": "Plan (EXPLAIN), dem Trace zugeordnet",
+    "actualRows": "tatsächlich {rows}",
+    "rowsRatio": "Schätzung um das {ratio}-fache daneben",
+    "match": {
+      "status": {
+        "match": "Der Plan stimmt mit dem endgültigen Pfad des Trace überein",
+        "match_with_notes": "Der Plan stimmt mit dem endgültigen Pfad überein, mit Anpassungen",
+        "mismatch": "Der Plan stimmt nicht mit dem Trace überein",
+        "no_final_path": "Der Trace bestimmt keinen endgültigen Pfad: nichts zuzuordnen"
+      },
+      "queryTextDiffers": "Der Abfragetext im Plan unterscheidet sich von der Trace-Abfrage: es sind verschiedene Abfragen.",
+      "diff": "{path}: erwartet {expected}, im Plan {found} (Knoten {node}).",
+      "root": "Wurzel",
+      "note": {
+        "projection_omitted": "Projection ohne Result-Knoten: der Planer brauchte die Projektion nicht",
+        "subquery_scan_removed": "Subquery Scan als trivial aus dem Plan entfernt",
+        "append_removed": "Append mit einer Eingabe aus dem Plan entfernt",
+        "append_children_differ": "das Append im Plan hat weniger Eingaben als im Trace (Partition Pruning); Kinder nicht zugeordnet"
+      },
+      "unmatched": {
+        "unknown_shape": "Knoten nicht zugeordnet: keine Regel für diese Form",
+        "no_edges": "pathprobe erfasst die Eingaben dieses Pfads nicht",
+        "subplan": "InitPlan/SubPlan wird getrennt geplant und ist im Trace nicht verknüpft",
+        "partial_paths_unobserved": "Gather: pathprobe sieht keine partiellen Pfade",
+        "append_child": "Append-Eingabe nicht zugeordnet"
+      },
+      "finalByPlan": "Der endgültige Pfad wurde anhand des Plans aus mehreren Trace-Kandidaten gewählt."
+    },
+    "summary": {
+      "title": "Ergebnis",
+      "final": "Gewählt: {path}, Kosten {cost}.",
+      "inPlan": "Im Plan: {indexes}.",
+      "lostAtTop": "der beste Plan damit ist {path}, Kosten {cost}: {ratio} des gewählten.",
+      "stoppedAt": "Pfade darüber kamen nur bis {rel}; der beste ist {path}, Kosten {cost}."
+    },
+    "pastedTrace": "eingefügter Trace",
+    "replace": "Ersetzen",
+    "showQuery": "Ganze Abfrage zeigen",
+    "fateHint": {
+      "chosen": "Teil des endgültigen Plans",
+      "survived": "hat die Suche seiner Relation überstanden, ist aber nicht im endgültigen Plan",
+      "displaced": "wurde in die Pfadliste der Relation aufgenommen und dann von einem besseren Pfad verdrängt",
+      "removed": "wurde aufgenommen und dann von einem neuen Pfad entfernt, der selbst verworfen wurde",
+      "rejected": "sofort verworfen: die Liste enthielt schon einen in jeder Hinsicht mindestens gleich guten Pfad",
+      "child_only": "keine eigenen Ereignisse, nur Eingabe anderer Pfade",
+      "unknown": "der Trace verrät sein Schicksal nicht"
+    },
+    "event": {
+      "accepted": "aufgenommen",
+      "rejected": "verworfen",
+      "displaced": "verdrängt",
+      "removed": "entfernt",
+      "survived": "überlebt",
+      "skipped": "übersprungen (precheck)",
+      "excluded": "ausgeschlossen"
+    },
+    "eventHint": {
+      "accepted": "add_path() hat den Pfad in die Liste der Relation aufgenommen",
+      "rejected": "add_path() hat den Pfad verworfen: die Liste hat schon einen mindestens gleich guten",
+      "displaced": "der Pfad wurde von einem neuen, besseren aus der Liste verdrängt",
+      "removed": "der Pfad wurde von einem neuen Pfad entfernt, der dann verworfen wurde",
+      "survived": "der Pfad blieb nach der Suche der Relation in der Liste",
+      "skipped": "add_path_precheck() hat die Variante verworfen, bevor ein Pfad gebaut wurde",
+      "excluded": "die Variante wurde ausgeschlossen, bevor ein Pfad gebaut wurde"
+    },
+    "skipReason": {
+      "dominated_early": "sicher teurer als die schon behaltenen Pfade (Untergrenze)",
+      "disabled": "Methode durch eine enable_*-Einstellung abgeschaltet",
+      "param_mismatch": "Parametrisierung passt nicht"
+    },
+    "keptReason": {
+      "startup": "günstiger beim Startup",
+      "order_": "seine Sortierung könnte nützlich sein"
+    },
+    "ratioHint": "×N: wie viel teurer der Pfad als der gewählte dieser Relation ist ({path}); nicht bei parametrisierten Pfaden, deren Kosten pro Durchlauf gelten.",
+    "inputOf": "Eingabe von",
+    "outer": "äußerer",
+    "inner": "innerer"
   }
 }
