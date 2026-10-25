@@ -2230,6 +2230,11 @@ type PlanLifecycleFinalStatus string
 
 // PlanLifecycleIndexChain defines model for PlanLifecycleIndexChain.
 type PlanLifecycleIndexChain struct {
+	// BestAtFinalLevel best_path_id is in the relation of the final path, so their costs compare.
+	BestAtFinalLevel *bool `json:"best_at_final_level,omitempty"`
+
+	// BestPathId The cheapest path over the index at the highest level such paths reached. Absent when the index is in the plan.
+	BestPathId   *int                           `json:"best_path_id,omitempty"`
 	Hypothetical bool                           `json:"hypothetical"`
 	Index        string                         `json:"index"`
 	Leaves       []PlanLifecycleChainNode       `json:"leaves"`

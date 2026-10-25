@@ -9370,6 +9370,14 @@ components:
             $ref: '#/components/schemas/PlanLifecycleChainNode'
         truncated:
           type: boolean
+        best_path_id:
+          type: integer
+          description: >-
+            The cheapest path over the index at the highest level such paths
+            reached. Absent when the index is in the plan.
+        best_at_final_level:
+          type: boolean
+          description: best_path_id is in the relation of the final path, so their costs compare.
     PlanLifecycleChainNode:
       type: object
       required:

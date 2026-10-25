@@ -1,12 +1,15 @@
 import type {
   PlanLifecycleAnalysis,
+  PlanLifecycleIndexChain,
   PlanLifecycleCause,
   PlanLifecyclePath,
   PlanNode,
 } from '@/api/models'
 import { pathKey } from '@/components/explain/planText'
+import { fmtCompactFloat } from '@/utils/format'
 
 type TFunc = (key: string, params?: Record<string, unknown>) => string
+type TeFunc = (key: string) => boolean
 
 // pathprobe prints planner node tags (SeqScan); the tree shows EXPLAIN's names.
 const TYPE_LABELS: Record<string, string> = {
@@ -44,6 +47,26 @@ export function pathTypeLabel(pathtype: string): string {
   return TYPE_LABELS[pathtype] ?? pathtype
 }
 
+// Small costs keep two decimals: startup costs such as 0.71 vs 0.42 decide add_path().
+export function fmtCost(v: number | null | undefined): string {
+  if (v == null) return '—'
+  return Math.abs(v) >= 1000 ? fmtCompactFloat(v) : v.toFixed(2)
+}
+
+export function fmtCostRange(startup: number | null | undefined, total: number | null | undefined): string {
+  return startup != null ? `${fmtCost(startup)}..${fmtCost(total)}` : fmtCost(total)
+}
+
+export function fmtRatio(r: number): string {
+  return r < 10 ? `×${r.toFixed(1)}` : `×${fmtCompactFloat(r)}`
+}
+
+// A term pathprobe writes as is (an event kind, a skip reason) shown in the UI language when known.
+export function termText(group: string, value: string, t: TFunc, te: TeFunc): string {
+  const key = `planLifecycle.${group}.${value.replace(/\W/g, '_')}`
+  return te(key) ? t(key) : value
+}
+
 export function pathsById(a: PlanLifecycleAnalysis): Map<number, PlanLifecyclePath> {
   return new Map(a.paths.map(p => [p.path_id, p]))
 }
@@ -64,6 +87,59 @@ export function relText(rel: string, aliases: Map<number, string>, t: TFunc): st
 export function paramText(p: PlanLifecyclePath, aliases: Map<number, string>): string {
   if (!p.required_outer?.length) return ''
   return p.required_outer.map(i => (p.in_subquery ? undefined : aliases.get(i)) ?? String(i)).join(', ')
+}
+
+function baseAlias(p: PlanLifecyclePath, aliases: Map<number, string>): string | undefined {
+  if (p.rel === '?' || p.rel.includes(',') || p.in_subquery) return undefined
+  return aliases.get(Number(p.rel.replace(/[{}]/g, '')))
+}
+
+// "Index Only Scan c (pp_customers_pkey)", "Nested Loop c ⋈ o"; join rels only with withRel.
+export function pathName(
+  p: PlanLifecyclePath,
+  aliases: Map<number, string>,
+  t: TFunc,
+  withRel = false,
+): string {
+  const parts = [pathTypeLabel(p.pathtype)]
+  const base = baseAlias(p, aliases)
+  if (base) parts.push(base)
+  else if (withRel && !p.in_subquery) parts.push(relText(p.rel, aliases, t))
+  if (p.index_name) parts.push(`(${p.index_name})`)
+  return parts.join(' ')
+}
+
+export function finalText(a: PlanLifecycleAnalysis, aliases: Map<number, string>, t: TFunc): string {
+  const f = a.final.path_id != null ? pathsById(a).get(a.final.path_id) : undefined
+  if (!f) return ''
+  return t('planLifecycle.summary.final', { path: `${pathName(f, aliases, t, true)} #${f.path_id}`, cost: fmtCost(f.cost_total) })
+}
+
+// One line on why the index is or is not in the plan, from the cheapest path built over it.
+export function indexVerdict(
+  ix: PlanLifecycleIndexChain,
+  a: PlanLifecycleAnalysis,
+  aliases: Map<number, string>,
+  t: TFunc,
+): string {
+  if (ix.outcome === 'in_plan') return t('planLifecycle.summary.inPlan')
+  const byId = pathsById(a)
+  const best = ix.best_path_id != null ? byId.get(ix.best_path_id) : undefined
+  if (!best) return t(`planLifecycle.outcome.${ix.outcome}`)
+  const name = `${pathName(best, aliases, t, true)} #${best.path_id}`
+  const f = a.final.path_id != null ? byId.get(a.final.path_id) : undefined
+  if (ix.best_at_final_level && f?.cost_total && best.cost_total != null) {
+    return t('planLifecycle.summary.lostAtTop', {
+      path: name,
+      cost: fmtCost(best.cost_total),
+      ratio: fmtRatio(best.cost_total / f.cost_total),
+    })
+  }
+  return t('planLifecycle.summary.stoppedAt', {
+    rel: relText(best.rel, aliases, t),
+    path: name,
+    cost: fmtCost(best.cost_total),
+  })
 }
 
 export function childIds(p: PlanLifecyclePath): number[] {
@@ -103,8 +179,7 @@ export function finalTree(a: PlanLifecycleAnalysis): PathTree {
 
     // an index path under a BitmapHeapScan, BitmapAnd or BitmapOr is a Bitmap Index Scan in EXPLAIN
     const isBitmapQual = p.pathtype === 'IndexScan' && parent != null && BITMAP_PARENTS.has(parent.pathtype)
-    const single = p.rel !== '?' && !p.rel.includes(',') && !p.in_subquery
-    const base = single ? aliases.get(Number(p.rel.replace(/[{}]/g, ''))) : undefined
+    const base = baseAlias(p, aliases)
 
     return {
       type: isBitmapQual ? 'Bitmap Index Scan' : pathTypeLabel(p.pathtype),
@@ -168,16 +243,12 @@ export function fateColor(fate: string): string {
   }
 }
 
-function num(v: number | undefined): string {
-  return v == null ? '—' : v.toFixed(2)
-}
-
 export function causeText(c: PlanLifecycleCause | undefined, t: TFunc): string {
   if (!c) return ''
   return t(`planLifecycle.cause.${c.code}`, {
-    gap: num(c.gap == null ? undefined : Math.abs(c.gap)),
-    startup: num(c.startup),
-    winnerStartup: num(c.winner_startup),
+    gap: fmtCost(c.gap == null ? undefined : Math.abs(c.gap)),
+    startup: fmtCost(c.startup),
+    winnerStartup: fmtCost(c.winner_startup),
   })
 }
 

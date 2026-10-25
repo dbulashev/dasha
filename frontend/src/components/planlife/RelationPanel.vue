@@ -7,14 +7,19 @@ import {
   causeText,
   childIds,
   fateColor,
+  fmtCost,
+  fmtCostRange,
+  fmtRatio,
   matched,
   paramText,
+  pathName,
   planNodeAt,
   pathTypeLabel,
   pathsById,
   relAliases,
   relText,
   sortPaths,
+  termText,
 } from './planlife'
 
 const props = defineProps<{
@@ -25,7 +30,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{ select: [pathId: number] }>()
 
-const { t } = useI18n()
+const { t, te } = useI18n()
 
 const byId = computed(() => pathsById(props.analysis))
 const planRoot = computed(() => (matched(props.analysis) ? props.analysis.plan?.root : undefined))
@@ -60,7 +65,20 @@ function childrenText(p: PlanLifecyclePath): string {
 function childText(id: number | undefined): string {
   if (id == null) return ''
   const c = byId.value.get(id)
-  return c ? `${pathTypeLabel(c.pathtype)} #${id}` : `#${id}`
+  return c ? `${pathName(c, aliases.value, t)} #${id}` : `#${id}`
+}
+
+// the chosen path of the relation, else its cheapest survivor; parameterized costs are per loop and do not compare
+const reference = computed(() => {
+  const own = paths.value.filter(p => p.cost_total != null && !p.required_outer?.length)
+  return own.find(p => p.fate === 'chosen') ?? own.find(p => p.fate === 'survived')
+})
+
+function ratioText(p: PlanLifecyclePath): string {
+  const ref = reference.value
+  if (!ref || ref.path_id === p.path_id || p.cost_total == null || p.required_outer?.length) return ''
+  if (!ref.cost_total) return ''
+  return t('planLifecycle.ratioTo', { ratio: fmtRatio(p.cost_total / ref.cost_total), path: `#${ref.path_id}` })
 }
 </script>
 
@@ -119,10 +137,12 @@ function childText(id: number | undefined): string {
             <div v-if="p.label" class="text-caption text-mono">{{ p.label }}</div>
           </td>
           <td>
-            <v-chip :color="fateColor(p.fate)" size="x-small" variant="flat" label>
+            <v-chip :color="fateColor(p.fate)" :title="t(`planLifecycle.fateHint.${p.fate}`)" size="x-small" variant="flat" label>
               {{ t(`planLifecycle.fate.${p.fate}`) }}
             </v-chip>
-            <div v-if="p.kept_reason" class="text-caption">{{ t('planLifecycle.kept', { why: p.kept_reason }) }}</div>
+            <div v-if="p.kept_reason" class="text-caption">
+              {{ t('planLifecycle.kept', { why: termText('keptReason', p.kept_reason, t, te) }) }}
+            </div>
             <div v-if="p.fate_reason" class="text-caption text-medium-emphasis">
               {{ t(`planLifecycle.fateReason.${p.fate_reason}`) }}
             </div>
@@ -130,9 +150,7 @@ function childText(id: number | undefined): string {
           <td>
             <template v-if="winner(p)">
               {{ t(p.fate === 'removed' ? 'planLifecycle.removedBy' : 'planLifecycle.lostTo') }}
-              <a href="#" @click.prevent.stop="emit('select', p.by!)">
-                {{ pathTypeLabel(winner(p)!.pathtype) }} #{{ p.by }}
-              </a>
+              <a href="#" @click.prevent.stop="emit('select', p.by!)">{{ childText(p.by) }}</a>
             </template>
             <div class="text-caption">{{ causeText(p.cause, t) }}</div>
           </td>
@@ -151,7 +169,8 @@ function childText(id: number | undefined): string {
           </td>
           <td class="text-end text-no-wrap">
             <template v-if="p.cost_total != null">
-              {{ p.cost_startup != null ? p.cost_startup.toFixed(2) : '—' }}..{{ p.cost_total.toFixed(2) }}
+              <span :title="`${p.cost_startup ?? '—'}..${p.cost_total}`">{{ fmtCostRange(p.cost_startup, p.cost_total) }}</span>
+              <div v-if="ratioText(p)" class="text-caption text-medium-emphasis">{{ ratioText(p) }}</div>
             </template>
             <span v-else class="text-medium-emphasis">{{ t('planLifecycle.noOwnEvents') }}</span>
           </td>
@@ -164,8 +183,8 @@ function childText(id: number | undefined): string {
       <div class="text-subtitle-2">{{ t('planLifecycle.precheck.title') }}</div>
       <div class="text-caption text-medium-emphasis mb-1">{{ t('planLifecycle.precheck.hint') }}</div>
       <div v-for="g in relation.precheck" :key="g.method + g.reason" class="text-body-2">
-        {{ pathTypeLabel(g.method) }} × {{ g.count }} — {{ g.reason }},
-        {{ t('planLifecycle.precheck.cost') }} {{ g.min_cost.toFixed(2) }}…{{ g.max_cost.toFixed(2) }}
+        {{ pathTypeLabel(g.method) }} × {{ g.count }} — {{ termText('skipReason', g.reason, t, te) }},
+        {{ t('planLifecycle.precheck.cost') }} {{ fmtCost(g.min_cost) }}…{{ fmtCost(g.max_cost) }}
       </div>
     </div>
 

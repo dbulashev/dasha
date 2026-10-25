@@ -156,6 +156,17 @@ func TestDemoJoin_IndexChain(t *testing.T) {
 		t.Errorf("path 14: inner %d fate %s by %d/#%d cause %+v", mj.InnerID, mj.Fate, mj.By, mj.BySeq, mj.Cause)
 	}
 
+	// of the join paths over the index, nested loop 11 is the cheapest (86234.27)
+	if ch.Best != 11 || !ch.BestAtFinalLevel {
+		t.Errorf("best %d at final level %t, want 11 true", ch.Best, ch.BestAtFinalLevel)
+	}
+
+	for _, other := range a.Indexes {
+		if other.Index == "pp_customers_pkey" && other.Best != 0 {
+			t.Errorf("pp_customers_pkey is in the plan, best %d", other.Best)
+		}
+	}
+
 	if !hasCaveat(a, CaveatIndexNotExamined, nil) {
 		t.Error("no index_not_examined caveat next to the index list")
 	}

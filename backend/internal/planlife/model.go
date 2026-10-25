@@ -122,6 +122,10 @@ type IndexChain struct {
 	Outcome      IndexOutcome
 	Leaves       []ChainNode
 	Truncated    bool // stopped at maxChainNodes
+	// Best: the cheapest path over the index at the highest level such paths reached; 0 when in the plan.
+	Best int
+	// BestAtFinalLevel: Best is in the relation of the final path, so their costs compare.
+	BestAtFinalLevel bool
 }
 
 type CaveatScope string

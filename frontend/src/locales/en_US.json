@@ -2235,7 +2235,7 @@
     },
     "cause": {
       "costlier_total": "costlier in total by {gap}",
-      "lost_on_startup": "not costlier in total, lost on startup: {startup} vs {winnerStartup}",
+      "lost_on_startup": "total costs equal within 1% (add_path fuzz), startup decided: {startup} vs {winnerStartup}",
       "lost_not_on_cost": "lost not on cost: on sort order, parameterization, rows or parallel safety (the trace does not tell)",
       "unknown": "the trace does not name the winner or its cost"
     },
@@ -2308,6 +2308,54 @@
         "append_child": "Append input not matched"
       },
       "finalByPlan": "The final path was picked by the plan from several trace candidates."
+    },
+    "summary": {
+      "title": "Summary",
+      "final": "Chosen: {path}, cost {cost}.",
+      "inPlan": "in the plan",
+      "lostAtTop": "the best plan with it is {path}, cost {cost}: {ratio} of the chosen one.",
+      "stoppedAt": "paths over it reached only {rel}; the best is {path}, cost {cost}."
+    },
+    "pastedTrace": "pasted trace",
+    "replace": "Replace",
+    "showQuery": "Show the whole query",
+    "chainHint": "First the path over the index, then, marked ↑, the paths built on top of it: from the scan up to the joins.",
+    "ratioTo": "{ratio} vs {path}",
+    "fateHint": {
+      "chosen": "part of the final plan",
+      "survived": "lasted to the end of its relation's search but is not in the final plan",
+      "displaced": "was accepted into the relation's path list, then pushed out by a better path",
+      "removed": "was accepted, then removed by a new path that was itself rejected",
+      "rejected": "rejected at once: the list already held a path at least as good on every criterion",
+      "child_only": "no events of its own, only an input of other paths",
+      "unknown": "the trace does not tell its fate"
+    },
+    "event": {
+      "accepted": "accepted",
+      "rejected": "rejected",
+      "displaced": "displaced",
+      "removed": "removed",
+      "survived": "survived",
+      "skipped": "skipped (precheck)",
+      "excluded": "excluded"
+    },
+    "eventHint": {
+      "accepted": "add_path() accepted the path into the relation's list",
+      "rejected": "add_path() rejected the path: the list already holds one at least as good",
+      "displaced": "the path was pushed out of the list by a new, better one",
+      "removed": "the path was removed from the list by a new path that was then rejected",
+      "survived": "the path stayed in the list after the relation's search",
+      "skipped": "add_path_precheck() dropped the option before a path was built",
+      "excluded": "the option was excluded before a path was built"
+    },
+    "skipReason": {
+      "dominated_early": "certainly costlier than the paths already kept (lower bound)",
+      "disabled": "method turned off by an enable_* setting",
+      "param_mismatch": "parameterization does not fit"
+    },
+    "keptReason": {
+      "startup": "cheaper on startup",
+      "order_": "its sort order may be useful"
     }
   }
 }

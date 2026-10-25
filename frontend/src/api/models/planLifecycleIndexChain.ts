@@ -14,4 +14,8 @@ export interface PlanLifecycleIndexChain {
   outcome: PlanLifecycleIndexChainOutcome
   leaves: PlanLifecycleChainNode[]
   truncated: boolean
+  /** The cheapest path over the index at the highest level such paths reached. Absent when the index is in the plan. */
+  best_path_id?: number
+  /** best_path_id is in the relation of the final path, so their costs compare. */
+  best_at_final_level?: boolean
 }

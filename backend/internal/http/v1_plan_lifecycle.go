@@ -284,6 +284,11 @@ func mapPlanLifecycleIndex(c planlife.IndexChain) serverhttp.PlanLifecycleIndexC
 		out.Oid = shortcut.Ptr(int64(c.OID))
 	}
 
+	if c.Best != 0 {
+		out.BestPathId = shortcut.Ptr(c.Best)
+		out.BestAtFinalLevel = shortcut.Ptr(c.BestAtFinalLevel)
+	}
+
 	return out
 }
 

@@ -1,6 +1,7 @@
 package planlife
 
 import (
+	"math"
 	"sort"
 	"strings"
 )
@@ -39,6 +40,10 @@ func (s *state) indexChains() []IndexChain {
 
 	for _, ch := range byName {
 		ch.Outcome = s.indexOutcome(ch)
+		if ch.Outcome != IndexInPlan {
+			s.bestOverIndex(ch)
+		}
+
 		out = append(out, *ch)
 	}
 
@@ -97,6 +102,58 @@ func (s *state) chainUp(id int, budget *int, onPath map[int]bool) ChainNode {
 	}
 
 	return node
+}
+
+// bestOverIndex: the upper relation ranks above every join level.
+func (s *state) bestOverIndex(ch *IndexChain) {
+	level := func(pv *PathView) int {
+		if pv.Rel.IsUpper() {
+			return math.MaxInt
+		}
+
+		return len(pv.Rel.Members())
+	}
+
+	seen := map[int]bool{}
+	queue := make([]int, 0, len(ch.Leaves))
+
+	for _, leaf := range ch.Leaves {
+		queue = append(queue, leaf.PathID)
+	}
+
+	var best *PathView
+
+	for len(queue) > 0 {
+		id := queue[0]
+		queue = queue[1:]
+
+		pv, ok := s.paths[id]
+		if !ok || seen[id] {
+			continue
+		}
+
+		seen[id] = true
+		queue = append(queue, pv.Parents...)
+
+		if pv.CostTotal == nil {
+			continue
+		}
+
+		if best == nil || level(pv) > level(best) ||
+			(level(pv) == level(best) && *pv.CostTotal < *best.CostTotal) {
+			best = pv
+		}
+	}
+
+	if best == nil {
+		return
+	}
+
+	ch.Best = best.ID
+
+	if final, ok := s.paths[s.a.Final.PathID]; ok {
+		ch.BestAtFinalLevel = best.Rel == final.Rel
+	}
 }
 
 func (s *state) indexOutcome(ch *IndexChain) IndexOutcome {

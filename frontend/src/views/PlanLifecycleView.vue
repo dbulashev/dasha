@@ -8,7 +8,15 @@ import { pathKey } from '@/components/explain/planText'
 import IndexChains from '@/components/planlife/IndexChains.vue'
 import RelationPanel from '@/components/planlife/RelationPanel.vue'
 import TraceTimeline from '@/components/planlife/TraceTimeline.vue'
-import { matched, pathTypeLabel, pathsById, planTree } from '@/components/planlife/planlife'
+import {
+  finalText,
+  indexVerdict,
+  matched,
+  pathTypeLabel,
+  pathsById,
+  planTree,
+  relAliases,
+} from '@/components/planlife/planlife'
 
 const { t } = useI18n()
 
@@ -19,6 +27,10 @@ const planName = ref('')
 const loading = ref(false)
 const error = ref('')
 const analysis = ref<PlanLifecycleAnalysis | null>(null)
+
+// the input card folds into one line once there is a result to read
+const editing = ref(true)
+const queryOpen = ref(false)
 
 const tab = ref('plan')
 const selectedPath = ref<number | null>(null)
@@ -87,6 +99,8 @@ async function analyze() {
     switch (res.status) {
       case 200:
         analysis.value = res.data
+        editing.value = false
+        queryOpen.value = false
         selectedPath.value = res.data.final.path_id ?? null
         timelinePath.value = null
         tab.value = 'plan'
@@ -139,6 +153,10 @@ function mismatchText(m: PlanLifecycleMatch): string {
   })
 }
 const byId = computed(() => (analysis.value ? pathsById(analysis.value) : new Map()))
+const aliases = computed(() => (analysis.value ? relAliases(analysis.value) : new Map<number, string>()))
+const summaryFinal = computed(() => (analysis.value ? finalText(analysis.value, aliases.value, t) : ''))
+
+const INDEX_COLOR: Record<string, string> = { in_plan: 'success', lost: 'warning', only_rejected: 'error' }
 
 const selectedRel = computed(() => {
   const p = selectedPath.value != null ? byId.value.get(selectedPath.value) : undefined
@@ -182,7 +200,16 @@ const traceCaveats = computed(
     <div class="text-h5 mb-1">{{ t('planLifecycle.title') }}</div>
     <div class="text-body-2 text-medium-emphasis mb-4">{{ t('planLifecycle.subtitle') }}</div>
 
-    <v-card variant="outlined" class="mb-4" @dragover.prevent @drop.prevent="onDrop">
+    <v-card v-if="analysis && !editing" variant="outlined" class="mb-4">
+      <v-card-text class="d-flex align-center flex-wrap ga-3 py-2">
+        <v-icon icon="mdi-file-check-outline" size="small" />
+        <span class="text-body-2">{{ [traceName || t('planLifecycle.pastedTrace'), planName].filter(Boolean).join(' + ') }}</span>
+        <v-spacer />
+        <v-btn variant="text" size="small" @click="editing = true">{{ t('planLifecycle.replace') }}</v-btn>
+      </v-card-text>
+    </v-card>
+
+    <v-card v-else variant="outlined" class="mb-4" @dragover.prevent @drop.prevent="onDrop">
       <v-card-text>
         <div class="d-flex flex-wrap align-center ga-3">
           <v-file-input
@@ -281,7 +308,27 @@ const traceCaveats = computed(
         <div v-if="analysis.final.status === 'by_plan'" class="text-caption">{{ t('planLifecycle.match.finalByPlan') }}</div>
       </v-alert>
 
-      <div v-if="analysis.query" class="text-caption text-mono text-medium-emphasis my-3 planlife-query">
+      <v-card variant="tonal" class="mb-3">
+        <v-card-text>
+          <div class="text-subtitle-2 mb-1">{{ t('planLifecycle.summary.title') }}</div>
+          <div v-if="summaryFinal" class="text-body-2 mb-1">{{ summaryFinal }}</div>
+          <div v-for="ix in analysis.indexes" :key="ix.index" class="text-body-2 d-flex align-center flex-wrap ga-2">
+            <a href="#" class="text-mono" @click.prevent="tab = 'indexes'">{{ ix.index }}</a>
+            <v-chip :color="INDEX_COLOR[ix.outcome]" size="x-small" variant="flat" label>
+              {{ t(`planLifecycle.outcome.${ix.outcome}`) }}
+            </v-chip>
+            <span v-if="ix.outcome !== 'in_plan'">{{ indexVerdict(ix, analysis, aliases, t) }}</span>
+          </div>
+        </v-card-text>
+      </v-card>
+
+      <div
+        v-if="analysis.query"
+        class="text-caption text-mono text-medium-emphasis my-3 planlife-query"
+        :class="{ 'planlife-query-short': !queryOpen }"
+        :title="queryOpen ? undefined : t('planLifecycle.showQuery')"
+        @click="queryOpen = !queryOpen"
+      >
         {{ analysis.query }}
       </div>
 
@@ -342,5 +389,12 @@ const traceCaveats = computed(
 <style scoped>
 .planlife-query {
   white-space: pre-wrap;
+  cursor: pointer;
+}
+
+.planlife-query-short {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>

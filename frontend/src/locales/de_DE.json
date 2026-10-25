@@ -2197,7 +2197,7 @@
     },
     "cause": {
       "costlier_total": "insgesamt teurer um {gap}",
-      "lost_on_startup": "insgesamt nicht teurer, verlor beim Startup: {startup} gegen {winnerStartup}",
+      "lost_on_startup": "Gesamtkosten gleich innerhalb von 1% (add_path-Fuzz), Startup entschied: {startup} gegen {winnerStartup}",
       "lost_not_on_cost": "nicht über die Kosten verloren: Sortierung, Parametrisierung, Zeilen oder parallel safety (der Trace unterscheidet es nicht)",
       "unknown": "der Trace nennt den Gewinner oder dessen Kosten nicht"
     },
@@ -2270,6 +2270,54 @@
         "append_child": "Append-Eingabe nicht zugeordnet"
       },
       "finalByPlan": "Der endgültige Pfad wurde anhand des Plans aus mehreren Trace-Kandidaten gewählt."
+    },
+    "summary": {
+      "title": "Ergebnis",
+      "final": "Gewählt: {path}, Kosten {cost}.",
+      "inPlan": "im Plan",
+      "lostAtTop": "der beste Plan damit ist {path}, Kosten {cost}: {ratio} des gewählten.",
+      "stoppedAt": "Pfade darüber kamen nur bis {rel}; der beste ist {path}, Kosten {cost}."
+    },
+    "pastedTrace": "eingefügter Trace",
+    "replace": "Ersetzen",
+    "showQuery": "Ganze Abfrage zeigen",
+    "chainHint": "Zuerst der Pfad über den Index, darunter mit ↑ die Pfade, die darauf aufbauen: vom Scan bis zu den Joins.",
+    "ratioTo": "{ratio} gegenüber {path}",
+    "fateHint": {
+      "chosen": "Teil des endgültigen Plans",
+      "survived": "hat die Suche seiner Relation überstanden, ist aber nicht im endgültigen Plan",
+      "displaced": "wurde in die Pfadliste der Relation aufgenommen und dann von einem besseren Pfad verdrängt",
+      "removed": "wurde aufgenommen und dann von einem neuen Pfad entfernt, der selbst verworfen wurde",
+      "rejected": "sofort verworfen: die Liste enthielt schon einen in jeder Hinsicht mindestens gleich guten Pfad",
+      "child_only": "keine eigenen Ereignisse, nur Eingabe anderer Pfade",
+      "unknown": "der Trace verrät sein Schicksal nicht"
+    },
+    "event": {
+      "accepted": "aufgenommen",
+      "rejected": "verworfen",
+      "displaced": "verdrängt",
+      "removed": "entfernt",
+      "survived": "überlebt",
+      "skipped": "übersprungen (precheck)",
+      "excluded": "ausgeschlossen"
+    },
+    "eventHint": {
+      "accepted": "add_path() hat den Pfad in die Liste der Relation aufgenommen",
+      "rejected": "add_path() hat den Pfad verworfen: die Liste hat schon einen mindestens gleich guten",
+      "displaced": "der Pfad wurde von einem neuen, besseren aus der Liste verdrängt",
+      "removed": "der Pfad wurde von einem neuen Pfad entfernt, der dann verworfen wurde",
+      "survived": "der Pfad blieb nach der Suche der Relation in der Liste",
+      "skipped": "add_path_precheck() hat die Variante verworfen, bevor ein Pfad gebaut wurde",
+      "excluded": "die Variante wurde ausgeschlossen, bevor ein Pfad gebaut wurde"
+    },
+    "skipReason": {
+      "dominated_early": "sicher teurer als die schon behaltenen Pfade (Untergrenze)",
+      "disabled": "Methode durch eine enable_*-Einstellung abgeschaltet",
+      "param_mismatch": "Parametrisierung passt nicht"
+    },
+    "keptReason": {
+      "startup": "günstiger beim Startup",
+      "order_": "seine Sortierung könnte nützlich sein"
     }
   }
 }

@@ -15,16 +15,21 @@ ANALYZE ?= 1
 
 # $(call staging_probe,<query file>,<output name>): plan + text report to
 # <name>.txt, JSON report to <name>.json, EXPLAIN (FORMAT JSON) to
-# <name>.plan.json, with ANALYZE unless ANALYZE=0.  Comment lines and a
-# trailing semicolon on the last line of the query file are dropped: pathprobe
-# takes one statement as text, and the trace carries it.
+# <name>.plan.json, with ANALYZE unless ANALYZE=0.
+#
+# $(call staging_query,<query file>): the file without the comment lines above
+# the statement and without a trailing semicolon on its last line: pathprobe
+# takes one statement as text, and the trace carries it.  Lines inside the
+# statement stay as they are: a "--" line there may be in a dollar quote.
+staging_query = awk 'body || !/^[[:space:]]*(--|$$)/ { body = 1; print }' $(1) | sed -e '$$s/;[[:space:]]*$$//'
+
 define staging_probe
 	@mkdir -p $(STAGING_TRACES)
-	$(STAGING_PSQL) -v q="$$(sed -e '/^[[:space:]]*--/d' -e '$$s/;[[:space:]]*$$//' $(1))" \
+	$(STAGING_PSQL) -v q="$$($(call staging_query,$(1)))" \
 		-f /path-probe/probe.sql >$(STAGING_TRACES)/$(2).txt 2>&1
-	$(STAGING_PSQL) -v q="$$(sed -e '/^[[:space:]]*--/d' -e '$$s/;[[:space:]]*$$//' $(1))" -v json=1 \
+	$(STAGING_PSQL) -v q="$$($(call staging_query,$(1)))" -v json=1 \
 		-f /path-probe/probe.sql >$(STAGING_TRACES)/$(2).json
-	$(STAGING_PSQL) -v q="$$(sed -e '/^[[:space:]]*--/d' -e '$$s/;[[:space:]]*$$//' $(1))" -v plan=1 \
+	$(STAGING_PSQL) -v q="$$($(call staging_query,$(1)))" -v plan=1 \
 		$(if $(filter 1,$(ANALYZE)),-v analyze=1) \
 		-f /path-probe/probe.sql >$(STAGING_TRACES)/$(2).plan.json
 	@echo "  $(STAGING_TRACES)/$(2).txt, $(STAGING_TRACES)/$(2).json, $(STAGING_TRACES)/$(2).plan.json"
