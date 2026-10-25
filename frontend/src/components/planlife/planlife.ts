@@ -276,6 +276,10 @@ const FATE_ORDER: Record<string, number> = {
   unknown: 6,
 }
 
+export function sortedCounts(counts: Record<string, number>): [string, number][] {
+  return Object.entries(counts).sort(([x], [y]) => (FATE_ORDER[x] ?? 9) - (FATE_ORDER[y] ?? 9))
+}
+
 export function sortPaths(paths: PlanLifecyclePath[]): PlanLifecyclePath[] {
   return [...paths].sort(
     (x, y) =>

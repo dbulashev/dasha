@@ -19,6 +19,7 @@ import {
   relAliases,
   relText,
   sortPaths,
+  sortedCounts,
   termText,
 } from './planlife'
 
@@ -100,9 +101,9 @@ watch(
       <span class="text-subtitle-1 font-weight-medium">{{ relText(rel, aliases, t) }}</span>
       <span class="text-caption text-medium-emphasis text-mono">{{ rel }}</span>
       <v-chip
-        v-for="(n, fate) in relation.counts"
+        v-for="[fate, n] in sortedCounts(relation.counts)"
         :key="fate"
-        :color="fateColor(String(fate))"
+        :color="fateColor(fate)"
         size="x-small"
         variant="tonal"
         label

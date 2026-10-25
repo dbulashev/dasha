@@ -352,7 +352,8 @@ const traceCaveats = computed(
         <v-tab value="timeline">{{ t('planLifecycle.tab.timeline') }} ({{ analysis.timeline.length }})</v-tab>
       </v-tabs>
 
-      <v-window v-model="tab">
+      <!-- no transition: a path picked on another tab is scrolled to right after the switch -->
+      <v-window v-model="tab" :transition="false" :reverse-transition="false">
         <v-window-item value="plan">
           <v-card v-if="tree?.root" variant="outlined" class="mb-4">
             <v-card-title class="text-subtitle-1">
