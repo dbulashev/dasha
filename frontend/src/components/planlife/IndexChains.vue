@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { PlanLifecycleAnalysis } from '@/api/models'
 import ChainNodeView from './ChainNodeView.vue'
-import { indexVerdict, pathsById, relAliases } from './planlife'
+import { pathsById, relAliases } from './planlife'
 
 const props = defineProps<{ analysis: PlanLifecycleAnalysis }>()
 const emit = defineEmits<{ select: [pathId: number] }>()
@@ -26,13 +26,9 @@ const OUTCOME_COLOR: Record<string, string> = { in_plan: 'success', lost: 'warni
 
 <template>
   <div>
-    <v-alert type="info" variant="tonal" density="compact" class="mb-3">
-      {{ t('planLifecycle.caveat.index_not_examined_unobservable') }}
-    </v-alert>
+    <div class="text-caption text-medium-emphasis mb-2">{{ t('planLifecycle.caveat.index_not_examined_unobservable') }}</div>
 
     <div v-if="!analysis.indexes.length" class="text-medium-emphasis">{{ t('planLifecycle.noIndexes') }}</div>
-
-    <div v-if="analysis.indexes.length" class="text-caption text-medium-emphasis mb-2">{{ t('planLifecycle.chainHint') }}</div>
 
     <v-expansion-panels v-model="open" multiple variant="accordion">
       <v-expansion-panel v-for="ix in analysis.indexes" :key="ix.index" :value="ix.index">
@@ -44,7 +40,6 @@ const OUTCOME_COLOR: Record<string, string> = { in_plan: 'success', lost: 'warni
           </v-chip>
         </v-expansion-panel-title>
         <v-expansion-panel-text>
-          <div class="text-body-2 mb-2">{{ indexVerdict(ix, analysis, aliases, t) }}</div>
           <v-alert v-if="ix.truncated" type="warning" variant="tonal" density="compact" class="mb-2">
             {{ t('planLifecycle.chainTruncated') }}
           </v-alert>

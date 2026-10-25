@@ -65,14 +65,21 @@ describe('indexVerdict', () => {
 
   it('compares the best path with the chosen one at the same level', () => {
     const v = indexVerdict({ ...ix, best_path_id: 11, best_at_final_level: true } as PlanLifecycleIndexChain, a, aliases, t)
-    expect(v).toContain('summary.lostAtTop')
-    expect(v).toContain('"ratio":"×2.7"')
-    expect(v).toContain('Nested Loop c ⋈ o #11')
+    expect(v).toEqual({
+      key: 'planLifecycle.summary.lostAtTop',
+      pathId: 11,
+      pathText: 'Nested Loop c ⋈ o #11',
+      params: { cost: '86.2k', ratio: '×2.7' },
+    })
   })
 
   it('names the level the paths stopped at', () => {
     const v = indexVerdict({ ...ix, best_path_id: 8, best_at_final_level: false } as PlanLifecycleIndexChain, a, aliases, t)
-    expect(v).toContain('summary.stoppedAt')
-    expect(v).toContain('"rel":"o"')
+    expect(v?.key).toBe('planLifecycle.summary.stoppedAt')
+    expect(v?.params.rel).toBe('o')
+  })
+
+  it('says nothing for an index in the plan', () => {
+    expect(indexVerdict({ ...ix, outcome: 'in_plan' } as PlanLifecycleIndexChain, a, aliases, t)).toBeNull()
   })
 })

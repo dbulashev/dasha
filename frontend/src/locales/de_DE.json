@@ -2274,15 +2274,13 @@
     "summary": {
       "title": "Ergebnis",
       "final": "Gewählt: {path}, Kosten {cost}.",
-      "inPlan": "im Plan",
+      "inPlan": "Im Plan: {indexes}.",
       "lostAtTop": "der beste Plan damit ist {path}, Kosten {cost}: {ratio} des gewählten.",
       "stoppedAt": "Pfade darüber kamen nur bis {rel}; der beste ist {path}, Kosten {cost}."
     },
     "pastedTrace": "eingefügter Trace",
     "replace": "Ersetzen",
     "showQuery": "Ganze Abfrage zeigen",
-    "chainHint": "Zuerst der Pfad über den Index, darunter mit ↑ die Pfade, die darauf aufbauen: vom Scan bis zu den Joins.",
-    "ratioTo": "{ratio} gegenüber {path}",
     "fateHint": {
       "chosen": "Teil des endgültigen Plans",
       "survived": "hat die Suche seiner Relation überstanden, ist aber nicht im endgültigen Plan",
@@ -2318,6 +2316,7 @@
     "keptReason": {
       "startup": "günstiger beim Startup",
       "order_": "seine Sortierung könnte nützlich sein"
-    }
+    },
+    "ratioHint": "×N: wie viel teurer der Pfad als der gewählte dieser Relation ist ({path}); nicht bei parametrisierten Pfaden, deren Kosten pro Durchlauf gelten."
   }
 }

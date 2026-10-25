@@ -109,37 +109,50 @@ export function pathName(
   return parts.join(' ')
 }
 
-export function finalText(a: PlanLifecycleAnalysis, aliases: Map<number, string>, t: TFunc): string {
-  const f = a.final.path_id != null ? pathsById(a).get(a.final.path_id) : undefined
-  if (!f) return ''
-  return t('planLifecycle.summary.final', { path: `${pathName(f, aliases, t, true)} #${f.path_id}`, cost: fmtCost(f.cost_total) })
+// A summary sentence: a locale key whose {path} placeholder is a link to pathId.
+export interface Verdict {
+  key: string
+  pathId?: number
+  pathText?: string
+  params: Record<string, string>
 }
 
-// One line on why the index is or is not in the plan, from the cheapest path built over it.
+export function finalVerdict(a: PlanLifecycleAnalysis, aliases: Map<number, string>, t: TFunc): Verdict | null {
+  const f = a.final.path_id != null ? pathsById(a).get(a.final.path_id) : undefined
+  if (!f) return null
+  return {
+    key: 'planLifecycle.summary.final',
+    pathId: f.path_id,
+    pathText: `${pathName(f, aliases, t, true)} #${f.path_id}`,
+    params: { cost: fmtCost(f.cost_total) },
+  }
+}
+
+// Why an index is not in the plan, from the cheapest path built over it; null when it is in the plan.
 export function indexVerdict(
   ix: PlanLifecycleIndexChain,
   a: PlanLifecycleAnalysis,
   aliases: Map<number, string>,
   t: TFunc,
-): string {
-  if (ix.outcome === 'in_plan') return t('planLifecycle.summary.inPlan')
+): Verdict | null {
+  if (ix.outcome === 'in_plan') return null
   const byId = pathsById(a)
   const best = ix.best_path_id != null ? byId.get(ix.best_path_id) : undefined
-  if (!best) return t(`planLifecycle.outcome.${ix.outcome}`)
-  const name = `${pathName(best, aliases, t, true)} #${best.path_id}`
+  if (!best) return { key: `planLifecycle.outcome.${ix.outcome}`, params: {} }
+  const link = { pathId: best.path_id, pathText: `${pathName(best, aliases, t, true)} #${best.path_id}` }
   const f = a.final.path_id != null ? byId.get(a.final.path_id) : undefined
   if (ix.best_at_final_level && f?.cost_total && best.cost_total != null) {
-    return t('planLifecycle.summary.lostAtTop', {
-      path: name,
-      cost: fmtCost(best.cost_total),
-      ratio: fmtRatio(best.cost_total / f.cost_total),
-    })
+    return {
+      key: 'planLifecycle.summary.lostAtTop',
+      ...link,
+      params: { cost: fmtCost(best.cost_total), ratio: fmtRatio(best.cost_total / f.cost_total) },
+    }
   }
-  return t('planLifecycle.summary.stoppedAt', {
-    rel: relText(best.rel, aliases, t),
-    path: name,
-    cost: fmtCost(best.cost_total),
-  })
+  return {
+    key: 'planLifecycle.summary.stoppedAt',
+    ...link,
+    params: { rel: relText(best.rel, aliases, t), cost: fmtCost(best.cost_total) },
+  }
 }
 
 export function childIds(p: PlanLifecyclePath): number[] {

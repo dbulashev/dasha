@@ -8,8 +8,9 @@ import { pathKey } from '@/components/explain/planText'
 import IndexChains from '@/components/planlife/IndexChains.vue'
 import RelationPanel from '@/components/planlife/RelationPanel.vue'
 import TraceTimeline from '@/components/planlife/TraceTimeline.vue'
+import VerdictText from '@/components/planlife/VerdictText.vue'
 import {
-  finalText,
+  finalVerdict,
   indexVerdict,
   matched,
   pathTypeLabel,
@@ -154,9 +155,16 @@ function mismatchText(m: PlanLifecycleMatch): string {
 }
 const byId = computed(() => (analysis.value ? pathsById(analysis.value) : new Map()))
 const aliases = computed(() => (analysis.value ? relAliases(analysis.value) : new Map<number, string>()))
-const summaryFinal = computed(() => (analysis.value ? finalText(analysis.value, aliases.value, t) : ''))
-
-const INDEX_COLOR: Record<string, string> = { in_plan: 'success', lost: 'warning', only_rejected: 'error' }
+const summaryFinal = computed(() => (analysis.value ? finalVerdict(analysis.value, aliases.value, t) : null))
+const lostIndexes = computed(() =>
+  (analysis.value?.indexes ?? []).flatMap(ix => {
+    const v = indexVerdict(ix, analysis.value!, aliases.value, t)
+    return v ? [{ index: ix.index, verdict: v }] : []
+  }),
+)
+const inPlanIndexes = computed(() =>
+  (analysis.value?.indexes ?? []).filter(ix => ix.outcome === 'in_plan').map(ix => ix.index),
+)
 
 const selectedRel = computed(() => {
   const p = selectedPath.value != null ? byId.value.get(selectedPath.value) : undefined
@@ -311,13 +319,13 @@ const traceCaveats = computed(
       <v-card variant="tonal" class="mb-3">
         <v-card-text>
           <div class="text-subtitle-2 mb-1">{{ t('planLifecycle.summary.title') }}</div>
-          <div v-if="summaryFinal" class="text-body-2 mb-1">{{ summaryFinal }}</div>
-          <div v-for="ix in analysis.indexes" :key="ix.index" class="text-body-2 d-flex align-center flex-wrap ga-2">
-            <a href="#" class="text-mono" @click.prevent="tab = 'indexes'">{{ ix.index }}</a>
-            <v-chip :color="INDEX_COLOR[ix.outcome]" size="x-small" variant="flat" label>
-              {{ t(`planLifecycle.outcome.${ix.outcome}`) }}
-            </v-chip>
-            <span v-if="ix.outcome !== 'in_plan'">{{ indexVerdict(ix, analysis, aliases, t) }}</span>
+          <div v-if="summaryFinal" class="text-body-2"><VerdictText :verdict="summaryFinal" @select="selectPath" /></div>
+          <div v-for="ix in lostIndexes" :key="ix.index" class="text-body-2">
+            <a href="#" class="text-mono" @click.prevent="tab = 'indexes'">{{ ix.index }}</a>:
+            <VerdictText :verdict="ix.verdict" @select="selectPath" />
+          </div>
+          <div v-if="inPlanIndexes.length" class="text-caption text-medium-emphasis">
+            {{ t('planLifecycle.summary.inPlan', { indexes: inPlanIndexes.join(', ') }) }}
           </div>
         </v-card-text>
       </v-card>

@@ -2312,15 +2312,13 @@
     "summary": {
       "title": "Summary",
       "final": "Chosen: {path}, cost {cost}.",
-      "inPlan": "in the plan",
+      "inPlan": "In the plan: {indexes}.",
       "lostAtTop": "the best plan with it is {path}, cost {cost}: {ratio} of the chosen one.",
       "stoppedAt": "paths over it reached only {rel}; the best is {path}, cost {cost}."
     },
     "pastedTrace": "pasted trace",
     "replace": "Replace",
     "showQuery": "Show the whole query",
-    "chainHint": "First the path over the index, then, marked ↑, the paths built on top of it: from the scan up to the joins.",
-    "ratioTo": "{ratio} vs {path}",
     "fateHint": {
       "chosen": "part of the final plan",
       "survived": "lasted to the end of its relation's search but is not in the final plan",
@@ -2356,6 +2354,7 @@
     "keptReason": {
       "startup": "cheaper on startup",
       "order_": "its sort order may be useful"
-    }
+    },
+    "ratioHint": "×N: how many times the path costs more than the chosen one of this relation ({path}); not shown for parameterized paths, whose cost is per loop."
   }
 }

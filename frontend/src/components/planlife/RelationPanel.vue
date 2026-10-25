@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { PlanLifecycleAnalysis, PlanLifecyclePath, PlanNode } from '@/api/models'
 import { fmtCompactFloat } from '@/utils/format'
@@ -59,7 +59,12 @@ function winner(p: PlanLifecyclePath): PlanLifecyclePath | undefined {
 }
 
 function childrenText(p: PlanLifecyclePath): string {
-  return childIds(p).map(childText).join(', ')
+  return childIds(p).map(inputText).join(', ')
+}
+
+function inputText(id: number | undefined): string {
+  const c = id != null ? byId.value.get(id) : undefined
+  return c ? pathName(c, aliases.value, t) : id != null ? `#${id}` : ''
 }
 
 function childText(id: number | undefined): string {
@@ -74,12 +79,19 @@ const reference = computed(() => {
   return own.find(p => p.fate === 'chosen') ?? own.find(p => p.fate === 'survived')
 })
 
+const LOST = new Set(['displaced', 'removed', 'rejected'])
+
 function ratioText(p: PlanLifecyclePath): string {
   const ref = reference.value
-  if (!ref || ref.path_id === p.path_id || p.cost_total == null || p.required_outer?.length) return ''
-  if (!ref.cost_total) return ''
-  return t('planLifecycle.ratioTo', { ratio: fmtRatio(p.cost_total / ref.cost_total), path: `#${ref.path_id}` })
+  if (!ref?.cost_total || !LOST.has(p.fate) || p.cost_total == null || p.required_outer?.length) return ''
+  return fmtRatio(p.cost_total / ref.cost_total)
 }
+
+// a path picked elsewhere (the summary, a chain) may be below the fold
+watch(
+  () => props.selected,
+  () => nextTick(() => document.querySelector('.planlife-selected')?.scrollIntoView({ block: 'center', behavior: 'smooth' })),
+)
 </script>
 
 <template>
@@ -106,7 +118,9 @@ function ratioText(p: PlanLifecyclePath): string {
           <th>{{ t('planLifecycle.col.fate') }}</th>
           <th>{{ t('planLifecycle.col.why') }}</th>
           <th class="text-end">{{ t('planLifecycle.col.rows') }}</th>
-          <th class="text-end">{{ t('planLifecycle.col.cost') }}</th>
+          <th class="text-end" :title="reference ? t('planLifecycle.ratioHint', { path: `#${reference.path_id}` }) : undefined">
+            {{ t('planLifecycle.col.cost') }}
+          </th>
           <th>{{ t('planLifecycle.col.events') }}</th>
         </tr>
       </thead>
@@ -128,7 +142,7 @@ function ratioText(p: PlanLifecyclePath): string {
               {{ t('planLifecycle.paramFrom', { rels: paramText(p, aliases) }) }}
             </div>
             <div v-if="p.outer_path_id != null" class="text-caption text-medium-emphasis">
-              outer: {{ childText(p.outer_path_id) }} · inner: {{ childText(p.inner_path_id) }}
+              outer: {{ inputText(p.outer_path_id) }} · inner: {{ inputText(p.inner_path_id) }}
             </div>
             <div v-else-if="childIds(p).length" class="text-caption text-medium-emphasis">
               {{ t('planLifecycle.over') }} {{ childrenText(p) }}
@@ -208,6 +222,7 @@ function ratioText(p: PlanLifecyclePath): string {
 }
 
 .planlife-selected {
-  background: rgba(var(--v-theme-primary), 0.08);
+  background: rgba(var(--v-theme-primary), 0.18);
+  box-shadow: inset 3px 0 0 rgb(var(--v-theme-primary));
 }
 </style>
