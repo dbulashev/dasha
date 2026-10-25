@@ -1,0 +1,27 @@
+{
+  "version": "1.1",
+  "query": "SELECT * FROM gr_c ORDER BY region, id",
+  "rels": {"1": "gr_c"},
+  "events": [
+    {"seq": 1, "src": "p1", "rel": "{1}", "pathtype": "SeqScan", "cost_startup": 0.00, "cost_total": 22.00, "kind": "accepted", "path_id": 1, "origin": "real"},
+    {"seq": 2, "src": "wp", "rel": "{1}", "pathtype": "CustomScan", "cost_startup": 0.00, "cost_total": 10.00, "kind": "accepted", "label": "cA", "path_id": 2, "origin": "proposed", "gap_cost": 12.00},
+    {"seq": 3, "src": "wp", "rel": "{1}", "pathtype": "SeqScan", "cost_startup": 0.00, "cost_total": 22.00, "kind": "displaced", "path_id": 1, "displacer_path_id": 2, "displacer_seq": 2, "other_pathtype": "CustomScan", "gap_cost": 12.00, "origin": "real"},
+    {"seq": 4, "src": "wp", "rel": "{1}", "pathtype": "CustomScan", "cost_startup": 0.00, "cost_total": 10.00, "kind": "survived", "label": "cA", "path_id": 2, "origin": "proposed"},
+    {"seq": 5, "src": "wp", "rel": "{1}", "pathtype": "CustomScan", "cost_startup": 0.00, "cost_total": 10.15, "kind": "accepted", "label": "cB", "path_id": 3, "origin": "proposed"},
+    {"seq": 6, "src": "wp", "rel": "{1}", "pathtype": "CustomScan", "cost_startup": 0.00, "cost_total": 10.15, "kind": "survived", "label": "cB", "path_id": 3, "origin": "proposed"},
+    {"seq": 7, "src": "wp", "rel": "{1}", "pathtype": "CustomScan", "cost_startup": 0.00, "cost_total": 10.09, "kind": "rejected", "label": "cN", "path_id": 4, "dominator_path_id": 3, "dominator_seq": 5, "dominator_pathtype": "CustomScan", "origin": "proposed"},
+    {"seq": 8, "src": "wp", "rel": "{1}", "pathtype": "CustomScan", "cost_startup": 0.00, "cost_total": 10.00, "kind": "removed", "label": "cA", "path_id": 2, "remover_path_id": 4, "remover_seq": 7, "remover_pathtype": "CustomScan", "origin": "proposed"},
+    {"seq": 9, "src": "wp", "rel": "{1}", "pathtype": "CustomScan", "cost_startup": 0.00, "cost_total": 10.50, "kind": "rejected", "label": "cD", "path_id": 5, "dominator_path_id": 3, "dominator_seq": 5, "dominator_pathtype": "CustomScan", "origin": "proposed"},
+    {"seq": 10, "src": "p1", "rel": "?", "pathtype": "CustomScan", "cost_startup": 0.00, "cost_total": 10.15, "kind": "accepted", "label": "cB", "path_id": 3, "origin": "proposed"}
+  ],
+  "paths": [
+    {"path_id": 1, "pathtype": "SeqScan", "rel": "{1}", "rows": 1000},
+    {"path_id": 2, "pathtype": "CustomScan", "rel": "{1}", "rows": 1},
+    {"path_id": 3, "pathtype": "CustomScan", "rel": "{1}", "rows": 1},
+    {"path_id": 4, "pathtype": "CustomScan", "rel": "{1}", "rows": 1},
+    {"path_id": 5, "pathtype": "CustomScan", "rel": "{1}", "rows": 1}
+  ],
+  "coverage": {"survived_snapshot": true, "add_path_accepted": true, "add_path_rejected": true, "add_path_displaced": true, "add_path_removed": true, "add_path_precheck": true, "join_excluded": true, "index_build": false},
+  "limits": {"events_truncated": false, "summary_truncated": false, "max_events": 10000, "max_summary_entries": 128},
+  "summary": []
+}

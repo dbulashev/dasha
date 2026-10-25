@@ -19,7 +19,10 @@ const props = defineProps<{
   root: PlanNode
   findings?: PlanFinding[]
   highlight?: number[] | null
+  selectable?: boolean
 }>()
+
+const emit = defineEmits<{ select: [path: number[]] }>()
 
 const { t, te } = useI18n()
 
@@ -111,7 +114,8 @@ function buffersText(node: PlanNode): string {
       v-for="row in rows"
       :key="row.key"
       class="plan-row"
-      :class="{ 'plan-row-highlight': highlightKey === row.key }"
+      :class="{ 'plan-row-highlight': highlightKey === row.key, 'plan-row-selectable': selectable }"
+      @click="selectable && emit('select', row.path)"
     >
       <div class="d-flex align-center flex-wrap ga-1" :style="{ paddingLeft: `${row.depth * 18}px` }">
         <v-btn
@@ -120,7 +124,7 @@ function buffersText(node: PlanNode): string {
           variant="text"
           size="x-small"
           density="compact"
-          @click="toggle(row.key)"
+          @click.stop="toggle(row.key)"
         />
         <span v-else class="plan-caret-gap"></span>
 
@@ -146,6 +150,8 @@ function buffersText(node: PlanNode): string {
             {{ findingText(f, t, te) }}
           </v-tooltip>
         </v-chip>
+
+        <slot name="extra" :path="row.path" :node="row.node" />
 
         <v-spacer />
 
@@ -210,6 +216,14 @@ function buffersText(node: PlanNode): string {
 .plan-row-highlight {
   border-left-color: rgb(var(--v-theme-primary));
   background: rgba(var(--v-theme-primary), 0.08);
+}
+
+.plan-row-selectable {
+  cursor: pointer;
+}
+
+.plan-row-selectable:hover {
+  background: rgba(var(--v-theme-on-surface), 0.04);
 }
 
 .plan-caret-gap {

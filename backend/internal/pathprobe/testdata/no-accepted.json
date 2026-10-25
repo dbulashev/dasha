@@ -1,0 +1,17 @@
+{
+  "version": "1.1",
+  "query": "SELECT * FROM t WHERE id = 42",
+  "rels": {"1": "t"},
+  "events": [
+    {"seq": 1, "src": "p1", "rel": "{1}", "pathtype": "BitmapHeapScan", "cost_startup": 4.30, "cost_total": 8.32, "kind": "rejected", "path_id": 3, "dominator_path_id": 2, "dominator_seq": null, "dominator_pathtype": "IndexScan", "origin": "real"},
+    {"seq": 2, "src": "p0", "rel": "{1}", "pathtype": "IndexScan", "cost_startup": 0.29, "cost_total": 8.30, "kind": "survived", "path_id": 2, "origin": "real"}
+  ],
+  "paths": [
+    {"path_id": 2, "pathtype": "IndexScan", "rel": "{1}", "rows": 1, "index_oid": 16390, "index_name": "t_pkey"},
+    {"path_id": 3, "pathtype": "BitmapHeapScan", "rel": "{1}", "subpath_id": 4, "rows": 1, "index_oid": 16390, "index_name": "t_pkey"},
+    {"path_id": 4, "pathtype": "IndexScan", "rel": "{1}", "rows": 1, "index_oid": 16390, "index_name": "t_pkey"}
+  ],
+  "coverage": {"survived_snapshot": true, "add_path_accepted": false, "add_path_rejected": true, "add_path_displaced": false, "add_path_removed": true, "add_path_precheck": true, "join_excluded": true, "index_build": false},
+  "limits": {"events_truncated": false, "summary_truncated": false, "max_events": 10000, "max_summary_entries": 128},
+  "summary": []
+}

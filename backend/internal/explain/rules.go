@@ -320,6 +320,15 @@ func evalCTEMaterialize(p *Plan, _ Context) []Finding {
 	return out
 }
 
+// RowMisestimate: the ratio between the per-loop estimate and the measured rows,
+// and whether it crosses the row_misestimate thresholds.
+func RowMisestimate(planRows, actualRows float64) (float64, bool) {
+	estimated, actual := math.Max(planRows, 1), math.Max(actualRows, 1)
+	ratio := math.Max(estimated/actual, actual/estimated)
+
+	return ratio, math.Max(estimated, actual) >= misestimateMinRows && ratio >= misestimateFactor
+}
+
 // evalRowMisestimate compares per-loop numbers: both the estimate and the
 // measured row count are what one pass of the node produced.
 func evalRowMisestimate(p *Plan, _ Context) []Finding {
@@ -330,13 +339,8 @@ func evalRowMisestimate(p *Plan, _ Context) []Finding {
 			return
 		}
 
-		estimated, actual := math.Max(n.PlanRows, 1), math.Max(n.Actual.Rows, 1)
-		if math.Max(estimated, actual) < misestimateMinRows {
-			return
-		}
-
-		ratio := math.Max(estimated/actual, actual/estimated)
-		if ratio < misestimateFactor {
+		ratio, ok := RowMisestimate(n.PlanRows, n.Actual.Rows)
+		if !ok {
 			return
 		}
 

@@ -1,0 +1,9 @@
+# Override for docker-compose.yaml: Dasha from published images instead of a
+# build of this checkout.  Used by `make demo-lab-staging-prebuilt`
+# (mk/staging.mk), which runs `up --no-build`.
+services:
+  backend:
+    image: ${DASHA_REGISTRY:-dbulashev}/dasha-backend:${DASHA_TAG:?DASHA_TAG is not set}
+
+  frontend:
+    image: ${DASHA_REGISTRY:-dbulashev}/dasha-frontend:${DASHA_TAG:?DASHA_TAG is not set}

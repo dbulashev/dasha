@@ -164,6 +164,8 @@ watch(
 )
 
 const fleetPage = computed(() => route.name === 'fleet')
+// pages that read no cluster: no cluster selector, no host role
+const clusterlessPage = computed(() => fleetPage.value || route.name === 'plan-lifecycle')
 
 // Admin-only during the fleet overview's trial period.
 watch(
@@ -226,10 +228,10 @@ watch(() => route.path, () => {
             <v-divider vertical class="mx-2 app-brand-divider" />
             <span class="app-brand-sub">PostgreSQL Dashboard</span>
           </span>
-          <HostRoleLabel v-if="!fleetPage" />
+          <HostRoleLabel v-if="!clusterlessPage" />
         </v-toolbar-title>
         <!-- The selector root is d-flex (display: flex !important), which beats v-show. -->
-        <div v-show="!fleetPage" style="display: contents">
+        <div v-show="!clusterlessPage" style="display: contents">
           <cluster-host-db-selector class="ml-4 mr-2" />
         </div>
         <template v-slot:append>
@@ -289,6 +291,7 @@ watch(() => route.path, () => {
             <v-list-item :title="t('logs.menuInsights')" link :to="logInsightsLink"></v-list-item>
           </v-list-group>
           <v-list-item v-if="autosnapshotVisible" :title="t('autosnapshot.menu')" prepend-icon="mdi-camera-timer" link :to="autoSnapshotLink"></v-list-item>
+          <v-list-item :title="t('planLifecycle.menu')" prepend-icon="mdi-source-branch" link to="/plan-lifecycle"></v-list-item>
         </v-list>
       </v-navigation-drawer>
 

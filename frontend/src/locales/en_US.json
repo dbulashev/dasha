@@ -2143,5 +2143,139 @@
     "connection": "Connections",
     "error": "Errors",
     "other": "Other"
+  },
+  "planLifecycle": {
+    "menu": "Plan lifecycle",
+    "title": "Plan lifecycle",
+    "subtitle": "A pathprobe trace: which path the planner chose, what happened to the others and why they lost. Experimental.",
+    "traceFile": "pathprobe_json() trace (.json)",
+    "dropHint": "or drop the file here",
+    "analyze": "Analyze",
+    "paste": "Paste the trace text",
+    "finalTree": "Final path",
+    "alternatives": "alternatives: {n}",
+    "noFinal": "The trace does not determine the final path.",
+    "upperRel": "upper level",
+    "usingIndex": "using index",
+    "hypotheticalIndex": "hypothetical index",
+    "paramFrom": "parameterized by {rels}",
+    "over": "over",
+    "kept": "kept: {why}",
+    "lostTo": "lost to",
+    "removedBy": "removed by",
+    "by": "by",
+    "perLoop": "per loop",
+    "noOwnEvents": "no events of its own",
+    "rowsShort": "{rows} rows",
+    "noIndexes": "The trace has no index paths.",
+    "chainTruncated": "Chain cut short: too many paths above the index.",
+    "onlyPath": "only path #{id}",
+    "tab": {
+      "plan": "Plan",
+      "indexes": "Indexes",
+      "timeline": "Timeline"
+    },
+    "col": {
+      "path": "Path",
+      "fate": "Fate",
+      "why": "Why",
+      "rows": "Rows",
+      "cost": "Cost",
+      "events": "Events",
+      "rel": "Relation",
+      "event": "Event",
+      "link": "Winner"
+    },
+    "fate": {
+      "chosen": "chosen",
+      "survived": "survived",
+      "displaced": "displaced",
+      "removed": "removed",
+      "rejected": "rejected",
+      "child_only": "only as a child",
+      "unknown": "unknown"
+    },
+    "fateReason": {
+      "displaced_not_covered": "accepted; displacement was not observed (log_accepted off)",
+      "removed_not_covered": "accepted; removal was not observed (older core patch)",
+      "no_events": "no events"
+    },
+    "cause": {
+      "costlier_total": "costlier in total by {gap}",
+      "lost_on_startup": "not costlier in total, lost on startup: {startup} vs {winnerStartup}",
+      "lost_not_on_cost": "lost not on cost: on sort order, parameterization, rows or parallel safety (the trace does not tell)",
+      "unknown": "the trace does not name the winner or its cost"
+    },
+    "outcome": {
+      "in_plan": "in the plan",
+      "lost": "built and lost",
+      "only_rejected": "only rejected paths"
+    },
+    "precheck": {
+      "title": "Dropped before being built (precheck)",
+      "hint": "No path was created, so its inputs and winner are unknown.",
+      "cost": "estimate"
+    },
+    "input": {
+      "trace": "the trace",
+      "plan": "the plan"
+    },
+    "error": {
+      "parse": "Could not parse {input}: {code} ({where})",
+      "tooLarge": "The file is larger than allowed.",
+      "rateLimited": "Too many requests, try again in a minute."
+    },
+    "caveat": {
+      "coverage_missing": "Point {point} was not observed in this run: the absence of its events proves nothing.",
+      "coverage_absent": "The trace has no coverage object: what was observed is unknown.",
+      "events_truncated": "The trace was cut at pathprobe.max_events = {max_events}: conclusions from missing events do not hold.",
+      "dominator_not_reported": "Rejected paths do not name their dominator: the server was built with an older pathprobe core patch.",
+      "no_path_graph": "The trace has no path ids: no tree or links can be built.",
+      "unknown_values": "Unknown values in the trace: {values}.",
+      "final_ambiguous": "The final path is ambiguous: candidates {candidates}; the cheapest is shown.",
+      "final_none": "The trace does not determine the final path.",
+      "edges_absent": "This path type always has an input, but pathprobe does not record it (e.g. GroupingSets as Agg): the subtree is not shown.",
+      "precheck_no_inputs": "Paths dropped by precheck have no inputs and no winner.",
+      "index_not_examined_unobservable": "Only indexes that paths were built over are listed. An index the planner did not consider is not visible in a trace.",
+      "subquery_rels": "Some paths are inside a subquery: their relations are numbered in the subquery, aliases do not apply to them, and the relation panel may mix them with paths of the outer query.",
+      "chosen_but_displaced": "The path is in the final plan but displaced or removed in the trace (event #{seq}): this case is not explained.",
+      "chosen_as_bitmapqual": "The path was displaced from its relation (#{seq}) but stayed inside the chosen Bitmap Heap Scan: in the plan it is the Bitmap Index Scan.",
+      "plan_query_text_missing": "The plan has no query text (EXPLAIN from psql): it is the same query only by the shape of the tree.",
+      "partial_paths_unobserved": "The plan has a Gather: pathprobe does not observe partial paths, part of the search is invisible."
+    },
+    "inSubquery": "inside a subquery: relation numbers are the subquery's",
+    "planFile": "Plan (EXPLAIN), optional",
+    "planHint": "JSON or text; with ANALYZE the actual rows are shown",
+    "removePlan": "Remove plan",
+    "pastePlan": "Paste EXPLAIN",
+    "planPlaceholder": "EXPLAIN (ANALYZE, FORMAT JSON) ... or a text plan",
+    "planTree": "Plan (EXPLAIN) matched to the trace",
+    "actualRows": "actual {rows}",
+    "rowsRatio": "estimate off by {ratio}×",
+    "match": {
+      "status": {
+        "match": "The plan matches the final path of the trace",
+        "match_with_notes": "The plan matches the final path, with adjustments",
+        "mismatch": "The plan does not match the trace",
+        "no_final_path": "The trace does not determine a final path: nothing to match"
+      },
+      "queryTextDiffers": "The query text in the plan differs from the trace query: these are different queries.",
+      "diff": "{path}: expected {expected}, the plan has {found} (node {node}).",
+      "root": "root",
+      "note": {
+        "projection_omitted": "Projection without a Result node: the planner did not need the projection",
+        "subquery_scan_removed": "Subquery Scan removed from the plan as trivial",
+        "append_removed": "single-input Append removed from the plan",
+        "append_children_differ": "the plan's Append has fewer inputs than the trace (partition pruning); children not matched"
+      },
+      "unmatched": {
+        "unknown_shape": "node not matched: no rule for this shape",
+        "no_edges": "pathprobe does not record the inputs of this path",
+        "subplan": "InitPlan/SubPlan is planned apart and not linked in the trace",
+        "partial_paths_unobserved": "Gather: pathprobe does not see partial paths",
+        "append_child": "Append input not matched"
+      },
+      "finalByPlan": "The final path was picked by the plan from several trace candidates."
+    }
   }
 }

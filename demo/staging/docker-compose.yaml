@@ -1,0 +1,85 @@
+# Staging stand for planner traces: PostgreSQL master with the pathprobe core
+# hooks patch and the pathprobe extension
+# (https://github.com/obartunov/pathprobe).
+#
+# Image: dbulashev/postgres-pathprobe, built by the pathprobe-image branch of
+# https://github.com/dbulashev/postgres (.github/pathprobe/).  It uses the
+# entrypoint of the official postgres image, so POSTGRES_* and
+# /docker-entrypoint-initdb.d behave as usual, and listen_addresses = '*' is
+# set in the image.
+#
+# Independent of the demo lab: its own compose project, network and volume,
+# so it runs with or without `make demo-lab`.  Started by
+# `make demo-lab-staging` (mk/staging.mk).
+#
+# Dasha (backend + frontend, built from this checkout) runs next to it WITHOUT
+# auth (dasha-staging.yaml) at http://<host>:3001, on all interfaces: for the
+# plan lifecycle page and for an agent driving a browser from another machine.
+# Anyone who reaches the host gets Dasha without a login; DASHA_BIND=127.0.0.1
+# keeps it local.
+#
+# Not for production: the core hooks patch changes add_path(), and fsync is
+# off because the data is regenerated on every start.
+name: dasha-staging
+
+services:
+  pg-pathprobe:
+    image: dbulashev/postgres-pathprobe:latest
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo
+      POSTGRES_DB: demo
+    command:
+      - postgres
+      - -c
+      - fsync=off
+      - -c
+      - synchronous_commit=off
+      - -c
+      - full_page_writes=off # throwaway instance, see the header
+    ports:
+      - "127.0.0.1:5440:5432"
+    volumes:
+      # Dataset of the demo (pp_customers 10k rows, pp_orders 1M rows), loaded
+      # once at initdb.  Copied from running-postgresql
+      # experiments/ch08-path-probe/hackers/demo/setup.sql, plus
+      # autovacuum_enabled = off so the plans do not change after start.
+      - ./path-probe/01-setup.sql:/docker-entrypoint-initdb.d/01-setup.sql:ro
+      - ./path-probe:/path-probe:ro
+      - pg-data:/var/lib/postgresql
+    healthcheck:
+      # Over TCP: the temporary server the entrypoint runs for initdb scripts
+      # listens on the socket only, so a socket check would report ready
+      # before the dataset is loaded.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U demo -d demo"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+      start_period: 180s
+
+  # Service names match demo/nginx.conf (proxy_pass http://backend:8000).
+  backend:
+    build:
+      context: ../..
+      dockerfile: demo/Dockerfile.backend
+    # no storage: skip `dasha migrate` of the image's default command
+    command: ["dasha"]
+    volumes:
+      - ./dasha-staging.yaml:/etc/dasha/dasha.yaml:ro
+    depends_on:
+      pg-pathprobe:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ../..
+      dockerfile: demo/Dockerfile.frontend
+    ports:
+      # no auth and open to every interface of the host by default, for an agent's
+      # browser on another machine; DASHA_BIND=127.0.0.1 keeps it local
+      - "${DASHA_BIND:-0.0.0.0}:3001:3000"
+    depends_on:
+      - backend
+
+volumes:
+  pg-data:

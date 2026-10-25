@@ -45,3 +45,6 @@ AGENTS.md
 CLAUDE.md
 backend/coverage-*
 
+
+# Planner traces written by make demo-lab-staging (mk/staging.mk)
+demo/staging/traces/

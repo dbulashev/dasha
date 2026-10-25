@@ -1,0 +1,7 @@
+ Hash Join  (cost=241.28..31761.40 rows=500000 width=20)
+   Hash Cond: (o.customer_id = c.id)
+   ->  Seq Scan on pp_orders o  (cost=0.00..28894.00 rows=1000000 width=20)
+         Filter: (customer_id > 0)
+   ->  Hash  (cost=178.78..178.78 rows=5000 width=8)
+         ->  Index Only Scan using pp_customers_pkey on pp_customers c  (cost=0.29..178.78 rows=5000 width=8)
+               Index Cond: (id <= 5000)
