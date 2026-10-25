@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { PlanLifecycleChainNode, PlanLifecyclePath } from '@/api/models'
+import { fmtCompactFloat } from '@/utils/format'
 import { causeText, fateColor, paramText, pathTypeLabel } from './planlife'
 
 const props = defineProps<{
@@ -17,6 +18,12 @@ const { t } = useI18n()
 
 const p = computed(() => props.paths.get(props.node.path_id))
 const winner = computed(() => (p.value?.by != null ? props.paths.get(p.value.by) : undefined))
+
+const rowsText = computed(() => {
+  if (p.value?.rows == null) return ''
+  const rows = t('planLifecycle.rowsShort', { rows: fmtCompactFloat(p.value.rows) })
+  return p.value.required_outer?.length ? `${rows} ${t('planLifecycle.perLoop')}` : rows
+})
 </script>
 
 <template>
@@ -26,9 +33,7 @@ const winner = computed(() => (p.value?.by != null ? props.paths.get(p.value.by)
     <span v-if="paramText(p, aliases)" class="text-medium-emphasis">
       · {{ t('planLifecycle.paramFrom', { rels: paramText(p, aliases) }) }}
     </span>
-    <span v-if="p.rows != null" class="text-medium-emphasis">
-      · {{ t('planLifecycle.rowsShort', { rows: p.rows }) }}<template v-if="p.required_outer?.length"> {{ t('planLifecycle.perLoop') }}</template>
-    </span>
+    <span v-if="rowsText" class="text-medium-emphasis"> · {{ rowsText }}</span>
     <v-chip :color="fateColor(p.fate)" size="x-small" variant="flat" label class="ms-2">
       {{ t(`planLifecycle.fate.${p.fate}`) }}
     </v-chip>

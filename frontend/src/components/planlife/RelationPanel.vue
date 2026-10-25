@@ -133,7 +133,6 @@ function childText(id: number | undefined): string {
               <a href="#" @click.prevent.stop="emit('select', p.by!)">
                 {{ pathTypeLabel(winner(p)!.pathtype) }} #{{ p.by }}
               </a>
-              <span v-if="p.by_seq" class="text-medium-emphasis">(#{{ p.by_seq }})</span>
             </template>
             <div class="text-caption">{{ causeText(p.cause, t) }}</div>
           </td>

@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import type { PlanLifecycleAnalysis } from '@/api/models'
-import { fateColor, pathTypeLabel, relAliases, relText } from './planlife'
+import { fateColor, pathTypeLabel, pathsById, relAliases, relText } from './planlife'
 
 const props = defineProps<{ analysis: PlanLifecycleAnalysis; pathFilter: number | null }>()
 const emit = defineEmits<{ select: [pathId: number]; 'update:pathFilter': [pathId: number | null] }>()
@@ -10,6 +10,7 @@ const emit = defineEmits<{ select: [pathId: number]; 'update:pathFilter': [pathI
 const { t } = useI18n()
 
 const aliases = computed(() => relAliases(props.analysis))
+const paths = computed(() => pathsById(props.analysis))
 const relFilter = ref<string | null>(null)
 const kindFilter = ref<string[]>([])
 
@@ -79,7 +80,7 @@ const headers = computed(() => [
       <template #[`item.pathtype`]="{ item }">
         {{ pathTypeLabel(item.pathtype) }}
         <a v-if="item.path_id != null" href="#" @click.prevent="emit('select', item.path_id)">#{{ item.path_id }}</a>
-        <span v-if="item.kept_reason" class="text-caption text-medium-emphasis"> {{ t('planLifecycle.kept', { why: item.kept_reason }) }}</span>
+        <span v-if="item.kept_reason" class="text-caption text-medium-emphasis ms-1">{{ t('planLifecycle.kept', { why: item.kept_reason }) }}</span>
       </template>
       <template #[`item.kind`]="{ item }">
         <v-chip :color="kindColor(item.kind)" size="x-small" variant="flat" label>{{ item.kind }}</v-chip>
@@ -93,8 +94,9 @@ const headers = computed(() => [
       <template #[`item.link`]="{ item }">
         <template v-if="item.by_path_id != null">
           {{ t('planLifecycle.by') }}
-          <a href="#" @click.prevent="emit('select', item.by_path_id!)">#{{ item.by_path_id }}</a>
-          <span v-if="item.by_seq" class="text-medium-emphasis"> (#{{ item.by_seq }})</span>
+          <a href="#" @click.prevent="emit('select', item.by_path_id!)">
+            {{ pathTypeLabel(paths.get(item.by_path_id)?.pathtype ?? '') }} #{{ item.by_path_id }}
+          </a>
         </template>
         <span v-if="item.gap != null" class="text-caption text-medium-emphasis ms-1">gap {{ item.gap.toFixed(2) }}</span>
       </template>
