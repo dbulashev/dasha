@@ -247,3 +247,42 @@ func TestMatch_Alias(t *testing.T) {
 		t.Errorf("match %+v mismatch %+v", a.Match, d)
 	}
 }
+
+// FuzzAnalyze: whatever Parse accepts, the analysis finishes on.
+func FuzzAnalyze(f *testing.F) {
+	for _, name := range []string{"demo-join.json", "demo-index.json", "removed.json", "bitmap-or.json", "setop.json", "truncated.json"} {
+		body, err := os.ReadFile(filepath.Join("..", "pathprobe", "testdata", name))
+		if err != nil {
+			f.Fatal(err)
+		}
+
+		f.Add(body)
+	}
+
+	f.Add([]byte(`{"events": [{"seq": 1, "rel": "{1}", "kind": "survived", "path_id": 1}],
+		"paths": [{"path_id": 1, "rel": "{1}", "pathtype": "SubqueryScan", "subpath_id": 1}]}`))
+	f.Add([]byte(`{"events": [{"seq": 1, "rel": "{1}", "kind": "survived", "path_id": 1}],
+		"paths": [{"path_id": 1, "rel": "{1}", "pathtype": "BitmapHeapScan", "subpath_id": 2},
+			{"path_id": 2, "rel": "{1}", "pathtype": "BitmapOr", "child_path_ids": [3]},
+			{"path_id": 3, "rel": "{1}", "pathtype": "BitmapOr", "child_path_ids": [2]}]}`))
+
+	planBody, err := os.ReadFile(filepath.Join("..", "pathprobe", "testdata", "demo-join.plan.json"))
+	if err != nil {
+		f.Fatal(err)
+	}
+
+	plan, err := explain.Parse(string(planBody), explain.SourceUpload)
+	if err != nil {
+		f.Fatal(err)
+	}
+
+	f.Fuzz(func(_ *testing.T, body []byte) {
+		tr, err := pathprobe.Parse(body)
+		if err != nil {
+			return
+		}
+
+		Analyze(tr)
+		AnalyzeWithPlan(tr, &plan)
+	})
+}

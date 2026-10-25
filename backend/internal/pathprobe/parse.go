@@ -157,6 +157,11 @@ func Parse(body []byte) (Trace, error) {
 		tr.Paths[p.ID] = p
 	}
 
+	// the analysis recurses over the path graph and assumes a DAG
+	if i, cyclic := findCycle(raw.Paths, tr.Paths); cyclic {
+		return Trace{}, &Error{Code: CodeInvalid, Field: fmt.Sprintf("paths[%d]", i), Offset: 0}
+	}
+
 	markSubqueries(tr.Paths)
 
 	tr.Coverage = convertCoverage(raw.Coverage)
@@ -279,6 +284,45 @@ func convertPath(rp rawPath) (PathNode, *Error) {
 	}
 
 	return p, nil
+}
+
+// findCycle returns the index in raw of a path from which a cycle is reachable.
+func findCycle(raw []rawPath, paths map[int]PathNode) (int, bool) {
+	const (
+		unvisited = iota
+		onStack
+		done
+	)
+
+	state := make(map[int]int, len(paths))
+
+	var visit func(id int) bool
+
+	visit = func(id int) bool {
+		state[id] = onStack
+
+		for _, c := range paths[id].Children() {
+			if _, ok := paths[c]; !ok {
+				continue
+			}
+
+			if state[c] == onStack || (state[c] == unvisited && visit(c)) {
+				return true
+			}
+		}
+
+		state[id] = done
+
+		return false
+	}
+
+	for i, rp := range raw {
+		if state[rp.ID] == unvisited && visit(rp.ID) {
+			return i, true
+		}
+	}
+
+	return 0, false
 }
 
 func markSubqueries(paths map[int]PathNode) {

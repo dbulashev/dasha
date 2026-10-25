@@ -173,6 +173,15 @@ func TestParse_Errors(t *testing.T) {
 		{"wrong type", `{"events": [{"seq": "one"}]}`, CodeType, "events.0.seq"},
 		{"dup path", `{"events": [], "paths": [{"path_id": 1, "rel": "{1}"}, {"path_id": 1, "rel": "{1}"}]}`, CodeInvalid, "paths[1].path_id"},
 		{"bad child", `{"events": [], "paths": [{"path_id": 1, "rel": "{1}", "child_path_ids": [0]}]}`, CodeInvalid, "paths[0].child_path_ids"},
+		{"self subpath", `{"events": [], "paths": [{"path_id": 1, "rel": "{1}", "pathtype": "SubqueryScan", "subpath_id": 1}]}`, CodeInvalid, "paths[0]"},
+		{"child cycle", `{"events": [], "paths": [
+			{"path_id": 1, "rel": "{1}", "pathtype": "SeqScan"},
+			{"path_id": 2, "rel": "{1}", "pathtype": "BitmapOr", "child_path_ids": [3]},
+			{"path_id": 3, "rel": "{1}", "pathtype": "BitmapOr", "child_path_ids": [2]}]}`, CodeInvalid, "paths[1]"},
+		{"join cycle", `{"events": [], "paths": [
+			{"path_id": 1, "rel": "{1,2}", "pathtype": "NestLoop", "outer_path_id": 2, "inner_path_id": 3},
+			{"path_id": 2, "rel": "{1}", "pathtype": "SeqScan"},
+			{"path_id": 3, "rel": "{2}", "pathtype": "Material", "subpath_id": 1}]}`, CodeInvalid, "paths[0]"},
 	}
 
 	for _, c := range cases {
@@ -188,6 +197,24 @@ func TestParse_Errors(t *testing.T) {
 				t.Errorf("got %s at %q, want %s at %q", pe.Code, pe.Field, c.code, c.field)
 			}
 		})
+	}
+}
+
+// TestParse_SharedChild: a path under several parents is not a cycle; a missing child is skipped.
+func TestParse_SharedChild(t *testing.T) {
+	body := `{"events": [], "paths": [
+		{"path_id": 1, "rel": "{1,2}", "pathtype": "NestLoop", "outer_path_id": 3, "inner_path_id": 4},
+		{"path_id": 2, "rel": "{1,2}", "pathtype": "HashJoin", "outer_path_id": 3, "inner_path_id": 4},
+		{"path_id": 3, "rel": "{1}", "pathtype": "SeqScan"},
+		{"path_id": 4, "rel": "{2}", "pathtype": "SeqScan", "subpath_id": 9}]}`
+
+	tr, err := Parse([]byte(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(tr.Paths) != 4 {
+		t.Errorf("paths %d, want 4", len(tr.Paths))
 	}
 }
 

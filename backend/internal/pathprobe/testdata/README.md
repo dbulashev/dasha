@@ -3,8 +3,9 @@
 Format: pathprobe 9bcf24c (`r2d2/dmitry-attribution`), `docs/technical/json-format.md`.
 
 - `demo-index.json`, `demo-join.json`: real `pathprobe_json()` output from the
-  staging stand (`make demo-lab-staging`, image `dbulashev/postgres-pathprobe`
-  built from pathprobe 9bcf24c), the two demo queries of running-postgresql
+  staging stand (`make demo-lab-staging`, image
+  `dbulashev/postgres-pathprobe:20devel-425daf545d91-pp9bcf24c` built from
+  pathprobe 9bcf24c), the two demo queries of running-postgresql
   `experiments/ch08-path-probe/hackers/demo`. Regenerate with
   `make demo-lab-staging-trace` and copy from `demo/staging/traces/`
   (`trace-observed.json`, `trace-observed-join.json`) after a fresh
