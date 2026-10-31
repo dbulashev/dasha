@@ -182,10 +182,14 @@ func (s PGSettings) resolve(entry, scope string, logger *zap.Logger) (scopePG, e
 		password = os.Getenv(s.PasswordFromEnv)
 
 		if password == "" {
+			key := "password_from_env"
+			if scope != "" {
+				key = "overrides." + scope + "." + key
+			}
+
 			logger.Warn("password_from_env is set but the variable is empty",
 				zap.String("entry", entry),
-				zap.String("scope", scope),
-				zap.String("variable", s.PasswordFromEnv),
+				zap.String("key", key),
 			)
 		}
 	}
