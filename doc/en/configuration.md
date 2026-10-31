@@ -167,8 +167,8 @@ discovery:
 ```
 
 `refresh_interval` takes a duration (`5m`, `90s`) in every discovery type. A bare number is read as
-minutes, so older configs (`refresh_interval: 5`) keep working. Values below `1m` are raised to `1m`
-with a warning.
+minutes, so older configs (`refresh_interval: 5`) keep working. A positive value below `1m` is raised to `1m`
+with a warning. Zero, a negative value or an unset key gives the default `5m`.
 
 ## Database discovery inside a cluster (optional)
 

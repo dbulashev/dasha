@@ -181,6 +181,7 @@ var validPgIdentifier = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][
 type pgxPoolItem struct {
 	Host     config.Host
 	Database config.Database
+	Port     string // effective port the pool connects to
 	pool     *pgxpool.Pool
 }
 
@@ -363,22 +364,24 @@ func (p *PgxPool) ensurePool(ctx context.Context) error {
 		return fmt.Errorf("config.Clusters.Get | %w", err)
 	}
 
-	// Build desired state: cluster -> set of host+db pairs.
+	// Build desired state: cluster -> host+db -> effective port; a pool on
+	// another port is replaced.
 	type connTask struct {
 		cluster config.Cluster
 		host    config.Host
 		db      config.Database
 	}
 
-	desired := make(map[config.ClusterName]map[hostDbKey]bool)
+	desired := make(map[config.ClusterName]map[hostDbKey]string)
 	for _, cl := range cls {
 		if desired[cl.Name] == nil {
-			desired[cl.Name] = make(map[hostDbKey]bool)
+			desired[cl.Name] = make(map[hostDbKey]string)
 		}
 
 		for _, host := range cl.Hosts {
+			port := hostPort(cl, host)
 			for _, db := range cl.Databases {
-				desired[cl.Name][hostDbKey{host, db}] = true
+				desired[cl.Name][hostDbKey{host, db}] = port
 			}
 		}
 	}
@@ -409,8 +412,10 @@ func (p *PgxPool) ensurePool(ctx context.Context) error {
 		for _, item := range items {
 			key := hostDbKey{item.Host, item.Database}
 
+			port, wanted := desiredSet[key]
+
 			switch {
-			case !desiredSet[key]:
+			case !wanted || port != item.Port:
 				toClose = append(toClose, item.pool)
 				p.logger.Debug("pool removed",
 					zap.String("cluster", string(clName)),
@@ -487,12 +492,14 @@ func (p *PgxPool) ensurePool(ctx context.Context) error {
 		go func(t connTask) {
 			defer wg.Done()
 
+			port := hostPort(t.cluster, t.host)
+
 			// url.URL escapes credentials; a hand-built string breaks on a
 			// password containing @ : / or ?.
 			dsn := url.URL{ //nolint:exhaustruct
 				Scheme: "postgres",
 				User:   url.UserPassword(t.cluster.UserName, t.cluster.Password),
-				Host:   net.JoinHostPort(string(t.host), hostPort(t.cluster, t.host)),
+				Host:   net.JoinHostPort(string(t.host), port),
 				Path:   "/" + string(t.db),
 			}
 
@@ -516,7 +523,7 @@ func (p *PgxPool) ensurePool(ctx context.Context) error {
 
 			resultsCh <- poolResult{
 				clusterName: t.cluster.Name,
-				item:        pgxPoolItem{Host: t.host, Database: t.db, pool: pool},
+				item:        pgxPoolItem{Host: t.host, Database: t.db, Port: port, pool: pool},
 			}
 		}(task)
 	}
