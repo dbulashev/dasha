@@ -60,7 +60,7 @@ discovery:
       port: 5432
       user: demo
       password: demo
-      refresh_interval: 1        # minutes; 1 to keep the demo responsive
+      refresh_interval: 1m       # the minimum, to keep the demo responsive
       exclude_db: "^postgres$"   # the maintenance database is of no interest
 
 # Log search source: the demo lab's VictoriaLogs (demo/docker-compose.logs.yaml).

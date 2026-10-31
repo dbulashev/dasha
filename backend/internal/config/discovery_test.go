@@ -45,8 +45,8 @@ func TestDecodeDiscoveryConfigYandexMDB(t *testing.T) {
 		t.Fatalf("scalar fields decoded as %+v", cfg)
 	}
 
-	if cfg.RefreshInterval != 7 {
-		t.Errorf("RefreshInterval = %d, want 7", cfg.RefreshInterval)
+	if cfg.RefreshInterval != 7*time.Minute {
+		t.Errorf("RefreshInterval = %v, want 7m", cfg.RefreshInterval)
 	}
 
 	if len(cfg.Clusters) != 1 {
@@ -143,5 +143,70 @@ func TestDecodeDiscoveryConfigReportsTypos(t *testing.T) {
 
 	if cfg.Port != "5432" {
 		t.Errorf("Port = %q, want 5432: known keys must still decode", cfg.Port)
+	}
+}
+
+func TestDecodeDiscoveryConfigRefreshInterval(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		raw  any
+		want time.Duration
+	}{
+		{name: "int is minutes", raw: 5, want: 5 * time.Minute},
+		{name: "numeric string is minutes", raw: "5", want: 5 * time.Minute},
+		{name: "float is minutes", raw: 1.5, want: 90 * time.Second},
+		{name: "duration string", raw: "5m", want: 5 * time.Minute},
+		{name: "seconds string", raw: "10s", want: 10 * time.Second},
+		{name: "negative", raw: -1, want: -time.Minute},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg, _, err := DecodeDiscoveryConfig[YandexMDBConfig](map[string]any{"refresh_interval": tt.raw})
+			if err != nil {
+				t.Fatalf("DecodeDiscoveryConfig() error = %v", err)
+			}
+
+			if cfg.RefreshInterval != tt.want {
+				t.Errorf("RefreshInterval = %v, want %v", cfg.RefreshInterval, tt.want)
+			}
+		})
+	}
+}
+
+func TestDecodeDiscoveryConfigRefreshIntervalOverflow(t *testing.T) {
+	t.Parallel()
+
+	if _, _, err := DecodeDiscoveryConfig[YandexMDBConfig](map[string]any{
+		"refresh_interval": 1e300,
+	}); err == nil {
+		t.Fatal("DecodeDiscoveryConfig() error = nil, want an out-of-range error")
+	}
+}
+
+func TestDiscoveryInterval(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		in         time.Duration
+		want       time.Duration
+		wantRaised bool
+	}{
+		{in: 0, want: DefaultDiscoveryInterval},
+		{in: -time.Minute, want: DefaultDiscoveryInterval},
+		{in: 10 * time.Second, want: MinDiscoveryInterval, wantRaised: true},
+		{in: time.Minute, want: time.Minute},
+		{in: 7 * time.Minute, want: 7 * time.Minute},
+	}
+
+	for _, tt := range tests {
+		got, raised := DiscoveryInterval(tt.in)
+		if got != tt.want || raised != tt.wantRaised {
+			t.Errorf("DiscoveryInterval(%v) = %v, %v, want %v, %v", tt.in, got, raised, tt.want, tt.wantRaised)
+		}
 	}
 }

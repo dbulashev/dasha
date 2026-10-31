@@ -144,6 +144,9 @@ type Cluster struct {
 	Databases       []Database
 	Hosts           []Host
 
+	// HostMeta is keyed by an entry of Hosts; static clusters leave it nil.
+	HostMeta map[Host]HostMeta `mapstructure:"-"`
+
 	// Extended attributes for service discovery.
 	Source     string            `mapstructure:"source"`
 	ProviderID string            `mapstructure:"provider_id"`
@@ -155,12 +158,25 @@ type Cluster struct {
 	LogSource string `mapstructure:"log_source"`
 }
 
+// HostMeta holds per-host attributes a discovery source knows about.
+type HostMeta struct {
+	Address string // address to connect to; empty: the host name itself
+	Port    string // overrides Cluster.Port for this host
+	Alias   string // display name, e.g. the Patroni member name
+}
+
 // SourceYandexMDB marks clusters discovered from Yandex Managed Databases.
 const SourceYandexMDB = "yandex-mdb"
 
 // SourcePostgres marks clusters whose databases are discovered by querying the
 // cluster itself.
 const SourcePostgres = "postgres"
+
+// SourcePatroni marks clusters discovered from the keys Patroni keeps in its DCS.
+const SourcePatroni = "patroni"
+
+// LabelPatroniStandbyOf names the cluster a Patroni standby cluster replicates from.
+const LabelPatroniStandbyOf = "patroni.standby_of"
 
 // DiscoveryClusterFilter defines regex matching rules for discovered clusters.
 type DiscoveryClusterFilter struct {
@@ -177,7 +193,7 @@ type YandexMDBConfig struct {
 	User            string                   `mapstructure:"user"`
 	Password        string                   `mapstructure:"password"`
 	PasswordFromEnv string                   `mapstructure:"password_from_env"`
-	RefreshInterval int                      `mapstructure:"refresh_interval"`
+	RefreshInterval time.Duration            `mapstructure:"refresh_interval"` // bare number: minutes
 	Clusters        []DiscoveryClusterFilter `mapstructure:"clusters"`
 }
 
@@ -192,7 +208,8 @@ type DiscoveryEntry struct {
 // DecodeDiscoveryConfig decodes a raw discovery config block into a provider's
 // own config struct. Decoder settings mirror viper's, so a block behaves the
 // same whether viper unmarshals it directly or it is decoded here: notably
-// weak typing, which lets `port: 5432` land in a string field.
+// weak typing, which lets `port: 5432` land in a string field. A bare number
+// for a time.Duration field means minutes.
 //
 // Keys the target struct has no field for are returned instead of rejected: an
 // old config with a stale key must keep working, but a typo (`excludedb` for
@@ -209,6 +226,7 @@ func DecodeDiscoveryConfig[T any](raw map[string]any) (T, []string, error) {
 		Metadata:         &metadata,
 		WeaklyTypedInput: true,
 		DecodeHook: mapstructure.ComposeDecodeHookFunc(
+			minutesHook,
 			mapstructure.StringToTimeDurationHookFunc(),
 			mapstructure.StringToSliceHookFunc(","),
 		),

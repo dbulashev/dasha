@@ -1,4 +1,4 @@
-package postgres
+package pgdb
 
 // listDatabasesQuery lists the databases this role may connect to: template
 // databases and those with connections disabled are left out. ORDER BY keeps

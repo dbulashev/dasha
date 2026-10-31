@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"go.uber.org/zap"
@@ -12,8 +11,6 @@ import (
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/discovery/filter"
 )
-
-const defaultRefreshInterval = 5 * time.Minute
 
 var (
 	errAuthorizedKeyRequired = errors.New("authorized_key is required")
@@ -76,16 +73,12 @@ func NewProvider(
 		filters = append(filters, *f)
 	}
 
-	password := cfg.Password
-	if cfg.PasswordFromEnv != "" {
-		password = os.Getenv(cfg.PasswordFromEnv)
-
-		if password == "" {
-			logger.Warn("password_from_env is set but the variable is empty",
-				zap.String("entry", folderName),
-				zap.String("variable", cfg.PasswordFromEnv),
-			)
-		}
+	password, unset := config.ResolveSecret(cfg.Password, cfg.PasswordFromEnv)
+	if unset {
+		logger.Warn("password_from_env is set but the variable is empty",
+			zap.String("entry", folderName),
+			zap.String("variable", cfg.PasswordFromEnv),
+		)
 	}
 
 	sdk, err := NewSDK(cfg.AuthorizedKey)
@@ -97,9 +90,13 @@ func NewProvider(
 		registry.Register(cfg.FolderID, sdk)
 	}
 
-	interval := time.Duration(cfg.RefreshInterval) * time.Minute
-	if cfg.RefreshInterval <= 0 {
-		interval = defaultRefreshInterval
+	interval, raised := config.DiscoveryInterval(cfg.RefreshInterval)
+	if raised {
+		logger.Warn("refresh_interval is below the minimum, raised",
+			zap.String("entry", folderName),
+			zap.Duration("configured", cfg.RefreshInterval),
+			zap.Duration("interval", interval),
+		)
 	}
 
 	// The entry's own settings; the engine logs name, type and interval.

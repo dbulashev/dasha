@@ -1,18 +1,20 @@
 package postgres
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/dbulashev/dasha/internal/config"
+	"github.com/dbulashev/dasha/internal/discovery/pgdb"
 )
 
 func newTestProvider(t *testing.T, raw map[string]any) *Provider {
@@ -189,29 +191,93 @@ func loggedStrings(field any) []string {
 	return out
 }
 
-func TestDSNEscapesCredentials(t *testing.T) {
+func TestTargetsCarryConnectionSettings(t *testing.T) {
 	t.Parallel()
 
 	p := newTestProvider(t, map[string]any{
-		"password":     "p@ss:/word?",
-		"port":         5432, // a yaml number must reach the string field
+		"password":     "s3cret",
+		"port":         5433, // a yaml number must reach the string field
 		"bootstrap_db": "admin_db",
 	})
 
-	connCfg, err := pgx.ParseConfig(p.dsn("pg-01.local"))
-	if err != nil {
-		t.Fatalf("ParseConfig() error = %v", err)
+	want := []pgdb.Target{
+		{Host: "pg-01.local", Port: "5433", User: "dasha", Password: "s3cret", Database: "admin_db"},
+		{Host: "pg-02.local", Port: "5433", User: "dasha", Password: "s3cret", Database: "admin_db"},
 	}
 
-	if connCfg.User != "dasha" || connCfg.Password != "p@ss:/word?" {
-		t.Errorf("credentials = %q / %q, want dasha / p@ss:/word?", connCfg.User, connCfg.Password)
+	if got := p.targets(); !slices.Equal(got, want) {
+		t.Errorf("targets() = %+v, want %+v", got, want)
+	}
+}
+
+func TestDiscoverRemembersAnsweringHost(t *testing.T) {
+	t.Parallel()
+
+	p := newTestProvider(t, map[string]any{})
+
+	var asked []string
+
+	p.list = func(_ context.Context, target pgdb.Target) ([]string, error) {
+		asked = append(asked, target.Host)
+		if target.Host == "pg-01.local" {
+			return nil, errors.New("connection refused")
+		}
+
+		return []string{"app"}, nil
 	}
 
-	if connCfg.Host != "pg-01.local" || connCfg.Port != 5432 {
-		t.Errorf("address = %s:%d, want pg-01.local:5432", connCfg.Host, connCfg.Port)
+	for range 2 {
+		if _, err := p.Discover(t.Context()); err != nil {
+			t.Fatalf("Discover() error = %v", err)
+		}
 	}
 
-	if connCfg.Database != "admin_db" {
-		t.Errorf("Database = %q, want admin_db", connCfg.Database)
+	if want := []string{"pg-01.local", "pg-02.local", "pg-02.local"}; !slices.Equal(asked, want) {
+		t.Errorf("asked %v, want %v", asked, want)
+	}
+}
+
+func TestDiscoverErrorNamesEntry(t *testing.T) {
+	t.Parallel()
+
+	p := newTestProvider(t, map[string]any{})
+	p.list = func(context.Context, pgdb.Target) ([]string, error) {
+		return nil, errors.New("connection refused")
+	}
+
+	_, err := p.Discover(t.Context())
+	if err == nil || !strings.Contains(err.Error(), `no host answered for entry "onprem_prod"`) {
+		t.Fatalf("Discover() error = %v, want a no-host error", err)
+	}
+}
+
+func TestNewProviderInterval(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		raw  any
+		want time.Duration
+	}{
+		{name: "unset", raw: nil, want: config.DefaultDiscoveryInterval},
+		{name: "bare number is minutes", raw: 7, want: 7 * time.Minute},
+		{name: "duration string", raw: "90s", want: 90 * time.Second},
+		{name: "below minimum", raw: "10s", want: config.MinDiscoveryInterval},
+		{name: "negative", raw: -3, want: config.DefaultDiscoveryInterval},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			raw := map[string]any{}
+			if tt.raw != nil {
+				raw["refresh_interval"] = tt.raw
+			}
+
+			if got := newTestProvider(t, raw).Interval(); got != tt.want {
+				t.Errorf("Interval() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

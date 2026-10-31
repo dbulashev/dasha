@@ -3,22 +3,17 @@ package postgres
 import (
 	"context"
 	"fmt"
-	"net"
-	"net/url"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"go.uber.org/zap"
 
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/discovery/filter"
-	"github.com/dbulashev/dasha/internal/version"
+	"github.com/dbulashev/dasha/internal/discovery/pgdb"
+	"github.com/dbulashev/dasha/internal/pkg/mapstruct"
 )
 
 const (
-	connectTimeout = 5 * time.Second
-	queryTimeout   = 10 * time.Second
-
 	// matchAllClusters satisfies filter.New: this provider serves a single
 	// cluster, so only the database patterns matter.
 	matchAllClusters = ".*"
@@ -26,10 +21,12 @@ const (
 
 // Provider discovers the databases of one PostgreSQL cluster.
 type Provider struct {
-	name   string
-	cfg    Config
-	filter *filter.Filter
-	logger *zap.Logger
+	name     string
+	cfg      Config
+	filter   *filter.Filter
+	list     pgdb.Lister
+	logger   *zap.Logger
+	interval time.Duration
 	// hostIdx is the host that answered last, so a dead first host is not
 	// retried first every cycle. Only the discovery loop touches it, one cycle
 	// at a time.
@@ -67,6 +64,15 @@ func NewProvider(name string, raw map[string]any, logger *zap.Logger) (*Provider
 		)
 	}
 
+	interval, raised := config.DiscoveryInterval(cfg.RefreshInterval)
+	if raised {
+		logger.Warn("refresh_interval is below the minimum, raised",
+			zap.String("entry", name),
+			zap.Duration("configured", cfg.RefreshInterval),
+			zap.Duration("interval", interval),
+		)
+	}
+
 	f, err := filter.New(matchAllClusters, cfg.Db, nil, cfg.ExcludeDb)
 	if err != nil {
 		return nil, fmt.Errorf("compile filter: %w", err)
@@ -84,7 +90,9 @@ func NewProvider(name string, raw map[string]any, logger *zap.Logger) (*Provider
 		name:      name,
 		cfg:       cfg,
 		filter:    f,
+		list:      pgdb.ListDatabases,
 		logger:    logger,
+		interval:  interval,
 		hostIdx:   0,
 		published: nil,
 	}, nil
@@ -92,7 +100,7 @@ func NewProvider(name string, raw map[string]any, logger *zap.Logger) (*Provider
 
 // Interval returns the configured refresh interval.
 func (p *Provider) Interval() time.Duration {
-	return p.cfg.interval()
+	return p.interval
 }
 
 // Discover lists the cluster's databases and returns it as a single cluster.
@@ -158,8 +166,8 @@ func (p *Provider) logChanges(current []string) {
 		return
 	}
 
-	added := missingFrom(current, p.published)
-	removed := missingFrom(p.published, current)
+	added := mapstruct.SliceMissing(current, p.published)
+	removed := mapstruct.SliceMissing(p.published, current)
 
 	if len(added) > 0 || len(removed) > 0 {
 		p.logger.Info("database list changed",
@@ -172,128 +180,36 @@ func (p *Provider) logChanges(current []string) {
 	p.published = current
 }
 
-// missingFrom returns the names of from that other does not contain.
-func missingFrom(from, other []string) []string {
-	present := make(map[string]bool, len(other))
-	for _, name := range other {
-		present[name] = true
-	}
-
-	var diff []string
-
-	for _, name := range from {
-		if !present[name] {
-			diff = append(diff, name)
-		}
-	}
-
-	return diff
-}
-
 // listDatabases queries the first host that answers, starting from the one that
 // answered last cycle.
 func (p *Provider) listDatabases(ctx context.Context) ([]string, error) {
-	var lastErr error
-
-	for i := range p.cfg.Hosts {
-		idx := (p.hostIdx + i) % len(p.cfg.Hosts)
-		host := p.cfg.Hosts[idx]
-
-		names, err := p.queryDatabases(ctx, host)
-		if err != nil {
-			lastErr = err
-
-			p.logger.Debug("host did not answer, trying the next one",
-				zap.String("entry", p.name),
-				zap.String("host", host),
-				zap.Error(err),
-			)
-
-			continue
-		}
-
-		p.hostIdx = idx
-
-		p.logger.Debug("databases listed",
-			zap.String("entry", p.name),
-			zap.String("host", host),
-			zap.Int("databases", len(names)),
-		)
-
-		return names, nil
-	}
-
-	return nil, fmt.Errorf("no host answered for entry %q: %w", p.name, lastErr)
-}
-
-func (p *Provider) queryDatabases(ctx context.Context, host string) ([]string, error) {
-	connCfg, err := pgx.ParseConfig(p.dsn(host))
+	names, idx, err := pgdb.ListFirst(ctx, p.list, p.targets(), p.hostIdx)
 	if err != nil {
-		return nil, fmt.Errorf("parse connection config: %w", err)
+		return nil, fmt.Errorf("no host answered for entry %q: %w", p.name, err)
 	}
 
-	connCfg.ConnectTimeout = connectTimeout
-	// Simple protocol and a recognisable application_name for the same reason
-	// the monitored pools use them: transaction-pooling proxies in front of the
-	// cluster, and a DBA looking at pg_stat_activity.
-	connCfg.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
+	p.hostIdx = idx
 
-	if connCfg.RuntimeParams == nil {
-		connCfg.RuntimeParams = make(map[string]string)
-	}
-
-	// Same shape as the pools' application_name, with the role spelled out.
-	connCfg.RuntimeParams["application_name"] = fmt.Sprintf("dasha discovery %s %s",
-		version.GetBuildNumber(), version.GetBuildDate())
-
-	queryCtx, cancel := context.WithTimeout(ctx, queryTimeout)
-	defer cancel()
-
-	conn, err := pgx.ConnectConfig(queryCtx, connCfg)
-	if err != nil {
-		return nil, fmt.Errorf("connect: %w", err)
-	}
-
-	defer func() {
-		// Closing on its own context: the query context may already be done.
-		_ = conn.Close(context.WithoutCancel(ctx))
-	}()
-
-	rows, err := conn.Query(queryCtx, listDatabasesQuery)
-	if err != nil {
-		return nil, fmt.Errorf("list databases: %w", err)
-	}
-
-	defer rows.Close()
-
-	var names []string
-
-	for rows.Next() {
-		var name string
-
-		if err := rows.Scan(&name); err != nil {
-			return nil, fmt.Errorf("scan datname: %w", err)
-		}
-
-		names = append(names, name)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("list databases: %w", err)
-	}
+	p.logger.Debug("databases listed",
+		zap.String("entry", p.name),
+		zap.String("host", p.cfg.Hosts[idx]),
+		zap.Int("databases", len(names)),
+	)
 
 	return names, nil
 }
 
-// dsn builds the connection string for the bootstrap database. url.URL escapes
-// credentials, which a hand-built string would not.
-func (p *Provider) dsn(host string) string {
-	u := url.URL{ //nolint:exhaustruct
-		Scheme: "postgres",
-		User:   url.UserPassword(p.cfg.User, p.cfg.Password),
-		Host:   net.JoinHostPort(host, p.cfg.Port),
-		Path:   "/" + p.cfg.BootstrapDB,
+func (p *Provider) targets() []pgdb.Target {
+	out := make([]pgdb.Target, 0, len(p.cfg.Hosts))
+	for _, h := range p.cfg.Hosts {
+		out = append(out, pgdb.Target{
+			Host:     h,
+			Port:     p.cfg.Port,
+			User:     p.cfg.User,
+			Password: p.cfg.Password,
+			Database: p.cfg.BootstrapDB,
+		})
 	}
 
-	return u.String()
+	return out
 }

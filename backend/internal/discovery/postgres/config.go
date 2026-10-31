@@ -4,14 +4,14 @@ package postgres
 
 import (
 	"errors"
-	"os"
 	"time"
+
+	"github.com/dbulashev/dasha/internal/config"
 )
 
 const (
-	defaultPort            = "5432"
-	defaultBootstrapDB     = "postgres"
-	defaultRefreshInterval = 5 * time.Minute
+	defaultPort        = "5432"
+	defaultBootstrapDB = "postgres"
 )
 
 var (
@@ -29,10 +29,10 @@ type Config struct {
 	PasswordFromEnv string   `mapstructure:"password_from_env"`
 	// BootstrapDB is the database the discovery query connects to; it need not
 	// be one of the databases Dasha ends up monitoring.
-	BootstrapDB     string  `mapstructure:"bootstrap_db"`
-	RefreshInterval int     `mapstructure:"refresh_interval"` // minutes
-	Db              *string `mapstructure:"db"`
-	ExcludeDb       *string `mapstructure:"exclude_db"`
+	BootstrapDB     string        `mapstructure:"bootstrap_db"`
+	RefreshInterval time.Duration `mapstructure:"refresh_interval"` // bare number: minutes
+	Db              *string       `mapstructure:"db"`
+	ExcludeDb       *string       `mapstructure:"exclude_db"`
 }
 
 // withDefaults fills unset fields and resolves the password from the environment.
@@ -45,9 +45,7 @@ func (c Config) withDefaults() Config {
 		c.BootstrapDB = defaultBootstrapDB
 	}
 
-	if c.PasswordFromEnv != "" {
-		c.Password = os.Getenv(c.PasswordFromEnv)
-	}
+	c.Password, _ = config.ResolveSecret(c.Password, c.PasswordFromEnv)
 
 	return c
 }
@@ -68,14 +66,4 @@ func (c Config) validate() error {
 	}
 
 	return nil
-}
-
-// interval returns how often the databases are re-listed. The unit is minutes,
-// so any configured value is already at or above the sane lower bound.
-func (c Config) interval() time.Duration {
-	if c.RefreshInterval <= 0 {
-		return defaultRefreshInterval
-	}
-
-	return time.Duration(c.RefreshInterval) * time.Minute
 }

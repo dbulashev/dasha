@@ -1,12 +1,14 @@
 package repository
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"net"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -180,6 +182,7 @@ var validPgIdentifier = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][
 type pgxPoolItem struct {
 	Host     config.Host
 	Database config.Database
+	dsn      string // holds the password; never log it
 	pool     *pgxpool.Pool
 }
 
@@ -362,25 +365,14 @@ func (p *PgxPool) ensurePool(ctx context.Context) error {
 		return fmt.Errorf("config.Clusters.Get | %w", err)
 	}
 
-	// Build desired state: cluster -> set of host+db pairs.
 	type connTask struct {
-		cluster config.Cluster
+		cluster config.ClusterName
 		host    config.Host
 		db      config.Database
+		dsn     string
 	}
 
-	desired := make(map[config.ClusterName]map[hostDbKey]bool)
-	for _, cl := range cls {
-		if desired[cl.Name] == nil {
-			desired[cl.Name] = make(map[hostDbKey]bool)
-		}
-
-		for _, host := range cl.Hosts {
-			for _, db := range cl.Databases {
-				desired[cl.Name][hostDbKey{host, db}] = true
-			}
-		}
-	}
+	desired := desiredDSNs(cls)
 
 	p.mu.Lock()
 
@@ -408,8 +400,10 @@ func (p *PgxPool) ensurePool(ctx context.Context) error {
 		for _, item := range items {
 			key := hostDbKey{item.Host, item.Database}
 
+			dsn, wanted := desiredSet[key]
+
 			switch {
-			case !desiredSet[key]:
+			case !wanted || dsn != item.dsn:
 				toClose = append(toClose, item.pool)
 				p.logger.Debug("pool removed",
 					zap.String("cluster", string(clName)),
@@ -457,7 +451,12 @@ func (p *PgxPool) ensurePool(ctx context.Context) error {
 				}
 
 				if !found {
-					tasks = append(tasks, connTask{cluster: cl, host: host, db: db})
+					tasks = append(tasks, connTask{
+						cluster: cl.Name,
+						host:    host,
+						db:      db,
+						dsn:     desired[cl.Name][hostDbKey{host, db}],
+					})
 				}
 			}
 		}
@@ -486,24 +485,10 @@ func (p *PgxPool) ensurePool(ctx context.Context) error {
 		go func(t connTask) {
 			defer wg.Done()
 
-			port := t.cluster.Port
-			if port == "" {
-				port = "5432"
-			}
-
-			// url.URL escapes credentials; a hand-built string breaks on a
-			// password containing @ : / or ?.
-			dsn := url.URL{ //nolint:exhaustruct
-				Scheme: "postgres",
-				User:   url.UserPassword(t.cluster.UserName, t.cluster.Password),
-				Host:   net.JoinHostPort(string(t.host), port),
-				Path:   "/" + string(t.db),
-			}
-
-			pool, err := p.getPool(ctx, dsn.String())
+			pool, err := p.getPool(ctx, t.dsn)
 			if err != nil {
 				p.logger.Warn("failed to connect to database, skipping",
-					zap.String("cluster", string(t.cluster.Name)),
+					zap.String("cluster", string(t.cluster)),
 					zap.String("host", string(t.host)),
 					zap.String("database", string(t.db)),
 					zap.Error(err),
@@ -513,14 +498,14 @@ func (p *PgxPool) ensurePool(ctx context.Context) error {
 			}
 
 			p.logger.Debug("pool connected",
-				zap.String("cluster", string(t.cluster.Name)),
+				zap.String("cluster", string(t.cluster)),
 				zap.String("host", string(t.host)),
 				zap.String("database", string(t.db)),
 			)
 
 			resultsCh <- poolResult{
-				clusterName: t.cluster.Name,
-				item:        pgxPoolItem{Host: t.host, Database: t.db, pool: pool},
+				clusterName: t.cluster,
+				item:        pgxPoolItem{Host: t.host, Database: t.db, dsn: t.dsn, pool: pool},
 			}
 		}(task)
 	}
@@ -528,28 +513,44 @@ func (p *PgxPool) ensurePool(ctx context.Context) error {
 	wg.Wait()
 	close(resultsCh)
 
-	// Collect successful connections under lock. Planning happens without one, so
-	// a concurrent ensurePool — six lookup paths call it, and a cold start has
-	// them all racing — may have connected the same host+db and got here first.
-	// The late pool is closed rather than appended: no lookup would ever reach it.
-	var duplicates []*pgxpool.Pool
+	// Concurrent ensurePool calls connect without the lock and may have planned
+	// from different cluster snapshots: the latest snapshot decides which pool stays.
+	if latest, err := p.clusters.Get(ctx); err == nil {
+		desired = desiredDSNs(latest)
+	}
+
+	var dropped []*pgxpool.Pool
 
 	p.mu.Lock()
 
 	for r := range resultsCh {
-		if p.hasPoolLocked(r.clusterName, r.item) {
-			duplicates = append(duplicates, r.item.pool)
+		key := hostDbKey{r.item.Host, r.item.Database}
+		if desired[r.clusterName][key] != r.item.dsn {
+			dropped = append(dropped, r.item.pool)
 
 			continue
 		}
 
-		p.pools[r.clusterName] = append(p.pools[r.clusterName], r.item)
+		items := p.pools[r.clusterName]
+		i := slices.IndexFunc(items, func(it pgxPoolItem) bool { return it.Host == key.Host && it.Database == key.Db })
+
+		switch {
+		case i < 0:
+			p.pools[r.clusterName] = append(items, r.item)
+		case items[i].dsn == r.item.dsn:
+			dropped = append(dropped, r.item.pool)
+		default:
+			dropped = append(dropped, items[i].pool)
+			next := slices.Clone(items)
+			next[i] = r.item
+			p.pools[r.clusterName] = next
+		}
 	}
 
 	p.mu.Unlock()
 
-	for _, pool := range duplicates {
-		p.logger.Debug("duplicate pool closed after a concurrent connect")
+	for _, pool := range dropped {
+		p.logger.Debug("pool closed after a concurrent connect")
 		p.forgetPool(pool)
 
 		go pool.Close()
@@ -558,16 +559,39 @@ func (p *PgxPool) ensurePool(ctx context.Context) error {
 	return nil
 }
 
-// hasPoolLocked reports whether a pool for this host+db is already registered.
-// Callers must hold p.mu.
-func (p *PgxPool) hasPoolLocked(clusterName config.ClusterName, item pgxPoolItem) bool {
-	for _, existing := range p.pools[clusterName] {
-		if existing.Host == item.Host && existing.Database == item.Database {
-			return true
+// desiredDSNs maps every cluster's host+db pair to its connection string.
+func desiredDSNs(cls []config.Cluster) map[config.ClusterName]map[hostDbKey]string {
+	desired := make(map[config.ClusterName]map[hostDbKey]string, len(cls))
+
+	for _, cl := range cls {
+		if desired[cl.Name] == nil {
+			desired[cl.Name] = make(map[hostDbKey]string)
+		}
+
+		for _, host := range cl.Hosts {
+			for _, db := range cl.Databases {
+				desired[cl.Name][hostDbKey{host, db}] = poolDSN(cl, host, db)
+			}
 		}
 	}
 
-	return false
+	return desired
+}
+
+// poolDSN builds the connection string; url.URL escapes credentials containing @ : / or ?.
+func poolDSN(cl config.Cluster, host config.Host, db config.Database) string {
+	dsn := url.URL{ //nolint:exhaustruct
+		Scheme: "postgres",
+		User:   url.UserPassword(cl.UserName, cl.Password),
+		Host:   net.JoinHostPort(cmp.Or(cl.HostMeta[host].Address, string(host)), hostPort(cl, host)),
+		Path:   "/" + string(db),
+	}
+
+	return dsn.String()
+}
+
+func hostPort(cl config.Cluster, host config.Host) string {
+	return cmp.Or(cl.HostMeta[host].Port, cl.Port, "5432")
 }
 
 // Dasha opens one pool per (host, database) and connects as a single monitoring
