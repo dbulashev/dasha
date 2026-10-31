@@ -171,6 +171,12 @@ const SourceYandexMDB = "yandex-mdb"
 // cluster itself.
 const SourcePostgres = "postgres"
 
+// SourcePatroni marks clusters discovered from the keys Patroni keeps in its DCS.
+const SourcePatroni = "patroni"
+
+// LabelPatroniStandbyOf names the cluster a Patroni standby cluster replicates from.
+const LabelPatroniStandbyOf = "patroni.standby_of"
+
 // DiscoveryClusterFilter defines regex matching rules for discovered clusters.
 type DiscoveryClusterFilter struct {
 	Name        string  `mapstructure:"name"`
