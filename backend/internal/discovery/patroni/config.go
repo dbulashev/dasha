@@ -5,12 +5,12 @@ package patroni
 import (
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
 	"go.uber.org/zap"
 
+	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/discovery/filter"
 )
 
@@ -177,21 +177,22 @@ func (s PGSettings) resolve(entry, scope string, logger *zap.Logger) (scopePG, e
 		return scopePG{}, errUserRequired //nolint:exhaustruct
 	}
 
-	password := s.Password
-	if s.PasswordFromEnv != "" {
-		password = os.Getenv(s.PasswordFromEnv)
+	if s.Port != "" && !validPort(s.Port) {
+		return scopePG{}, fmt.Errorf("%w: %q", errBadPort, s.Port) //nolint:exhaustruct
+	}
 
-		if password == "" {
-			key := "password_from_env"
-			if scope != "" {
-				key = "overrides." + scope + "." + key
-			}
-
-			logger.Warn("password_from_env is set but the variable is empty",
-				zap.String("entry", entry),
-				zap.String("key", key),
-			)
+	password, unset := config.ResolveSecret(s.Password, s.PasswordFromEnv)
+	if unset {
+		key := "password_from_env"
+		if scope != "" {
+			key = "overrides." + scope + "." + key
 		}
+
+		logger.Warn("password_from_env is set but the variable is empty",
+			zap.String("entry", entry),
+			zap.String("key", key),
+			zap.String("variable", s.PasswordFromEnv),
+		)
 	}
 
 	f, err := filter.New(matchAll, s.Db, nil, s.ExcludeDb)
@@ -241,13 +242,4 @@ func deref(s *string) string {
 	}
 
 	return *s
-}
-
-// secret returns the value of the variable when env is set, else plain.
-func secret(plain, env string) string {
-	if env != "" {
-		return os.Getenv(env)
-	}
-
-	return plain
 }

@@ -51,6 +51,12 @@ func TestNewProviderValidation(t *testing.T) {
 			raw:     etcdRaw(map[string]any{"overrides": map[string]any{"beta": map[string]any{"user": ""}}}),
 			wantErr: errUserRequired,
 		},
+		{name: "bad port", raw: etcdRaw(map[string]any{"port": "54 32"}), wantErr: errBadPort},
+		{
+			name:    "bad override port",
+			raw:     etcdRaw(map[string]any{"overrides": map[string]any{"beta": map[string]any{"port": "abc"}}}),
+			wantErr: errBadPort,
+		},
 	}
 
 	for _, tt := range tests {

@@ -38,3 +38,36 @@ func TestHostPort(t *testing.T) {
 		})
 	}
 }
+
+func TestPoolDSN(t *testing.T) {
+	t.Parallel()
+
+	cl := config.Cluster{ //nolint:exhaustruct
+		UserName: "dasha",
+		Password: "p@ss:word",
+		Port:     "6432",
+		HostMeta: map[config.Host]config.HostMeta{
+			"10.0.0.1:5433": {Address: "10.0.0.1", Port: "5433", Alias: "pg-1"},
+		},
+	}
+
+	tests := []struct {
+		name string
+		cl   config.Cluster
+		host config.Host
+		want string
+	}{
+		{name: "address from meta", cl: cl, host: "10.0.0.1:5433", want: "postgres://dasha:p%40ss%3Aword@10.0.0.1:5433/app"},
+		{name: "host as address", cl: cl, host: "pg-01", want: "postgres://dasha:p%40ss%3Aword@pg-01:6432/app"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if got := poolDSN(tt.cl, tt.host, "app"); got != tt.want {
+				t.Errorf("poolDSN() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

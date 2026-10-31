@@ -204,8 +204,8 @@ func TestDiscoverPortFromConfig(t *testing.T) {
 
 	alpha := env.discover(t)[0]
 
-	if alpha.Port != "6432" || alpha.HostMeta["10.0.0.1"].Port != "" {
-		t.Errorf("port = %q, meta port = %q, want 6432 and none", alpha.Port, alpha.HostMeta["10.0.0.1"].Port)
+	if alpha.Port != "6432" || alpha.HostMeta["10.0.0.1"].Port != "6432" {
+		t.Errorf("port = %q, meta port = %q, want 6432 for both", alpha.Port, alpha.HostMeta["10.0.0.1"].Port)
 	}
 
 	if env.pg.asked[0].Port != "6432" {
@@ -375,10 +375,35 @@ func TestDiscoverLogsChanges(t *testing.T) {
 	}
 }
 
-func TestDiscoverHostCollision(t *testing.T) {
+func TestDiscoverSharedHost(t *testing.T) {
 	t.Parallel()
 
 	env := newTestEnv(t, nil, false,
+		memberKV("lab", "lab-1", "10.0.0.1", 5432),
+		memberKV("lab", "lab-2", "10.0.0.1", 5433),
+		memberKV("lab", "lab-3", "10.0.0.2", 5432),
+	)
+
+	cl := env.discover(t)[0]
+
+	want := []config.Host{"10.0.0.1:5432", "10.0.0.1:5433", "10.0.0.2"}
+	if !slices.Equal(cl.Hosts, want) {
+		t.Fatalf("hosts = %v, want %v", cl.Hosts, want)
+	}
+
+	if m := cl.HostMeta["10.0.0.1:5433"]; m.Address != "10.0.0.1" || m.Port != "5433" || m.Alias != "lab-2" {
+		t.Errorf("meta = %+v, want 10.0.0.1:5433 lab-2", m)
+	}
+
+	if m := cl.HostMeta["10.0.0.2"]; m.Address != "10.0.0.2" || m.Port != "5432" {
+		t.Errorf("meta = %+v, want 10.0.0.2:5432", m)
+	}
+}
+
+func TestDiscoverAddressCollision(t *testing.T) {
+	t.Parallel()
+
+	env := newTestEnv(t, map[string]any{"port": "6432"}, false,
 		memberKV("lab", "lab-1", "10.0.0.1", 5432),
 		memberKV("lab", "lab-2", "10.0.0.1", 5433),
 	)
@@ -386,11 +411,11 @@ func TestDiscoverHostCollision(t *testing.T) {
 	cl := env.discover(t)[0]
 	env.discover(t)
 
-	if len(cl.Hosts) != 1 || cl.HostMeta["10.0.0.1"].Alias != "lab-1" {
+	if len(cl.Hosts) != 1 || cl.Hosts[0] != "10.0.0.1" || cl.HostMeta["10.0.0.1"].Alias != "lab-1" {
 		t.Errorf("hosts = %v meta = %v, want lab-1 only", cl.Hosts, cl.HostMeta)
 	}
 
-	if n := env.logs.FilterMessage("patroni member shares a host with another member, skipped").Len(); n != 1 {
+	if n := env.logs.FilterMessage("patroni member shares an address with another member, skipped").Len(); n != 1 {
 		t.Errorf("collision logged %d times over two cycles, want 1", n)
 	}
 }

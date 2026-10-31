@@ -4,8 +4,9 @@ package postgres
 
 import (
 	"errors"
-	"os"
 	"time"
+
+	"github.com/dbulashev/dasha/internal/config"
 )
 
 const (
@@ -44,9 +45,7 @@ func (c Config) withDefaults() Config {
 		c.BootstrapDB = defaultBootstrapDB
 	}
 
-	if c.PasswordFromEnv != "" {
-		c.Password = os.Getenv(c.PasswordFromEnv)
-	}
+	c.Password, _ = config.ResolveSecret(c.Password, c.PasswordFromEnv)
 
 	return c
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/discovery/filter"
 	"github.com/dbulashev/dasha/internal/discovery/pgdb"
+	"github.com/dbulashev/dasha/internal/pkg/mapstruct"
 )
 
 const (
@@ -165,8 +166,8 @@ func (p *Provider) logChanges(current []string) {
 		return
 	}
 
-	added := missingFrom(current, p.published)
-	removed := missingFrom(p.published, current)
+	added := mapstruct.SliceMissing(current, p.published)
+	removed := mapstruct.SliceMissing(p.published, current)
 
 	if len(added) > 0 || len(removed) > 0 {
 		p.logger.Info("database list changed",
@@ -177,24 +178,6 @@ func (p *Provider) logChanges(current []string) {
 	}
 
 	p.published = current
-}
-
-// missingFrom returns the names of from that other does not contain.
-func missingFrom(from, other []string) []string {
-	present := make(map[string]bool, len(other))
-	for _, name := range other {
-		present[name] = true
-	}
-
-	var diff []string
-
-	for _, name := range from {
-		if !present[name] {
-			diff = append(diff, name)
-		}
-	}
-
-	return diff
 }
 
 // listDatabases queries the first host that answers, starting from the one that

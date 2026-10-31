@@ -4,6 +4,8 @@ import (
 	"slices"
 
 	"go.uber.org/zap"
+
+	"github.com/dbulashev/dasha/internal/pkg/mapstruct"
 )
 
 // maxListedScopes caps the scope list in the first-cycle log line.
@@ -26,7 +28,7 @@ func (p *Provider) logChanges(next map[string]scopeState) {
 
 	prev := sortedKeys(p.state)
 
-	if added, removed := missingFrom(names, prev), missingFrom(prev, names); len(added) > 0 || len(removed) > 0 {
+	if added, removed := mapstruct.SliceMissing(names, prev), mapstruct.SliceMissing(prev, names); len(added) > 0 || len(removed) > 0 {
 		p.logger.Info("patroni scopes changed",
 			zap.String("entry", p.entry),
 			zap.Strings("added", added),
@@ -48,7 +50,7 @@ func (p *Provider) logChanges(next map[string]scopeState) {
 }
 
 func logDiff(logger *zap.Logger, msg, entry, scope string, old, cur []string) {
-	added, removed := missingFrom(cur, old), missingFrom(old, cur)
+	added, removed := mapstruct.SliceMissing(cur, old), mapstruct.SliceMissing(old, cur)
 	if len(added) == 0 && len(removed) == 0 {
 		return
 	}
@@ -70,17 +72,4 @@ func sortedKeys(m map[string]scopeState) []string {
 	slices.Sort(keys)
 
 	return keys
-}
-
-// missingFrom returns the names of from that other does not contain.
-func missingFrom(from, other []string) []string {
-	var diff []string
-
-	for _, name := range from {
-		if !slices.Contains(other, name) {
-			diff = append(diff, name)
-		}
-	}
-
-	return diff
 }

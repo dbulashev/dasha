@@ -6,6 +6,7 @@ import (
 	"context"
 	"io"
 	"net"
+	"net/url"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -88,6 +89,15 @@ func publishOnPort(clusters config.Clusters, port string) {
 	}})
 }
 
+func dsnPort(t *testing.T, item pgxPoolItem) string {
+	t.Helper()
+
+	u, err := url.Parse(item.dsn)
+	require.NoError(t, err)
+
+	return u.Port()
+}
+
 func onlyPool(t *testing.T, p *PgxPool) pgxPoolItem {
 	t.Helper()
 
@@ -121,7 +131,7 @@ func TestEnsurePoolReplacesPoolOnPortChange(t *testing.T) {
 	require.NoError(t, p.ensurePool(ctx))
 
 	old := onlyPool(t, p)
-	require.Equal(t, first.port(), old.Port)
+	require.Equal(t, first.port(), dsnPort(t, old))
 	require.NoError(t, old.pool.Ping(ctx))
 	require.Positive(t, first.accepted.Load())
 
@@ -129,7 +139,7 @@ func TestEnsurePoolReplacesPoolOnPortChange(t *testing.T) {
 	require.NoError(t, p.ensurePool(ctx))
 
 	cur := onlyPool(t, p)
-	require.Equal(t, second.port(), cur.Port)
+	require.Equal(t, second.port(), dsnPort(t, cur))
 	require.NotSame(t, old.pool, cur.pool)
 	require.NoError(t, cur.pool.Ping(ctx))
 	require.Positive(t, second.accepted.Load())

@@ -8,6 +8,8 @@ import (
 
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
+
+	"github.com/dbulashev/dasha/internal/config"
 )
 
 const (
@@ -32,10 +34,17 @@ func newEtcdStore(cfg EtcdConfig, logger *zap.Logger) (*etcdStore, error) {
 		}
 	}
 
+	password, unset := config.ResolveSecret(cfg.Password, cfg.PasswordFromEnv)
+	if unset {
+		logger.Warn("etcd3.password_from_env is set but the variable is empty",
+			zap.String("variable", cfg.PasswordFromEnv),
+		)
+	}
+
 	cli, err := clientv3.New(clientv3.Config{ //nolint:exhaustruct
 		Endpoints:          cfg.Endpoints,
 		Username:           cfg.Username,
-		Password:           secret(cfg.Password, cfg.PasswordFromEnv),
+		Password:           password,
 		TLS:                tlsCfg,
 		DialTimeout:        etcdDialTimeout,
 		MaxCallRecvMsgSize: etcdMaxRecvSize,

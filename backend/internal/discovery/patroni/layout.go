@@ -2,6 +2,7 @@ package patroni
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"net/url"
@@ -136,14 +137,14 @@ func memberAddr(value []byte) (string, string, error) {
 			return "", "", errBadConnURL
 		}
 
-		host, port = u.Hostname(), u.Port()
-
-		if host == "" && u.Query().Get("host") != "" {
-			host = u.Query().Get("host")
-		}
+		q := u.Query()
+		host, port = cmp.Or(u.Hostname(), q.Get("host")), cmp.Or(u.Port(), q.Get("port"))
 	} else {
 		host, port = m.ConnKwargs.Host, rawScalar(m.ConnKwargs.Port)
 	}
+
+	// libpq accepts comma-separated lists; the first entry is the member itself.
+	host, port = firstOf(host), firstOf(port)
 
 	switch {
 	case host == "":
@@ -239,6 +240,14 @@ func splitList(s string) []string {
 	}
 
 	return out
+}
+
+func firstOf(list string) string {
+	if items := splitList(list); len(items) > 0 {
+		return items[0]
+	}
+
+	return ""
 }
 
 func validPort(p string) bool {

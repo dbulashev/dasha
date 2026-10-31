@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	"go.uber.org/zap"
@@ -74,16 +73,12 @@ func NewProvider(
 		filters = append(filters, *f)
 	}
 
-	password := cfg.Password
-	if cfg.PasswordFromEnv != "" {
-		password = os.Getenv(cfg.PasswordFromEnv)
-
-		if password == "" {
-			logger.Warn("password_from_env is set but the variable is empty",
-				zap.String("entry", folderName),
-				zap.String("variable", cfg.PasswordFromEnv),
-			)
-		}
+	password, unset := config.ResolveSecret(cfg.Password, cfg.PasswordFromEnv)
+	if unset {
+		logger.Warn("password_from_env is set but the variable is empty",
+			zap.String("entry", folderName),
+			zap.String("variable", cfg.PasswordFromEnv),
+		)
 	}
 
 	sdk, err := NewSDK(cfg.AuthorizedKey)

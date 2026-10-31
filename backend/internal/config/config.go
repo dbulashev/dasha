@@ -160,8 +160,9 @@ type Cluster struct {
 
 // HostMeta holds per-host attributes a discovery source knows about.
 type HostMeta struct {
-	Port  string // overrides Cluster.Port for this host
-	Alias string // display name, e.g. the Patroni member name
+	Address string // address to connect to; empty: the host name itself
+	Port    string // overrides Cluster.Port for this host
+	Alias   string // display name, e.g. the Patroni member name
 }
 
 // SourceYandexMDB marks clusters discovered from Yandex Managed Databases.

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"net"
 	"slices"
 	"strings"
 	"time"
@@ -53,7 +54,15 @@ type scopeState struct {
 type scopePlan struct {
 	data    scopeData
 	pg      scopePG
-	members []member // one per host
+	members []target // one per address
+}
+
+// target is a member as dasha connects to it.
+type target struct {
+	ID   config.Host // instance name: the host, or host:port when members share the host
+	Name string
+	Host string
+	Port string // effective: the entry port or the member's
 }
 
 type listResult struct {
@@ -70,7 +79,7 @@ func NewProvider(name string, raw map[string]any, prefixName bool, logger *zap.L
 		return nil, err
 	}
 
-	p.store, err = newStore(p.cfg, logger)
+	p.store, err = newStore(p.cfg, logger.With(zap.String("entry", name)))
 	if err != nil {
 		return nil, err
 	}
@@ -245,33 +254,46 @@ func (p *Provider) pgFor(scope string) scopePG {
 	return p.base
 }
 
-// plan resolves settings per scope and keeps one member per host: the host is
-// the pool key, so a second member on it would collide.
+// plan resolves settings per scope and keeps one member per address.
 func (p *Provider) plan(scopes []scopeData, warned map[string]bool) []scopePlan {
 	plans := make([]scopePlan, 0, len(scopes))
 
 	for _, s := range scopes {
-		seen := make(map[string]bool, len(s.Members))
-		members := make([]member, 0, len(s.Members))
+		pg := p.pgFor(s.Name)
+		seen := make(map[hostPort]bool, len(s.Members))
+		perHost := make(map[string]int, len(s.Members))
+		targets := make([]target, 0, len(s.Members))
 
 		for _, m := range s.Members {
-			if seen[m.Host] {
-				p.warnOnce(warned, "host/"+s.Name+"/"+m.Name, "patroni member shares a host with another member, skipped",
+			addr := hostPort{Host: m.Host, Port: cmp.Or(pg.Port, m.Port)}
+			if seen[addr] {
+				p.warnOnce(warned, "addr/"+s.Name+"/"+m.Name, "patroni member shares an address with another member, skipped",
 					zap.String("entry", p.entry),
 					zap.String("scope", s.Name),
 					zap.String("member", m.Name),
-					zap.String("host", m.Host),
+					zap.String("host", addr.Host),
+					zap.String("port", addr.Port),
 				)
 
 				continue
 			}
 
-			seen[m.Host] = true
+			seen[addr] = true
+			perHost[addr.Host]++
 
-			members = append(members, m)
+			targets = append(targets, target{ID: "", Name: m.Name, Host: addr.Host, Port: addr.Port})
 		}
 
-		plans = append(plans, scopePlan{data: s, pg: p.pgFor(s.Name), members: members})
+		for i := range targets {
+			t := &targets[i]
+
+			t.ID = config.Host(t.Host)
+			if perHost[t.Host] > 1 {
+				t.ID = config.Host(net.JoinHostPort(t.Host, t.Port))
+			}
+		}
+
+		plans = append(plans, scopePlan{data: s, pg: pg, members: targets})
 	}
 
 	return plans
@@ -314,7 +336,7 @@ func (p *Provider) listScope(ctx context.Context, pl scopePlan) listResult {
 
 		targets = append(targets, pgdb.Target{
 			Host:     m.Host,
-			Port:     cmp.Or(pl.pg.Port, m.Port),
+			Port:     m.Port,
 			User:     pl.pg.User,
 			Password: pl.pg.Password,
 			Database: pl.pg.BootstrapDB,
@@ -366,16 +388,9 @@ func (p *Provider) build(plans []scopePlan, results []listResult) ([]config.Clus
 		meta := make(map[config.Host]config.HostMeta, len(pl.members))
 
 		for _, m := range pl.members {
-			h := config.Host(m.Host)
-			hosts = append(hosts, h)
-			st.Hosts = append(st.Hosts, m.Host)
-
-			hm := config.HostMeta{Port: "", Alias: m.Name}
-			if pl.pg.Port == "" {
-				hm.Port = m.Port
-			}
-
-			meta[h] = hm
+			hosts = append(hosts, m.ID)
+			st.Hosts = append(st.Hosts, string(m.ID))
+			meta[m.ID] = config.HostMeta{Address: m.Host, Port: m.Port, Alias: m.Name}
 		}
 
 		labels := map[string]string{

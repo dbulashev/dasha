@@ -80,3 +80,21 @@ func SliceUniqueMember[T any, U comparable](slice []T, fn func(T) U) []U {
 
 	return ret
 }
+
+// SliceMissing returns the elements of from that other does not contain, in from's order.
+func SliceMissing[T comparable](from, other []T) []T {
+	present := make(map[T]bool, len(other))
+	for _, v := range other {
+		present[v] = true
+	}
+
+	var diff []T
+
+	for _, v := range from {
+		if !present[v] {
+			diff = append(diff, v)
+		}
+	}
+
+	return diff
+}
