@@ -160,12 +160,16 @@ discovery:
       folder_id: "b1g..."
       user: "monitoring_user"
       password: "secret"
-      refresh_interval: 5  # минуты
+      refresh_interval: 5m  # по умолчанию 5m, минимум 1m
       clusters:
         - name: "prod-.*"       # регулярное выражение
           exclude_name: "test"
           exclude_db: "system_db"
 ```
+
+`refresh_interval` во всех типах discovery задаётся длительностью (`5m`, `90s`). Голое число —
+минуты, поэтому старые конфиги (`refresh_interval: 5`) работают без изменений. Значение меньше
+`1m` поднимается до `1m` с предупреждением.
 
 ## Автообнаружение баз в кластере (опционально)
 
@@ -182,7 +186,7 @@ discovery:
       user: dasha
       password: secret            # или password_from_env: DASHA_PG_PASSWORD
       bootstrap_db: postgres      # база, из которой читается список баз
-      refresh_interval: 5         # минуты, по умолчанию 5
+      refresh_interval: 5m        # по умолчанию 5m, минимум 1m
       db: ".*"                    # регулярное выражение
       exclude_db: "(template.*)"
 ```

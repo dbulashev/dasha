@@ -13,8 +13,6 @@ import (
 	"github.com/dbulashev/dasha/internal/discovery/filter"
 )
 
-const defaultRefreshInterval = 5 * time.Minute
-
 var (
 	errAuthorizedKeyRequired = errors.New("authorized_key is required")
 	errFolderIDRequired      = errors.New("folder_id is required")
@@ -97,9 +95,13 @@ func NewProvider(
 		registry.Register(cfg.FolderID, sdk)
 	}
 
-	interval := time.Duration(cfg.RefreshInterval) * time.Minute
-	if cfg.RefreshInterval <= 0 {
-		interval = defaultRefreshInterval
+	interval, raised := config.DiscoveryInterval(cfg.RefreshInterval)
+	if raised {
+		logger.Warn("refresh_interval is below the minimum, raised",
+			zap.String("entry", folderName),
+			zap.Duration("configured", cfg.RefreshInterval),
+			zap.Duration("interval", interval),
+		)
 	}
 
 	// The entry's own settings; the engine logs name, type and interval.

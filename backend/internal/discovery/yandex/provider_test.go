@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+
+	"github.com/dbulashev/dasha/internal/config"
 )
 
 // writeTestKey writes an authorized key that passes loadAuthorizedKey's checks.
@@ -103,14 +105,24 @@ func TestNewProviderInterval(t *testing.T) {
 			want: 7 * time.Minute,
 		},
 		{
+			name: "duration string",
+			raw:  map[string]any{"refresh_interval": "90s"},
+			want: 90 * time.Second,
+		},
+		{
+			name: "below minimum is raised",
+			raw:  map[string]any{"refresh_interval": "10s"},
+			want: config.MinDiscoveryInterval,
+		},
+		{
 			name: "unset falls back to default",
 			raw:  map[string]any{},
-			want: defaultRefreshInterval,
+			want: config.DefaultDiscoveryInterval,
 		},
 		{
 			name: "non-positive falls back to default",
 			raw:  map[string]any{"refresh_interval": -1},
-			want: defaultRefreshInterval,
+			want: config.DefaultDiscoveryInterval,
 		},
 	}
 

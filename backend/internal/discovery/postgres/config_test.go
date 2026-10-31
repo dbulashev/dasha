@@ -3,7 +3,6 @@ package postgres
 import (
 	"errors"
 	"testing"
-	"time"
 )
 
 func TestConfigValidate(t *testing.T) {
@@ -71,30 +70,5 @@ func TestConfigPasswordFromEnv(t *testing.T) {
 
 	if cfg.Password != "s3cret" {
 		t.Errorf("Password = %q, want the value from the environment", cfg.Password)
-	}
-}
-
-func TestConfigInterval(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		minutes int
-		want    time.Duration
-	}{
-		{name: "explicit", minutes: 7, want: 7 * time.Minute},
-		{name: "unset", minutes: 0, want: defaultRefreshInterval},
-		{name: "negative", minutes: -3, want: defaultRefreshInterval},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			cfg := Config{RefreshInterval: tt.minutes} //nolint:exhaustruct
-			if got := cfg.interval(); got != tt.want {
-				t.Errorf("interval() = %v, want %v", got, tt.want)
-			}
-		})
 	}
 }

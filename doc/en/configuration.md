@@ -159,12 +159,16 @@ discovery:
       folder_id: "b1g..."
       user: "monitoring_user"
       password: "secret"
-      refresh_interval: 5  # minutes
+      refresh_interval: 5m  # default 5m, min 1m
       clusters:
         - name: "prod-.*"       # regex filter
           exclude_name: "test"
           exclude_db: "system_db"
 ```
+
+`refresh_interval` takes a duration (`5m`, `90s`) in every discovery type. A bare number is read as
+minutes, so older configs (`refresh_interval: 5`) keep working. Values below `1m` are raised to `1m`
+with a warning.
 
 ## Database discovery inside a cluster (optional)
 
@@ -182,7 +186,7 @@ discovery:
       user: dasha
       password: secret            # or password_from_env: DASHA_PG_PASSWORD
       bootstrap_db: postgres      # database the discovery query connects to
-      refresh_interval: 5         # minutes, default 5
+      refresh_interval: 5m        # default 5m, min 1m
       db: ".*"                    # regex filter
       exclude_db: "(template.*)"
 ```

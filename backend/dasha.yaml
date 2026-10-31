@@ -34,6 +34,6 @@ clusters:
 #       user: dasha
 #       password: secret         # or password_from_env: DASHA_PG_PASSWORD
 #       bootstrap_db: postgres   # database the discovery query connects to
-#       refresh_interval: 5      # minutes, default 5
+#       refresh_interval: 5m     # default 5m, min 1m; a bare number is minutes
 #       db: ".*"                 # regex include
 #       exclude_db: "template.*" # regex exclude

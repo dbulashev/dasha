@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -486,17 +487,12 @@ func (p *PgxPool) ensurePool(ctx context.Context) error {
 		go func(t connTask) {
 			defer wg.Done()
 
-			port := t.cluster.Port
-			if port == "" {
-				port = "5432"
-			}
-
 			// url.URL escapes credentials; a hand-built string breaks on a
 			// password containing @ : / or ?.
 			dsn := url.URL{ //nolint:exhaustruct
 				Scheme: "postgres",
 				User:   url.UserPassword(t.cluster.UserName, t.cluster.Password),
-				Host:   net.JoinHostPort(string(t.host), port),
+				Host:   net.JoinHostPort(string(t.host), hostPort(t.cluster, t.host)),
 				Path:   "/" + string(t.db),
 			}
 
@@ -556,6 +552,10 @@ func (p *PgxPool) ensurePool(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func hostPort(cl config.Cluster, host config.Host) string {
+	return cmp.Or(cl.HostMeta[host].Port, cl.Port, "5432")
 }
 
 // hasPoolLocked reports whether a pool for this host+db is already registered.
