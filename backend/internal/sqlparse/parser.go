@@ -74,8 +74,7 @@ func (e *Error) Unwrap() error { return e.err }
 // ReasonOf reports the reason code behind err, falling back to a parse error for
 // anything the parser did not classify itself.
 func ReasonOf(err error) string {
-	var perr *Error
-	if errors.As(err, &perr) {
+	if perr, ok := errors.AsType[*Error](err); ok {
 		return perr.Code
 	}
 

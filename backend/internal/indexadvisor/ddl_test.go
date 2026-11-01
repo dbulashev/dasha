@@ -11,7 +11,7 @@ import (
 // level down, and the DDL walks Parent.
 func partRel(name, kind string, parent, root RelKey) Relation {
 	return Relation{
-		RelKey: RelKey{Schema: testSchema, Name: name},
+		Schema: testSchema, Name: name,
 		Kind:   kind,
 		Rows:   testRows,
 		Pages:  100,

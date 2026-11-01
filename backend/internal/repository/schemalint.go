@@ -775,9 +775,8 @@ func skipForCodes(codes []string, reason schemalint.SkipReason, detail string) [
 
 // classifySchemaLintError turns a query failure into the reason the page shows.
 func classifySchemaLintError(err error) schemalint.SkipReason {
-	var pgErr *pgconn.PgError
 
-	if errors.As(err, &pgErr) {
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
 		switch pgErr.Code {
 		case insufficientPrivilegeCode:
 			return schemalint.SkipInsufficientPrivileges
@@ -798,8 +797,7 @@ func skipDetail(err error) string {
 		return "timeout"
 	}
 
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
+	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
 		return "SQLSTATE " + pgErr.Code
 	}
 

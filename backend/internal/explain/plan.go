@@ -217,7 +217,3 @@ func (n *Node) SelfCost() float64 {
 
 	return self
 }
-
-func ptrFloat(v float64) *float64 { return &v }
-
-func ptrInt(v int) *int { return &v }

@@ -513,19 +513,19 @@ func setTextAttr(n *Node, key, value, raw string) {
 	case "Join Filter":
 		n.JoinFilter = value
 	case "Rows Removed by Filter":
-		n.RowsRemovedByFilter = ptrFloat(parseFloat(value))
+		n.RowsRemovedByFilter = new(parseFloat(value))
 	case "Rows Removed by Join Filter":
-		n.RowsRemovedByJoinFilter = ptrFloat(parseFloat(value))
+		n.RowsRemovedByJoinFilter = new(parseFloat(value))
 	case "Heap Fetches":
-		n.HeapFetches = ptrFloat(parseFloat(value))
+		n.HeapFetches = new(parseFloat(value))
 	case "Sort Key":
 		n.SortKey = splitTopLevel(value)
 	case "Sort Method":
 		setSortMethod(n, raw)
 	case "Workers Planned":
-		n.WorkersPlanned = ptrInt(int(parseFloat(value)))
+		n.WorkersPlanned = new(int(parseFloat(value)))
 	case "Workers Launched":
-		n.WorkersLaunched = ptrInt(int(parseFloat(value)))
+		n.WorkersLaunched = new(int(parseFloat(value)))
 	case "Heap Blocks":
 		setHeapBlocks(n, value)
 	case "Buffers":
@@ -563,7 +563,7 @@ func setSortMethod(n *Node, raw string) {
 
 	if m := sortSpaceRe.FindStringSubmatch(value); m != nil {
 		n.SortSpaceType = m[1]
-		n.SortSpaceKB = ptrFloat(parseFloat(m[2]))
+		n.SortSpaceKB = new(parseFloat(m[2]))
 		value = value[:strings.Index(value, m[0])]
 	}
 
@@ -571,7 +571,7 @@ func setSortMethod(n *Node, raw string) {
 }
 
 func setHeapBlocks(n *Node, value string) {
-	for _, part := range strings.Fields(value) {
+	for part := range strings.FieldsSeq(value) {
 		kind, num, ok := strings.Cut(part, "=")
 		if !ok {
 			continue
@@ -579,9 +579,9 @@ func setHeapBlocks(n *Node, value string) {
 
 		switch kind {
 		case "exact":
-			n.HeapBlocksExact = ptrFloat(parseFloat(num))
+			n.HeapBlocksExact = new(parseFloat(num))
 		case "lossy":
-			n.HeapBlocksLossy = ptrFloat(parseFloat(num))
+			n.HeapBlocksLossy = new(parseFloat(num))
 		}
 	}
 }
@@ -590,7 +590,7 @@ func setHeapBlocks(n *Node, value string) {
 func parseTextBuffers(value string) *Buffers {
 	b := &Buffers{}
 
-	for _, group := range strings.Split(value, ",") {
+	for group := range strings.SplitSeq(value, ",") {
 		fields := strings.Fields(group)
 		if len(fields) < 2 {
 			continue
@@ -641,9 +641,9 @@ func applyTail(p *Plan, line string, nested bool) bool {
 
 	switch {
 	case strings.HasPrefix(line, "Planning Time: "):
-		p.PlanningTime = ptrFloat(parseFloat(strings.TrimSuffix(strings.TrimPrefix(line, "Planning Time: "), " ms")))
+		p.PlanningTime = new(parseFloat(strings.TrimSuffix(strings.TrimPrefix(line, "Planning Time: "), " ms")))
 	case strings.HasPrefix(line, "Execution Time: "):
-		p.ExecutionTime = ptrFloat(parseFloat(strings.TrimSuffix(strings.TrimPrefix(line, "Execution Time: "), " ms")))
+		p.ExecutionTime = new(parseFloat(strings.TrimSuffix(strings.TrimPrefix(line, "Execution Time: "), " ms")))
 	case strings.HasPrefix(line, "Query Identifier: "):
 		id, err := strconv.ParseInt(strings.TrimPrefix(line, "Query Identifier: "), 10, 64)
 		if err != nil {
@@ -684,7 +684,7 @@ func applyJITLine(p *Plan, line string) bool {
 		p.JIT.Functions = int(parseFloat(strings.TrimPrefix(line, "Functions: ")))
 	case strings.HasPrefix(line, "Timing: "):
 		for _, m := range jitTimeRe.FindAllStringSubmatch(line, -1) {
-			v := ptrFloat(parseFloat(m[2]))
+			v := new(parseFloat(m[2]))
 			switch m[1] {
 			case "Generation":
 				p.JIT.Generation = v

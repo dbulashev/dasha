@@ -336,7 +336,7 @@ func (d *Daemon) takeSnapshot(
 			TriggerType:    trigType,
 			Outcome:        OutcomeError,
 			TriggerContext: trigCtx,
-			ErrorMessage:   strPtr(fmt.Sprintf("get report: %v", err)),
+			ErrorMessage:   new(fmt.Sprintf("get report: %v", err)),
 		})
 
 		return err
@@ -352,7 +352,7 @@ func (d *Daemon) takeSnapshot(
 			TriggerType:    trigType,
 			Outcome:        OutcomeError,
 			TriggerContext: trigCtx,
-			ErrorMessage:   strPtr("empty report: no query-statistics extension is readable in any database of the host"),
+			ErrorMessage:   new("empty report: no query-statistics extension is readable in any database of the host"),
 		})
 
 		return errEmptyReport
@@ -370,7 +370,7 @@ func (d *Daemon) takeSnapshot(
 			TriggerType:    trigType,
 			Outcome:        OutcomeError,
 			TriggerContext: trigCtx,
-			ErrorMessage:   strPtr(fmt.Sprintf("pgss database: %v", err)),
+			ErrorMessage:   new(fmt.Sprintf("pgss database: %v", err)),
 		})
 
 		return err
@@ -412,7 +412,7 @@ func (d *Daemon) takeSnapshot(
 			TriggerType:    trigType,
 			Outcome:        OutcomeError,
 			TriggerContext: trigCtx,
-			ErrorMessage:   strPtr(fmt.Sprintf("create snapshot: %v", err)),
+			ErrorMessage:   new(fmt.Sprintf("create snapshot: %v", err)),
 		})
 
 		return err
@@ -544,8 +544,4 @@ func firstDatabase(cl config.Cluster) string {
 	}
 
 	return string(cl.Databases[0])
-}
-
-func strPtr(s string) *string {
-	return &s
 }

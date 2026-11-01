@@ -4,6 +4,7 @@ package postgres
 
 import (
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/dbulashev/dasha/internal/config"
@@ -55,10 +56,8 @@ func (c Config) validate() error {
 		return errHostsRequired
 	}
 
-	for _, h := range c.Hosts {
-		if h == "" {
-			return errEmptyHost
-		}
+	if slices.Contains(c.Hosts, "") {
+		return errEmptyHost
 	}
 
 	if c.User == "" {

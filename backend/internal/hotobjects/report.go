@@ -389,10 +389,7 @@ func quantiles(vals, probs []float64) []float64 {
 	out := make([]float64, 0, len(probs))
 
 	for _, p := range probs {
-		idx := int(math.Ceil(p*float64(n) - 1e-9))
-		if idx < 1 {
-			idx = 1
-		}
+		idx := max(int(math.Ceil(p*float64(n)-1e-9)), 1)
 
 		if idx > n {
 			idx = n

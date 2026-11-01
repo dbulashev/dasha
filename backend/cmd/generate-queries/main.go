@@ -99,8 +99,8 @@ func generateEnumFile(queries []string) {
 						lines := strings.SplitSeq(comment.Text, "\n")
 						for line := range lines {
 							line = strings.TrimSpace(line)
-							if strings.HasPrefix(line, "//") {
-								line = strings.TrimPrefix(line, "//")
+							if after, ok0 := strings.CutPrefix(line, "//"); ok0 {
+								line = after
 								line = strings.TrimSpace(line)
 								if line != "" && line != "ENUM(" && line != ")" {
 									existingQueries = append(existingQueries, line)

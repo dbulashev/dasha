@@ -8,13 +8,11 @@ import (
 	"github.com/dbulashev/dasha/gen/apiclient"
 )
 
-func ptr[T any](v T) *T { return &v }
-
 func scanNode(rel string) apiclient.PlanNode {
 	return apiclient.PlanNode{ //nolint:exhaustruct
 		Type:      "Seq Scan",
-		Relation:  ptr(rel),
-		Schema:    ptr("public"),
+		Relation:  new(rel),
+		Schema:    new("public"),
 		PlanRows:  100,
 		PlanWidth: 8,
 		TotalCost: 1000,
@@ -26,15 +24,15 @@ func TestRenderPlan_TreeConditionsAndMarks(t *testing.T) {
 	t.Parallel()
 
 	inner := scanNode("orders")
-	inner.Alias = ptr("o")
-	inner.Filter = ptr(strings.Repeat("a", 50))
-	inner.FilterOmittedBytes = ptr(1000)
-	inner.RowsRemovedByFilter = ptr(12345.0)
-	inner.Actual = &apiclient.PlanNodeActual{Loops: 1, Rows: 40000, StartupTimeMs: ptr(0.1), TotalTimeMs: ptr(480.5)} //nolint:exhaustruct
+	inner.Alias = new("o")
+	inner.Filter = new(strings.Repeat("a", 50))
+	inner.FilterOmittedBytes = new(1000)
+	inner.RowsRemovedByFilter = new(12345.0)
+	inner.Actual = &apiclient.PlanNodeActual{Loops: 1, Rows: 40000, StartupTimeMs: new(0.1), TotalTimeMs: new(480.5)} //nolint:exhaustruct
 
 	root := apiclient.PlanNode{ //nolint:exhaustruct
 		Type:      "Nested Loop",
-		JoinType:  ptr("Left"),
+		JoinType:  new("Left"),
 		PlanRows:  10,
 		TotalCost: 1234,
 		Children:  []apiclient.PlanNode{scanNode("customers"), inner},
@@ -100,11 +98,11 @@ func TestNodeLabel(t *testing.T) {
 		n    apiclient.PlanNode
 		want string
 	}{
-		{apiclient.PlanNode{Type: "Aggregate", Strategy: ptr("Hashed"), PartialMode: ptr("Partial")}, "Partial Aggregate [Hashed]"}, //nolint:exhaustruct
-		{apiclient.PlanNode{Type: "Aggregate", Strategy: ptr("Plain")}, "Aggregate"},                                                //nolint:exhaustruct
-		{apiclient.PlanNode{Type: "Hash Join", JoinType: ptr("Inner")}, "Hash Join"},                                                //nolint:exhaustruct
+		{apiclient.PlanNode{Type: "Aggregate", Strategy: new("Hashed"), PartialMode: new("Partial")}, "Partial Aggregate [Hashed]"}, //nolint:exhaustruct
+		{apiclient.PlanNode{Type: "Aggregate", Strategy: new("Plain")}, "Aggregate"},                                                //nolint:exhaustruct
+		{apiclient.PlanNode{Type: "Hash Join", JoinType: new("Inner")}, "Hash Join"},                                                //nolint:exhaustruct
 		{apiclient.PlanNode{Type: "Seq Scan", Parallel: true}, "Parallel Seq Scan"},                                                 //nolint:exhaustruct
-		{apiclient.PlanNode{Type: "ModifyTable", Operation: ptr("Update")}, "ModifyTable [Update]"},                                 //nolint:exhaustruct
+		{apiclient.PlanNode{Type: "ModifyTable", Operation: new("Update")}, "ModifyTable [Update]"},                                 //nolint:exhaustruct
 	} {
 		if got := nodeLabel(tc.n); got != tc.want {
 			t.Errorf("nodeLabel = %q, want %q", got, tc.want)
@@ -132,13 +130,13 @@ func TestNodeDetails_WorkersLaunchedOnlyWhenMeasured(t *testing.T) {
 	t.Parallel()
 
 	n := scanNode("orders")
-	n.WorkersPlanned = ptr(4)
+	n.WorkersPlanned = new(4)
 
 	if got := strings.Join(nodeDetails(n, 100), "\n"); !strings.Contains(got, "Workers Planned: 4") || strings.Contains(got, "Launched") {
 		t.Errorf("estimate-only = %q", got)
 	}
 
-	n.WorkersLaunched = ptr(0)
+	n.WorkersLaunched = new(0)
 
 	if got := strings.Join(nodeDetails(n, 100), "\n"); !strings.Contains(got, "Workers Planned: 4 Launched: 0") {
 		t.Errorf("measured = %q", got)

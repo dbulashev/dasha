@@ -179,7 +179,7 @@ func (s *Storage) GetIOSnapshotsAt(
 		snap.Rows = make([]statio.Row, 0, len(stored))
 		for _, r := range stored {
 			snap.Rows = append(snap.Rows, statio.Row{
-				Key:    statio.Key{BackendType: r.B, Object: r.O, Context: r.C},
+				BackendType: r.B, Object: r.O, Context: r.C,
 				Values: r.V,
 			})
 		}

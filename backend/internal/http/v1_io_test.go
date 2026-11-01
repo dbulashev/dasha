@@ -26,7 +26,7 @@ func ioBucket(from time.Time, partial bool, rows ...statio.Row) statio.Bucket {
 
 func ioRow(bt, obj, ctx string, reads int64) statio.Row {
 	return statio.Row{
-		Key:    statio.Key{BackendType: bt, Object: obj, Context: ctx},
+		BackendType: bt, Object: obj, Context: ctx,
 		Values: map[string]int64{"reads": reads},
 	}
 }
@@ -216,8 +216,8 @@ func TestIOPointsClamped(t *testing.T) {
 	}{
 		"absent":   {nil, defaultIOPoints},
 		"zero":     {new(int), defaultIOPoints},
-		"in range": {ptrTo(50), 50},
-		"over cap": {ptrTo(5000), maxIOPoints},
+		"in range": {new(50), 50},
+		"over cap": {new(5000), maxIOPoints},
 	}
 
 	for name, tc := range tests {
@@ -299,5 +299,3 @@ func TestGetIOHistoryWithoutStorage(t *testing.T) {
 		t.Fatalf("response = %T, want 501", resp)
 	}
 }
-
-func ptrTo(v int) *int { return &v }

@@ -1,6 +1,8 @@
 package sqlparse
 
 import (
+	"slices"
+
 	pgast "github.com/pganalyze/pg_query_go/v6"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -602,12 +604,10 @@ func (b *builder) addUsageRef(ref Ref, column string, role Role, desc bool, seq 
 }
 
 func (b *builder) noteWrappedColumn(nodes ...*pgast.Node) {
-	for _, n := range nodes {
-		if hasColumnRef(n) {
-			b.note(ReasonExpressionPredicate)
+	if slices.ContainsFunc(nodes, hasColumnRef) {
+		b.note(ReasonExpressionPredicate)
 
-			return
-		}
+		return
 	}
 }
 

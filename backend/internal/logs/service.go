@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"sort"
 	"strconv"
 	"strings"
@@ -603,9 +604,7 @@ func (s *service) toEntry(
 // the field map through sanitize.SQL().
 func maskFields(fields map[string]string, fm source.FieldMap) map[string]string {
 	masked := make(map[string]string, len(fields))
-	for k, v := range fields {
-		masked[k] = v
-	}
+	maps.Copy(masked, fields)
 
 	for _, mk := range fm.Mask {
 		if v, ok := masked[mk]; ok {

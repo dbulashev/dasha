@@ -5,10 +5,6 @@ import (
 	"time"
 )
 
-func ptrInt(v int) *int { return &v }
-
-func ptrTime(t time.Time) *time.Time { return &t }
-
 var base = time.Date(2026, 8, 22, 3, 0, 0, 0, time.UTC)
 
 func snap(at time.Time, reset *time.Time, rows ...Row) Snapshot {
@@ -16,11 +12,11 @@ func snap(at time.Time, reset *time.Time, rows ...Row) Snapshot {
 }
 
 func row(bt, obj, ctx string, values map[string]int64) Row {
-	return Row{Key: Key{BackendType: bt, Object: obj, Context: ctx}, Values: values}
+	return Row{BackendType: bt, Object: obj, Context: ctx, Values: values}
 }
 
 func TestDeltaSubtractsCounters(t *testing.T) {
-	reset := ptrTime(base.Add(-time.Hour))
+	reset := new(base.Add(-time.Hour))
 
 	prev := snap(base, reset, row("client backend", "relation", "normal", map[string]int64{"reads": 10, "hits": 100}))
 	cur := snap(base.Add(5*time.Minute), reset, row("client backend", "relation", "normal", map[string]int64{"reads": 25, "hits": 400}))
@@ -54,12 +50,12 @@ func TestDeltaIncompleteOnEpochChange(t *testing.T) {
 		prev, cur Snapshot
 	}{
 		"stats_reset moved": {
-			prev: snap(base, ptrTime(base.Add(-time.Hour)), r),
-			cur:  snap(base.Add(5*time.Minute), ptrTime(base), r),
+			prev: snap(base, new(base.Add(-time.Hour)), r),
+			cur:  snap(base.Add(5*time.Minute), new(base), r),
 		},
 		"stats_reset appeared": {
 			prev: snap(base, nil, r),
-			cur:  snap(base.Add(5*time.Minute), ptrTime(base), r),
+			cur:  snap(base.Add(5*time.Minute), new(base), r),
 		},
 		"counter went backwards": {
 			prev: snap(base, nil, row("client backend", "relation", "normal", map[string]int64{"reads": 10})),
@@ -86,7 +82,7 @@ func TestDeltaIncompleteOnEpochChange(t *testing.T) {
 }
 
 func TestDeltaIncompleteOnMajorUpgrade(t *testing.T) {
-	reset := ptrTime(base.Add(-time.Hour))
+	reset := new(base.Add(-time.Hour))
 	r := row("client backend", "relation", "normal", map[string]int64{"reads": 10})
 
 	prev := Snapshot{CapturedAt: base, VersionNum: 170004, StatsReset: reset, Rows: []Row{r}}
@@ -98,7 +94,7 @@ func TestDeltaIncompleteOnMajorUpgrade(t *testing.T) {
 }
 
 func TestDeltaSkipsRowWithoutBaseline(t *testing.T) {
-	reset := ptrTime(base)
+	reset := new(base)
 
 	prev := snap(base, reset, row("client backend", "relation", "normal", map[string]int64{"reads": 10}))
 	cur := snap(base.Add(5*time.Minute), reset,
@@ -120,7 +116,7 @@ func TestNormalizedDerivesBytesFromOpBytes(t *testing.T) {
 	s := Snapshot{
 		CapturedAt: base,
 		VersionNum: 170004,
-		OpBytes:    ptrInt(8192),
+		OpBytes:    new(8192),
 		Rows:       []Row{row("client backend", "relation", "normal", map[string]int64{"reads": 3, "writes": 2, "extends": 1})},
 	}
 
@@ -190,7 +186,7 @@ func loaded(snaps []Snapshot, at []time.Time) []Snapshot {
 }
 
 func TestPlanBucketsReadsOnlyTheBucketEnds(t *testing.T) {
-	snaps := ioRun(11, 1, ptrTime(base.Add(-time.Hour)))
+	snaps := ioRun(11, 1, new(base.Add(-time.Hour)))
 	plan := PlanBuckets(metasOf(snaps), 5)
 
 	if len(plan.Buckets) != 5 {
@@ -218,9 +214,9 @@ func TestPlanBucketsReadsOnlyTheBucketEnds(t *testing.T) {
 }
 
 func TestPlanBucketsBreaksTheSpanOnAnEpochChange(t *testing.T) {
-	snaps := ioRun(5, 10, ptrTime(base.Add(-time.Hour)))
+	snaps := ioRun(5, 10, new(base.Add(-time.Hour)))
 
-	after := ptrTime(base.Add(90 * time.Second))
+	after := new(base.Add(90 * time.Second))
 	for i := 2; i < len(snaps); i++ {
 		snaps[i].StatsReset = after
 	}
@@ -252,7 +248,7 @@ func TestPlanBucketsBreaksTheSpanOnAnEpochChange(t *testing.T) {
 }
 
 func TestPlanAssembleDropsASpanWhoseCountersRegressed(t *testing.T) {
-	reset := ptrTime(base)
+	reset := new(base)
 	r := func(v int64) Row { return row("client backend", "relation", "normal", map[string]int64{"reads": v}) }
 
 	// The headers show one continuous epoch; only the counters give the reset away.
@@ -279,7 +275,7 @@ func TestPlanAssembleDropsASpanWhoseCountersRegressed(t *testing.T) {
 }
 
 func TestPlanAssembleMeasuresEveryIntervalWhenTheyFitInThePoints(t *testing.T) {
-	reset := ptrTime(base)
+	reset := new(base)
 	r := func(v int64) Row { return row("client backend", "relation", "normal", map[string]int64{"reads": v}) }
 
 	snaps := []Snapshot{

@@ -31,10 +31,7 @@ func Generate() (secret string, hash []byte, display string, err error) {
 	body := base64.RawURLEncoding.EncodeToString(b)
 	secret = Prefix + body
 
-	n := displayChars
-	if len(body) < n {
-		n = len(body)
-	}
+	n := min(len(body), displayChars)
 
 	return secret, Hash(secret), Prefix + body[:n], nil
 }

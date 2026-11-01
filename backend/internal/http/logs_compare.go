@@ -24,14 +24,13 @@ func (s *Handlers) GetLogsPlansCompare(
 	p := req.Params
 
 	q := logs.CompareQuery{ //nolint:exhaustruct
-		PlansQuery: logs.PlansQuery{ //nolint:exhaustruct
-			Cluster: string(p.ClusterName),
-			Stream:  string(p.ServiceType),
-			From:    deref(p.From),
-			To:      deref(p.To),
-			Host:    deref(p.Host),
-			Limit:   deref(p.Limit),
-		},
+		//nolint:exhaustruct
+		Cluster:  string(p.ClusterName),
+		Stream:   string(p.ServiceType),
+		From:     deref(p.From),
+		To:       deref(p.To),
+		Host:     deref(p.Host),
+		Limit:    deref(p.Limit),
 		BaseFrom: p.BaselineFrom,
 		BaseTo:   p.BaselineTo,
 	}

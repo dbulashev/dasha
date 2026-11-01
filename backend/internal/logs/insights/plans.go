@@ -424,8 +424,7 @@ func durationStats(ds []float64) DurationStats {
 }
 
 func parseCode(err error) string {
-	var pe *explain.Error
-	if errors.As(err, &pe) {
+	if pe, ok := errors.AsType[*explain.Error](err); ok {
 		return pe.Code
 	}
 

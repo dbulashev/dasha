@@ -1,4 +1,4 @@
-MODERNIZE_CMD = go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@v0.18.1
+MODERNIZE_CMD = go run golang.org/x/tools/go/analysis/passes/modernize/cmd/modernize@v0.52.0
 
 .PHONY: lint-go
 lint-go: ## Lint backend (revive + gosec)

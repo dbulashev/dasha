@@ -141,8 +141,7 @@ func (c *Client) Do(ctx context.Context, req Request, fn func(io.Reader) error) 
 			return nil
 		}
 
-		var transport *transportError
-		if !errors.As(err, &transport) {
+		if _, ok := errors.AsType[*transportError](err); !ok {
 			return err
 		}
 
