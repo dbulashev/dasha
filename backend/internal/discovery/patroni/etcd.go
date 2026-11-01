@@ -52,7 +52,7 @@ func newEtcdStore(cfg EtcdConfig, logger *zap.Logger) (*etcdStore, error) {
 			TLS:                tlsCfg,
 			DialTimeout:        etcdDialTimeout,
 			MaxCallRecvMsgSize: etcdMaxRecvSize,
-			Logger:             logger.Named("etcd").WithOptions(zap.IncreaseLevel(zap.WarnLevel)),
+			Logger:             logger.Named("etcd").WithOptions(zap.IncreaseLevel(zap.WarnLevel), zap.AddStacktrace(zap.ErrorLevel)),
 		},
 	}, nil
 }

@@ -45,3 +45,7 @@ AGENTS.md
 CLAUDE.md
 backend/coverage-*
 
+
+# Patroni discovery lab, local only
+demo/patroni/
+mk/patroni-lab.mk
