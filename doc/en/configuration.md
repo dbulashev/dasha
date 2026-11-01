@@ -257,7 +257,8 @@ discovery:
 - **Hosts.** Each member becomes a host, addressed by the host and port of its `conn_url`
   (`conn_kwargs` when `conn_url` is empty). The host selector shows the member name next to the
   address. Members of one scope on one machine with different ports are named `host:port`. A
-  member with no usable address (a unix socket, an empty host) is skipped with a warning.
+  member with no usable address (a unix socket, an empty host, an unparseable value) is skipped
+  with a warning. A scope with no member left is not published as a cluster.
 - **Membership** follows the member keys only: a stopped member disappears once its key expires
   (Patroni `ttl`), a switchover changes nothing. Roles and tags are not read.
 - **Databases** are listed per scope, up to 8 scopes at a time, starting with the member that
