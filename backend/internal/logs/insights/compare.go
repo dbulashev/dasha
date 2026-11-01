@@ -7,6 +7,7 @@ import (
 
 	"github.com/dbulashev/dasha/internal/health"
 	"github.com/dbulashev/dasha/internal/logs/pattern"
+	"github.com/dbulashev/dasha/internal/pkg/mapstruct"
 )
 
 // Why a statement is listed as a regression.
@@ -211,13 +212,7 @@ func ratio(cur, base float64) float64 {
 }
 
 func missingFrom(values, other []string) []string {
-	var out []string
-
-	for _, v := range values {
-		if !slices.Contains(other, v) {
-			out = append(out, v)
-		}
-	}
+	out := mapstruct.SliceMissing(values, other)
 
 	slices.Sort(out)
 

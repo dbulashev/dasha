@@ -19,4 +19,6 @@ export interface Cluster {
   log_severities?: ClusterLogSeverities
   instances?: ClusterInstance[]
   databases?: string[]
+  /** name of the cluster this standby cluster replicates from; absent for primary clusters and when the primary is not known */
+  standby_of?: string
 }

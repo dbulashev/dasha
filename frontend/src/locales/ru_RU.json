@@ -1004,6 +1004,8 @@
     },
     "Replication": "Репликация",
     "replication": {
+        "standbyOf": "Standby-кластер, реплицируется с",
+        "standbyClusters": "Standby-кластеры:",
         "config": "Настройки репликации",
         "status": "Статус репликации",
         "stateSyncState": "Состояние / синхр.",

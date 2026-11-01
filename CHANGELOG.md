@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Features
+- **Patroni clusters from etcd v3 or Consul** (`discovery.<entry>.type: patroni`): every Patroni scope with at least one member with a usable address becomes a cluster, its members the hosts, its databases listed from PostgreSQL. Clusters, replicas and databases follow Patroni within `refresh_interval`; the DCS is only read. Per-scope `overrides` for the PostgreSQL user, password, port and database filters; TLS and client certificates for both DCS.
+- **Patroni member names in the host selector**, next to the address.
+- **Standby cluster links**: a Patroni standby cluster shows the cluster it replicates from, and the primary its standbys, on the Summary and Replication pages. Matched by the PostgreSQL system identifier, so a standby behind a VIP is found too.
+- **Metrics auto-mapping for Patroni clusters** by scope and member name.
+
+### Changes
+- `refresh_interval` in every discovery type takes a duration (`5m`, `90s`); a bare number still means minutes.
+
 ## v1.9.2
 
 ### Dependencies

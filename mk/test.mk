@@ -3,11 +3,12 @@
 POSTGRES_VERSION ?= 18
 
 # Integration suites by the container they need: PostgreSQL ones run per
-# POSTGRES_VERSION, log sources bring their own store and run once.
+# POSTGRES_VERSION, log sources and DCS bring their own store and run once.
 PG_PKGS := ./internal/repository/ ./internal/storage/ ./internal/discovery/postgres/
 PG_COVERPKG := ./internal/repository/,./internal/query/,./internal/storage/
 LOGS_PKGS := ./internal/logs/source/opensearch/ ./internal/logs/source/victorialogs/
 LOGS_COVERPKG := ./internal/logs/...
+DCS_PKGS := ./internal/discovery/patroni/
 
 .PHONY: test-unit
 test-unit: ## Run unit tests (no containers required)
@@ -23,8 +24,13 @@ test-integration-logs: ## Run log source integration tests: OpenSearch, Victoria
 	cd backend && go test -tags=integration -v -timeout=15m -coverprofile=coverage-integration-logs.out -coverpkg=$(LOGS_COVERPKG) $(LOGS_PKGS)
 	@cd backend && go tool cover -func=coverage-integration-logs.out | tail -1
 
+.PHONY: test-integration-dcs
+test-integration-dcs: ## Run Patroni discovery integration tests: etcd, Consul (requires docker)
+	cd backend && go test -tags=integration -v -timeout=10m -coverprofile=coverage-integration-dcs.out -coverpkg=$(DCS_PKGS) $(DCS_PKGS)
+	@cd backend && go tool cover -func=coverage-integration-dcs.out | tail -1
+
 .PHONY: test-integration
-test-integration: test-integration-pg test-integration-logs ## Run every integration suite (requires docker)
+test-integration: test-integration-pg test-integration-logs test-integration-dcs ## Run every integration suite (requires docker)
 
 .PHONY: test-locales
 test-locales: ## Check i18n locale files; fails on duplicates/placeholder drift, warns on missing translations

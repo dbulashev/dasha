@@ -195,6 +195,8 @@ When the instance resolves but **no series matches any selector**, the score is 
 
 **Service-discovered clusters** (from `discovery:`, e.g. Yandex MDB) are auto-mapped from their discovery metadata, so they need no `targets:` entry: the host FQDN becomes `{{.Host}}`, the cloud resource id (MDB cluster id) `{{.Service}}`, the `folder_id` label `{{.Env}}` and the short host `{{.Container}}`; providers come from `providers_default` (e.g. `core: pgscv`, `pooler/host: yc_native`). Only the selector templates stay your customization surface. A static `targets:` entry always overrides the derived mapping; set `auto_map_discovered: false` to require explicit targets, or `discovery_env_label` to feed `{{.Env}}` from a different discovery label.
 
+**Patroni clusters** (`type: patroni`) are mapped by scope and member instead: `{{.Service}}` and `{{.ServiceID}}` are the scope name without the entry prefix, `{{.Container}}` is the member name, `{{.Host}}` the member's address without the port. Patroni discovery sets no `folder_id` label, so with the default `discovery_env_label` `{{.Env}}` is empty: point `discovery_env_label` at a Patroni label (`patroni.scope`, `patroni.namespace`, `patroni.dcs`) whose value matches the `cluster` label of your metrics, or drop `{{.Env}}` from the selectors. These match how pgscv and patroni-exporter are usually labelled; adjust the selector templates if your labels differ.
+
 ### Trend, seasonal baseline and dips
 
 `GET /api/common/health-score/history?cluster_name=…&instance=…&from=…&to=…&step_seconds=…` returns the per-timestamp overall score, per-category scores and latency over `[from, to]`. The chart on `/health-score` plots score, baseline and latency with dips marked.

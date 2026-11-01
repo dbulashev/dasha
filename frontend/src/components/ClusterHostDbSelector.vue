@@ -22,7 +22,15 @@
       density="compact"
       hide-details
       class="selector-field"
-    />
+    >
+      <template #item="{ props: itemProps, item }">
+        <v-list-item v-bind="itemProps">
+          <template v-if="item.raw.address" #append>
+            <span class="text-medium-emphasis text-caption ms-2">{{ item.raw.address }}</span>
+          </template>
+        </v-list-item>
+      </template>
+    </v-autocomplete>
 
     <!-- Database -->
     <v-autocomplete

@@ -64,7 +64,8 @@ func (s *Handlers) GetClusters(
 	for _, v := range c {
 		instances := mapstruct.SliceMap(v.Instances, func(t dto.Instance) serverhttp.ClusterInstance {
 			return serverhttp.ClusterInstance{
-				HostName: shortcut.Ptr(t.HostName.String()),
+				HostName:    shortcut.Ptr(t.HostName.String()),
+				DisplayName: optString(t.Alias),
 			}
 		})
 
@@ -76,6 +77,7 @@ func (s *Handlers) GetClusters(
 			LogSeverities: nil,
 			Instances:     &instances,
 			Databases:     &v.Databases,
+			StandbyOf:     optString(v.StandbyOf),
 		}
 
 		if len(v.LogStreams) > 0 {

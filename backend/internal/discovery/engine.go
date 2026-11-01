@@ -4,11 +4,13 @@ package discovery
 import (
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	"go.uber.org/zap"
 
 	"github.com/dbulashev/dasha/internal/config"
+	"github.com/dbulashev/dasha/internal/discovery/patroni"
 	"github.com/dbulashev/dasha/internal/discovery/postgres"
 	"github.com/dbulashev/dasha/internal/discovery/yandex"
 )
@@ -16,9 +18,11 @@ import (
 const (
 	discoveryTypeYandexMDB = config.SourceYandexMDB
 	discoveryTypePostgres  = config.SourcePostgres
+	discoveryTypePatroni   = config.SourcePatroni
 )
 
-// Provider discovers clusters from a single configured source.
+// Provider discovers clusters from a single configured source. A provider that
+// also implements io.Closer is closed when its loop stops.
 type Provider interface {
 	// Discover returns the current set of clusters for this source. A non-nil
 	// error means the cycle failed: the engine then keeps whatever the source
@@ -60,13 +64,10 @@ func (e *Engine) Start(ctx context.Context) error {
 		return nil
 	}
 
-	// Only Yandex folders qualify their cluster names, so only they are counted:
-	// adding an entry of another type must not rename clusters that are already
-	// being monitored under their bare name.
-	prefixNames := countEntries(e.cfg, discoveryTypeYandexMDB) > 1
+	prefixNames := prefixByType(e.cfg)
 
 	for name, entry := range e.cfg {
-		provider, err := e.newProvider(name, entry, prefixNames)
+		provider, err := e.newProvider(name, entry, prefixNames[entry.Type])
 		if err != nil {
 			e.logger.Warn("failed to start discovery",
 				zap.String("entry", name),
@@ -102,6 +103,16 @@ func countEntries(cfg map[string]config.DiscoveryEntry, entryType string) int {
 	return count
 }
 
+// prefixByType reports, per discovery type, whether its cluster names are
+// qualified with the entry name. Only entries of the same type are counted:
+// adding an entry of another type must not rename monitored clusters.
+func prefixByType(cfg map[string]config.DiscoveryEntry) map[string]bool {
+	return map[string]bool{
+		discoveryTypeYandexMDB: countEntries(cfg, discoveryTypeYandexMDB) > 1,
+		discoveryTypePatroni:   countEntries(cfg, discoveryTypePatroni) > 1,
+	}
+}
+
 // newProvider builds the provider for one discovery entry.
 func (e *Engine) newProvider(name string, entry config.DiscoveryEntry, prefixName bool) (Provider, error) {
 	switch entry.Type {
@@ -110,12 +121,16 @@ func (e *Engine) newProvider(name string, entry config.DiscoveryEntry, prefixNam
 	case discoveryTypePostgres:
 		// The entry name is the cluster name, so it needs no qualifying.
 		return postgres.NewProvider(name, entry.Config, e.logger)
+	case discoveryTypePatroni:
+		return patroni.NewProvider(name, entry.Config, prefixName, e.logger)
 	default:
 		return nil, fmt.Errorf("unknown discovery type %q", entry.Type)
 	}
 }
 
 func (e *Engine) runLoop(ctx context.Context, name string, provider Provider) {
+	defer closeProvider(name, provider, e.logger)
+
 	// Run first discovery immediately.
 	e.discover(ctx, name, provider)
 
@@ -131,6 +146,17 @@ func (e *Engine) runLoop(ctx context.Context, name string, provider Provider) {
 		case <-ticker.C:
 			e.discover(ctx, name, provider)
 		}
+	}
+}
+
+func closeProvider(name string, provider Provider, logger *zap.Logger) {
+	c, ok := provider.(io.Closer)
+	if !ok {
+		return
+	}
+
+	if err := c.Close(); err != nil {
+		logger.Warn("failed to close discovery provider", zap.String("entry", name), zap.Error(err))
 	}
 }
 

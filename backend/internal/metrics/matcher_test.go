@@ -249,3 +249,82 @@ func TestMatcher_AutoMapDisabled(t *testing.T) {
 		t.Error("auto_map_discovered=false: discovered target should stay unmapped")
 	}
 }
+
+func TestMatcher_AutoMapPatroni(t *testing.T) {
+	cfg := Default()
+	cfg.Enabled = true
+	cfg.Datasource.URL = "http://vm:8428"
+
+	meta := fakeMeta{
+		"etcd_alpha/10.0.0.11": {
+			Source:     "patroni",
+			ProviderID: "etcd",
+			Labels:     map[string]string{"patroni.scope": "alpha"},
+			Alias:      "alpha-1",
+		},
+		"etcd_beta/10.0.0.21:5433": {
+			Source:     "patroni",
+			ProviderID: "etcd",
+			Labels:     map[string]string{"patroni.scope": "beta"},
+			Address:    "10.0.0.21",
+		},
+	}
+
+	m, err := NewMatcher(cfg, meta)
+	if err != nil {
+		t.Fatalf("NewMatcher: %v", err)
+	}
+
+	rt, err := m.Resolve("etcd_alpha", "10.0.0.11")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	if rt.Cluster != "etcd_alpha" {
+		t.Errorf("Cluster = %q, want etcd_alpha", rt.Cluster)
+	}
+
+	if rt.Service != "alpha" || rt.ServiceID != "alpha" {
+		t.Errorf("Service/ServiceID = %q/%q, want the scope alpha", rt.Service, rt.ServiceID)
+	}
+
+	if rt.Container != "alpha-1" {
+		t.Errorf("Container = %q, want the member name alpha-1", rt.Container)
+	}
+
+	if rt.Host != "10.0.0.11" {
+		t.Errorf("Host = %q, want the instance", rt.Host)
+	}
+
+	// Without a member name the instance is kept whole: an IP is not cut at the first dot.
+	rt, err = m.Resolve("etcd_beta", "10.0.0.21:5433")
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	if rt.Container != "10.0.0.21:5433" {
+		t.Errorf("Container = %q, want 10.0.0.21:5433", rt.Container)
+	}
+
+	if rt.Host != "10.0.0.21" {
+		t.Errorf("Host = %q, want the member address without the port", rt.Host)
+	}
+}
+
+func TestShortHost(t *testing.T) {
+	tests := map[string]string{
+		"rc1a-abc.mdb.yandexcloud.net": "rc1a-abc",
+		"pg-1":                         "pg-1",
+		"10.0.0.1":                     "10.0.0.1",
+		"10.0.0.1:5433":                "10.0.0.1:5433",
+		"[fd00::1]:5432":               "[fd00::1]:5432",
+		"fd00::1":                      "fd00::1",
+		"pg-1.local:5433":              "pg-1",
+	}
+
+	for in, want := range tests {
+		if got := shortHost(in); got != want {
+			t.Errorf("shortHost(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

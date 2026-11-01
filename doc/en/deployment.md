@@ -118,7 +118,7 @@ config:
         folder_id: "b1g..."
         user: monitoring_user
         password_from_env: DISCOVERY_PROD_PASSWORD
-        refresh_interval: 5
+        refresh_interval: 5m
         clusters:
           - name: ".*"
 

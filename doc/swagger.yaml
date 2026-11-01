@@ -3659,6 +3659,11 @@ components:
           type: array
           items:
             type: string
+        standby_of:
+          type: string
+          description: >-
+            name of the cluster this standby cluster replicates from; absent
+            for primary clusters and when the primary is not known
     LogSourceCheck:
       type: object
       required:
@@ -4664,6 +4669,11 @@ components:
       properties:
         host_name:
           type: string
+        display_name:
+          type: string
+          description: >-
+            human-readable host name from discovery, e.g. the Patroni member
+            name; absent when discovery knows none
     CommonSummary:
       type: object
       required:

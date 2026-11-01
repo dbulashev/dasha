@@ -7,4 +7,6 @@
 
 export interface ClusterInstance {
   host_name?: string
+  /** human-readable host name from discovery, e.g. the Patroni member name; absent when discovery knows none */
+  display_name?: string
 }

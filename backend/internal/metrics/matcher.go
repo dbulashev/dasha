@@ -1,9 +1,11 @@
 package metrics
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"text/template"
 	"time"
@@ -24,12 +26,20 @@ type ResolvedTarget struct {
 // ErrTargetNotMapped is returned when no targets[] entry matches the request.
 var ErrTargetNotMapped = errors.New("metrics: target has no label mapping")
 
+// Patroni discovery values; metrics cannot import config, which imports metrics.
+const (
+	sourcePatroni     = "patroni"       // config.SourcePatroni
+	labelPatroniScope = "patroni.scope" // config.LabelPatroniScope
+)
+
 // DiscoveryMeta carries the service-discovery attributes used to auto-derive a
 // label mapping for a target that is not enumerated in the static Targets list.
 type DiscoveryMeta struct {
 	Source     string            // "static" | "yandex-mdb" | ...
 	ProviderID string            // cloud resource id (e.g. MDB cluster id)
 	Labels     map[string]string // discovery labels (e.g. folder_id)
+	Alias      string            // host display name, e.g. the Patroni member name
+	Address    string            // address to connect to; empty: the instance name itself
 }
 
 // MetadataProvider supplies DiscoveryMeta for a Dasha (cluster, instance), so
@@ -101,8 +111,23 @@ func (m *Matcher) Resolve(cluster, instance string) (ResolvedTarget, error) {
 // UUID is exposed separately as ServiceID for schemes that key by id. Host is the
 // FQDN, Container the short hostname, Env the configured discovery label (default
 // folder_id). Providers come from providers_default; selector templates stay the
-// customization surface for the real label scheme.
+// customization surface for the real label scheme. Patroni clusters key by scope
+// (without the entry prefix) and member name instead.
 func (m *Matcher) deriveTarget(cluster, instance string, md DiscoveryMeta) ResolvedTarget {
+	if md.Source == sourcePatroni {
+		scope := cmp.Or(md.Labels[labelPatroniScope], cluster)
+
+		return ResolvedTarget{
+			Cluster:   cluster,
+			Env:       md.Labels[m.cfg.envLabelKey()],
+			Service:   scope,
+			ServiceID: scope,
+			Host:      cmp.Or(md.Address, instance),
+			Container: cmp.Or(md.Alias, shortHost(instance)),
+			Providers: m.cfg.providersFor(nil),
+		}
+	}
+
 	return ResolvedTarget{
 		Cluster:   cluster,
 		Env:       md.Labels[m.cfg.envLabelKey()],
@@ -121,7 +146,17 @@ func isDiscovered(source string) bool {
 }
 
 // shortHost returns the first DNS label of an FQDN (rc1a-abc.mdb… -> rc1a-abc).
+// An IP address, with or without a port, is returned unchanged.
 func shortHost(fqdn string) string {
+	host := fqdn
+	if h, _, err := net.SplitHostPort(fqdn); err == nil {
+		host = h
+	}
+
+	if net.ParseIP(host) != nil {
+		return fqdn
+	}
+
 	if i := strings.IndexByte(fqdn, '.'); i > 0 {
 		return fqdn[:i]
 	}

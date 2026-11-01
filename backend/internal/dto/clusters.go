@@ -4,6 +4,7 @@ import "github.com/dbulashev/dasha/internal/config"
 
 type Instance struct {
 	HostName config.Host
+	Alias    string
 }
 
 type ClusterInfo struct {
@@ -14,4 +15,5 @@ type ClusterInfo struct {
 	LogSeverities map[string][]string
 	Instances     []Instance
 	Databases     []string
+	StandbyOf     string
 }

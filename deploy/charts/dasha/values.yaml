@@ -148,7 +148,7 @@ config:
   #      folder_id: "xxx"
   #      user: postgres_monitoring
   #      password_from_env: DISCOVERY_PROD_PASSWORD
-  #      refresh_interval: 5
+  #      refresh_interval: 5m
   #      clusters:
   #        - name: ".*"
   #  onprem_prod:                 # entry name = cluster name; databases come from the cluster itself
@@ -159,7 +159,7 @@ config:
   #      user: postgres_monitoring
   #      password_from_env: DISCOVERY_ONPREM_PASSWORD
   #      bootstrap_db: postgres   # database the discovery query connects to
-  #      refresh_interval: 5
+  #      refresh_interval: 5m
   #      exclude_db: "template.*"
 
   # -- Snapshot storage (optional): a PostgreSQL DB for pgss snapshots and Health
