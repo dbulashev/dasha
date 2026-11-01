@@ -67,7 +67,7 @@ func TestTakeIOSnapshotStores(t *testing.T) {
 	snap := &statio.Snapshot{
 		VersionNum: 170004,
 		Rows: []statio.Row{{
-			Key:    statio.Key{BackendType: "client backend", Object: "relation", Context: "normal"},
+			BackendType: "client backend", Object: "relation", Context: "normal",
 			Values: map[string]int64{"reads": 7},
 		}},
 	}

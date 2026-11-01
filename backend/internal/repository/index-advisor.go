@@ -182,10 +182,8 @@ func (p *PgxPool) collectIndexAdvisorClusterWorkload(
 	var wg sync.WaitGroup
 
 	for _, hp := range hostPools {
-		wg.Add(1)
 
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 
 			vNum, err := p.getServerVersionNum(ctx, hp.Pool)
 			if err != nil {
@@ -196,7 +194,7 @@ func (p *PgxPool) collectIndexAdvisorClusterWorkload(
 
 			w, err := p.collectIndexAdvisorWorkload(ctx, hp.Pool, hp.Host, vNum, excludeUsers)
 			resultsCh <- hostResult{host: hp.Host, pool: hp.Pool, vNum: vNum, workload: w, err: err}
-		}()
+		})
 	}
 
 	wg.Wait()

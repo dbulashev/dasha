@@ -344,9 +344,7 @@ func (s *Handlers) GetQueriesCompare(
 	scope, pairable := compareScope(attributedA, attributedB, req.Params.Scope, req.Params.Database)
 	if !pairable {
 		return serverhttp.GetQueriesCompare409JSONResponse{
-			IncomparableSnapshotsJSONResponse: serverhttp.IncomparableSnapshotsJSONResponse{
-				Message: msgIncomparableSnapshots,
-			},
+			Message: msgIncomparableSnapshots,
 		}, nil
 	}
 

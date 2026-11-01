@@ -67,7 +67,7 @@ func compareProvider(t *testing.T, current, baseline []source.Record) *windowPro
 	t.Helper()
 
 	return &windowProvider{
-		fakeProvider: fakeProvider{fields: testFieldMap(t)}, //nolint:exhaustruct
+		fields: testFieldMap(t), //nolint:exhaustruct
 		byWindow: map[time.Time][]source.Record{
 			testWindow.from: current,
 			baseWindow.from: baseline,
@@ -77,12 +77,11 @@ func compareProvider(t *testing.T, current, baseline []source.Record) *windowPro
 
 func compareQuery() CompareQuery {
 	return CompareQuery{ //nolint:exhaustruct
-		PlansQuery: PlansQuery{ //nolint:exhaustruct
-			Cluster: "prod",
-			Stream:  testStream,
-			From:    testWindow.from,
-			To:      testWindow.to,
-		},
+		//nolint:exhaustruct
+		Cluster:  "prod",
+		Stream:   testStream,
+		From:     testWindow.from,
+		To:       testWindow.to,
 		BaseFrom: baseWindow.from,
 		BaseTo:   baseWindow.to,
 	}

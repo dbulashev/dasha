@@ -95,8 +95,7 @@ func New(
 		// A cancelled request context means the client disconnected — nobody
 		// will receive the response, so don't log it as a server error.
 		if !c.Response().Committed && !errors.Is(err, context.Canceled) {
-			var he *echo.HTTPError
-			if errors.As(err, &he) {
+			if he, ok := errors.AsType[*echo.HTTPError](err); ok {
 				if he.Code >= http.StatusInternalServerError {
 					logger.Error("internal server error",
 						zap.Int("status", he.Code),

@@ -8,9 +8,9 @@ import (
 func TestCatalogByNameTracksRelations(t *testing.T) {
 	cat := NewCatalog()
 
-	cat.AddRelation(Relation{RelKey: RelKey{Schema: "public", Name: "orders"}, Kind: "r", Rows: 10})
-	cat.AddRelation(Relation{RelKey: RelKey{Schema: "billing", Name: "orders"}, Kind: "r", Rows: 20})
-	cat.AddRelation(Relation{RelKey: RelKey{Schema: "public", Name: "customers"}, Kind: "r"})
+	cat.AddRelation(Relation{Schema: "public", Name: "orders", Kind: "r", Rows: 10})
+	cat.AddRelation(Relation{Schema: "billing", Name: "orders", Kind: "r", Rows: 20})
+	cat.AddRelation(Relation{Schema: "public", Name: "customers", Kind: "r"})
 
 	if got := len(cat.ByName["orders"]); got != 2 {
 		t.Errorf("orders resolves to %d relations, want 2 — an ambiguous name must stay ambiguous", got)
@@ -96,16 +96,16 @@ func TestCatalogForgetDropsTheNameWithItsLastRelation(t *testing.T) {
 
 func TestRelationIsPartition(t *testing.T) {
 	part := Relation{
-		RelKey: RelKey{Schema: "public", Name: "events_01"},
-		Kind:   "r",
-		Root:   RelKey{Schema: "public", Name: "events"},
+		Schema: "public", Name: "events_01",
+		Kind: "r",
+		Root: RelKey{Schema: "public", Name: "events"},
 	}
 
 	if !part.IsPartition() {
 		t.Error("a relation with a root is a partition")
 	}
 
-	plain := Relation{RelKey: RelKey{Schema: "public", Name: "orders"}, Kind: "r"}
+	plain := Relation{Schema: "public", Name: "orders", Kind: "r"}
 	if plain.IsPartition() {
 		t.Error("a relation without a root is not a partition")
 	}

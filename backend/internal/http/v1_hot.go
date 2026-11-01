@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sort"
 	"time"
 
@@ -240,9 +241,7 @@ func hotEntry(
 func countersMap(c hotobjects.Counters) map[string]int64 {
 	out := make(map[string]int64, len(c))
 
-	for k, v := range c {
-		out[k] = v
-	}
+	maps.Copy(out, c)
 
 	return out
 }

@@ -228,10 +228,7 @@ func newStoreFor(cfg *config.RateLimitConfig) *rateLimiterStore {
 		return nil
 	}
 
-	burst := cfg.Burst
-	if burst < 1 {
-		burst = 1
-	}
+	burst := max(cfg.Burst, 1)
 
 	return newRateLimiterStore(cfg.RequestsPerSecond, burst)
 }

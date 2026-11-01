@@ -343,7 +343,7 @@ func TestBuildSnapshot_ObservedSince(t *testing.T) {
 	reset := ts(0)
 	anchors := anchorsOf(ts(10), &reset, tableRow("public", "orders", 1, Counters{"n_tup_ins": 1}))
 	rows := []AnchorRow{tableRow("public", "orders", 1, Counters{"n_tup_ins": 2})}
-	prev := &HostWindow{ObservedSince: ptr(ts(2))} //nolint:exhaustruct
+	prev := &HostWindow{ObservedSince: new(ts(2))} //nolint:exhaustruct
 
 	window := func(in BuildInput) HostWindow {
 		return BuildSnapshot("c1", "db", ts(20), []BuildInput{in}, nil, 10).Windows["h1"]
@@ -368,5 +368,3 @@ func TestBuildSnapshot_ObservedSince(t *testing.T) {
 	got = window(BuildInput{Sample: standby, Anchors: anchors, PrevWindow: prev})
 	assert.Nil(t, got.ObservedSince)
 }
-
-func ptr[T any](v T) *T { return &v }

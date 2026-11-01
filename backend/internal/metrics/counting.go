@@ -44,8 +44,7 @@ func (st *QueryStats) record(isRange bool, err error) {
 	if err != nil {
 		code = 0
 
-		var se *StatusError
-		if errors.As(err, &se) {
+		if se, ok := errors.AsType[*StatusError](err); ok {
 			code = se.Code
 		}
 	}

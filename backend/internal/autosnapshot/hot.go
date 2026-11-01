@@ -71,10 +71,7 @@ func (d *Daemon) takeHotSnapshotSafe(ctx context.Context, cfg Config, cl config.
 		}
 	}()
 
-	hosts := len(cl.Hosts)
-	if hosts < 1 {
-		hosts = 1
-	}
+	hosts := max(len(cl.Hosts), 1)
 
 	cctx, cancel := context.WithTimeout(ctx, time.Duration(hosts)*clusterTickBudgetPerHost)
 	defer cancel()

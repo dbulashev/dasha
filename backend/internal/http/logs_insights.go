@@ -332,7 +332,7 @@ func mapPlanFinding(f explain.Finding) serverhttp.PlanFinding {
 	}
 
 	if len(f.Params) > 0 {
-		params := map[string]interface{}(f.Params)
+		params := map[string]any(f.Params)
 		out.Params = &params
 	}
 

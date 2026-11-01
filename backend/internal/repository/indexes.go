@@ -359,10 +359,8 @@ func (p *PgxPool) GetIndexUnusedReport(
 	var wg sync.WaitGroup
 
 	for _, hp := range hostPools {
-		wg.Add(1)
 
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 
 			vNum, err := p.getServerVersionNum(ctx, hp.Pool)
 			if err != nil {
@@ -373,7 +371,7 @@ func (p *PgxPool) GetIndexUnusedReport(
 
 			samples, err := p.getIndexScanSamples(ctx, vNum, hp.Pool)
 			resultsCh <- hostResult{host: hp.Host, samples: samples, err: err}
-		}()
+		})
 	}
 
 	wg.Wait()

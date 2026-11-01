@@ -12,8 +12,8 @@ func TestColdStatusOf(t *testing.T) {
 	captured := ts(0).Add(30 * 24 * time.Hour)
 
 	assert.Equal(t, ColdStandby, ColdStatusOf(captured, nil, window))
-	assert.Equal(t, ColdWarmingUp, ColdStatusOf(captured, ptr(captured.Add(-window+time.Second)), window))
-	assert.Equal(t, ColdAvailable, ColdStatusOf(captured, ptr(captured.Add(-window)), window))
+	assert.Equal(t, ColdWarmingUp, ColdStatusOf(captured, new(captured.Add(-window+time.Second)), window))
+	assert.Equal(t, ColdAvailable, ColdStatusOf(captured, new(captured.Add(-window)), window))
 }
 
 func TestColdSetsFor(t *testing.T) {

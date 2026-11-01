@@ -23,7 +23,7 @@ var (
 func planGroup(ord int, qid string) apiclient.LogPlanGroup {
 	return apiclient.LogPlanGroup{
 		Ord:       ord,
-		QueryId:   ptr(qid),
+		QueryId:   new(qid),
 		Hash:      "h" + strconv.Itoa(ord),
 		Count:     5,
 		Durations: apiclient.PlanDurationStats{P50Ms: 10, P95Ms: 20, MaxMs: 30, SumMs: 50}, //nolint:exhaustruct
@@ -33,7 +33,7 @@ func planGroup(ord int, qid string) apiclient.LogPlanGroup {
 			QueryText: "select * from orders where status = $1",
 			Root:      scanNode("orders"),
 			Findings: []apiclient.PlanFinding{{ //nolint:exhaustruct
-				Code: apiclient.SeqScanLarge, Severity: apiclient.MEDIUM, NodeType: "Seq Scan", Relation: ptr("orders"), Path: []int{},
+				Code: apiclient.SeqScanLarge, Severity: apiclient.MEDIUM, NodeType: "Seq Scan", Relation: new("orders"), Path: []int{},
 			}},
 		},
 	}
@@ -131,7 +131,7 @@ func TestPlanInsights_PartialCaution(t *testing.T) {
 	}
 
 	s.Partial = false
-	s.Scan = &apiclient.LogScanInfo{From: planT0.Add(-time.Hour), To: planT0, Host: ptr("h2")} //nolint:exhaustruct
+	s.Scan = &apiclient.LogScanInfo{From: planT0.Add(-time.Hour), To: planT0, Host: new("h2")} //nolint:exhaustruct
 
 	if w := planWindowOf(s, time.Time{}, time.Time{}, ""); !w.From.Equal(planT0.Add(-time.Hour)) || w.Host != "h2" || w.Caution != "" {
 		t.Errorf("window from a stored scan = %+v", w)
@@ -262,7 +262,7 @@ func TestQueryPlans_RefusesScanOfAnotherCluster(t *testing.T) {
 	api := &planAPI{cluster: "other", groups: map[int]apiclient.LogPlanGroup{1: planGroup(1, "1")}} //nolint:exhaustruct
 	c := api.server(t)
 
-	_, err := queryPlans(context.Background(), c, queryPlansArgs{Cluster: "demo", ScanID: planScanID.String(), Ord: ptr(1)}) //nolint:exhaustruct
+	_, err := queryPlans(context.Background(), c, queryPlansArgs{Cluster: "demo", ScanID: planScanID.String(), Ord: new(1)}) //nolint:exhaustruct
 	if err == nil || !strings.Contains(err.Error(), `"other"`) {
 		t.Errorf("err = %v", err)
 	}
@@ -308,20 +308,20 @@ func TestQueryPlans_OrdChecks(t *testing.T) {
 	api := &planAPI{cluster: "demo", groups: map[int]apiclient.LogPlanGroup{3: planGroup(3, "7")}} //nolint:exhaustruct
 	c := api.server(t)
 
-	_, err := queryPlans(context.Background(), c, queryPlansArgs{Cluster: "demo", ScanID: planScanID.String(), Ord: ptr(0)}) //nolint:exhaustruct
+	_, err := queryPlans(context.Background(), c, queryPlansArgs{Cluster: "demo", ScanID: planScanID.String(), Ord: new(0)}) //nolint:exhaustruct
 	if err == nil || !strings.Contains(err.Error(), "ord starts at 1") {
 		t.Errorf("ord 0: err = %v", err)
 	}
 
 	_, err = queryPlans(context.Background(), c, queryPlansArgs{ //nolint:exhaustruct
-		Cluster: "demo", ScanID: planScanID.String(), Ord: ptr(3), QueryID: "42",
+		Cluster: "demo", ScanID: planScanID.String(), Ord: new(3), QueryID: "42",
 	})
 	if err == nil || !strings.Contains(err.Error(), `query_id "7"`) {
 		t.Errorf("foreign group: err = %v", err)
 	}
 
 	if _, err = queryPlans(context.Background(), c, queryPlansArgs{ //nolint:exhaustruct
-		Cluster: "demo", ScanID: planScanID.String(), Ord: ptr(3), QueryID: "7",
+		Cluster: "demo", ScanID: planScanID.String(), Ord: new(3), QueryID: "7",
 	}); err != nil {
 		t.Errorf("own group: %v", err)
 	}
@@ -331,7 +331,7 @@ func TestGroupRow_QueryLenCountsRawText(t *testing.T) {
 	t.Parallel()
 
 	text := "select *\n  from orders\n  where id = $1"
-	r := groupRow(1, nil, "h", 1, apiclient.PlanDurationStats{}, planT0, planT0, text, ptr(100), nil) //nolint:exhaustruct
+	r := groupRow(1, nil, "h", 1, apiclient.PlanDurationStats{}, planT0, planT0, text, new(100), nil) //nolint:exhaustruct
 
 	if r.QueryTrunc != "select * from orders where id = $1" || r.QueryLen != len(text)+100 {
 		t.Errorf("trunc = %q, len = %d", r.QueryTrunc, r.QueryLen)
@@ -350,9 +350,9 @@ func TestRegressionScanMatches(t *testing.T) {
 	}{
 		{nil, "h1", true},
 		{&apiclient.LogScanInfo{ServiceType: pg}, "", true},                                      //nolint:exhaustruct
-		{&apiclient.LogScanInfo{ServiceType: pg, Host: ptr("h1")}, "h1", true},                   //nolint:exhaustruct
-		{&apiclient.LogScanInfo{ServiceType: pg, Host: ptr("h1")}, "", true},                     //nolint:exhaustruct
-		{&apiclient.LogScanInfo{ServiceType: pg, Host: ptr("h1")}, "h2", false},                  //nolint:exhaustruct
+		{&apiclient.LogScanInfo{ServiceType: pg, Host: new("h1")}, "h1", true},                   //nolint:exhaustruct
+		{&apiclient.LogScanInfo{ServiceType: pg, Host: new("h1")}, "", true},                     //nolint:exhaustruct
+		{&apiclient.LogScanInfo{ServiceType: pg, Host: new("h1")}, "h2", false},                  //nolint:exhaustruct
 		{&apiclient.LogScanInfo{ServiceType: pg}, "h2", false},                                   //nolint:exhaustruct
 		{&apiclient.LogScanInfo{ServiceType: apiclient.LogScanInfoServiceTypePooler}, "", false}, //nolint:exhaustruct
 	} {
@@ -369,7 +369,7 @@ func TestQueryPlans_ArgumentErrors(t *testing.T) {
 
 	for _, a := range []queryPlansArgs{
 		{Cluster: "demo"},                          //nolint:exhaustruct
-		{Cluster: "demo", Ord: ptr(1)},             //nolint:exhaustruct
+		{Cluster: "demo", Ord: new(1)},             //nolint:exhaustruct
 		{Cluster: "demo", QueryID: "abc"},          //nolint:exhaustruct
 		{Cluster: "demo", ScanID: "not-a-uuid"},    //nolint:exhaustruct
 		{Cluster: "demo", QueryID: "1", Trees: 99}, //nolint:exhaustruct
@@ -469,7 +469,7 @@ func TestPlanRegressions_ScanWindowShiftsBaseline(t *testing.T) {
 	api := &planAPI{cluster: "demo", compare: &apiclient.LogPlanComparison{ //nolint:exhaustruct
 		Partial: true,
 		Regressions: []apiclient.LogPlanRegression{{ //nolint:exhaustruct
-			QueryId: ptr("42"), Severity: apiclient.LogPlanRegressionSeverityHIGH,
+			QueryId: new("42"), Severity: apiclient.LogPlanRegressionSeverityHIGH,
 			Reasons: []apiclient.LogPlanRegressionReason{apiclient.LostIndex}, LostIndexes: []string{"orders_status_idx"},
 			QueryText: "select  *\n from orders", CurrentCount: 30, BaselineCount: 25,
 		}},
@@ -520,7 +520,7 @@ func TestAdvisorCandidate_CarriesEvidence(t *testing.T) {
 	t.Parallel()
 
 	c := advisorCandidateOf(apiclient.IndexAdvisorCandidate{ //nolint:exhaustruct
-		Evidence: apiclient.IndexAdvisorEvidence{State: apiclient.Found, Plans: ptr(47)}, //nolint:exhaustruct
+		Evidence: apiclient.IndexAdvisorEvidence{State: apiclient.Found, Plans: new(47)}, //nolint:exhaustruct
 	}, false)
 
 	b, _ := json.Marshal(c)

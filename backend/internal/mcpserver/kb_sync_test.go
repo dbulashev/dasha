@@ -161,7 +161,7 @@ func headingLevels(t *testing.T, path string) []int {
 
 	var levels []int
 
-	for _, line := range strings.Split(string(b), "\n") {
+	for line := range strings.SplitSeq(string(b), "\n") {
 		n := 0
 		for n < len(line) && line[n] == '#' {
 			n++
