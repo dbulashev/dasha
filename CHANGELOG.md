@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.9.2
+
+### Dependencies
+- **Security updates:** echo 4.16.0→4.16.1 (GHSA-cxf3-9h37-7rr8), go-jose 4.1.4→4.1.6, brotli-libs in the frontend image, curl and libcurl 8.22.0→8.23.0 in the frontend image (use-after-free on HTTP/2 upload, CVE-2026-92392).
+
 ## v1.9.1
 
 ### Dependencies
