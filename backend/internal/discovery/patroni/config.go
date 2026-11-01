@@ -186,7 +186,6 @@ func (s PGSettings) resolve(entry, envKey string, logger *zap.Logger) (scopePG, 
 		logger.Warn("password_from_env is set but the variable is empty",
 			zap.String("entry", entry),
 			zap.String("key", envKey),
-			zap.String("variable", s.PasswordFromEnv),
 		)
 	}
 

@@ -77,7 +77,6 @@ func NewProvider(
 	if unset {
 		logger.Warn("password_from_env is set but the variable is empty",
 			zap.String("entry", folderName),
-			zap.String("variable", cfg.PasswordFromEnv),
 		)
 	}
 

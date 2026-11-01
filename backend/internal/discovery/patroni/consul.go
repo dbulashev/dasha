@@ -19,7 +19,8 @@ import (
 const (
 	consulMaxBody    = 64 << 20
 	consulRetryDelay = time.Second
-	consulTokenHdr   = "X-Consul-Token" //nolint:gosec // header name, not a credential
+	// #nosec G101 -- header name, not a credential
+	consulTokenHdr = "X-Consul-Token"
 	// Set by some Consul versions when ACLs hid keys from a list.
 	consulFilteredHdr = "X-Consul-Results-Filtered-By-ACLs"
 )
@@ -69,9 +70,7 @@ func newConsulStore(cfg ConsulConfig, logger *zap.Logger) (*consulStore, error) 
 
 	token, unset := config.ResolveSecret(cfg.Token, cfg.TokenFromEnv)
 	if unset {
-		logger.Warn("consul.token_from_env is set but the variable is empty",
-			zap.String("variable", cfg.TokenFromEnv),
-		)
+		logger.Warn("consul.token_from_env is set but the variable is empty")
 	}
 
 	return &consulStore{

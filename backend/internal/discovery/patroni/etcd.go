@@ -41,9 +41,7 @@ func newEtcdStore(cfg EtcdConfig, logger *zap.Logger) (*etcdStore, error) {
 
 	password, unset := config.ResolveSecret(cfg.Password, cfg.PasswordFromEnv)
 	if unset {
-		logger.Warn("etcd3.password_from_env is set but the variable is empty",
-			zap.String("variable", cfg.PasswordFromEnv),
-		)
+		logger.Warn("etcd3.password_from_env is set but the variable is empty")
 	}
 
 	return &etcdStore{ //nolint:exhaustruct

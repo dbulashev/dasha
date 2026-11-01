@@ -60,7 +60,6 @@ func NewProvider(name string, raw map[string]any, logger *zap.Logger) (*Provider
 	if cfg.PasswordFromEnv != "" && cfg.Password == "" {
 		logger.Warn("password_from_env is set but the variable is empty",
 			zap.String("entry", name),
-			zap.String("variable", cfg.PasswordFromEnv),
 		)
 	}
 
