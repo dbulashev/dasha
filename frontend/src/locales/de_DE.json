@@ -966,6 +966,8 @@
   },
   "Replication": "Replikation",
   "replication": {
+    "standbyOf": "Standby-Cluster, repliziert von",
+    "standbyClusters": "Standby-Cluster:",
     "config": "Replikationseinstellungen",
     "status": "Replikationsstatus",
     "stateSyncState": "Status / Sync",

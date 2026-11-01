@@ -171,8 +171,8 @@ func (s PGSettings) merge(o PGOverride) PGSettings {
 }
 
 // resolve reads the password from the environment and compiles the db filters.
-// scope is empty for the entry-level settings.
-func (s PGSettings) resolve(entry, scope string, logger *zap.Logger) (scopePG, error) {
+// envKey names password_from_env in warnings; empty: the value is inherited, already reported.
+func (s PGSettings) resolve(entry, envKey string, logger *zap.Logger) (scopePG, error) {
 	if s.User == "" {
 		return scopePG{}, errUserRequired //nolint:exhaustruct
 	}
@@ -182,15 +182,10 @@ func (s PGSettings) resolve(entry, scope string, logger *zap.Logger) (scopePG, e
 	}
 
 	password, unset := config.ResolveSecret(s.Password, s.PasswordFromEnv)
-	if unset {
-		key := "password_from_env"
-		if scope != "" {
-			key = "overrides." + scope + "." + key
-		}
-
+	if unset && envKey != "" {
 		logger.Warn("password_from_env is set but the variable is empty",
 			zap.String("entry", entry),
-			zap.String("key", key),
+			zap.String("key", envKey),
 			zap.String("variable", s.PasswordFromEnv),
 		)
 	}
@@ -217,7 +212,7 @@ func (s PGSettings) resolve(entry, scope string, logger *zap.Logger) (scopePG, e
 // resolvePG builds the entry settings and one scopePG per override, keyed by
 // lower-cased scope name: viper lower-cases map keys when it reads the file.
 func resolvePG(entry string, cfg Config, logger *zap.Logger) (scopePG, map[string]scopePG, error) {
-	base, err := cfg.PGSettings.resolve(entry, "", logger)
+	base, err := cfg.PGSettings.resolve(entry, "password_from_env", logger)
 	if err != nil {
 		return scopePG{}, nil, err //nolint:exhaustruct
 	}
@@ -225,7 +220,12 @@ func resolvePG(entry string, cfg Config, logger *zap.Logger) (scopePG, map[strin
 	overrides := make(map[string]scopePG, len(cfg.Overrides))
 
 	for scope, o := range cfg.Overrides {
-		pg, err := cfg.PGSettings.merge(o).resolve(entry, scope, logger)
+		envKey := ""
+		if o.PasswordFromEnv != nil {
+			envKey = "overrides." + scope + ".password_from_env"
+		}
+
+		pg, err := cfg.PGSettings.merge(o).resolve(entry, envKey, logger)
 		if err != nil {
 			return scopePG{}, nil, fmt.Errorf("overrides.%s: %w", scope, err) //nolint:exhaustruct
 		}

@@ -199,6 +199,107 @@ discovery:
 - На каждую пару «хост + база» открывается свой пул соединений. Для кластера с десятками баз сузьте
   список через `db` и `exclude_db` и проверьте `db_pool.max_conns`.
 
+## Кластеры Patroni из etcd или Consul (опционально)
+
+Dasha читает ключи, которые Patroni хранит в DCS, и превращает каждый кластер Patroni (scope) в
+кластер Dasha: member'ы становятся хостами, а список баз берётся из PostgreSQL, как у
+`type: postgres`. Создание и удаление кластера, добавление и потеря реплики, создание и удаление
+базы видны в течение `refresh_interval`. Dasha только читает DCS и ничего в него не пишет.
+
+```yaml
+discovery:
+  etcd:
+    type: patroni
+    config:
+      dcs: etcd3                  # etcd3 | consul
+      namespace: /service         # namespace Patroni, по умолчанию /service
+      etcd3:
+        endpoints: [https://etcd-1:2379, https://etcd-2:2379]
+        username: dasha_ro
+        password_from_env: DASHA_ETCD_PASSWORD
+        tls:                      # необязательно; https:// и так включает TLS
+          ca_file: /etc/dasha/etcd-ca.pem
+          cert_file: /etc/dasha/etcd-client.pem   # клиентский сертификат, необязательно
+          key_file: /etc/dasha/etcd-client.key
+      scope: ".*"                 # регулярное выражение по имени scope
+      exclude_scope: "test-.*"
+      refresh_interval: 5m        # по умолчанию 5m, минимум 1m
+      # PostgreSQL, общее для всех scope
+      user: dasha
+      password_from_env: DASHA_PG_PASSWORD
+      port: ""                    # пусто: порт из conn_url каждого member'а
+      bootstrap_db: postgres
+      db: ".*"
+      exclude_db: "(template.*)"
+      overrides:                  # по точному имени scope
+        billing:
+          user: dasha_billing
+          password_from_env: DASHA_BILLING_PASSWORD
+          db: "^app$"
+  consul:
+    type: patroni
+    config:
+      dcs: consul
+      consul:
+        address: https://consul.local:8501
+        datacenter: dc2           # пусто: датацентр агента
+        token_from_env: DASHA_CONSUL_TOKEN
+        tls: { ca_file: /etc/dasha/consul-ca.pem }
+      user: dasha
+      password_from_env: DASHA_PG_PASSWORD
+```
+
+- **Имена кластеров.** Кластер называется по scope. Если записей `type: patroni` две и больше, к
+  имени добавляется имя записи (`etcd_alpha`, `consul_alpha`), и одинаковый scope в двух DCS не
+  конфликтует. Записи других типов не учитываются: новая папка `yandex-mdb` не переименует
+  кластеры Patroni. Имя, уже занятое статическим кластером или другим источником, пропускается с
+  предупреждением.
+- **Хосты.** Каждый member — хост с адресом и портом из `conn_url` (или из `conn_kwargs`, если
+  `conn_url` пуст). В селекторе хоста рядом с адресом показывается имя member'а. Member'ы одного
+  scope на одной машине с разными портами получают имя `host:port`. Member без пригодного адреса
+  (unix-сокет, пустой хост) пропускается с предупреждением.
+- **Состав** определяется только ключами member'ов: остановленный member исчезает, когда истекает
+  его ключ (`ttl` Patroni), switchover ничего не меняет. Роли и теги не читаются.
+- **Базы** перечисляются по каждому scope, до 8 scope одновременно, начиная с member'а, ответившего
+  в прошлый раз. Если не ответил ни один member, остаётся последний известный список, а если его
+  нет — кластер показывается без баз.
+- **Overrides** заменяют отдельные настройки одного scope: пароль без пользователя оставляет
+  пользователя записи, и наоборот. `password` и `password_from_env` — одна настройка. Ключи
+  сравниваются с именем scope без учёта регистра. Scope с точкой в имени (`pg.prod`)
+  переопределить нельзя: загрузчик конфига разбивает такой ключ на вложенные.
+- **Standby-кластеры.** Standby-кластер Patroni (`standby_cluster` в dynamic config) связывается с
+  кластером, с которого реплицируется: сначала по system identifier PostgreSQL, который оба хранят
+  в `<scope>/initialize`, поэтому находится и standby, смотрящий на VIP или балансировщик; если не
+  получилось — по совпадению хоста и порта `standby_cluster` с адресом member'а. Связь видна в обе
+  стороны на страницах «Сводка» и «Репликация».
+- **Недоступность DCS.** Если DCS не ответил, цикл завершается с предупреждением, кластеры
+  остаются прежними. Пустой namespace — корректный ответ: кластеры удаляются.
+- Группы Citus (`<scope>/<group>/members/…`) не поддерживаются.
+
+Доступ к DCS только на чтение:
+
+```bash
+# etcd v3
+etcdctl role add dasha_ro
+etcdctl role grant-permission dasha_ro --prefix=true read /service/
+etcdctl user add dasha_ro
+etcdctl user grant-role dasha_ro dasha_ro
+```
+
+```hcl
+# Политика Consul ACL для токена dasha
+key_prefix "service/" {
+  policy = "read"
+}
+```
+
+Consul не отказывает токену без права `read` на namespace, а скрывает ключи. Dasha считает такой
+ответ ошибкой, чтобы пропущенное правило ACL не выглядело как «все кластеры удалены».
+
+В PostgreSQL нужна та же роль, что и для статических кластеров (см.
+[Роль мониторинга](#роль-мониторинга)): создайте её на мастере каждого кластера и разрешите в
+`pg_hba` через конфиг Patroni (`postgresql.pg_hba`), иначе discovery найдёт хосты, но не базы.
+
 ## Поиск по логам (опционально)
 
 Страница `/logs` ищет по существующему хранилищу логов. Dasha логи не собирает.

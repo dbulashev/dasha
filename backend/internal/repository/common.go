@@ -182,7 +182,7 @@ var validPgIdentifier = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][
 type pgxPoolItem struct {
 	Host     config.Host
 	Database config.Database
-	dsn      string // holds the password; never log it
+	conn     connParams // holds the password; never log it
 	pool     *pgxpool.Pool
 }
 
@@ -298,10 +298,14 @@ func (p *PgxPool) Clusters(ctx context.Context) ([]dto.ClusterInfo, error) {
 	supportsLogs := make(map[config.ClusterName]bool)
 	logStreams := make(map[config.ClusterName][]string)
 	logSeverities := make(map[config.ClusterName]map[string][]string)
+	hostMeta := make(map[config.ClusterName]map[config.Host]config.HostMeta)
+	standbyOf := make(map[config.ClusterName]string)
 
 	if cls, cfgErr := p.clusters.Get(ctx); cfgErr == nil {
 		for _, c := range cls {
 			sources[c.Name] = c.Source
+			hostMeta[c.Name] = c.HostMeta
+			standbyOf[c.Name] = c.Labels[config.LabelPatroniStandbyOf]
 
 			if p.logSources == nil {
 				continue
@@ -331,7 +335,7 @@ func (p *PgxPool) Clusters(ctx context.Context) ([]dto.ClusterInfo, error) {
 		})
 
 		instances := mapstruct.SliceMap(hosts, func(h config.Host) dto.Instance {
-			return dto.Instance{HostName: h}
+			return dto.Instance{HostName: h, Alias: hostMeta[clusterName][h].Alias}
 		})
 
 		ret = append(ret, dto.ClusterInfo{
@@ -342,6 +346,7 @@ func (p *PgxPool) Clusters(ctx context.Context) ([]dto.ClusterInfo, error) {
 			LogSeverities: logSeverities[clusterName],
 			Instances:     instances,
 			Databases:     databases,
+			StandbyOf:     standbyOf[clusterName],
 		})
 	}
 
@@ -360,28 +365,32 @@ type hostDbKey struct {
 }
 
 func (p *PgxPool) ensurePool(ctx context.Context) error {
-	cls, err := p.clusters.Get(ctx)
-	if err != nil {
-		return fmt.Errorf("config.Clusters.Get | %w", err)
-	}
-
 	type connTask struct {
 		cluster config.ClusterName
 		host    config.Host
 		db      config.Database
-		dsn     string
+		conn    connParams
 	}
 
-	desired := desiredDSNs(cls)
-
 	p.mu.Lock()
+
+	// Read under p.mu: the snapshot is never older than the one a previous lock
+	// holder registered pools from.
+	cls, err := p.clusters.Get(ctx)
+	if err != nil {
+		p.mu.Unlock()
+
+		return fmt.Errorf("config.Clusters.Get | %w", err)
+	}
+
+	desired := desiredConns(cls)
 
 	// Find pools to remove (exist in p.pools but not in desired).
 	var toClose []*pgxpool.Pool
 
 	for clName, items := range p.pools {
-		desiredSet := desired[clName]
-		if desiredSet == nil {
+		want, ok := desired[clName]
+		if !ok {
 			// Entire cluster removed.
 			for _, item := range items {
 				toClose = append(toClose, item.pool)
@@ -400,10 +409,10 @@ func (p *PgxPool) ensurePool(ctx context.Context) error {
 		for _, item := range items {
 			key := hostDbKey{item.Host, item.Database}
 
-			dsn, wanted := desiredSet[key]
+			conn, wanted := want.lookup(key)
 
 			switch {
-			case !wanted || dsn != item.dsn:
+			case !wanted || conn != item.conn:
 				toClose = append(toClose, item.pool)
 				p.logger.Debug("pool removed",
 					zap.String("cluster", string(clName)),
@@ -455,7 +464,7 @@ func (p *PgxPool) ensurePool(ctx context.Context) error {
 						cluster: cl.Name,
 						host:    host,
 						db:      db,
-						dsn:     desired[cl.Name][hostDbKey{host, db}],
+						conn:    desired[cl.Name].hosts[host],
 					})
 				}
 			}
@@ -485,7 +494,7 @@ func (p *PgxPool) ensurePool(ctx context.Context) error {
 		go func(t connTask) {
 			defer wg.Done()
 
-			pool, err := p.getPool(ctx, t.dsn)
+			pool, err := p.getPool(ctx, t.conn.dsn(t.db))
 			if err != nil {
 				p.logger.Warn("failed to connect to database, skipping",
 					zap.String("cluster", string(t.cluster)),
@@ -505,7 +514,7 @@ func (p *PgxPool) ensurePool(ctx context.Context) error {
 
 			resultsCh <- poolResult{
 				clusterName: t.cluster,
-				item:        pgxPoolItem{Host: t.host, Database: t.db, dsn: t.dsn, pool: pool},
+				item:        pgxPoolItem{Host: t.host, Database: t.db, conn: t.conn, pool: pool},
 			}
 		}(task)
 	}
@@ -513,19 +522,19 @@ func (p *PgxPool) ensurePool(ctx context.Context) error {
 	wg.Wait()
 	close(resultsCh)
 
-	// Concurrent ensurePool calls connect without the lock and may have planned
-	// from different cluster snapshots: the latest snapshot decides which pool stays.
-	if latest, err := p.clusters.Get(ctx); err == nil {
-		desired = desiredDSNs(latest)
-	}
-
 	var dropped []*pgxpool.Pool
 
 	p.mu.Lock()
 
+	// Concurrent ensurePool calls connect without the lock and may have planned
+	// from different cluster snapshots: the latest snapshot decides which pool stays.
+	if latest, err := p.clusters.Get(ctx); err == nil {
+		desired = desiredConns(latest)
+	}
+
 	for r := range resultsCh {
 		key := hostDbKey{r.item.Host, r.item.Database}
-		if desired[r.clusterName][key] != r.item.dsn {
+		if conn, ok := desired[r.clusterName].lookup(key); !ok || conn != r.item.conn {
 			dropped = append(dropped, r.item.pool)
 
 			continue
@@ -537,7 +546,7 @@ func (p *PgxPool) ensurePool(ctx context.Context) error {
 		switch {
 		case i < 0:
 			p.pools[r.clusterName] = append(items, r.item)
-		case items[i].dsn == r.item.dsn:
+		case items[i].conn == r.item.conn:
 			dropped = append(dropped, r.item.pool)
 		default:
 			dropped = append(dropped, items[i].pool)
@@ -559,35 +568,74 @@ func (p *PgxPool) ensurePool(ctx context.Context) error {
 	return nil
 }
 
-// desiredDSNs maps every cluster's host+db pair to its connection string.
-func desiredDSNs(cls []config.Cluster) map[config.ClusterName]map[hostDbKey]string {
-	desired := make(map[config.ClusterName]map[hostDbKey]string, len(cls))
+// connParams is everything a pool's DSN depends on besides the database.
+type connParams struct {
+	User, Password, Address, Port string
+}
+
+// dsn builds the connection string; url.URL escapes credentials containing @ : / or ?.
+func (c connParams) dsn(db config.Database) string {
+	u := url.URL{ //nolint:exhaustruct
+		Scheme: "postgres",
+		User:   url.UserPassword(c.User, c.Password),
+		Host:   net.JoinHostPort(c.Address, c.Port),
+		Path:   "/" + string(db),
+	}
+
+	return u.String()
+}
+
+func hostConn(cl config.Cluster, host config.Host) connParams {
+	return connParams{
+		User:     cl.UserName,
+		Password: cl.Password,
+		Address:  cmp.Or(cl.HostMeta[host].Address, string(host)),
+		Port:     hostPort(cl, host),
+	}
+}
+
+// clusterConns is the desired pool set of one cluster: every host × every database.
+type clusterConns struct {
+	hosts map[config.Host]connParams
+	dbs   map[config.Database]bool
+}
+
+func (c clusterConns) lookup(key hostDbKey) (connParams, bool) {
+	conn, ok := c.hosts[key.Host]
+	if !ok || !c.dbs[key.Db] {
+		return connParams{}, false //nolint:exhaustruct
+	}
+
+	return conn, true
+}
+
+func desiredConns(cls []config.Cluster) map[config.ClusterName]clusterConns {
+	desired := make(map[config.ClusterName]clusterConns, len(cls))
 
 	for _, cl := range cls {
-		if desired[cl.Name] == nil {
-			desired[cl.Name] = make(map[hostDbKey]string)
+		want, ok := desired[cl.Name]
+		if !ok {
+			want = clusterConns{
+				hosts: make(map[config.Host]connParams, len(cl.Hosts)),
+				dbs:   make(map[config.Database]bool, len(cl.Databases)),
+			}
+			desired[cl.Name] = want
 		}
 
 		for _, host := range cl.Hosts {
-			for _, db := range cl.Databases {
-				desired[cl.Name][hostDbKey{host, db}] = poolDSN(cl, host, db)
-			}
+			want.hosts[host] = hostConn(cl, host)
+		}
+
+		for _, db := range cl.Databases {
+			want.dbs[db] = true
 		}
 	}
 
 	return desired
 }
 
-// poolDSN builds the connection string; url.URL escapes credentials containing @ : / or ?.
 func poolDSN(cl config.Cluster, host config.Host, db config.Database) string {
-	dsn := url.URL{ //nolint:exhaustruct
-		Scheme: "postgres",
-		User:   url.UserPassword(cl.UserName, cl.Password),
-		Host:   net.JoinHostPort(cmp.Or(cl.HostMeta[host].Address, string(host)), hostPort(cl, host)),
-		Path:   "/" + string(db),
-	}
-
-	return dsn.String()
+	return hostConn(cl, host).dsn(db)
 }
 
 func hostPort(cl config.Cluster, host config.Host) string {

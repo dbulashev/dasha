@@ -2,7 +2,6 @@ package patroni
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -12,8 +11,6 @@ import (
 )
 
 const dcsTimeout = 10 * time.Second
-
-var errConsulNotImplemented = errors.New("dcs consul is not supported yet")
 
 type kv struct {
 	Key   string
@@ -33,7 +30,7 @@ func newStore(cfg Config, logger *zap.Logger) (store, error) {
 	case dcsEtcd3:
 		return newEtcdStore(cfg.Etcd3, logger)
 	case dcsConsul:
-		return nil, errConsulNotImplemented
+		return newConsulStore(cfg.Consul, logger)
 	default:
 		return nil, fmt.Errorf("%w: %q", errDCSUnknown, cfg.DCS)
 	}

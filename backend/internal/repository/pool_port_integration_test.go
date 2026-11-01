@@ -6,7 +6,6 @@ import (
 	"context"
 	"io"
 	"net"
-	"net/url"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -92,10 +91,7 @@ func publishOnPort(clusters config.Clusters, port string) {
 func dsnPort(t *testing.T, item pgxPoolItem) string {
 	t.Helper()
 
-	u, err := url.Parse(item.dsn)
-	require.NoError(t, err)
-
-	return u.Port()
+	return item.conn.Port
 }
 
 func onlyPool(t *testing.T, p *PgxPool) pgxPoolItem {

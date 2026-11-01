@@ -587,13 +587,18 @@ type Cluster struct {
 	// Source cluster origin, e.g. "static" or "yandex-mdb"
 	Source *string `json:"source,omitempty"`
 
+	// StandbyOf name of the cluster this standby cluster replicates from; absent for primary clusters and when the primary is not known
+	StandbyOf *string `json:"standby_of,omitempty"`
+
 	// SupportsLogs true when cluster logs can be searched via GET /api/logs
 	SupportsLogs *bool `json:"supports_logs,omitempty"`
 }
 
 // ClusterInstance defines model for ClusterInstance.
 type ClusterInstance struct {
-	HostName *string `json:"host_name,omitempty"`
+	// DisplayName human-readable host name from discovery, e.g. the Patroni member name; absent when discovery knows none
+	DisplayName *string `json:"display_name,omitempty"`
+	HostName    *string `json:"host_name,omitempty"`
 }
 
 // ClusterSnapshotSummary defines model for ClusterSnapshotSummary.

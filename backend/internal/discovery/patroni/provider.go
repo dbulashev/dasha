@@ -394,10 +394,10 @@ func (p *Provider) build(plans []scopePlan, results []listResult) ([]config.Clus
 		}
 
 		labels := map[string]string{
-			"patroni.dcs":       p.cfg.DCS,
-			"patroni.namespace": p.namespace,
-			"patroni.scope":     pl.data.Name,
-			"bootstrap_db":      pl.pg.BootstrapDB,
+			config.LabelPatroniDCS:       p.cfg.DCS,
+			config.LabelPatroniNamespace: p.namespace,
+			config.LabelPatroniScope:     pl.data.Name,
+			"bootstrap_db":               pl.pg.BootstrapDB,
 		}
 
 		if primary, ok := standby[pl.data.Name]; ok {

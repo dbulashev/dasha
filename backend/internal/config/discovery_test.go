@@ -160,6 +160,8 @@ func TestDecodeDiscoveryConfigRefreshInterval(t *testing.T) {
 		{name: "duration string", raw: "5m", want: 5 * time.Minute},
 		{name: "seconds string", raw: "10s", want: 10 * time.Second},
 		{name: "negative", raw: -1, want: -time.Minute},
+		{name: "empty string is unset", raw: "", want: 0},
+		{name: "blank string is unset", raw: "  ", want: 0},
 	}
 
 	for _, tt := range tests {

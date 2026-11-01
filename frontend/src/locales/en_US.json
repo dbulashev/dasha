@@ -1004,6 +1004,8 @@
   },
   "Replication": "Replication",
   "replication": {
+    "standbyOf": "Standby cluster, replicates from",
+    "standbyClusters": "Standby clusters:",
     "config": "Replication settings",
     "status": "Replication status",
     "stateSyncState": "State / sync",

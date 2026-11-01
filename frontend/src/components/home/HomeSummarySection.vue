@@ -20,6 +20,7 @@ import type {
   QueryStatsStatus,
   InstanceInfo,
 } from '@/api/models/index'
+import ClusterStandbyLink from '@/components/ClusterStandbyLink.vue'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { DEFAULT_STATS_SOURCE } from '@/composables/useStatsSource'
 import { useViewError } from '@/composables/useViewError'
@@ -276,6 +277,7 @@ watch([clusterName, hostName, databaseName], () => load(), { immediate: true })
         <v-icon start icon="mdi-database" />
         {{ databaseSize.SizePretty }}
       </v-chip>
+      <ClusterStandbyLink />
       <v-chip v-if="formattedStatsResetTime" variant="tonal" size="default" prepend-icon="mdi-clock-outline">
         {{ t('home.statsResetAt') }}: {{ formattedStatsResetTime }}
       </v-chip>

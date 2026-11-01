@@ -175,8 +175,14 @@ const SourcePostgres = "postgres"
 // SourcePatroni marks clusters discovered from the keys Patroni keeps in its DCS.
 const SourcePatroni = "patroni"
 
-// LabelPatroniStandbyOf names the cluster a Patroni standby cluster replicates from.
-const LabelPatroniStandbyOf = "patroni.standby_of"
+// Labels of Patroni-discovered clusters.
+const (
+	LabelPatroniDCS       = "patroni.dcs"
+	LabelPatroniNamespace = "patroni.namespace"
+	LabelPatroniScope     = "patroni.scope" // scope name without the entry prefix
+	// LabelPatroniStandbyOf names the cluster a Patroni standby cluster replicates from.
+	LabelPatroniStandbyOf = "patroni.standby_of"
+)
 
 // DiscoveryClusterFilter defines regex matching rules for discovered clusters.
 type DiscoveryClusterFilter struct {

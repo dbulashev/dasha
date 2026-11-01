@@ -37,3 +37,18 @@ clusters:
 #       refresh_interval: 5m     # default 5m, min 1m; a bare number is minutes
 #       db: ".*"                 # regex include
 #       exclude_db: "template.*" # regex exclude
+#   etcd:                        # one cluster per Patroni scope
+#     type: patroni
+#     config:
+#       dcs: etcd3               # etcd3 | consul
+#       namespace: /service      # Patroni namespace
+#       etcd3:
+#         endpoints: [http://etcd-1:2379]
+#         username: dasha_ro
+#         password_from_env: DASHA_ETCD_PASSWORD
+#       # consul: { address: http://consul:8500, token_from_env: DASHA_CONSUL_TOKEN }
+#       exclude_scope: "test-.*" # regex exclude over scope names
+#       user: dasha
+#       password_from_env: DASHA_PG_PASSWORD
+#       overrides:               # per scope
+#         billing: { user: dasha_billing, db: "^app$" }

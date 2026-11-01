@@ -147,6 +147,8 @@ func (p clusterMetaProvider) LookupMeta(cluster, instance string) (metrics.Disco
 					Source:     c.Source,
 					ProviderID: c.ProviderID,
 					Labels:     c.Labels,
+					Alias:      c.HostMeta[h].Alias,
+					Address:    c.HostMeta[h].Address,
 				}, true
 			}
 		}

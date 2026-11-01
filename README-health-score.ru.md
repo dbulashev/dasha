@@ -195,6 +195,8 @@ Score потребляет **нормализованный набор сигн�
 
 **Дискаверенные кластеры** (из `discovery:`, напр. Yandex MDB) авто-маппятся из метаданных discovery — их не нужно перечислять в `targets:`: FQDN хоста → `{{.Host}}`, cloud resource id (id кластера MDB) → `{{.Service}}`, лейбл `folder_id` → `{{.Env}}`, короткий хост → `{{.Container}}`; провайдеры берутся из `providers_default` (напр. `core: pgscv`, `pooler/host: yc_native`). Кастомизируются только шаблоны селекторов. Статический `targets:` всегда перекрывает выведенный маппинг; `auto_map_discovered: false` отключает авто-маппинг, `discovery_env_label` меняет, из какого лейбла брать `{{.Env}}`.
 
+**Кластеры Patroni** (`type: patroni`) маппятся по scope и member'у: `{{.Service}}` и `{{.ServiceID}}` — имя scope без префикса записи, `{{.Container}}` — имя member'а, `{{.Host}}` — инстанс, как его показывает Dasha. Так обычно размечены pgscv и patroni-exporter; если лейблы другие, поправьте шаблоны селекторов.
+
 ### Тренд, сезонная норма (baseline) и просадки
 
 `GET /api/common/health-score/history?cluster_name=…&instance=…&from=…&to=…&step_seconds=…` отдаёт по времени общий балл, баллы категорий и латентность на `[from, to]`. График на `/health-score` рисует score, сезонную норму и латентность с отметками просадок.

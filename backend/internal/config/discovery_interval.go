@@ -36,7 +36,12 @@ func minutesHook(from, to reflect.Type, data any) (any, error) {
 	case reflect.Float32, reflect.Float64:
 		minutes = v.Float()
 	case reflect.String:
-		f, err := strconv.ParseFloat(strings.TrimSpace(v.String()), 64)
+		str := strings.TrimSpace(v.String())
+		if str == "" {
+			return time.Duration(0), nil
+		}
+
+		f, err := strconv.ParseFloat(str, 64)
 		if err != nil {
 			return data, nil //nolint:nilerr // not a bare number: a duration string
 		}

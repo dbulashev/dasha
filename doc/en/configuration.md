@@ -199,6 +199,108 @@ list is kept.
 Dasha opens one connection pool per host and database, so on a cluster with dozens of databases
 narrow the list with `db` / `exclude_db` and check `db_pool.max_conns`.
 
+## Patroni clusters from etcd or Consul (optional)
+
+Dasha reads the keys Patroni keeps in its DCS and turns every Patroni cluster (scope) into a Dasha
+cluster: the members become hosts, the databases are listed from PostgreSQL as with `type: postgres`.
+A cluster created or removed in Patroni, a replica added or lost, a database created or dropped —
+all show up within `refresh_interval`. Dasha only reads the DCS and never writes to it.
+
+```yaml
+discovery:
+  etcd:
+    type: patroni
+    config:
+      dcs: etcd3                  # etcd3 | consul
+      namespace: /service         # Patroni "namespace", default /service
+      etcd3:
+        endpoints: [https://etcd-1:2379, https://etcd-2:2379]
+        username: dasha_ro
+        password_from_env: DASHA_ETCD_PASSWORD
+        tls:                      # optional; https:// endpoints use TLS anyway
+          ca_file: /etc/dasha/etcd-ca.pem
+          cert_file: /etc/dasha/etcd-client.pem   # client certificate, optional
+          key_file: /etc/dasha/etcd-client.key
+      scope: ".*"                 # regex over scope names
+      exclude_scope: "test-.*"
+      refresh_interval: 5m        # default 5m, min 1m
+      # PostgreSQL side, shared by every scope
+      user: dasha
+      password_from_env: DASHA_PG_PASSWORD
+      port: ""                    # empty: the port from each member's conn_url
+      bootstrap_db: postgres
+      db: ".*"
+      exclude_db: "(template.*)"
+      overrides:                  # per scope, by exact scope name
+        billing:
+          user: dasha_billing
+          password_from_env: DASHA_BILLING_PASSWORD
+          db: "^app$"
+  consul:
+    type: patroni
+    config:
+      dcs: consul
+      consul:
+        address: https://consul.local:8501
+        datacenter: dc2           # empty: the agent's datacenter
+        token_from_env: DASHA_CONSUL_TOKEN
+        tls: { ca_file: /etc/dasha/consul-ca.pem }
+      user: dasha
+      password_from_env: DASHA_PG_PASSWORD
+```
+
+- **Cluster names.** A cluster is named after its scope. With two or more `type: patroni` entries
+  the name gets the entry name in front (`etcd_alpha`, `consul_alpha`), so the same scope in two DCS
+  does not clash. Entries of other types do not count: adding a `yandex-mdb` folder never renames
+  Patroni clusters. A name already taken by a static cluster or another source is skipped with a
+  warning.
+- **Hosts.** Each member becomes a host, addressed by the host and port of its `conn_url`
+  (`conn_kwargs` when `conn_url` is empty). The host selector shows the member name next to the
+  address. Members of one scope on one machine with different ports are named `host:port`. A
+  member with no usable address (a unix socket, an empty host) is skipped with a warning.
+- **Membership** follows the member keys only: a stopped member disappears once its key expires
+  (Patroni `ttl`), a switchover changes nothing. Roles and tags are not read.
+- **Databases** are listed per scope, up to 8 scopes at a time, starting with the member that
+  answered last time. When no member answers, the last known list is kept, or the cluster is
+  shown without databases.
+- **Overrides** replace single settings of one scope: a password without a user keeps the entry
+  user, and the other way round. `password` and `password_from_env` count as one setting.
+  Override keys match scope names case-insensitively. A scope with a dot in its name
+  (`pg.prod`) cannot be overridden: the config loader splits such keys into nested ones.
+- **Standby clusters.** A Patroni standby cluster (`standby_cluster` in its dynamic config) is
+  linked to the cluster it replicates from: first by the PostgreSQL system identifier both keep in
+  `<scope>/initialize`, so a standby pointed at a VIP or a load balancer is still matched; failing
+  that, by the `standby_cluster` host and port equal to a member's address. The Summary and
+  Replication pages show the link both ways.
+- **DCS outages.** When the DCS does not answer, the cycle fails with a warning and the clusters
+  stay as they were. An empty namespace is a valid answer: the clusters are removed.
+- Citus groups (`<scope>/<group>/members/…`) are not supported.
+
+Read-only access to the DCS:
+
+```bash
+# etcd v3
+etcdctl role add dasha_ro
+etcdctl role grant-permission dasha_ro --prefix=true read /service/
+etcdctl user add dasha_ro
+etcdctl user grant-role dasha_ro dasha_ro
+```
+
+```hcl
+# Consul ACL policy for the dasha token
+key_prefix "service/" {
+  policy = "read"
+}
+```
+
+Consul does not refuse a token without `read` on the namespace: it hides the keys. Dasha treats
+such an answer as an error, so a missing ACL rule does not look like "all clusters removed".
+
+On the PostgreSQL side the role is the same as for static clusters (see
+[Monitoring role](#monitoring-role)); create it on the primary of each cluster and allow it in
+`pg_hba` through the Patroni config (`postgresql.pg_hba`), otherwise discovery finds the hosts but
+not the databases.
+
 ## Log Search (optional)
 
 The `/logs` page reads an existing log store; Dasha never collects or parses logs itself. For clusters

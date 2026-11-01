@@ -4,6 +4,7 @@ import { useClustersStore } from '@/stores/clusters'
 import { getClusters } from '@/api/gen/default/default'
 import { assertOk, ApiError } from '@/utils/api'
 import { getErrorMessage } from '@/utils/error'
+import { hostItems } from '@/utils/clusters'
 import { useViewError } from '@/composables/useViewError'
 import { useI18n } from 'vue-i18n'
 
@@ -29,10 +30,9 @@ export function useClusterSelector() {
     (clusterStore.clusterList?.map(c => c.name).filter(Boolean) as string[] ?? []).sort(),
   )
 
-  const hostOptions = computed(() => {
-    const c = clusterStore.clusterList?.find(c => c.name === selectedCluster.value)
-    return (c?.instances?.map(i => i.host_name).filter(Boolean) as string[] ?? []).sort()
-  })
+  const hostOptions = computed(() =>
+    hostItems(clusterStore.clusterList?.find(c => c.name === selectedCluster.value)),
+  )
 
   const dbOptions = computed(() => {
     const c = clusterStore.clusterList?.find(c => c.name === selectedCluster.value)

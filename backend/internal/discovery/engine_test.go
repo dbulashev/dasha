@@ -3,6 +3,7 @@ package discovery
 import (
 	"context"
 	"errors"
+	"io"
 	"testing"
 	"time"
 
@@ -140,31 +141,40 @@ func TestNewProviderPostgres(t *testing.T) {
 	}
 }
 
-func TestCountEntriesDrivesNamePrefix(t *testing.T) {
+func TestPrefixByType(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name string
 		cfg  map[string]config.DiscoveryEntry
-		want int
+		want map[string]bool
 	}{
 		{
-			name: "single folder alongside a postgres entry",
+			name: "one entry of each type",
 			cfg: map[string]config.DiscoveryEntry{
 				"prod":   {Type: discoveryTypeYandexMDB}, //nolint:exhaustruct
 				"onprem": {Type: discoveryTypePostgres},  //nolint:exhaustruct
+				"etcd":   {Type: discoveryTypePatroni},   //nolint:exhaustruct
 			},
-			// Adding a postgres entry must not start prefixing the folder's
-			// cluster names: the names are the key to snapshots and history.
-			want: 1,
+			want: map[string]bool{discoveryTypeYandexMDB: false, discoveryTypePatroni: false},
 		},
 		{
-			name: "two folders",
+			name: "two folders, one patroni",
 			cfg: map[string]config.DiscoveryEntry{
 				"prod":    {Type: discoveryTypeYandexMDB}, //nolint:exhaustruct
 				"staging": {Type: discoveryTypeYandexMDB}, //nolint:exhaustruct
+				"etcd":    {Type: discoveryTypePatroni},   //nolint:exhaustruct
 			},
-			want: 2,
+			want: map[string]bool{discoveryTypeYandexMDB: true, discoveryTypePatroni: false},
+		},
+		{
+			name: "two patroni, one folder",
+			cfg: map[string]config.DiscoveryEntry{
+				"prod":   {Type: discoveryTypeYandexMDB}, //nolint:exhaustruct
+				"etcd":   {Type: discoveryTypePatroni},   //nolint:exhaustruct
+				"consul": {Type: discoveryTypePatroni},   //nolint:exhaustruct
+			},
+			want: map[string]bool{discoveryTypeYandexMDB: false, discoveryTypePatroni: true},
 		},
 	}
 
@@ -172,10 +182,105 @@ func TestCountEntriesDrivesNamePrefix(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := countEntries(tt.cfg, discoveryTypeYandexMDB); got != tt.want {
-				t.Errorf("countEntries() = %d, want %d", got, tt.want)
+			got := prefixByType(tt.cfg)
+
+			for typ, want := range tt.want {
+				if got[typ] != want {
+					t.Errorf("prefixByType()[%q] = %v, want %v", typ, got[typ], want)
+				}
+			}
+
+			if got[discoveryTypePostgres] {
+				t.Errorf("prefixByType()[%q] = true, postgres names are never prefixed", discoveryTypePostgres)
 			}
 		})
+	}
+}
+
+func TestNewProviderPatroni(t *testing.T) {
+	t.Parallel()
+
+	engine, _ := newTestEngine(t)
+
+	// The etcd client connects lazily: an unreachable endpoint must not fail the entry.
+	provider, err := engine.newProvider("etcd", config.DiscoveryEntry{
+		Type: discoveryTypePatroni,
+		Config: map[string]any{
+			"dcs":   "etcd3",
+			"etcd3": map[string]any{"endpoints": []any{"http://127.0.0.1:1"}},
+			"user":  "dasha",
+		},
+	}, true)
+	if err != nil {
+		t.Fatalf("newProvider() error = %v", err)
+	}
+
+	if got, want := provider.Interval(), 5*time.Minute; got != want {
+		t.Errorf("Interval() = %v, want %v", got, want)
+	}
+
+	closer, ok := provider.(io.Closer)
+	if !ok {
+		t.Fatal("patroni provider does not implement io.Closer")
+	}
+
+	if err := closer.Close(); err != nil {
+		t.Errorf("Close() error = %v", err)
+	}
+}
+
+func TestNewProviderPatroniInvalidConfig(t *testing.T) {
+	t.Parallel()
+
+	engine, _ := newTestEngine(t)
+
+	_, err := engine.newProvider("etcd", config.DiscoveryEntry{
+		Type:   discoveryTypePatroni,
+		Config: map[string]any{"user": "dasha"},
+	}, false)
+	if err == nil {
+		t.Fatal("newProvider() error = nil, want a validation error")
+	}
+}
+
+type closingProvider struct {
+	fakeProvider
+
+	closed chan struct{}
+}
+
+func (c *closingProvider) Close() error {
+	close(c.closed)
+
+	return nil
+}
+
+func TestRunLoopClosesProvider(t *testing.T) {
+	t.Parallel()
+
+	engine, _ := newTestEngine(t)
+	provider := &closingProvider{closed: make(chan struct{})} //nolint:exhaustruct
+
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+
+	go func() {
+		engine.runLoop(ctx, "etcd", provider)
+		close(done)
+	}()
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("runLoop did not stop after cancel")
+	}
+
+	select {
+	case <-provider.closed:
+	default:
+		t.Fatal("Close() was not called when the loop stopped")
 	}
 }
 

@@ -137,6 +137,19 @@ jobs:
           go test -tags=integration -v -timeout=15m \
             ./internal/logs/source/opensearch/ ./internal/logs/source/victorialogs/
 
+  test-backend-integration-dcs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.27.3"
+          cache-dependency-path: backend/go.sum
+      - name: Integration tests (Patroni DCS)
+        run: |
+          cd backend
+          go test -tags=integration -v -timeout=10m ./internal/discovery/patroni/
+
   test-frontend:
     runs-on: ubuntu-latest
     steps:
