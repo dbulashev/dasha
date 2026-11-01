@@ -501,20 +501,51 @@ func restoreRoleMappingCase(c *config.Config, raw []byte) error {
 		return nil
 	}
 
-	var doc struct {
-		Auth struct {
-			OIDC struct {
-				RoleMapping map[string]string `yaml:"role_mapping"`
-			} `yaml:"oidc"`
-		} `yaml:"auth"`
-	}
-
+	var doc map[string]any
 	if err := yaml.Unmarshal(raw, &doc); err != nil {
 		return fmt.Errorf("parse: %w", err)
 	}
 
-	if m := doc.Auth.OIDC.RoleMapping; m != nil {
-		c.Auth.OIDC.RoleMapping = m
+	node := any(doc)
+	for _, key := range []string{"auth", "oidc", "role_mapping"} {
+		section, ok := node.(map[string]any)
+		if !ok {
+			return nil
+		}
+
+		node = foldLookup(section, key)
+	}
+
+	mapping, ok := node.(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	out := make(map[string]string, len(mapping))
+	for k, v := range mapping {
+		if v != nil {
+			out[k] = fmt.Sprint(v)
+		} else {
+			out[k] = ""
+		}
+	}
+
+	c.Auth.OIDC.RoleMapping = out
+
+	return nil
+}
+
+// foldLookup matches a section name the way viper does: exact first, then
+// case-insensitively.
+func foldLookup(m map[string]any, key string) any {
+	if v, ok := m[key]; ok {
+		return v
+	}
+
+	for k, v := range m {
+		if strings.EqualFold(k, key) {
+			return v
+		}
 	}
 
 	return nil

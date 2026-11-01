@@ -102,3 +102,41 @@ auth:
 		t.Errorf("role_mapping = %v, want 2 entries", m)
 	}
 }
+
+func TestRoleMappingKeepsKeyCaseUnderCapitalizedSections(t *testing.T) {
+	t.Parallel()
+
+	const yml = `
+Auth:
+  mode: oidc
+  OIDC:
+    Role_Mapping:
+      "DB.Admin": admin
+`
+
+	v := newConfigViper()
+	v.SetConfigType("yaml")
+
+	if err := v.ReadConfig(strings.NewReader(yml)); err != nil {
+		t.Fatalf("read: %v", err)
+	}
+
+	var c config.Config
+	if err := v.Unmarshal(&c); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if err := restoreRoleMappingCase(&c, []byte(yml)); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+
+	m := c.Auth.OIDC.RoleMapping
+
+	if got, ok := m["DB.Admin"]; !ok || got != config.RoleAdmin {
+		t.Errorf(`role_mapping["DB.Admin"] = %q, %v; want admin`, got, ok)
+	}
+
+	if _, ok := m["db.admin"]; ok {
+		t.Errorf("role_mapping = %v, lower-cased key survived", m)
+	}
+}
