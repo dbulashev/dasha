@@ -18,6 +18,21 @@
   <img src="assets/dasha-demo.gif" alt="Dasha — Home, Health Score, Query Stats, Query Report, Locks" width="900">
 </p>
 
+| | |
+|---|---|
+| **Кластеры** | Задаются списком в `dasha.yaml` или подтягиваются автоматически: кластеры **Patroni** из **etcd v3** или **Consul** (с именами member'ов, ролями и связями standby-кластеров) и **Yandex Managed Service for PostgreSQL**. Список баз Dasha читает из самого кластера и обновляет без перезапуска — [Patroni](doc/ru/configuration.md#кластеры-patroni-из-etcd-или-consul-опционально) · [Yandex MDB](doc/ru/configuration.md#сервис-дискавери-yandex-mdb-опционально) · [базы](doc/ru/configuration.md#автообнаружение-баз-в-кластере-опционально) |
+| **Поиск по логам** | Ищет по логам PostgreSQL и пулера в **VictoriaLogs**, **OpenSearch / Elasticsearch** или через API Yandex MDB. Есть фильтры, схлопывание одинаковых сообщений, гистограмма и готовые пресеты — [настройка](doc/ru/configuration.md#поиск-по-логам-опционально) · [VictoriaLogs](doc/ru/configuration.md#источники-victorialogs) · [OpenSearch](doc/ru/configuration.md#источники-opensearch) |
+| **Планы из логов** | Собирает планы `auto_explain` по запросам, показывает запросы, у которых план стал хуже, чем в прошлом периоде, и проверяет рекомендации по индексам на реальных планах — [Сводка по логам](doc/ru/configuration.md#сводка-по-логам) |
+| **Health Score** | Оценивает инстанс от 0 до 100 и подсказывает, что исправить в первую очередь. Работает сразу, без настройки; с **Prometheus / VictoriaMetrics** (pgSCV, Yandex MDB, pgbouncer, метрики хоста) добавляются история и сравнение с обычным для этого времени уровнем — [модель](README-health-score.ru.md) · [режим метрик](README-health-score.ru.md#metrics-backed-режим-история-baseline-богатые-сигналы) |
+| **Подбор индексов** | Разбирает запросы из `pg_stat_statements` парсером PostgreSQL, находит недостающие btree-индексы и выдаёт готовый `CREATE INDEX` — [настройка](doc/ru/configuration.md#рекомендации-по-индексам-опционально) |
+| **Снимки** | Сохраняет и сравнивает снимки `pg_stat_statements`, блокировок и самых нагруженных объектов. Демон автоснимков делает их сам при всплеске активности и при смене мастера — [Снимки](doc/ru/autosnapshot.md) |
+| **Проверки схемы** | 17 проверок структуры, от исчерпания последовательностей до таблиц без первичного ключа; к каждой находке — чем она грозит и как исправить — [настройка](doc/ru/configuration.md#проверки-схемы-опционально) |
+| **Доступ** | Без аутентификации, по статическим токенам или через **OIDC** (Keycloak, Google и др.); роли `admin` и `viewer`, персональные токены — [Аутентификация](doc/ru/auth.md) |
+| **AI-ассистенты** | `dasha-mcp` — MCP-сервер только для чтения: 34 инструмента, чтобы диагностировать кластеры из AI-ассистента — [MCP-коннектор](doc/ru/mcp.md) |
+| **Развёртывание** | Docker Compose, образы на Docker Hub, Helm chart — [Развёртывание](doc/ru/deployment.md) |
+
+Поддерживаются PostgreSQL 14–18 и Postgres Pro: вместо `pg_stat_statements` Dasha сама использует `pgpro_stats`.
+
 ## Возможности
 
 [Анализ запросов](doc/ru/features.md#анализ-запросов) ·

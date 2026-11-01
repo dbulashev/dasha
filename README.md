@@ -18,6 +18,21 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
   <img src="assets/dasha-demo.gif" alt="Dasha — Home, Health Score, Query Stats, Query Report, Locks" width="900">
 </p>
 
+| | |
+|---|---|
+| **Cluster discovery** | Static list in `dasha.yaml`, **Patroni** clusters from **etcd v3** or **Consul** (members, roles, standby cluster links), **Yandex Managed Service for PostgreSQL**; databases discovered from the cluster itself, no restart needed — [Patroni](doc/en/configuration.md#patroni-clusters-from-etcd-or-consul-optional) · [Yandex MDB](doc/en/configuration.md#yandex-mdb-service-discovery-optional) · [databases](doc/en/configuration.md#database-discovery-inside-a-cluster-optional) |
+| **Log search** | PostgreSQL and pooler logs from **VictoriaLogs**, **OpenSearch / Elasticsearch** or the Yandex MDB API: filters, deduplication by template, histogram, presets — [setup](doc/en/configuration.md#log-search-optional) · [VictoriaLogs](doc/en/configuration.md#victorialogs-sources) · [OpenSearch](doc/en/configuration.md#opensearch-sources) |
+| **Plans from logs** | `auto_explain` plans grouped by statement and shape, plan regressions between windows, plan evidence for index recommendations — [Log insights](doc/en/configuration.md#log-insights) |
+| **Health Score** | 0–100 score with prioritized recommendations; point-in-time SQL out of the box, or trend and seasonal baseline from **Prometheus / VictoriaMetrics** (pgSCV, Yandex MDB, pgbouncer, host metrics) — [model](README-health-score.md) · [metrics mode](README-health-score.md#metrics-backed-mode-history-baseline-richer-signals) |
+| **Index advisor** | Missing btree indexes proposed from `pg_stat_statements` parsed with the PostgreSQL parser, with a ready `CREATE INDEX` — [setup](doc/en/configuration.md#index-recommendations-optional) |
+| **Snapshots** | `pg_stat_statements`, lock and hot-object snapshots, comparison, auto-snapshots on activity spikes and failovers — [Snapshots](doc/en/autosnapshot.md) |
+| **Schema checks** | 17 structural checks with fixes, from sequence exhaustion to tables without a primary key — [setup](doc/en/configuration.md#schema-checks-optional) |
+| **Access control** | `none` / static tokens / **OIDC** (Keycloak, Google, …), `admin` and `viewer` roles, personal access tokens — [Authentication](doc/en/auth.md) |
+| **AI assistants** | `dasha-mcp`: read-only MCP server, 34 tools for fleet diagnostics — [MCP connector](doc/en/mcp.md) |
+| **Deployment** | Docker Compose, Docker Hub images, Helm chart — [Deployment](doc/en/deployment.md) |
+
+PostgreSQL 14–18 and Postgres Pro (`pgpro_stats` is picked up automatically).
+
 ## Features
 
 [Query Analysis](doc/en/features.md#query-analysis) ·

@@ -56,7 +56,9 @@
 - Write-ahead log I/O (PostgreSQL 18) in both the chart and the breakdown
 
 ## Progress Tracking
-- ANALYZE, VACUUM, CLUSTER / VACUUM FULL, CREATE INDEX, BASE BACKUP
+- ANALYZE, VACUUM, CLUSTER / VACUUM FULL, CREATE INDEX, BASE BACKUP, COPY
+- COPY (PostgreSQL 14+): table, source type, bytes and rows processed, rows excluded and skipped; a percentage with ETA when the total is known (the file size for `COPY FROM` a server-side file, the row estimate for `COPY TO`)
+- Replication slot invalidation forecast: the WAL rate over a chosen window (30 s – 5 min), and for every slot the WAL it retains, the remaining `max_slot_wal_keep_size` reserve and the time until it is lost
 
 ## Settings Analysis
 - Excessive logging detection
@@ -113,7 +115,7 @@
 
 ## Infrastructure
 - Multi-cluster support with per-cluster host/database selection
-- Yandex Managed Service for PostgreSQL service discovery
+- Service discovery: Patroni clusters from etcd v3 or Consul (member names, standby cluster links, metrics auto-mapping) and Yandex Managed Service for PostgreSQL — [Configuration](configuration.md#patroni-clusters-from-etcd-or-consul-optional)
 - In-cluster database discovery — the database list comes from the cluster itself and refreshes without a restart
 - Primary / replica role display
 - Optional snapshot storage database (daily-partitioned tables, `dasha migrate` CLI)
