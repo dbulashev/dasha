@@ -487,20 +487,27 @@ func provideLogger(debug bool) *zap.Logger {
 	return l
 }
 
-func provideConfig() (*config.Config, error) {
-	viper.SetConfigName("dasha")
-	viper.SetConfigType("yaml")
-	viper.AddConfigPath(".")
-	viper.AddConfigPath("$HOME/.dasha")
-	viper.AddConfigPath("/etc/dasha/")
+// newConfigViper keeps dots inside map keys (keyword_fields "host.name",
+// selector "kubernetes.labels.app") instead of splitting them into nested maps.
+func newConfigViper() *viper.Viper {
+	return viper.NewWithOptions(viper.KeyDelimiter("::"))
+}
 
-	if err := viper.ReadInConfig(); err != nil {
+func provideConfig() (*config.Config, error) {
+	v := newConfigViper()
+	v.SetConfigName("dasha")
+	v.SetConfigType("yaml")
+	v.AddConfigPath(".")
+	v.AddConfigPath("$HOME/.dasha")
+	v.AddConfigPath("/etc/dasha/")
+
+	if err := v.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("provideConfig | failed to read config: %w", err)
 	}
 
 	var c config.Config
 
-	err := viper.Unmarshal(&c)
+	err := v.Unmarshal(&c)
 	if err != nil {
 		return nil, fmt.Errorf("provideConfig | %w", err)
 	}
