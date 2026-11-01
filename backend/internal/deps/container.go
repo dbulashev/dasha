@@ -13,6 +13,7 @@ import (
 	"github.com/samber/do"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
+	"go.yaml.in/yaml/v3"
 	"golang.org/x/time/rate"
 
 	"github.com/dbulashev/dasha/internal/auth"
@@ -493,6 +494,32 @@ func newConfigViper() *viper.Viper {
 	return viper.NewWithOptions(viper.KeyDelimiter("::"))
 }
 
+// restoreRoleMappingCase reloads role_mapping keys from the raw YAML: viper
+// lower-cases map keys, and claim values are matched case-sensitively.
+func restoreRoleMappingCase(c *config.Config, raw []byte) error {
+	if c.Auth.OIDC == nil {
+		return nil
+	}
+
+	var doc struct {
+		Auth struct {
+			OIDC struct {
+				RoleMapping map[string]string `yaml:"role_mapping"`
+			} `yaml:"oidc"`
+		} `yaml:"auth"`
+	}
+
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		return fmt.Errorf("parse: %w", err)
+	}
+
+	if m := doc.Auth.OIDC.RoleMapping; m != nil {
+		c.Auth.OIDC.RoleMapping = m
+	}
+
+	return nil
+}
+
 func provideConfig() (*config.Config, error) {
 	v := newConfigViper()
 	v.SetConfigName("dasha")
@@ -510,6 +537,15 @@ func provideConfig() (*config.Config, error) {
 	err := v.Unmarshal(&c)
 	if err != nil {
 		return nil, fmt.Errorf("provideConfig | %w", err)
+	}
+
+	raw, err := os.ReadFile(v.ConfigFileUsed())
+	if err != nil {
+		return nil, fmt.Errorf("provideConfig | failed to read config: %w", err)
+	}
+
+	if err := restoreRoleMappingCase(&c, raw); err != nil {
+		return nil, fmt.Errorf("provideConfig | auth.oidc.role_mapping: %w", err)
 	}
 
 	for i := range c.Clusters {

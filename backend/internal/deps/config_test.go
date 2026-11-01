@@ -57,3 +57,48 @@ log_search:
 		t.Errorf("field_map.host = %q", got)
 	}
 }
+
+func TestRoleMappingKeepsKeyCase(t *testing.T) {
+	t.Parallel()
+
+	const yml = `
+auth:
+  mode: oidc
+  oidc:
+    role_mapping:
+      "DB.Admin": admin
+      "dev.team": viewer
+`
+
+	v := newConfigViper()
+	v.SetConfigType("yaml")
+
+	if err := v.ReadConfig(strings.NewReader(yml)); err != nil {
+		t.Fatalf("read: %v", err)
+	}
+
+	var c config.Config
+	if err := v.Unmarshal(&c); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	if err := restoreRoleMappingCase(&c, []byte(yml)); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+
+	m := c.Auth.OIDC.RoleMapping
+
+	if got, ok := m["DB.Admin"]; !ok || got != config.RoleAdmin {
+		t.Errorf(`role_mapping["DB.Admin"] = %q, %v; want admin`, got, ok)
+	}
+
+	for _, claim := range []string{"db.admin", "DB.ADMIN", "Db.Admin"} {
+		if got, ok := m[claim]; ok {
+			t.Errorf("role_mapping[%q] = %q, want no match", claim, got)
+		}
+	}
+
+	if len(m) != 2 {
+		t.Errorf("role_mapping = %v, want 2 entries", m)
+	}
+}
