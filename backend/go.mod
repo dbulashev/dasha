@@ -22,8 +22,8 @@ require (
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.44.0
 	github.com/wasilibs/go-pgquery v0.0.0-20260728010200-155ebad2880e
-	github.com/yandex-cloud/go-genproto v0.127.0
-	github.com/yandex-cloud/go-sdk v0.36.0
+	github.com/yandex-cloud/go-genproto v0.134.0
+	github.com/yandex-cloud/go-sdk v0.43.0
 	go.etcd.io/etcd/client/v3 v3.7.3
 	go.uber.org/zap v1.28.0
 	go.yaml.in/yaml/v3 v3.0.5
