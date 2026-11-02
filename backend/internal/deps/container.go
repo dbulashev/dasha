@@ -13,6 +13,7 @@ import (
 	"github.com/samber/do"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
+	"go.yaml.in/yaml/v3"
 	"golang.org/x/time/rate"
 
 	"github.com/dbulashev/dasha/internal/auth"
@@ -487,22 +488,95 @@ func provideLogger(debug bool) *zap.Logger {
 	return l
 }
 
-func provideConfig() (*config.Config, error) {
-	viper.SetConfigName("dasha")
-	viper.SetConfigType("yaml")
-	viper.AddConfigPath(".")
-	viper.AddConfigPath("$HOME/.dasha")
-	viper.AddConfigPath("/etc/dasha/")
+// newConfigViper keeps dots inside map keys (keyword_fields "host.name",
+// selector "kubernetes.labels.app") instead of splitting them into nested maps.
+func newConfigViper() *viper.Viper {
+	return viper.NewWithOptions(viper.KeyDelimiter("::"))
+}
 
-	if err := viper.ReadInConfig(); err != nil {
+// restoreRoleMappingCase reloads role_mapping keys from the raw YAML: viper
+// lower-cases map keys, and claim values are matched case-sensitively.
+func restoreRoleMappingCase(c *config.Config, raw []byte) error {
+	if c.Auth.OIDC == nil {
+		return nil
+	}
+
+	var doc map[string]any
+	if err := yaml.Unmarshal(raw, &doc); err != nil {
+		return fmt.Errorf("parse: %w", err)
+	}
+
+	node := any(doc)
+	for _, key := range []string{"auth", "oidc", "role_mapping"} {
+		section, ok := node.(map[string]any)
+		if !ok {
+			return nil
+		}
+
+		node = foldLookup(section, key)
+	}
+
+	mapping, ok := node.(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	out := make(map[string]string, len(mapping))
+	for k, v := range mapping {
+		if v != nil {
+			out[k] = fmt.Sprint(v)
+		} else {
+			out[k] = ""
+		}
+	}
+
+	c.Auth.OIDC.RoleMapping = out
+
+	return nil
+}
+
+// foldLookup matches a section name the way viper does: exact first, then
+// case-insensitively.
+func foldLookup(m map[string]any, key string) any {
+	if v, ok := m[key]; ok {
+		return v
+	}
+
+	for k, v := range m {
+		if strings.EqualFold(k, key) {
+			return v
+		}
+	}
+
+	return nil
+}
+
+func provideConfig() (*config.Config, error) {
+	v := newConfigViper()
+	v.SetConfigName("dasha")
+	v.SetConfigType("yaml")
+	v.AddConfigPath(".")
+	v.AddConfigPath("$HOME/.dasha")
+	v.AddConfigPath("/etc/dasha/")
+
+	if err := v.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("provideConfig | failed to read config: %w", err)
 	}
 
 	var c config.Config
 
-	err := viper.Unmarshal(&c)
+	err := v.Unmarshal(&c)
 	if err != nil {
 		return nil, fmt.Errorf("provideConfig | %w", err)
+	}
+
+	raw, err := os.ReadFile(v.ConfigFileUsed())
+	if err != nil {
+		return nil, fmt.Errorf("provideConfig | failed to read config: %w", err)
+	}
+
+	if err := restoreRoleMappingCase(&c, raw); err != nil {
+		return nil, fmt.Errorf("provideConfig | auth.oidc.role_mapping: %w", err)
 	}
 
 	for i := range c.Clusters {

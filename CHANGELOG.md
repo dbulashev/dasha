@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+- Map keys with dots in the config (`keyword_fields: {"host.name": "host.name.keyword"}`, `selector`, `stream_selector`, `labels`, `role_mapping`) no longer split into nested maps and stop the backend from starting.
+
 ## v1.10.0
 
 ### Features

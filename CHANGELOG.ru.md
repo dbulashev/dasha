@@ -1,5 +1,10 @@
 # История изменений
 
+## Unreleased
+
+### Исправления
+- Ключи с точками в картах конфига (`keyword_fields: {"host.name": "host.name.keyword"}`, `selector`, `stream_selector`, `labels`, `role_mapping`) больше не разбиваются на вложенные карты и не роняют бэкенд при старте.
+
 ## v1.10.0
 
 ### Фичи
