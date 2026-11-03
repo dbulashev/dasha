@@ -59,6 +59,14 @@ const (
 	ColdTablesStatusStatusWarmingUp ColdTablesStatusStatus = "warming_up"
 )
 
+// Defines values for HealthScoreDatasourceRoleMatch.
+const (
+	Anchor   HealthScoreDatasourceRoleMatch = "anchor"
+	Explicit HealthScoreDatasourceRoleMatch = "explicit"
+	Static   HealthScoreDatasourceRoleMatch = "static"
+	Template HealthScoreDatasourceRoleMatch = "template"
+)
+
 // Defines values for HealthScoreFleetItemSource.
 const (
 	HealthScoreFleetItemSourceMetrics  HealthScoreFleetItemSource = "metrics"
@@ -768,14 +776,27 @@ type HealthScoreDatabases struct {
 type HealthScoreDatasourceRole struct {
 	Error *string `json:"error,omitempty"`
 
+	// Match How the selector was chosen: static (label mapping), explicit (user
+	// selector template), anchor (scrape found by the exporter's address
+	// metric), template (fallback selector template).
+	Match *HealthScoreDatasourceRoleMatch `json:"match,omitempty"`
+
 	// Matched Number of matching series (exactly 1 means OK).
-	Matched      int                `json:"matched"`
-	Metric       string             `json:"metric"`
-	Provider     string             `json:"provider"`
-	Role         string             `json:"role"`
-	SampleLabels *map[string]string `json:"sample_labels,omitempty"`
-	Selector     string             `json:"selector"`
+	Matched int    `json:"matched"`
+	Metric  string `json:"metric"`
+
+	// MissingSignals Signals the provider can serve that the datasource did not return.
+	MissingSignals *[]HealthScoreMissingSignal `json:"missing_signals,omitempty"`
+	Provider       string                      `json:"provider"`
+	Role           string                      `json:"role"`
+	SampleLabels   *map[string]string          `json:"sample_labels,omitempty"`
+	Selector       string                      `json:"selector"`
 }
+
+// HealthScoreDatasourceRoleMatch How the selector was chosen: static (label mapping), explicit (user
+// selector template), anchor (scrape found by the exporter's address
+// metric), template (fallback selector template).
+type HealthScoreDatasourceRoleMatch string
 
 // HealthScoreDatasourceStatus defines model for HealthScoreDatasourceStatus.
 type HealthScoreDatasourceStatus struct {
@@ -882,6 +903,13 @@ type HealthScoreLowHotUpdateTable struct {
 	Schema     string  `json:"Schema"`
 	Table      string  `json:"Table"`
 	Updates    int64   `json:"Updates"`
+}
+
+// HealthScoreMissingSignal defines model for HealthScoreMissingSignal.
+type HealthScoreMissingSignal struct {
+	// Flag Exporter flag that enables the signal's collector.
+	Flag   *string `json:"flag,omitempty"`
+	Signal string  `json:"signal"`
 }
 
 // HealthScoreRecommendation defines model for HealthScoreRecommendation.

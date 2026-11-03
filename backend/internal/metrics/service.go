@@ -88,9 +88,63 @@ func (s *Service) Enabled() bool {
 	return s != nil
 }
 
-// ValidateTarget runs label-matching diagnostics for a Dasha target.
+// ValidateTarget runs label-matching diagnostics for a Dasha target and lists,
+// per matched role, the catalogued signals the datasource did not return.
 func (s *Service) ValidateTarget(ctx context.Context, cluster, instance string) (Diagnostics, error) {
-	return s.matcher.Validate(ctx, s.client, cluster, instance)
+	diag, err := s.matcher.Validate(ctx, s.client, cluster, instance)
+	if err != nil {
+		return diag, err
+	}
+
+	var sigs []SignalKind
+
+	for _, rd := range diag.Roles {
+		if rd.OK {
+			sigs = append(sigs, s.catalog.Signals(rd.Provider, rd.Role)...)
+		}
+	}
+
+	if len(sigs) == 0 {
+		return diag, nil
+	}
+
+	got, err := s.collector.Instant(ctx, cluster, instance, time.Now(), sigs...)
+	if err != nil {
+		s.log.Warn("metrics: missing-signal check failed", zap.String("target", diag.Target), zap.Error(err))
+
+		return diag, nil
+	}
+
+	for i := range diag.Roles {
+		rd := &diag.Roles[i]
+		if !rd.OK {
+			continue
+		}
+
+		for _, sig := range s.catalog.Signals(rd.Provider, rd.Role) {
+			if got.Has(sig) || conditionalSignals[sig] {
+				continue
+			}
+
+			ms := MissingSignal{Signal: sig}
+			if rd.Provider == ProviderPostgresExporter {
+				ms.Flag = exporterFlags[sig]
+			}
+
+			rd.Missing = append(rd.Missing, ms)
+		}
+	}
+
+	return diag, nil
+}
+
+// conditionalSignals are absent in normal operation (no replicas, no table
+// above the dead-ratio cut), so their absence is not a collector gap.
+var conditionalSignals = map[SignalKind]bool{
+	SigReplLagBytes:   true,
+	SigReplLagSeconds: true,
+	SigMaxDeadRatio:   true,
+	SigAvgDeadRatio:   true,
 }
 
 // Collector returns the shared catalog-driven collector; its requests count

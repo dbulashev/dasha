@@ -10,6 +10,7 @@ package metrics
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 )
@@ -22,6 +23,11 @@ const (
 	ProviderYCNative    Provider = "yc_native"    // YC managed host + pooler metrics
 	ProviderPgBouncer   Provider = "pgbouncer"    // self-managed pooler via pgSCV
 	ProviderPgSCVSystem Provider = "pgscv_system" // self-managed host (system collector)
+
+	ProviderPostgresExporter  Provider = "postgres_exporter"  // prometheus-community/postgres_exporter
+	ProviderNodeExporter      Provider = "node_exporter"      // prometheus/node_exporter
+	ProviderPgBouncerExporter Provider = "pgbouncer_exporter" // prometheus-community/pgbouncer_exporter
+	ProviderNone              Provider = "none"               // role disabled
 )
 
 // Role is the responsibility a provider fulfils for a target.
@@ -60,6 +66,9 @@ type Config struct {
 	// clusters qualify; a self-managed cluster without a target stays unmapped
 	// and falls back to the SQL snapshot. A static Targets[] entry always wins.
 	AutoMapDiscovered *bool `mapstructure:"auto_map_discovered"`
+	// AutoMapStatic maps a static cluster absent from Targets when the default
+	// core provider is postgres_exporter (default true).
+	AutoMapStatic *bool `mapstructure:"auto_map_static"`
 	// DiscoveryEnvLabel is the discovery Labels key whose value feeds the
 	// {{.Env}} selector variable for auto-mapped targets (default "folder_id").
 	DiscoveryEnvLabel string `mapstructure:"discovery_env_label"`
@@ -69,6 +78,11 @@ type Config struct {
 // be auto-mapped. Unset (nil) defaults to true.
 func (c Config) autoMapEnabled() bool {
 	return c.AutoMapDiscovered == nil || *c.AutoMapDiscovered
+}
+
+// autoMapStaticEnabled applies only with postgres_exporter as core.
+func (c Config) autoMapStaticEnabled() bool {
+	return (c.AutoMapStatic == nil || *c.AutoMapStatic) && c.Providers.Core == ProviderPostgresExporter
 }
 
 // envLabelKey is the discovery label feeding {{.Env}} for auto-mapped targets.
@@ -163,7 +177,14 @@ const (
 	SelectorYCNativePooler = "yc_native_pooler"
 	SelectorPgBouncer      = "pgbouncer"
 	SelectorPgSCVSystem    = "pgscv_system"
+
+	SelectorPostgresExporter  = string(ProviderPostgresExporter)
+	SelectorNodeExporter      = string(ProviderNodeExporter)
+	SelectorPgBouncerExporter = string(ProviderPgBouncerExporter)
 )
+
+// exporterFallbackSelector matches any scrape port of the target host.
+const exporterFallbackSelector = `instance=~"{{promre .Host}}(:[0-9]+)?"`
 
 // Default returns the built-in defaults (feature disabled).
 func Default() Config {
@@ -194,6 +215,10 @@ func Default() Config {
 			SelectorYCNativePooler: `cluster="{{.Env}}",subcluster_name="{{.Service}}"`,
 			SelectorPgBouncer:      `cluster="{{.Env}}",service_id="{{.Service}}",container="{{.Container}}"`,
 			SelectorPgSCVSystem:    `cluster="{{.Env}}",service_id="{{.Service}}",container="{{.Container}}"`,
+
+			SelectorPostgresExporter:  exporterFallbackSelector,
+			SelectorNodeExporter:      exporterFallbackSelector,
+			SelectorPgBouncerExporter: exporterFallbackSelector,
 		},
 	}
 }
@@ -310,6 +335,10 @@ func (c Config) Validate() error {
 		}
 	}
 
+	if err := c.validateProviders(); err != nil {
+		return err
+	}
+
 	switch c.Datasource.Auth.Type {
 	case "", "none":
 	case "bearer":
@@ -323,6 +352,56 @@ func (c Config) Validate() error {
 		}
 	default:
 		return fmt.Errorf("%w: datasource.auth.type %q (want none|bearer|basic)", ErrInvalidConfig, c.Datasource.Auth.Type)
+	}
+
+	return nil
+}
+
+// exporterRoles lists the roles each stock-exporter provider (and none) may
+// fill. Older providers are not listed and stay accepted in any role.
+var exporterRoles = map[Provider][]Role{
+	ProviderPostgresExporter:  {RoleCore},
+	ProviderNodeExporter:      {RoleHost},
+	ProviderPgBouncerExporter: {RolePooler},
+	ProviderNone:              {RolePooler, RoleHost},
+}
+
+var legacyProviders = []Provider{ProviderPgSCV, ProviderYCNative, ProviderPgBouncer, ProviderPgSCVSystem}
+
+func (c Config) validateProviders() error {
+	if err := checkProviders("providers_default", c.Providers); err != nil {
+		return err
+	}
+
+	for i := range c.Targets {
+		if p := c.Targets[i].Providers; p != nil {
+			if err := checkProviders(fmt.Sprintf("targets[%d].providers", i), *p); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// checkProviders validates each set role; an empty value inherits the default.
+func checkProviders(path string, p ProvidersConfig) error {
+	for _, rp := range []struct {
+		role     Role
+		provider Provider
+	}{{RoleCore, p.Core}, {RolePooler, p.Pooler}, {RoleHost, p.Host}} {
+		if rp.provider == "" || slices.Contains(legacyProviders, rp.provider) {
+			continue
+		}
+
+		roles, known := exporterRoles[rp.provider]
+		if !known {
+			return fmt.Errorf("%w: %s.%s: unknown provider %q", ErrInvalidConfig, path, rp.role, rp.provider)
+		}
+
+		if !slices.Contains(roles, rp.role) {
+			return fmt.Errorf("%w: %s.%s: provider %q cannot serve this role", ErrInvalidConfig, path, rp.role, rp.provider)
+		}
 	}
 
 	return nil

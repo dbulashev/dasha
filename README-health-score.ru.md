@@ -197,6 +197,62 @@ Score потребляет **нормализованный набор сигн�
 
 **Кластеры Patroni** (`type: patroni`) маппятся по scope и member'у: `{{.Service}}` и `{{.ServiceID}}` — имя scope без префикса записи, `{{.Container}}` — имя member'а, `{{.Host}}` — адрес member'а без порта. Лейбла `folder_id` discovery Patroni не ставит, поэтому с дефолтным `discovery_env_label` `{{.Env}}` пустой: укажите в `discovery_env_label` лейбл Patroni (`patroni.scope`, `patroni.namespace`, `patroni.dcs`), значение которого совпадает с лейблом `cluster` в ваших метриках, или уберите `{{.Env}}` из селекторов. Так обычно размечены pgscv и patroni-exporter; если лейблы другие, поправьте шаблоны селекторов.
 
+### Стандартные экспортёры (postgres_exporter, node_exporter, pgbouncer_exporter)
+
+Экспортёры из prometheus-community подключаются как провайдеры, лейблы для них вручную описывать не нужно:
+
+| Роль | Провайдер | Метрика для проверки |
+|------|-----------|----------------------|
+| `core` | `postgres_exporter` | `pg_up` |
+| `host` | `node_exporter` | `node_uname_info` |
+| `pooler` | `pgbouncer_exporter` или `none` | `pgbouncer_up` |
+
+`none` отключает роль, если pgbouncer или node_exporter в стеке нет. Если указать провайдер в чужой роли или с опечаткой в имени, Dasha не запустится.
+
+```yaml
+health_score:
+  metrics:
+    enabled: true
+    datasource: { url: http://victoriametrics:8428 }
+    providers_default:
+      core: postgres_exporter
+      host: node_exporter
+      pooler: pgbouncer_exporter   # или none
+    # необязательно: свой шаблон отключает поиск хоста для этого провайдера
+    selectors:
+      node_exporter: 'job="node",instance="{{.HostShort}}:9100"'
+```
+
+Экспортёры можно сочетать с pgSCV: `core: pgscv`, `host: node_exporter`. Для static-кластера в этом случае `targets:` по-прежнему нужен — селектору pgSCV требуются `env` и `service`.
+
+**Как Dasha находит хост.** Каждый экспортёр отдаёт имя или адрес сервера, к которому относятся его метрики: `pg_static{server}` у postgres_exporter, `node_uname_info{nodename}` у node_exporter, `pgbouncer_databases_pool_size{host,port}` (адрес PostgreSQL за пулом) у pgbouncer_exporter. Dasha одним запросом на каждый тип экспортёра читает эти серии по всему парку и ищет среди адресов имя хоста — полное или короткое, имя member'а Patroni или IP. Регистр не важен, DNS не используется; два полных имени должны совпасть целиком, короткое имя сравнивается с первой частью полного. Если хост называют несколько скрейпов, выбирается тот, у которого совпал порт PostgreSQL. У найденного скрейпа берутся `instance` и `job`, и все запросы по роли идут уже по ним. Результат поиска хранится минуту (ошибка запроса — 30 секунд), эндпоинт статуса перечитывает его заново. Если хост не нашёлся или нашёлся у нескольких скрейпов, используется запасной шаблон `instance=~"{{promre .Host}}(:[0-9]+)?"`. Функция `promre` экранирует имя хоста для регулярного выражения, чтобы точка означала точку, а не любой символ; её можно использовать и в своих шаблонах.
+
+**Static-кластерам** при `core: postgres_exporter` запись в `targets:` не нужна (отключается через `auto_map_static: false`). `{{.Host}}`, `{{.Instance}}`, `{{.HostShort}}` и порт PostgreSQL Dasha берёт из описания кластера.
+
+**Как настроить экспортёры:**
+
+- postgres_exporter запускайте с флагами `--collector.stat_checkpointer --collector.database_wraparound --collector.stat_statements`. На PG до 17-й версии `stat_checkpointer` пишет в лог WARN, но метрики отдаются, а чекпойнты берутся из `pg_stat_bgwriter`;
+- в DSN экспортёра укажите тот же адрес, что и в конфиге Dasha (то же имя или тот же IP), а не `localhost`. База в DSN — основная база приложения: статистика по таблицам (мёртвые строки, HOT, seq scan) собирается только по ней;
+- если на один сервер смотрят два экспортёра или перед одним primary стоят несколько pgbouncer'ов, Dasha не может выбрать сама — задайте `selectors.<провайдер>` с `job`;
+- закрепите за `instance` постоянное имя через relabel в Prometheus или vmagent. История и базовая линия запрашиваются по текущему `instance`, и если он поменяется (например, при перезапуске пода), более ранняя история пропадёт с графиков.
+
+```yaml
+# Prometheus / vmagent
+scrape_configs:
+  - job_name: postgres
+    static_configs: [{ targets: ["db1.example.com:9187"] }]
+    relabel_configs:
+      - { source_labels: [__address__], regex: "([^:]+):.*", target_label: instance, replacement: "$1:9187" }
+```
+
+**Что покрыто.** Соединения, max_connections, autovacuum и track_counts, попадания в кеш, deadlocks, чекпойнты, отставание реплик в байтах (на primary), запас до wraparound, мёртвые строки, HOT, seq scan, латентность, load average на vCPU, диск, заполненность пула. Остальное берётся из SQL-снимка: отставание реплик в секундах, ожидающие блокировки, ошибки контрольных сумм, bloat, исчерпание последовательностей и типов. Латентность считается только по запросам, попавшим в выборку pg_stat_statements экспортёра (размер задаёт `--collector.stat_statements.limit`).
+
+**Диагностика.** `GET /api/common/health-score/datasource/status?cluster_name=…&instance=…` для каждой роли показывает:
+
+- `match` — как выбран селектор: `anchor` (хост найден по адресу), `template` (запасной шаблон), `explicit` (ваш шаблон), `static` (лейблы pgSCV/YC);
+- `matched` — сколько серий подходит под селектор; норма — ровно одна;
+- `missing_signals` — какие сигналы провайдер мог бы отдать, но не отдал, и каким флагом экспортёра их включить. Отставание реплик и доли мёртвых строк сюда не попадают: их отсутствие — обычное дело (нет реплик, нет крупных таблиц).
+
 ### Тренд, сезонная норма (baseline) и просадки
 
 `GET /api/common/health-score/history?cluster_name=…&instance=…&from=…&to=…&step_seconds=…` отдаёт по времени общий балл, баллы категорий и латентность на `[from, to]`. График на `/health-score` рисует score, сезонную норму и латентность с отметками просадок.

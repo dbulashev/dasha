@@ -1,6 +1,7 @@
 package deps
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"maps"
@@ -150,6 +151,7 @@ func (p clusterMetaProvider) LookupMeta(cluster, instance string) (metrics.Disco
 					Labels:     c.Labels,
 					Alias:      c.HostMeta[h].Alias,
 					Address:    c.HostMeta[h].Address,
+					Port:       cmp.Or(c.HostMeta[h].Port, c.Port),
 				}, true
 			}
 		}

@@ -131,7 +131,7 @@ func (co *Collector) InstantMany(ctx context.Context, targets []TargetRef, at ti
 		sigs = CoreSignals
 	}
 
-	items, keyErrs := co.plan(targetKeys(targets, sigs))
+	items, keyErrs := co.plan(ctx, targetKeys(targets, sigs))
 	vals, fails := co.batch.instant(ctx, items, at)
 
 	errs := make(map[TargetRef]error)
@@ -169,7 +169,7 @@ func (co *Collector) InstantMany(ctx context.Context, targets []TargetRef, at ti
 // rangeKeys fetches the series of each key over r in glued requests. A key that
 // did not resolve or whose request failed is in the error map.
 func (co *Collector) rangeKeys(ctx context.Context, keys []batchKey, r Range) (map[batchKey][]SeriesPoint, map[batchKey]error) {
-	items, errs := co.plan(keys)
+	items, errs := co.plan(ctx, keys)
 	pts, fails := co.batch.rangeQ(ctx, items, r)
 
 	for _, f := range fails {
@@ -195,7 +195,7 @@ func targetKeys(targets []TargetRef, sigs []SignalKind) []batchKey {
 
 // plan renders the keys into batch items, one per distinct expression.
 // Uncatalogued keys are dropped; keys of an unresolved target are errors.
-func (co *Collector) plan(keys []batchKey) ([]batchItem, map[batchKey]error) {
+func (co *Collector) plan(ctx context.Context, keys []batchKey) ([]batchItem, map[batchKey]error) {
 	var items []batchItem
 
 	errs := make(map[batchKey]error)
@@ -214,7 +214,7 @@ func (co *Collector) plan(keys []batchKey) ([]batchItem, map[batchKey]error) {
 
 			var err error
 
-			rt, err = co.matcher.Resolve(k.Target.Cluster, k.Target.Instance)
+			rt, err = co.matcher.ResolveCtx(ctx, co.client, k.Target.Cluster, k.Target.Instance, false)
 			if err != nil {
 				resolveErr[k.Target] = err
 				errs[k] = err
@@ -246,7 +246,7 @@ func (co *Collector) plan(keys []batchKey) ([]batchItem, map[batchKey]error) {
 // Range collects the given signals over r and aligns them into per-timestamp
 // Signals sorted ascending.
 func (co *Collector) Range(ctx context.Context, cluster, instance string, r Range, sigs ...SignalKind) ([]Signals, error) {
-	rt, err := co.matcher.Resolve(cluster, instance)
+	rt, err := co.matcher.ResolveCtx(ctx, co.client, cluster, instance, false)
 	if err != nil {
 		return nil, err
 	}
@@ -306,6 +306,9 @@ func (co *Collector) Range(ctx context.Context, cluster, instance string, r Rang
 func (co *Collector) exprFor(rt ResolvedTarget, sig SignalKind) (string, bool) {
 	role := signalRole(sig)
 	provider := providerForRole(rt, role)
+	if provider == ProviderNone {
+		return "", false
+	}
 
 	sel, err := co.matcher.Selector(provider, role, rt)
 	if err != nil {

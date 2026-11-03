@@ -1,0 +1,106 @@
+# HELP pg_settings_autovacuum Server Parameter: autovacuum
+# TYPE pg_settings_autovacuum gauge
+pg_settings_autovacuum 1
+# HELP pg_settings_max_connections Server Parameter: max_connections
+# TYPE pg_settings_max_connections gauge
+pg_settings_max_connections 100
+# HELP pg_settings_track_counts Server Parameter: track_counts
+# TYPE pg_settings_track_counts gauge
+pg_settings_track_counts 1
+# HELP pg_stat_activity_count number of connections in this state
+# TYPE pg_stat_activity_count gauge
+pg_stat_activity_count{application_name="",backend_type="",datname="app",state="disabled",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="app",state="fastpath function call",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="app",state="idle",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="app",state="idle in transaction (aborted)",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="bench",state="disabled",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="bench",state="fastpath function call",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="bench",state="idle in transaction (aborted)",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="postgres",state="active",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="postgres",state="disabled",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="postgres",state="fastpath function call",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="postgres",state="idle",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="postgres",state="idle in transaction",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="postgres",state="idle in transaction (aborted)",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="template0",state="active",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="template0",state="disabled",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="template0",state="fastpath function call",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="template0",state="idle",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="template0",state="idle in transaction",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="template0",state="idle in transaction (aborted)",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="template1",state="active",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="template1",state="disabled",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="template1",state="fastpath function call",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="template1",state="idle",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="template1",state="idle in transaction",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="template1",state="idle in transaction (aborted)",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="client backend",datname="bench",state="idle",usename="postgres",wait_event="ClientRead",wait_event_type="Client"} 2
+pg_stat_activity_count{application_name="pgbench",backend_type="client backend",datname="bench",state="active",usename="postgres",wait_event="",wait_event_type=""} 3
+pg_stat_activity_count{application_name="pgbench",backend_type="client backend",datname="bench",state="active",usename="postgres",wait_event="WalSync",wait_event_type="IO"} 1
+pg_stat_activity_count{application_name="pgbench",backend_type="client backend",datname="bench",state="active",usename="postgres",wait_event="transactionid",wait_event_type="Lock"} 3
+pg_stat_activity_count{application_name="pgbench",backend_type="client backend",datname="bench",state="idle",usename="postgres",wait_event="",wait_event_type=""} 1
+pg_stat_activity_count{application_name="pgbench",backend_type="client backend",datname="bench",state="idle",usename="postgres",wait_event="ClientRead",wait_event_type="Client"} 2
+pg_stat_activity_count{application_name="pgbench",backend_type="client backend",datname="bench",state="idle in transaction",usename="postgres",wait_event="",wait_event_type=""} 1
+pg_stat_activity_count{application_name="pgbench",backend_type="client backend",datname="bench",state="idle in transaction",usename="postgres",wait_event="ClientRead",wait_event_type="Client"} 1
+pg_stat_activity_count{application_name="psql",backend_type="client backend",datname="app",state="active",usename="postgres",wait_event="relation",wait_event_type="Lock"} 2
+pg_stat_activity_count{application_name="psql",backend_type="client backend",datname="app",state="idle in transaction",usename="postgres",wait_event="ClientRead",wait_event_type="Client"} 2
+# HELP pg_stat_database_blks_hit Number of times disk blocks were found already in the buffer cache, so that a read was not necessary (this only includes hits in the PostgreSQL buffer cache, not the operating system's file system cache)
+# TYPE pg_stat_database_blks_hit counter
+pg_stat_database_blks_hit{datid="1",datname="template1"} 92513
+pg_stat_database_blks_hit{datid="16384",datname="bench"} 4.9302201e+07
+pg_stat_database_blks_hit{datid="16385",datname="app"} 62054
+pg_stat_database_blks_hit{datid="4",datname="template0"} 0
+pg_stat_database_blks_hit{datid="5",datname="postgres"} 3403
+# HELP pg_stat_database_blks_read Number of disk blocks read in this database
+# TYPE pg_stat_database_blks_read counter
+pg_stat_database_blks_read{datid="1",datname="template1"} 936
+pg_stat_database_blks_read{datid="16384",datname="bench"} 651812
+pg_stat_database_blks_read{datid="16385",datname="app"} 24745
+pg_stat_database_blks_read{datid="4",datname="template0"} 0
+pg_stat_database_blks_read{datid="5",datname="postgres"} 285
+# HELP pg_stat_database_deadlocks Number of deadlocks detected in this database
+# TYPE pg_stat_database_deadlocks counter
+pg_stat_database_deadlocks{datid="1",datname="template1"} 0
+pg_stat_database_deadlocks{datid="16384",datname="bench"} 0
+pg_stat_database_deadlocks{datid="16385",datname="app"} 3
+pg_stat_database_deadlocks{datid="4",datname="template0"} 0
+pg_stat_database_deadlocks{datid="5",datname="postgres"} 0
+# HELP pg_stat_replication_pg_wal_lsn_diff Lag in bytes between master and slave
+# TYPE pg_stat_replication_pg_wal_lsn_diff gauge
+pg_stat_replication_pg_wal_lsn_diff{application_name="walreceiver",client_addr="172.18.0.3/32",slot_name="",state="streaming"} 4.6919876e+08
+# HELP pg_stat_user_tables_n_dead_tup Estimated number of dead rows
+# TYPE pg_stat_user_tables_n_dead_tup gauge
+pg_stat_user_tables_n_dead_tup{datname="bench",relname="pgbench_accounts",schemaname="public"} 176713
+pg_stat_user_tables_n_dead_tup{datname="bench",relname="pgbench_branches",schemaname="public"} 176485
+pg_stat_user_tables_n_dead_tup{datname="bench",relname="pgbench_history",schemaname="public"} 0
+pg_stat_user_tables_n_dead_tup{datname="bench",relname="pgbench_tellers",schemaname="public"} 176871
+# HELP pg_stat_user_tables_n_live_tup Estimated number of live rows
+# TYPE pg_stat_user_tables_n_live_tup gauge
+pg_stat_user_tables_n_live_tup{datname="bench",relname="pgbench_accounts",schemaname="public"} 1e+06
+pg_stat_user_tables_n_live_tup{datname="bench",relname="pgbench_branches",schemaname="public"} 10
+pg_stat_user_tables_n_live_tup{datname="bench",relname="pgbench_history",schemaname="public"} 177016
+pg_stat_user_tables_n_live_tup{datname="bench",relname="pgbench_tellers",schemaname="public"} 100
+# HELP pg_stat_user_tables_n_tup_hot_upd Number of rows HOT updated (i.e., with no separate index update required)
+# TYPE pg_stat_user_tables_n_tup_hot_upd counter
+pg_stat_user_tables_n_tup_hot_upd{datname="bench",relname="pgbench_accounts",schemaname="public"} 36
+pg_stat_user_tables_n_tup_hot_upd{datname="bench",relname="pgbench_branches",schemaname="public"} 174561
+pg_stat_user_tables_n_tup_hot_upd{datname="bench",relname="pgbench_history",schemaname="public"} 0
+pg_stat_user_tables_n_tup_hot_upd{datname="bench",relname="pgbench_tellers",schemaname="public"} 156483
+# HELP pg_stat_user_tables_n_tup_upd Number of rows updated
+# TYPE pg_stat_user_tables_n_tup_upd counter
+pg_stat_user_tables_n_tup_upd{datname="bench",relname="pgbench_accounts",schemaname="public"} 176713
+pg_stat_user_tables_n_tup_upd{datname="bench",relname="pgbench_branches",schemaname="public"} 176713
+pg_stat_user_tables_n_tup_upd{datname="bench",relname="pgbench_history",schemaname="public"} 0
+pg_stat_user_tables_n_tup_upd{datname="bench",relname="pgbench_tellers",schemaname="public"} 176713
+# HELP pg_stat_user_tables_seq_tup_read Number of live rows fetched by sequential scans
+# TYPE pg_stat_user_tables_seq_tup_read counter
+pg_stat_user_tables_seq_tup_read{datname="bench",relname="pgbench_accounts",schemaname="public"} 1e+06
+pg_stat_user_tables_seq_tup_read{datname="bench",relname="pgbench_branches",schemaname="public"} 4510
+pg_stat_user_tables_seq_tup_read{datname="bench",relname="pgbench_history",schemaname="public"} 0
+pg_stat_user_tables_seq_tup_read{datname="bench",relname="pgbench_tellers",schemaname="public"} 29900
+# HELP pg_static Version string as reported by postgres
+# TYPE pg_static untyped
+pg_static{server="dasha-exp-primary:5432",short_version="17.11.0",version="PostgreSQL 17.11 (Debian 17.11-1.pgdg12+2) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 12.2.0-14+deb12u1) 12.2.0, 64-bit"} 1
+# HELP pg_up Whether the last scrape of metrics from PostgreSQL was able to connect to the server (1 for yes, 0 for no).
+# TYPE pg_up gauge
+pg_up 1

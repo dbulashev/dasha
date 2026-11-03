@@ -8046,6 +8046,29 @@ components:
           type: object
           additionalProperties:
             type: string
+        match:
+          description: |
+            How the selector was chosen: static (label mapping), explicit (user
+            selector template), anchor (scrape found by the exporter's address
+            metric), template (fallback selector template).
+          type: string
+          enum: [static, explicit, anchor, template]
+        missing_signals:
+          description: Signals the provider can serve that the datasource did not return.
+          type: array
+          items:
+            $ref: '#/components/schemas/HealthScoreMissingSignal'
+
+    HealthScoreMissingSignal:
+      type: object
+      required:
+        - signal
+      properties:
+        signal:
+          type: string
+        flag:
+          description: Exporter flag that enables the signal's collector.
+          type: string
 
     HealthScoreHistory:
       type: object
