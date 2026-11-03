@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Features
+- **Health Score from the stock exporters**: `postgres_exporter`, `node_exporter` and `pgbouncer_exporter` as metrics providers. Each host is found by the address the exporter reports (`pg_static`, `node_uname_info`, the pgbouncer pool backend), with an `instance` template as fallback; static clusters need no `targets:` entry. `none` switches the pooler or host role off.
+- **Datasource status** reports how each role was matched (`match`) and which signals did not come back, with the exporter flag that enables them (`missing_signals`).
+
+### Changes
+- An unknown metrics provider, or one in a role it cannot serve, stops the backend at startup instead of leaving the role silently empty.
+
 ### Fixes
 - Map keys with dots in the config (`keyword_fields: {"host.name": "host.name.keyword"}`, `selector`, `stream_selector`, `labels`, `role_mapping`) no longer split into nested maps and stop the backend from starting.
 

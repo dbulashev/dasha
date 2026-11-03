@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"regexp"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 )
@@ -22,7 +24,9 @@ type ResolvedTarget struct {
 	Container string
 	Instance  string // Dasha instance name
 	HostShort string // first DNS label of Host; an IP stays as is
+	Port      string // PostgreSQL port; empty for targets[] entries
 	Providers ProvidersConfig
+	Scrape    map[Role]string // instance/job selector found by the anchor lookup
 }
 
 // ErrTargetNotMapped is returned when no targets[] entry matches the request.
@@ -42,6 +46,7 @@ type DiscoveryMeta struct {
 	Labels     map[string]string // discovery labels (e.g. folder_id)
 	Alias      string            // host display name, e.g. the Patroni member name
 	Address    string            // address to connect to; empty: the instance name itself
+	Port       string            // PostgreSQL port; empty: 5432
 }
 
 // MetadataProvider supplies DiscoveryMeta for a Dasha (cluster, instance), so
@@ -57,6 +62,18 @@ type Matcher struct {
 	cfg   Config
 	tmpls map[string]*template.Template
 	meta  MetadataProvider // optional: enables discovery-driven auto-mapping
+	now   func() time.Time
+
+	anchorMu sync.Mutex
+	anchors  map[Provider]anchorSnap
+}
+
+// selectorFuncs are available in selector templates.
+var selectorFuncs = template.FuncMap{"promre": promRegexLiteral}
+
+// promRegexLiteral quotes s as a regex literal inside a PromQL string.
+func promRegexLiteral(s string) string {
+	return strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(regexp.QuoteMeta(s))
 }
 
 // NewMatcher precompiles the selector templates. meta is optional and, when
@@ -65,7 +82,7 @@ func NewMatcher(cfg Config, meta MetadataProvider) (*Matcher, error) {
 	tmpls := make(map[string]*template.Template, len(cfg.Selectors))
 
 	for key, raw := range cfg.Selectors {
-		t, err := template.New(key).Option("missingkey=error").Parse(raw)
+		t, err := template.New(key).Funcs(selectorFuncs).Option("missingkey=error").Parse(raw)
 		if err != nil {
 			return nil, fmt.Errorf("metrics: selector template %q: %w", key, err)
 		}
@@ -73,7 +90,7 @@ func NewMatcher(cfg Config, meta MetadataProvider) (*Matcher, error) {
 		tmpls[key] = t
 	}
 
-	return &Matcher{cfg: cfg, tmpls: tmpls, meta: meta}, nil
+	return &Matcher{cfg: cfg, tmpls: tmpls, meta: meta, now: time.Now, anchors: map[Provider]anchorSnap{}}, nil
 }
 
 // Resolve finds the mapping for a Dasha (cluster, instance) target. A static
@@ -100,9 +117,21 @@ func (m *Matcher) Resolve(cluster, instance string) (ResolvedTarget, error) {
 	// No static mapping: derive one from discovery metadata. Only non-static
 	// (discovered) clusters qualify — a self-managed cluster without a target
 	// stays unmapped and the caller falls back to the SQL snapshot.
-	if m.meta != nil && m.cfg.autoMapEnabled() {
-		if md, ok := m.meta.LookupMeta(cluster, instance); ok && isDiscovered(md.Source) {
-			return m.deriveTarget(cluster, instance, md), nil
+	if m.meta != nil {
+		if md, ok := m.meta.LookupMeta(cluster, instance); ok {
+			switch {
+			case isDiscovered(md.Source) && m.cfg.autoMapEnabled():
+				return m.deriveTarget(cluster, instance, md), nil
+			case !isDiscovered(md.Source) && m.cfg.autoMapStaticEnabled():
+				return ResolvedTarget{
+					Cluster:   cluster,
+					Host:      instance,
+					Instance:  instance,
+					HostShort: shortHost(instance),
+					Port:      cmp.Or(md.Port, defaultPGPort),
+					Providers: m.cfg.providersFor(nil),
+				}, nil
+			}
 		}
 	}
 
@@ -131,6 +160,7 @@ func (m *Matcher) deriveTarget(cluster, instance string, md DiscoveryMeta) Resol
 			Container: cmp.Or(md.Alias, shortHost(instance)),
 			Instance:  instance,
 			HostShort: shortHost(host),
+			Port:      cmp.Or(md.Port, defaultPGPort),
 			Providers: m.cfg.providersFor(nil),
 		}
 	}
@@ -144,9 +174,12 @@ func (m *Matcher) deriveTarget(cluster, instance string, md DiscoveryMeta) Resol
 		Container: shortHost(instance),
 		Instance:  instance,
 		HostShort: shortHost(instance),
+		Port:      cmp.Or(md.Port, defaultPGPort),
 		Providers: m.cfg.providersFor(nil),
 	}
 }
+
+const defaultPGPort = "5432"
 
 // isDiscovered reports whether a cluster came from service discovery (i.e. is
 // not a static config entry).
@@ -176,6 +209,10 @@ func shortHost(fqdn string) string {
 // Selector renders the inner label selector (without braces) for a provider in
 // a given role.
 func (m *Matcher) Selector(p Provider, role Role, rt ResolvedTarget) (string, error) {
+	if s := rt.Scrape[role]; s != "" {
+		return s, nil
+	}
+
 	key := selectorKey(p, role)
 
 	t, ok := m.tmpls[key]
@@ -229,6 +266,15 @@ type RoleDiagnostic struct {
 	OK       bool
 	Sample   map[string]string
 	Err      string
+	Match    string // MatchStatic | MatchExplicit | MatchAnchor | MatchTemplate
+	Missing  []MissingSignal
+}
+
+// MissingSignal is a signal the provider can serve that the datasource did not
+// return; Flag names the exporter flag enabling it, when known.
+type MissingSignal struct {
+	Signal SignalKind
+	Flag   string
 }
 
 // roleAssignment pairs a role with its configured provider.
@@ -237,22 +283,17 @@ type roleAssignment struct {
 	provider Provider
 }
 
-// Validate confirms each role's selector matches exactly one live series.
+// Validate confirms each role's selector matches exactly one live series. The
+// anchor lookup bypasses its cache and refreshes it.
 func (m *Matcher) Validate(ctx context.Context, client DatasourceClient, cluster, instance string) (Diagnostics, error) {
-	rt, err := m.Resolve(cluster, instance)
+	rt, err := m.ResolveCtx(ctx, client, cluster, instance, true)
 	if err != nil {
 		return Diagnostics{}, err
 	}
 
 	diag := Diagnostics{Target: cluster + "/" + instance}
 
-	assignments := []roleAssignment{
-		{RoleCore, rt.Providers.Core},
-		{RolePooler, rt.Providers.Pooler},
-		{RoleHost, rt.Providers.Host},
-	}
-
-	for _, a := range assignments {
+	for _, a := range roleAssignments(rt.Providers) {
 		if a.provider == ProviderNone {
 			continue
 		}
@@ -264,7 +305,7 @@ func (m *Matcher) Validate(ctx context.Context, client DatasourceClient, cluster
 }
 
 func (m *Matcher) validateRole(ctx context.Context, client DatasourceClient, rt ResolvedTarget, a roleAssignment) RoleDiagnostic {
-	rd := RoleDiagnostic{Role: a.role, Provider: a.provider}
+	rd := RoleDiagnostic{Role: a.role, Provider: a.provider, Match: m.matchKind(a.provider, a.role, rt)}
 
 	metric := validationMetricFor(a.provider, a.role)
 	if metric == "" {

@@ -49,3 +49,6 @@ backend/coverage-*
 # Patroni discovery lab, local only
 demo/patroni/
 mk/patroni-lab.mk
+
+# exporters-snapshot.sh output
+scripts/*.tar.gz

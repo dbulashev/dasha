@@ -66,6 +66,9 @@ type Config struct {
 	// clusters qualify; a self-managed cluster without a target stays unmapped
 	// and falls back to the SQL snapshot. A static Targets[] entry always wins.
 	AutoMapDiscovered *bool `mapstructure:"auto_map_discovered"`
+	// AutoMapStatic maps a static cluster absent from Targets when the default
+	// core provider is postgres_exporter (default true).
+	AutoMapStatic *bool `mapstructure:"auto_map_static"`
 	// DiscoveryEnvLabel is the discovery Labels key whose value feeds the
 	// {{.Env}} selector variable for auto-mapped targets (default "folder_id").
 	DiscoveryEnvLabel string `mapstructure:"discovery_env_label"`
@@ -75,6 +78,12 @@ type Config struct {
 // be auto-mapped. Unset (nil) defaults to true.
 func (c Config) autoMapEnabled() bool {
 	return c.AutoMapDiscovered == nil || *c.AutoMapDiscovered
+}
+
+// autoMapStaticEnabled requires postgres_exporter as core: other providers'
+// selectors need Env/Service, which a static cluster without a target lacks.
+func (c Config) autoMapStaticEnabled() bool {
+	return (c.AutoMapStatic == nil || *c.AutoMapStatic) && c.Providers.Core == ProviderPostgresExporter
 }
 
 // envLabelKey is the discovery label feeding {{.Env}} for auto-mapped targets.
@@ -176,7 +185,7 @@ const (
 )
 
 // exporterFallbackSelector matches any scrape port of the target host.
-const exporterFallbackSelector = `instance=~"{{.Host}}(:[0-9]+)?"`
+const exporterFallbackSelector = `instance=~"{{promre .Host}}(:[0-9]+)?"`
 
 // Default returns the built-in defaults (feature disabled).
 func Default() Config {

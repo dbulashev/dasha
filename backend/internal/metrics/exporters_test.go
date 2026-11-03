@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -22,9 +23,9 @@ func TestExporterCatalogGolden(t *testing.T) {
 
 	golden := map[catalogKey]string{
 		{ProviderPostgresExporter, SigTotalConns}:        `sum(pg_stat_activity_count{S,backend_type="client backend"})`,
-		{ProviderPostgresExporter, SigActiveConns}:       `sum(pg_stat_activity_count{S,backend_type="client backend",state="active"})`,
-		{ProviderPostgresExporter, SigIdleInTx}:          `sum(pg_stat_activity_count{S,backend_type="client backend",state="idle in transaction"})`,
-		{ProviderPostgresExporter, SigActiveLockWaiters}: `sum(pg_stat_activity_count{S,backend_type="client backend",wait_event_type="Lock"})`,
+		{ProviderPostgresExporter, SigActiveConns}:       `sum(pg_stat_activity_count{S,backend_type="client backend",state="active"}) or 0 * sum(pg_stat_activity_count{S})`,
+		{ProviderPostgresExporter, SigIdleInTx}:          `sum(pg_stat_activity_count{S,backend_type="client backend",state="idle in transaction"}) or 0 * sum(pg_stat_activity_count{S})`,
+		{ProviderPostgresExporter, SigActiveLockWaiters}: `sum(pg_stat_activity_count{S,backend_type="client backend",wait_event_type="Lock"}) or 0 * sum(pg_stat_activity_count{S})`,
 		{ProviderPostgresExporter, SigMaxConns}:          `max(pg_settings_max_connections{S})`,
 		{ProviderPostgresExporter, SigAutovacuumOff}:     `min(pg_settings_autovacuum{S}) == bool 0`,
 		{ProviderPostgresExporter, SigTrackCountsOff}:    `min(pg_settings_track_counts{S}) == bool 0`,
@@ -274,8 +275,8 @@ func TestMatcher_ExporterSelectors(t *testing.T) {
 		role     Role
 		want     string
 	}{
-		{ProviderPostgresExporter, RoleCore, `instance=~"db1.example.com(:[0-9]+)?"`},
-		{ProviderPgBouncerExporter, RolePooler, `instance=~"db1.example.com(:[0-9]+)?"`},
+		{ProviderPostgresExporter, RoleCore, `instance=~"db1\\.example\\.com(:[0-9]+)?"`},
+		{ProviderPgBouncerExporter, RolePooler, `instance=~"db1\\.example\\.com(:[0-9]+)?"`},
 		{ProviderNodeExporter, RoleHost, `job="node",instance="db1:9100"`},
 	}
 
@@ -347,5 +348,30 @@ func TestCollector_NoneRoleQueriesNothing(t *testing.T) {
 		if strings.Contains(term, "pgbouncer_") {
 			t.Errorf("queried pooler metric for a role set to none: %s", term)
 		}
+	}
+}
+
+func TestPromRegexLiteral(t *testing.T) {
+	for _, host := range []string{"db1.example.com", "10.0.0.7", "[::1]", "pg-node_1"} {
+		lit := promRegexLiteral(host)
+
+		re, err := strconv.Unquote(`"` + lit + `"`)
+		if err != nil {
+			t.Fatalf("%s: %q is not a valid PromQL string body: %v", host, lit, err)
+		}
+
+		rx := regexp.MustCompile(`^(?:` + re + `)(:[0-9]+)?$`)
+		if !rx.MatchString(host) || !rx.MatchString(host+":9187") {
+			t.Errorf("%s: %s does not match the host itself", host, lit)
+		}
+	}
+
+	if promRegexLiteral("db1.example.com") != `db1\\.example\\.com` {
+		t.Errorf("promRegexLiteral = %s", promRegexLiteral("db1.example.com"))
+	}
+
+	re, _ := strconv.Unquote(`"` + promRegexLiteral("db1.example.com") + `"`)
+	if regexp.MustCompile(`^(?:` + re + `)$`).MatchString("db1xexample.com") {
+		t.Error("escaped dot matches any character")
 	}
 }

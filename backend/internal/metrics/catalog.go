@@ -3,6 +3,7 @@ package metrics
 import (
 	"fmt"
 	"maps"
+	"slices"
 )
 
 // QueryCatalog maps (provider, signal) to a MetricsQL template. Templates use
@@ -161,6 +162,12 @@ func exporterTemplates() map[catalogKey]string {
 	bgwReq := `pg_stat_bgwriter_checkpoints_req_total{%[1]s}`
 	rate := func(m string) string { return `sum(rate(` + m + `[%[2]s]))` }
 
+	// A state with no backends has no series; read it as 0 while the exporter
+	// reports pg_stat_activity_count at all.
+	activity := func(m string) string {
+		return `sum(pg_stat_activity_count{%[1]s,` + pgeClient + `,` + m + `}) or 0 * sum(pg_stat_activity_count{%[1]s})`
+	}
+
 	dead := `pg_stat_user_tables_n_dead_tup{%[1]s}`
 	live := `pg_stat_user_tables_n_live_tup{%[1]s}`
 	deadRatio := `((` + dead + ` / clamp_min(` + dead + ` + ` + live + `, 1)) and (` + dead + ` + ` + live + ` > 10000))`
@@ -171,9 +178,9 @@ func exporterTemplates() map[catalogKey]string {
 
 	return map[catalogKey]string{
 		{pe, SigTotalConns}:        `sum(pg_stat_activity_count{%[1]s,` + pgeClient + `})`,
-		{pe, SigActiveConns}:       `sum(pg_stat_activity_count{%[1]s,` + pgeClient + `,state="active"})`,
-		{pe, SigIdleInTx}:          `sum(pg_stat_activity_count{%[1]s,` + pgeClient + `,state="idle in transaction"})`,
-		{pe, SigActiveLockWaiters}: `sum(pg_stat_activity_count{%[1]s,` + pgeClient + `,wait_event_type="Lock"})`,
+		{pe, SigActiveConns}:       activity(`state="active"`),
+		{pe, SigIdleInTx}:          activity(`state="idle in transaction"`),
+		{pe, SigActiveLockWaiters}: activity(`wait_event_type="Lock"`),
 		{pe, SigMaxConns}:          `max(pg_settings_max_connections{%[1]s})`,
 		{pe, SigAutovacuumOff}:     `min(pg_settings_autovacuum{%[1]s}) == bool 0`,
 		{pe, SigTrackCountsOff}:    `min(pg_settings_track_counts{%[1]s}) == bool 0`,
@@ -227,6 +234,21 @@ func (c *QueryCatalog) Expr(p Provider, s SignalKind, selector, window, exclude 
 	}
 
 	return fmt.Sprintf(tpl, selector, window, exclude), true
+}
+
+// Signals lists, sorted, the signals catalogued for a provider in a role.
+func (c *QueryCatalog) Signals(p Provider, role Role) []SignalKind {
+	var out []SignalKind
+
+	for k := range c.templates {
+		if k.provider == p && signalRole(k.signal) == role {
+			out = append(out, k.signal)
+		}
+	}
+
+	slices.Sort(out)
+
+	return out
 }
 
 // Supports reports whether the catalog can build a query for (provider, signal).

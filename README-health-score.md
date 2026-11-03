@@ -197,6 +197,62 @@ When the instance resolves but **no series matches any selector**, the score is 
 
 **Patroni clusters** (`type: patroni`) are mapped by scope and member instead: `{{.Service}}` and `{{.ServiceID}}` are the scope name without the entry prefix, `{{.Container}}` is the member name, `{{.Host}}` the member's address without the port. Patroni discovery sets no `folder_id` label, so with the default `discovery_env_label` `{{.Env}}` is empty: point `discovery_env_label` at a Patroni label (`patroni.scope`, `patroni.namespace`, `patroni.dcs`) whose value matches the `cluster` label of your metrics, or drop `{{.Env}}` from the selectors. These match how pgscv and patroni-exporter are usually labelled; adjust the selector templates if your labels differ.
 
+### Stock exporters (postgres_exporter, node_exporter, pgbouncer_exporter)
+
+The prometheus-community exporters work as providers without hand-written labels:
+
+| Role | Provider | Validation metric |
+|------|----------|-------------------|
+| `core` | `postgres_exporter` | `pg_up` |
+| `host` | `node_exporter` | `node_uname_info` |
+| `pooler` | `pgbouncer_exporter` or `none` | `pgbouncer_up` |
+
+`none` switches a role off, for a stack without pgbouncer or node_exporter. A provider in a role it cannot serve, or an unknown provider name, stops Dasha at startup.
+
+```yaml
+health_score:
+  metrics:
+    enabled: true
+    datasource: { url: http://victoriametrics:8428 }
+    providers_default:
+      core: postgres_exporter
+      host: node_exporter
+      pooler: pgbouncer_exporter   # or none
+    # optional: a template other than the default turns the lookup off for that provider
+    selectors:
+      node_exporter: 'job="node",instance="{{.HostShort}}:9100"'
+```
+
+A mixed stack keeps its model: `core: pgscv`, `host: node_exporter`. Static clusters then still need `targets:` (the pgSCV selector needs `env`/`service`).
+
+**How a host is found.** Each exporter reports the address it watches: `pg_static{server}` (postgres_exporter), `node_uname_info{nodename}`, `pgbouncer_databases_pool_size{host,port}` (the pool's backend). Dasha reads these series for the whole fleet in one query per exporter type, compares the address with the host's name, short name, Patroni member name or IP (case-insensitively, without DNS; the port only when both sides know it), and queries that scrape by its `instance` and `job`. The lookup is cached for `baseline.cache_ttl`; the status endpoint refreshes it. When no scrape or more than one names the host, the fallback template `instance=~"{{promre .Host}}(:[0-9]+)?"` applies. `promre` quotes the host as a regex literal (dots match only dots) and is available in your own selector templates too.
+
+**Static clusters** need no `targets:` entry when `core` is `postgres_exporter` (`auto_map_static: false` turns that off). `{{.Host}}`, `{{.Instance}}`, `{{.HostShort}}` and the PostgreSQL port come from the cluster config.
+
+**Exporter setup:**
+
+- postgres_exporter flags: `--collector.stat_checkpointer --collector.database_wraparound --collector.stat_statements`. On PG < 17 `stat_checkpointer` logs a WARN and the scrape still succeeds; checkpoints then come from `pg_stat_bgwriter`.
+- The exporter's DSN uses the address Dasha knows the host by (same name or same IP), not `localhost`, and points at the application's main database: table signals (dead tuples, HOT, seq scans) cover that one database.
+- Two exporters on one server, or several pgbouncers in front of one primary, are ambiguous: set `selectors.<provider>` with a `job` explicitly.
+- Relabel `instance` to a stable name in Prometheus/vmagent. History and the baseline are read under the scrape's current identity, so a pod restart that changes `instance` leaves the older history empty.
+
+```yaml
+# Prometheus / vmagent
+scrape_configs:
+  - job_name: postgres
+    static_configs: [{ targets: ["db1.example.com:9187"] }]
+    relabel_configs:
+      - { source_labels: [__address__], regex: "([^:]+):.*", target_label: instance, replacement: "$1:9187" }
+```
+
+**Coverage and limits.** Connections, max_connections, autovacuum/track_counts, cache hit, deadlocks, checkpoints, replication lag in bytes (on the primary), wraparound, dead tuples, HOT, seq scans, latency, load/vCPU, disk, pooler saturation. Not covered, so filled from the SQL snapshot: replication lag in seconds, ungranted locks, checksum failures, bloat, sequence and type exhaustion. Latency follows pg_stat_statements' top-N (`--collector.stat_statements.limit`).
+
+**Diagnostics.** `GET /api/common/health-score/datasource/status?cluster_name=…&instance=…` adds per role:
+
+- `match`: `anchor` (found by address), `template` (fallback template), `explicit` (your template), `static` (label mapping of pgSCV/YC);
+- `matched`: series behind the selector, exactly one is OK;
+- `missing_signals`: signals the provider can serve that did not come back, with the exporter `flag` that enables them. Replication lag and dead-ratio signals are not listed: they are absent in normal operation.
+
 ### Trend, seasonal baseline and dips
 
 `GET /api/common/health-score/history?cluster_name=…&instance=…&from=…&to=…&step_seconds=…` returns the per-timestamp overall score, per-category scores and latency over `[from, to]`. The chart on `/health-score` plots score, baseline and latency with dips marked.

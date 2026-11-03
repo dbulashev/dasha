@@ -44,12 +44,15 @@
     "xacts_left_before_wraparound": 2147231966.0
   },
   "replica": {
+    "active_connections": 0,
+    "active_lock_waiters": 0,
     "autovacuum_off": 0,
     "cache_hit_ratio": 91.0856134157105,
     "checkpoints_all_rate": 0.0,
     "checkpoints_req_rate": 0.0,
     "deadlocks_total": 0.0,
     "hot_update_ratio": 1.0,
+    "idle_in_transaction": 0,
     "latency_ms": 0.6634657096774194,
     "max_connections": 100.0,
     "requested_checkpoints": 0.0,

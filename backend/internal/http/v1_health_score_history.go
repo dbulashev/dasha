@@ -50,6 +50,26 @@ func (s *Handlers) GetHealthScoreDatasourceStatus(
 			role.SampleLabels = &labels
 		}
 
+		if rd.Match != "" {
+			m := serverhttp.HealthScoreDatasourceRoleMatch(rd.Match)
+			role.Match = &m
+		}
+
+		if len(rd.Missing) > 0 {
+			missing := make([]serverhttp.HealthScoreMissingSignal, 0, len(rd.Missing))
+			for _, ms := range rd.Missing {
+				item := serverhttp.HealthScoreMissingSignal{Signal: string(ms.Signal)}
+				if ms.Flag != "" {
+					flag := ms.Flag
+					item.Flag = &flag
+				}
+
+				missing = append(missing, item)
+			}
+
+			role.MissingSignals = &missing
+		}
+
 		roles = append(roles, role)
 	}
 

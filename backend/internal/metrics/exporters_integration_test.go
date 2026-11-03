@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -23,15 +24,58 @@ var exporterVersions = []string{"pg16", "pg17"}
 
 type exporterScrape struct {
 	file, instance, job string
+	rewrite             func(line string) string // optional
+}
+
+var nodenameRe = regexp.MustCompile(`nodename="[^"]*"`)
+
+// anchorScrapes hides the target in instance and names it only in the address
+// labels, so nothing but the anchor lookup can find it.
+func anchorScrapes(v string) []exporterScrape {
+	server := func(from, to string) func(string) string {
+		return func(l string) string {
+			return strings.Replace(l, `server="`+from+`:5432"`, `server="`+to+`:5432"`, 1)
+		}
+	}
+
+	return []exporterScrape{
+		{"postgres_exporter_all_primary", "a-" + v + "-1:9187", "postgres", server("dasha-exp-primary", v+"-a-primary")},
+		{"postgres_exporter_default_primary", "a-" + v + "-2:9187", "postgres_default", server("dasha-exp-primary", v+"-a-default")},
+		{"postgres_exporter_all_replica", "a-" + v + "-3:9187", "postgres", server("dasha-exp-replica", v+"-a-replica")},
+		{"node_exporter", "a-" + v + "-4:9100", "node", func(l string) string {
+			return nodenameRe.ReplaceAllString(l, `nodename="`+v+`-a-primary"`)
+		}},
+		{"pgbouncer_exporter", "a-" + v + "-5:9127", "pgbouncer", func(l string) string {
+			return strings.Replace(l, `host="dasha-exp-primary"`, `host="`+v+`-a-primary"`, 1)
+		}},
+	}
+}
+
+func anchorTestConfig() Config {
+	c := Default()
+	c.Enabled = true
+	c.Datasource.URL = vmURL
+	c.Providers = ProvidersConfig{Core: ProviderPostgresExporter, Pooler: ProviderPgBouncerExporter, Host: ProviderNodeExporter}
+
+	return c
+}
+
+func anchorMeta(v string) fakeMeta {
+	out := fakeMeta{}
+	for _, name := range []string{"primary", "default", "replica"} {
+		out[v+"-a/"+v+"-a-"+name] = DiscoveryMeta{Source: "static", Port: "5432"}
+	}
+
+	return out
 }
 
 func exporterScrapes(v string) []exporterScrape {
 	return []exporterScrape{
-		{"postgres_exporter_all_primary", v + "-primary:9187", "postgres"},
-		{"postgres_exporter_default_primary", v + "-default:9187", "postgres_default"},
-		{"postgres_exporter_all_replica", v + "-replica:9187", "postgres"},
-		{"node_exporter", v + "-primary:9100", "node"},
-		{"pgbouncer_exporter", v + "-primary:9127", "pgbouncer"},
+		{"postgres_exporter_all_primary", v + "-primary:9187", "postgres", nil},
+		{"postgres_exporter_default_primary", v + "-default:9187", "postgres_default", nil},
+		{"postgres_exporter_all_replica", v + "-replica:9187", "postgres", nil},
+		{"node_exporter", v + "-primary:9100", "node", nil},
+		{"pgbouncer_exporter", v + "-primary:9127", "pgbouncer", nil},
 	}
 }
 
@@ -111,6 +155,10 @@ func importProm(t *testing.T, lines []string, s exporterScrape, at time.Time) {
 	var sb strings.Builder
 
 	for _, l := range lines {
+		if s.rewrite != nil {
+			l = s.rewrite(l)
+		}
+
 		fmt.Fprintf(&sb, "%s %d\n", l, at.UnixMilli())
 	}
 
@@ -130,7 +178,7 @@ func importProm(t *testing.T, lines []string, s exporterScrape, at time.Time) {
 
 // loadExporterFixtures imports t0 and t1 under each scrape's instance/job,
 // keeping their interval with t1 a minute ago, and returns the t1 time.
-func loadExporterFixtures(t *testing.T, v string) time.Time {
+func loadExporterFixtures(t *testing.T, v string, scrapes []exporterScrape) time.Time {
 	t.Helper()
 
 	dir := fixtureDir(v)
@@ -138,7 +186,7 @@ func loadExporterFixtures(t *testing.T, v string) time.Time {
 	t1 := time.Now().Truncate(time.Second).Add(-time.Minute)
 	t0 := t1.Add(-interval)
 
-	for _, s := range exporterScrapes(v) {
+	for _, s := range scrapes {
 		before := promSamples(t, filepath.Join(dir, "t0", s.file+".prom"))
 		after := promSamples(t, filepath.Join(dir, "t1", s.file+".prom"))
 
@@ -206,7 +254,7 @@ func TestExporters(t *testing.T) {
 
 	for _, v := range exporterVersions {
 		t.Run(v, func(t *testing.T) {
-			t1 := loadExporterFixtures(t, v)
+			t1 := loadExporterFixtures(t, v, exporterScrapes(v))
 
 			cfg := exporterTestConfig(v)
 			if err := cfg.Validate(); err != nil {
@@ -237,22 +285,7 @@ func TestExporters(t *testing.T) {
 						t.Fatalf("InstantMany: %v", err)
 					}
 
-					s, want := got[ref], expected[ref.Instance]
-
-					for sig, w := range want {
-						g, ok := s.Get(sig)
-						if !ok {
-							t.Errorf("%s: absent, want %v", sig, w)
-						} else if !closeTo(g, w) {
-							t.Errorf("%s = %v, want %v", sig, g, w)
-						}
-					}
-
-					for sig := range s.Have {
-						if _, ok := want[sig]; !ok {
-							t.Errorf("%s = %v, want absent", sig, s.Value[sig])
-						}
-					}
+					checkSignals(t, got[ref], expected[ref.Instance])
 				})
 			}
 
@@ -280,13 +313,82 @@ func TestExporters(t *testing.T) {
 					}
 
 					for _, rd := range diag.Roles {
-						if !rd.OK {
-							t.Errorf("%s %s/%s: matched %d via %s{%s}: %s",
-								ref.Instance, rd.Role, rd.Provider, rd.Matched, rd.Metric, rd.Selector, rd.Err)
+						if !rd.OK || rd.Match != MatchTemplate {
+							t.Errorf("%s %s/%s: match %s, matched %d via %s{%s}: %s",
+								ref.Instance, rd.Role, rd.Provider, rd.Match, rd.Matched, rd.Metric, rd.Selector, rd.Err)
 						}
 					}
 				}
 			})
+		})
+	}
+}
+
+func checkSignals(t *testing.T, s Signals, want map[SignalKind]float64) {
+	t.Helper()
+
+	for sig, w := range want {
+		g, ok := s.Get(sig)
+		if !ok {
+			t.Errorf("%s: absent, want %v", sig, w)
+		} else if !closeTo(g, w) {
+			t.Errorf("%s = %v, want %v", sig, g, w)
+		}
+	}
+
+	for sig := range s.Have {
+		if _, ok := want[sig]; !ok {
+			t.Errorf("%s = %v, want absent", sig, s.Value[sig])
+		}
+	}
+}
+
+func TestExportersAnchor(t *testing.T) {
+	ctx := context.Background()
+
+	for _, v := range exporterVersions {
+		t.Run(v, func(t *testing.T) {
+			t1 := loadExporterFixtures(t, v, anchorScrapes(v))
+
+			m, err := NewMatcher(anchorTestConfig(), anchorMeta(v))
+			if err != nil {
+				t.Fatalf("NewMatcher: %v", err)
+			}
+
+			client := NewVMClient(DatasourceConfig{URL: vmURL}, nil)
+			cat := NewQueryCatalog()
+			co := NewCollector(m, cat, client, "5m", "", BatchLimits{}, nil)
+
+			expected := loadExpected(t, v)
+
+			for name, want := range expected {
+				ref := TargetRef{Cluster: v + "-a", Instance: v + "-a-" + name}
+
+				t.Run(name, func(t *testing.T) {
+					got, errs := co.InstantMany(ctx, []TargetRef{ref}, t1, exporterSignals(cat)...)
+					if err := errs[ref]; err != nil {
+						t.Fatalf("InstantMany: %v", err)
+					}
+
+					checkSignals(t, got[ref], want)
+
+					diag, err := m.Validate(ctx, client, ref.Cluster, ref.Instance)
+					if err != nil {
+						t.Fatalf("Validate: %v", err)
+					}
+
+					for _, rd := range diag.Roles {
+						if rd.Role != RoleCore && name != "primary" {
+							continue
+						}
+
+						if !rd.OK || rd.Match != MatchAnchor {
+							t.Errorf("%s/%s: match %s, matched %d via %s{%s}: %s",
+								rd.Role, rd.Provider, rd.Match, rd.Matched, rd.Metric, rd.Selector, rd.Err)
+						}
+					}
+				})
+			}
 		})
 	}
 }

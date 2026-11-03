@@ -11,6 +11,7 @@ import (
 	"os"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -91,11 +92,16 @@ func positiveLabels(s string) map[string]string {
 	out := map[string]string{}
 
 	for _, m := range matcherRe.FindAllStringSubmatch(s, -1) {
+		v, err := strconv.Unquote(`"` + m[3] + `"`)
+		if err != nil {
+			v = m[3]
+		}
+
 		switch m[2] {
 		case "=":
-			out[m[1]] = m[3]
+			out[m[1]] = v
 		case "=~":
-			out[m[1]] = regexSample(m[3])
+			out[m[1]] = regexSample(v)
 		}
 	}
 
