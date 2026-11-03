@@ -1,0 +1,320 @@
+# HELP pg_database_wraparound_age_datfrozenxid_seconds Age of the oldest transaction ID that has not been frozen.
+# TYPE pg_database_wraparound_age_datfrozenxid_seconds gauge
+pg_database_wraparound_age_datfrozenxid_seconds{datname="app"} 263728
+pg_database_wraparound_age_datfrozenxid_seconds{datname="bench"} 263728
+pg_database_wraparound_age_datfrozenxid_seconds{datname="postgres"} 263728
+pg_database_wraparound_age_datfrozenxid_seconds{datname="template1"} 263728
+# HELP pg_settings_autovacuum Server Parameter: autovacuum
+# TYPE pg_settings_autovacuum gauge
+pg_settings_autovacuum 1
+# HELP pg_settings_max_connections Server Parameter: max_connections
+# TYPE pg_settings_max_connections gauge
+pg_settings_max_connections 100
+# HELP pg_settings_track_counts Server Parameter: track_counts
+# TYPE pg_settings_track_counts gauge
+pg_settings_track_counts 1
+# HELP pg_stat_activity_count number of connections in this state
+# TYPE pg_stat_activity_count gauge
+pg_stat_activity_count{application_name="",backend_type="",datname="app",state="disabled",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="app",state="fastpath function call",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="app",state="idle",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="app",state="idle in transaction (aborted)",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="bench",state="disabled",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="bench",state="fastpath function call",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="bench",state="idle in transaction (aborted)",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="postgres",state="active",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="postgres",state="disabled",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="postgres",state="fastpath function call",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="postgres",state="idle",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="postgres",state="idle in transaction",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="postgres",state="idle in transaction (aborted)",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="template0",state="active",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="template0",state="disabled",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="template0",state="fastpath function call",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="template0",state="idle",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="template0",state="idle in transaction",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="template0",state="idle in transaction (aborted)",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="template1",state="active",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="template1",state="disabled",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="template1",state="fastpath function call",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="template1",state="idle",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="template1",state="idle in transaction",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="",datname="template1",state="idle in transaction (aborted)",usename="",wait_event="",wait_event_type=""} 0
+pg_stat_activity_count{application_name="",backend_type="client backend",datname="bench",state="idle",usename="postgres",wait_event="ClientRead",wait_event_type="Client"} 2
+pg_stat_activity_count{application_name="pgbench",backend_type="client backend",datname="bench",state="active",usename="postgres",wait_event="",wait_event_type=""} 1
+pg_stat_activity_count{application_name="pgbench",backend_type="client backend",datname="bench",state="active",usename="postgres",wait_event="WALSync",wait_event_type="IO"} 1
+pg_stat_activity_count{application_name="pgbench",backend_type="client backend",datname="bench",state="active",usename="postgres",wait_event="transactionid",wait_event_type="Lock"} 2
+pg_stat_activity_count{application_name="pgbench",backend_type="client backend",datname="bench",state="idle",usename="postgres",wait_event="ClientRead",wait_event_type="Client"} 4
+pg_stat_activity_count{application_name="pgbench",backend_type="client backend",datname="bench",state="idle in transaction",usename="postgres",wait_event="ClientRead",wait_event_type="Client"} 4
+pg_stat_activity_count{application_name="psql",backend_type="client backend",datname="app",state="active",usename="postgres",wait_event="relation",wait_event_type="Lock"} 2
+pg_stat_activity_count{application_name="psql",backend_type="client backend",datname="app",state="idle in transaction",usename="postgres",wait_event="ClientRead",wait_event_type="Client"} 2
+# HELP pg_stat_bgwriter_checkpoints_req_total Number of requested checkpoints that have been performed
+# TYPE pg_stat_bgwriter_checkpoints_req_total counter
+pg_stat_bgwriter_checkpoints_req_total 104
+# HELP pg_stat_bgwriter_checkpoints_timed_total Number of scheduled checkpoints that have been performed
+# TYPE pg_stat_bgwriter_checkpoints_timed_total counter
+pg_stat_bgwriter_checkpoints_timed_total 0
+# HELP pg_stat_database_blks_hit Number of times disk blocks were found already in the buffer cache, so that a read was not necessary (this only includes hits in the PostgreSQL buffer cache, not the operating system's file system cache)
+# TYPE pg_stat_database_blks_hit counter
+pg_stat_database_blks_hit{datid="1",datname="template1"} 92377
+pg_stat_database_blks_hit{datid="16384",datname="bench"} 1.01380517e+08
+pg_stat_database_blks_hit{datid="16385",datname="app"} 64821
+pg_stat_database_blks_hit{datid="4",datname="template0"} 0
+pg_stat_database_blks_hit{datid="5",datname="postgres"} 3430
+# HELP pg_stat_database_blks_read Number of disk blocks read in this database
+# TYPE pg_stat_database_blks_read counter
+pg_stat_database_blks_read{datid="1",datname="template1"} 1030
+pg_stat_database_blks_read{datid="16384",datname="bench"} 1.153164e+06
+pg_stat_database_blks_read{datid="16385",datname="app"} 57826
+pg_stat_database_blks_read{datid="4",datname="template0"} 0
+pg_stat_database_blks_read{datid="5",datname="postgres"} 336
+# HELP pg_stat_database_deadlocks Number of deadlocks detected in this database
+# TYPE pg_stat_database_deadlocks counter
+pg_stat_database_deadlocks{datid="1",datname="template1"} 0
+pg_stat_database_deadlocks{datid="16384",datname="bench"} 0
+pg_stat_database_deadlocks{datid="16385",datname="app"} 3
+pg_stat_database_deadlocks{datid="4",datname="template0"} 0
+pg_stat_database_deadlocks{datid="5",datname="postgres"} 0
+# HELP pg_stat_replication_pg_wal_lsn_diff Lag in bytes between master and slave
+# TYPE pg_stat_replication_pg_wal_lsn_diff gauge
+pg_stat_replication_pg_wal_lsn_diff{application_name="walreceiver",client_addr="172.18.0.3/32",slot_name="",state="streaming"} 3.3040332e+08
+# HELP pg_stat_statements_calls_total Number of times executed
+# TYPE pg_stat_statements_calls_total counter
+pg_stat_statements_calls_total{datname="app",queryid="-1379775932950762113",user="postgres"} 1
+pg_stat_statements_calls_total{datname="app",queryid="-2042799606268276173",user="postgres"} 4
+pg_stat_statements_calls_total{datname="app",queryid="-2681018109964112599",user="postgres"} 1
+pg_stat_statements_calls_total{datname="app",queryid="-3001077671193128586",user="postgres"} 4
+pg_stat_statements_calls_total{datname="app",queryid="-3416356442043621232",user="postgres"} 6
+pg_stat_statements_calls_total{datname="app",queryid="-3627211039277602740",user="postgres"} 1
+pg_stat_statements_calls_total{datname="app",queryid="-3917828303097562058",user="postgres"} 1
+pg_stat_statements_calls_total{datname="app",queryid="-4939026921861618597",user="postgres"} 1
+pg_stat_statements_calls_total{datname="app",queryid="-5088763038475574527",user="postgres"} 9
+pg_stat_statements_calls_total{datname="app",queryid="-6444116630088437673",user="postgres"} 1
+pg_stat_statements_calls_total{datname="app",queryid="-7253722793257664054",user="postgres"} 201
+pg_stat_statements_calls_total{datname="app",queryid="-8069457740457500848",user="postgres"} 1
+pg_stat_statements_calls_total{datname="app",queryid="-8553890797533947962",user="postgres"} 1
+pg_stat_statements_calls_total{datname="app",queryid="-8610881939439092446",user="postgres"} 1
+pg_stat_statements_calls_total{datname="app",queryid="1413096659189952555",user="postgres"} 1
+pg_stat_statements_calls_total{datname="app",queryid="1837395689297397374",user="postgres"} 1
+pg_stat_statements_calls_total{datname="app",queryid="2040008778832042745",user="postgres"} 1
+pg_stat_statements_calls_total{datname="app",queryid="2141963688456158591",user="postgres"} 1
+pg_stat_statements_calls_total{datname="app",queryid="3762829239777940768",user="postgres"} 3
+pg_stat_statements_calls_total{datname="app",queryid="5666695132111682671",user="postgres"} 1
+pg_stat_statements_calls_total{datname="app",queryid="6650430479887907887",user="postgres"} 8
+pg_stat_statements_calls_total{datname="app",queryid="7817776402393175893",user="postgres"} 1
+pg_stat_statements_calls_total{datname="app",queryid="8520238304496078038",user="postgres"} 3
+pg_stat_statements_calls_total{datname="bench",queryid="-1379775932950762113",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="-1513771707998115028",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="-1864079628023708478",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="-1865429890013523065",user="postgres"} 5
+pg_stat_statements_calls_total{datname="bench",queryid="-1899586786912371063",user="postgres"} 4
+pg_stat_statements_calls_total{datname="bench",queryid="-2042799606268276173",user="postgres"} 4
+pg_stat_statements_calls_total{datname="bench",queryid="-2219924749103764101",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="-2373325213533167494",user="postgres"} 263684
+pg_stat_statements_calls_total{datname="bench",queryid="-2565669271273608176",user="postgres"} 5
+pg_stat_statements_calls_total{datname="bench",queryid="-272769907185287434",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="-2885330479908940062",user="postgres"} 10
+pg_stat_statements_calls_total{datname="bench",queryid="-2915735780218380451",user="postgres"} 5
+pg_stat_statements_calls_total{datname="bench",queryid="-3001077671193128586",user="postgres"} 4
+pg_stat_statements_calls_total{datname="bench",queryid="-3137563807140961712",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="-3380822044050131393",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="-3500676563655919583",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="-3627211039277602740",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="-3853847067120037534",user="postgres"} 2.093705e+06
+pg_stat_statements_calls_total{datname="bench",queryid="-3917828303097562058",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="-416742667701294759",user="postgres"} 4
+pg_stat_statements_calls_total{datname="bench",queryid="-4365075133306717682",user="postgres"} 2
+pg_stat_statements_calls_total{datname="bench",queryid="-4518122012732265171",user="postgres"} 5
+pg_stat_statements_calls_total{datname="bench",queryid="-48616838367866754",user="postgres"} 3
+pg_stat_statements_calls_total{datname="bench",queryid="-4908153104082006408",user="postgres"} 5
+pg_stat_statements_calls_total{datname="bench",queryid="-4939026921861618597",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="-5443687307591998570",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="-5879866427594072445",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="-6095988013807599142",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="-6444116630088437673",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="-6911109443227572258",user="postgres"} 5
+pg_stat_statements_calls_total{datname="bench",queryid="-7390902673174426915",user="postgres"} 5
+pg_stat_statements_calls_total{datname="bench",queryid="-7817009895307261831",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="-8069457740457500848",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="-8553890797533947962",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="-8896750547091959305",user="postgres"} 3
+pg_stat_statements_calls_total{datname="bench",queryid="1413096659189952555",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="1749358766332113392",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="1921593885245078624",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="2064869707185898531",user="postgres"} 263679
+pg_stat_statements_calls_total{datname="bench",queryid="2462876104705255386",user="postgres"} 2
+pg_stat_statements_calls_total{datname="bench",queryid="2492360957308788813",user="postgres"} 3
+pg_stat_statements_calls_total{datname="bench",queryid="3669805560929681454",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="3693259739934620859",user="postgres"} 10
+pg_stat_statements_calls_total{datname="bench",queryid="3762829239777940768",user="postgres"} 3
+pg_stat_statements_calls_total{datname="bench",queryid="4058516698343550532",user="postgres"} 5
+pg_stat_statements_calls_total{datname="bench",queryid="4452344162736673220",user="postgres"} 5
+pg_stat_statements_calls_total{datname="bench",queryid="4462478418694727844",user="postgres"} 3
+pg_stat_statements_calls_total{datname="bench",queryid="4499419349976865785",user="postgres"} 5
+pg_stat_statements_calls_total{datname="bench",queryid="46030360328943072",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="4966976092255929974",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="503665720034892342",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="5119351857707933656",user="postgres"} 2
+pg_stat_statements_calls_total{datname="bench",queryid="5149169312152779445",user="postgres"} 263679
+pg_stat_statements_calls_total{datname="bench",queryid="5297993646951925842",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="5666695132111682671",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="5689496557305188212",user="postgres"} 100
+pg_stat_statements_calls_total{datname="bench",queryid="6114769141693454530",user="postgres"} 263682
+pg_stat_statements_calls_total{datname="bench",queryid="6423579253078159036",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="6646990913314461658",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="6650430479887907887",user="postgres"} 263685
+pg_stat_statements_calls_total{datname="bench",queryid="6725345816693078331",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="7099822544686814325",user="postgres"} 263679
+pg_stat_statements_calls_total{datname="bench",queryid="7147051152837998674",user="postgres"} 5
+pg_stat_statements_calls_total{datname="bench",queryid="7880631279068928702",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="7883471954638489049",user="postgres"} 3
+pg_stat_statements_calls_total{datname="bench",queryid="8207445343163765616",user="postgres"} 22
+pg_stat_statements_calls_total{datname="bench",queryid="8332100064811717391",user="postgres"} 5
+pg_stat_statements_calls_total{datname="bench",queryid="8443275754871054099",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="8448299123520600672",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="8520238304496078038",user="postgres"} 3
+pg_stat_statements_calls_total{datname="bench",queryid="8527841720120159031",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="8593022491669611238",user="postgres"} 1
+pg_stat_statements_calls_total{datname="bench",queryid="8967233569238105325",user="postgres"} 3
+pg_stat_statements_calls_total{datname="bench",queryid="9185716268003872535",user="postgres"} 4
+pg_stat_statements_calls_total{datname="postgres",queryid="-5116010198563363313",user="postgres"} 1
+pg_stat_statements_calls_total{datname="postgres",queryid="-6088520868700959044",user="postgres"} 1
+pg_stat_statements_calls_total{datname="postgres",queryid="-8273630303375581597",user="postgres"} 1
+# HELP pg_stat_statements_seconds_total Total time spent in the statement, in seconds
+# TYPE pg_stat_statements_seconds_total counter
+pg_stat_statements_seconds_total{datname="app",queryid="-1379775932950762113",user="postgres"} 0.00015437500000000003
+pg_stat_statements_seconds_total{datname="app",queryid="-2042799606268276173",user="postgres"} 0.00026350099999999997
+pg_stat_statements_seconds_total{datname="app",queryid="-2681018109964112599",user="postgres"} 0.000118333
+pg_stat_statements_seconds_total{datname="app",queryid="-3001077671193128586",user="postgres"} 0.003046042
+pg_stat_statements_seconds_total{datname="app",queryid="-3416356442043621232",user="postgres"} 6.005616295000001
+pg_stat_statements_seconds_total{datname="app",queryid="-3627211039277602740",user="postgres"} 6.4625e-05
+pg_stat_statements_seconds_total{datname="app",queryid="-3917828303097562058",user="postgres"} 5.4042e-05
+pg_stat_statements_seconds_total{datname="app",queryid="-4939026921861618597",user="postgres"} 3.8e-05
+pg_stat_statements_seconds_total{datname="app",queryid="-5088763038475574527",user="postgres"} 2.9927931290000003
+pg_stat_statements_seconds_total{datname="app",queryid="-6444116630088437673",user="postgres"} 4.6333e-05
+pg_stat_statements_seconds_total{datname="app",queryid="-7253722793257664054",user="postgres"} 1.5560210739999993
+pg_stat_statements_seconds_total{datname="app",queryid="-8069457740457500848",user="postgres"} 0.000128083
+pg_stat_statements_seconds_total{datname="app",queryid="-8553890797533947962",user="postgres"} 0.005560875
+pg_stat_statements_seconds_total{datname="app",queryid="-8610881939439092446",user="postgres"} 0.002091916
+pg_stat_statements_seconds_total{datname="app",queryid="1413096659189952555",user="postgres"} 6.8e-05
+pg_stat_statements_seconds_total{datname="app",queryid="1837395689297397374",user="postgres"} 0.000108834
+pg_stat_statements_seconds_total{datname="app",queryid="2040008778832042745",user="postgres"} 0.059118709000000005
+pg_stat_statements_seconds_total{datname="app",queryid="2141963688456158591",user="postgres"} 0.00010375
+pg_stat_statements_seconds_total{datname="app",queryid="3762829239777940768",user="postgres"} 0.00028729199999999997
+pg_stat_statements_seconds_total{datname="app",queryid="5666695132111682671",user="postgres"} 6.0707999999999995e-05
+pg_stat_statements_seconds_total{datname="app",queryid="6650430479887907887",user="postgres"} 0.0003008739999999999
+pg_stat_statements_seconds_total{datname="app",queryid="7817776402393175893",user="postgres"} 3.5792e-05
+pg_stat_statements_seconds_total{datname="app",queryid="8520238304496078038",user="postgres"} 0.000218249
+pg_stat_statements_seconds_total{datname="bench",queryid="-1379775932950762113",user="postgres"} 0.00011758299999999999
+pg_stat_statements_seconds_total{datname="bench",queryid="-1513771707998115028",user="postgres"} 0.000261375
+pg_stat_statements_seconds_total{datname="bench",queryid="-1864079628023708478",user="postgres"} 0.9764440839999999
+pg_stat_statements_seconds_total{datname="bench",queryid="-1865429890013523065",user="postgres"} 0.001158542
+pg_stat_statements_seconds_total{datname="bench",queryid="-1899586786912371063",user="postgres"} 3.4708e-05
+pg_stat_statements_seconds_total{datname="bench",queryid="-2042799606268276173",user="postgres"} 0.000255876
+pg_stat_statements_seconds_total{datname="bench",queryid="-2219924749103764101",user="postgres"} 0.000671916
+pg_stat_statements_seconds_total{datname="bench",queryid="-2373325213533167494",user="postgres"} 15.672995198999947
+pg_stat_statements_seconds_total{datname="bench",queryid="-2565669271273608176",user="postgres"} 0.0011863330000000001
+pg_stat_statements_seconds_total{datname="bench",queryid="-272769907185287434",user="postgres"} 0.00013075
+pg_stat_statements_seconds_total{datname="bench",queryid="-2885330479908940062",user="postgres"} 0.000109537
+pg_stat_statements_seconds_total{datname="bench",queryid="-2915735780218380451",user="postgres"} 0.00022454200000000002
+pg_stat_statements_seconds_total{datname="bench",queryid="-3001077671193128586",user="postgres"} 0.0026225000000000003
+pg_stat_statements_seconds_total{datname="bench",queryid="-3137563807140961712",user="postgres"} 0.000207833
+pg_stat_statements_seconds_total{datname="bench",queryid="-3380822044050131393",user="postgres"} 0.002139666
+pg_stat_statements_seconds_total{datname="bench",queryid="-3500676563655919583",user="postgres"} 0.001805333
+pg_stat_statements_seconds_total{datname="bench",queryid="-3627211039277602740",user="postgres"} 6.025e-05
+pg_stat_statements_seconds_total{datname="bench",queryid="-3853847067120037534",user="postgres"} 53.38787665700037
+pg_stat_statements_seconds_total{datname="bench",queryid="-3917828303097562058",user="postgres"} 3.8167e-05
+pg_stat_statements_seconds_total{datname="bench",queryid="-416742667701294759",user="postgres"} 0.000149083
+pg_stat_statements_seconds_total{datname="bench",queryid="-4365075133306717682",user="postgres"} 0.001972416
+pg_stat_statements_seconds_total{datname="bench",queryid="-4518122012732265171",user="postgres"} 4.5375e-05
+pg_stat_statements_seconds_total{datname="bench",queryid="-48616838367866754",user="postgres"} 0.00012345799999999998
+pg_stat_statements_seconds_total{datname="bench",queryid="-4908153104082006408",user="postgres"} 3.8083999999999997e-05
+pg_stat_statements_seconds_total{datname="bench",queryid="-4939026921861618597",user="postgres"} 4.1e-05
+pg_stat_statements_seconds_total{datname="bench",queryid="-5443687307591998570",user="postgres"} 0.00019875
+pg_stat_statements_seconds_total{datname="bench",queryid="-5879866427594072445",user="postgres"} 0.00036133300000000003
+pg_stat_statements_seconds_total{datname="bench",queryid="-6095988013807599142",user="postgres"} 0.000281541
+pg_stat_statements_seconds_total{datname="bench",queryid="-6444116630088437673",user="postgres"} 5.4875e-05
+pg_stat_statements_seconds_total{datname="bench",queryid="-6911109443227572258",user="postgres"} 4.1419000000000004e-05
+pg_stat_statements_seconds_total{datname="bench",queryid="-7390902673174426915",user="postgres"} 0.003096667
+pg_stat_statements_seconds_total{datname="bench",queryid="-7817009895307261831",user="postgres"} 0.00022170799999999999
+pg_stat_statements_seconds_total{datname="bench",queryid="-8069457740457500848",user="postgres"} 0.000192584
+pg_stat_statements_seconds_total{datname="bench",queryid="-8553890797533947962",user="postgres"} 0.005259792
+pg_stat_statements_seconds_total{datname="bench",queryid="-8896750547091959305",user="postgres"} 0.000234
+pg_stat_statements_seconds_total{datname="bench",queryid="1413096659189952555",user="postgres"} 6.875e-05
+pg_stat_statements_seconds_total{datname="bench",queryid="1749358766332113392",user="postgres"} 0.000530708
+pg_stat_statements_seconds_total{datname="bench",queryid="1921593885245078624",user="postgres"} 0.078878584
+pg_stat_statements_seconds_total{datname="bench",queryid="2064869707185898531",user="postgres"} 0.1580897259999813
+pg_stat_statements_seconds_total{datname="bench",queryid="2462876104705255386",user="postgres"} 0.000285084
+pg_stat_statements_seconds_total{datname="bench",queryid="2492360957308788813",user="postgres"} 0.000425834
+pg_stat_statements_seconds_total{datname="bench",queryid="3669805560929681454",user="postgres"} 4.6667e-05
+pg_stat_statements_seconds_total{datname="bench",queryid="3693259739934620859",user="postgres"} 5.800000000000002e-05
+pg_stat_statements_seconds_total{datname="bench",queryid="3762829239777940768",user="postgres"} 0.000276125
+pg_stat_statements_seconds_total{datname="bench",queryid="4058516698343550532",user="postgres"} 4.7212e-05
+pg_stat_statements_seconds_total{datname="bench",queryid="4452344162736673220",user="postgres"} 0.0008879579999999999
+pg_stat_statements_seconds_total{datname="bench",queryid="4462478418694727844",user="postgres"} 0.000432126
+pg_stat_statements_seconds_total{datname="bench",queryid="4499419349976865785",user="postgres"} 0.000868502
+pg_stat_statements_seconds_total{datname="bench",queryid="46030360328943072",user="postgres"} 0.001075709
+pg_stat_statements_seconds_total{datname="bench",queryid="4966976092255929974",user="postgres"} 0.00200925
+pg_stat_statements_seconds_total{datname="bench",queryid="503665720034892342",user="postgres"} 0.00021800000000000004
+pg_stat_statements_seconds_total{datname="bench",queryid="5119351857707933656",user="postgres"} 6.0040999999999997e-05
+pg_stat_statements_seconds_total{datname="bench",queryid="5149169312152779445",user="postgres"} 2.745876685000047
+pg_stat_statements_seconds_total{datname="bench",queryid="5297993646951925842",user="postgres"} 0.00012575
+pg_stat_statements_seconds_total{datname="bench",queryid="5666695132111682671",user="postgres"} 5.6458e-05
+pg_stat_statements_seconds_total{datname="bench",queryid="5689496557305188212",user="postgres"} 0.00018008499999999983
+pg_stat_statements_seconds_total{datname="bench",queryid="6114769141693454530",user="postgres"} 135.92450762000382
+pg_stat_statements_seconds_total{datname="bench",queryid="6423579253078159036",user="postgres"} 9.8875e-05
+pg_stat_statements_seconds_total{datname="bench",queryid="6646990913314461658",user="postgres"} 0.001788583
+pg_stat_statements_seconds_total{datname="bench",queryid="6650430479887907887",user="postgres"} 0.15486796699987948
+pg_stat_statements_seconds_total{datname="bench",queryid="6725345816693078331",user="postgres"} 0.0007994160000000001
+pg_stat_statements_seconds_total{datname="bench",queryid="7099822544686814325",user="postgres"} 424.4709465110004
+pg_stat_statements_seconds_total{datname="bench",queryid="7147051152837998674",user="postgres"} 0.000473541
+pg_stat_statements_seconds_total{datname="bench",queryid="7880631279068928702",user="postgres"} 9.7958e-05
+pg_stat_statements_seconds_total{datname="bench",queryid="7883471954638489049",user="postgres"} 0.000422833
+pg_stat_statements_seconds_total{datname="bench",queryid="8207445343163765616",user="postgres"} 0.024199296000000002
+pg_stat_statements_seconds_total{datname="bench",queryid="8332100064811717391",user="postgres"} 0.007729706
+pg_stat_statements_seconds_total{datname="bench",queryid="8443275754871054099",user="postgres"} 0.000249375
+pg_stat_statements_seconds_total{datname="bench",queryid="8448299123520600672",user="postgres"} 6.9084e-05
+pg_stat_statements_seconds_total{datname="bench",queryid="8520238304496078038",user="postgres"} 0.000220999
+pg_stat_statements_seconds_total{datname="bench",queryid="8527841720120159031",user="postgres"} 0.249495125
+pg_stat_statements_seconds_total{datname="bench",queryid="8593022491669611238",user="postgres"} 0.000195708
+pg_stat_statements_seconds_total{datname="bench",queryid="8967233569238105325",user="postgres"} 0.002562043
+pg_stat_statements_seconds_total{datname="bench",queryid="9185716268003872535",user="postgres"} 0.0014229169999999999
+pg_stat_statements_seconds_total{datname="postgres",queryid="-5116010198563363313",user="postgres"} 0.500192042
+pg_stat_statements_seconds_total{datname="postgres",queryid="-6088520868700959044",user="postgres"} 0.034081125
+pg_stat_statements_seconds_total{datname="postgres",queryid="-8273630303375581597",user="postgres"} 0.028432834
+# HELP pg_stat_user_tables_n_dead_tup Estimated number of dead rows
+# TYPE pg_stat_user_tables_n_dead_tup gauge
+pg_stat_user_tables_n_dead_tup{datname="bench",relname="pgbench_accounts",schemaname="public"} 263490
+pg_stat_user_tables_n_dead_tup{datname="bench",relname="pgbench_branches",schemaname="public"} 263191
+pg_stat_user_tables_n_dead_tup{datname="bench",relname="pgbench_history",schemaname="public"} 0
+pg_stat_user_tables_n_dead_tup{datname="bench",relname="pgbench_tellers",schemaname="public"} 263743
+# HELP pg_stat_user_tables_n_live_tup Estimated number of live rows
+# TYPE pg_stat_user_tables_n_live_tup gauge
+pg_stat_user_tables_n_live_tup{datname="bench",relname="pgbench_accounts",schemaname="public"} 1e+06
+pg_stat_user_tables_n_live_tup{datname="bench",relname="pgbench_branches",schemaname="public"} 10
+pg_stat_user_tables_n_live_tup{datname="bench",relname="pgbench_history",schemaname="public"} 263971
+pg_stat_user_tables_n_live_tup{datname="bench",relname="pgbench_tellers",schemaname="public"} 100
+# HELP pg_stat_user_tables_n_tup_hot_upd Number of rows HOT updated (i.e., with no separate index update required)
+# TYPE pg_stat_user_tables_n_tup_hot_upd counter
+pg_stat_user_tables_n_tup_hot_upd{datname="bench",relname="pgbench_accounts",schemaname="public"} 72
+pg_stat_user_tables_n_tup_hot_upd{datname="bench",relname="pgbench_branches",schemaname="public"} 260261
+pg_stat_user_tables_n_tup_hot_upd{datname="bench",relname="pgbench_history",schemaname="public"} 0
+pg_stat_user_tables_n_tup_hot_upd{datname="bench",relname="pgbench_tellers",schemaname="public"} 233669
+# HELP pg_stat_user_tables_n_tup_upd Number of rows updated
+# TYPE pg_stat_user_tables_n_tup_upd counter
+pg_stat_user_tables_n_tup_upd{datname="bench",relname="pgbench_accounts",schemaname="public"} 263490
+pg_stat_user_tables_n_tup_upd{datname="bench",relname="pgbench_branches",schemaname="public"} 263490
+pg_stat_user_tables_n_tup_upd{datname="bench",relname="pgbench_history",schemaname="public"} 0
+pg_stat_user_tables_n_tup_upd{datname="bench",relname="pgbench_tellers",schemaname="public"} 263490
+# HELP pg_stat_user_tables_seq_tup_read Number of live rows fetched by sequential scans
+# TYPE pg_stat_user_tables_seq_tup_read counter
+pg_stat_user_tables_seq_tup_read{datname="bench",relname="pgbench_accounts",schemaname="public"} 1e+06
+pg_stat_user_tables_seq_tup_read{datname="bench",relname="pgbench_branches",schemaname="public"} 4550
+pg_stat_user_tables_seq_tup_read{datname="bench",relname="pgbench_history",schemaname="public"} 0
+pg_stat_user_tables_seq_tup_read{datname="bench",relname="pgbench_tellers",schemaname="public"} 8800
+# HELP pg_static Version string as reported by postgres
+# TYPE pg_static untyped
+pg_static{server="dasha-exp-primary:5432",short_version="16.15.0",version="PostgreSQL 16.15 (Debian 16.15-1.pgdg12+2) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 12.2.0-14+deb12u1) 12.2.0, 64-bit"} 1
+# HELP pg_up Whether the last scrape of metrics from PostgreSQL was able to connect to the server (1 for yes, 0 for no).
+# TYPE pg_up gauge
+pg_up 1

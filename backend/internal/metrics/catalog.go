@@ -1,6 +1,9 @@
 package metrics
 
-import "fmt"
+import (
+	"fmt"
+	"maps"
+)
 
 // QueryCatalog maps (provider, signal) to a MetricsQL template. Templates use
 // fmt indexed verbs: %[1]s = inner label selector, %[2]s = rate window,
@@ -129,7 +132,90 @@ func NewQueryCatalog() *QueryCatalog {
 		{ProviderYCNative, SigPoolerPoolSize}: `clamp_max(count(postgres_role_conn_limit{%[1]s%[3]s} > 0), 1)`,
 	}
 
+	maps.Copy(t, exporterTemplates())
+
 	return &QueryCatalog{templates: t}
+}
+
+const (
+	pgeClient = `backend_type="client backend"`
+	nodeFS    = `fstype=~"ext[34]|xfs|btrfs",device_error=""`
+	pgbNoAdm  = `database!="pgbouncer"`
+)
+
+// exporterTemplates covers the stock prometheus-community exporters. No
+// expression falls back to a constant: a disabled collector leaves the signal
+// absent so the snapshot overlay fills it.
+func exporterTemplates() map[catalogKey]string {
+	const (
+		pe  = ProviderPostgresExporter
+		ne  = ProviderNodeExporter
+		pbe = ProviderPgBouncerExporter
+	)
+
+	// Checkpoint counters live in pg_stat_checkpointer on PG 17+ and in
+	// pg_stat_bgwriter before; `or` picks whichever the exporter emits.
+	ckptTimed := `pg_stat_checkpointer_num_timed_total{%[1]s}`
+	ckptReq := `pg_stat_checkpointer_num_requested_total{%[1]s}`
+	bgwTimed := `pg_stat_bgwriter_checkpoints_timed_total{%[1]s}`
+	bgwReq := `pg_stat_bgwriter_checkpoints_req_total{%[1]s}`
+	rate := func(m string) string { return `sum(rate(` + m + `[%[2]s]))` }
+
+	dead := `pg_stat_user_tables_n_dead_tup{%[1]s}`
+	live := `pg_stat_user_tables_n_live_tup{%[1]s}`
+	deadRatio := `((` + dead + ` / clamp_min(` + dead + ` + ` + live + `, 1)) and (` + dead + ` + ` + live + ` > 10000))`
+	upd := rate(`pg_stat_user_tables_n_tup_upd{%[1]s}`)
+
+	fsSize := `node_filesystem_size_bytes{%[1]s,` + nodeFS + `}`
+	fsFree := `node_filesystem_free_bytes{%[1]s,` + nodeFS + `}`
+
+	return map[catalogKey]string{
+		{pe, SigTotalConns}:        `sum(pg_stat_activity_count{%[1]s,` + pgeClient + `})`,
+		{pe, SigActiveConns}:       `sum(pg_stat_activity_count{%[1]s,` + pgeClient + `,state="active"})`,
+		{pe, SigIdleInTx}:          `sum(pg_stat_activity_count{%[1]s,` + pgeClient + `,state="idle in transaction"})`,
+		{pe, SigActiveLockWaiters}: `sum(pg_stat_activity_count{%[1]s,` + pgeClient + `,wait_event_type="Lock"})`,
+		{pe, SigMaxConns}:          `max(pg_settings_max_connections{%[1]s})`,
+		{pe, SigAutovacuumOff}:     `min(pg_settings_autovacuum{%[1]s}) == bool 0`,
+		{pe, SigTrackCountsOff}:    `min(pg_settings_track_counts{%[1]s}) == bool 0`,
+		{pe, SigCacheHitRatio}: `100 * ` + rate(`pg_stat_database_blks_hit{%[1]s}`) + ` / clamp_min(` +
+			rate(`pg_stat_database_blks_hit{%[1]s}`) + ` + ` + rate(`pg_stat_database_blks_read{%[1]s}`) + `, 1)`,
+		{pe, SigDeadlocksTotal}:       `sum(pg_stat_database_deadlocks{%[1]s})`,
+		{pe, SigTimedCheckpoints}:     `sum(` + ckptTimed + `) or sum(` + bgwTimed + `)`,
+		{pe, SigRequestedCheckpoints}: `sum(` + ckptReq + `) or sum(` + bgwReq + `)`,
+		{pe, SigCheckpointsReqRate}:   rate(ckptReq) + ` or ` + rate(bgwReq),
+		{pe, SigCheckpointsAllRate}:   rate(ckptTimed) + ` + ` + rate(ckptReq) + ` or ` + rate(bgwTimed) + ` + ` + rate(bgwReq),
+		// Primary-side lag only: a standby or a primary without replicas has no series.
+		{pe, SigReplLagBytes}: `max(pg_stat_replication_pg_wal_lsn_diff{%[1]s})`,
+		// The metric is an xid age despite the _seconds suffix.
+		{pe, SigXactsLeftWrap}: `2147483648 - max(pg_database_wraparound_age_datfrozenxid_seconds{%[1]s})`,
+		{pe, SigMaxDeadRatio}:  `100 * max` + deadRatio,
+		{pe, SigAvgDeadRatio}:  `100 * avg` + deadRatio,
+		{pe, SigHotUpdateRatio}: `(` + rate(`pg_stat_user_tables_n_tup_hot_upd{%[1]s}`) + ` / ` + upd +
+			` and ` + upd + ` > 0.1) or (` + upd + ` >= bool 0)`,
+		{pe, SigSeqScanRate}: rate(`pg_stat_user_tables_seq_tup_read{%[1]s}`),
+		{pe, SigLatencyMs}: `1000 * ` + rate(`pg_stat_statements_seconds_total{%[1]s}`) +
+			` / clamp_min(` + rate(`pg_stat_statements_calls_total{%[1]s}`) + `, 1)`,
+
+		{ne, SigLoadAvg15}:     `max(node_load15{%[1]s})`,
+		{ne, SigNumVCPU}:       `count(count by (cpu) (node_cpu_seconds_total{%[1]s}))`,
+		{ne, SigDiskUsedRatio}: `max((` + fsSize + ` - ` + fsFree + `) / ` + fsSize + `)`,
+
+		{pbe, SigPoolerClients}: `sum({__name__=~"pgbouncer_pools_client_(active|waiting)_connections",%[1]s,` + pgbNoAdm + `})`,
+		{pbe, SigPoolerServers}: `sum({__name__=~"pgbouncer_pools_server_(active|idle|used|testing|login)_connections",%[1]s,` +
+			pgbNoAdm + `})`,
+		{pbe, SigPoolerPoolSize}: `sum(pgbouncer_databases_pool_size{%[1]s,` + pgbNoAdm + `})`,
+	}
+}
+
+// exporterFlags names the postgres_exporter flag that enables a signal's
+// collector (off by default upstream).
+var exporterFlags = map[SignalKind]string{
+	SigTimedCheckpoints:     "--collector.stat_checkpointer",
+	SigRequestedCheckpoints: "--collector.stat_checkpointer",
+	SigCheckpointsReqRate:   "--collector.stat_checkpointer",
+	SigCheckpointsAllRate:   "--collector.stat_checkpointer",
+	SigXactsLeftWrap:        "--collector.database_wraparound",
+	SigLatencyMs:            "--collector.stat_statements",
 }
 
 // Expr renders the expression for (provider, signal). Returns ("", false) when
@@ -163,6 +249,12 @@ func ValidationMetric(p Provider) string {
 		return "pgbouncer_up"
 	case ProviderPgSCVSystem:
 		return "node_load15" // pgSCV system collector (loadaverage)
+	case ProviderPostgresExporter:
+		return "pg_up"
+	case ProviderNodeExporter:
+		return "node_uname_info"
+	case ProviderPgBouncerExporter:
+		return "pgbouncer_up"
 	default:
 		return ""
 	}

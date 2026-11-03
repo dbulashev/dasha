@@ -69,7 +69,7 @@ func vmImage() string {
 const parityExclude = `,query_type!~"postgres_exporter"`
 
 var (
-	selectorRe = regexp.MustCompile(`([a-zA-Z_:][a-zA-Z0-9_:]*)\{([^}]*)\}`)
+	selectorRe = regexp.MustCompile(`([a-zA-Z_:][a-zA-Z0-9_:]*)?\{([^}]*)\}`)
 	matcherRe  = regexp.MustCompile(`(\w+)\s*(=~|!~|!=|=)\s*"([^"]*)"`)
 )
 
@@ -95,11 +95,97 @@ func positiveLabels(s string) map[string]string {
 		case "=":
 			out[m[1]] = m[3]
 		case "=~":
-			out[m[1]], _, _ = strings.Cut(m[3], "|")
+			out[m[1]] = regexSample(m[3])
 		}
 	}
 
 	return out
+}
+
+// regexSample returns one string the regex matches. It covers the subset the
+// catalog and selectors use: alternation, groups, character classes, ?, *, +.
+func regexSample(re string) string {
+	re = firstAlternative(re)
+
+	var sb strings.Builder
+
+	for i := 0; i < len(re); i++ {
+		var piece string
+
+		switch re[i] {
+		case '\\':
+			i++
+			if i < len(re) {
+				piece = re[i : i+1]
+			}
+		case '(':
+			j := closingParen(re, i)
+			piece = regexSample(re[i+1 : j])
+			i = j
+		case '[':
+			j := i + strings.IndexByte(re[i:], ']')
+			piece = re[i+1 : i+2]
+			i = j
+		default:
+			piece = re[i : i+1]
+		}
+
+		if i+1 < len(re) {
+			switch re[i+1] {
+			case '?', '*':
+				i++
+
+				continue
+			case '+':
+				i++
+			}
+		}
+
+		sb.WriteString(piece)
+	}
+
+	return sb.String()
+}
+
+func firstAlternative(re string) string {
+	depth := 0
+
+	for i := 0; i < len(re); i++ {
+		switch re[i] {
+		case '\\':
+			i++
+		case '(':
+			depth++
+		case ')':
+			depth--
+		case '|':
+			if depth == 0 {
+				return re[:i]
+			}
+		}
+	}
+
+	return re
+}
+
+func closingParen(re string, open int) int {
+	depth := 0
+
+	for i := open; i < len(re); i++ {
+		switch re[i] {
+		case '\\':
+			i++
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+
+	return len(re) - 1
 }
 
 type parityPair struct {
@@ -157,7 +243,14 @@ func seedParity(t *testing.T, pairs []parityPair, end time.Time) {
 	for _, p := range pairs {
 		for _, sm := range selectorRe.FindAllStringSubmatch(p.expr, -1) {
 			labels := positiveLabels(sm[2])
-			labels["__name__"] = sm[1]
+			if sm[1] != "" {
+				labels["__name__"] = sm[1]
+			}
+
+			name := labels["__name__"]
+			if name == "" {
+				continue
+			}
 
 			keys := make([]string, 0, len(labels))
 			for k := range labels {
@@ -173,7 +266,7 @@ func seedParity(t *testing.T, pairs []parityPair, end time.Time) {
 				parts = append(parts, fmt.Sprintf("%s=%q", k, labels[k]))
 			}
 
-			series := sm[1] + "{" + strings.Join(parts, ",") + "}"
+			series := name + "{" + strings.Join(parts, ",") + "}"
 			if seen[series] {
 				continue
 			}

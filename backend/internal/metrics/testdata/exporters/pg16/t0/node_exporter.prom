@@ -1,0 +1,82 @@
+# HELP node_cpu_seconds_total Seconds the CPUs spent in each mode.
+# TYPE node_cpu_seconds_total counter
+node_cpu_seconds_total{cpu="0",mode="idle"} 202127.21
+node_cpu_seconds_total{cpu="0",mode="iowait"} 161.73
+node_cpu_seconds_total{cpu="0",mode="irq"} 0
+node_cpu_seconds_total{cpu="0",mode="nice"} 0
+node_cpu_seconds_total{cpu="0",mode="softirq"} 5879.68
+node_cpu_seconds_total{cpu="0",mode="steal"} 0
+node_cpu_seconds_total{cpu="0",mode="system"} 1946.21
+node_cpu_seconds_total{cpu="0",mode="user"} 5487.59
+node_cpu_seconds_total{cpu="1",mode="idle"} 203382.48
+node_cpu_seconds_total{cpu="1",mode="iowait"} 235.9
+node_cpu_seconds_total{cpu="1",mode="irq"} 0
+node_cpu_seconds_total{cpu="1",mode="nice"} 0
+node_cpu_seconds_total{cpu="1",mode="softirq"} 3128.96
+node_cpu_seconds_total{cpu="1",mode="steal"} 0
+node_cpu_seconds_total{cpu="1",mode="system"} 1891.18
+node_cpu_seconds_total{cpu="1",mode="user"} 5665.47
+node_cpu_seconds_total{cpu="2",mode="idle"} 203749.28
+node_cpu_seconds_total{cpu="2",mode="iowait"} 223.13
+node_cpu_seconds_total{cpu="2",mode="irq"} 0
+node_cpu_seconds_total{cpu="2",mode="nice"} 0
+node_cpu_seconds_total{cpu="2",mode="softirq"} 1657.7
+node_cpu_seconds_total{cpu="2",mode="steal"} 0
+node_cpu_seconds_total{cpu="2",mode="system"} 1873.83
+node_cpu_seconds_total{cpu="2",mode="user"} 5667.79
+node_cpu_seconds_total{cpu="3",mode="idle"} 203882.66
+node_cpu_seconds_total{cpu="3",mode="iowait"} 209.86
+node_cpu_seconds_total{cpu="3",mode="irq"} 0
+node_cpu_seconds_total{cpu="3",mode="nice"} 0
+node_cpu_seconds_total{cpu="3",mode="softirq"} 928.76
+node_cpu_seconds_total{cpu="3",mode="steal"} 0
+node_cpu_seconds_total{cpu="3",mode="system"} 1869.01
+node_cpu_seconds_total{cpu="3",mode="user"} 5665.58
+node_cpu_seconds_total{cpu="4",mode="idle"} 203899.34
+node_cpu_seconds_total{cpu="4",mode="iowait"} 200.71
+node_cpu_seconds_total{cpu="4",mode="irq"} 0
+node_cpu_seconds_total{cpu="4",mode="nice"} 0
+node_cpu_seconds_total{cpu="4",mode="softirq"} 558.56
+node_cpu_seconds_total{cpu="4",mode="steal"} 0
+node_cpu_seconds_total{cpu="4",mode="system"} 1871.17
+node_cpu_seconds_total{cpu="4",mode="user"} 5683.66
+node_cpu_seconds_total{cpu="5",mode="idle"} 203916.05
+node_cpu_seconds_total{cpu="5",mode="iowait"} 193.31
+node_cpu_seconds_total{cpu="5",mode="irq"} 0
+node_cpu_seconds_total{cpu="5",mode="nice"} 0
+node_cpu_seconds_total{cpu="5",mode="softirq"} 362.39
+node_cpu_seconds_total{cpu="5",mode="steal"} 0
+node_cpu_seconds_total{cpu="5",mode="system"} 1864.16
+node_cpu_seconds_total{cpu="5",mode="user"} 5712.46
+node_cpu_seconds_total{cpu="6",mode="idle"} 203953.86
+node_cpu_seconds_total{cpu="6",mode="iowait"} 187.29
+node_cpu_seconds_total{cpu="6",mode="irq"} 0
+node_cpu_seconds_total{cpu="6",mode="nice"} 0
+node_cpu_seconds_total{cpu="6",mode="softirq"} 255.21
+node_cpu_seconds_total{cpu="6",mode="steal"} 0
+node_cpu_seconds_total{cpu="6",mode="system"} 1865.04
+node_cpu_seconds_total{cpu="6",mode="user"} 5693.52
+node_cpu_seconds_total{cpu="7",mode="idle"} 203996.55
+node_cpu_seconds_total{cpu="7",mode="iowait"} 188.51
+node_cpu_seconds_total{cpu="7",mode="irq"} 0
+node_cpu_seconds_total{cpu="7",mode="nice"} 0
+node_cpu_seconds_total{cpu="7",mode="softirq"} 192.75
+node_cpu_seconds_total{cpu="7",mode="steal"} 0
+node_cpu_seconds_total{cpu="7",mode="system"} 1861.01
+node_cpu_seconds_total{cpu="7",mode="user"} 5660.1
+# HELP node_filesystem_free_bytes Filesystem free space in bytes.
+# TYPE node_filesystem_free_bytes gauge
+node_filesystem_free_bytes{device="/dev/vda1",device_error="",fstype="ext4",mountpoint="/etc/hostname"} 4.1207750656e+10
+node_filesystem_free_bytes{device="/dev/vda1",device_error="",fstype="ext4",mountpoint="/etc/hosts"} 4.1207750656e+10
+node_filesystem_free_bytes{device="/dev/vda1",device_error="",fstype="ext4",mountpoint="/etc/resolv.conf"} 4.1207750656e+10
+# HELP node_filesystem_size_bytes Filesystem size in bytes.
+# TYPE node_filesystem_size_bytes gauge
+node_filesystem_size_bytes{device="/dev/vda1",device_error="",fstype="ext4",mountpoint="/etc/hostname"} 6.2671097856e+10
+node_filesystem_size_bytes{device="/dev/vda1",device_error="",fstype="ext4",mountpoint="/etc/hosts"} 6.2671097856e+10
+node_filesystem_size_bytes{device="/dev/vda1",device_error="",fstype="ext4",mountpoint="/etc/resolv.conf"} 6.2671097856e+10
+# HELP node_load15 15m load average.
+# TYPE node_load15 gauge
+node_load15 3.63
+# HELP node_uname_info Labeled system information as provided by the uname system call.
+# TYPE node_uname_info gauge
+node_uname_info{domainname="(none)",machine="aarch64",nodename="009afc2af926",release="6.10.14-linuxkit",sysname="Linux",version="#1 SMP Sat May 17 08:28:57 UTC 2025"} 1

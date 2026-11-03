@@ -1,0 +1,35 @@
+# HELP pgbouncer_databases_pool_size Maximum number of server connections
+# TYPE pgbouncer_databases_pool_size gauge
+pgbouncer_databases_pool_size{database="bench",force_user="postgres",host="dasha-exp-primary",name="bench",pool_mode="",port="5432"} 4
+pgbouncer_databases_pool_size{database="pgbouncer",force_user="pgbouncer",host="",name="pgbouncer",pool_mode="statement",port="6432"} 2
+# HELP pgbouncer_pools_client_active_connections Client connections linked to server connection and able to process queries, shown as connection
+# TYPE pgbouncer_pools_client_active_connections gauge
+pgbouncer_pools_client_active_connections{database="bench",user="postgres"} 4
+pgbouncer_pools_client_active_connections{database="pgbouncer",user="pgbouncer"} 1
+# HELP pgbouncer_pools_client_waiting_connections Client connections waiting on a server connection, shown as connection
+# TYPE pgbouncer_pools_client_waiting_connections gauge
+pgbouncer_pools_client_waiting_connections{database="bench",user="postgres"} 8
+pgbouncer_pools_client_waiting_connections{database="pgbouncer",user="pgbouncer"} 0
+# HELP pgbouncer_pools_server_active_connections Server connections linked to a client connection, shown as connection
+# TYPE pgbouncer_pools_server_active_connections gauge
+pgbouncer_pools_server_active_connections{database="bench",user="postgres"} 4
+pgbouncer_pools_server_active_connections{database="pgbouncer",user="pgbouncer"} 0
+# HELP pgbouncer_pools_server_idle_connections Server connections idle and ready for a client query, shown as connection
+# TYPE pgbouncer_pools_server_idle_connections gauge
+pgbouncer_pools_server_idle_connections{database="bench",user="postgres"} 0
+pgbouncer_pools_server_idle_connections{database="pgbouncer",user="pgbouncer"} 0
+# HELP pgbouncer_pools_server_login_connections Server connections currently in the process of logging in, shown as connection
+# TYPE pgbouncer_pools_server_login_connections gauge
+pgbouncer_pools_server_login_connections{database="bench",user="postgres"} 0
+pgbouncer_pools_server_login_connections{database="pgbouncer",user="pgbouncer"} 0
+# HELP pgbouncer_pools_server_testing_connections Server connections currently running either server_reset_query or server_check_query, shown as connection
+# TYPE pgbouncer_pools_server_testing_connections gauge
+pgbouncer_pools_server_testing_connections{database="bench",user="postgres"} 0
+pgbouncer_pools_server_testing_connections{database="pgbouncer",user="pgbouncer"} 0
+# HELP pgbouncer_pools_server_used_connections Server connections idle more than server_check_delay, needing server_check_query, shown as connection
+# TYPE pgbouncer_pools_server_used_connections gauge
+pgbouncer_pools_server_used_connections{database="bench",user="postgres"} 0
+pgbouncer_pools_server_used_connections{database="pgbouncer",user="pgbouncer"} 0
+# HELP pgbouncer_up The pgbouncer scrape succeeded
+# TYPE pgbouncer_up gauge
+pgbouncer_up 1

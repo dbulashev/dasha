@@ -306,6 +306,9 @@ func (co *Collector) Range(ctx context.Context, cluster, instance string, r Rang
 func (co *Collector) exprFor(rt ResolvedTarget, sig SignalKind) (string, bool) {
 	role := signalRole(sig)
 	provider := providerForRole(rt, role)
+	if provider == ProviderNone {
+		return "", false
+	}
 
 	sel, err := co.matcher.Selector(provider, role, rt)
 	if err != nil {

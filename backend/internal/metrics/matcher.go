@@ -20,6 +20,8 @@ type ResolvedTarget struct {
 	ServiceID string // {{.ServiceID}}: cloud resource id (MDB cluster UUID), for metrics keyed by id
 	Host      string
 	Container string
+	Instance  string // Dasha instance name
+	HostShort string // first DNS label of Host; an IP stays as is
 	Providers ProvidersConfig
 }
 
@@ -88,6 +90,8 @@ func (m *Matcher) Resolve(cluster, instance string) (ResolvedTarget, error) {
 				ServiceID: t.Service,
 				Host:      t.Host,
 				Container: t.Container,
+				Instance:  instance,
+				HostShort: shortHost(t.Host),
 				Providers: m.cfg.providersFor(t),
 			}, nil
 		}
@@ -116,14 +120,17 @@ func (m *Matcher) Resolve(cluster, instance string) (ResolvedTarget, error) {
 func (m *Matcher) deriveTarget(cluster, instance string, md DiscoveryMeta) ResolvedTarget {
 	if md.Source == sourcePatroni {
 		scope := cmp.Or(md.Labels[labelPatroniScope], cluster)
+		host := cmp.Or(md.Address, instance)
 
 		return ResolvedTarget{
 			Cluster:   cluster,
 			Env:       md.Labels[m.cfg.envLabelKey()],
 			Service:   scope,
 			ServiceID: scope,
-			Host:      cmp.Or(md.Address, instance),
+			Host:      host,
 			Container: cmp.Or(md.Alias, shortHost(instance)),
+			Instance:  instance,
+			HostShort: shortHost(host),
 			Providers: m.cfg.providersFor(nil),
 		}
 	}
@@ -135,6 +142,8 @@ func (m *Matcher) deriveTarget(cluster, instance string, md DiscoveryMeta) Resol
 		ServiceID: md.ProviderID,
 		Host:      instance,
 		Container: shortHost(instance),
+		Instance:  instance,
+		HostShort: shortHost(instance),
 		Providers: m.cfg.providersFor(nil),
 	}
 }
@@ -191,6 +200,8 @@ func selectorKey(p Provider, role Role) string {
 		return SelectorPgBouncer
 	case ProviderPgSCVSystem:
 		return SelectorPgSCVSystem
+	case ProviderPostgresExporter, ProviderNodeExporter, ProviderPgBouncerExporter:
+		return string(p)
 	case ProviderYCNative:
 		if role == RolePooler {
 			return SelectorYCNativePooler
@@ -242,6 +253,10 @@ func (m *Matcher) Validate(ctx context.Context, client DatasourceClient, cluster
 	}
 
 	for _, a := range assignments {
+		if a.provider == ProviderNone {
+			continue
+		}
+
 		diag.Roles = append(diag.Roles, m.validateRole(ctx, client, rt, a))
 	}
 
