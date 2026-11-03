@@ -11,36 +11,70 @@ import (
 )
 
 func TestHostMatches(t *testing.T) {
-	fqdn := ResolvedTarget{Host: "db1.prod.example", Instance: "db1.prod.example", Port: "5432"}
+	fqdn := ResolvedTarget{Host: "db1.prod.example", Instance: "db1.prod.example", Container: "db1", Port: "5432"}
 	patroni := ResolvedTarget{Host: "10.0.0.7", Instance: "pg-a", Container: "pg-node-1"}
 
 	cases := []struct {
-		name       string
-		host, port string
-		rt         ResolvedTarget
-		want       bool
+		name string
+		host string
+		rt   ResolvedTarget
+		want bool
 	}{
-		{"fqdn", "db1.prod.example", "5432", fqdn, true},
-		{"case", "DB1.Prod.Example", "", fqdn, true},
-		{"short reported", "db1", "", fqdn, true},
-		{"fqdn reported, short known", "db1.prod.example", "", ResolvedTarget{Host: "db1"}, true},
-		{"other domain", "db1.stage.example", "", fqdn, false},
-		{"port mismatch", "db1.prod.example", "6432", fqdn, false},
-		{"port unknown on target", "db1", "6432", ResolvedTarget{Host: "db1.prod.example"}, true},
-		{"ip", "10.0.0.7", "5432", patroni, true},
-		{"ip prefix is not a match", "10.0.0.70", "", patroni, false},
-		{"patroni member", "pg-node-1", "", patroni, true},
-		{"empty", "", "", fqdn, false},
+		{"fqdn", "db1.prod.example", fqdn, true},
+		{"case", "DB1.Prod.Example", fqdn, true},
+		{"short reported", "db1", fqdn, true},
+		{"fqdn reported, short known", "db1.prod.example", ResolvedTarget{Host: "db1"}, true},
+		{"other domain", "db1.stage.example", fqdn, false},
+		{"ip", "10.0.0.7", patroni, true},
+		{"ip prefix is not a match", "10.0.0.70", patroni, false},
+		{"patroni member", "pg-node-1", patroni, true},
+		{"patroni member fqdn", "pg-node-1.dc.local", patroni, true},
+		{"patroni member fqdn, fqdn instance", "pg-node-1.dc.local", ResolvedTarget{Host: "10.0.0.7", Instance: "pg-a.dc.local", Container: "pg-node-1"}, true},
+		{"derived container is not an alias", "db1.stage.example", ResolvedTarget{Host: "db1.prod.example", Instance: "db1.prod.example", Container: "db1"}, false},
+		{"empty", "", fqdn, false},
 	}
 
 	for _, tc := range cases {
-		if got := hostMatches(tc.host, tc.port, tc.rt); got != tc.want {
-			t.Errorf("%s: hostMatches(%q, %q) = %v, want %v", tc.name, tc.host, tc.port, got, tc.want)
+		if got := hostMatches(tc.host, tc.rt); got != tc.want {
+			t.Errorf("%s: hostMatches(%q) = %v, want %v", tc.name, tc.host, got, tc.want)
 		}
 	}
 }
 
-// anchorClient answers anchor queries from fixed series and counts them.
+func TestScrapeSelector_Port(t *testing.T) {
+	spec := anchorSpecs[ProviderPostgresExporter]
+	rt := ResolvedTarget{Host: "db1.example.com", Port: "6432"}
+
+	cases := []struct {
+		name   string
+		series []map[string]string
+		want   string
+	}{
+		{"single scrape, other port", []map[string]string{
+			pgStatic("pgexp:9187", "pg", "db1.example.com:5432"),
+		}, `instance="pgexp:9187",job="pg"`},
+		{"two scrapes, port picks one", []map[string]string{
+			pgStatic("pgexp-a:9187", "pg", "db1.example.com:5432"),
+			pgStatic("pgexp-b:9187", "pg", "db1.example.com:6432"),
+		}, `instance="pgexp-b:9187",job="pg"`},
+		{"two scrapes, no port match", []map[string]string{
+			pgStatic("pgexp-a:9187", "pg", "db1.example.com:5432"),
+			pgStatic("pgexp-b:9187", "pg", "db1.example.com:5433"),
+		}, ""},
+	}
+
+	for _, tc := range cases {
+		samples := make([]Sample, 0, len(tc.series))
+		for _, l := range tc.series {
+			samples = append(samples, Sample{Labels: l, Value: 1})
+		}
+
+		if got := scrapeSelector(samples, spec, rt); got != tc.want {
+			t.Errorf("%s: scrapeSelector = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
 type anchorClient struct {
 	mu      sync.Mutex
 	queries map[string]int
@@ -195,7 +229,7 @@ func TestResolveCtx_Cache(t *testing.T) {
 		t.Errorf("fresh issued %d queries, want %d", n-first, first)
 	}
 
-	now = now.Add(Default().Baseline.CacheTTL)
+	now = now.Add(anchorTTL)
 	resolve(false)
 
 	if n := client.total(); n != 3*first {
@@ -203,9 +237,11 @@ func TestResolveCtx_Cache(t *testing.T) {
 	}
 }
 
-func TestResolveCtx_ErrorNotCached(t *testing.T) {
+func TestResolveCtx_ErrorCachedBriefly(t *testing.T) {
 	ctx := context.Background()
 	m, _ := NewMatcher(exporterConfig(), nil)
+	now := time.Unix(1000, 0)
+	m.now = func() time.Time { return now }
 	client := &anchorClient{err: errors.New("boom")}
 
 	rt, err := m.ResolveCtx(ctx, client, "self", "db1", false)
@@ -217,12 +253,57 @@ func TestResolveCtx_ErrorNotCached(t *testing.T) {
 		t.Errorf("Scrape = %v after a failed lookup, want empty", rt.Scrape)
 	}
 
+	q := anchorSpecs[ProviderPostgresExporter].query
+
 	client.err = nil
 	client.series = map[string][]map[string]string{"pg_static": {pgStatic("pgexp:9187", "pg", "db1.example.com:5432")}}
 
 	rt, _ = m.ResolveCtx(ctx, client, "self", "db1", false)
+	if len(rt.Scrape) != 0 || client.queries[q] != 1 {
+		t.Errorf("failure not cached: Scrape = %v, queries = %d", rt.Scrape, client.queries[q])
+	}
+
+	rt, _ = m.ResolveCtx(ctx, client, "self", "db1", true)
 	if rt.Scrape[RoleCore] == "" {
-		t.Error("lookup not retried after a failure")
+		t.Error("fresh lookup did not bypass the cached failure")
+	}
+
+	client.err = errors.New("boom")
+	_, _ = m.ResolveCtx(ctx, client, "self", "db1", true)
+	client.err = nil
+
+	rt, _ = m.ResolveCtx(ctx, client, "self", "db1", false)
+	if rt.Scrape[RoleCore] == "" {
+		t.Error("failed fresh lookup overwrote the cached anchor")
+	}
+
+	m.anchors = map[Provider]anchorSnap{}
+	client.err = errors.New("boom")
+	_, _ = m.ResolveCtx(ctx, client, "self", "db1", false)
+	client.err = nil
+	now = now.Add(anchorErrorTTL)
+
+	rt, _ = m.ResolveCtx(ctx, client, "self", "db1", false)
+	if rt.Scrape[RoleCore] == "" {
+		t.Error("lookup not retried after anchorErrorTTL")
+	}
+}
+
+func TestResolveCtx_CallerCancelNotCached(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	m, _ := NewMatcher(exporterConfig(), nil)
+	client := &anchorClient{err: context.Canceled}
+
+	_, _ = m.ResolveCtx(ctx, client, "self", "db1", false)
+
+	client.err = nil
+	client.series = map[string][]map[string]string{"pg_static": {pgStatic("pgexp:9187", "pg", "db1.example.com:5432")}}
+
+	rt, _ := m.ResolveCtx(context.Background(), client, "self", "db1", false)
+	if rt.Scrape[RoleCore] == "" {
+		t.Error("caller cancellation was cached as a datasource failure")
 	}
 }
 

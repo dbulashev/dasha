@@ -80,8 +80,7 @@ func (c Config) autoMapEnabled() bool {
 	return c.AutoMapDiscovered == nil || *c.AutoMapDiscovered
 }
 
-// autoMapStaticEnabled requires postgres_exporter as core: other providers'
-// selectors need Env/Service, which a static cluster without a target lacks.
+// autoMapStaticEnabled applies only with postgres_exporter as core.
 func (c Config) autoMapStaticEnabled() bool {
 	return (c.AutoMapStatic == nil || *c.AutoMapStatic) && c.Providers.Core == ProviderPostgresExporter
 }

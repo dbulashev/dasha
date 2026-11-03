@@ -1,7 +1,6 @@
 package metrics
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"net"
@@ -40,7 +39,14 @@ var anchorSpecs = map[Provider]anchorSpec{
 type anchorSnap struct {
 	samples []Sample
 	expires time.Time
+	failed  bool
 }
+
+// Anchor cache lifetimes: anchorTTL for scrapes found, anchorErrorTTL for a failed query.
+const (
+	anchorTTL      = time.Minute
+	anchorErrorTTL = 30 * time.Second
+)
 
 // usesAnchor reports whether a provider's scrape is looked up by address: it
 // has an anchor metric and the user kept the fallback selector template.
@@ -81,8 +87,8 @@ func (m *Matcher) ResolveCtx(ctx context.Context, c DatasourceClient, cluster, i
 	return rt, nil
 }
 
-// anchorSamples returns the provider's anchor series. A failed query is not
-// cached: the role falls back to its template until the next call.
+// anchorSamples returns the provider's anchor series. A datasource failure on a
+// non-fresh call is cached; meanwhile the role falls back to its template.
 func (m *Matcher) anchorSamples(ctx context.Context, c DatasourceClient, p Provider, fresh bool) ([]Sample, bool) {
 	now := m.now()
 
@@ -92,35 +98,53 @@ func (m *Matcher) anchorSamples(ctx context.Context, c DatasourceClient, p Provi
 		m.anchorMu.Unlock()
 
 		if ok && now.Before(snap.expires) {
-			return snap.samples, true
+			return snap.samples, !snap.failed
 		}
 	}
 
 	samples, err := c.QueryInstant(ctx, anchorSpecs[p].query, time.Time{})
 	if err != nil {
+		if !fresh && ctx.Err() == nil {
+			m.anchorMu.Lock()
+			m.anchors[p] = anchorSnap{failed: true, expires: now.Add(anchorErrorTTL)}
+			m.anchorMu.Unlock()
+		}
+
 		return nil, false
 	}
 
-	ttl := cmp.Or(m.cfg.Baseline.CacheTTL, Default().Baseline.CacheTTL)
-
 	m.anchorMu.Lock()
-	m.anchors[p] = anchorSnap{samples: samples, expires: now.Add(ttl)}
+	m.anchors[p] = anchorSnap{samples: samples, expires: now.Add(anchorTTL)}
 	m.anchorMu.Unlock()
 
 	return samples, true
 }
 
 // scrapeSelector returns `instance="…",job="…"` when exactly one scrape names
-// the target's host, "" otherwise.
+// the target's host, "" otherwise. Several scrapes of one host are told apart by
+// the PostgreSQL port.
 func scrapeSelector(samples []Sample, spec anchorSpec, rt ResolvedTarget) string {
 	type scrape struct{ instance, job string }
 
-	found := map[scrape]bool{}
+	byHost, byPort := map[scrape]bool{}, map[scrape]bool{}
 
 	for _, s := range samples {
-		if host, port := spec.addr(s.Labels); hostMatches(host, port, rt) {
-			found[scrape{s.Labels["instance"], s.Labels["job"]}] = true
+		host, port := spec.addr(s.Labels)
+		if !hostMatches(host, rt) {
+			continue
 		}
+
+		sc := scrape{s.Labels["instance"], s.Labels["job"]}
+		byHost[sc] = true
+
+		if port != "" && port == rt.Port {
+			byPort[sc] = true
+		}
+	}
+
+	found := byHost
+	if len(found) > 1 {
+		found = byPort
 	}
 
 	if len(found) != 1 {
@@ -135,30 +159,36 @@ func scrapeSelector(samples []Sample, spec anchorSpec, rt ResolvedTarget) string
 }
 
 // hostMatches compares an exporter-reported address with the target's names,
-// case-insensitively, in full or short form. IPs compare as strings; the port
-// only when both sides know it.
-func hostMatches(host, port string, rt ResolvedTarget) bool {
+// case-insensitively. Two FQDNs must be equal; a short name matches the first
+// label of the other side. A Patroni member alias matches by first label. IPs
+// compare as strings.
+func hostMatches(host string, rt ResolvedTarget) bool {
 	if host == "" {
 		return false
 	}
 
-	if port != "" && rt.Port != "" && port != rt.Port {
-		return false
-	}
+	fqdn := isFQDN(host) && (isFQDN(rt.Host) || isFQDN(rt.Instance))
 
-	short := shortHost(host)
-
-	for _, name := range []string{rt.Host, rt.Instance, rt.Container} {
+	for _, name := range []string{rt.Host, rt.Instance} {
 		if name == "" {
 			continue
 		}
 
-		if strings.EqualFold(host, name) || strings.EqualFold(host, shortHost(name)) || strings.EqualFold(short, name) {
+		if strings.EqualFold(host, name) || !fqdn && strings.EqualFold(shortHost(host), shortHost(name)) {
 			return true
 		}
 	}
 
-	return false
+	alias := rt.Container
+	if alias == "" || strings.EqualFold(alias, shortHost(rt.Host)) || strings.EqualFold(alias, shortHost(rt.Instance)) {
+		return false
+	}
+
+	return strings.EqualFold(shortHost(host), shortHost(alias))
+}
+
+func isFQDN(name string) bool {
+	return strings.Contains(name, ".") && net.ParseIP(name) == nil
 }
 
 // roleAssignments lists the roles in diagnostic order.
