@@ -1,0 +1,18 @@
+# Lite demo: one PostgreSQL 18 cluster, no login (every visitor is an admin).
+enable_query_stats_reset: true
+
+storage:
+  dsn: "postgres://dasha:dasha@storage-db:5432/dasha_storage?sslmode=disable"
+
+auth:
+  mode: none
+
+clusters:
+  - name: pg18-cluster
+    username: demo
+    password: demo
+    databases:
+      - demo
+    hosts:
+      - pg18-master
+      - pg18-replica

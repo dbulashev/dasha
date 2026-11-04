@@ -1,0 +1,28 @@
+# Overlay for `make demo-lab-build`: Dasha services built from the working tree.
+# Paths resolve against demo/lite, the directory of the first compose file.
+services:
+  backend:
+    image: dasha-demo-backend:local
+    pull_policy: build
+    build:
+      context: ../..
+      dockerfile: demo/Dockerfile.backend
+
+  # Reuses the backend build; a second build of one tag collides on export.
+  autosnapshot:
+    image: dasha-demo-backend:local
+    pull_policy: never
+
+  frontend:
+    image: dasha-demo-frontend:local
+    pull_policy: build
+    build:
+      context: ../..
+      dockerfile: demo/Dockerfile.frontend
+
+  dasha-mcp:
+    image: dasha-demo-mcp:local
+    pull_policy: build
+    build:
+      context: ../..
+      dockerfile: deploy/images/Dockerfile.mcp

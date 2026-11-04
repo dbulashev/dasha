@@ -1,0 +1,175 @@
+# Lite demo lab: one PostgreSQL 18 cluster (primary + streaming replica), snapshot
+# storage, a workload generator and Dasha with MCP. No login, no Keycloak, no
+# metrics or log stores. Start with `make demo-lab`; the full lab is `make demo-lab-full`.
+name: dasha-demo-lite
+
+x-pg-health: &pg-health
+  test: ["CMD-SHELL", "pg_isready -U demo"]
+  interval: 3s
+  timeout: 3s
+  retries: 30
+
+services:
+  pg18-master:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo
+      POSTGRES_DB: demo
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - pg_stat_statements.track=all
+      - -c
+      - wal_level=logical
+      - -c
+      - max_wal_senders=6
+      - -c
+      - max_replication_slots=6
+      - -c
+      - track_io_timing=on
+      - -c
+      - hba_file=/etc/pg_hba.conf
+    volumes:
+      - ../pg_hba.conf:/etc/pg_hba.conf:ro
+      - ../sql/fixture.sql:/docker-entrypoint-initdb.d/01-fixture.sql:ro
+      - ../sql/pg18-master-init.sh:/docker-entrypoint-initdb.d/02-init.sh:ro
+    healthcheck: *pg-health
+    networks:
+      - dasha-demo
+
+  pg18-replica:
+    image: postgres:18-alpine
+    environment:
+      PRIMARY_HOST: pg18-master
+      REPLICATION_SLOT: pg18_replica_slot
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo
+    entrypoint: ["/replica-entrypoint.sh"]
+    volumes:
+      - ../scripts/replica-entrypoint.sh:/replica-entrypoint.sh:ro
+    depends_on:
+      pg18-master:
+        condition: service_healthy
+    healthcheck: *pg-health
+    networks:
+      - dasha-demo
+
+  storage-db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: dasha
+      POSTGRES_PASSWORD: dasha
+      POSTGRES_DB: dasha_storage
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dasha -d dasha_storage"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    networks:
+      - dasha-demo
+
+  backend:
+    image: dbulashev/dasha-backend:${DASHA_TAG:-latest}
+    pull_policy: always
+    volumes:
+      - ./dasha.yaml:/etc/dasha/dasha.yaml:ro
+    depends_on:
+      pg18-master:
+        condition: service_healthy
+      storage-db:
+        condition: service_healthy
+    networks:
+      - dasha-demo
+
+  frontend:
+    image: dbulashev/dasha-frontend:${DASHA_TAG:-latest}
+    pull_policy: always
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - dasha-demo
+
+  # Read-only MCP server for AI assistants at http://localhost:8765; no token needed
+  # because the backend runs without auth.
+  dasha-mcp:
+    image: dbulashev/dasha-mcp:${DASHA_TAG:-latest}
+    pull_policy: always
+    command: ["--http", ":8765", "--dasha-url", "http://backend:8000"]
+    ports:
+      - "8765:8765"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - dasha-demo
+
+  autosnapshot-seed:
+    image: postgres:18-alpine
+    entrypoint:
+      - sh
+      - -c
+      - |
+        until pg_isready -h storage-db -U dasha -d dasha_storage; do sleep 2; done
+        until psql -h storage-db -U dasha -d dasha_storage -tAc \
+          "SELECT 1 FROM autosnapshot_config_global WHERE id = 1" | grep -q 1; do
+          echo "waiting for backend to run migrations..."
+          sleep 3
+        done
+        psql -h storage-db -U dasha -d dasha_storage -f /autosnapshot-seed.sql
+    environment:
+      PGPASSWORD: dasha
+    volumes:
+      - ../sql/autosnapshot-seed.sql:/autosnapshot-seed.sql:ro
+    depends_on:
+      storage-db:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    restart: on-failure
+    networks:
+      - dasha-demo
+
+  autosnapshot:
+    image: dbulashev/dasha-backend:${DASHA_TAG:-latest}
+    pull_policy: always
+    command: ["sh", "-c", "dasha migrate && dasha autosnapshot"]
+    volumes:
+      - ./dasha.yaml:/etc/dasha/dasha.yaml:ro
+    depends_on:
+      storage-db:
+        condition: service_healthy
+      autosnapshot-seed:
+        condition: service_completed_successfully
+      pg18-master:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - dasha-demo
+
+  workload-generator:
+    image: postgres:18-alpine
+    entrypoint: ["/workload-generator.sh"]
+    environment:
+      PG17_HOST: ""
+      STANDALONE_HOST: ""
+      SPIKE_GENERATOR: "${SPIKE_GENERATOR:-on}"
+      LOCK_TABLE_GENERATOR: "${LOCK_TABLE_GENERATOR:-on}"
+      COPY_GENERATOR: "${COPY_GENERATOR:-on}"
+      COPY_DEMO_ROWS: "${COPY_DEMO_ROWS:-300000}"
+    volumes:
+      - ../scripts/workload-generator.sh:/workload-generator.sh:ro
+    depends_on:
+      pg18-master:
+        condition: service_healthy
+    restart: on-failure
+    networks:
+      - dasha-demo
+
+networks:
+  dasha-demo:
+    driver: bridge

@@ -281,10 +281,11 @@ services:
   # ============================================================
   # Application
   # ============================================================
+  # Released images by default; `make demo-lab-build` swaps in source builds
+  # through docker-compose.build.yaml.
   backend:
-    build:
-      context: ..
-      dockerfile: demo/Dockerfile.backend
+    image: dbulashev/dasha-backend:${DASHA_TAG:-latest}
+    pull_policy: always
     volumes:
       - ./dasha-demo.yaml:/etc/dasha/dasha.yaml:ro
     depends_on:
@@ -302,9 +303,8 @@ services:
       - dasha-demo
 
   frontend:
-    build:
-      context: ..
-      dockerfile: demo/Dockerfile.frontend
+    image: dbulashev/dasha-frontend:${DASHA_TAG:-latest}
+    pull_policy: always
     ports:
       - "3000:3000"
     depends_on:
@@ -317,9 +317,8 @@ services:
   # the demo static token as `Authorization: Bearer demo-api-token-for-testing`
   # (role viewer, sufficient for the read-only tools). Reachable at localhost:8765.
   dasha-mcp:
-    build:
-      context: ..
-      dockerfile: deploy/images/Dockerfile.mcp
+    image: dbulashev/dasha-mcp:${DASHA_TAG:-latest}
+    pull_policy: always
     command: ["--http", ":8765", "--dasha-url", "http://backend:8000"]
     ports:
       - "8765:8765"
@@ -361,9 +360,8 @@ services:
   # Auto-snapshot daemon — same image, "autosnapshot" subcommand.
   # Uses sh to run migrations first in case daemon starts before backend.
   autosnapshot:
-    build:
-      context: ..
-      dockerfile: demo/Dockerfile.backend
+    image: dbulashev/dasha-backend:${DASHA_TAG:-latest}
+    pull_policy: always
     command: ["sh", "-c", "dasha migrate && dasha autosnapshot"]
     volumes:
       - ./dasha-demo.yaml:/etc/dasha/dasha.yaml:ro
