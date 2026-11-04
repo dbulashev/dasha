@@ -61,6 +61,7 @@ The full list with details: [doc/en/features.md](doc/en/features.md).
 > [!TIP]
 > **Demo lab**
 > ```bash
+> git clone --depth 1 https://github.com/dbulashev/dasha.git && cd dasha
 > make demo-lab        # http://localhost:3000
 > ```
 > A PostgreSQL 18 cluster with a replica, a load generator and the MCP server. No login needed.

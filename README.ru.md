@@ -61,6 +61,7 @@
 > [!TIP]
 > **Демо-стенд**
 > ```bash
+> git clone --depth 1 https://github.com/dbulashev/dasha.git && cd dasha
 > make demo-lab        # http://localhost:3000
 > ```
 > Кластер PostgreSQL 18 с репликой, генератор нагрузки и MCP-сервер. Без авторизации.
