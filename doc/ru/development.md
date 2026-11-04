@@ -15,6 +15,8 @@ make run-frontend
 make run-mcp
 ```
 
+<a id="demo-lab"></a>
+
 ## Демо-лаборатория
 
 Два варианта на опубликованных образах `dbulashev/dasha-*`. Оба занимают порты 3000 и 8765,
