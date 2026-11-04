@@ -59,15 +59,20 @@ The full list with details: [doc/en/features.md](doc/en/features.md).
 ## Quick Start
 
 > [!TIP]
-> **Demo Lab: Dasha against a live workload**
->
+> **Demo lab**
 > ```bash
 > make demo-lab        # http://localhost:3000
 > ```
+> A PostgreSQL 18 cluster with a replica, a load generator and the MCP server. No login needed.
 >
-> A PostgreSQL 18 cluster with a replica, a load generator and the MCP server, no login needed.
-> `make demo-lab-full` adds more clusters, an OIDC provider, metrics and log search.
-> More: [Demo Lab](doc/en/development.md#demo-lab).
+> **Full demo lab**
+> ```bash
+> make demo-lab-full
+> ```
+> Adds two more PostgreSQL clusters, an OIDC provider, metrics and log search.
+> Log in through Keycloak: `admin`/`admin`.
+>
+> More on the demo labs: [doc/en/development.md](doc/en/development.md#demo-lab).
 
 For your own clusters, create `dasha.yaml` (searched in `.`, `$HOME/.dasha/`, `/etc/dasha/`):
 
