@@ -17,22 +17,50 @@ make run-mcp
 
 ## Demo Lab
 
-A full demo environment with multiple PostgreSQL clusters, streaming replication, and a workload generator:
+Two variants on the released `dbulashev/dasha-*` images. Both use ports 3000 and 8765, so
+starting one stops the other.
 
 ```bash
-make demo-lab          # Build and start (http://localhost:3000)
-make demo-lab-logs     # Follow logs
-make demo-lab-restart  # Rebuild and restart (runs `down -v` first — volumes are dropped)
-make demo-lab-down     # Stop and remove volumes (snapshot storage and PG data are lost)
+make demo-lab             # Lite: one PG18 cluster, no login (http://localhost:3000)
+make demo-lab-full        # Full: three clusters, Keycloak, metrics, log search
+make demo-lab-build       # Lite with Dasha built from source
+make demo-lab-full-build  # Full with Dasha built from source
+make demo-lab-logs        # Follow logs (lite); make demo-lab-full-logs for the full lab
+make demo-lab-down        # Stop both and remove volumes (snapshot storage and PG data are lost)
 ```
 
-The demo includes:
-- **PG18 cluster**: master + streaming replica
+Images are `latest` by default; pick another tag with `DASHA_TAG=1.10.2 make demo-lab`.
+The demo configs (`demo/lite/dasha.yaml`, `demo/dasha-demo.yaml`) track `main`: if one uses
+a feature not released yet, run the `-build` target.
+
+**Lite** (`demo/lite/`):
+- **PG18 cluster**: primary + streaming replica
+- **No login**: `auth.mode: none`, every visitor has the admin role
+- **Storage DB** and the auto-snapshot daemon
+- **Workload generator**: continuous background load
+- **MCP server** at `http://localhost:8765`, no token
+
+**Full** (`demo/`) adds:
 - **PG17 cluster**: master + 2 replicas (with intentionally "bad" settings for analysis)
-- **PG18 standalone**: logical replication subscriber
-- **Keycloak**: OIDC provider with preconfigured realm, users `admin`/`admin` and `viewer`/`viewer`
-- **Storage DB**: snapshot storage with auto-migration on startup
-- **Workload generator**: continuous background load for realistic data
+- **PG18 standalone**: logical replication subscriber, databases found by discovery
+- **Keycloak**: OIDC provider with preconfigured realm, users `admin`/`admin` and `viewer`/`viewer`.
+  The browser is sent to `http://keycloak:8080`, so add `127.0.0.1 keycloak` to `/etc/hosts` once
+- **Metrics**: VictoriaMetrics, pgSCV and pgbouncer for the metrics-based Health Score
+- **Log search**: VictoriaLogs and Fluent Bit, `auto_explain` plans for Log insights
+- **MCP server** at `http://localhost:8765`, token `demo-api-token-for-testing` (role viewer)
+
+### MCP in the demo
+
+Claude Code:
+
+```bash
+claude mcp add --transport http dasha-demo http://localhost:8765
+# full lab:
+claude mcp add --transport http dasha-demo http://localhost:8765 \
+  --header "Authorization: Bearer demo-api-token-for-testing"
+```
+
+Other clients: see [MCP connector](mcp.md#httpsse-shared--multi-user).
 
 ## Project Structure
 

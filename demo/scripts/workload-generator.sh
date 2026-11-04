@@ -1,18 +1,21 @@
 #!/bin/bash
 set -e
 
-echo "Waiting for pg18-master..."
-until pg_isready -h pg18-master -p 5432 -U demo -d demo; do sleep 2; done
+# Set to an empty value to skip that host (the lite demo runs pg18-master only).
+PG17_HOST="${PG17_HOST-pg17-master}"
+STANDALONE_HOST="${STANDALONE_HOST-pg18-standalone}"
+MASTERS="pg18-master${PG17_HOST:+ $PG17_HOST}"
+# Dead rows and the query mix go to pg17 when it runs.
+ALT_HOST="${PG17_HOST:-pg18-master}"
 
-echo "Waiting for pg17-master..."
-until pg_isready -h pg17-master -p 5432 -U demo -d demo; do sleep 2; done
-
-echo "Waiting for pg18-standalone..."
-until pg_isready -h pg18-standalone -p 5432 -U demo -d demo; do sleep 2; done
+for host in $MASTERS $STANDALONE_HOST; do
+  echo "Waiting for $host..."
+  until pg_isready -h "$host" -p 5432 -U demo -d demo; do sleep 2; done
+done
 
 # --- Log insights fixtures: a table large enough for plans worth reading and a
 #     function whose statement auto_explain logs as a nested one ---
-for host in pg18-master pg17-master; do
+for host in $MASTERS; do
   psql -h "$host" -U demo -d demo <<'SQL'
 CREATE TABLE IF NOT EXISTS plan_demo AS
   SELECT g AS id, g % 1000 AS k, md5(g::text) AS payload
@@ -29,7 +32,9 @@ done
 
 echo "=== Starting continuous pgbench load ==="
 pgbench -h pg18-master -U demo -d demo -c 4 -j 2 -T 0 -P 60 &
-pgbench -h pg17-master -U demo -d demo -c 2 -j 1 -T 0 -P 60 &
+if [ -n "$PG17_HOST" ]; then
+  pgbench -h "$PG17_HOST" -U demo -d demo -c 2 -j 1 -T 0 -P 60 &
+fi
 
 # --- Continuous blocking loop (separate background process) ---
 echo "=== Starting continuous lock generator ==="
@@ -171,8 +176,10 @@ echo "=== Starting workload loop ==="
 # Disable autovacuum on customer_profiles to accumulate dead tuples for demo
 psql -h pg18-master -U demo -d demo -c \
   "ALTER TABLE customer_profiles SET (autovacuum_enabled = false);"
-psql -h pg17-master -U demo -d demo -c \
-  "ALTER TABLE customer_profiles SET (autovacuum_enabled = false);" 2>/dev/null || true
+if [ -n "$PG17_HOST" ]; then
+  psql -h "$PG17_HOST" -U demo -d demo -c \
+    "ALTER TABLE customer_profiles SET (autovacuum_enabled = false);" 2>/dev/null || true
+fi
 
 cycle=0
 
@@ -180,7 +187,7 @@ while true; do
   cycle=$((cycle + 1))
 
   # 1. Dead rows generation (visible in Maintenance Info)
-  psql -h pg17-master -U demo -d demo -c "
+  psql -h "$ALT_HOST" -U demo -d demo -c "
     DELETE FROM deadrows_test WHERE id IN (SELECT id FROM deadrows_test ORDER BY random() LIMIT 50);
     INSERT INTO deadrows_test (data) SELECT 'new_' || i FROM generate_series(1, 50) i;
   "
@@ -210,7 +217,7 @@ while true; do
   "
 
   # 5. Diverse queries for pg_stat_statements variety (visible in Top10/Report)
-  psql -h pg17-master -U demo -d demo <<'SQL'
+  psql -h "$ALT_HOST" -U demo -d demo <<'SQL'
     SELECT count(*) FROM orders WHERE status = 'new';
     SELECT avg(amount), max(amount) FROM orders WHERE created_at > now() - interval '30 days';
     SELECT user_id, count(*) FROM orders GROUP BY user_id ORDER BY count(*) DESC LIMIT 10;
@@ -236,7 +243,8 @@ SQL
 
   # 5b. Queries on pg18-standalone, whose pg_stat_statements lives in schema
   #     "ext" — without them the custom-schema case would have nothing to show.
-  psql -h pg18-standalone -U demo -d demo <<'SQL' 2>/dev/null
+  if [ -n "$STANDALONE_HOST" ]; then
+  psql -h "$STANDALONE_HOST" -U demo -d demo <<'SQL' 2>/dev/null
     SELECT count(*) FROM orders;
     SELECT status, count(*) FROM orders GROUP BY status;
     SELECT * FROM orders ORDER BY created_at DESC LIMIT 10;
@@ -244,20 +252,21 @@ SQL
 
   # 5c. Queries on the discovered databases of pg18-standalone — Dasha finds
   #     them itself, so they need traffic of their own to be worth opening.
-  psql -h pg18-standalone -U demo -d analytics <<'SQL' 2>/dev/null
+  psql -h "$STANDALONE_HOST" -U demo -d analytics <<'SQL' 2>/dev/null
     SELECT event_type, count(*) FROM events GROUP BY event_type;
     SELECT * FROM events WHERE user_id = (random() * 5000)::int ORDER BY created_at DESC LIMIT 20;
 SQL
 
-  psql -h pg18-standalone -U demo -d billing <<'SQL' 2>/dev/null
+  psql -h "$STANDALONE_HOST" -U demo -d billing <<'SQL' 2>/dev/null
     SELECT status, sum(amount) FROM invoices GROUP BY status;
     SELECT i.id, i.amount, p.paid_at FROM invoices i JOIN payments p ON p.invoice_id = i.id LIMIT 20;
 SQL
 
-  psql -h pg18-standalone -U demo -d archive <<'SQL' 2>/dev/null
+  psql -h "$STANDALONE_HOST" -U demo -d archive <<'SQL' 2>/dev/null
     SELECT status, count(*) FROM orders_2024 GROUP BY status;
     SELECT count(*) FROM orders_2024 WHERE created_at > timestamptz '2024-06-01';
 SQL
+  fi
 
   # 6. Hash / range→hash partition load (hot-objects rollup demo)
   #    Reads + writes spread across every partition, so the hot-objects top must
@@ -275,7 +284,7 @@ SQL
 
   # 7. Materialized view report: filters on columns its unique index does not
   #    cover, so the advisor has a matview candidate to propose.
-  for host in pg18-master pg17-master; do
+  for host in $MASTERS; do
     psql -h "$host" -U demo -d demo <<'SQL'
     SELECT session_id, event_count FROM mv_session_stats
       WHERE status = 'failed' AND event_count > 5
@@ -285,7 +294,7 @@ SQL
 
   # Refreshed on its own rhythm — that is the cost an index on a matview carries.
   if [ $((cycle % 10)) -eq 0 ]; then
-    for host in pg18-master pg17-master; do
+    for host in $MASTERS; do
       psql -h "$host" -U demo -d demo -c \
         "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_session_stats;"
     done
@@ -296,7 +305,7 @@ SQL
   #    fresh literal each cycle, a nested statement, and events for the
   #    classifier (temp files, a statement timeout, an unknown role).
   k=$((RANDOM % 1000))
-  for host in pg18-master pg17-master; do
+  for host in $MASTERS; do
     psql -h "$host" -U demo -d demo <<SQL 2>/dev/null
 SET max_parallel_workers_per_gather = 0;
 SELECT count(*) FROM plan_demo WHERE k = $k AND payload LIKE '%ab%';
@@ -317,7 +326,7 @@ SQL
   #     filter, past the 256 KiB VictoriaLogs line limit by default.
   if [ $((cycle % 20)) -eq 1 ]; then
     ids="$(seq -s, 1 30000)"
-    for host in pg18-master pg17-master; do
+    for host in $MASTERS; do
       psql -h "$host" -U demo -d demo >/dev/null 2>&1 <<SQL || true
 SELECT count(*) FROM plan_demo WHERE id = ANY ('{$ids}'::int[]);
 SQL

@@ -95,8 +95,9 @@ docker compose up -d
 Everything else — service discovery, log search, schema checks, authentication, snapshot
 storage — is optional and documented in [Configuration](doc/en/configuration.md).
 
-To see Dasha against a live workload, `make demo-lab` starts several PostgreSQL clusters with
-streaming replication, an OIDC provider and a load generator: [Demo Lab](doc/en/development.md#demo-lab).
+To see Dasha against a live workload, `make demo-lab` starts a PostgreSQL 18 cluster with a
+replica, a load generator and the MCP server, no login needed; `make demo-lab-full` adds more
+clusters, an OIDC provider, metrics and log search: [Demo Lab](doc/en/development.md#demo-lab).
 
 ## Documentation
 

@@ -17,22 +17,50 @@ make run-mcp
 
 ## Демо-лаборатория
 
-Полноценное демо-окружение с несколькими кластерами PostgreSQL, потоковой репликацией и генератором нагрузки:
+Два варианта на опубликованных образах `dbulashev/dasha-*`. Оба занимают порты 3000 и 8765,
+поэтому запуск одного останавливает другой.
 
 ```bash
-make demo-lab          # Собрать и запустить (http://localhost:3000)
-make demo-lab-logs     # Просмотр логов
-make demo-lab-restart  # Пересобрать и перезапустить (сначала `down -v` — тома удаляются)
-make demo-lab-down     # Остановить и удалить тома (хранилище снимков и данные PG теряются)
+make demo-lab             # Лёгкая: один кластер PG18, без входа (http://localhost:3000)
+make demo-lab-full        # Полная: три кластера, Keycloak, метрики, поиск по логам
+make demo-lab-build       # Лёгкая с Dasha, собранной из исходников
+make demo-lab-full-build  # Полная с Dasha, собранной из исходников
+make demo-lab-logs        # Логи лёгкой; make demo-lab-full-logs — полной
+make demo-lab-down        # Остановить обе и удалить тома (хранилище снимков и данные PG теряются)
 ```
 
-Демо включает:
+По умолчанию образы `latest`; другой тег — `DASHA_TAG=1.10.2 make demo-lab`.
+Конфиги демо (`demo/lite/dasha.yaml`, `demo/dasha-demo.yaml`) следуют за `main`: если в них
+есть ещё не выпущенная функция, запускайте цель `-build`.
+
+**Лёгкая** (`demo/lite/`):
 - **Кластер PG18**: мастер + потоковая реплика
+- **Без входа**: `auth.mode: none`, у любого посетителя роль admin
+- **БД хранилища** и демон автоснимков
+- **Генератор нагрузки**: непрерывная фоновая нагрузка
+- **MCP-сервер** на `http://localhost:8765`, без токена
+
+**Полная** (`demo/`) добавляет:
 - **Кластер PG17**: мастер + 2 реплики (с намеренно «плохими» настройками для анализа)
-- **PG18 standalone**: подписчик логической репликации
-- **Keycloak**: OIDC-провайдер с настроенным realm, пользователи `admin`/`admin` и `viewer`/`viewer`
-- **БД хранилища**: хранилище снимков с автоматической миграцией при запуске
-- **Генератор нагрузки**: непрерывная фоновая нагрузка для реалистичных данных
+- **PG18 standalone**: подписчик логической репликации, базы находит discovery
+- **Keycloak**: OIDC-провайдер с настроенным realm, пользователи `admin`/`admin` и `viewer`/`viewer`.
+  Браузер уходит на `http://keycloak:8080`, поэтому один раз добавьте `127.0.0.1 keycloak` в `/etc/hosts`
+- **Метрики**: VictoriaMetrics, pgSCV и pgbouncer для Health Score по метрикам
+- **Поиск по логам**: VictoriaLogs и Fluent Bit, планы `auto_explain` для Log insights
+- **MCP-сервер** на `http://localhost:8765`, токен `demo-api-token-for-testing` (роль viewer)
+
+### MCP в демо
+
+Claude Code:
+
+```bash
+claude mcp add --transport http dasha-demo http://localhost:8765
+# полная лаба:
+claude mcp add --transport http dasha-demo http://localhost:8765 \
+  --header "Authorization: Bearer demo-api-token-for-testing"
+```
+
+Другие клиенты — см. [MCP-коннектор](mcp.md).
 
 ## Структура проекта
 
