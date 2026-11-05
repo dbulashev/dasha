@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.10.3
 
 ### Features
 - **Activity & Waits** (PostgreSQL 14+): live chart of active sessions by wait class from `pg_stat_activity` samples, the top statements, sessions, databases, users, applications and events with filters, links to the query report and the lock tree.
