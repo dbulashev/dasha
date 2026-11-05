@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-viper/mapstructure/v2"
 
+	"github.com/dbulashev/dasha/internal/activity"
 	"github.com/dbulashev/dasha/internal/indexadvisor"
 	"github.com/dbulashev/dasha/internal/logs/stream"
 	"github.com/dbulashev/dasha/internal/metrics"
@@ -773,6 +774,8 @@ type Config struct {
 	// IndexAdvisor tunes the index candidate report: how much of the
 	// pg_stat_statements top is analyzed and what a candidate may look like.
 	IndexAdvisor indexadvisor.Config `mapstructure:"index_advisor"`
+
+	Activity activity.Config `mapstructure:"activity"`
 }
 
 // PoolConfig tunes a pgx connection pool. Zero MaxConns/MaxConnIdleTime fall back

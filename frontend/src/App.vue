@@ -11,6 +11,7 @@ import { useI18n } from 'vue-i18n'
 import { AuthInfoMode } from '@/api/models'
 import { errorKey, type GlobalError } from './composables/useViewError'
 import { IO_MIN_VERSION_NUM } from '@/components/io/types'
+import { ACTIVITY_MIN_VERSION_NUM } from '@/components/activity/classes'
 
 const { t } = useI18n()
 const themeStore = useThemeStore()
@@ -84,6 +85,7 @@ const mainLink = computed(() => withQuery("main"));
 const healthScoreLink = computed(() => withQuery("health-score"));
 const connectionsLink = computed(() => withQuery("connections"));
 const queriesLink = computed(() => withQuery("queries"));
+const activityLink = computed(() => withQuery("activity"));
 const queryStatsLink = computed(() => withQuery("query-stats"));
 const queryReportLink = computed(() => withQuery("query-report"));
 const queryCompareLink = computed(() => withQuery("query-compare"));
@@ -141,6 +143,12 @@ const isReplica = computed(() =>
   instanceInfoStore.isReplica(currentCluster.value, currentHost.value),
 )
 
+const activityVisible = computed(
+  () =>
+    (instanceInfoStore.known(currentCluster.value, currentHost.value)?.VersionNum ?? 0) >=
+    ACTIVITY_MIN_VERSION_NUM,
+)
+
 // On a host without pg_stat_io the I/O page has no subject: no menu item at all.
 const ioVisible = computed(
   () =>
@@ -181,6 +189,11 @@ const drawer = ref(true)
 const tablesGroupOpen = computed(() => {
   const path = route.path
   return path.includes('/tables') || path.includes('/table-describe')
+})
+
+const queriesGroupOpen = computed(() => {
+  const path = route.path
+  return path.startsWith('/queries') || path.startsWith('/activity')
 })
 
 const indexesGroupOpen = computed(() => {
@@ -253,7 +266,13 @@ watch(() => route.path, () => {
           <v-list-item :title="t('Home')"  prepend-icon="mdi-sigma" link :to="mainLink"></v-list-item>
           <v-list-item :title="t('healthScore.page.menuItem')" prepend-icon="mdi-heart-pulse" link :to="healthScoreLink"></v-list-item>
           <v-list-item :title="t('Connections')" prepend-icon="mdi-connection" link :to="connectionsLink"></v-list-item>
-          <v-list-item :title="t('Active Queries')" prepend-icon="mdi-database-clock-outline" link :to="queriesLink"></v-list-item>
+          <v-list-group value="queries" :model-value="queriesGroupOpen">
+            <template #activator="{ props }">
+              <v-list-item v-bind="props" :title="t('Active Queries')" prepend-icon="mdi-database-clock-outline"></v-list-item>
+            </template>
+            <v-list-item :title="t('activity.menuCurrent')" link :to="queriesLink"></v-list-item>
+            <v-list-item v-if="activityVisible" :title="t('activity.menu')" link :to="activityLink"></v-list-item>
+          </v-list-group>
           <v-list-item :title="t('Query Stats')" prepend-icon="mdi-chart-bar" link :to="queryStatsLink"></v-list-item>
           <v-list-item :title="t('Query Report')" prepend-icon="mdi-file-chart-outline" link :to="queryReportLink"></v-list-item>
           <v-list-item v-if="snapshotsStatusStore.available" :title="t('Query Compare')" prepend-icon="mdi-compare" link :to="queryCompareLink"></v-list-item>

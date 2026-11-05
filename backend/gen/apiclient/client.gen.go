@@ -23,6 +23,30 @@ const (
 	BearerAuthScopes = "BearerAuth.Scopes"
 )
 
+// Defines values for ActivityClass.
+const (
+	ActivityClassActivity     ActivityClass = "Activity"
+	ActivityClassBufferPin    ActivityClass = "BufferPin"
+	ActivityClassCPU          ActivityClass = "CPU"
+	ActivityClassClient       ActivityClass = "Client"
+	ActivityClassClientIdleTx ActivityClass = "ClientIdleTx"
+	ActivityClassExtension    ActivityClass = "Extension"
+	ActivityClassIO           ActivityClass = "IO"
+	ActivityClassIPC          ActivityClass = "IPC"
+	ActivityClassLWLock       ActivityClass = "LWLock"
+	ActivityClassLock         ActivityClass = "Lock"
+	ActivityClassOther        ActivityClass = "Other"
+	ActivityClassTimeout      ActivityClass = "Timeout"
+)
+
+// Defines values for ActivityQueryKeyKind.
+const (
+	ActivityQueryKeyKindFingerprint ActivityQueryKeyKind = "fingerprint"
+	ActivityQueryKeyKindNone        ActivityQueryKeyKind = "none"
+	ActivityQueryKeyKindQueryId     ActivityQueryKeyKind = "query_id"
+	ActivityQueryKeyKindText        ActivityQueryKeyKind = "text"
+)
+
 // Defines values for AdminPersonalAccessTokenRole.
 const (
 	AdminPersonalAccessTokenRoleAdmin  AdminPersonalAccessTokenRole = "admin"
@@ -69,9 +93,9 @@ const (
 
 // Defines values for HealthScoreFleetItemSource.
 const (
-	HealthScoreFleetItemSourceMetrics  HealthScoreFleetItemSource = "metrics"
-	HealthScoreFleetItemSourceNone     HealthScoreFleetItemSource = "none"
-	HealthScoreFleetItemSourceSnapshot HealthScoreFleetItemSource = "snapshot"
+	Metrics  HealthScoreFleetItemSource = "metrics"
+	None     HealthScoreFleetItemSource = "none"
+	Snapshot HealthScoreFleetItemSource = "snapshot"
 )
 
 // Defines values for HealthScoreRecommendationSeverity.
@@ -411,10 +435,142 @@ const (
 
 // Defines values for GetSchemaLintParamsLevel.
 const (
-	Error   GetSchemaLintParamsLevel = "error"
-	Notice  GetSchemaLintParamsLevel = "notice"
-	Warning GetSchemaLintParamsLevel = "warning"
+	GetSchemaLintParamsLevelError   GetSchemaLintParamsLevel = "error"
+	GetSchemaLintParamsLevelNotice  GetSchemaLintParamsLevel = "notice"
+	GetSchemaLintParamsLevelWarning GetSchemaLintParamsLevel = "warning"
 )
+
+// ActivityClass What the session is doing. ClientIdleTx is a session idle inside an open transaction; CPU is an active session with no wait event. The order of the values is the stacking order of the chart, bottom first.
+type ActivityClass string
+
+// ActivityClassShare defines model for ActivityClassShare.
+type ActivityClassShare struct {
+	Aas float64 `json:"aas"`
+
+	// Class What the session is doing. ClientIdleTx is a session idle inside an open transaction; CPU is an active session with no wait event. The order of the values is the stacking order of the chart, bottom first.
+	Class    ActivityClass `json:"class"`
+	SharePct float64       `json:"share_pct"`
+}
+
+// ActivityEventShare defines model for ActivityEventShare.
+type ActivityEventShare struct {
+	Aas float64 `json:"aas"`
+
+	// Class What the session is doing. ClientIdleTx is a session idle inside an open transaction; CPU is an active session with no wait event. The order of the values is the stacking order of the chart, bottom first.
+	Class    ActivityClass `json:"class"`
+	SharePct float64       `json:"share_pct"`
+
+	// WaitEvent Empty for CPU.
+	WaitEvent string `json:"wait_event"`
+}
+
+// ActivityProfile defines model for ActivityProfile.
+type ActivityProfile struct {
+	Aas           float64         `json:"aas"`
+	ByApplication []ActivityShare `json:"by_application"`
+
+	// ByBackendType Split by pg_stat_activity.backend_type; background processes appear only with include_background.
+	ByBackendType    []ActivityShare      `json:"by_backend_type"`
+	ByClass          []ActivityClassShare `json:"by_class"`
+	ByDatabase       []ActivityShare      `json:"by_database"`
+	ByUser           []ActivityShare      `json:"by_user"`
+	CanReadAllStats  bool                 `json:"can_read_all_stats"`
+	FailedSamples    int                  `json:"failed_samples"`
+	From             time.Time            `json:"from"`
+	QueryIdAvailable bool                 `json:"query_id_available"`
+
+	// Samples Successful samples, the denominator of every aas.
+	Samples   int                  `json:"samples"`
+	To        time.Time            `json:"to"`
+	TopEvents []ActivityEventShare `json:"top_events"`
+
+	// TopQueries Client sessions only; background processes run no statement of their own.
+	TopQueries []ActivityQueryShare `json:"top_queries"`
+
+	// TruncatedSamples Samples cut at activity.max_sessions; their counts are a lower bound.
+	TruncatedSamples int `json:"truncated_samples"`
+}
+
+// ActivityQueryKeyKind How query_key was built: query_id is exact, fingerprint is the normalized parse tree, text is a hash of the leading text with literals masked, none means no text was visible.
+type ActivityQueryKeyKind string
+
+// ActivityQueryShare defines model for ActivityQueryShare.
+type ActivityQueryShare struct {
+	Aas float64 `json:"aas"`
+
+	// ByClass Share of the statement's own sessions per class, in percent.
+	ByClass      map[string]float64 `json:"by_class"`
+	DistinctPids int                `json:"distinct_pids"`
+
+	// QueryId query_id as string to preserve int64 precision in JavaScript; "0" when not computed.
+	QueryId  string `json:"query_id"`
+	QueryKey string `json:"query_key"`
+
+	// QueryKeyKind How query_key was built: query_id is exact, fingerprint is the normalized parse tree, text is a hash of the leading text with literals masked, none means no text was visible.
+	QueryKeyKind ActivityQueryKeyKind `json:"query_key_kind"`
+	SharePct     float64              `json:"share_pct"`
+
+	// Text Sanitized text of one of the sessions, as the client sent it: for a multi-statement string it is the whole string, while query_id belongs to the one statement that was running.
+	Text *string `json:"text,omitempty"`
+}
+
+// ActivitySample defines model for ActivitySample.
+type ActivitySample struct {
+	// CanReadAllStats False when the monitoring role lacks pg_read_all_stats and sees only its own sessions.
+	CanReadAllStats bool `json:"can_read_all_stats"`
+
+	// QueryIdAvailable compute_query_id makes the server compute query_id by itself.
+	QueryIdAvailable bool `json:"query_id_available"`
+
+	// SampledAt Server time of the sample; pass it back as text_since.
+	SampledAt time.Time         `json:"sampled_at"`
+	Sessions  []ActivitySession `json:"sessions"`
+
+	// Truncated The host had more sessions than activity.max_sessions; only the first ones are listed.
+	Truncated bool `json:"truncated"`
+}
+
+// ActivitySession defines model for ActivitySession.
+type ActivitySession struct {
+	Application string `json:"application"`
+	BackendType string `json:"backend_type"`
+
+	// Class What the session is doing. ClientIdleTx is a session idle inside an open transaction; CPU is an active session with no wait event. The order of the values is the stacking order of the chart, bottom first.
+	Class      ActivityClass `json:"class"`
+	ClientAddr string        `json:"client_addr"`
+	Database   string        `json:"database"`
+
+	// HoldsXmin The session holds back the xmin horizon.
+	HoldsXmin bool  `json:"holds_xmin"`
+	Pid       int32 `json:"pid"`
+
+	// QueryId query_id as string to preserve int64 precision in JavaScript; "0" when not computed.
+	QueryId string `json:"query_id"`
+
+	// QueryKey Groups sessions running the same statement; empty when the text is not visible.
+	QueryKey string `json:"query_key"`
+
+	// QueryKeyKind How query_key was built: query_id is exact, fingerprint is the normalized parse tree, text is a hash of the leading text with literals masked, none means no text was visible.
+	QueryKeyKind ActivityQueryKeyKind `json:"query_key_kind"`
+	QueryStart   *time.Time           `json:"query_start"`
+	State        string               `json:"state"`
+
+	// Text Sanitized statement text, up to 2000 characters. Absent when the query started at or before text_since.
+	Text      *string    `json:"text,omitempty"`
+	User      string     `json:"user"`
+	WaitEvent string     `json:"wait_event"`
+	XactStart *time.Time `json:"xact_start"`
+}
+
+// ActivityShare defines model for ActivityShare.
+type ActivityShare struct {
+	// Aas Average active sessions over the successful samples, rounded to 2 decimals.
+	Aas float64 `json:"aas"`
+
+	// SharePct Percent of all counted sessions, rounded to 1 decimal.
+	SharePct float64 `json:"share_pct"`
+	Value    string  `json:"value"`
+}
 
 // ActivitySpikeTrigger defines model for ActivitySpikeTrigger.
 type ActivitySpikeTrigger struct {
@@ -476,6 +632,8 @@ type AdminUserRole string
 
 // AuthInfo defines model for AuthInfo.
 type AuthInfo struct {
+	// ActivityWindowMinutes How many minutes of activity samples the page keeps (activity.window_minutes).
+	ActivityWindowMinutes *int         `json:"activity_window_minutes,omitempty"`
 	EnableQueryStatsReset *bool        `json:"enable_query_stats_reset,omitempty"`
 	Mode                  AuthInfoMode `json:"mode"`
 	OidcLoginUrl          *string      `json:"oidc_login_url,omitempty"`
@@ -2991,6 +3149,36 @@ type ObjectLocked = ErrorMessage
 // QueryTimeout defines model for QueryTimeout.
 type QueryTimeout = ErrorMessage
 
+// GetActivityProfileParams defines parameters for GetActivityProfile.
+type GetActivityProfileParams struct {
+	ClusterName     ClusterName `form:"cluster_name" json:"cluster_name"`
+	Instance        Instance    `form:"instance" json:"instance"`
+	DurationSeconds *int        `form:"duration_seconds,omitempty" json:"duration_seconds,omitempty"`
+	PeriodSeconds   *int        `form:"period_seconds,omitempty" json:"period_seconds,omitempty"`
+
+	// Database Count only the sessions of this database.
+	Database *string `form:"database,omitempty" json:"database,omitempty"`
+
+	// Class Count only the sessions of this class.
+	Class             *ActivityClass `form:"class,omitempty" json:"class,omitempty"`
+	IncludeBackground *bool          `form:"include_background,omitempty" json:"include_background,omitempty"`
+
+	// Top Length of every list except by_class.
+	Top *int `form:"top,omitempty" json:"top,omitempty"`
+}
+
+// GetActivitySampleParams defines parameters for GetActivitySample.
+type GetActivitySampleParams struct {
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance    `form:"instance" json:"instance"`
+
+	// IncludeBackground Count background processes (autovacuum, walsender, checkpointer, ...) that are not idle.
+	IncludeBackground *bool `form:"include_background,omitempty" json:"include_background,omitempty"`
+
+	// TextSince sampled_at of the last sample the client received. A session that ran the same statement in that sample (same pid, query_start and query_key) comes without text: the client already has it. When the server no longer remembers that sample, every text is sent. Omit after a gap to receive every text.
+	TextSince *time.Time `form:"text_since,omitempty" json:"text_since,omitempty"`
+}
+
 // ListAllPersonalTokensParams defines parameters for ListAllPersonalTokens.
 type ListAllPersonalTokensParams struct {
 	// IncludeRevoked Include revoked tokens in the listing. They are kept as an audit trail and can never authenticate again.
@@ -4062,6 +4250,12 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
+	// GetActivityProfile request
+	GetActivityProfile(ctx context.Context, params *GetActivityProfileParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetActivitySample request
+	GetActivitySample(ctx context.Context, params *GetActivitySampleParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListAllPersonalTokens request
 	ListAllPersonalTokens(ctx context.Context, params *ListAllPersonalTokensParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -4432,6 +4626,30 @@ type ClientInterface interface {
 
 	// GetTablesTopKBySize request
 	GetTablesTopKBySize(ctx context.Context, params *GetTablesTopKBySizeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+func (c *Client) GetActivityProfile(ctx context.Context, params *GetActivityProfileParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetActivityProfileRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetActivitySample(ctx context.Context, params *GetActivitySampleParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetActivitySampleRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
 }
 
 func (c *Client) ListAllPersonalTokens(ctx context.Context, params *ListAllPersonalTokensParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -5932,6 +6150,248 @@ func (c *Client) GetTablesTopKBySize(ctx context.Context, params *GetTablesTopKB
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+// NewGetActivityProfileRequest generates requests for GetActivityProfile
+func NewGetActivityProfileRequest(server string, params *GetActivityProfileParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/activity/profile")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, params.ClusterName); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "instance", runtime.ParamLocationQuery, params.Instance); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.DurationSeconds != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "duration_seconds", runtime.ParamLocationQuery, *params.DurationSeconds); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.PeriodSeconds != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "period_seconds", runtime.ParamLocationQuery, *params.PeriodSeconds); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Database != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "database", runtime.ParamLocationQuery, *params.Database); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Class != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "class", runtime.ParamLocationQuery, *params.Class); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.IncludeBackground != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "include_background", runtime.ParamLocationQuery, *params.IncludeBackground); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Top != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "top", runtime.ParamLocationQuery, *params.Top); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetActivitySampleRequest generates requests for GetActivitySample
+func NewGetActivitySampleRequest(server string, params *GetActivitySampleParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/activity/sample")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, params.ClusterName); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "instance", runtime.ParamLocationQuery, params.Instance); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.IncludeBackground != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "include_background", runtime.ParamLocationQuery, *params.IncludeBackground); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.TextSince != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "text_since", runtime.ParamLocationQuery, *params.TextSince); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
 }
 
 // NewListAllPersonalTokensRequest generates requests for ListAllPersonalTokens
@@ -15330,6 +15790,12 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
+	// GetActivityProfileWithResponse request
+	GetActivityProfileWithResponse(ctx context.Context, params *GetActivityProfileParams, reqEditors ...RequestEditorFn) (*GetActivityProfileResponse, error)
+
+	// GetActivitySampleWithResponse request
+	GetActivitySampleWithResponse(ctx context.Context, params *GetActivitySampleParams, reqEditors ...RequestEditorFn) (*GetActivitySampleResponse, error)
+
 	// ListAllPersonalTokensWithResponse request
 	ListAllPersonalTokensWithResponse(ctx context.Context, params *ListAllPersonalTokensParams, reqEditors ...RequestEditorFn) (*ListAllPersonalTokensResponse, error)
 
@@ -15700,6 +16166,53 @@ type ClientWithResponsesInterface interface {
 
 	// GetTablesTopKBySizeWithResponse request
 	GetTablesTopKBySizeWithResponse(ctx context.Context, params *GetTablesTopKBySizeParams, reqEditors ...RequestEditorFn) (*GetTablesTopKBySizeResponse, error)
+}
+
+type GetActivityProfileResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ActivityProfile
+	JSON400      *ErrorMessage
+	JSON504      *QueryTimeout
+}
+
+// Status returns HTTPResponse.Status
+func (r GetActivityProfileResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetActivityProfileResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetActivitySampleResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ActivitySample
+	JSON504      *QueryTimeout
+}
+
+// Status returns HTTPResponse.Status
+func (r GetActivitySampleResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetActivitySampleResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
 }
 
 type ListAllPersonalTokensResponse struct {
@@ -18377,6 +18890,24 @@ func (r GetTablesTopKBySizeResponse) StatusCode() int {
 	return 0
 }
 
+// GetActivityProfileWithResponse request returning *GetActivityProfileResponse
+func (c *ClientWithResponses) GetActivityProfileWithResponse(ctx context.Context, params *GetActivityProfileParams, reqEditors ...RequestEditorFn) (*GetActivityProfileResponse, error) {
+	rsp, err := c.GetActivityProfile(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetActivityProfileResponse(rsp)
+}
+
+// GetActivitySampleWithResponse request returning *GetActivitySampleResponse
+func (c *ClientWithResponses) GetActivitySampleWithResponse(ctx context.Context, params *GetActivitySampleParams, reqEditors ...RequestEditorFn) (*GetActivitySampleResponse, error) {
+	rsp, err := c.GetActivitySample(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetActivitySampleResponse(rsp)
+}
+
 // ListAllPersonalTokensWithResponse request returning *ListAllPersonalTokensResponse
 func (c *ClientWithResponses) ListAllPersonalTokensWithResponse(ctx context.Context, params *ListAllPersonalTokensParams, reqEditors ...RequestEditorFn) (*ListAllPersonalTokensResponse, error) {
 	rsp, err := c.ListAllPersonalTokens(ctx, params, reqEditors...)
@@ -19496,6 +20027,79 @@ func (c *ClientWithResponses) GetTablesTopKBySizeWithResponse(ctx context.Contex
 		return nil, err
 	}
 	return ParseGetTablesTopKBySizeResponse(rsp)
+}
+
+// ParseGetActivityProfileResponse parses an HTTP response from a GetActivityProfileWithResponse call
+func ParseGetActivityProfileResponse(rsp *http.Response) (*GetActivityProfileResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetActivityProfileResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ActivityProfile
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorMessage
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
+		var dest QueryTimeout
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON504 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetActivitySampleResponse parses an HTTP response from a GetActivitySampleWithResponse call
+func ParseGetActivitySampleResponse(rsp *http.Response) (*GetActivitySampleResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetActivitySampleResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ActivitySample
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
+		var dest QueryTimeout
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON504 = &dest
+
+	}
+
+	return response, nil
 }
 
 // ParseListAllPersonalTokensResponse parses an HTTP response from a ListAllPersonalTokensWithResponse call

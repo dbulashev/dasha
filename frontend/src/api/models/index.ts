@@ -5,6 +5,16 @@
  * OpenAPI spec version: 1.0.0
  */
 
+export * from './activityClass';
+export * from './activityClassShare';
+export * from './activityEventShare';
+export * from './activityProfile';
+export * from './activityQueryKeyKind';
+export * from './activityQueryShare';
+export * from './activityQueryShareByClass';
+export * from './activitySample';
+export * from './activitySession';
+export * from './activityShare';
 export * from './activitySpikeTrigger';
 export * from './adminPersonalAccessToken';
 export * from './adminPersonalAccessTokenRole';
@@ -41,6 +51,8 @@ export * from './errorMessage';
 export * from './fksPossibleNulls';
 export * from './fksPossibleSimilar';
 export * from './fkTypeMismatch';
+export * from './getActivityProfileParams';
+export * from './getActivitySampleParams';
 export * from './getAutosnapshotTriggerEventsParams';
 export * from './getAutovacuumSettingsParams';
 export * from './getCommonSummaryParams';

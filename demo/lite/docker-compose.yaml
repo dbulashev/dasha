@@ -23,6 +23,8 @@ services:
       - -c
       - pg_stat_statements.track=all
       - -c
+      - compute_query_id=on
+      - -c
       - wal_level=logical
       - -c
       - max_wal_senders=6

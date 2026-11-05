@@ -919,6 +919,37 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a ioTrendArgs) (*mcp.CallToolResult, any, error) {
 		return jsonResult(ctx)(ioTrend(ctx, c, a))
 	})
+
+	addTool(s, &mcp.Tool{
+		Name: "sample_activity",
+		Description: "Sample pg_stat_activity of one host live for duration_seconds (default 15, max 60) and " +
+			"answer with the load profile of that window: aas (average active sessions), its split by_class " +
+			"(CPU, IO, Lock, LWLock, IPC, Client, ClientIdleTx = idle inside an open transaction, ...), " +
+			"top_events, top_queries, and the split by database, user, application and backend_type. " +
+			"Call it when the question is about load right now: the host is slow, active sessions are " +
+			"climbing, a complaint " +
+			"names the present moment. It sees only the window it samples — no history; for the past use " +
+			"top_queries and io_summary. The call blocks for the whole window, so ask for a short one first. " +
+			"aas is a session count averaged over samples, not CPU utilisation; compare it with the core " +
+			"count before calling the host overloaded. by_class of a query is the share of its own sessions. " +
+			"Where to go next: a top query with query_key_kind=query_id goes to query_report with that " +
+			"queryid; fingerprint and text keys group sessions that had no query_id: with " +
+			"query_id_available=false compute_query_id is off, otherwise the statement was not parsed yet " +
+			"(it waits for a table lock) and the key needs no fix; a large Lock share goes to " +
+			"blocked_queries; a large IO share goes to io_summary; a large ClientIdleTx share means the " +
+			"application holds transactions open. " +
+			"can_read_all_stats=false means the role sees only its own sessions and every number is a lower " +
+			"bound; truncated_samples > 0 means samples were cut at activity.max_sessions; failed_samples " +
+			"counts samples that timed out and are left out of every average. Texts are cut to 300 bytes " +
+			"(texts_truncated). A text is the whole string the client sent: for a multi-statement string " +
+			"query_id names only the statement that was running, so do not blame the other statements. " +
+			"A large Timeout share with wait_event PgSleep is sessions sleeping on purpose, not a resource " +
+			"shortage. Background processes are left out unless include_background is set; they show up " +
+			"in by_backend_type and never in top_queries. " +
+			"Requires PostgreSQL 14 or newer.",
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, a sampleActivityArgs) (*mcp.CallToolResult, any, error) {
+		return jsonResult(ctx)(sampleActivity(ctx, c, a))
+	})
 }
 
 // closedWorld marks the tools as not interacting with an open world of external

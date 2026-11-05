@@ -3,6 +3,7 @@ package http
 import (
 	"go.uber.org/zap"
 
+	"github.com/dbulashev/dasha/internal/activity"
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/healthscore"
 	"github.com/dbulashev/dasha/internal/logs"
@@ -13,13 +14,14 @@ import (
 
 // Handlers holds the HTTP handler dependencies used by the server.
 type Handlers struct {
-	cfg     *config.Config
-	repo    repository.Repository
-	storage *storage.Storage
-	metrics *metrics.Service
-	logs    logs.Service
-	scorer  *healthscore.Scorer
-	fleet   *healthscore.Fleet
+	cfg      *config.Config
+	repo     repository.Repository
+	storage  *storage.Storage
+	metrics  *metrics.Service
+	logs     logs.Service
+	scorer   *healthscore.Scorer
+	fleet    *healthscore.Fleet
+	activity *activity.Sampler
 }
 
 // NewDashaHandlers constructs a new Handlers instance from its dependencies.
@@ -30,8 +32,9 @@ func NewDashaHandlers(
 
 	return &Handlers{
 		cfg: cfg, repo: repo, storage: st, metrics: ms, logs: logsSvc,
-		scorer: scorer,
-		fleet:  healthscore.NewFleet(cfg, scorer, ms, repo, logger),
+		scorer:   scorer,
+		fleet:    healthscore.NewFleet(cfg, scorer, ms, repo, logger),
+		activity: activity.NewSampler(repo, cfg.Activity),
 	}
 }
 

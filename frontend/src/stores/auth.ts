@@ -50,6 +50,7 @@ export const useAuthStore = defineStore('auth', () => {
   const enableQueryStatsReset = ref(false)
   const patEnabled = ref(false)
   const patMinRole = ref('admin')
+  const activityWindowMinutes = ref(60)
   let redirecting = false
 
   const isAuthenticated = computed(() => mode.value === AuthInfoMode.none || user.value !== null)
@@ -96,6 +97,7 @@ export const useAuthStore = defineStore('auth', () => {
       enableQueryStatsReset.value = res.data.enable_query_stats_reset ?? false
       patEnabled.value = res.data.pat_enabled ?? false
       patMinRole.value = res.data.pat_min_role ?? 'admin'
+      activityWindowMinutes.value = res.data.activity_window_minutes ?? 60
     } catch {
       mode.value = AuthInfoMode.none
     }
@@ -169,5 +171,5 @@ export const useAuthStore = defineStore('auth', () => {
     window.location.href = '/'
   }
 
-  return { mode, oidcLoginUrl, user, initialized, isAuthenticated, requiresLogin, isAdmin, enableQueryStatsReset, patEnabled, patMinRole, canManageTokens, canAdminTokens, init, doLoginRedirect, handleUnauthorized, consumeReturnUrl, logout }
+  return { mode, oidcLoginUrl, user, initialized, isAuthenticated, requiresLogin, isAdmin, enableQueryStatsReset, patEnabled, patMinRole, activityWindowMinutes, canManageTokens, canAdminTokens, init, doLoginRedirect, handleUnauthorized, consumeReturnUrl, logout }
 })

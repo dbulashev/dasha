@@ -36,6 +36,11 @@ const router = createRouter({
       component: () => import('../views/QueriesView.vue'),
     },
     {
+      path: '/activity/:clustername?',
+      name: 'activity',
+      component: () => import('../views/ActivityView.vue'),
+    },
+    {
       path: '/query-stats/:clustername?',
       name: 'query-stats',
       component: () => import('../views/QueryStatsView.vue'),

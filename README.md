@@ -41,6 +41,7 @@ PostgreSQL 14–18 and Postgres Pro (`pgpro_stats` is picked up automatically).
 [Foreign Key Analysis](doc/en/features.md#foreign-key-analysis) ·
 [Maintenance & Vacuum](doc/en/features.md#maintenance--vacuum) ·
 [Connections & Locks](doc/en/features.md#connections--locks) ·
+[Activity & Waits](doc/en/features.md#activity--waits-postgresql-14) ·
 [I/O](doc/en/features.md#io-pg_stat_io-postgresql-16) ·
 [Progress Tracking](doc/en/features.md#progress-tracking) ·
 [Settings Analysis](doc/en/features.md#settings-analysis) ·

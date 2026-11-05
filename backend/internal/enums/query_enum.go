@@ -11,6 +11,10 @@ import (
 )
 
 const (
+	// QueryActivityAccess is a Query of type activity/access.
+	QueryActivityAccess Query = "activity/access"
+	// QueryActivitySample is a Query of type activity/sample.
+	QueryActivitySample Query = "activity/sample"
 	// QueryCommonDatabaseUsers is a Query of type common/database_users.
 	QueryCommonDatabaseUsers Query = "common/database_users"
 	// QueryCommonHealthScore is a Query of type common/health_score.
@@ -228,6 +232,8 @@ const (
 var ErrInvalidQuery = fmt.Errorf("not a valid Query, try [%s]", strings.Join(_QueryNames, ", "))
 
 var _QueryNames = []string{
+	string(QueryActivityAccess),
+	string(QueryActivitySample),
 	string(QueryCommonDatabaseUsers),
 	string(QueryCommonHealthScore),
 	string(QueryCommonHealthScoreColdTables),
@@ -346,6 +352,8 @@ func QueryNames() []string {
 // QueryValues returns a list of the values for Query
 func QueryValues() []Query {
 	return []Query{
+		QueryActivityAccess,
+		QueryActivitySample,
 		QueryCommonDatabaseUsers,
 		QueryCommonHealthScore,
 		QueryCommonHealthScoreColdTables,
@@ -468,6 +476,8 @@ func (x Query) IsValid() bool {
 }
 
 var _QueryValue = map[string]Query{
+	"activity/access":                               QueryActivityAccess,
+	"activity/sample":                               QueryActivitySample,
 	"common/database_users":                         QueryCommonDatabaseUsers,
 	"common/health_score":                           QueryCommonHealthScore,
 	"common/health_score_cold_tables":               QueryCommonHealthScoreColdTables,

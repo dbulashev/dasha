@@ -6,10 +6,27 @@ import type { WaitEvent } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useApiLoader } from '@/composables/useApiLoader'
 import { useViewError } from '@/composables/useViewError'
+import { ACTIVITY_MIN_VERSION_NUM, classColor, waitTypeClass } from '@/components/activity/classes'
+import { useThemeStore } from '@/stores/theme'
+import { useInstanceInfoStore } from '@/stores/instanceInfo'
 
 const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
 const { onError } = useViewError()
+const themeStore = useThemeStore()
+const instanceInfoStore = useInstanceInfoStore()
+
+const activityAvailable = computed(
+  () =>
+    (instanceInfoStore.known(clusterName.value ?? '', hostName.value ?? '')?.VersionNum ?? 0) >=
+    ACTIVITY_MIN_VERSION_NUM,
+)
+
+const activityLink = computed(() => ({
+  name: 'activity',
+  params: { clustername: clusterName.value ?? '' },
+  query: { host: hostName.value ?? '' },
+}))
 
 const headers = computed(() => [
   { title: t('header.waitEventType'), key: 'WaitEventType' },
@@ -34,11 +51,7 @@ const totalWaiting = computed(() =>
 )
 
 function eventTypeColor(type: string): string {
-  if (type === 'Lock') return 'error'
-  if (type === 'LWLock') return 'warning'
-  if (type === 'IO') return 'info'
-  if (type === 'BufferPin') return 'warning'
-  return 'default'
+  return classColor(waitTypeClass(type), themeStore.currentTheme() === 'dark')
 }
 </script>
 
@@ -46,7 +59,16 @@ function eventTypeColor(type: string): string {
   <v-card class="h-100">
     <v-card-title class="d-flex align-center ga-2">
       <v-icon start icon="mdi-timer-sand" />
-      {{ t('home.waitEvents') }}
+      <router-link
+        v-if="activityAvailable"
+        :to="activityLink"
+        class="text-decoration-none text-high-emphasis"
+        :title="t('activity.menu')"
+      >
+        {{ t('home.waitEvents') }}
+        <v-icon size="x-small" icon="mdi-open-in-app" />
+      </router-link>
+      <span v-else>{{ t('home.waitEvents') }}</span>
       <v-chip v-if="!loading && totalWaiting > 0" size="small" variant="tonal" color="warning">
         {{ totalWaiting }}
       </v-chip>

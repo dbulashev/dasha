@@ -123,6 +123,7 @@ func New(
 		)
 	}
 
+	e.Use(extendDeadlines(activityProfilePath, profileWriteTimeout, logger))
 	e.Use(requireHTTPSMW)
 	e.Use(skipPublic(authMW))
 	e.Use(rateLimitMW)
@@ -157,6 +158,29 @@ func mapDatabaseError(err error) *echo.HTTPError {
 		return echo.NewHTTPError(http.StatusGatewayTimeout, msgQueryTimeout).SetInternal(err)
 	default:
 		return nil
+	}
+}
+
+// extendDeadlines lets one long-polling route outlive the server-wide timeouts.
+// The read deadline matters too: when it passes, net/http cancels the request context.
+func extendDeadlines(path string, d time.Duration, logger *zap.Logger) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			if c.Request().URL.Path == path {
+				rc := http.NewResponseController(c.Response())
+				deadline := time.Now().Add(d)
+
+				if err := rc.SetReadDeadline(deadline); err != nil {
+					logger.Warn("cannot extend read deadline", zap.String("path", path), zap.Error(err))
+				}
+
+				if err := rc.SetWriteDeadline(deadline); err != nil {
+					logger.Warn("cannot extend write deadline", zap.String("path", path), zap.Error(err))
+				}
+			}
+
+			return next(c)
+		}
 	}
 }
 

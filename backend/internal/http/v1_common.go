@@ -35,11 +35,13 @@ func (s *Handlers) GetAuthInfo(
 	// lives in CreatePersonalToken, where the identity is guaranteed.
 	patEnabled := s.cfg.Auth.Mode == config.AuthModeOIDC && s.storage.APITokensReady(ctx)
 	patMinRole := serverhttp.AuthInfoPatMinRole(s.cfg.Auth.PATMinRole)
+	activityWindow := s.cfg.Activity.WindowMinutes
 	resp := serverhttp.GetAuthInfo200JSONResponse{
 		Mode:                  mode,
 		EnableQueryStatsReset: &enableReset,
 		PatEnabled:            &patEnabled,
 		PatMinRole:            &patMinRole,
+		ActivityWindowMinutes: &activityWindow,
 	}
 
 	if s.cfg.Auth.Mode == config.AuthModeOIDC {
