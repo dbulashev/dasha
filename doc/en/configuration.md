@@ -574,12 +574,12 @@ activity:
   max_sessions: 2000   # sessions read per sample, 100–20000
 ```
 
-One host's sample is shared by every tab and MCP call: each backend replica reads
+One host's sample is shared by every tab and MCP call: each Dasha instance reads
 `pg_stat_activity` at most once per second. A sample that misses `sample_timeout` is drawn as a
 gap. With more sessions than `max_sessions` the page warns that the numbers are a lower bound.
 
 Statements are grouped by `query_id` when the server computes it: `compute_query_id = on`, or
-`auto` with `pg_stat_statements` in `shared_preload_libraries`. Without it the grouping is
+`auto` with `pg_stat_statements` or `pgpro_stats` in `shared_preload_libraries`. Without it the grouping is
 approximate.
 
 ## Index recommendations (optional)

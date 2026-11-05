@@ -3,7 +3,7 @@
 ## Unreleased
 
 ### Features
-- **Activity & Waits** (PostgreSQL 14+): live chart of active sessions by wait class from `pg_stat_activity` samples, the top statements, sessions, databases, users, applications and events over a selected interval with filters, links to the query report and the lock tree. One host's sample is shared by every viewer; settings live in the `activity` block. The title of the Waits panel on the home page leads to this page.
+- **Activity & Waits** (PostgreSQL 14+): live chart of active sessions by wait class from `pg_stat_activity` samples, the top statements, sessions, databases, users, applications and events with filters, links to the query report and the lock tree.
 - **MCP tool `sample_activity`**: load profile of a host over a 5–60 s window.
 
 ## v1.10.2

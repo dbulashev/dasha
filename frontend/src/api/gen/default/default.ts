@@ -7466,7 +7466,7 @@ export const getGetActivitySampleUrl = (params: GetActivitySampleParams,) => {
 }
 
 /**
- * Every session of pg_stat_activity that is part of the active load, with its class (CPU, a wait event type, or idle in transaction) and a key grouping sessions that run the same statement. Samples are shared: any number of callers polling one host cause at most one read of pg_stat_activity per second per backend replica. Requires PostgreSQL 14.
+ * Every session of pg_stat_activity that is part of the active load, with its class (CPU, a wait event type, or idle in transaction) and a key grouping sessions that run the same statement. Samples are shared: any number of callers polling one host cause at most one read of pg_stat_activity per second per Dasha instance. Requires PostgreSQL 14.
  * @summary One sample of the active sessions of a host
  */
 export const getActivitySample = async (params: GetActivitySampleParams, options?: Parameters<typeof customFetch>[1]): Promise<getActivitySampleResponse> => {

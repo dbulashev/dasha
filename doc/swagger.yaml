@@ -1927,7 +1927,7 @@ paths:
         its class (CPU, a wait event type, or idle in transaction) and a key
         grouping sessions that run the same statement. Samples are shared: any
         number of callers polling one host cause at most one read of
-        pg_stat_activity per second per backend replica. Requires PostgreSQL 14.
+        pg_stat_activity per second per Dasha instance. Requires PostgreSQL 14.
       parameters:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
