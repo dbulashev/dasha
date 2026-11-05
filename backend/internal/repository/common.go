@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 
+	"github.com/dbulashev/dasha/internal/activity"
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/hotobjects"
@@ -125,6 +126,8 @@ type Repository interface {
 	GetMaintenanceAutovacuumSummary(ctx context.Context, clusterName, instanceName, databaseName string) (*dto.MaintenanceAutovacuumSummary, error)
 	GetHotSampleTables(ctx context.Context, clusterName, instanceName, databaseName string, schema, object *string) ([]hotobjects.AnchorRow, *time.Time, bool, error)
 	GetHotSampleIndexes(ctx context.Context, clusterName, instanceName, databaseName string, schema, object *string) ([]hotobjects.AnchorRow, *time.Time, bool, error)
+	GetActivitySample(ctx context.Context, clusterName, instanceName string, maxSessions int) (activity.Sample, error)
+	GetActivityAccess(ctx context.Context, clusterName, instanceName string) (activity.Access, error)
 	// GetIOSample takes no database: pg_stat_io is instance-wide.
 	GetIOSample(ctx context.Context, clusterName, instanceName string) (*statio.Snapshot, error)
 	// GetIndexAdvisorReport takes no instance: pg_stat_statements is per-host and

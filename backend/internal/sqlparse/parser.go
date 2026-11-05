@@ -84,8 +84,9 @@ func ReasonOf(err error) string {
 func reason(code string, err error) error { return &Error{Code: code, err: err} }
 
 type parser struct {
-	cfg   Config
-	cache *lru
+	cfg     Config
+	cache   *lru
+	fpCache *lru
 	// sem bounds how many statements are in the WASM parser at once. The library
 	// keeps an unbounded pool of parser instances and builds a fresh wazero
 	// runtime whenever the pool is empty, so unbounded concurrency would leave
@@ -98,9 +99,10 @@ func New(cfg Config) Parser {
 	cfg = cfg.withDefaults()
 
 	return &parser{
-		cfg:   cfg,
-		cache: newLRU(cfg.CacheSize),
-		sem:   make(chan struct{}, cfg.MaxParallel),
+		cfg:     cfg,
+		cache:   newLRU(cfg.CacheSize),
+		fpCache: newLRU(cfg.CacheSize),
+		sem:     make(chan struct{}, cfg.MaxParallel),
 	}
 }
 
@@ -170,6 +172,18 @@ func (p *parser) precheck(sql string) error {
 // Fingerprint hashes the structure of a statement: two texts differing only in
 // constants, parameter numbering or whitespace share a fingerprint.
 func (p *parser) Fingerprint(sql string) (string, error) {
+	key := sha256.Sum256([]byte(sql))
+	if e, ok := p.fpCache.get(key); ok {
+		return e.st.Fingerprint, e.err
+	}
+
+	fp, err := p.fingerprintUncached(sql)
+	p.fpCache.put(key, Statement{Fingerprint: fp}, err)
+
+	return fp, err
+}
+
+func (p *parser) fingerprintUncached(sql string) (string, error) {
 	if err := p.precheck(sql); err != nil {
 		return "", err
 	}

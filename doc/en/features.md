@@ -47,6 +47,15 @@
 - Wait events grouped by type/event
 - Lock tree visualization
 
+## Activity & Waits (PostgreSQL 14+)
+- Live chart of active sessions by class: CPU, wait event type (`IO`, `Lock`, `LWLock`, …) and "client in transaction"; `pg_stat_activity` sampled every 1–10 s
+- Split by the ten top wait events, drag to select an interval, freeze the chart
+- Top over the selected interval: statements, sessions, databases, users, applications, events, process types; a click on a value adds a filter
+- Statements are grouped by `query_id`, and approximately by parse fingerprint without it; links to the query report and the lock tree
+- Live only: the buffer lives in the browser while the page is open (`activity.window_minutes`); the host sees at most one `pg_stat_activity` read per second per backend replica, whatever the number of viewers
+- MCP tool `sample_activity`: load profile over a 5–60 s window
+- Needs `pg_read_all_stats` (otherwise only the role's own sessions are visible) and `compute_query_id` (`auto` with `pg_stat_statements`, or `on`)
+
 ## I/O (pg_stat_io, PostgreSQL 16+)
 - Server I/O split by backend type, object and context (`normal` / `vacuum` / `bulkread` / `bulkwrite`)
 - History from scheduled snapshots plus a live mode polling every 3–30 s, or one snapshot per click, that needs no snapshot storage

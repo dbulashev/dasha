@@ -31,7 +31,8 @@ CREATE EXTENSION IF NOT EXISTS pg_stat_statements;
 
 `pg_monitor` carries `pg_read_all_stats`. A role without it reads `pg_stat_statements` with neither
 the identifier nor the text of the statements of other users: the query report and the Top 10
-panels then hold the statements of the monitoring role alone, and say so above the tables.
+panels then hold the statements of the monitoring role alone, and say so above the tables. The
+Activity page likewise sees only the role's own sessions.
 
 Beyond `pg_monitor`, the sequence-exhaustion check reads `last_value` and needs
 `GRANT SELECT ON ALL SEQUENCES IN SCHEMA public TO monitoring_user`; the schema-lint page names
@@ -561,6 +562,25 @@ The auto-snapshot daemon empties the snapshots once a day, the first time on sta
 lives a day at most, after which it answers 404 and the client scans again. Without a running
 daemon the tables `log_insights_scans` and `log_insights_groups` are never cleared. Query literals
 are not masked in a stored plan and are readable by any viewer until the cleanup.
+
+## Activity & Waits (optional)
+
+The Activity page works without configuration. The global `activity` block:
+
+```yaml
+activity:
+  window_minutes: 60   # minutes of samples the page keeps in the browser, 5–240
+  sample_timeout: 1s   # limit of one pg_stat_activity read, 200ms–10s
+  max_sessions: 2000   # sessions read per sample, 100–20000
+```
+
+One host's sample is shared by every tab and MCP call: each backend replica reads
+`pg_stat_activity` at most once per second. A sample that misses `sample_timeout` is drawn as a
+gap. With more sessions than `max_sessions` the page warns that the numbers are a lower bound.
+
+Statements are grouped by `query_id` when the server computes it: `compute_query_id = on`, or
+`auto` with `pg_stat_statements` in `shared_preload_libraries`. Without it the grouping is
+approximate.
 
 ## Index recommendations (optional)
 

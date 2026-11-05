@@ -15,4 +15,6 @@ export interface AuthInfo {
   pat_enabled?: boolean;
   /** Minimum role allowed to manage personal access tokens (auth.pat_min_role); the client combines it with the signed-in user's role. */
   pat_min_role?: AuthInfoPatMinRole;
+  /** How many minutes of activity samples the page keeps (activity.window_minutes). */
+  activity_window_minutes?: number;
 }

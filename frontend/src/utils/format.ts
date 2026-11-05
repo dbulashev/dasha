@@ -64,6 +64,12 @@ export function fmtPct(v: number | null | undefined, decimals = 1): string {
   return v.toFixed(decimals) + '%'
 }
 
+// Fixed decimals in the language the user picked: 10,43 in ru and de, 10.43 in en.
+export function fmtDecimal(v: number, decimals: number): string {
+  const locale = useLocaleStore().currentLocale().replace('_', '-')
+  return v.toLocaleString(locale, { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
+}
+
 export function fmtInt(v: number | null | undefined): string {
   if (v == null) return '—'
   return v.toLocaleString()
@@ -269,4 +275,12 @@ export function fmtRowCount(n: number): string {
   if (n >= 1_000_000) return parseFloat((n / 1_000_000).toFixed(1)) + 'M'
   if (n >= 1_000) return parseFloat((n / 1_000).toFixed(1)) + 'K'
   return n.toLocaleString()
+}
+
+/** Axis label with seconds, for charts whose bars are seconds wide. */
+export function fmtClockTime(value: number): string {
+  const d = new Date(value)
+  if (isNaN(d.getTime())) return ''
+  const { locale, options } = dateIntl()
+  return d.toLocaleTimeString(locale, { ...options, hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }

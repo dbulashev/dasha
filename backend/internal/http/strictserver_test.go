@@ -4,11 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/labstack/echo/v4"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func TestMapDatabaseError(t *testing.T) {
@@ -75,4 +81,43 @@ func assertMapped(t *testing.T, got *echo.HTTPError, wantCode int, src error) {
 	if !errors.Is(got, src) {
 		t.Error("original error should stay reachable for the log")
 	}
+}
+
+func TestExtendDeadlines(t *testing.T) {
+	t.Parallel()
+
+	e := echo.New()
+	e.Use(extendDeadlines("/slow", 5*time.Second, zap.NewNop()))
+
+	slow := func(c echo.Context) error {
+		select {
+		case <-time.After(300 * time.Millisecond):
+			return c.String(http.StatusOK, "ok")
+		case <-c.Request().Context().Done():
+			return c.String(http.StatusOK, "cancelled")
+		}
+	}
+	e.GET("/slow", slow)
+	e.GET("/other", slow)
+
+	srv := httptest.NewUnstartedServer(e)
+	srv.Config.ReadTimeout = 100 * time.Millisecond
+	srv.Config.WriteTimeout = 100 * time.Millisecond
+	srv.Start()
+	t.Cleanup(srv.Close)
+
+	resp, err := srv.Client().Get(srv.URL + "/slow")
+	require.NoError(t, err)
+
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	assert.Equal(t, "ok", string(body), "the read deadline must not cancel the request")
+
+	resp, err = srv.Client().Get(srv.URL + "/other")
+	if err == nil {
+		_ = resp.Body.Close()
+	}
+
+	assert.Error(t, err, "other routes keep the server-wide WriteTimeout")
 }

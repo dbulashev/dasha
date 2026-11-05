@@ -27,6 +27,8 @@ import type {
 } from 'vue';
 
 import type {
+  ActivityProfile,
+  ActivitySample,
   AdminPersonalAccessToken,
   AdminUser,
   AuthInfo,
@@ -48,6 +50,8 @@ import type {
   FkTypeMismatch,
   FksPossibleNulls,
   FksPossibleSimilar,
+  GetActivityProfileParams,
+  GetActivitySampleParams,
   GetAutosnapshotTriggerEventsParams,
   GetAutovacuumSettingsParams,
   GetCommonSummaryParams,
@@ -7404,6 +7408,241 @@ export function useGetIOHistory<TData = Awaited<ReturnType<typeof getIOHistory>>
  ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetIOHistoryQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey };
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey;
+
+  return query;
+}
+
+
+
+
+
+
+export type getActivitySampleResponse200 = {
+  data: ActivitySample
+  status: 200
+}
+
+export type getActivitySampleResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getActivitySampleResponse501 = {
+  data: void
+  status: 501
+}
+
+export type getActivitySampleResponse504 = {
+  data: QueryTimeoutResponse
+  status: 504
+}
+
+export type getActivitySampleResponseSuccess = (getActivitySampleResponse200) & {
+  headers: Headers;
+};
+export type getActivitySampleResponseError = (getActivitySampleResponse404 | getActivitySampleResponse501 | getActivitySampleResponse504) & {
+  headers: Headers;
+};
+
+export type getActivitySampleResponse = (getActivitySampleResponseSuccess | getActivitySampleResponseError)
+
+export const getGetActivitySampleUrl = (params: GetActivitySampleParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/activity/sample?${stringifiedParams}` : `/api/activity/sample`
+}
+
+/**
+ * Every session of pg_stat_activity that is part of the active load, with its class (CPU, a wait event type, or idle in transaction) and a key grouping sessions that run the same statement. Samples are shared: any number of callers polling one host cause at most one read of pg_stat_activity per second per backend replica. Requires PostgreSQL 14.
+ * @summary One sample of the active sessions of a host
+ */
+export const getActivitySample = async (params: GetActivitySampleParams, options?: Parameters<typeof customFetch>[1]): Promise<getActivitySampleResponse> => {
+
+  return customFetch<getActivitySampleResponse>(getGetActivitySampleUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetActivitySampleQueryKey = (params?: MaybeRef<GetActivitySampleParams>,) => {
+    return [
+    'api','activity','sample', ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetActivitySampleQueryOptions = <TData = Awaited<ReturnType<typeof getActivitySample>>, TError = NotFoundResponse | void | QueryTimeoutResponse>(params: MaybeRef<GetActivitySampleParams>, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getActivitySample>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  getGetActivitySampleQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getActivitySample>>> = ({ signal }) => getActivitySample(unref(params), { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getActivitySample>>, TError, TData>
+}
+
+export type GetActivitySampleQueryResult = NonNullable<Awaited<ReturnType<typeof getActivitySample>>>
+export type GetActivitySampleQueryError = NotFoundResponse | void | QueryTimeoutResponse
+
+
+/**
+ * @summary One sample of the active sessions of a host
+ */
+
+export function useGetActivitySample<TData = Awaited<ReturnType<typeof getActivitySample>>, TError = NotFoundResponse | void | QueryTimeoutResponse>(
+ params: MaybeRef<GetActivitySampleParams>, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getActivitySample>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetActivitySampleQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey };
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey;
+
+  return query;
+}
+
+
+
+
+
+
+export type getActivityProfileResponse200 = {
+  data: ActivityProfile
+  status: 200
+}
+
+export type getActivityProfileResponse400 = {
+  data: ErrorMessage
+  status: 400
+}
+
+export type getActivityProfileResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getActivityProfileResponse501 = {
+  data: void
+  status: 501
+}
+
+export type getActivityProfileResponse504 = {
+  data: QueryTimeoutResponse
+  status: 504
+}
+
+export type getActivityProfileResponseSuccess = (getActivityProfileResponse200) & {
+  headers: Headers;
+};
+export type getActivityProfileResponseError = (getActivityProfileResponse400 | getActivityProfileResponse404 | getActivityProfileResponse501 | getActivityProfileResponse504) & {
+  headers: Headers;
+};
+
+export type getActivityProfileResponse = (getActivityProfileResponseSuccess | getActivityProfileResponseError)
+
+export const getGetActivityProfileUrl = (params: GetActivityProfileParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/activity/profile?${stringifiedParams}` : `/api/activity/profile`
+}
+
+/**
+ * Samples the host every period_seconds for duration_seconds and answers with the aggregate: average active sessions (AAS), its split by class, the top wait events and statements, and the split by database, user and application. The call blocks for the whole window. Samples are shared with the activity page, so the host sees no extra load. Requires PostgreSQL 14.
+ * @summary Activity profile of a host over a short live window
+ */
+export const getActivityProfile = async (params: GetActivityProfileParams, options?: Parameters<typeof customFetch>[1]): Promise<getActivityProfileResponse> => {
+
+  return customFetch<getActivityProfileResponse>(getGetActivityProfileUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetActivityProfileQueryKey = (params?: MaybeRef<GetActivityProfileParams>,) => {
+    return [
+    'api','activity','profile', ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetActivityProfileQueryOptions = <TData = Awaited<ReturnType<typeof getActivityProfile>>, TError = ErrorMessage | NotFoundResponse | void | QueryTimeoutResponse>(params: MaybeRef<GetActivityProfileParams>, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getActivityProfile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  getGetActivityProfileQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getActivityProfile>>> = ({ signal }) => getActivityProfile(unref(params), { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getActivityProfile>>, TError, TData>
+}
+
+export type GetActivityProfileQueryResult = NonNullable<Awaited<ReturnType<typeof getActivityProfile>>>
+export type GetActivityProfileQueryError = ErrorMessage | NotFoundResponse | void | QueryTimeoutResponse
+
+
+/**
+ * @summary Activity profile of a host over a short live window
+ */
+
+export function useGetActivityProfile<TData = Awaited<ReturnType<typeof getActivityProfile>>, TError = ErrorMessage | NotFoundResponse | void | QueryTimeoutResponse>(
+ params: MaybeRef<GetActivityProfileParams>, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getActivityProfile>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetActivityProfileQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey };
 

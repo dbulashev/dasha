@@ -5,6 +5,8 @@ package enums
 
 // ENUM(
 //
+//	activity/access
+//	activity/sample
 //	common/database_users
 //	common/health_score
 //	common/health_score_cold_tables

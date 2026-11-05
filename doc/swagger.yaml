@@ -1918,6 +1918,121 @@ paths:
         '501':
           description: Snapshot storage not configured
 
+  /api/activity/sample:
+    get:
+      operationId: getActivitySample
+      summary: One sample of the active sessions of a host
+      description: >-
+        Every session of pg_stat_activity that is part of the active load, with
+        its class (CPU, a wait event type, or idle in transaction) and a key
+        grouping sessions that run the same statement. Samples are shared: any
+        number of callers polling one host cause at most one read of
+        pg_stat_activity per second per backend replica. Requires PostgreSQL 14.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - in: query
+          name: include_background
+          schema:
+            type: boolean
+            default: false
+          description: Count background processes (autovacuum, walsender, checkpointer, ...) that are not idle.
+        - in: query
+          name: text_since
+          schema:
+            type: string
+            format: date-time
+          description: >-
+            sampled_at of the last sample the client received. A session that
+            ran the same statement in that sample (same pid, query_start and
+            query_key) comes without text: the client already has it. When the
+            server no longer remembers that sample, every text is sent. Omit
+            after a gap to receive every text.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivitySample'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: The host runs PostgreSQL older than 14 and has no pg_stat_activity.query_id
+        '504':
+          $ref: '#/components/responses/QueryTimeout'
+
+  /api/activity/profile:
+    get:
+      operationId: getActivityProfile
+      summary: Activity profile of a host over a short live window
+      description: >-
+        Samples the host every period_seconds for duration_seconds and answers
+        with the aggregate: average active sessions (AAS), its split by class,
+        the top wait events and statements, and the split by database, user and
+        application. The call blocks for the whole window. Samples are shared
+        with the activity page, so the host sees no extra load. Requires
+        PostgreSQL 14.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - in: query
+          name: duration_seconds
+          schema:
+            type: integer
+            minimum: 5
+            maximum: 60
+            default: 15
+        - in: query
+          name: period_seconds
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10
+            default: 1
+        - in: query
+          name: database
+          schema:
+            type: string
+          description: Count only the sessions of this database.
+        - in: query
+          name: class
+          schema:
+            $ref: '#/components/schemas/ActivityClass'
+          description: Count only the sessions of this class.
+        - in: query
+          name: include_background
+          schema:
+            type: boolean
+            default: false
+        - in: query
+          name: top
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+          description: Length of every list except by_class.
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivityProfile'
+        '400':
+          description: A parameter is out of range
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorMessage'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: The host runs PostgreSQL older than 14 and has no pg_stat_activity.query_id
+        '504':
+          $ref: '#/components/responses/QueryTimeout'
+
   /api/maintenance/autovacuum-summary:
     get:
       operationId: getMaintenanceAutovacuumSummary
@@ -3618,6 +3733,9 @@ components:
           type: string
           enum: [admin, viewer]
           description: Minimum role allowed to manage personal access tokens (auth.pat_min_role); the client combines it with the signed-in user's role.
+        activity_window_minutes:
+          type: integer
+          description: How many minutes of activity samples the page keeps (activity.window_minutes).
     User:
       type: object
       properties:
@@ -6027,6 +6145,243 @@ components:
             format: int64
           description: Counters, plus I/O times in milliseconds when track_io_timing is on. Absent counters are the ones the server reports as NULL.
 
+    ActivityClass:
+      type: string
+      description: >-
+        What the session is doing. ClientIdleTx is a session idle inside an open
+        transaction; CPU is an active session with no wait event. The order of
+        the values is the stacking order of the chart, bottom first.
+      enum: [CPU, IO, Lock, LWLock, BufferPin, IPC, Client, Timeout, ClientIdleTx, Extension, Activity, Other]
+    ActivityQueryKeyKind:
+      type: string
+      enum: [query_id, fingerprint, text, none]
+      description: >-
+        How query_key was built: query_id is exact, fingerprint is the
+        normalized parse tree, text is a hash of the leading text with literals
+        masked, none means no text was visible.
+    ActivityShare:
+      type: object
+      required: [value, aas, share_pct]
+      properties:
+        value:
+          type: string
+        aas:
+          type: number
+          format: double
+          description: Average active sessions over the successful samples, rounded to 2 decimals.
+        share_pct:
+          type: number
+          format: double
+          description: Percent of all counted sessions, rounded to 1 decimal.
+    ActivityClassShare:
+      type: object
+      required: [class, aas, share_pct]
+      properties:
+        class:
+          $ref: '#/components/schemas/ActivityClass'
+        aas:
+          type: number
+          format: double
+        share_pct:
+          type: number
+          format: double
+    ActivityEventShare:
+      type: object
+      required: [class, wait_event, aas, share_pct]
+      properties:
+        class:
+          $ref: '#/components/schemas/ActivityClass'
+        wait_event:
+          type: string
+          description: Empty for CPU.
+        aas:
+          type: number
+          format: double
+        share_pct:
+          type: number
+          format: double
+    ActivityQueryShare:
+      type: object
+      required: [query_key, query_key_kind, query_id, aas, share_pct, by_class, distinct_pids]
+      properties:
+        query_key:
+          type: string
+        query_key_kind:
+          $ref: '#/components/schemas/ActivityQueryKeyKind'
+        query_id:
+          type: string
+          description: query_id as string to preserve int64 precision in JavaScript; "0" when not computed.
+        aas:
+          type: number
+          format: double
+        share_pct:
+          type: number
+          format: double
+        by_class:
+          type: object
+          description: Share of the statement's own sessions per class, in percent.
+          additionalProperties:
+            type: number
+            format: double
+        distinct_pids:
+          type: integer
+        text:
+          type: string
+          description: >-
+            Sanitized text of one of the sessions, as the client sent it: for a
+            multi-statement string it is the whole string, while query_id
+            belongs to the one statement that was running.
+    ActivityProfile:
+      type: object
+      required:
+        - from
+        - to
+        - samples
+        - failed_samples
+        - truncated_samples
+        - can_read_all_stats
+        - query_id_available
+        - aas
+        - by_class
+        - top_events
+        - top_queries
+        - by_database
+        - by_user
+        - by_application
+        - by_backend_type
+      properties:
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        samples:
+          type: integer
+          description: Successful samples, the denominator of every aas.
+        failed_samples:
+          type: integer
+        truncated_samples:
+          type: integer
+          description: Samples cut at activity.max_sessions; their counts are a lower bound.
+        can_read_all_stats:
+          type: boolean
+        query_id_available:
+          type: boolean
+        aas:
+          type: number
+          format: double
+        by_class:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActivityClassShare'
+        top_events:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActivityEventShare'
+        top_queries:
+          type: array
+          description: Client sessions only; background processes run no statement of their own.
+          items:
+            $ref: '#/components/schemas/ActivityQueryShare'
+        by_database:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActivityShare'
+        by_user:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActivityShare'
+        by_application:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActivityShare'
+        by_backend_type:
+          type: array
+          description: Split by pg_stat_activity.backend_type; background processes appear only with include_background.
+          items:
+            $ref: '#/components/schemas/ActivityShare'
+    ActivitySample:
+      type: object
+      required: [sampled_at, truncated, can_read_all_stats, query_id_available, sessions]
+      properties:
+        sampled_at:
+          type: string
+          format: date-time
+          description: Server time of the sample; pass it back as text_since.
+        truncated:
+          type: boolean
+          description: The host had more sessions than activity.max_sessions; only the first ones are listed.
+        can_read_all_stats:
+          type: boolean
+          description: False when the monitoring role lacks pg_read_all_stats and sees only its own sessions.
+        query_id_available:
+          type: boolean
+          description: compute_query_id makes the server compute query_id by itself.
+        sessions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActivitySession'
+    ActivitySession:
+      type: object
+      required:
+        - pid
+        - backend_type
+        - database
+        - user
+        - application
+        - client_addr
+        - state
+        - class
+        - wait_event
+        - query_key
+        - query_key_kind
+        - query_id
+        - query_start
+        - xact_start
+        - holds_xmin
+      properties:
+        pid:
+          type: integer
+          format: int32
+        backend_type:
+          type: string
+        database:
+          type: string
+        user:
+          type: string
+        application:
+          type: string
+        client_addr:
+          type: string
+        state:
+          type: string
+        class:
+          $ref: '#/components/schemas/ActivityClass'
+        wait_event:
+          type: string
+        query_key:
+          type: string
+          description: Groups sessions running the same statement; empty when the text is not visible.
+        query_key_kind:
+          $ref: '#/components/schemas/ActivityQueryKeyKind'
+        query_id:
+          type: string
+          description: query_id as string to preserve int64 precision in JavaScript; "0" when not computed.
+        query_start:
+          type: string
+          format: date-time
+          nullable: true
+        xact_start:
+          type: string
+          format: date-time
+          nullable: true
+        holds_xmin:
+          type: boolean
+          description: The session holds back the xmin horizon.
+        text:
+          type: string
+          description: Sanitized statement text, up to 2000 characters. Absent when the query started at or before text_since.
     IOSnapshot:
       type: object
       required:
