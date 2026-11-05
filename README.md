@@ -28,7 +28,7 @@ PostgreSQL performance dashboard for analyzing database cluster health, identify
 | **Snapshots** | `pg_stat_statements`, lock and hot-object snapshots, comparison, auto-snapshots on activity spikes and failovers — [Snapshots](doc/en/autosnapshot.md) |
 | **Schema checks** | 17 structural checks with fixes, from sequence exhaustion to tables without a primary key — [setup](doc/en/configuration.md#schema-checks-optional) |
 | **Access control** | `none` / static tokens / **OIDC** (Keycloak, Google, …), `admin` and `viewer` roles, personal access tokens — [Authentication](doc/en/auth.md) |
-| **AI assistants** | `dasha-mcp`: read-only MCP server, 34 tools for fleet diagnostics — [MCP connector](doc/en/mcp.md) |
+| **AI assistants** | `dasha-mcp`: read-only MCP server, 35 tools for fleet diagnostics — [MCP connector](doc/en/mcp.md) |
 | **Deployment** | Docker Compose, Docker Hub images, Helm chart — [Deployment](doc/en/deployment.md) |
 
 PostgreSQL 14–18 and Postgres Pro (`pgpro_stats` is picked up automatically).
