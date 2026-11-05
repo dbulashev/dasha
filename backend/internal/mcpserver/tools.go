@@ -936,10 +936,11 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			"queryid; fingerprint and text keys group sessions that had no query_id: with " +
 			"query_id_available=false compute_query_id is off, otherwise the statement was not parsed yet " +
 			"(it waits for a table lock) and the key needs no fix; a large Lock share goes to " +
-			"blocked_queries; a large IO share goes to io_summary; a large ClientIdleTx share means the " +
+			"blocked_queries; a large IO share goes to io_summary (PostgreSQL 16+ and snapshot storage), " +
+			"otherwise to wait_events; a large ClientIdleTx share means the " +
 			"application holds transactions open. " +
-			"can_read_all_stats=false means the role sees only its own sessions and every number is a lower " +
-			"bound; truncated_samples > 0 means samples were cut at activity.max_sessions; failed_samples " +
+			"can_read_all_stats=false means the role sees only its own sessions: aas and session counts are " +
+			"lower bounds, share_pct is a share of the visible sessions only; truncated_samples > 0 means samples were cut at activity.max_sessions; failed_samples " +
 			"counts samples that timed out and are left out of every average. Texts are cut to 300 bytes " +
 			"(texts_truncated). A text is the whole string the client sent: for a multi-statement string " +
 			"query_id names only the statement that was running, so do not blame the other statements. " +

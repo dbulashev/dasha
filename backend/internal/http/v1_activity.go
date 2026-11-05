@@ -29,7 +29,8 @@ func (s *Handlers) GetActivitySample(
 		return nil, fmt.Errorf("GetActivitySample | %w", err)
 	}
 
-	includeBackground := req.Params.IncludeBackground != nil && *req.Params.IncludeBackground
+	// Without pg_read_all_stats background rows come back with state and wait_event_type hidden.
+	includeBackground := req.Params.IncludeBackground != nil && *req.Params.IncludeBackground && acc.CanReadAllStats
 
 	var prev *activity.Sample
 	if ts := req.Params.TextSince; ts != nil {
@@ -179,7 +180,7 @@ func (s *Handlers) GetActivityProfile(
 
 	filter := activity.Filter{
 		Database:          deref(p.Database),
-		IncludeBackground: deref(p.IncludeBackground),
+		IncludeBackground: deref(p.IncludeBackground) && col.access.CanReadAllStats,
 	}
 
 	if p.Class != nil {
