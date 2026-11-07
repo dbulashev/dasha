@@ -37,8 +37,8 @@ export function isJson(text: string): boolean {
   }
 }
 
-const LEADING_NOISE = /^(?:\s+|--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/|\()*/
-const TRAILING_NOISE = /^(?:\s+|--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/|;)*$/
+const LEADING_NOISE = /^(?:\s|--[^\n]*(?:\n|$)|\/\*(?:[^*]|\*(?!\/))*\*\/|\()*/
+const TRAILING_NOISE = /^(?:\s|--[^\n]*(?:\n|$)|\/\*(?:[^*]|\*(?!\/))*\*\/|;)*$/
 const OPTIMIZABLE = /^(?:select|insert|update|delete|merge|with|values|table)\b/i
 const QUOTED_OR_COMMENT = /'(?:[^']|'')*'|"(?:[^"]|"")*"|--[^\n]*|\/\*[\s\S]*?\*\//g
 // SELECT ... INTO creates a table and is a utility statement.

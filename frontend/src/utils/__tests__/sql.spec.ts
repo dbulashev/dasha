@@ -52,4 +52,13 @@ describe('isUtilityStatement', () => {
   it('leaves text cut off inside its leading comment unclassified', () => {
     expect(isUtilityStatement('/* controller=orders action=index')).toBe(false)
   })
+
+  it.each([
+    'COMMIT;' + ' '.repeat(5000) + 'x',
+    'COMMIT;' + '/**/ '.repeat(400) + 'x',
+  ])('rejects long trailing noise without backtracking', (sql) => {
+    const start = performance.now()
+    expect(isUtilityStatement(sql)).toBe(false)
+    expect(performance.now() - start).toBeLessThan(100)
+  })
 })
