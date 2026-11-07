@@ -98,12 +98,12 @@ func (p *PgxPool) GetQueriesTop10ByTime(
 		return nil, fmt.Errorf("get server version | %w", err)
 	}
 
-	if readable, _ := p.getQueryStatsReadable(ctx, vNum, pool); !readable {
-		return nil, nil
-	}
-
 	ret, err := p.getQueriesTop10ByTime(ctx, vNum, pool, databaseFilter(databaseName, scope))
 	if err != nil {
+		if p.statsUnavailable(ctx, pool, err) {
+			return nil, nil
+		}
+
 		return nil, fmt.Errorf("getQueriesTop10ByTime | %w", err)
 	}
 
@@ -127,12 +127,12 @@ func (p *PgxPool) GetQueriesTop10ByWal(
 		return nil, fmt.Errorf("get server version | %w", err)
 	}
 
-	if readable, _ := p.getQueryStatsReadable(ctx, vNum, pool); !readable {
-		return nil, nil
-	}
-
 	ret, err := p.getQueriesTop10ByWal(ctx, vNum, pool, databaseFilter(databaseName, scope))
 	if err != nil {
+		if p.statsUnavailable(ctx, pool, err) {
+			return nil, nil
+		}
+
 		return nil, fmt.Errorf("getQueriesTop10ByWal | %w", err)
 	}
 
@@ -156,12 +156,12 @@ func (p *PgxPool) GetQueriesTop10Chart(
 		return nil, fmt.Errorf("get server version | %w", err)
 	}
 
-	if readable, _ := p.getQueryStatsReadable(ctx, vNum, pool); !readable {
-		return nil, nil
-	}
-
 	ret, err := p.getQueriesTop10Chart(ctx, vNum, pool, databaseFilter(databaseName, scope))
 	if err != nil {
+		if p.statsUnavailable(ctx, pool, err) {
+			return nil, nil
+		}
+
 		return nil, fmt.Errorf("getQueriesTop10Chart | %w", err)
 	}
 
@@ -190,16 +190,16 @@ func (p *PgxPool) GetQueriesReport(
 		return nil, fmt.Errorf("get server version | %w", err)
 	}
 
-	if readable, _ := p.getQueryStatsReadable(ctx, vNum, pool); !readable {
-		return nil, nil
-	}
-
 	if excludeUsers == nil {
 		excludeUsers = []string{}
 	}
 
 	ret, err := p.getQueriesReport(ctx, vNum, pool, excludeUsers, queryID)
 	if err != nil {
+		if p.statsUnavailable(ctx, pool, err) {
+			return nil, nil
+		}
+
 		return nil, fmt.Errorf("getQueriesReport | %w", err)
 	}
 

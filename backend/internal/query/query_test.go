@@ -285,3 +285,11 @@ func TestColdCTE(t *testing.T) {
 		t.Errorf("ColdCTE(4) left a placeholder: %s", got)
 	}
 }
+
+func TestStatsPreloaded(t *testing.T) {
+	t.Parallel()
+
+	got := StatsPreloaded(2)
+	assert.Contains(t, got, "ANY($2::text[])")
+	assert.NotContains(t, got, "$SETTINGS")
+}

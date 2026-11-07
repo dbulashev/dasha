@@ -14,6 +14,7 @@ const INPUT_EVENTS = ['pointermove', 'pointerdown', 'keydown', 'wheel', 'touchst
 export interface ActivityAccess {
   canReadAllStats: boolean
   queryIdAvailable: boolean
+  trackUtility: boolean
   truncated: boolean
 }
 
@@ -86,6 +87,7 @@ export function useActivitySampler(opts: {
       access.value = {
         canReadAllStats: data.can_read_all_stats,
         queryIdAvailable: data.query_id_available,
+        trackUtility: data.track_utility,
         truncated: data.truncated,
       }
       errorStreak.value = 0

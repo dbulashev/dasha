@@ -34,6 +34,7 @@ function sample(offsetSec: number, sessions: ActivitySession[]): ActivitySample 
     truncated: false,
     can_read_all_stats: true,
     query_id_available: true,
+    track_utility: true,
     sessions,
   }
 }

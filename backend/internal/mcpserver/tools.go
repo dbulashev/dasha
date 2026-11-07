@@ -933,7 +933,9 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			"aas is a session count averaged over samples, not CPU utilisation; compare it with the core " +
 			"count before calling the host overloaded. by_class of a query is the share of its own sessions. " +
 			"Where to go next: a top query with query_key_kind=query_id goes to query_report with that " +
-			"queryid; fingerprint and text keys group sessions that had no query_id: with " +
+			"queryid, except a utility statement (BEGIN, COMMIT, SET, ...) under track_utility=false: " +
+			"pg_stat_statements has no entry for it, and BEGIN or COMMIT with a large ClientIdleTx share " +
+			"is an open transaction left idle; fingerprint and text keys group sessions that had no query_id: with " +
 			"query_id_available=false compute_query_id is off, otherwise the statement was not parsed yet " +
 			"(it waits for a table lock) and the key needs no fix; a large Lock share goes to " +
 			"blocked_queries; a large IO share goes to io_summary (PostgreSQL 16+ and snapshot storage), " +

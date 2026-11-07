@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
@@ -51,7 +53,7 @@ func (p *PgxPool) GetQueryStatsStatus(
 		p.logger.Warn("failed to get query stats enabled", zap.Error(err))
 	}
 
-	readable, err := p.getQueryStatsReadable(ctx, vNum, pool)
+	readable, err := p.getQueryStatsReadable(ctx, pool)
 	if err != nil {
 		p.logger.Warn("failed to get query stats readable", zap.Error(err))
 	}
@@ -174,30 +176,140 @@ func (p *PgxPool) getQueryStatsRestricted(
 	return b, nil
 }
 
-func (p *PgxPool) getQueryStatsReadable(
-	ctx context.Context,
-	serverVersion int,
-	pool *pgxpool.Pool,
-) (bool, error) {
-	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
-	defer cancel()
+type statsReadableKey struct {
+	pool     *pgxpool.Pool
+	relation string
+}
 
-	qStr, err := query.Get(serverVersion, enums.QueryCommonQueryStatsReadable, p.pgssTemplateData(ctx, pool))
+type statsReadableEntry struct {
+	readable bool
+	expires  time.Time
+}
+
+const statsReadableHitTTL = 5 * time.Minute
+
+// Statistics queries fail with these codes when the extension is absent, not
+// preloaded or closed to the role.
+var statsUnavailableCodes = map[string]struct{}{
+	undefinedTableCode:               {},
+	invalidSchemaNameCode:            {},
+	insufficientPrivilegeCode:        {},
+	undefinedFunctionCode:            {},
+	objectNotInPrerequisiteStateCode: {},
+}
+
+func isStatsUnavailable(err error) bool {
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) {
+		return false
+	}
+
+	_, ok := statsUnavailableCodes[pgErr.Code]
+
+	return ok
+}
+
+func (p *PgxPool) getQueryStatsReadable(ctx context.Context, pool *pgxpool.Pool) (bool, error) {
+	src := p.statsSource(ctx, pool)
+	key := statsReadableKey{pool: pool, relation: src.Relation()}
+
+	if v, ok := p.statsReadable.Load(key); ok {
+		if e, valid := v.(statsReadableEntry); valid && time.Now().Before(e.expires) {
+			return e.readable, nil
+		}
+	}
+
+	readable, err := p.probeStatsReadable(ctx, pool, src)
 	if err != nil {
 		return false, fmt.Errorf("getQueryStatsReadable | %w", err)
 	}
 
-	_, err = pool.Exec(ctx, qStr)
+	p.storeStatsReadable(key, readable)
+
+	return readable, nil
+}
+
+func (p *PgxPool) storeStatsReadable(key statsReadableKey, readable bool) {
+	ttl := extSchemaMissTTL
+	if readable {
+		ttl = statsReadableHitTTL
+	}
+
+	p.statsReadable.Store(key, statsReadableEntry{readable: readable, expires: time.Now().Add(ttl)})
+}
+
+// statsUnavailable reports whether a failed statistics query is explained by
+// statistics the role cannot read, as confirmed by a fresh probe.
+func (p *PgxPool) statsUnavailable(ctx context.Context, pool *pgxpool.Pool, err error) bool {
+	if !isStatsUnavailable(err) {
+		return false
+	}
+
+	src := p.statsSource(ctx, pool)
+
+	readable, probeErr := p.probeStatsReadable(ctx, pool, src)
+	if probeErr != nil || readable {
+		return false
+	}
+
+	p.logger.Debug("query statistics are not readable", zap.Error(err))
+	p.storeStatsReadable(statsReadableKey{pool: pool, relation: src.Relation()}, false)
+
+	return true
+}
+
+// probeStatsReadable treats a dead connection or an expired deadline as an error.
+func (p *PgxPool) probeStatsReadable(ctx context.Context, pool *pgxpool.Pool, src statsSource) (bool, error) {
+	vNum, err := p.getServerVersionNum(ctx, pool)
 	if err != nil {
-		// Only an answer from the server settles the question; a dead connection
-		// or an expired deadline is not one.
+		return false, err
+	}
+
+	preloadedQ, err := query.Get(vNum, enums.QueryCommonQueryStatsPreloaded, statsPreloadedTemplateData{
+		StatsPreloaded: query.StatsPreloaded(1),
+	})
+	if err != nil {
+		return false, err
+	}
+
+	readableQ, err := query.Get(vNum, enums.QueryCommonQueryStatsReadable, pgssTemplateData{
+		Pgss:     src.Relation(),
+		PgssInfo: src.InfoRelation(),
+	})
+	if err != nil {
+		return false, err
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	batch := &pgx.Batch{}
+	batch.Queue(preloadedQ, []string{src.MaxSetting()})
+	batch.Queue(readableQ)
+
+	br := pool.SendBatch(ctx, batch)
+	defer func() { _ = br.Close() }()
+
+	var loaded bool
+	if err := br.QueryRow().Scan(&loaded); err != nil {
+		return false, err
+	}
+
+	if !loaded {
+		p.logger.Debug("query statistics library is not preloaded", zap.String("extension", src.Name()))
+
+		return false, nil
+	}
+
+	if _, err := br.Exec(); err != nil {
 		var pgErr *pgconn.PgError
 		if IsTimeout(err) || !errors.As(err, &pgErr) {
-			return false, fmt.Errorf("getQueryStatsReadable | %w", err)
+			return false, err
 		}
 
 		// The reason (privileges, custom schema) is visible only here.
-		p.logger.Debug("query statistics view is not readable", zap.Error(err))
+		p.logger.Debug("query statistics view is not readable",
+			zap.String("extension", src.Name()), zap.Error(err))
 
 		return false, nil
 	}

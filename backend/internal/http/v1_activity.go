@@ -111,6 +111,7 @@ func activitySampleToAPI(
 		Truncated:        smp.Truncated,
 		CanReadAllStats:  acc.CanReadAllStats,
 		QueryIdAvailable: acc.QueryIDAvailable,
+		TrackUtility:     acc.TrackUtility,
 		Sessions:         sessions,
 	}
 }
@@ -293,6 +294,7 @@ func activityProfileToAPI(p activity.Profile, acc activity.Access, failed int) s
 		TruncatedSamples: p.Truncated,
 		CanReadAllStats:  acc.CanReadAllStats,
 		QueryIdAvailable: acc.QueryIDAvailable,
+		TrackUtility:     acc.TrackUtility,
 		Aas:              round2(p.AAS),
 		ByClass:          make([]serverhttp.ActivityClassShare, 0, len(p.ByClass)),
 		TopEvents:        make([]serverhttp.ActivityEventShare, 0, len(p.TopEvents)),

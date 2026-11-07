@@ -2,12 +2,10 @@ package repository
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 )
@@ -18,6 +16,9 @@ type statsSourceDef struct {
 	View  string
 	Info  string
 	Reset string
+	// MaxSetting is declared only by a library loaded through shared_preload_libraries.
+	MaxSetting   string
+	TrackUtility string
 }
 
 // Ordered by priority: with both extensions installed and readable, the first wins.
@@ -27,13 +28,29 @@ var statsSourceDefs = []statsSourceDef{
 		View:  "pg_stat_statements",
 		Info:  "pg_stat_statements_info",
 		Reset: "pg_stat_statements_reset",
+
+		MaxSetting:   "pg_stat_statements.max",
+		TrackUtility: "pg_stat_statements.track_utility",
 	},
 	{
 		Ext:   "pgpro_stats",
 		View:  "pgpro_stats_statements",
 		Info:  "pgpro_stats_info",
 		Reset: "pgpro_stats_statements_reset",
+
+		MaxSetting:   "pgpro_stats.max",
+		TrackUtility: "pgpro_stats.track_utility",
 	},
+}
+
+// statsSettings lists one setting of every statistics library in priority order.
+func statsSettings(setting func(statsSourceDef) string) []string {
+	names := make([]string, len(statsSourceDefs))
+	for i, def := range statsSourceDefs {
+		names[i] = setting(def)
+	}
+
+	return names
 }
 
 // Order the status probes suggest an extension to install. Reversed on purpose:
@@ -58,6 +75,8 @@ func (s statsSource) Relation() string { return qualify(s.schema, s.definition()
 func (s statsSource) InfoRelation() string { return qualify(s.schema, s.definition().Info) }
 
 func (s statsSource) ResetFunc() string { return qualify(s.schema, s.definition().Reset) }
+
+func (s statsSource) MaxSetting() string { return s.definition().MaxSetting }
 
 func (s statsSource) definition() statsSourceDef {
 	if !s.found {
@@ -89,7 +108,7 @@ type statsSourceEntry struct {
 // statsSourceResolver is the resolution logic with its I/O pulled out.
 type statsSourceResolver struct {
 	catalog  func(ctx context.Context) (map[string]catalogExt, error)
-	readable func(ctx context.Context, relation string) (bool, error)
+	readable func(ctx context.Context, src statsSource) (bool, error)
 	now      func() time.Time
 	cache    *sync.Map
 	key      any
@@ -146,10 +165,10 @@ func (r statsSourceResolver) choose(ctx context.Context) (statsSource, time.Dura
 }
 
 // resolveConflict settles the case both are in the catalog: pg_stat_statements
-// can be created while its library is not loaded, and only a read tells them apart.
+// can be created while its library is not loaded, and only the probe tells them apart.
 func (r statsSourceResolver) resolveConflict(ctx context.Context, candidates []statsSource) (statsSource, time.Duration) {
 	for _, candidate := range candidates {
-		ok, err := r.readable(ctx, candidate.Relation())
+		ok, err := r.readable(ctx, candidate)
 		if err != nil {
 			// No answer from the server: hold the fallback on the short TTL.
 			r.logger.Warn("query statistics source probe failed",
@@ -177,8 +196,8 @@ func (p *PgxPool) statsSource(ctx context.Context, pool *pgxpool.Pool) statsSour
 func (p *PgxPool) statsSourceResolver(pool *pgxpool.Pool) statsSourceResolver {
 	return statsSourceResolver{
 		catalog: func(ctx context.Context) (map[string]catalogExt, error) { return p.statsSourceCatalog(ctx, pool) },
-		readable: func(ctx context.Context, relation string) (bool, error) {
-			return p.statsSourceReadable(ctx, pool, relation)
+		readable: func(ctx context.Context, src statsSource) (bool, error) {
+			return p.probeStatsReadable(ctx, pool, src)
 		},
 		now:    time.Now,
 		cache:  &p.resolvedStatsSources,
@@ -214,23 +233,4 @@ func (p *PgxPool) statsSourceCatalog(ctx context.Context, pool *pgxpool.Pool) (m
 	}
 
 	return installed, rows.Err()
-}
-
-// Only an answer from the server settles readability; a dead connection or an
-// expired deadline is returned as an error instead.
-func (p *PgxPool) statsSourceReadable(ctx context.Context, pool *pgxpool.Pool, relation string) (bool, error) {
-	queryCtx, cancel := context.WithTimeout(ctx, queryTimeout)
-	defer cancel()
-
-	_, err := pool.Exec(queryCtx, "SELECT 1 FROM "+relation+" LIMIT 1")
-	if err == nil {
-		return true, nil
-	}
-
-	var pgErr *pgconn.PgError
-	if IsTimeout(err) || !errors.As(err, &pgErr) {
-		return false, err
-	}
-
-	return false, nil
 }

@@ -327,6 +327,7 @@ const selectionLabel = computed(() =>
       :rows="rows"
       :cluster="clusterName"
       :host="hostName"
+      :track-utility="access?.trackUtility ?? true"
       :query-info="queryInfo"
       :session-info="sessionInfo"
       :lock-pids="lockPids"

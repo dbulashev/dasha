@@ -317,22 +317,13 @@ func (p *PgxPool) collectIndexAdvisorWorkload(
 	vNum int,
 	excludeUsers []string,
 ) (indexadvisor.Workload, error) {
-	// pg_stat_statements missing or unreadable is a state, not a failure — the
-	// same treatment the query pages give it. On a cluster it is also a state
-	// worth naming: the host is up, and its load is simply invisible to us. A
-	// probe that never reached the server is the other statement entirely, and
-	// the error carries it up to be reported as an unreachable host.
-	readable, err := p.getQueryStatsReadable(ctx, vNum, pool)
-	if err != nil {
-		return indexadvisor.Workload{}, fmt.Errorf("collectIndexAdvisorWorkload | %w", err)
-	}
-
-	if !readable {
-		return indexadvisor.Workload{NoStats: []string{host}}, nil
-	}
-
 	rows, err := p.readIndexAdvisorWorkloadRows(ctx, pool, vNum, excludeUsers)
 	if err != nil {
+		// Unreadable statistics name the host in NoStats; any other error marks it unreachable.
+		if p.statsUnavailable(ctx, pool, err) {
+			return indexadvisor.Workload{NoStats: []string{host}}, nil
+		}
+
 		return indexadvisor.Workload{}, err
 	}
 

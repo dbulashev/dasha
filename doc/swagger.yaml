@@ -6241,6 +6241,7 @@ components:
         - truncated_samples
         - can_read_all_stats
         - query_id_available
+        - track_utility
         - aas
         - by_class
         - top_events
@@ -6268,6 +6269,11 @@ components:
           type: boolean
         query_id_available:
           type: boolean
+        track_utility:
+          type: boolean
+          description: >-
+            pg_stat_statements.track_utility. When false, utility statements (BEGIN, COMMIT, SET, ...)
+            have a query_id in pg_stat_activity but no pg_stat_statements entry.
         aas:
           type: number
           format: double
@@ -6303,7 +6309,7 @@ components:
             $ref: '#/components/schemas/ActivityShare'
     ActivitySample:
       type: object
-      required: [sampled_at, truncated, can_read_all_stats, query_id_available, sessions]
+      required: [sampled_at, truncated, can_read_all_stats, query_id_available, track_utility, sessions]
       properties:
         sampled_at:
           type: string
@@ -6318,6 +6324,11 @@ components:
         query_id_available:
           type: boolean
           description: compute_query_id makes the server compute query_id by itself.
+        track_utility:
+          type: boolean
+          description: >-
+            pg_stat_statements.track_utility. When false, utility statements (BEGIN, COMMIT, SET, ...)
+            have a query_id in pg_stat_activity but no pg_stat_statements entry.
         sessions:
           type: array
           items:

@@ -1,1 +1,1 @@
-SELECT * FROM {{ .Pgss }} LIMIT 1
+EXPLAIN SELECT 1 FROM {{ .Pgss }}

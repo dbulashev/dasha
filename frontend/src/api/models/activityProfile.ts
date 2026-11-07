@@ -19,6 +19,8 @@ export interface ActivityProfile {
   truncated_samples: number;
   can_read_all_stats: boolean;
   query_id_available: boolean;
+  /** pg_stat_statements.track_utility. When false, utility statements (BEGIN, COMMIT, SET, ...) have a query_id in pg_stat_activity but no pg_stat_statements entry. */
+  track_utility: boolean;
   aas: number;
   by_class: ActivityClassShare[];
   top_events: ActivityEventShare[];

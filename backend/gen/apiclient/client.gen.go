@@ -487,6 +487,9 @@ type ActivityProfile struct {
 	// TopQueries Client sessions only; background processes run no statement of their own.
 	TopQueries []ActivityQueryShare `json:"top_queries"`
 
+	// TrackUtility pg_stat_statements.track_utility. When false, utility statements (BEGIN, COMMIT, SET, ...) have a query_id in pg_stat_activity but no pg_stat_statements entry.
+	TrackUtility bool `json:"track_utility"`
+
 	// TruncatedSamples Samples cut at activity.max_sessions; their counts are a lower bound.
 	TruncatedSamples int `json:"truncated_samples"`
 }
@@ -525,6 +528,9 @@ type ActivitySample struct {
 	// SampledAt Server time of the sample; pass it back as text_since.
 	SampledAt time.Time         `json:"sampled_at"`
 	Sessions  []ActivitySession `json:"sessions"`
+
+	// TrackUtility pg_stat_statements.track_utility. When false, utility statements (BEGIN, COMMIT, SET, ...) have a query_id in pg_stat_activity but no pg_stat_statements entry.
+	TrackUtility bool `json:"track_utility"`
 
 	// Truncated The host had more sessions than activity.max_sessions; only the first ones are listed.
 	Truncated bool `json:"truncated"`

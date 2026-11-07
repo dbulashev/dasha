@@ -45,7 +45,7 @@ func TestExtensionSchemaResolution(t *testing.T) {
 	assert.Equal(t, "pg_stat_statements", src.Name())
 	assert.Equal(t, `"ext".pg_stat_statements`, src.Relation())
 
-	readable, err := p.getQueryStatsReadable(ctx, vNum, pool)
+	readable, err := p.getQueryStatsReadable(ctx, pool)
 	require.NoError(t, err)
 	assert.True(t, readable, "pg_stat_statements must stay readable outside search_path")
 

@@ -141,7 +141,9 @@ func (p *PgxPool) getActivitySample(
 }
 
 func getActivityAccess(ctx context.Context, serverVersion int, pool querier) (activity.Access, error) {
-	qStr, err := query.Get(serverVersion, enums.QueryActivityAccess, nil)
+	qStr, err := query.Get(serverVersion, enums.QueryActivityAccess, statsPreloadedTemplateData{
+		StatsPreloaded: query.StatsPreloaded(1),
+	})
 	if err != nil {
 		return activity.Access{}, err
 	}
@@ -152,8 +154,10 @@ func getActivityAccess(ctx context.Context, serverVersion int, pool querier) (ac
 		pgssPreloaded  bool
 	)
 
-	// shared_preload_libraries is hidden without pg_read_all_settings and then reads as preloaded.
-	if err := pool.QueryRow(ctx, qStr).Scan(&acc.CanReadAllStats, &computeQueryID, &pgssPreloaded); err != nil {
+	row := pool.QueryRow(ctx, qStr,
+		statsSettings(func(d statsSourceDef) string { return d.MaxSetting }),
+		statsSettings(func(d statsSourceDef) string { return d.TrackUtility }))
+	if err := row.Scan(&acc.CanReadAllStats, &computeQueryID, &pgssPreloaded, &acc.TrackUtility); err != nil {
 		return activity.Access{}, err
 	}
 

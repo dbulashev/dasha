@@ -42,15 +42,6 @@ const (
 	partitionRootsCode = "partition_roots"
 )
 
-// SQLSTATEs that separate "this role may not look" and "this server has no such
-// catalog" from a genuine failure.
-const (
-	insufficientPrivilegeCode = "42501"
-	undefinedTableCode        = "42P01"
-	undefinedColumnCode       = "42703"
-	undefinedFunctionCode     = "42883"
-)
-
 // sequenceHeadroomEntry is the only thing kept between requests. The report
 // itself is not cached: the page is opened deliberately and expects to see the
 // schema as it is now. This one number is different — the health score reads it
