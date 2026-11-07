@@ -55,6 +55,8 @@ func New(
 	e.HideBanner = true
 	e.HidePort = true
 	e.Debug = true
+	// X-Forwarded-For is honoured only from loopback, link-local and private-network peers.
+	e.IPExtractor = echo.ExtractIPFromXFFHeader()
 
 	e.HTTPErrorHandler = func(err error, c echo.Context) {
 		// Running out of time, or giving up on a lock, is not a server fault,

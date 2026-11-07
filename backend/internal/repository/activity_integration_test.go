@@ -165,6 +165,7 @@ func TestGetActivityAccess(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, acc.CanReadAllStats, "the test role is a superuser")
 	assert.True(t, acc.QueryIDAvailable, "pg_stat_statements is preloaded and compute_query_id is auto")
+	assert.True(t, acc.TrackUtility, "pg_stat_statements.track_utility defaults to on")
 }
 
 func TestGetActivityAccessUnderUnprivilegedRole(t *testing.T) {
@@ -204,7 +205,7 @@ func TestGetActivityAccessUnderUnprivilegedRole(t *testing.T) {
 	defer rolePool.Close()
 
 	acc, err := getActivityAccess(ctx, vNum, rolePool)
-	require.NoError(t, err, "shared_preload_libraries is hidden from the role, not an error")
+	require.NoError(t, err)
 	assert.False(t, acc.CanReadAllStats)
-	assert.True(t, acc.QueryIDAvailable, "compute_query_id is auto and the hidden preload list reads as preloaded")
+	assert.True(t, acc.QueryIDAvailable, "the preload is visible to the role through pg_settings")
 }

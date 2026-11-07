@@ -19,6 +19,7 @@ package enums
 //	common/in_recovery
 //	common/query_stats_available
 //	common/query_stats_enabled
+//	common/query_stats_preloaded
 //	common/query_stats_readable
 //	common/query_stats_restricted
 //	common/server_version

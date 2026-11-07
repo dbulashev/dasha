@@ -55,12 +55,77 @@ func TestGetQueryStatsReadable(t *testing.T) {
 	p := NewTestPgxPool(pool, zap.NewNop())
 	ctx := t.Context()
 
-	vNum, err := p.getServerVersionNum(ctx, pool)
-	require.NoError(t, err)
-
-	readable, err := p.getQueryStatsReadable(ctx, vNum, pool)
+	readable, err := p.getQueryStatsReadable(ctx, pool)
 	require.NoError(t, err)
 	assert.True(t, readable, "pg_stat_statements should be readable")
+}
+
+func TestQueryStatsUnreadableForRole(t *testing.T) {
+	t.Parallel()
+	adminPool := testinfra.IsolatePool(t)
+	ctx := t.Context()
+
+	const role = "pgss_denied"
+
+	_, err := adminPool.Exec(ctx, `CREATE ROLE `+role+` LOGIN PASSWORD 'secret'`)
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		cleanCtx := context.Background()
+		_, _ = adminPool.Exec(cleanCtx, `DROP OWNED BY `+role)
+		_, _ = adminPool.Exec(cleanCtx, `DROP ROLE IF EXISTS `+role)
+	})
+
+	_, err = adminPool.Exec(ctx, `REVOKE SELECT ON pg_stat_statements FROM PUBLIC`)
+	require.NoError(t, err)
+
+	var dbName string
+
+	require.NoError(t, adminPool.QueryRow(ctx, `SELECT current_database()`).Scan(&dbName))
+
+	conn := adminPool.Config().ConnConfig
+	dsn := fmt.Sprintf("postgres://%s:secret@%s:%d/%s?sslmode=disable", role, conn.Host, conn.Port, dbName)
+
+	rolePool, err := pgxpool.New(ctx, dsn)
+	require.NoError(t, err, "connect as the role")
+
+	defer rolePool.Close()
+
+	p := NewTestPgxPool(rolePool, zap.NewNop())
+
+	readable, err := p.getQueryStatsReadable(ctx, rolePool)
+	require.NoError(t, err, "a refusal is an answer, not an error")
+	assert.False(t, readable, "EXPLAIN must check SELECT on the view")
+
+	vNum, err := p.getServerVersionNum(ctx, rolePool)
+	require.NoError(t, err)
+
+	_, err = p.getQueriesTop10ByTime(ctx, vNum, rolePool, nil)
+	require.Error(t, err)
+	assert.True(t, p.statsUnavailable(ctx, rolePool, err), "the page treats the refusal as missing statistics")
+}
+
+func TestQueryStatsReadableIsCached(t *testing.T) {
+	t.Parallel()
+	pool := testinfra.IsolatePool(t)
+	p := NewTestPgxPool(pool, zap.NewNop())
+	ctx := t.Context()
+
+	readable, err := p.getQueryStatsReadable(ctx, pool)
+	require.NoError(t, err)
+	require.True(t, readable)
+
+	p.storeStatsReadable(statsReadableKey{pool: pool, relation: p.statsSource(ctx, pool).Relation()}, false)
+
+	readable, err = p.getQueryStatsReadable(ctx, pool)
+	require.NoError(t, err)
+	assert.False(t, readable, "a recorded miss is served from the cache")
+
+	p.forgetPool(pool)
+
+	readable, err = p.getQueryStatsReadable(ctx, pool)
+	require.NoError(t, err)
+	assert.True(t, readable, "forgetPool drops the cached answer")
 }
 
 func TestGetQueriesBlocked(t *testing.T) {

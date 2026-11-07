@@ -15,5 +15,7 @@ export interface ActivitySample {
   can_read_all_stats: boolean;
   /** compute_query_id makes the server compute query_id by itself. */
   query_id_available: boolean;
+  /** pg_stat_statements.track_utility. When false, utility statements (BEGIN, COMMIT, SET, ...) have a query_id in pg_stat_activity but no pg_stat_statements entry. */
+  track_utility: boolean;
   sessions: ActivitySession[];
 }

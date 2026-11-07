@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import SqlDialog from '@/components/queries/SqlDialog.vue'
 import { fmtDecimal } from '@/utils/format'
 import { queryReportLink } from '@/utils/queryLink'
-import { highlightSql, truncateSql } from '@/utils/sql'
+import { highlightSql, isUtilityStatement, truncateSql } from '@/utils/sql'
 import '@/assets/sql-highlight.css'
 import ActivityClassBar from './ActivityClassBar.vue'
 import { BACKGROUND, DIMENSIONS, queryKeyLabel, type AggregateRow, type Dimension, type QueryInfo, type SessionInfo } from './activityBuffer'
@@ -14,6 +14,7 @@ const props = defineProps<{
   rows: AggregateRow[]
   cluster: string
   host: string
+  trackUtility: boolean
   queryInfo: (key: string) => QueryInfo | undefined
   sessionInfo: (pid: number) => SessionInfo | undefined
   lockPids: Set<number>
@@ -100,6 +101,7 @@ function displayValue(value: string): string {
 
 function reportLink(info: QueryInfo | undefined) {
   if (!info || info.kind !== 'query_id' || info.queryId === '0') return null
+  if (!props.trackUtility && isUtilityStatement(info.text)) return null
   return queryReportLink(props.cluster, props.host, info.queryId)
 }
 

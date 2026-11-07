@@ -202,6 +202,7 @@ type PgxPool struct {
 	resolvedPgStatsView   sync.Map // *pgxpool.Pool → string (resolved view name)
 	resolvedExtSchemas    sync.Map // extSchemaKey → string (quoted extension schema)
 	resolvedStatsSources  sync.Map // *pgxpool.Pool → statsSourceEntry
+	statsReadable         sync.Map // statsReadableKey → statsReadableEntry
 	pgssResetFuncConfig   string   // configured pgss_reset_function from global config
 	poolConfig            config.PoolConfig
 	schemaLintConfig      schemalint.Config
@@ -786,6 +787,14 @@ func (p *PgxPool) forgetPool(pool *pgxpool.Pool) {
 
 		return true
 	})
+
+	p.statsReadable.Range(func(k, _ any) bool {
+		if key, ok := k.(statsReadableKey); ok && key.pool == pool {
+			p.statsReadable.Delete(k)
+		}
+
+		return true
+	})
 }
 
 // lockTimeout bounds how long a query may wait for a lock on a user object.
@@ -868,6 +877,10 @@ func (p *PgxPool) pgssTemplateData(ctx context.Context, pool *pgxpool.Pool) pgss
 		Pgss:     src.Relation(),
 		PgssInfo: src.InfoRelation(),
 	}
+}
+
+type statsPreloadedTemplateData struct {
+	StatsPreloaded string
 }
 
 // pgstattupleTemplateData carries the schema-qualified pgstattuple functions.

@@ -18,3 +18,12 @@ func ColdCTE(first int) string {
 		"$WRITES", "$"+strconv.Itoa(first+2),
 	).Replace(strings.TrimSpace(coldTablesFragment))
 }
+
+//go:embed fragments/stats_preloaded.sql
+var statsPreloadedFragment string
+
+// StatsPreloaded renders a predicate that a library declares one of the <ext>.max
+// settings listed in $param. An undeclared setting is absent or a string placeholder.
+func StatsPreloaded(param int) string {
+	return strings.ReplaceAll(strings.TrimSpace(statsPreloadedFragment), "$SETTINGS", "$"+strconv.Itoa(param))
+}

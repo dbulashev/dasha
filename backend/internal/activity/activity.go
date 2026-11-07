@@ -98,6 +98,8 @@ type Sample struct {
 type Access struct {
 	CanReadAllStats  bool
 	QueryIDAvailable bool
+	// TrackUtility mirrors track_utility of the preloaded statistics library.
+	TrackUtility bool
 }
 
 // QueryIDAvailable reports whether the server computes query_id by itself

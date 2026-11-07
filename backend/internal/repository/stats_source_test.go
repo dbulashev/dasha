@@ -3,10 +3,12 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -41,7 +43,8 @@ func (st *stubResolver) resolver() statsSourceResolver {
 
 			return st.installed, st.catalogErr
 		},
-		readable: func(_ context.Context, relation string) (bool, error) {
+		readable: func(_ context.Context, src statsSource) (bool, error) {
+			relation := src.Relation()
 			st.probed = append(st.probed, relation)
 
 			if st.probeErr != nil {
@@ -344,4 +347,33 @@ func TestStatsSource_RecommendationOrder(t *testing.T) {
 	assert.Equal(t, pgproExt, recommendedSourceOrder[0].Ext)
 	assert.Equal(t, pgssExt, recommendedSourceOrder[1].Ext)
 	assert.Equal(t, pgssExt, statsSourceDefs[0].Ext, "conflict priority stays on pg_stat_statements")
+}
+
+func TestIsStatsUnavailable(t *testing.T) {
+	t.Parallel()
+
+	for _, code := range []string{"42P01", "3F000", "42501", "42883", "55000"} {
+		err := fmt.Errorf("wrapped | %w", &pgconn.PgError{Code: code}) //nolint:exhaustruct
+		assert.True(t, isStatsUnavailable(err), code)
+	}
+
+	assert.False(t, isStatsUnavailable(&pgconn.PgError{Code: queryCanceledCode}), "a timeout is an error") //nolint:exhaustruct
+	assert.False(t, isStatsUnavailable(errors.New("connection reset")), "no answer from the server")
+}
+
+func TestStatsSource_MaxSetting(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "pg_stat_statements.max", statsSource{}.MaxSetting()) //nolint:exhaustruct
+
+	st := &stubResolver{installed: bare(pgproExt), now: time.Now()} //nolint:exhaustruct
+	assert.Equal(t, "pgpro_stats.max", st.resolver().resolve(t.Context()).MaxSetting())
+}
+
+func TestStatsSettings_FollowPriority(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t,
+		[]string{"pg_stat_statements.track_utility", "pgpro_stats.track_utility"},
+		statsSettings(func(d statsSourceDef) string { return d.TrackUtility }))
 }
