@@ -7,6 +7,26 @@ import (
 	"github.com/dbulashev/dasha/internal/config"
 )
 
+func TestBasePathEnvironment(t *testing.T) {
+	for _, value := range []string{"/tools/dasha", "", "/"} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv("DASHA_BASE_PATH", value)
+			v := newConfigViper()
+			v.SetConfigType("yaml")
+			if err := v.ReadConfig(strings.NewReader("base_path: /other\n")); err != nil {
+				t.Fatal(err)
+			}
+			var c config.Config
+			if err := v.Unmarshal(&c); err != nil {
+				t.Fatal(err)
+			}
+			if c.BasePath != value {
+				t.Fatalf("DASHA_BASE_PATH не переопределил конфигурацию: %q", c.BasePath)
+			}
+		})
+	}
+}
+
 func TestConfigViperKeepsDottedMapKeys(t *testing.T) {
 	t.Parallel()
 

@@ -9,6 +9,44 @@
 - PostgreSQL 14+ (target databases); Postgres Pro is supported — its `pgpro_stats` is used in place of `pg_stat_statements` automatically
 - Docker & Docker Compose (for demo lab)
 
+## Hosting under a URL subpath
+
+The published images support a runtime URL prefix without rebuilding the frontend.
+The default is `/`. Set the **same** `DASHA_BASE_PATH=/dasha` on the frontend and
+backend containers. The backend also accepts `base_path: /dasha` in `dasha.yaml`;
+`DASHA_BASE_PATH` takes precedence. An optional trailing slash is normalized.
+Nested paths such as `/tools/dasha` are supported. Segments may contain ASCII
+letters, digits, `.`, `_`, `~` and `-`; empty segments, `.`/`..`, encoded paths,
+query strings, fragments and full URLs are rejected.
+
+With Helm, set `config.base_path: /dasha`: the chart supplies both containers,
+updates frontend probes, and scopes Ingress/HTTPRoute matches to the prefix.
+For OIDC, set `auth.oidc.redirect_url` to the full external URL, for example
+`https://example.com/dasha/auth/callback`, and register that callback and
+`https://example.com/dasha/` (post-logout) at the identity provider.
+
+The outer reverse proxy must **preserve** `/dasha` when forwarding to the frontend
+nginx and pass the original `Host` and `X-Forwarded-Proto`. No response-body,
+`Location` or cookie-path rewriting is needed. The frontend forwards the URI
+unchanged; only the backend removes the prefix before routing and authentication.
+Registered internal routes take precedence and remain available to service-to-service
+clients, including with `/api` or `/auth` as the prefix. `X-Forwarded-Prefix` is not trusted or used.
+
+The frontend entrypoint renders only HTML `<base>` into its writable
+`/etc/nginx/conf.d/runtime` directory and links the original static assets there;
+compiled JS/CSS are unchanged. This also works with the chart's read-only rootfs
+mounts. Session/state cookies and authentication/error/logout links use the prefix.
+When moving an existing deployment to a different prefix, sign in again.
+
+Image regression: `bash deploy/images/tests/subpath-smoke.sh <frontend-image>`.
+To include Chromium checks, install the frontend's npm dependencies and Playwright
+Chromium, then set `DASHA_SUBPATH_BROWSER=true` for that command. Browser checks mock
+API/auth responses, while backend tests exercise a complete signed-token OIDC flow.
+Set `DASHA_SUBPATH_BACKEND` to the absolute path of a statically built
+`backend/internal/http/testdata/subpath-backend` binary to also test real nginx → backend
+requests, URI/query/body preservation, RBAC and unprefixed internal routes. CI builds
+and supplies this routing fixture, including for `/api`, `/auth` and `/api/auth` prefixes.
+
 ## Monitoring role
 
 Dasha only reads the monitored databases and changes nothing in them; the one exception, resetting

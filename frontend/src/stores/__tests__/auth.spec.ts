@@ -43,6 +43,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  document.querySelector('base')?.remove()
   vi.unstubAllGlobals()
   vi.useRealTimers()
   vi.restoreAllMocks()
@@ -159,6 +160,13 @@ describe('consumeReturnUrl', () => {
 })
 
 describe('isSafeReturnUrl', () => {
+  it('разрешает возврат только внутри префикса и не в auth', () => {
+    document.head.insertAdjacentHTML('afterbegin', '<base href="/tools/dasha/">')
+    expect(isSafeReturnUrl('/tools/dasha/main/c1')).toBe(true)
+    for (const path of ['/main/c1', '/tools/dasha-other/main', '/tools/dasha/auth/callback', '//evil.example', '/tools/dasha/../other']) {
+      expect(isSafeReturnUrl(path)).toBe(false)
+    }
+  })
   it('accepts a same-origin path', () => {
     expect(isSafeReturnUrl('/main/c1')).toBe(true)
   })

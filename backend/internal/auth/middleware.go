@@ -122,7 +122,7 @@ func oidcMiddleware(
 					return errUnauthorized
 				}
 
-				return c.Redirect(http.StatusFound, "/auth/login")
+				return c.Redirect(http.StatusFound, sm.basePath+"/auth/login")
 			}
 
 			logger.Debug("authenticated via OIDC session", zap.String("user", user.Name))

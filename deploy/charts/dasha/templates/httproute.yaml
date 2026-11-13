@@ -19,7 +19,11 @@ spec:
   rules:
     {{- if .Values.frontend.enabled }}
     # Frontend nginx handles path-routing internally (/api/, /auth/ → backend, / → SPA).
-    - backendRefs:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: {{ include "dasha.basePath" . | default "/" }}
+      backendRefs:
         - name: {{ include "dasha.fullname" . }}-frontend
           port: {{ .Values.frontend.port }}
     {{- else }}
@@ -27,14 +31,14 @@ spec:
     - matches:
         - path:
             type: PathPrefix
-            value: /api/
+            value: {{ include "dasha.basePath" . }}/api/
       backendRefs:
         - name: {{ include "dasha.fullname" . }}-backend
           port: {{ .Values.backend.port }}
     - matches:
         - path:
             type: PathPrefix
-            value: /auth/
+            value: {{ include "dasha.basePath" . }}/auth/
       backendRefs:
         - name: {{ include "dasha.fullname" . }}-backend
           port: {{ .Values.backend.port }}
@@ -43,7 +47,7 @@ spec:
     - matches:
         - path:
             type: PathPrefix
-            value: /mcp
+            value: {{ include "dasha.basePath" . }}/mcp
       backendRefs:
         - name: {{ include "dasha.fullname" . }}-mcp
           port: {{ .Values.mcp.port }}

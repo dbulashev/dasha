@@ -205,7 +205,7 @@ func (c *Container) AuthMiddlewares(ctx context.Context, resolver auth.PATResolv
 	cfg := c.Config()
 	logger := c.Logger()
 
-	return auth.NewMiddlewares(ctx, cfg.Auth, resolver, logger)
+	return auth.NewMiddlewares(ctx, cfg.Auth, cfg.BasePath, resolver, logger)
 }
 
 // PAT resolution tuning. The cache keeps the hot path (every API request that
@@ -493,7 +493,11 @@ func provideLogger(debug bool) *zap.Logger {
 // newConfigViper keeps dots inside map keys (keyword_fields "host.name",
 // selector "kubernetes.labels.app") instead of splitting them into nested maps.
 func newConfigViper() *viper.Viper {
-	return viper.NewWithOptions(viper.KeyDelimiter("::"))
+	v := viper.NewWithOptions(viper.KeyDelimiter("::"))
+	v.SetDefault("base_path", "")
+	v.AllowEmptyEnv(true)
+	v.MustBindEnv("base_path", "DASHA_BASE_PATH")
+	return v
 }
 
 // restoreRoleMappingCase reloads role_mapping keys from the raw YAML: viper
@@ -579,6 +583,11 @@ func provideConfig() (*config.Config, error) {
 
 	if err := restoreRoleMappingCase(&c, raw); err != nil {
 		return nil, fmt.Errorf("provideConfig | auth.oidc.role_mapping: %w", err)
+	}
+
+	c.BasePath, err = config.NormalizeBasePath(c.BasePath)
+	if err != nil {
+		return nil, fmt.Errorf("provideConfig | %w", err)
 	}
 
 	for i := range c.Clusters {

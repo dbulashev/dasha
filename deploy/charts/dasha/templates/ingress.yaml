@@ -54,7 +54,7 @@ spec:
         paths:
           {{- if .Values.frontend.enabled }}
           # Frontend nginx handles path-routing internally (/api/, /auth/ → backend, / → SPA).
-          - path: /
+          - path: {{ include "dasha.basePath" . | default "/" }}
             pathType: Prefix
             backend:
               service:
@@ -63,14 +63,14 @@ spec:
                   name: http
           {{- else }}
           # Headless deploy (no UI): route API and auth callbacks directly to backend.
-          - path: /api/
+          - path: {{ include "dasha.basePath" . }}/api/
             pathType: Prefix
             backend:
               service:
                 name: {{ template "dasha.fullname" $ }}-backend
                 port:
                   name: http
-          - path: /auth/
+          - path: {{ include "dasha.basePath" . }}/auth/
             pathType: Prefix
             backend:
               service:
@@ -79,7 +79,7 @@ spec:
                   name: http
           {{- if and .Values.mcp.enabled .Values.mcp.frontendProxy }}
           # No frontend nginx to proxy /mcp — route it here instead.
-          - path: /mcp
+          - path: {{ include "dasha.basePath" . }}/mcp
             pathType: Prefix
             backend:
               service:

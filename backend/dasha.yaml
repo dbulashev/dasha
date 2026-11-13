@@ -1,4 +1,6 @@
 debug: true
+# Внешний URL-префикс; DASHA_BASE_PATH переопределяет это значение.
+base_path: ""
 clusters:
   - name: home
     username: postgres

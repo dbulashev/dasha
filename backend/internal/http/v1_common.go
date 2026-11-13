@@ -45,7 +45,7 @@ func (s *Handlers) GetAuthInfo(
 	}
 
 	if s.cfg.Auth.Mode == config.AuthModeOIDC {
-		loginURL := "/auth/login"
+		loginURL := s.cfg.BasePath + "/auth/login"
 		resp.OidcLoginUrl = &loginURL
 	}
 

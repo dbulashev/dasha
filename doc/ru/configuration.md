@@ -9,6 +9,44 @@
 - PostgreSQL 14+ или Postgres Pro (вместо `pg_stat_statements` используется `pgpro_stats`)
 - Docker и Docker Compose для демо-лаборатории
 
+## Размещение в подкаталоге URL
+
+Готовые образы поддерживают префикс URL без пересборки frontend. По умолчанию
+приложение работает в `/`. Передайте **одинаковый** `DASHA_BASE_PATH=/dasha` обоим
+контейнерам — frontend и backend. Backend также читает `base_path: /dasha` из
+`dasha.yaml`; переменная окружения имеет приоритет. Завершающий `/` необязателен.
+Поддерживаются вложенные пути, например `/tools/dasha`. В сегментах допустимы
+латинские буквы, цифры, `.`, `_`, `~` и `-`; пустые сегменты, `.`/`..`, percent-encoding,
+query, fragment и полный URL запрещены.
+
+В Helm достаточно `config.base_path: /dasha`: chart согласует оба контейнера,
+probes frontend и пути Ingress/HTTPRoute. Для OIDC задайте полный внешний callback
+в `auth.oidc.redirect_url`, например `https://example.com/dasha/auth/callback`;
+зарегистрируйте у провайдера этот callback и `https://example.com/dasha/` для logout.
+
+Внешний reverse proxy должен **сохранять** `/dasha` при передаче запроса frontend
+nginx, а также передавать исходные `Host` и `X-Forwarded-Proto`. Подменять HTML,
+`Location` и пути cookie на внешнем прокси не нужно. Frontend передаёт URI без изменений,
+а префикс снимает только backend — до маршрутизации и проверки доступа.
+Зарегистрированные внутренние маршруты имеют приоритет и доступны межсервисным
+клиентам даже при префиксах `/api` и `/auth`.
+Заголовок `X-Forwarded-Prefix` не используется и не является источником конфигурации.
+
+При запуске frontend формирует только HTML `<base>` в доступном для записи
+`/etc/nginx/conf.d/runtime`, а исходные статические ресурсы подключает симлинками.
+Скомпилированные JS/CSS не меняются; дополнительных writable mounts к штатному
+read-only rootfs chart не требуется. Cookie сессии/state и ссылки авторизации,
+ошибок и logout ограничены префиксом. После смены префикса войдите заново.
+
+Проверка образа: `bash deploy/images/tests/subpath-smoke.sh <frontend-image>`.
+Для проверки в Chromium установите npm-зависимости frontend и Playwright Chromium,
+затем задайте `DASHA_SUBPATH_BROWSER=true` для этой команды. Браузерные тесты
+подменяют ответы API/auth; полный OIDC-цикл с подписанными токенами проверяют backend-тесты.
+Для сквозных HTTP-проверок задайте `DASHA_SUBPATH_BACKEND` — абсолютный путь к статически
+собранному `backend/internal/http/testdata/subpath-backend`. CI собирает этот стенд и
+проверяет настоящие запросы nginx → backend, сохранение URI/query/body, RBAC и внутренние
+URL без префикса, в том числе при префиксах `/api`, `/auth` и `/api/auth`.
+
 ## Роль мониторинга
 
 Dasha только читает базы. Сброс статистики запросов по умолчанию выключен.
