@@ -153,8 +153,11 @@ router.beforeEach(async (to) => {
 
   if (auth.isAuthenticated) {
     const returnUrl = auth.consumeReturnUrl()
-    if (returnUrl && returnUrl !== to.fullPath) {
-      return returnUrl
+    // sessionStorage хранит browser URL с префиксом, router принимает путь без base.
+    const base = appBasePath().replace(/\/$/, '')
+    const route = returnUrl ? returnUrl.slice(base.length) || '/' : null
+    if (route && route !== to.fullPath) {
+      return route
     }
   }
 })

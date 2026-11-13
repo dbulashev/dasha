@@ -207,7 +207,15 @@ jobs:
           # a uid it does not own breaks startup. OpenShift assigns a random one and
           # guarantees only gid 0 — the image must survive that, not just its own uid.
           serve_check frontend-smoke-uid --user 12345:0
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.27.3"
+          cache-dependency-path: backend/go.sum
+      - name: Build subpath routing fixture
+        run: cd backend && CGO_ENABLED=0 go build -o "$RUNNER_TEMP/subpath-backend" ./internal/http/testdata/subpath-backend
       - name: Runtime subpath smoke tests
+        env:
+          DASHA_SUBPATH_BACKEND: ${{ runner.temp }}/subpath-backend
         run: bash deploy/images/tests/subpath-smoke.sh dasha-frontend:ci
       - uses: actions/setup-node@v7
         with:
@@ -216,6 +224,8 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: cd frontend && npm ci && npx playwright install --with-deps chromium
       - name: Runtime subpath browser tests
+        env:
+          DASHA_SUBPATH_BACKEND: ${{ runner.temp }}/subpath-backend
         run: DASHA_SUBPATH_BROWSER=true bash deploy/images/tests/subpath-smoke.sh dasha-frontend:ci
 
   # Same idea for the backend image: it runs migrations at startup as a non-root user,

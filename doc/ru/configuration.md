@@ -26,9 +26,10 @@ probes frontend и пути Ingress/HTTPRoute. Для OIDC задайте пол
 
 Внешний reverse proxy должен **сохранять** `/dasha` при передаче запроса frontend
 nginx, а также передавать исходные `Host` и `X-Forwarded-Proto`. Подменять HTML,
-`Location` и пути cookie на внешнем прокси не нужно. Frontend снимает префикс только
-при внутреннем proxy_pass API/auth. Backend принимает и prefixed-запросы для headless-
-развёртывания; внутренние URL без префикса остаются для межсервисных клиентов.
+`Location` и пути cookie на внешнем прокси не нужно. Frontend передаёт URI без изменений,
+а префикс снимает только backend — до маршрутизации и проверки доступа.
+Зарегистрированные внутренние маршруты имеют приоритет и доступны межсервисным
+клиентам даже при префиксах `/api` и `/auth`.
 Заголовок `X-Forwarded-Prefix` не используется и не является источником конфигурации.
 
 При запуске frontend формирует только HTML `<base>` в доступном для записи
@@ -41,6 +42,10 @@ read-only rootfs chart не требуется. Cookie сессии/state и с�
 Для проверки в Chromium установите npm-зависимости frontend и Playwright Chromium,
 затем задайте `DASHA_SUBPATH_BROWSER=true` для этой команды. Браузерные тесты
 подменяют ответы API/auth; полный OIDC-цикл с подписанными токенами проверяют backend-тесты.
+Для сквозных HTTP-проверок задайте `DASHA_SUBPATH_BACKEND` — абсолютный путь к статически
+собранному `backend/internal/http/testdata/subpath-backend`. CI собирает этот стенд и
+проверяет настоящие запросы nginx → backend, сохранение URI/query/body, RBAC и внутренние
+URL без префикса, в том числе при префиксах `/api`, `/auth` и `/api/auth`.
 
 ## Роль мониторинга
 

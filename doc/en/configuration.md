@@ -27,10 +27,10 @@ For OIDC, set `auth.oidc.redirect_url` to the full external URL, for example
 
 The outer reverse proxy must **preserve** `/dasha` when forwarding to the frontend
 nginx and pass the original `Host` and `X-Forwarded-Proto`. No response-body,
-`Location` or cookie-path rewriting is needed. The frontend strips the prefix
-when proxying API/auth requests internally; the backend also accepts prefixed
-requests for headless deployments. Internal unprefixed API routes remain available
-for service-to-service clients. `X-Forwarded-Prefix` is not trusted or used.
+`Location` or cookie-path rewriting is needed. The frontend forwards the URI
+unchanged; only the backend removes the prefix before routing and authentication.
+Registered internal routes take precedence and remain available to service-to-service
+clients, including with `/api` or `/auth` as the prefix. `X-Forwarded-Prefix` is not trusted or used.
 
 The frontend entrypoint renders only HTML `<base>` into its writable
 `/etc/nginx/conf.d/runtime` directory and links the original static assets there;
@@ -42,6 +42,10 @@ Image regression: `bash deploy/images/tests/subpath-smoke.sh <frontend-image>`.
 To include Chromium checks, install the frontend's npm dependencies and Playwright
 Chromium, then set `DASHA_SUBPATH_BROWSER=true` for that command. Browser checks mock
 API/auth responses, while backend tests exercise a complete signed-token OIDC flow.
+Set `DASHA_SUBPATH_BACKEND` to the absolute path of a statically built
+`backend/internal/http/testdata/subpath-backend` binary to also test real nginx → backend
+requests, URI/query/body preservation, RBAC and unprefixed internal routes. CI builds
+and supplies this routing fixture, including for `/api`, `/auth` and `/api/auth` prefixes.
 
 ## Monitoring role
 

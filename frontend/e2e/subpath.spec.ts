@@ -4,6 +4,27 @@ import { test, expect } from '@playwright/test'
 // eslint-disable-next-line playwright/no-skipped-test -- отдельный контейнерный стенд
 test.skip(!process.env.DASHA_SUBPATH_URL, 'Нужен frontend-контейнер и DASHA_SUBPATH_URL')
 
+for (const entry of ['/', '/settings/ci?host=h&db=d']) {
+  test(`runtime-префикс: возврат после SSO с ${entry}`, async ({ page, baseURL }) => {
+    const url = new URL(baseURL!)
+    const prefix = url.pathname.replace(/\/$/, '')
+    const target = prefix + '/settings/ci?host=h&db=d'
+    await page.addInitScript(saved => sessionStorage.setItem('dasha_return_url', saved), target)
+    await page.route(`${url.origin}${prefix}/api/**`, route => route.fulfill({
+      json: new URL(route.request().url()).pathname.endsWith('/auth/info')
+        ? { mode: 'oidc', oidc_login_url: prefix + '/auth/login' }
+        : [],
+    }))
+    await page.route(`${url.origin}${prefix}/auth/me`, route => route.fulfill({
+      json: { name: 'test-user', email: 'test@example.test', role: 'admin' },
+    }))
+    await page.goto(url.origin + prefix + entry)
+    await expect(page).toHaveURL(url.origin + target)
+    await expect(page.locator('nav').first()).toBeVisible()
+    expect(await page.evaluate(() => sessionStorage.getItem('dasha_return_url'))).toBeNull()
+  })
+}
+
 test('runtime-префикс: deep link, ресурсы и reload', async ({ page, baseURL }) => {
   const url = new URL(baseURL!)
   const prefix = url.pathname.replace(/\/$/, '')

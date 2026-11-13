@@ -21,7 +21,7 @@ server {
 
     # The profile blocks for up to 60 s; the backend extends its write deadline to 75 s.
     location = ${DASHA_BASE_PATH}/api/activity/profile {
-        proxy_pass http://${BACKEND_URL}/api/activity/profile;
+        proxy_pass http://${BACKEND_URL};
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -35,7 +35,7 @@ server {
     }
 
     location ${DASHA_BASE_PATH}/api/ {
-        proxy_pass http://${BACKEND_URL}/api/;
+        proxy_pass http://${BACKEND_URL};
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -49,7 +49,7 @@ server {
     }
 
     location ${DASHA_BASE_PATH}/auth/ {
-        proxy_pass http://${BACKEND_URL}/auth/;
+        proxy_pass http://${BACKEND_URL};
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
