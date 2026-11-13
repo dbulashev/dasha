@@ -19,11 +19,18 @@ function stubFetch(status: number) {
 }
 
 afterEach(() => {
+  document.querySelector('base')?.remove()
   vi.unstubAllGlobals()
   handleUnauthorized.mockReset()
 })
 
 describe('customFetch', () => {
+  it('добавляет runtime-префикс к сгенерированному API URL', async () => {
+    document.head.insertAdjacentHTML('afterbegin', '<base href="/dasha/">')
+    stubFetch(200)
+    await customFetch('/api/clusters?q=a%2Fb')
+    expect(fetch).toHaveBeenCalledWith('/dasha/api/clusters?q=a%2Fb', undefined)
+  })
   it('reports 401 to the auth store and still returns the response', async () => {
     stubFetch(401)
     const res = await customFetch<{ status: number }>('/api/v1/x')

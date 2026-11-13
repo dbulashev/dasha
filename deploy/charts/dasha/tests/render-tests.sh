@@ -69,4 +69,19 @@ render_fails "ingress and gateway API at the same time" \
   --set ingress.enabled=true \
   --set gatewayAPI.enabled=true
 
+render_ok "префикс: вложенный путь" --set config.base_path=/tools/dasha/
+render_ok "префикс: headless backend" --set config.base_path=/dasha --set frontend.enabled=false --set ingress.enabled=true
+render_fails "префикс: относительный путь" "config.base_path" --set config.base_path=dasha
+render_fails "префикс: traversal" "config.base_path" --set config.base_path=/tools/../dasha
+render_fails "префикс: чужой origin" "config.base_path" --set config.base_path=//example.com
+render_fails "префикс: неверный тип" "config.base_path" --set config.base_path=false
+
+out=$(helm template test "$CHART" --set config.base_path=/tools/dasha/ --set ingress.enabled=true)
+for expected in 'base_path: /tools/dasha' 'value: "/tools/dasha"' 'path: "/tools/dasha/"' 'path: /tools/dasha'; do
+  if ! grep -Fq "$expected" <<<"$out"; then
+    echo "FAIL: потерян префикс chart: $expected"
+    FAILED=1
+  fi
+done
+
 exit "$FAILED"

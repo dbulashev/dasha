@@ -5,6 +5,18 @@ Expand the name of the chart.
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
+{{/* Канонический внешний префикс, общий для frontend и backend. */}}
+{{- define "dasha.basePath" -}}
+{{- if not (kindIs "string" .Values.config.base_path) -}}
+{{- fail "config.base_path: ожидается строка" -}}
+{{- end -}}
+{{- $path := trimSuffix "/" (default "" .Values.config.base_path) -}}
+{{- if and $path (or (not (regexMatch "^(/[A-Za-z0-9._~-]+)+$" $path)) (regexMatch "(^|/)\\.\\.?(/|$)" $path)) -}}
+{{- fail "config.base_path: недопустимый URL-префикс" -}}
+{{- end -}}
+{{- $path -}}
+{{- end -}}
+
 {{/*
 Create a default fully qualified app name.
 */}}

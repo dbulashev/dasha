@@ -40,7 +40,7 @@ func (m *Middlewares) Stop() {
 	}
 }
 
-func NewMiddlewares(ctx context.Context, cfg config.AuthConfig, resolver PATResolver, logger *zap.Logger) (*Middlewares, error) {
+func NewMiddlewares(ctx context.Context, cfg config.AuthConfig, basePath string, resolver PATResolver, logger *zap.Logger) (*Middlewares, error) {
 	if cfg.Mode != config.AuthModeNone && cfg.Mode != "" && !cfg.RequireHTTPS {
 		logger.Warn(
 			"auth enabled without require_https — credentials may be transmitted in plaintext",
@@ -58,8 +58,8 @@ func NewMiddlewares(ctx context.Context, cfg config.AuthConfig, resolver PATReso
 			logger.Warn("auth.cookie_secret is unset or too short — session cookies are keyed with an ephemeral random key that changes on every restart and differs per replica; users get logged out on restarts/scale-out. Set a stable cookie_secret (>=32 chars), ideally via cookie_secret_from_env.")
 		}
 
-		oidcProvider = NewOIDCProvider(ctx, *cfg.OIDC, logger)
-		sessionMgr = NewSessionManager(cfg, logger)
+		oidcProvider = NewOIDCProvider(ctx, *cfg.OIDC, basePath, logger)
+		sessionMgr = NewSessionManager(cfg, basePath, logger)
 	}
 
 	enforcer, err := NewCasbinEnforcer()

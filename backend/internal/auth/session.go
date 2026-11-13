@@ -48,12 +48,13 @@ func (j jsonSerializer) Deserialize(src []byte, dst any) error {
 }
 
 type SessionManager struct {
-	sc     *securecookie.SecureCookie
-	maxAge int
-	logger *zap.Logger
+	basePath string
+	sc       *securecookie.SecureCookie
+	maxAge   int
+	logger   *zap.Logger
 }
 
-func NewSessionManager(cfg config.AuthConfig, logger *zap.Logger) *SessionManager {
+func NewSessionManager(cfg config.AuthConfig, basePath string, logger *zap.Logger) *SessionManager {
 	maxAge := cfg.CookieMaxAge
 	if maxAge == 0 {
 		maxAge = defaultMaxAge
@@ -76,7 +77,7 @@ func NewSessionManager(cfg config.AuthConfig, logger *zap.Logger) *SessionManage
 	sc.MaxLength(0) // disable internal limit; we handle size check in SetSession
 	sc.SetSerializer(jsonSerializer{})
 
-	return &SessionManager{sc: sc, maxAge: maxAge, logger: logger}
+	return &SessionManager{sc: sc, maxAge: maxAge, logger: logger, basePath: basePath}
 }
 
 const maxCookieSize = 4000 // browsers silently drop cookies > 4096 bytes
@@ -100,7 +101,7 @@ func (sm *SessionManager) SetSession(c echo.Context, data *SessionData) error {
 	c.SetCookie(&http.Cookie{ //gosec:disable G124, nolint:exhaustruct
 		Name:     cookieName,
 		Value:    encoded,
-		Path:     "/",
+		Path:     sm.basePath + "/",
 		MaxAge:   sm.maxAge,
 		HttpOnly: true,
 		Secure:   isSecureRequest(c),
@@ -131,7 +132,7 @@ func (sm *SessionManager) ClearSession(c echo.Context) {
 	c.SetCookie(&http.Cookie{ //gosec:disable G124, nolint:exhaustruct
 		Name:     cookieName,
 		Value:    "",
-		Path:     "/",
+		Path:     sm.basePath + "/",
 		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   isSecureRequest(c),
@@ -228,7 +229,7 @@ func (sm *SessionManager) SetStateCookie(c echo.Context) (string, error) {
 	c.SetCookie(&http.Cookie{ //gosec:disable G124, nolint:exhaustruct
 		Name:     stateCookieName,
 		Value:    state,
-		Path:     "/",
+		Path:     sm.basePath + "/",
 		MaxAge:   stateMaxAge,
 		HttpOnly: true,
 		Secure:   isSecureRequest(c),
@@ -253,7 +254,7 @@ func (sm *SessionManager) ValidateStateCookie(c echo.Context) error {
 	c.SetCookie(&http.Cookie{ //gosec:disable G124, nolint:exhaustruct
 		Name:     stateCookieName,
 		Value:    "",
-		Path:     "/",
+		Path:     sm.basePath + "/",
 		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   isSecureRequest(c),

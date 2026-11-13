@@ -207,6 +207,16 @@ jobs:
           # a uid it does not own breaks startup. OpenShift assigns a random one and
           # guarantees only gid 0 — the image must survive that, not just its own uid.
           serve_check frontend-smoke-uid --user 12345:0
+      - name: Runtime subpath smoke tests
+        run: bash deploy/images/tests/subpath-smoke.sh dasha-frontend:ci
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: cd frontend && npm ci && npx playwright install --with-deps chromium
+      - name: Runtime subpath browser tests
+        run: DASHA_SUBPATH_BROWSER=true bash deploy/images/tests/subpath-smoke.sh dasha-frontend:ci
 
   # Same idea for the backend image: it runs migrations at startup as a non-root user,
   # so let it come up against a real PostgreSQL and answer a request.
