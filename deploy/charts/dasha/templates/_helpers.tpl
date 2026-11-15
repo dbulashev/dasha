@@ -5,14 +5,14 @@ Expand the name of the chart.
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
-{{/* Канонический внешний префикс, общий для frontend и backend. */}}
+{{/* Normalize the external URL prefix for frontend and backend. */}}
 {{- define "dasha.basePath" -}}
 {{- if not (kindIs "string" .Values.config.base_path) -}}
-{{- fail "config.base_path: ожидается строка" -}}
+{{- fail "config.base_path: expected a string" -}}
 {{- end -}}
-{{- $path := trimSuffix "/" (default "" .Values.config.base_path) -}}
-{{- if and $path (or (not (regexMatch "^(/[A-Za-z0-9._~-]+)+$" $path)) (regexMatch "(^|/)\\.\\.?(/|$)" $path)) -}}
-{{- fail "config.base_path: недопустимый URL-префикс" -}}
+{{- $path := trimSuffix "/" .Values.config.base_path -}}
+{{- if and $path (or (not (regexMatch "^(/[A-Za-z0-9._~-]+)+$" $path)) (regexMatch "(^|/)\\.\\.?(/|$)" $path) (regexMatch "^/(api|auth|mcp)(/|$)" $path)) -}}
+{{- fail "config.base_path: invalid URL prefix; first segment must not be api, auth or mcp" -}}
 {{- end -}}
 {{- $path -}}
 {{- end -}}

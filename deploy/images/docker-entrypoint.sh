@@ -3,19 +3,19 @@ set -e
 
 export BACKEND_URL="${BACKEND_URL:-backend:8000}"
 
-# Префикс — только путь, не произвольный URL или фрагмент nginx-конфигурации.
+# Validate the runtime URL prefix.
 export DASHA_BASE_PATH="${DASHA_BASE_PATH:-}"
 DASHA_BASE_PATH="${DASHA_BASE_PATH%/}"
 case "$DASHA_BASE_PATH" in
     *[!A-Za-z0-9/._~-]*)
-        echo 'Недопустимый DASHA_BASE_PATH' >&2
+        echo 'Invalid DASHA_BASE_PATH' >&2
         exit 1
         ;;
 esac
 if [ -n "$DASHA_BASE_PATH" ]; then
     if ! printf '%s\n' "$DASHA_BASE_PATH" | grep -Eq '^(/[A-Za-z0-9._~-]+)+$' ||
-       printf '%s\n' "$DASHA_BASE_PATH" | grep -Eq '(^|/)\.\.?(/|$)'; then
-        echo 'Недопустимый DASHA_BASE_PATH' >&2
+       printf '%s\n' "$DASHA_BASE_PATH" | grep -Eq '(^|/)\.\.?(/|$)|^/(api|auth|mcp)(/|$)'; then
+        echo 'Invalid DASHA_BASE_PATH' >&2
         exit 1
     fi
 fi
@@ -28,8 +28,7 @@ if [ -n "$DASHA_BASE_PATH" ]; then
     OUTSIDE_BASE_PATH_BLOCK='location / { return 404; }'
 fi
 
-# Только HTML получает runtime-значение <base>; скомпилированные JS/CSS не меняются.
-# conf.d уже доступен для записи в штатном Helm chart, включая read-only rootfs.
+# Render the runtime HTML base and link the static assets.
 site=/etc/nginx/conf.d/runtime
 rm -rf "$site"
 mkdir -p "$site$DASHA_BASE_PATH"
@@ -37,7 +36,7 @@ for file in /usr/share/nginx/html/*; do
     [ "$(basename "$file")" = index.html ] && continue
     ln -s "$file" "$site$DASHA_BASE_PATH/$(basename "$file")"
 done
-# <base> должен предшествовать preload-ссылкам, добавленным Vite plugins.
+# Insert the base element before preload links.
 sed -e '/<base href="\/">/d' -e "s|<head>|<head><base href=\"$DASHA_BASE_PATH/\">|" \
     /usr/share/nginx/html/index.html > "$site$DASHA_BASE_PATH/index.html"
 
@@ -53,7 +52,7 @@ EOF
 # Defense-in-depth: redirect HTTP→HTTPS at the pod level if the chart signals TLS upstream.
 # Only redirect requests that explicitly arrived via http through a proxy — requests without
 # X-Forwarded-Proto (probes, port-forward) are left alone.
-# Это текст nginx, не shell-команда; кавычки и переменные сохраняются для envsubst.
+# Preserve nginx variables for envsubst.
 # shellcheck disable=SC2016,SC2089,SC2090
 if [ "${FORCE_HTTPS_REDIRECT:-false}" = "true" ]; then
     export HTTPS_REDIRECT_BLOCK='if ($http_x_forwarded_proto = "http") { return 301 https://$host$request_uri; }'

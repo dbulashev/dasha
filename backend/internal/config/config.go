@@ -725,7 +725,7 @@ func (s *StorageConfig) MigrationDSN() string {
 
 // Config is the top-level application configuration.
 type Config struct {
-	// BasePath — внешний URL-префикс; пустая строка означает корень сайта.
+	// BasePath is the external URL prefix; an empty string means root.
 	BasePath  string                    `mapstructure:"base_path"`
 	Debug     bool                      `mapstructure:"debug"`
 	Clusters  []Cluster                 `mapstructure:"clusters"`

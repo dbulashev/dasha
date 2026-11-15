@@ -25,7 +25,7 @@ afterEach(() => {
 })
 
 describe('customFetch', () => {
-  it('добавляет runtime-префикс к сгенерированному API URL', async () => {
+  it('adds the runtime prefix to a generated API URL', async () => {
     document.head.insertAdjacentHTML('afterbegin', '<base href="/dasha/">')
     stubFetch(200)
     await customFetch('/api/clusters?q=a%2Fb')

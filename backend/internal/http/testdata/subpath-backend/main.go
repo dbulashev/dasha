@@ -1,4 +1,4 @@
-// Стенд маршрутизации для контейнерного smoke-теста, без БД и внешнего IdP.
+// Package main provides a routing fixture for container smoke tests.
 package main
 
 import (

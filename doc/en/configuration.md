@@ -14,10 +14,12 @@
 The published images support a runtime URL prefix without rebuilding the frontend.
 The default is `/`. Set the **same** `DASHA_BASE_PATH=/dasha` on the frontend and
 backend containers. The backend also accepts `base_path: /dasha` in `dasha.yaml`;
-`DASHA_BASE_PATH` takes precedence. An optional trailing slash is normalized.
+non-empty `DASHA_BASE_PATH` takes precedence; an empty variable is treated as unset.
+Use `/` to explicitly select root. An optional trailing slash is normalized.
 Nested paths such as `/tools/dasha` are supported. Segments may contain ASCII
 letters, digits, `.`, `_`, `~` and `-`; empty segments, `.`/`..`, encoded paths,
-query strings, fragments and full URLs are rejected.
+query strings, fragments and full URLs are rejected. The first segment must not be
+`api`, `auth` or `mcp`; these names are reserved for internal routes.
 
 With Helm, set `config.base_path: /dasha`: the chart supplies both containers,
 updates frontend probes, and scopes Ingress/HTTPRoute matches to the prefix.
@@ -29,8 +31,8 @@ The outer reverse proxy must **preserve** `/dasha` when forwarding to the fronte
 nginx and pass the original `Host` and `X-Forwarded-Proto`. No response-body,
 `Location` or cookie-path rewriting is needed. The frontend forwards the URI
 unchanged; only the backend removes the prefix before routing and authentication.
-Registered internal routes take precedence and remain available to service-to-service
-clients, including with `/api` or `/auth` as the prefix. `X-Forwarded-Prefix` is not trusted or used.
+Unprefixed internal routes remain available to service-to-service clients.
+`X-Forwarded-Prefix` is not trusted or used.
 
 The frontend entrypoint renders only HTML `<base>` into its writable
 `/etc/nginx/conf.d/runtime` directory and links the original static assets there;
@@ -45,7 +47,7 @@ API/auth responses, while backend tests exercise a complete signed-token OIDC fl
 Set `DASHA_SUBPATH_BACKEND` to the absolute path of a statically built
 `backend/internal/http/testdata/subpath-backend` binary to also test real nginx → backend
 requests, URI/query/body preservation, RBAC and unprefixed internal routes. CI builds
-and supplies this routing fixture, including for `/api`, `/auth` and `/api/auth` prefixes.
+and supplies this routing fixture. Reserved prefixes are tested as invalid inputs.
 
 ## Monitoring role
 

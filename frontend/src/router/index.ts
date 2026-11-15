@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { appBasePath } from '@/basePath'
+import { appBasePath, appURL } from '@/basePath'
 import HomeView from '../views/HomeView.vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -153,8 +153,8 @@ router.beforeEach(async (to) => {
 
   if (auth.isAuthenticated) {
     const returnUrl = auth.consumeReturnUrl()
-    // sessionStorage хранит browser URL с префиксом, router принимает путь без base.
-    const base = appBasePath().replace(/\/$/, '')
+    // Convert the saved browser URL to a base-relative route.
+    const base = appURL('')
     const route = returnUrl ? returnUrl.slice(base.length) || '/' : null
     if (route && route !== to.fullPath) {
       return route

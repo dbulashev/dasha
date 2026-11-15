@@ -52,7 +52,7 @@ func testOIDCIssuer(t *testing.T) string {
 			}}}
 		case "/token":
 			if err := r.ParseForm(); err != nil {
-				http.Error(w, "Неверная форма", http.StatusBadRequest)
+				http.Error(w, "Invalid form", http.StatusBadRequest)
 				return
 			}
 			if r.Form.Get("code") != "valid" {
@@ -69,7 +69,7 @@ func testOIDCIssuer(t *testing.T) string {
 			digest := sha256.Sum256([]byte(unsigned))
 			signature, signErr := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, digest[:])
 			if signErr != nil {
-				http.Error(w, "Ошибка подписи", http.StatusInternalServerError)
+				http.Error(w, "Signing failed", http.StatusInternalServerError)
 				return
 			}
 			response = map[string]any{
@@ -81,7 +81,7 @@ func testOIDCIssuer(t *testing.T) string {
 			return
 		}
 		if err := json.NewEncoder(w).Encode(response); err != nil {
-			t.Errorf("Ошибка ответа тестового IdP: %v", err)
+			t.Errorf("test IdP response failed: %v", err)
 		}
 	}))
 	t.Cleanup(issuer.Close)
@@ -99,7 +99,7 @@ func TestOIDCBasePath(t *testing.T) {
 			}
 			provider := NewOIDCProvider(t.Context(), cfg, prefix, zap.NewNop())
 			if !provider.Ready() {
-				t.Fatal("Тестовый IdP не готов")
+				t.Fatal("test IdP is not ready")
 			}
 			sm := NewSessionManager(config.AuthConfig{CookieSecret: strings.Repeat("x", 32)}, prefix, zap.NewNop()) //nolint:exhaustruct
 			e := echo.New()
@@ -114,7 +114,7 @@ func TestOIDCBasePath(t *testing.T) {
 				e.ServeHTTP(rec, req)
 				for _, cookie := range rec.Result().Cookies() {
 					if cookie.Path != prefix+"/" || !cookie.HttpOnly || !cookie.Secure {
-						t.Errorf("Неверная область/защита cookie: %s", cookie.Name)
+						t.Errorf("incorrect cookie scope or security: %s", cookie.Name)
 					}
 				}
 				return rec
@@ -125,7 +125,7 @@ func TestOIDCBasePath(t *testing.T) {
 				t.Fatalf("Login: %d, %v", login.Code, err)
 			}
 			if loginURL.Query().Get("redirect_uri") != cfg.RedirectURL {
-				t.Fatal("Потерян префикс callback")
+				t.Fatal("callback lost the prefix")
 			}
 			state := loginURL.Query().Get("state")
 			callback := request(http.MethodGet, "/auth/callback?code=valid&state="+url.QueryEscape(state), login.Result().Cookies()...)
@@ -135,7 +135,7 @@ func TestOIDCBasePath(t *testing.T) {
 			session := callback.Result().Cookies()
 			me := request(http.MethodGet, "/auth/me", session...)
 			if me.Code != http.StatusOK || !strings.Contains(me.Body.String(), `"admin"`) {
-				t.Fatalf("Сессия не работает: %d, %s", me.Code, me.Body.String())
+				t.Fatalf("session failed: %d, %s", me.Code, me.Body.String())
 			}
 			logout := request(http.MethodPost, "/auth/logout", session...)
 			var body map[string]string
@@ -144,17 +144,17 @@ func TestOIDCBasePath(t *testing.T) {
 			}
 			logoutURL, err := url.Parse(body["logout_url"])
 			if err != nil || logoutURL.Query().Get("post_logout_redirect_uri") != "https://dashboard.example.test"+prefix+"/" {
-				t.Fatalf("Потерян префикс logout: %v", body)
+				t.Fatalf("logout lost the prefix: %v", body)
 			}
 			invalid := request(http.MethodGet, "/auth/callback?error=access_denied")
 			if invalid.Header().Get("Location") != prefix+"/auth/login" {
-				t.Fatal("Неуспешный callback вышел из префикса")
+				t.Fatal("failed callback escaped the prefix")
 			}
 			failed := request(http.MethodGet, "/auth/callback?code=invalid&state="+url.QueryEscape(state), login.Result().Cookies()...)
 			if failed.Code != http.StatusBadGateway ||
 				!strings.Contains(failed.Body.String(), `href="`+prefix+`/auth/login"`) ||
 				!strings.Contains(failed.Body.String(), `src="`+prefix+`/dasha-appology.png"`) {
-				t.Fatal("Страница ошибки вышла из префикса")
+				t.Fatal("error page escaped the prefix")
 			}
 			expired := httptest.NewRecorder()
 			err = sm.SetSession(e.NewContext(httptest.NewRequest(http.MethodGet, "/", nil), expired),
@@ -164,7 +164,68 @@ func TestOIDCBasePath(t *testing.T) {
 			}
 			me = request(http.MethodGet, "/auth/me", expired.Result().Cookies()...)
 			if me.Code != http.StatusUnauthorized {
-				t.Fatal("Истёкшая сессия осталась действующей")
+				t.Fatal("expired session remained valid")
+			}
+		})
+	}
+}
+
+func TestBFFUnavailableBasePath(t *testing.T) {
+	ready := NewOIDCProvider(t.Context(), config.OIDCConfig{ //nolint:exhaustruct
+		IssuerURL: testOIDCIssuer(t), ClientID: "dasha-test",
+	}, "", zap.NewNop())
+	if !ready.Ready() {
+		t.Fatal("test IdP is not ready")
+	}
+	for _, tc := range []struct {
+		name     string
+		prefix   string
+		sessions bool
+	}{
+		{name: "nil sessions"},
+		{name: "root", sessions: true},
+		{name: "subpath", prefix: "/tools/dasha", sessions: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var sm *SessionManager
+			if tc.sessions {
+				sm = NewSessionManager(config.AuthConfig{CookieSecret: strings.Repeat("x", 32)}, tc.prefix, zap.NewNop()) //nolint:exhaustruct
+			}
+			providers := []*OIDCProvider{nil, {}}
+			if sm == nil {
+				providers = append(providers, ready)
+			}
+			for _, provider := range providers {
+				e := echo.New()
+				RegisterBFFRoutes(e, provider, sm, nil, zap.NewNop())
+				for _, path := range []string{"/auth/login", "/auth/callback"} {
+					rec := httptest.NewRecorder()
+					e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+					if rec.Code != http.StatusServiceUnavailable {
+						t.Fatalf("%s: status = %d, want 503", path, rec.Code)
+					}
+					if !strings.Contains(rec.Body.String(), `src="`+tc.prefix+`/dasha-appology.png"`) {
+						t.Errorf("%s: error page lost the asset prefix", path)
+					}
+					if path == "/auth/login" && !strings.Contains(rec.Body.String(), `href="`+tc.prefix+`/auth/login"`) {
+						t.Error("login error page lost the retry prefix")
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestAccessDeniedBasePath(t *testing.T) {
+	for _, prefix := range []string{"", "/tools/dasha"} {
+		t.Run(prefix, func(t *testing.T) {
+			e := echo.New()
+			rec := httptest.NewRecorder()
+			if err := renderAccessDenied(e.NewContext(httptest.NewRequest(http.MethodGet, "/", nil), rec), prefix); err != nil {
+				t.Fatal(err)
+			}
+			if rec.Code != http.StatusForbidden || !strings.Contains(rec.Body.String(), `src="`+prefix+`/dasha-appology.png"`) {
+				t.Fatalf("access denied page: status = %d, body = %s", rec.Code, rec.Body.String())
 			}
 		})
 	}

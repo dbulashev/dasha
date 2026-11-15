@@ -15,7 +15,7 @@ images:
 # -- dasha.yaml config rendered as ConfigMap
 # Passwords must use password_from_env, never inline
 config:
-  # Внешний URL-префикс для обоих образов; пусто или "/" — размещение в корне.
+  # External URL prefix for both images; empty or "/" means root.
   base_path: ""
   debug: false
   # pg_stats_view: monitoring.pg_stats  # custom view when user lacks pg_catalog.pg_stats access

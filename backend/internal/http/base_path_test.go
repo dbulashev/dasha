@@ -13,7 +13,7 @@ import (
 )
 
 func TestBasePathKeepsAuthentication(t *testing.T) {
-	for _, prefix := range []string{"", "/dasha", "/tools/dasha", "/api", "/auth", "/api/auth"} {
+	for _, prefix := range []string{"", "/dasha", "/tools/dasha", "/apiary", "/authentication", "/mcp-tools", "/tools/api"} {
 		t.Run(prefix, func(t *testing.T) {
 			api := &API{Echo: echo.New()}
 			api.WithBasePath(prefix)
@@ -26,7 +26,7 @@ func TestBasePathKeepsAuthentication(t *testing.T) {
 			api.Echo.Use(auth.NewCasbinMiddleware(cfg, enforcer, zap.NewNop()))
 			api.Echo.GET("/api/private", func(c echo.Context) error {
 				if c.Request().URL.Path != "/api/private" || c.QueryParam("q") != "a/b" {
-					t.Errorf("Префикс изменил маршрут или query: %s", c.Request().URL)
+					t.Errorf("prefix changed the route or query: %s", c.Request().URL)
 				}
 				return c.NoContent(http.StatusOK)
 			})
@@ -42,7 +42,7 @@ func TestBasePathKeepsAuthentication(t *testing.T) {
 						want = http.StatusUnauthorized
 					}
 					if rec.Code != want {
-						t.Fatalf("Статус %d, ожидается %d", rec.Code, want)
+						t.Fatalf("status = %d, want %d", rec.Code, want)
 					}
 				}
 			}
@@ -51,14 +51,14 @@ func TestBasePathKeepsAuthentication(t *testing.T) {
 			rec := httptest.NewRecorder()
 			api.Echo.ServeHTTP(rec, req)
 			if rec.Code != http.StatusForbidden {
-				t.Fatal("Префикс позволил viewer обойти RBAC")
+				t.Fatal("prefix allowed a viewer to bypass RBAC")
 			}
 		})
 	}
 }
 
 func TestBasePathPreservesInternalRoutes(t *testing.T) {
-	for _, prefix := range []string{"/api", "/auth", "/api/auth", "/dasha"} {
+	for _, prefix := range []string{"/dasha", "/tools/dasha", "/tools/api"} {
 		t.Run(prefix, func(t *testing.T) {
 			api := &API{Echo: echo.New()}
 			api.WithBasePath(prefix)
@@ -80,7 +80,7 @@ func TestBasePathPreservesInternalRoutes(t *testing.T) {
 			rec := httptest.NewRecorder()
 			api.Echo.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/auth/logout", nil))
 			if rec.Code != http.StatusMethodNotAllowed {
-				t.Errorf("Изменён статус внутреннего маршрута: %d", rec.Code)
+				t.Errorf("internal route status changed: %d", rec.Code)
 			}
 		})
 	}

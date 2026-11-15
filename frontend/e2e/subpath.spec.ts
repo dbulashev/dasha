@@ -1,11 +1,11 @@
 import { test, expect } from '@playwright/test'
 
-// Стенд — готовый frontend-контейнер; PostgreSQL и настоящий IdP не используются.
-// eslint-disable-next-line playwright/no-skipped-test -- отдельный контейнерный стенд
-test.skip(!process.env.DASHA_SUBPATH_URL, 'Нужен frontend-контейнер и DASHA_SUBPATH_URL')
+// Tests run against a frontend container.
+// eslint-disable-next-line playwright/no-skipped-test -- requires a container fixture
+test.skip(!process.env.DASHA_SUBPATH_URL, 'Requires a frontend container and DASHA_SUBPATH_URL')
 
 for (const entry of ['/', '/settings/ci?host=h&db=d']) {
-  test(`runtime-префикс: возврат после SSO с ${entry}`, async ({ page, baseURL }) => {
+  test(`runtime prefix: return after SSO from ${entry}`, async ({ page, baseURL }) => {
     const url = new URL(baseURL!)
     const prefix = url.pathname.replace(/\/$/, '')
     const target = prefix + '/settings/ci?host=h&db=d'
@@ -25,7 +25,7 @@ for (const entry of ['/', '/settings/ci?host=h&db=d']) {
   })
 }
 
-test('runtime-префикс: deep link, ресурсы и reload', async ({ page, baseURL }) => {
+test('runtime prefix: deep link, assets and reload', async ({ page, baseURL }) => {
   const url = new URL(baseURL!)
   const prefix = url.pathname.replace(/\/$/, '')
   const escaped: string[] = []
@@ -50,14 +50,14 @@ test('runtime-префикс: deep link, ресурсы и reload', async ({ pag
   expect(errors).toEqual([])
 })
 
-test('runtime-префикс: SSO-кнопка не дублирует префикс backend', async ({ page, baseURL }) => {
+test('runtime prefix: SSO button does not duplicate the backend prefix', async ({ page, baseURL }) => {
   const url = new URL(baseURL!)
   const prefix = url.pathname.replace(/\/$/, '')
   await page.route(`${url.origin}${prefix}/api/auth/info`, route => route.fulfill({
     json: { mode: 'oidc', oidc_login_url: prefix + '/auth/login' },
   }))
   await page.route(`${url.origin}${prefix}/auth/me`, route => route.fulfill({ status: 401, json: {} }))
-  await page.route(`${url.origin}${prefix}/auth/login`, route => route.fulfill({ body: 'Тестовый вход' }))
+  await page.route(`${url.origin}${prefix}/auth/login`, route => route.fulfill({ body: 'Test login' }))
   await page.goto(baseURL!)
   const logo = page.getByRole('img', { name: 'Dasha', exact: true })
   await expect(logo).toHaveAttribute('src', prefix + '/logo.png')

@@ -160,7 +160,7 @@ describe('consumeReturnUrl', () => {
 })
 
 describe('isSafeReturnUrl', () => {
-  it('разрешает возврат только внутри префикса и не в auth', () => {
+  it('allows return URLs only inside the prefix and outside auth', () => {
     document.head.insertAdjacentHTML('afterbegin', '<base href="/tools/dasha/">')
     expect(isSafeReturnUrl('/tools/dasha/main/c1')).toBe(true)
     for (const path of ['/main/c1', '/tools/dasha-other/main', '/tools/dasha/auth/callback', '//evil.example', '/tools/dasha/../other']) {

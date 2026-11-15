@@ -4,11 +4,11 @@ import { appBasePath, appURL } from '@/basePath'
 afterEach(() => document.querySelector('base')?.remove())
 
 describe('runtime base path', () => {
-  it('сохраняет корневые URL по умолчанию', () => {
+  it('keeps root URLs by default', () => {
     expect(appBasePath()).toBe('/')
     expect(appURL('/api/clusters?q=a%2Fb')).toBe('/api/clusters?q=a%2Fb')
   })
-  it('использует один HTML base для API и ресурсов', () => {
+  it('uses one HTML base for API requests and assets', () => {
     document.head.insertAdjacentHTML('afterbegin', '<base href="/tools/dasha/">')
     expect(appBasePath()).toBe('/tools/dasha/')
     expect(appURL('/api/clusters')).toBe('/tools/dasha/api/clusters')

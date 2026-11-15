@@ -495,7 +495,6 @@ func provideLogger(debug bool) *zap.Logger {
 func newConfigViper() *viper.Viper {
 	v := viper.NewWithOptions(viper.KeyDelimiter("::"))
 	v.SetDefault("base_path", "")
-	v.AllowEmptyEnv(true)
 	v.MustBindEnv("base_path", "DASHA_BASE_PATH")
 	return v
 }

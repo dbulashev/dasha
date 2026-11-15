@@ -8,21 +8,23 @@ import (
 
 var basePathPattern = regexp.MustCompile(`^(/[A-Za-z0-9._~-]+)+$`)
 
-// NormalizeBasePath возвращает пустой префикс для корня и запрещает неоднозначные URL.
+// NormalizeBasePath validates the URL prefix and returns an empty string for root.
 func NormalizeBasePath(value string) (string, error) {
-	if value == "//" {
-		return "", errors.New("base_path: пустой сегмент запрещён")
-	}
 	value = strings.TrimSuffix(value, "/")
 	if value == "" {
 		return "", nil
 	}
 	if !basePathPattern.MatchString(value) {
-		return "", errors.New("base_path: ожидается абсолютный путь из непустых сегментов без query/fragment")
+		return "", errors.New("base_path: expected an absolute path with non-empty segments and no query or fragment")
 	}
-	for _, segment := range strings.Split(value, "/")[1:] {
+	segments := strings.Split(value, "/")[1:]
+	switch segments[0] {
+	case "api", "auth", "mcp":
+		return "", errors.New("base_path: first segment must not be api, auth or mcp")
+	}
+	for _, segment := range segments {
 		if segment == "." || segment == ".." {
-			return "", errors.New("base_path: сегменты . и .. запрещены")
+			return "", errors.New("base_path: . and .. segments are not allowed")
 		}
 	}
 	return value, nil

@@ -1,4 +1,4 @@
-// Значение задаёт HTML <base>, который контейнер формирует при запуске.
+// appBasePath reads the runtime prefix from the HTML base element.
 export function appBasePath(): string {
   return document.querySelector('base')?.getAttribute('href') || '/'
 }
