@@ -47,10 +47,13 @@ read-only rootfs chart не требуется. Cookie сессии/state и с�
 Для проверки в Chromium установите npm-зависимости frontend и Playwright Chromium,
 затем задайте `DASHA_SUBPATH_BROWSER=true` для этой команды. Браузерные тесты
 подменяют ответы API/auth; полный OIDC-цикл с подписанными токенами проверяют backend-тесты.
+Для системного Chromium задайте `CHROMIUM_PATH`; на Firefox и WebKit эта настройка не влияет.
 Для сквозных HTTP-проверок задайте `DASHA_SUBPATH_BACKEND` — абсолютный путь к статически
 собранному `backend/internal/http/testdata/subpath-backend`. CI собирает этот стенд и
 проверяет настоящие запросы nginx → backend, сохранение URI/query/body, RBAC и внутренние
 URL без префикса. Зарезервированные префиксы проверяются как недопустимые значения.
+При включённом backend-стенде smoke-тесты ждут HTML frontend и успешного API-запроса
+с тестовым ключом; при таймауте готовности выводятся логи контейнера.
 
 ## Роль мониторинга
 

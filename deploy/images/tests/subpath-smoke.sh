@@ -13,7 +13,7 @@ cleanup() {
 trap cleanup EXIT
 
 check() {
-    local prefix="$1" name="dasha-subpath-$$-${#names[@]}" base html asset
+    local prefix="$1" name="dasha-subpath-$$-${#names[@]}" base html asset ready=false
     local -a backend_options=() backend_command=()
     shift
     names+=("$name")
@@ -26,9 +26,19 @@ check() {
     base="http://127.0.0.1:$(docker port "$name" 3000/tcp | sed 's/.*://')"
     prefix="${prefix%/}"
     for _ in $(seq 30); do
-        if curl -fsS "$base$prefix/" >/dev/null; then break; fi
+        if curl -fsS --max-time 2 "$base$prefix/" >/dev/null &&
+           { [ -z "${DASHA_SUBPATH_BACKEND:-}" ] ||
+             curl -fsS --max-time 2 -H "X-API-Key: $viewer_token" "$base$prefix/api/private" >/dev/null; }; then
+            ready=true
+            break
+        fi
         sleep 1
     done
+    if [ "$ready" != true ]; then
+        echo "Timed out waiting for subpath smoke readiness: ${prefix:-/}" >&2
+        docker logs "$name" >&2
+        return 1
+    fi
     html=$(curl -fsS "$base$prefix/settings")
     # Check that the base element precedes preload and asset links.
     [[ "$html" == *"<head><base href=\"$prefix/\">"* ]]

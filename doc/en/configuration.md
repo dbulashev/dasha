@@ -48,10 +48,13 @@ Image regression: `bash deploy/images/tests/subpath-smoke.sh <frontend-image>`.
 To include Chromium checks, install the frontend's npm dependencies and Playwright
 Chromium, then set `DASHA_SUBPATH_BROWSER=true` for that command. Browser checks mock
 API/auth responses, while backend tests exercise a complete signed-token OIDC flow.
+Set `CHROMIUM_PATH` to use a system Chromium binary; Firefox and WebKit are unaffected.
 Set `DASHA_SUBPATH_BACKEND` to the absolute path of a statically built
 `backend/internal/http/testdata/subpath-backend` binary to also test real nginx → backend
 requests, URI/query/body preservation, RBAC and unprefixed internal routes. CI builds
 and supplies this routing fixture. Reserved prefixes are tested as invalid inputs.
+With the fixture enabled, smoke tests wait for both frontend HTML and an authenticated
+API response before running assertions; a readiness timeout reports the container logs.
 
 ## Monitoring role
 
