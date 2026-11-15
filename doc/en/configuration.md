@@ -31,7 +31,11 @@ The outer reverse proxy must **preserve** `/dasha` when forwarding to the fronte
 nginx and pass the original `Host` and `X-Forwarded-Proto`. No response-body,
 `Location` or cookie-path rewriting is needed. The frontend forwards the URI
 unchanged; only the backend removes the prefix before routing and authentication.
-Unprefixed internal routes remain available to service-to-service clients.
+Unprefixed internal routes remain available directly on the backend. Service-to-service
+clients must connect to the backend endpoint, or use a separately configured route to it.
+When a base path is configured, the frontend nginx and the chart's Ingress/HTTPRoute
+expose only prefixed application paths. Direct backend access does not bypass
+authentication/RBAC or configured HTTPS requirements.
 `X-Forwarded-Prefix` is not trusted or used.
 
 The frontend entrypoint renders only HTML `<base>` into its writable
