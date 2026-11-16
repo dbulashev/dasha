@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.27.3"
+          go-version: "1.27.4"
           cache-dependency-path: backend/go.sum
       - name: Install linters
         run: |
@@ -48,7 +48,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.27.3"
+          go-version: "1.27.4"
           cache-dependency-path: backend/go.sum
       - run: cd backend && go test ./internal/...
 
@@ -58,12 +58,30 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.27.3"
+          go-version: "1.27.4"
           cache-dependency-path: backend/go.sum
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
       - name: Run govulncheck
-        run: cd backend && govulncheck ./...
+        working-directory: backend
+        env:
+          # Ignored only while the vuln DB lists no fixed version.
+          GOVULN_IGNORE: '["GO-2026-6872","GO-2026-6875"]'
+        run: |
+          set -euo pipefail
+          govulncheck -format json ./... > govulncheck.json
+          jq -rs --argjson ignore "$GOVULN_IGNORE" '
+            (map(select(.osv)) | map({key: .osv.id, value: .osv.summary}) | from_entries) as $summary
+            | [.[] | select(.finding and .finding.trace[0].function) | .finding]
+            | unique_by(.osv)
+            | .[]
+            | (.osv as $id | ($ignore | index($id)) != null and .fixed_version == null) as $ignored
+            | "\(if $ignored then "IGNORED" else "VULN" end)\t\(.osv)\tfixed: \(.fixed_version // "N/A")\t\($summary[.osv])"
+          ' govulncheck.json | tee govulncheck.txt
+          if grep -q '^VULN' govulncheck.txt; then
+            echo "::error::govulncheck found vulnerabilities in called code"
+            exit 1
+          fi
 
   vulncheck-frontend:
     runs-on: ubuntu-latest
@@ -115,7 +133,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.27.3"
+          go-version: "1.27.4"
           cache-dependency-path: backend/go.sum
       - name: Integration tests (PG ${{ matrix.pg-version }})
         run: |
@@ -129,7 +147,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.27.3"
+          go-version: "1.27.4"
           cache-dependency-path: backend/go.sum
       - name: Integration tests (log sources)
         run: |
@@ -143,7 +161,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.27.3"
+          go-version: "1.27.4"
           cache-dependency-path: backend/go.sum
       - name: Integration tests (Patroni DCS)
         run: |
@@ -209,7 +227,7 @@ jobs:
           serve_check frontend-smoke-uid --user 12345:0
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.27.3"
+          go-version: "1.27.4"
           cache-dependency-path: backend/go.sum
       - name: Build subpath routing fixture
         run: cd backend && CGO_ENABLED=0 go build -o "$RUNNER_TEMP/subpath-backend" ./internal/http/testdata/subpath-backend
@@ -307,7 +325,7 @@ jobs:
   #         persist-credentials: false # the scanner only reads history, it never pushes
   #     - uses: actions/setup-go@v7
   #       with:
-  #         go-version: "1.27.3"
+  #         go-version: "1.27.4"
   #         cache-dependency-path: backend/go.sum
   #     # Without a report Sonar reads coverage as 0% and the Quality Gate fails on
   #     # every pull request that adds code. Integration tests are included because
@@ -334,7 +352,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
         with:
-          go-version: "1.27.3"
+          go-version: "1.27.4"
           cache-dependency-path: backend/go.sum
       - run: cd backend && go build ./cmd/...
       # ./cmd/... already compiles the MCP binary, but release ships it from
