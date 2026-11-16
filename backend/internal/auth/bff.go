@@ -25,17 +25,18 @@ const defaultOIDCUnavailableMessage = "Single Sign-On is misconfigured. Please c
 const loginRecordTimeout = 2 * time.Second
 
 func RegisterBFFRoutes(e *echo.Echo, provider *OIDCProvider, sm *SessionManager, rec LoginRecorder, logger *zap.Logger) {
-	e.GET("/auth/login", loginHandler(provider, sm, logger))
-	e.GET("/auth/callback", callbackHandler(provider, sm, rec, logger))
+	basePath := ""
+	if sm != nil {
+		basePath = sm.basePath
+	}
+	e.GET("/auth/login", loginHandler(provider, sm, logger, basePath))
+	e.GET("/auth/callback", callbackHandler(provider, sm, rec, logger, basePath))
 	e.POST("/auth/logout", logoutHandler(sm, provider, logger))
 	e.GET("/auth/me", meHandler(sm, provider))
 }
 
-// renderOIDCUnavailable renders the apology page with a custom message and optional "Try again" link.
-// status: HTTP status code to return (typically 503 for misconfig, 502 for IDP errors).
-// message: user-facing description; empty falls back to the generic admin-contact text.
-// showRetry: when true, includes a link to /auth/login so the user can retry.
-func renderOIDCUnavailable(c echo.Context, status int, message string, showRetry bool) error {
+// renderOIDCUnavailable renders the apology page with an optional retry link.
+func renderOIDCUnavailable(c echo.Context, basePath string, status int, message string, showRetry bool) error {
 	if message == "" {
 		message = defaultOIDCUnavailableMessage
 	}
@@ -47,10 +48,12 @@ func renderOIDCUnavailable(c echo.Context, status int, message string, showRetry
 		"Title":     "Authentication is unavailable",
 		"Message":   message,
 		"ShowRetry": showRetry,
+		"LogoURL":   basePath + "/dasha-appology.png",
+		"LoginURL":  basePath + "/auth/login",
 	})
 }
 
-func renderAccessDenied(c echo.Context) error {
+func renderAccessDenied(c echo.Context, basePath string) error {
 	c.Response().Header().Set(echo.HeaderContentType, echo.MIMETextHTMLCharsetUTF8)
 	c.Response().WriteHeader(http.StatusForbidden)
 
@@ -58,60 +61,61 @@ func renderAccessDenied(c echo.Context) error {
 		"Title":     "Access denied",
 		"Message":   "Your account is not in any group that grants access to Dasha. Please contact your administrator.",
 		"ShowRetry": false,
+		"LogoURL":   basePath + "/dasha-appology.png",
 	})
 }
 
-func loginHandler(provider *OIDCProvider, sm *SessionManager, logger *zap.Logger) echo.HandlerFunc {
+func loginHandler(provider *OIDCProvider, sm *SessionManager, logger *zap.Logger, basePath string) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		if provider == nil || !provider.Ready() {
+		if sm == nil || provider == nil || !provider.Ready() {
 			logger.Warn("SSO login requested but OIDC provider is not ready (discovery pending or failed)")
-			return renderOIDCUnavailable(c, http.StatusServiceUnavailable, "Single Sign-On is starting up or the identity provider is unreachable. Please try again shortly.", true)
+			return renderOIDCUnavailable(c, basePath, http.StatusServiceUnavailable, "Single Sign-On is starting up or the identity provider is unreachable. Please try again shortly.", true)
 		}
 
 		state, err := sm.SetStateCookie(c)
 		if err != nil {
 			logger.Error("failed to generate state", zap.Error(err))
-			return renderOIDCUnavailable(c, http.StatusInternalServerError, "Failed to start login: state cookie could not be generated.", true)
+			return renderOIDCUnavailable(c, basePath, http.StatusInternalServerError, "Failed to start login: state cookie could not be generated.", true)
 		}
 
 		return c.Redirect(http.StatusFound, provider.AuthCodeURL(state))
 	}
 }
 
-func callbackHandler(provider *OIDCProvider, sm *SessionManager, rec LoginRecorder, logger *zap.Logger) echo.HandlerFunc {
+func callbackHandler(provider *OIDCProvider, sm *SessionManager, rec LoginRecorder, logger *zap.Logger, basePath string) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		if provider == nil || !provider.Ready() {
+		if sm == nil || provider == nil || !provider.Ready() {
 			logger.Warn("OIDC callback received but provider is not ready")
-			return renderOIDCUnavailable(c, http.StatusServiceUnavailable, "", false)
+			return renderOIDCUnavailable(c, basePath, http.StatusServiceUnavailable, "", false)
 		}
 
 		if err := sm.ValidateStateCookie(c); err != nil {
 			logger.Warn("invalid OAuth state, redirecting to login", zap.Error(err))
-			return c.Redirect(http.StatusFound, "/auth/login")
+			return c.Redirect(http.StatusFound, sm.basePath+"/auth/login")
 		}
 
 		oauth2Token, err := sm.ExchangeCode(c, provider)
 		if err != nil {
 			logger.Error("token exchange failed", zap.Error(err))
-			return renderOIDCUnavailable(c, http.StatusBadGateway, "Token exchange with the identity provider failed. Please try logging in again.", true)
+			return renderOIDCUnavailable(c, basePath, http.StatusBadGateway, "Token exchange with the identity provider failed. Please try logging in again.", true)
 		}
 
 		rawIDToken, ok := oauth2Token.Extra("id_token").(string)
 		if !ok {
 			logger.Error("OIDC token response did not include id_token")
-			return renderOIDCUnavailable(c, http.StatusBadGateway, "Identity provider response did not include an id_token.", true)
+			return renderOIDCUnavailable(c, basePath, http.StatusBadGateway, "Identity provider response did not include an id_token.", true)
 		}
 
 		idToken, err := provider.VerifyIDToken(c.Request().Context(), rawIDToken)
 		if err != nil {
 			logger.Error("ID token verification failed", zap.Error(err))
-			return renderOIDCUnavailable(c, http.StatusUnauthorized, "Identity provider returned an invalid id_token.", true)
+			return renderOIDCUnavailable(c, basePath, http.StatusUnauthorized, "Identity provider returned an invalid id_token.", true)
 		}
 
 		var claims map[string]any
 		if err := idToken.Claims(&claims); err != nil {
 			logger.Error("failed to parse claims", zap.Error(err))
-			return renderOIDCUnavailable(c, http.StatusInternalServerError, "Failed to parse identity claims from the id_token.", true)
+			return renderOIDCUnavailable(c, basePath, http.StatusInternalServerError, "Failed to parse identity claims from the id_token.", true)
 		}
 
 		name, _ := claims["preferred_username"].(string)
@@ -127,7 +131,7 @@ func callbackHandler(provider *OIDCProvider, sm *SessionManager, rec LoginRecord
 				logger.Warn("failed to revoke refresh token", zap.Error(err))
 			}
 
-			return renderAccessDenied(c)
+			return renderAccessDenied(c, basePath)
 		}
 
 		if err := sm.SetSession(c, &SessionData{
@@ -139,7 +143,7 @@ func callbackHandler(provider *OIDCProvider, sm *SessionManager, rec LoginRecord
 			UserRole:     role,
 		}); err != nil {
 			logger.Error("failed to set session", zap.Error(err))
-			return renderOIDCUnavailable(c, http.StatusInternalServerError, "Failed to create session after successful authentication.", true)
+			return renderOIDCUnavailable(c, basePath, http.StatusInternalServerError, "Failed to create session after successful authentication.", true)
 		}
 
 		recordLogin(c.Request().Context(), rec, email, name, role, logger)
@@ -149,7 +153,7 @@ func callbackHandler(provider *OIDCProvider, sm *SessionManager, rec LoginRecord
 			zap.String("role", role),
 		)
 
-		return c.Redirect(http.StatusFound, "/")
+		return c.Redirect(http.StatusFound, sm.basePath+"/")
 	}
 }
 

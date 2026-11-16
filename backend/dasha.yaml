@@ -1,4 +1,6 @@
 debug: true
+# External URL prefix; a non-empty DASHA_BASE_PATH overrides this value.
+base_path: ""
 clusters:
   - name: home
     username: postgres

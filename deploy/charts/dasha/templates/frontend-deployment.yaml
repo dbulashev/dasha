@@ -62,6 +62,8 @@ spec:
               containerPort: {{ .Values.frontend.port }}
               protocol: TCP
           env:
+            - name: DASHA_BASE_PATH
+              value: {{ include "dasha.basePath" . | quote }}
             - name: BACKEND_URL
               value: {{ template "dasha.fullname" $ }}-backend:{{ .Values.backend.port }}
             - name: FORCE_HTTPS_REDIRECT
@@ -79,13 +81,13 @@ spec:
               mountPath: /tmp
           livenessProbe:
             httpGet:
-              path: /
+              path: {{ printf "%s/" (include "dasha.basePath" .) | quote }}
               port: http
             initialDelaySeconds: 3
             periodSeconds: 30
           readinessProbe:
             httpGet:
-              path: /
+              path: {{ printf "%s/" (include "dasha.basePath" .) | quote }}
               port: http
             initialDelaySeconds: 2
             periodSeconds: 10

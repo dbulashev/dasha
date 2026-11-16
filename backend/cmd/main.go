@@ -245,6 +245,7 @@ func dashaExec(cmd *cobra.Command, _ []string) error {
 
 	d := http.NewDashaHandlers(container.Config(), container.Repository(), st, container.Metrics(), logsSvc, logger)
 	svc := http.New(d, mw, authMW.RequireHTTPS, authMW.RateLimit, logsRateLimit, authMW.Auth, authMW.Casbin, logger)
+	svc.WithBasePath(container.Config().BasePath)
 
 	if container.Config().Auth.Mode == config.AuthModeOIDC {
 		auth.RegisterBFFRoutes(svc.Echo, authMW.OIDCProvider, authMW.SessionManager, deps.NewLoginRecorder(st), logger)

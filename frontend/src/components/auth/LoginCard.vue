@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useAuthStore } from '@/stores/auth'
 import { useI18n } from 'vue-i18n'
+import { appURL } from '@/basePath'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -10,7 +11,7 @@ const appVersion = import.meta.env.VITE_APP_VERSION || 'dev'
 <template>
   <v-container class="fill-height d-flex flex-column align-center justify-center">
     <v-card max-width="440" class="pa-8 text-center" elevation="4" theme="light">
-      <img src="/logo.png" alt="Dasha" class="login-logo mb-8" />
+      <img :src="appURL('/logo.png')" alt="Dasha" class="login-logo mb-8" />
       <v-btn
         color="primary"
         size="large"

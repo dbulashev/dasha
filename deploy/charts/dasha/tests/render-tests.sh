@@ -69,4 +69,25 @@ render_fails "ingress and gateway API at the same time" \
   --set ingress.enabled=true \
   --set gatewayAPI.enabled=true
 
+render_ok "prefix: nested path" --set config.base_path=/tools/dasha/
+render_ok "prefix: headless backend" --set config.base_path=/dasha --set frontend.enabled=false --set ingress.enabled=true
+for prefix in "" / /apiary /authentication /mcp-tools /tools/api; do
+  render_ok "prefix: ${prefix:-root}" --set-string "config.base_path=$prefix"
+done
+render_fails "prefix: relative path" "config.base_path" --set config.base_path=dasha
+render_fails "prefix: traversal" "config.base_path" --set config.base_path=/tools/../dasha
+render_fails "prefix: foreign origin" "config.base_path" --set config.base_path=//example.com
+render_fails "prefix: invalid type" "config.base_path" --set config.base_path=false
+for prefix in /api /api/ /auth /auth/ /mcp /mcp/ /api/auth /api/autosnapshot/clusters /auth/tools /mcp/tools; do
+  render_fails "prefix: reserved first segment $prefix" "config.base_path" --set "config.base_path=$prefix"
+done
+
+out=$(helm template test "$CHART" --set config.base_path=/tools/dasha/ --set ingress.enabled=true)
+for expected in 'base_path: /tools/dasha' 'value: "/tools/dasha"' 'path: "/tools/dasha/"' 'path: /tools/dasha'; do
+  if ! grep -Fq "$expected" <<<"$out"; then
+    echo "FAIL: chart prefix lost: $expected"
+    FAILED=1
+  fi
+done
+
 exit "$FAILED"

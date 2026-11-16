@@ -47,15 +47,15 @@ const (
 // returns a non-nil shell: when discovery fails it keeps retrying in the
 // background until the IdP is reachable, so SSO self-heals without a restart.
 // ctx (the service lifetime) cancels the retry loop.
-func NewOIDCProvider(ctx context.Context, cfg config.OIDCConfig, logger *zap.Logger) *OIDCProvider {
+func NewOIDCProvider(ctx context.Context, cfg config.OIDCConfig, basePath string, logger *zap.Logger) *OIDCProvider {
 	roleClaim := cfg.RoleClaim
 	if roleClaim == "" {
 		roleClaim = "realm_access.roles"
 	}
 
-	postLogoutURI := "/"
+	postLogoutURI := basePath + "/"
 	if parsed, err := url.Parse(cfg.RedirectURL); err == nil {
-		postLogoutURI = parsed.Scheme + "://" + parsed.Host + "/"
+		postLogoutURI = parsed.Scheme + "://" + parsed.Host + basePath + "/"
 	}
 
 	p := &OIDCProvider{ //nolint:exhaustruct

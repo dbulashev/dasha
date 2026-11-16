@@ -1,4 +1,5 @@
 import { useAuthStore } from '@/stores/auth'
+import { appURL } from '@/basePath'
 
 /**
  * Custom fetch wrapper for orval-generated API clients.
@@ -10,7 +11,7 @@ import { useAuthStore } from '@/stores/auth'
  * with the real HTTP status.
  */
 export const customFetch = async <T>(url: string, options?: RequestInit): Promise<T> => {
-  const res = await fetch(url, options)
+  const res = await fetch(appURL(url), options)
   if (res.status === 401) useAuthStore().handleUnauthorized()
 
   const body = [204, 205, 304].includes(res.status) ? null : await res.text()

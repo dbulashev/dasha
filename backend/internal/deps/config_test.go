@@ -7,6 +7,34 @@ import (
 	"github.com/dbulashev/dasha/internal/config"
 )
 
+func TestBasePathEnvironment(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{name: "override", value: "/tools/dasha", want: "/tools/dasha"},
+		{name: "empty preserves config", value: "", want: "/other"},
+		{name: "explicit root", value: "/", want: "/"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("DASHA_BASE_PATH", tc.value)
+			v := newConfigViper()
+			v.SetConfigType("yaml")
+			if err := v.ReadConfig(strings.NewReader("base_path: /other\n")); err != nil {
+				t.Fatal(err)
+			}
+			var c config.Config
+			if err := v.Unmarshal(&c); err != nil {
+				t.Fatal(err)
+			}
+			if c.BasePath != tc.want {
+				t.Fatalf("base_path = %q, want %q", c.BasePath, tc.want)
+			}
+		})
+	}
+}
+
 func TestConfigViperKeepsDottedMapKeys(t *testing.T) {
 	t.Parallel()
 

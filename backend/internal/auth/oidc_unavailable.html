@@ -40,10 +40,10 @@
 </head>
 <body>
   <div class="empty-state">
-    <img src="/dasha-appology.png" alt="">
+    <img src="{{.LogoURL}}" alt="">
     <h1>{{.Title}}</h1>
     <p>{{.Message}}</p>
-    {{if .ShowRetry}}<p style="margin-top: 16px;"><a href="/auth/login">Try logging in again</a></p>{{end}}
+    {{if .ShowRetry}}<p style="margin-top: 16px;"><a href="{{.LoginURL}}">Try logging in again</a></p>{{end}}
   </div>
 </body>
 </html>
