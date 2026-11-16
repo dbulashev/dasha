@@ -278,8 +278,8 @@ func TestBuildSearchPushesDownQueryIDAndPhrase(t *testing.T) {
 	from := time.Date(2026, 9, 5, 10, 0, 0, 0, time.UTC)
 	id := int64(-4452854032459450605)
 
-	req := buildSearch(fm, nil,
-		source.Filter{QueryID: &id, Contains: []string{"plan"}}, from, from.Add(time.Hour), 500, false)
+	f := source.Filter{QueryID: &id, Words: []string{"plan"}, Terms: []string{"seq"}}
+	req := buildSearch(fm, nil, f, from, from.Add(time.Hour), 500, false)
 
 	raw, err := json.Marshal(req)
 	if err != nil {
@@ -291,6 +291,7 @@ func TestBuildSearchPushesDownQueryIDAndPhrase(t *testing.T) {
 	for _, want := range []string{
 		`"term":{"query_id":-4452854032459450605}`,
 		`"match_phrase":{"message":"plan"}`,
+		`"match_phrase":{"message":"seq"}`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("query body misses %s\ngot: %s", want, body)

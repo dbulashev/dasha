@@ -233,9 +233,9 @@ func TestLogsQLPushesDownQueryIDAndPhrase(t *testing.T) {
 	d := testStream(t, nil)
 	id := int64(-4452854032459450605)
 
-	got := d.logsQL(source.Filter{QueryID: &id, Contains: []string{"plan"}}, queryFrom, queryTo)
+	got := d.logsQL(source.Filter{QueryID: &id, Words: []string{"plan"}, Terms: []string{"Seq"}}, queryFrom, queryTo)
 
-	for _, want := range []string{`"query_id":="-4452854032459450605"`, `"_msg":"plan"`} {
+	for _, want := range []string{`"query_id":="-4452854032459450605"`, `"_msg":i("plan")`, `"_msg":i("Seq")`} {
 		if !strings.Contains(got, want) {
 			t.Errorf("logsQL() misses %s\n got %s", want, got)
 		}
@@ -253,14 +253,14 @@ func TestNarrowDropsAQueryIDTheStreamDoesNotCarry(t *testing.T) {
 	p := &Provider{streams: map[string]streamDef{"with": withID, "without": withoutID}} //nolint:exhaustruct
 
 	id := int64(7)
-	f := source.Filter{QueryID: &id, Contains: []string{"plan"}}
+	f := source.Filter{QueryID: &id, Words: []string{"plan"}}
 
 	if got := p.Narrow(context.Background(), source.StreamParams{Stream: "with", Filter: f}); got.QueryID == nil {
 		t.Errorf("filter = %+v, want the id pushed down", got)
 	}
 
 	got := p.Narrow(context.Background(), source.StreamParams{Stream: "without", Filter: f})
-	if got.QueryID != nil || len(got.Contains) != 1 {
+	if got.QueryID != nil || len(got.Words) != 1 {
 		t.Errorf("filter = %+v, want the id dropped and the phrase kept", got)
 	}
 }

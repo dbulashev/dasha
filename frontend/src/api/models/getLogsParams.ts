@@ -5,7 +5,9 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { ClusterNameParameter } from './clusterNameParameter';
+import type { GetLogsPreset } from './getLogsPreset';
 import type { GetLogsServiceType } from './getLogsServiceType';
+import type { GetLogsTextMode } from './getLogsTextMode';
 
 export type GetLogsParams = {
   cluster_name: ClusterNameParameter;
@@ -25,4 +27,8 @@ export type GetLogsParams = {
   dedup?: boolean;
   page_size?: number;
   page_token?: string;
+  /** search preset id; lets the backend narrow the store read by a word the preset text always holds, while a message filter still contains that text */
+  preset?: GetLogsPreset;
+  /** how message filters match: substring (default) is a case-insensitive substring checked by Dasha; words splits them on whitespace and lets the log store match each word by its own rules (whole words, its analyzer's case folding and stemming). Words fall back to substring where the store cannot run them, see text_mode and text_skipped of the result. */
+  text_mode?: GetLogsTextMode;
 };

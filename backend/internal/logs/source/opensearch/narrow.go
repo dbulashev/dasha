@@ -24,18 +24,26 @@ type fieldTypeEntry struct {
 }
 
 // Narrow keeps the filter parts the index can execute. Severity and host match
-// keyword fields and always push down; query_id and a phrase depend on how the
+// keyword fields and always push down; query_id and words depend on how the
 // field is indexed, and a mapping that cannot be read narrows nothing: a phrase
 // sent to a keyword field matches no record at all, and a silently empty answer
-// is worse than a large scan.
-func (p *Provider) Narrow(ctx context.Context, sp source.StreamParams) source.Filter {
-	out := source.Filter{ //nolint:exhaustruct
-		Severities: sp.Filter.Severities,
-		Host:       sp.Filter.Host,
+// is worse than a large scan. Terms go as a whole or not at all. Substrings,
+// database and user are not sent.
+func (p *Provider) Narrow(ctx context.Context, sp source.StreamParams) source.Narrowed {
+	out := source.Narrowed{ //nolint:exhaustruct
+		Filter: source.Filter{ //nolint:exhaustruct
+			Severities: sp.Filter.Severities,
+			Host:       sp.Filter.Host,
+		},
+		TextSkip: source.SkipText(sp.Filter, source.TextSkipUnsupported),
+	}
+
+	if len(sp.Filter.Terms) > 0 {
+		out.TextSkip = source.TextSkipMapping
 	}
 
 	def, ok := p.streams[sp.Stream]
-	if !ok || (sp.Filter.QueryID == nil && len(sp.Filter.Contains) == 0) {
+	if !ok || (sp.Filter.QueryID == nil && len(sp.Filter.Words) == 0 && len(sp.Filter.Terms) == 0) {
 		return out
 	}
 
@@ -55,8 +63,15 @@ func (p *Provider) Narrow(ctx context.Context, sp source.StreamParams) source.Fi
 		out.QueryID = sp.Filter.QueryID
 	}
 
-	if len(sp.Filter.Contains) > 0 && fullyAnalyzed(types, fm.Text) {
-		out.Contains = sp.Filter.Contains
+	if !fullyAnalyzed(types, fm.Text) {
+		return out
+	}
+
+	out.Words = sp.Filter.Words
+
+	if len(sp.Filter.Terms) > 0 {
+		out.Terms = sp.Filter.Terms
+		out.TextSkip = source.TextSkipNone
 	}
 
 	return out

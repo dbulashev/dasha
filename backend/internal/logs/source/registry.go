@@ -72,6 +72,18 @@ func (r *Registry) Supports(cluster config.Cluster) bool {
 	return ok
 }
 
+// WordSearch reports whether the cluster's source runs Filter.Terms.
+func (r *Registry) WordSearch(cluster config.Cluster) bool {
+	p, _, ok := r.For(cluster)
+	if !ok {
+		return false
+	}
+
+	w, ok := p.(WordSearcher)
+
+	return ok && w.WordSearch()
+}
+
 // Severities lists, per stream, the severity values the cluster's source
 // accepts, in the casing it stores them.
 func (r *Registry) Severities(cluster config.Cluster) map[string][]string {

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -62,7 +63,22 @@ type SearchQuery struct {
 	Dedup      bool
 	PageSize   int
 	PageToken  string // non-dedup cursor only
+	// Preset is the id of the search preset the filters came from; it lets the
+	// store narrow by a word the preset text always holds.
+	Preset   string
+	TextMode TextMode // "" means TextModeSubstring
 }
+
+// TextMode is how Include matches the message.
+type TextMode string
+
+const (
+	// TextModeSubstring matches each include as a case-insensitive substring.
+	TextModeSubstring TextMode = "substring"
+	// TextModeWords splits includes on whitespace and lets the store match each
+	// word by its own rules; Dasha does not check them after reading.
+	TextModeWords TextMode = "words"
+)
 
 // Entry is a single result row (or a dedup group when Count > 0).
 type Entry struct {
@@ -87,6 +103,13 @@ type SearchResult struct {
 	Dedup         bool
 	Partial       bool // max_scan reached -> results/counts are incomplete
 	Scanned       int
+	// NarrowedBy names what the store filtered on itself, see narrowedBy.
+	NarrowedBy []string
+	// TextMode is the mode the search ran in: words fall back to substring
+	// when the store cannot run them.
+	TextMode TextMode
+	// TextSkipped says why the message filter did not reach the store.
+	TextSkipped source.TextSkip
 }
 
 // CheckReport is the outcome of probing the source bound to a cluster.
@@ -172,6 +195,11 @@ func (s *service) Search(ctx context.Context, q SearchQuery) (SearchResult, erro
 		return SearchResult{}, err
 	}
 
+	word, err := presetWord(q.Preset, q.Include)
+	if err != nil {
+		return SearchResult{}, err
+	}
+
 	s.logRead(ctx, "log search", q.Cluster, b.sourceName, q.Stream)
 
 	params := source.StreamParams{
@@ -179,28 +207,94 @@ func (s *service) Search(ctx context.Context, q SearchQuery) (SearchResult, erro
 		Stream:  q.Stream,
 		From:    q.From,
 		To:      q.To,
-		Filter: source.Filter{ //nolint:exhaustruct
-			Severities: severities,
-			Host:       q.Host,
-			QueryID:    q.QueryID,
-		},
-		Token: q.PageToken,
+		Filter:  s.searchFilter(q, severities, word),
+		Token:   q.PageToken,
 	}
 
-	// A term on a field the store indexes as text matches no record at all, so
-	// the statement id goes down only where the store says it can run it.
-	if q.QueryID != nil {
-		params.Filter.QueryID = narrow(ctx, b.provider, params).QueryID
+	// One narrowed filter serves the first page and every continuation: the
+	// cursor does not depend on it.
+	n := narrow(ctx, b.provider, params)
+	params.Filter = n.Filter
+
+	// Terms the store runs are the message filter; toEntry must not apply the
+	// includes again as substrings.
+	mode := TextModeSubstring
+	if len(n.Terms) > 0 {
+		mode = TextModeWords
+		q.Include = nil
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(s.cfg.TimeoutSeconds)*time.Second)
 	defer cancel()
 
+	var res SearchResult
 	if q.Dedup {
-		return s.searchDedup(ctx, b.provider, params, q, b.fields)
+		res, err = s.searchDedup(ctx, b.provider, params, q, b.fields)
+	} else {
+		res, err = s.searchPage(ctx, b.provider, params, q, b.fields)
 	}
 
-	return s.searchPage(ctx, b.provider, params, q, b.fields)
+	if err != nil {
+		return SearchResult{}, err
+	}
+
+	res.NarrowedBy = narrowedBy(n.Filter)
+	res.TextMode = mode
+	res.TextSkipped = n.TextSkip
+
+	if q.TextMode == TextModeWords && mode != TextModeWords && n.TextSkip == source.TextSkipNone {
+		res.TextSkipped = source.TextSkipUnsupported
+	}
+
+	return res, nil
+}
+
+// searchFilter is what a search asks the store to run. With pushdown off only
+// severity, host and query_id go down.
+func (s *service) searchFilter(q SearchQuery, severities []string, word string) source.Filter {
+	f := source.Filter{ //nolint:exhaustruct
+		Severities: severities,
+		Host:       q.Host,
+		QueryID:    q.QueryID,
+	}
+
+	if !s.cfg.PushdownEnabled() {
+		return f
+	}
+
+	if word != "" {
+		f.Words = []string{word}
+	}
+
+	if q.TextMode == TextModeWords {
+		f.Terms = terms(q.Include)
+	} else {
+		for _, inc := range q.Include {
+			if inc != "" {
+				f.Substrings = append(f.Substrings, inc)
+			}
+		}
+	}
+
+	f.Database = q.Database
+	f.User = q.User
+
+	return f
+}
+
+// terms splits includes on whitespace, dropping repeats.
+func terms(include []string) []string {
+	var out []string
+
+	for _, inc := range include {
+		for _, w := range strings.Fields(inc) {
+			if !slices.Contains(out, w) {
+				out = append(out, w)
+			}
+		}
+	}
+
+	return out
 }
 
 // Check probes the source bound to the cluster and masks the sample record it
@@ -323,6 +417,12 @@ func (s *service) validate(cluster config.Cluster, fm source.FieldMap, q SearchQ
 		return nil, fmt.Errorf("%w: page_token cannot be combined with dedup", ErrInvalid)
 	}
 
+	switch q.TextMode {
+	case "", TextModeSubstring, TextModeWords:
+	default:
+		return nil, fmt.Errorf("%w: unknown text_mode %q", ErrInvalid, q.TextMode)
+	}
+
 	// A stream without the role would answer empty for every statement asked for.
 	if q.QueryID != nil && fm.QueryID == "" {
 		return nil, fmt.Errorf("%w: stream %q carries no query_id", ErrInvalid, q.Stream)
@@ -419,7 +519,7 @@ func (s *service) searchPage(
 		// page instead of being discarded.
 		switch {
 		case errors.Is(err, ErrTimeout) && len(items) > 0:
-			return SearchResult{
+			return SearchResult{ //nolint:exhaustruct
 				Items:         items,
 				NextPageToken: lastToken,
 				Dedup:         false,
@@ -427,7 +527,7 @@ func (s *service) searchPage(
 				Scanned:       st.Records,
 			}, nil
 		case st.Partial:
-			return SearchResult{
+			return SearchResult{ //nolint:exhaustruct
 				Items:         items,
 				NextPageToken: "",
 				Dedup:         false,
@@ -446,7 +546,7 @@ func (s *service) searchPage(
 		next = lastToken
 	}
 
-	return SearchResult{
+	return SearchResult{ //nolint:exhaustruct
 		Items:         items,
 		NextPageToken: next,
 		Dedup:         false,
@@ -525,7 +625,7 @@ func (s *service) searchDedup(
 		return items[i].LastSeen.After(items[j].LastSeen)
 	})
 
-	return SearchResult{
+	return SearchResult{ //nolint:exhaustruct
 		Items:         items,
 		NextPageToken: "",
 		Dedup:         true,

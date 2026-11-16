@@ -26,6 +26,9 @@ import (
 
 const testCluster = "prod"
 
+// corpusCluster holds the text corpus; the main set stays as it is.
+const corpusCluster = "corpus"
+
 var baseURL string
 
 func TestMain(m *testing.M) {
@@ -157,7 +160,7 @@ func queryID(i int) string {
 func seed(ctx context.Context) error {
 	var body bytes.Buffer
 
-	for _, r := range seedRecords() {
+	for _, r := range append(seedRecords(), corpusRecords()...) {
 		line, err := json.Marshal(r)
 		if err != nil {
 			return err
@@ -187,12 +190,49 @@ func seed(ctx context.Context) error {
 		return fmt.Errorf("insert: %s", resp.Status)
 	}
 
-	return waitForRecords(ctx, len(seedRecords()))
+	if err := waitForRecords(ctx, testCluster, len(seedRecords())); err != nil {
+		return err
+	}
+
+	return waitForRecords(ctx, corpusCluster, len(corpusRecords()))
+}
+
+// corpusRecords are messages a pushed-down substring is easy to get wrong on:
+// punctuation inside words, case folding outside ASCII, regexp metacharacters.
+func corpusRecords() []seedRecord {
+	msgs := []string{
+		"a.b c d.e", "x:y", "foo_bar baz", "Duration: 5 ms", "duration: 7 ms  plan:",
+		"ДЛИТЕЛЬНОСТЬ запроса", "İstanbul office", "ISTANBUL", "canceling statement due to user request",
+		"the due date", "日本語のログ", `path C:\tmp "quoted" (x)*`, "Straße", "STRASSE",
+		"σοφία ΣΟΦΊΑ", "tab\there", "connection authorized: user=app",
+	}
+	dbs := []string{"billing_prod", "Shop", "billing"}
+	users := []string{"Admin", "app"}
+
+	out := make([]seedRecord, 0, len(msgs))
+
+	for i, msg := range msgs {
+		out = append(out, seedRecord{
+			Time:          seedStart.Add(time.Duration(200+i) * time.Second).Format(time.RFC3339Nano),
+			Msg:           msg,
+			ErrorSeverity: "LOG",
+			Dbname:        dbs[i%len(dbs)],
+			User:          users[i%len(users)],
+			PID:           fmt.Sprintf("%d", 5000+i),
+			QueryID:       queryID(i),
+			StateCode:     "00000",
+			Cluster:       corpusCluster,
+			Host:          "db-1.example.net",
+			App:           "postgres",
+		})
+	}
+
+	return out
 }
 
 // waitForRecords flushes the in-memory buffer and waits until the whole set is
 // searchable.
-func waitForRecords(ctx context.Context, want int) error {
+func waitForRecords(ctx context.Context, cluster string, want int) error {
 	deadline := time.Now().Add(30 * time.Second)
 
 	for {
@@ -208,7 +248,10 @@ func waitForRecords(ctx context.Context, want int) error {
 
 		_ = resp.Body.Close()
 
-		got := collect(context.Background(), nil, testProvider(nil), testParams(source.Filter{}), 0)
+		params := testParams(source.Filter{})
+		params.Cluster.Name = config.ClusterName(cluster)
+
+		got := collect(context.Background(), nil, testProvider(nil), params, 0)
 		if len(got) >= want {
 			return nil
 		}
@@ -598,5 +641,20 @@ func TestUnknownStream(t *testing.T) {
 	err := testProvider(nil).Stream(context.Background(), params, func(source.Record) bool { return true })
 	if !errors.Is(err, source.ErrStream) {
 		t.Fatalf("stream error = %v, want ErrStream", err)
+	}
+}
+
+// TestTermsRunInTheStore: words-mode terms match whole words, case aside.
+func TestTermsRunInTheStore(t *testing.T) {
+	p := testProvider(nil)
+
+	n := p.Narrow(context.Background(), testParams(source.Filter{Terms: []string{"STATEMENT", "17"}}))
+	if len(n.Terms) != 2 {
+		t.Fatalf("narrowed = %+v, want both terms", n.Filter)
+	}
+
+	got := collect(context.Background(), t, p, testParams(n.Filter), 0)
+	if len(got) != 1 || got[0].Fields["pid"] != "1017" {
+		t.Fatalf("records = %+v, want pid 1017 alone", got)
 	}
 }

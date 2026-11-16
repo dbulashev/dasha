@@ -73,9 +73,9 @@ func buildSearch(
 		})
 	}
 
-	for _, phrase := range f.Contains {
+	for _, w := range slices.Concat(f.Words, f.Terms) {
 		filters = append(filters, map[string]any{
-			"match_phrase": map[string]any{fm.Text: phrase},
+			"match_phrase": map[string]any{fm.Text: w},
 		})
 	}
 

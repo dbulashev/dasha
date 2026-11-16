@@ -3,34 +3,16 @@ package logs
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/dbulashev/dasha/internal/logs/insights"
 	"github.com/dbulashev/dasha/internal/logs/source"
 )
 
-// planPhrase is the phrase every auto_explain record holds. The colon is left
-// out: a standard analyzer drops it, and a phrase carrying it would match
-// nothing where the store tokenizes the message.
-const planPhrase = "plan"
-
-// What a scan asked the log store to filter on. Without it an empty answer
-// cannot be told apart from a store that dropped the records itself.
-const (
-	NarrowedSeverity = "severity"
-	NarrowedQueryID  = "query_id"
-	NarrowedText     = "text"
-)
-
 const (
 	defaultPlanGroups = 10
 	maxPlanGroups     = 100
 )
-
-// narrowTimeout bounds what the provider spends deciding what it can filter
-// itself: the metadata call of a store must not eat the budget of the scan.
-const narrowTimeout = 5 * time.Second
 
 // PlansQuery reads the plans of a window, of one statement when QueryID is set.
 type PlansQuery struct {
@@ -127,7 +109,7 @@ func (s *service) scanPlans(
 		Filter:  planFilter(q, logging.Levels, b.fields),
 	}
 
-	params.Filter = narrow(ctx, b.provider, params)
+	params.Filter = narrow(ctx, b.provider, params).Filter
 
 	scanCtx, cancel := context.WithTimeout(ctx, time.Duration(s.cfg.TimeoutSeconds)*time.Second)
 	defer cancel()
@@ -221,24 +203,15 @@ func wantedPlan(q PlansQuery) func(insights.PlanRecord) bool {
 	}
 }
 
-// narrow asks the provider which parts of the filter it runs itself, on a
-// budget of its own.
-func narrow(ctx context.Context, p source.Provider, params source.StreamParams) source.Filter {
-	ctx, cancel := context.WithTimeout(ctx, narrowTimeout)
-	defer cancel()
-
-	return p.Narrow(ctx, params)
-}
-
 // planFilter is what the store is asked to execute, in falling order of
 // reliability: the severity auto_explain logs with, then the statement id, then
-// the phrase of a plan record. The provider drops whatever it cannot run. An
+// the word of a plan record. The provider drops whatever it cannot run. An
 // unread level narrows nothing: a guess would answer empty on a cluster that
 // logs plans at another level.
 func planFilter(q PlansQuery, levels []string, fm source.FieldMap) source.Filter {
 	f := source.Filter{ //nolint:exhaustruct
 		Host:       q.Host,
-		Contains:   []string{planPhrase},
+		Words:      []string{searchPresets[presetPlan].Word},
 		Severities: planSeverities(levels, fm),
 	}
 
@@ -248,24 +221,6 @@ func planFilter(q PlansQuery, levels []string, fm source.FieldMap) source.Filter
 	}
 
 	return f
-}
-
-func narrowedBy(f source.Filter) []string {
-	var out []string
-
-	if len(f.Severities) > 0 {
-		out = append(out, NarrowedSeverity+"="+strings.Join(f.Severities, ","))
-	}
-
-	if f.QueryID != nil {
-		out = append(out, NarrowedQueryID)
-	}
-
-	if len(f.Contains) > 0 {
-		out = append(out, NarrowedText)
-	}
-
-	return out
 }
 
 func planGroupLimit(limit int) int {

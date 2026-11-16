@@ -2794,6 +2794,27 @@ paths:
           required: false
           schema:
             type: string
+        - in: query
+          name: preset
+          required: false
+          description: >-
+            search preset id; lets the backend narrow the store read by a word the preset
+            text always holds, while a message filter still contains that text
+          schema:
+            type: string
+            enum: [autovacuum, deadlock, checkpoint, tempFiles, canceled, connections, slow, plan, errors]
+        - in: query
+          name: text_mode
+          required: false
+          description: >-
+            how message filters match: substring (default) is a case-insensitive
+            substring checked by Dasha; words splits them on whitespace and lets the
+            log store match each word by its own rules (whole words, its analyzer's
+            case folding and stemming). Words fall back to substring where the store
+            cannot run them, see text_mode and text_skipped of the result.
+          schema:
+            type: string
+            enum: [substring, words]
       responses:
         '200':
           description: Success
@@ -3754,6 +3775,9 @@ components:
         supports_logs:
           type: boolean
           description: true when cluster logs can be searched via GET /api/logs
+        supports_word_search:
+          type: boolean
+          description: true when GET /api/logs accepts text_mode=words for the cluster
         log_streams:
           type: array
           description: log streams the bound source serves, e.g. postgresql and pooler
@@ -3882,6 +3906,27 @@ components:
           description: max_scan reached - results/counts are incomplete
         scanned:
           type: integer
+        narrowed_by:
+          type: array
+          items:
+            type: string
+          description: >-
+            what the log store filtered on itself: severity=<values>, host, query_id,
+            text=<word> per word sent, text~<substring> per substring sent as is,
+            database, user. Empty means the store did not narrow the read.
+        text_mode:
+          type: string
+          enum: [substring, words]
+          description: >-
+            the mode message filters matched in; substring when words were asked for
+            but the store could not run them
+        text_skipped:
+          type: string
+          enum: [unsupported, mapping]
+          description: >-
+            why the message filter did not reach the store: unsupported - the store
+            or the configuration does not take it; mapping - the index does not
+            analyze the message field. Present only when a message filter was given.
     LogInsights:
       type: object
       description: One read of a window, by GET /api/logs/insights or GET /api/logs/plans.
@@ -3924,9 +3969,10 @@ components:
           description: >-
             what the log store filtered on itself, so an empty result is not
             mistaken for an empty window: severity=<values> is the level
-            auto_explain logs with, query_id an exact match on the statement id,
-            text the phrase of a plan record. A store that cannot run a filter
-            without dropping matching records leaves it out and Dasha scans wider.
+            auto_explain logs with, host the host asked for, query_id an exact
+            match on the statement id, text=plan the word of a plan record. A store
+            that cannot run a filter without dropping matching records leaves it
+            out and Dasha scans wider.
           items:
             type: string
         configuration:

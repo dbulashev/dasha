@@ -110,11 +110,11 @@ func TestPlansAsksTheStoreToNarrowAndSaysSo(t *testing.T) {
 
 	if !slices.Equal(p.filter.Severities, []string{"LOG"}) ||
 		p.filter.QueryID == nil || *p.filter.QueryID != 111 ||
-		!slices.Equal(p.filter.Contains, []string{planPhrase}) {
-		t.Errorf("filter = %+v, want severity LOG, query_id 111 and the plan phrase", p.filter)
+		!slices.Equal(p.filter.Words, []string{"plan"}) {
+		t.Errorf("filter = %+v, want severity LOG, query_id 111 and the plan word", p.filter)
 	}
 
-	want := []string{"severity=LOG", NarrowedQueryID, NarrowedText}
+	want := []string{"severity=LOG", NarrowedQueryID, "text=plan"}
 	if !slices.Equal(res.NarrowedBy, want) {
 		t.Errorf("narrowed_by = %v, want %v", res.NarrowedBy, want)
 	}

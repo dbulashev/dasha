@@ -6,7 +6,14 @@ import type { LocationQuery } from 'vue-router'
 import type { GetLogsServiceType } from '@/api/models'
 import { copyToClipboard } from '@/utils/sql'
 import { fromDateTimeInput, toDateTimeInput, withZoneLabel } from '@/utils/format'
-import { LOG_PRESETS, severityOptions, type LogFilters, type LogOrder, type LogPreset } from './types'
+import {
+  LOG_PRESETS,
+  severityOptions,
+  type LogFilters,
+  type LogOrder,
+  type LogPreset,
+  type LogTextMode,
+} from './types'
 
 const props = withDefaults(defineProps<{
   hosts: string[]
@@ -18,7 +25,9 @@ const props = withDefaults(defineProps<{
   mode?: 'search' | 'window'
   autoSubmit?: boolean
   submitLabel?: string
-}>(), { mode: 'search', autoSubmit: true })
+  // The source runs whole-word search itself (supports_word_search).
+  wordSearch?: boolean
+}>(), { mode: 'search', autoSubmit: true, wordSearch: false })
 
 const windowOnly = computed(() => props.mode === 'window')
 
@@ -43,6 +52,7 @@ const dedup = ref<boolean>(false)
 const pageSize = ref<number>(100)
 const order = ref<LogOrder>('desc')
 const preset = ref<string | null>(null)
+const textMode = ref<LogTextMode>('substring')
 
 // Custom range bounds — datetime-local strings, read as wall clock in the zone
 // the UI renders timestamps in (settings), not in the browser's own zone.
@@ -284,7 +294,7 @@ const WINDOW_QUERY_KEYS = ['service', 'range', 'from', 'to', 'log_host']
 
 const SEARCH_QUERY_KEYS = [
   ...WINDOW_QUERY_KEYS, 'severity',
-  'message', 'exclude', 'database', 'user', 'query_id', 'dedup', 'page_size', 'order', 'preset',
+  'message', 'text_mode', 'exclude', 'database', 'user', 'query_id', 'dedup', 'page_size', 'order', 'preset',
 ]
 
 const queryKeys = computed(() => (windowOnly.value ? WINDOW_QUERY_KEYS : SEARCH_QUERY_KEYS))
@@ -307,6 +317,7 @@ function toState(): FilterState {
   if (severities.value.length) s.severity = [...severities.value]
   if (host.value) s.log_host = host.value
   if (includes.value.length) s.message = [...includes.value]
+  if (textMode.value === 'words') s.text_mode = 'words'
   if (excludes.value.length) s.exclude = [...excludes.value]
   if (database.value) s.database = database.value
   if (user.value) s.user = user.value
@@ -346,6 +357,7 @@ function applyState(raw: FilterState) {
   const h = asStr(s.log_host)
   host.value = props.hosts.includes(h) ? h : ''
   includes.value = asArr(s.message)
+  textMode.value = asStr(s.text_mode) === 'words' ? 'words' : 'substring'
   excludes.value = asArr(s.exclude)
   database.value = asStr(s.database)
   user.value = asStr(s.user)
@@ -417,6 +429,8 @@ function onSubmit() {
     severities: [...(severities.value ?? [])],
     host: host.value ?? '',
     includes: (includes.value ?? []).map(s => s.trim()).filter(Boolean),
+    textMode: props.wordSearch ? textMode.value : 'substring',
+    preset: preset.value ?? '',
     excludes: (excludes.value ?? []).map(s => s.trim()).filter(Boolean),
     database: (database.value ?? '').trim(),
     user: (user.value ?? '').trim(),
@@ -629,7 +643,28 @@ defineExpose({ applyDrill, addExclude, applyAbsoluteRange })
               autocomplete="off"
               prepend-inner-icon="mdi-magnify"
               class="flex-grow-1"
-            />
+            >
+              <template v-if="props.wordSearch" #append-inner>
+                <v-btn-toggle
+                  v-model="textMode"
+                  mandatory
+                  density="compact"
+                  color="primary"
+                  variant="outlined"
+                  divided
+                  class="log-text-mode"
+                  @mousedown.stop
+                  @click.stop
+                >
+                  <v-btn value="substring" size="x-small" :title="t('logs.textMode.substringHint')">
+                    {{ t('logs.textMode.substring') }}
+                  </v-btn>
+                  <v-btn value="words" size="x-small" :title="t('logs.textMode.wordsHint')">
+                    {{ t('logs.textMode.words') }}
+                  </v-btn>
+                </v-btn-toggle>
+              </template>
+            </v-combobox>
             <v-badge :model-value="!moreOpen && hasMoreValues" dot color="primary">
               <v-btn
                 variant="text"
@@ -765,3 +800,10 @@ defineExpose({ applyDrill, addExclude, applyAbsoluteRange })
     </v-card-text>
   </v-card>
 </template>
+
+<style scoped>
+.log-text-mode {
+  height: 24px;
+  align-self: center;
+}
+</style>

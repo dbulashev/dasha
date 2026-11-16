@@ -13,6 +13,8 @@ export interface Cluster {
   source?: string;
   /** true when cluster logs can be searched via GET /api/logs */
   supports_logs?: boolean;
+  /** true when GET /api/logs accepts text_mode=words for the cluster */
+  supports_word_search?: boolean;
   /** log streams the bound source serves, e.g. postgresql and pooler */
   log_streams?: string[];
   /** severity values each stream accepts, keyed by stream name, in the casing the source stores them; the log search rejects any other value */

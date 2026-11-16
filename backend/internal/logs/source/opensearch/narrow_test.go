@@ -40,7 +40,7 @@ func narrowParams(f source.Filter) source.StreamParams {
 func planFilter() source.Filter {
 	id := int64(-4452854032459450605)
 
-	return source.Filter{Severities: []string{"LOG"}, Host: "db-1", QueryID: &id, Contains: []string{"plan"}}
+	return source.Filter{Severities: []string{"LOG"}, Host: "db-1", QueryID: &id, Words: []string{"plan"}}
 }
 
 func TestNarrowFollowsTheMapping(t *testing.T) {
@@ -53,7 +53,7 @@ func TestNarrowFollowsTheMapping(t *testing.T) {
 
 	got := p.Narrow(context.Background(), narrowParams(planFilter()))
 
-	if got.QueryID == nil || len(got.Contains) != 1 {
+	if got.QueryID == nil || len(got.Words) != 1 {
 		t.Errorf("filter = %+v, want the statement id and the phrase pushed down", got)
 	}
 }
@@ -70,7 +70,7 @@ func TestNarrowDropsWhatTheMappingWouldSilentlyEmpty(t *testing.T) {
 
 	got := p.Narrow(context.Background(), narrowParams(planFilter()))
 
-	if got.QueryID != nil || got.Contains != nil {
+	if got.QueryID != nil || got.Words != nil {
 		t.Errorf("filter = %+v, want neither pushed down", got)
 	}
 
@@ -91,7 +91,7 @@ func TestNarrowDropsAPhraseOnAMixedMapping(t *testing.T) {
 
 	got := p.Narrow(context.Background(), narrowParams(planFilter()))
 
-	if got.Contains != nil {
+	if got.Words != nil {
 		t.Errorf("filter = %+v, want the phrase dropped: one index maps the field as a keyword", got)
 	}
 
@@ -107,7 +107,7 @@ func TestNarrowWithoutAMappingNarrowsNothingExtra(t *testing.T) {
 
 	got := p.Narrow(context.Background(), narrowParams(planFilter()))
 
-	if got.QueryID != nil || got.Contains != nil {
+	if got.QueryID != nil || got.Words != nil {
 		t.Errorf("filter = %+v, want a wide scan over a silently empty answer", got)
 	}
 }
@@ -142,7 +142,7 @@ func TestNarrowDropsAnUnmappedQueryIDField(t *testing.T) {
 		t.Errorf("filter = %+v, want the id dropped: the index has no such field", got)
 	}
 
-	if len(got.Contains) != 1 {
+	if len(got.Words) != 1 {
 		t.Errorf("filter = %+v, want the phrase kept", got)
 	}
 }
@@ -163,7 +163,64 @@ func TestNarrowDropsTheIDOnAPartlyUnmappedField(t *testing.T) {
 		t.Errorf("filter = %+v, want the id dropped: one index of the pattern has no such field", got)
 	}
 
-	if len(got.Contains) != 1 {
+	if len(got.Words) != 1 {
 		t.Errorf("filter = %+v, want the phrase kept", got)
+	}
+}
+
+func TestNarrowHoldsBackSubstringsDatabaseAndUser(t *testing.T) {
+	t.Parallel()
+
+	p := narrowProvider(t, map[string][]string{"message": {"text"}})
+	f := planFilter()
+	f.Substrings, f.Database, f.User = []string{"select"}, "app", "bob"
+
+	got := p.Narrow(context.Background(), narrowParams(f))
+	if len(got.Words) != 1 || got.Substrings != nil || got.Database != "" || got.User != "" {
+		t.Errorf("filter = %+v, want the word alone", got.Filter)
+	}
+
+	if got.TextSkip != source.TextSkipUnsupported {
+		t.Errorf("text skip = %q, want unsupported", got.TextSkip)
+	}
+}
+
+func TestNarrowSendsTermsToAnAnalyzedField(t *testing.T) {
+	t.Parallel()
+
+	p := narrowProvider(t, map[string][]string{"message": {"text"}})
+	f := source.Filter{Terms: []string{"deadlock", "detected"}} //nolint:exhaustruct
+
+	got := p.Narrow(context.Background(), narrowParams(f))
+
+	if len(got.Terms) != 2 || got.TextSkip != source.TextSkipNone {
+		t.Errorf("narrowed = %+v, want both terms", got)
+	}
+}
+
+// Terms are the message filter itself: dropping some would widen the answer
+// past what the user asked for, so they go all together or not at all.
+func TestNarrowDropsEveryTermOnAMixedMapping(t *testing.T) {
+	t.Parallel()
+
+	p := narrowProvider(t, map[string][]string{"message": {"text", "keyword"}})
+	f := source.Filter{Terms: []string{"deadlock"}} //nolint:exhaustruct
+
+	got := p.Narrow(context.Background(), narrowParams(f))
+
+	if got.Terms != nil || got.TextSkip != source.TextSkipMapping {
+		t.Errorf("narrowed = %+v, want no terms and a mapping skip", got)
+	}
+}
+
+func TestNarrowDropsTermsWithoutAMapping(t *testing.T) {
+	t.Parallel()
+
+	f := source.Filter{Terms: []string{"deadlock"}} //nolint:exhaustruct
+
+	got := narrowProvider(t, nil).Narrow(context.Background(), narrowParams(f))
+
+	if got.Terms != nil || got.TextSkip != source.TextSkipMapping {
+		t.Errorf("narrowed = %+v, want no terms and a mapping skip", got)
 	}
 }

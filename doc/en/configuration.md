@@ -314,6 +314,7 @@ log_search:
   max_scan: 5000          # max records scanned per search
   max_page_size: 1000     # upper bound for page_size
   timeout_seconds: 30     # upstream read timeout
+  pushdown: true          # hand the message, database and user filters to the store and allow word search; false filters on the Dasha side only
   rate_limit:             # per user (per IP when anonymous); rps <= 0 disables
     requests_per_second: 0.0333   # 1 request per 30s
     burst: 10

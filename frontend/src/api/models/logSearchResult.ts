@@ -5,6 +5,8 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { LogEntry } from './logEntry';
+import type { LogSearchResultTextMode } from './logSearchResultTextMode';
+import type { LogSearchResultTextSkipped } from './logSearchResultTextSkipped';
 
 export interface LogSearchResult {
   items: LogEntry[];
@@ -14,4 +16,10 @@ export interface LogSearchResult {
   /** max_scan reached - results/counts are incomplete */
   partial: boolean;
   scanned?: number;
+  /** what the log store filtered on itself: severity=<values>, host, query_id, text=<word> per word sent, text~<substring> per substring sent as is, database, user. Empty means the store did not narrow the read. */
+  narrowed_by?: string[];
+  /** the mode message filters matched in; substring when words were asked for but the store could not run them */
+  text_mode?: LogSearchResultTextMode;
+  /** why the message filter did not reach the store: unsupported - the store or the configuration does not take it; mapping - the index does not analyze the message field. Present only when a message filter was given. */
+  text_skipped?: LogSearchResultTextSkipped;
 }

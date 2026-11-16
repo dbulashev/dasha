@@ -33,6 +33,7 @@ type Provider struct {
 	names          []string
 	batchSize      int
 	maxBoundaryIDs int
+	wordSearch     bool
 	logger         *zap.Logger
 	// fieldTypeCache maps an expanded index pattern to fieldTypeEntry.
 	fieldTypeCache sync.Map
@@ -78,9 +79,13 @@ func New(cfg config.LogSourceConfig, global config.LogSearchConfig, logger *zap.
 		names:          names,
 		batchSize:      batchSize,
 		maxBoundaryIDs: maxBoundaryIDs,
+		wordSearch:     global.PushdownEnabled(),
 		logger:         logger,
 	}, nil
 }
+
+// WordSearch reports whether Filter.Terms reach the store; pushdown off turns it off.
+func (p *Provider) WordSearch() bool { return p.wordSearch }
 
 func (p *Provider) Streams() []string {
 	return slices.Clone(p.names)

@@ -580,3 +580,19 @@ func TestUnknownStream(t *testing.T) {
 		t.Fatal("expected an error for a stream the source does not serve")
 	}
 }
+
+// TestTermsRunInTheStore: words-mode terms match whole words through the
+// analyzer of the message field.
+func TestTermsRunInTheStore(t *testing.T) {
+	p := testProvider(t, 9)
+
+	n := p.Narrow(context.Background(), testParams(source.Filter{Terms: []string{"STATEMENT", "17"}}))
+	if len(n.Terms) != 2 {
+		t.Fatalf("narrowed = %+v, want both terms", n)
+	}
+
+	got := collect(t, p, testParams(n.Filter), 0)
+	if len(got) != 1 || got[0].Fields["pid"] != "1017" {
+		t.Fatalf("records = %+v, want pid 1017 alone", got)
+	}
+}

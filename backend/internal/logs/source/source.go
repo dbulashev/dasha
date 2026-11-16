@@ -52,8 +52,32 @@ type Filter struct {
 	Host       string
 	// QueryID selects the records of one statement.
 	QueryID *int64
-	// Contains are phrases the text field must hold.
-	Contains []string
+	// Words are whole words every wanted record holds; the backend vouches for
+	// them, user input never lands here.
+	Words []string
+	// Substrings are case-insensitive substrings of the text field, as typed.
+	Substrings []string
+	// Terms are words the store matches by its own rules; Dasha does not check
+	// them after reading, so a provider runs all of them or none.
+	Terms []string
+	// Database and User are case-insensitive substrings of their fields.
+	Database, User string
+}
+
+// TextSkip says why Substrings or Terms did not reach the store.
+type TextSkip string
+
+const (
+	TextSkipNone        TextSkip = ""
+	TextSkipUnsupported TextSkip = "unsupported"
+	TextSkipMapping     TextSkip = "mapping"
+)
+
+// Narrowed is the part of a filter a provider runs itself. TextSkip is set only
+// when the input held Substrings or Terms and none of them reached the store.
+type Narrowed struct {
+	Filter
+	TextSkip TextSkip
 }
 
 // StreamParams configures a single read.
@@ -96,18 +120,32 @@ type Provider interface {
 	// that timestamp rather than by position.
 	Stream(ctx context.Context, p StreamParams, fn func(Record) bool) error
 	// Narrow returns the part of p.Filter the provider pushes down to the
-	// store. A part it cannot push down without dropping a matching record —
-	// a phrase on a field the store indexes as a keyword matches nothing — is
-	// left out, and the caller pays a larger scan for it. Stream applies
-	// whatever filter it is handed, so asking first tells a caller what really
-	// narrowed a read.
-	Narrow(ctx context.Context, p StreamParams) Filter
+	// store, a subset of the input. A part it cannot push down without dropping
+	// a matching record — a phrase on a field the store indexes as a keyword
+	// matches nothing — is left out, and the caller pays a larger scan for it.
+	// Stream applies whatever filter it is handed, so asking first tells a
+	// caller what really narrowed a read.
+	Narrow(ctx context.Context, p StreamParams) Narrowed
 	// Check probes the source for a cluster and stream.
 	Check(ctx context.Context, cluster config.Cluster, stream string) (CheckResult, error)
+}
+
+// WordSearcher is implemented by providers that run Filter.Terms.
+type WordSearcher interface {
+	WordSearch() bool
 }
 
 // ClusterMatcher is implemented by providers bound to clusters by their shape
 // rather than by an explicit name in the configuration.
 type ClusterMatcher interface {
 	Matches(cluster config.Cluster) bool
+}
+
+// SkipText is reason when in holds Substrings or Terms, TextSkipNone otherwise.
+func SkipText(in Filter, reason TextSkip) TextSkip {
+	if len(in.Substrings) == 0 && len(in.Terms) == 0 {
+		return TextSkipNone
+	}
+
+	return reason
 }
