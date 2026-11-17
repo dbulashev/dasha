@@ -160,20 +160,6 @@ func TestColumnCatalog_ManyPartitions(t *testing.T) {
 
 	assert.Equal(t, map[pairKey]int{nullPair("id"): 1, commented("fio", "ФИО"): 1, nullPair("n"): 1}, pairSet(pairs))
 	assert.Less(t, elapsed, 5*time.Second)
-
-	rows, err := pool.Query(ctx, "EXPLAIN (ANALYZE, BUFFERS) "+qStr, []string{})
-	require.NoError(t, err)
-
-	defer rows.Close()
-
-	for rows.Next() {
-		var line string
-		require.NoError(t, rows.Scan(&line))
-		t.Log(line)
-	}
-
-	require.NoError(t, rows.Err())
-	t.Logf("catalog query took %s", elapsed)
 }
 
 func TestWithTxSettings_StatementTimeout(t *testing.T) {

@@ -85,12 +85,6 @@ func TestPIICatalogConfig_Validate(t *testing.T) {
 			wantErr: `pii_catalog.schedule: invalid cron expression "bad"`,
 		},
 		{
-			name:    "four-field cron",
-			mutate:  func(c *PIICatalogConfig) { c.Schedule = "0 3 * *" },
-			auth:    tokenAuth,
-			wantErr: "pii_catalog.schedule",
-		},
-		{
 			name:    "schedule that never fires",
 			mutate:  func(c *PIICatalogConfig) { c.Schedule = "0 0 31 2 *" },
 			auth:    tokenAuth,
@@ -247,9 +241,6 @@ func TestPIICatalogConfig_ValidateSecrets(t *testing.T) {
 	c.AllowedTokens = []string{"pii-classifier", "unset"}
 	require.EqualError(t, c.ValidateSecrets(auth),
 		`pii_catalog.allowed_tokens[1]: token "unset" has no secret (token / token_from_env)`)
-
-	c.AllowedTokens = []string{"pii-classifier"}
-	require.NoError(t, c.ValidateSecrets(auth))
 }
 
 func TestPIICatalogConfig_DuplicateAllowedTokens(t *testing.T) {

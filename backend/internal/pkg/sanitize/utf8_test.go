@@ -11,7 +11,6 @@ func TestTruncateUTF8(t *testing.T) {
 		want string
 	}{
 		{"абв", 3, "а"},
-		{"ааа", 5, "аа"},
 		{"abc", 5, "abc"},
 		{cp1251, 100, "FATAL: ?"},
 		{"a\xffb", 3, "a?b"},

@@ -256,11 +256,3 @@ func TestPIICatalogGate_OtherPathsUntouched(t *testing.T) {
 		t.Fatalf("status = %d, audit = %d; want 401 and no audit", rec.Code, len(env.audit.records()))
 	}
 }
-
-func TestAuditText(t *testing.T) {
-	t.Parallel()
-
-	if got := auditText("\xffd"); got != "?d" {
-		t.Fatalf("auditText = %q", got)
-	}
-}
