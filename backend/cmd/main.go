@@ -20,6 +20,7 @@ import (
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/deps"
 	"github.com/dbulashev/dasha/internal/http"
+	"github.com/dbulashev/dasha/internal/piicatalog"
 	"github.com/dbulashev/dasha/internal/repository"
 	"github.com/dbulashev/dasha/internal/storage"
 	"github.com/dbulashev/dasha/internal/version"
@@ -137,12 +138,22 @@ func autosnapshotExec(cmd *cobra.Command, _ []string) error {
 		logger,
 	)
 
+	var pii *piicatalog.Runner
+
+	if cfg.PIICatalog.Enabled {
+		pii, err = piicatalog.NewRunner(cfg.PIICatalog, container.Clusters(), repo, st, logger)
+		if err != nil {
+			return fmt.Errorf("pii catalog: %w", err)
+		}
+	}
+
 	daemon := autosnapshot.NewDaemon(
 		container.Clusters(),
 		repo,
 		st,
 		cfg.Storage.LeaderElection,
 		logger,
+		pii,
 	)
 
 	if err := daemon.Run(cmd.Context()); err != nil {

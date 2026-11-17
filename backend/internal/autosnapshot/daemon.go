@@ -12,6 +12,7 @@ import (
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/hotobjects"
+	"github.com/dbulashev/dasha/internal/piicatalog"
 	"github.com/dbulashev/dasha/internal/statio"
 )
 
@@ -68,6 +69,8 @@ type Daemon struct {
 	store          Store
 	logger         *zap.Logger
 	leaderElection bool
+	// nil when pii_catalog is disabled.
+	pii *piicatalog.Runner
 	// clock feeds the spike state machine; nil means time.Now. Injected by tests
 	// so a multi-minute spike can be replayed without sleeping.
 	clock func() time.Time
@@ -231,6 +234,7 @@ func NewDaemon(
 	store Store,
 	leaderElection bool,
 	logger *zap.Logger,
+	pii *piicatalog.Runner,
 ) *Daemon {
 	return &Daemon{
 		clusters:       clusters,
@@ -238,6 +242,7 @@ func NewDaemon(
 		store:          store,
 		logger:         logger,
 		leaderElection: leaderElection,
+		pii:            pii,
 		hosts:          map[hostKey]*hostState{},
 		lastHotAttempt: map[string]time.Time{},
 		lastIOAttempt:  map[string]time.Time{},
@@ -266,6 +271,15 @@ func (d *Daemon) Run(ctx context.Context) error {
 	defer cancelHB()
 
 	go leader.RunHeartbeat(hbCtx)
+
+	// Waited for so it stops writing before the caller closes storage.
+	if d.pii != nil {
+		var wg sync.WaitGroup
+
+		wg.Go(func() { d.pii.Run(ctx) })
+
+		defer wg.Wait()
+	}
 
 	last, err := d.store.LastAutoSnapshotAt(ctx)
 	if err != nil {

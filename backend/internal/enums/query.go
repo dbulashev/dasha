@@ -66,6 +66,7 @@ package enums
 //	maintenance/info
 //	maintenance/transaction_id_danger
 //	maintenance/vacuum_progress
+//	pii_catalog/columns
 //	progress/analyze
 //	progress/base_backup
 //	progress/cluster
