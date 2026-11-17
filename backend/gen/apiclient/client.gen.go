@@ -258,8 +258,10 @@ const (
 const (
 	PiiCatalogErrBadRequest      PiiCatalogErrorCode = "bad_request"
 	PiiCatalogErrForbidden       PiiCatalogErrorCode = "forbidden"
+	PiiCatalogErrInternal        PiiCatalogErrorCode = "internal"
 	PiiCatalogErrNotCollectedYet PiiCatalogErrorCode = "not_collected_yet"
 	PiiCatalogErrNotFound        PiiCatalogErrorCode = "not_found"
+	PiiCatalogErrTimeout         PiiCatalogErrorCode = "timeout"
 )
 
 // Defines values for PlanFindingCode.
@@ -18187,6 +18189,8 @@ type GetPiiCatalogPairsResponse struct {
 	JSON400      *PiiCatalogError
 	JSON403      *PiiCatalogError
 	JSON404      *PiiCatalogError
+	JSON500      *PiiCatalogError
+	JSON504      *PiiCatalogError
 }
 
 // Status returns HTTPResponse.Status
@@ -18210,6 +18214,8 @@ type GetPiiCatalogStatusResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *PiiCatalogStatusResponse
 	JSON403      *PiiCatalogError
+	JSON500      *PiiCatalogError
+	JSON504      *PiiCatalogError
 }
 
 // Status returns HTTPResponse.Status
@@ -22497,6 +22503,20 @@ func ParseGetPiiCatalogPairsResponse(rsp *http.Response) (*GetPiiCatalogPairsRes
 		}
 		response.JSON404 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest PiiCatalogError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
+		var dest PiiCatalogError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON504 = &dest
+
 	}
 
 	return response, nil
@@ -22529,6 +22549,20 @@ func ParseGetPiiCatalogStatusResponse(rsp *http.Response) (*GetPiiCatalogStatusR
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
+		var dest PiiCatalogError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON500 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 504:
+		var dest PiiCatalogError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON504 = &dest
 
 	}
 

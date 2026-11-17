@@ -3483,6 +3483,22 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PiiCatalogError'
+        '500':
+          description: >-
+            internal: an unexpected server error; the cause is only in the
+            server log.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PiiCatalogError'
+        '504':
+          description: >-
+            timeout: the storage query ran out of time or gave up waiting for a
+            lock (the latter is answered with 423). Retry later.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PiiCatalogError'
   /api/pii-catalog/pairs:
     get:
       operationId: getPiiCatalogPairs
@@ -3521,6 +3537,22 @@ paths:
           description: >-
             not_found: the database is neither configured nor collected;
             not_collected_yet: it is configured, but no collection has succeeded yet.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PiiCatalogError'
+        '500':
+          description: >-
+            internal: an unexpected server error; the cause is only in the
+            server log.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PiiCatalogError'
+        '504':
+          description: >-
+            timeout: the storage query ran out of time or gave up waiting for a
+            lock (the latter is answered with 423). Retry later.
           content:
             application/json:
               schema:
@@ -9407,6 +9439,8 @@ components:
             - forbidden
             - not_found
             - not_collected_yet
+            - timeout
+            - internal
           # Explicit names: "not_found" would otherwise clash with
           # IndexAdvisorEvidenceState and rename its constants.
           x-enum-varnames:
@@ -9414,6 +9448,8 @@ components:
             - PiiCatalogErrForbidden
             - PiiCatalogErrNotFound
             - PiiCatalogErrNotCollectedYet
+            - PiiCatalogErrTimeout
+            - PiiCatalogErrInternal
         message:
           type: string
 

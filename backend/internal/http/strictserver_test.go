@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/dbulashev/dasha/gen/serverhttp"
 )
 
 func TestMapDatabaseError(t *testing.T) {
@@ -122,19 +125,27 @@ func TestExtendDeadlines(t *testing.T) {
 	assert.Error(t, err, "other routes keep the server-wide WriteTimeout")
 }
 
-func TestWritePIIBadRequest(t *testing.T) {
+func TestWritePIIError(t *testing.T) {
 	t.Parallel()
 
 	bindErr := echo.NewHTTPError(http.StatusBadRequest, "Invalid format for parameter database: bad")
+	sqlErr := fmt.Errorf("GetPiiCatalogPairs | %w",
+		&pgconn.PgError{Code: "42P01", Message: "relation \"pii_catalog_pair\" does not exist"}) //nolint:exhaustruct
+	timeoutErr := fmt.Errorf("GetPiiCatalogStatus | %w",
+		&pgconn.PgError{Code: "57014", Message: "canceling statement due to statement timeout"}) //nolint:exhaustruct
 
 	for _, tc := range []struct {
 		name, path string
 		err        error
-		want       bool
+		wantStatus int // 0: left to the default handler
+		wantCode   string
 	}{
-		{"pii binding error", "/api/pii-catalog/pairs", bindErr, true},
-		{"other path", "/api/clusters", bindErr, false},
-		{"not a 400", "/api/pii-catalog/pairs", echo.NewHTTPError(http.StatusNotFound), false},
+		{"binding error", "/api/pii-catalog/pairs", bindErr, http.StatusBadRequest, "bad_request"},
+		{"storage timeout", "/api/pii-catalog/status", timeoutErr, http.StatusGatewayTimeout, "timeout"},
+		{"internal error", "/api/pii-catalog/pairs", sqlErr, http.StatusInternalServerError, "internal"},
+		{"other path", "/api/clusters", bindErr, 0, ""},
+		{"error before the handler", "/api/pii-catalog/pairs", echo.NewHTTPError(http.StatusNotFound), 0, ""},
+		{"client gone", "/api/pii-catalog/pairs", fmt.Errorf("x | %w", context.Canceled), 0, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -142,12 +153,23 @@ func TestWritePIIBadRequest(t *testing.T) {
 			rec := httptest.NewRecorder()
 			c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, tc.path, nil), rec)
 
-			require.Equal(t, tc.want, writePIIBadRequest(tc.err, c, zap.NewNop()))
+			require.Equal(t, tc.wantStatus != 0, writePIIError(tc.err, c, zap.NewNop()))
 
-			if tc.want {
-				assert.Equal(t, http.StatusBadRequest, rec.Code)
-				assert.JSONEq(t, `{"code":"bad_request","message":"Invalid format for parameter database: bad"}`, rec.Body.String())
+			if tc.wantStatus == 0 {
+				return
 			}
+
+			assert.Equal(t, tc.wantStatus, rec.Code)
+
+			var body serverhttp.PiiCatalogError
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+			assert.Equal(t, tc.wantCode, string(body.Code))
+			assert.NotContains(t, rec.Body.String(), "pii_catalog_pair", "the cause must stay in the log")
 		})
 	}
+
+	rec := httptest.NewRecorder()
+	c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/api/pii-catalog/pairs", nil), rec)
+	require.True(t, writePIIError(bindErr, c, zap.NewNop()))
+	assert.JSONEq(t, `{"code":"bad_request","message":"Invalid format for parameter database: bad"}`, rec.Body.String())
 }

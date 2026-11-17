@@ -257,7 +257,7 @@ func dashaExec(cmd *cobra.Command, _ []string) error {
 	d := http.NewDashaHandlers(
 		container.Config(), container.Repository(), st, container.Metrics(), logsSvc, container.Clusters(), logger,
 	)
-	piiGate := auth.NewPIICatalogGate(container.Config().PIICatalog.AllowedTokens, serverLogger)
+	piiGate := auth.NewPIICatalogGate(container.Config().PIICatalog, serverLogger)
 	svc := http.New(
 		d, mw, authMW.RequireHTTPS, authMW.RateLimit, logsRateLimit, authMW.Auth, authMW.Casbin, piiGate, logger,
 	)

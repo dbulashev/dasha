@@ -4,10 +4,12 @@ import (
 	"errors"
 	"net/http"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/labstack/echo/v4"
 	"go.uber.org/zap"
+
+	"github.com/dbulashev/dasha/internal/config"
+	"github.com/dbulashev/dasha/internal/pkg/sanitize"
 )
 
 const PIICatalogPathPrefix = "/api/pii-catalog/"
@@ -28,19 +30,23 @@ type piiGateError struct {
 // PIICatalogGate admits to /api/pii-catalog/* only static tokens
 // (auth.tokens) whose name is in the allowed list, and logs every access with
 // audit=true. Role is not consulted: PATs and sessions are refused even for
-// admin.
+// admin. With the feature disabled everyone is refused, whatever the list says.
 type PIICatalogGate struct {
+	enabled bool
 	allowed map[string]struct{}
 	logger  *zap.Logger
 }
 
-func NewPIICatalogGate(allowed []string, logger *zap.Logger) *PIICatalogGate {
-	set := make(map[string]struct{}, len(allowed))
-	for _, name := range allowed {
-		set[name] = struct{}{}
+func NewPIICatalogGate(cfg config.PIICatalogConfig, logger *zap.Logger) *PIICatalogGate {
+	set := make(map[string]struct{}, len(cfg.AllowedTokens))
+	for _, name := range cfg.AllowedTokens {
+		// "" is what piiTokenName returns for every non-token caller.
+		if name != "" {
+			set[name] = struct{}{}
+		}
 	}
 
-	return &PIICatalogGate{allowed: set, logger: logger}
+	return &PIICatalogGate{enabled: cfg.Enabled, allowed: set, logger: logger}
 }
 
 // Middleware runs after authentication. In auth.mode none no user is ever set
@@ -54,6 +60,15 @@ func (g *PIICatalogGate) Middleware(next echo.HandlerFunc) echo.HandlerFunc {
 		c.Response().Header().Set("Cache-Control", "no-store")
 
 		user := GetUser(c)
+
+		if !g.enabled {
+			g.log(c, user, false)
+
+			return c.JSON(http.StatusForbidden, piiGateError{
+				Code:    "forbidden",
+				Message: "the PII catalog is disabled (pii_catalog.enabled is false)",
+			})
+		}
 
 		if _, listed := g.allowed[piiTokenName(user)]; !listed {
 			g.log(c, user, false)
@@ -141,19 +156,5 @@ func (g *PIICatalogGate) log(c echo.Context, user *UserContext, allowed bool) {
 }
 
 func auditText(s string) string {
-	return truncateUTF8(strings.ToValidUTF8(s, "�"), piiAuditMaxValue)
-}
-
-// s must be valid UTF-8: only a rune cut at the boundary is dropped.
-func truncateUTF8(s string, maxBytes int) string {
-	if len(s) <= maxBytes {
-		return s
-	}
-
-	s = s[:maxBytes]
-	for !utf8.ValidString(s) {
-		s = s[:len(s)-1]
-	}
-
-	return s
+	return sanitize.TruncateUTF8(s, piiAuditMaxValue)
 }

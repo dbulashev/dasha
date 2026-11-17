@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"go.uber.org/zap"
 
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/dto"
+	"github.com/dbulashev/dasha/internal/pkg/sanitize"
 )
 
 type Repo interface {
@@ -97,21 +97,7 @@ func (c *Collector) collect(
 		errs = append(errs, h+": "+err.Error())
 	}
 
-	return Snapshot{}, fmt.Errorf("%s", truncate(strings.Join(errs, "; "), maxErrorLen))
-}
-
-// truncate also replaces invalid UTF-8: a server may report a startup error in
-// its lc_messages encoding, which a text column rejects.
-func truncate(s string, n int) string {
-	s = strings.ToValidUTF8(s, "?")
-	if len(s) <= n {
-		return s
-	}
-
-	s = s[:n]
-	for !utf8.ValidString(s) {
-		s = s[:len(s)-1]
-	}
-
-	return s
+	// A server may report a startup error in its lc_messages encoding, which a
+	// text column rejects.
+	return Snapshot{}, fmt.Errorf("%s", sanitize.TruncateUTF8(strings.Join(errs, "; "), maxErrorLen))
 }

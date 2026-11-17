@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -11,13 +12,20 @@ import (
 )
 
 type fakePIIStore struct {
-	statuses map[piicatalog.Key]piicatalog.Status
-	catalog  piicatalog.Catalog
-	err      error
+	statuses  map[piicatalog.Key]piicatalog.Status
+	statusErr error
+	catalog   piicatalog.Catalog
+	err       error
 }
 
 func (f *fakePIIStore) ListPIIStatus(context.Context) (map[piicatalog.Key]piicatalog.Status, error) {
-	return f.statuses, nil
+	return f.statuses, f.statusErr
+}
+
+type failingClusters struct{ config.Clusters }
+
+func (failingClusters) Get(context.Context) ([]config.Cluster, error) {
+	return nil, errors.New("discovery unavailable")
 }
 
 func (f *fakePIIStore) PIICatalog(context.Context, piicatalog.Key) (piicatalog.Catalog, error) {
@@ -83,11 +91,35 @@ func TestGetPiiCatalogStatus_UnionOfConfigAndStorage(t *testing.T) {
 		t.Errorf("schedule = %q", got.Schedule)
 	}
 
-	resp, _ = h.GetPiiCatalogStatus(t.Context(), serverhttp.GetPiiCatalogStatusRequestObject{
+	resp, err = h.GetPiiCatalogStatus(t.Context(), serverhttp.GetPiiCatalogStatusRequestObject{
 		Params: serverhttp.GetPiiCatalogStatusParams{ClusterName: ptr("c0")},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	if items := resp.(serverhttp.GetPiiCatalogStatus200JSONResponse).Items; len(items) != 1 {
 		t.Errorf("cluster filter: %+v", items)
+	}
+}
+
+func TestGetPiiCatalogStatus_Errors(t *testing.T) {
+	t.Parallel()
+
+	storeErr := errors.New("storage down")
+
+	req := serverhttp.GetPiiCatalogStatusRequestObject{} //nolint:exhaustruct
+
+	h := newPIIHandlers(&fakePIIStore{statusErr: storeErr}) //nolint:exhaustruct
+	if _, err := h.GetPiiCatalogStatus(t.Context(), req); !errors.Is(err, storeErr) {
+		t.Errorf("storage failure: err = %v", err)
+	}
+
+	h = newPIIHandlers(&fakePIIStore{}) //nolint:exhaustruct
+	h.clusters = failingClusters{}
+
+	if _, err := h.GetPiiCatalogStatus(t.Context(), req); err == nil {
+		t.Error("clusters failure: want an error")
 	}
 }
 

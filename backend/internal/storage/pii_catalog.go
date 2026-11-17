@@ -82,7 +82,7 @@ func applyPIISnapshotTx(ctx context.Context, tx pgx.Tx, k piicatalog.Key, snap p
 		return false, fmt.Errorf("storage: pii status lock: %w", err)
 	}
 
-	changed := curHash == nil || !bytes.Equal(curHash, snap.SetHash)
+	changed := !bytes.Equal(curHash, snap.SetHash)
 
 	if changed {
 		if _, err := tx.Exec(ctx, `DELETE FROM pii_catalog_pair WHERE cluster_name = $1 AND database = $2`,

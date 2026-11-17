@@ -71,7 +71,7 @@ type gateEnv struct {
 
 // newGateEnv wires the gate the way http.New does, behind a real auth
 // middleware, so c.Path() and the user are set as in production.
-func newGateEnv(t *testing.T, mode config.AuthMode, allowed []string) gateEnv {
+func newGateEnv(t *testing.T, mode config.AuthMode, enabled bool, allowed []string) gateEnv {
 	t.Helper()
 
 	cfg := config.AuthConfig{Mode: mode, Tokens: gateTokens} //nolint:exhaustruct
@@ -81,7 +81,7 @@ func newGateEnv(t *testing.T, mode config.AuthMode, allowed []string) gateEnv {
 	authMW := NewAuthMiddleware(cfg, nil, nil, resolver, zap.NewNop())
 
 	logger, audit := newAccessLog()
-	gate := NewPIICatalogGate(allowed, logger)
+	gate := NewPIICatalogGate(config.PIICatalogConfig{Enabled: enabled, AllowedTokens: allowed}, logger) //nolint:exhaustruct
 
 	reached := new(bool)
 	ok := func(c echo.Context) error {
@@ -125,6 +125,7 @@ func TestPIICatalogGate_Decisions(t *testing.T) {
 	cases := []struct {
 		name       string
 		mode       config.AuthMode
+		disabled   bool
 		allowed    []string
 		key        string
 		wantStatus int
@@ -132,25 +133,29 @@ func TestPIICatalogGate_Decisions(t *testing.T) {
 		wantPrinc  string
 		wantMethod string
 	}{
-		{"listed static viewer token", config.AuthModeToken, []string{"pii-classifier"}, classifierSecret,
+		{"listed static viewer token", config.AuthModeToken, false, []string{"pii-classifier"}, classifierSecret,
 			http.StatusOK, "allowed", "pii-classifier", "token"},
-		{"listed static token under oidc", config.AuthModeOIDC, []string{"pii-classifier"}, classifierSecret,
+		{"listed static token under oidc", config.AuthModeOIDC, false, []string{"pii-classifier"}, classifierSecret,
 			http.StatusOK, "allowed", "pii-classifier", "token"},
-		{"unlisted static admin token", config.AuthModeToken, []string{"pii-classifier"}, adminSecret,
+		{"unlisted static admin token", config.AuthModeToken, false, []string{"pii-classifier"}, adminSecret,
 			http.StatusForbidden, "denied", "ops-admin", "token"},
-		{"admin PAT named like a listed token", config.AuthModeOIDC, []string{"pii-classifier"}, patSecret,
+		{"admin PAT named like a listed token", config.AuthModeOIDC, false, []string{"pii-classifier"}, patSecret,
 			http.StatusForbidden, "denied", "pii-classifier", "pat"},
-		{"empty allowlist", config.AuthModeToken, nil, classifierSecret,
+		{"empty allowlist", config.AuthModeToken, false, nil, classifierSecret,
 			http.StatusForbidden, "denied", "pii-classifier", "token"},
-		{"auth mode none", config.AuthModeNone, []string{"pii-classifier"}, classifierSecret,
+		{"auth mode none", config.AuthModeNone, false, []string{"pii-classifier"}, classifierSecret,
 			http.StatusForbidden, "denied", "", "none"},
+		{"empty name in allowlist, anonymous caller", config.AuthModeNone, false, []string{""}, "",
+			http.StatusForbidden, "denied", "", "none"},
+		{"listed token, feature disabled", config.AuthModeToken, true, []string{"pii-classifier"}, classifierSecret,
+			http.StatusForbidden, "denied", "pii-classifier", "token"},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			env := newGateEnv(t, tc.mode, tc.allowed)
+			env := newGateEnv(t, tc.mode, !tc.disabled, tc.allowed)
 			rec := env.do("/api/pii-catalog/status?cluster_name=c1", withKey(tc.key))
 
 			if rec.Code != tc.wantStatus {
@@ -185,7 +190,7 @@ func TestPIICatalogGate_OIDCSessionRefused(t *testing.T) {
 	t.Parallel()
 
 	logger, audit := newAccessLog()
-	gate := NewPIICatalogGate([]string{"alice"}, logger)
+	gate := NewPIICatalogGate(config.PIICatalogConfig{Enabled: true, AllowedTokens: []string{"alice"}}, logger) //nolint:exhaustruct
 
 	e := echo.New()
 	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
@@ -214,7 +219,7 @@ func TestPIICatalogGate_UnauthenticatedIsAudited(t *testing.T) {
 	t.Parallel()
 
 	for _, key := range []string{"", "wrong"} {
-		env := newGateEnv(t, config.AuthModeToken, []string{"pii-classifier"})
+		env := newGateEnv(t, config.AuthModeToken, true, []string{"pii-classifier"})
 
 		rec := env.do("/api/pii-catalog/unknown", withKey(key))
 		if rec.Code != http.StatusUnauthorized {
@@ -235,7 +240,7 @@ func TestPIICatalogGate_UnauthenticatedIsAudited(t *testing.T) {
 func TestPIICatalogGate_OtherPathsUntouched(t *testing.T) {
 	t.Parallel()
 
-	env := newGateEnv(t, config.AuthModeToken, nil)
+	env := newGateEnv(t, config.AuthModeToken, true, nil)
 
 	rec := env.do("/api/clusters", withKey(adminSecret))
 	if rec.Code != http.StatusOK {
@@ -255,11 +260,7 @@ func TestPIICatalogGate_OtherPathsUntouched(t *testing.T) {
 func TestAuditText(t *testing.T) {
 	t.Parallel()
 
-	if got := truncateUTF8("ааа", 5); got != "аа" {
-		t.Fatalf("truncateUTF8 = %q, want %q", got, "аа")
-	}
-
-	if got := auditText("\xffd"); got != "�d" {
+	if got := auditText("\xffd"); got != "?d" {
 		t.Fatalf("auditText = %q", got)
 	}
 }
