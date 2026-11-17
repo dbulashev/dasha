@@ -779,8 +779,6 @@ type Config struct {
 
 	Activity activity.Config `mapstructure:"activity"`
 
-	// PIICatalog collects (column name, comment) pairs for an external PII
-	// classifier; collected by the autosnapshot daemon, served by the API.
 	PIICatalog PIICatalogConfig `mapstructure:"pii_catalog"`
 }
 

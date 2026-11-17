@@ -198,7 +198,7 @@ pii_catalog:
 		t.Fatal(err)
 	}
 
-	c, err := provideConfig()
+	c, warnings, err := provideConfig()
 	if err != nil {
 		t.Fatalf("provideConfig: %v", err)
 	}
@@ -217,10 +217,12 @@ pii_catalog:
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("pii_catalog = %+v, want %+v", got, want)
 	}
+
+	if len(warnings) != 0 {
+		t.Fatalf("warnings = %+v, want none", warnings)
+	}
 }
 
-// A broken pii_catalog section fails config loading — and with it both the API
-// server and the autosnapshot daemon — even while the feature is disabled.
 func TestPIICatalogInvalidScheduleFailsConfig(t *testing.T) {
 	t.Chdir(t.TempDir())
 
@@ -228,8 +230,40 @@ func TestPIICatalogInvalidScheduleFailsConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := provideConfig()
+	_, _, err := provideConfig()
 	if err == nil || !strings.Contains(err.Error(), `pii_catalog.schedule: invalid cron expression "bad"`) {
 		t.Fatalf("provideConfig error = %v, want invalid pii_catalog.schedule", err)
+	}
+}
+
+func TestPIICatalogAllowedTokenSecretNotRequiredToLoad(t *testing.T) {
+	const yml = `
+auth:
+  mode: token
+  tokens:
+    - name: pii-classifier
+      token_from_env: DASHA_TEST_PII_TOKEN_UNSET
+pii_catalog:
+  allowed_tokens: [pii-classifier, pii-classifier]
+`
+
+	t.Chdir(t.TempDir())
+
+	if err := os.WriteFile("dasha.yaml", []byte(yml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c, warnings, err := provideConfig()
+	if err != nil {
+		t.Fatalf("provideConfig: %v", err)
+	}
+
+	if len(warnings) != 1 || warnings[0].msg != "pii_catalog.allowed_tokens lists a token more than once" {
+		t.Fatalf("warnings = %+v, want one duplicate warning", warnings)
+	}
+
+	err = c.PIICatalog.ValidateSecrets(c.Auth)
+	if err == nil || !strings.Contains(err.Error(), `token "pii-classifier" has no secret`) {
+		t.Fatalf("ValidateSecrets error = %v, want missing secret", err)
 	}
 }

@@ -9,14 +9,13 @@ import (
 )
 
 func TestPIICatalogConfig_WithDefaults(t *testing.T) {
-	got := PIICatalogConfig{RetentionDays: -1}.WithDefaults() //nolint:exhaustruct
+	got := PIICatalogConfig{}.WithDefaults() //nolint:exhaustruct
 
 	assert.Equal(t, DefaultPIICatalogSchedule, got.Schedule)
 	assert.Equal(t, DefaultPIICatalogRetentionDays, got.RetentionDays)
 	assert.Equal(t, DefaultPIICatalogAuditRetentionDays, got.AuditRetentionDays)
 	assert.Equal(t, DefaultPIICatalogStatementTimeout, got.StatementTimeout)
 
-	// Set values are kept.
 	got = PIICatalogConfig{ //nolint:exhaustruct
 		Schedule: "*/5 * * * *", RetentionDays: 7, AuditRetentionDays: 30, StatementTimeout: time.Minute,
 	}.WithDefaults()
@@ -25,8 +24,11 @@ func TestPIICatalogConfig_WithDefaults(t *testing.T) {
 	assert.Equal(t, 30, got.AuditRetentionDays)
 	assert.Equal(t, time.Minute, got.StatementTimeout)
 
-	// The disabled zero value is valid once defaulted: an absent section must
-	// not fail startup.
+	neg := PIICatalogConfig{RetentionDays: -5, AuditRetentionDays: -1}.WithDefaults() //nolint:exhaustruct
+	assert.Equal(t, -5, neg.RetentionDays)
+	assert.Equal(t, -1, neg.AuditRetentionDays)
+
+	// An absent section must not fail startup.
 	zero := PIICatalogConfig{}.WithDefaults()       //nolint:exhaustruct
 	require.NoError(t, zero.Validate(AuthConfig{})) //nolint:exhaustruct
 }
@@ -47,6 +49,13 @@ func TestPIICatalogConfig_Validate(t *testing.T) {
 
 	oidcAuth := tokenAuth
 	oidcAuth.Mode = AuthModeOIDC
+
+	noSecretAuth := AuthConfig{ //nolint:exhaustruct
+		Mode: AuthModeToken,
+		Tokens: []AuthToken{
+			{Name: "pii-classifier", TokenFromEnv: "DASHA_PII_TOKEN", Role: RoleViewer}, //nolint:exhaustruct
+		},
+	}
 
 	base := PIICatalogConfig{}.WithDefaults() //nolint:exhaustruct
 
@@ -89,6 +98,18 @@ func TestPIICatalogConfig_Validate(t *testing.T) {
 			mutate:  func(c *PIICatalogConfig) { c.RetentionDays = 3651 },
 			auth:    tokenAuth,
 			wantErr: "pii_catalog.retention_days must be between 1 and 3650",
+		},
+		{
+			name:    "negative retention",
+			mutate:  func(c *PIICatalogConfig) { c.RetentionDays = -5 },
+			auth:    tokenAuth,
+			wantErr: "pii_catalog.retention_days must be between 1 and 3650",
+		},
+		{
+			name:    "negative audit retention",
+			mutate:  func(c *PIICatalogConfig) { c.AuditRetentionDays = -1 },
+			auth:    tokenAuth,
+			wantErr: "pii_catalog.audit_retention_days must be between 1 and 3650",
 		},
 		{
 			name:    "audit retention too long",
@@ -147,7 +168,7 @@ func TestPIICatalogConfig_Validate(t *testing.T) {
 			name:    "unknown name",
 			mutate:  func(c *PIICatalogConfig) { c.AllowedTokens = []string{"ops", "pii-clasifier"} },
 			auth:    tokenAuth,
-			wantErr: `pii_catalog.allowed_tokens[1]: no auth.tokens entry named "pii-clasifier"`,
+			wantErr: "pii_catalog.allowed_tokens[1]: no auth.tokens entry with this name",
 		},
 		{
 			name:    "empty name",
@@ -162,16 +183,22 @@ func TestPIICatalogConfig_Validate(t *testing.T) {
 			wantErr: `pii_catalog.allowed_tokens[0]: auth.tokens has 2 entries named "dup"`,
 		},
 		{
-			name:    "token without secret",
-			mutate:  func(c *PIICatalogConfig) { c.AllowedTokens = []string{"unset"} },
-			auth:    tokenAuth,
-			wantErr: `pii_catalog.allowed_tokens[0]: token "unset" has no secret (token / token_from_env)`,
+			// autosnapshot/migrate have no secret and must still start.
+			name:   "token without secret here",
+			mutate: func(c *PIICatalogConfig) { c.AllowedTokens = []string{"unset"} },
+			auth:   tokenAuth,
 		},
 		{
 			name:    "secret in place of name",
 			mutate:  func(c *PIICatalogConfig) { c.AllowedTokens = []string{secret} },
 			auth:    tokenAuth,
 			wantErr: "pii_catalog.allowed_tokens[0]: looks like a token secret, use its name",
+		},
+		{
+			name:    "secret in place of name, secret not resolved here",
+			mutate:  func(c *PIICatalogConfig) { c.AllowedTokens = []string{secret} },
+			auth:    noSecretAuth,
+			wantErr: "pii_catalog.allowed_tokens[0]: no auth.tokens entry with this name",
 		},
 	}
 
@@ -192,8 +219,29 @@ func TestPIICatalogConfig_Validate(t *testing.T) {
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tt.wantErr)
 			assert.NotContains(t, err.Error(), secret, "a token secret must never reach the error text")
+			assert.NotContains(t, err.Error(), "pii-clasifier", "an unmatched entry must never reach the error text")
 		})
 	}
+}
+
+func TestPIICatalogConfig_ValidateSecrets(t *testing.T) {
+	auth := AuthConfig{ //nolint:exhaustruct
+		Mode: AuthModeToken,
+		Tokens: []AuthToken{
+			{Name: "pii-classifier", Token: "s3cr3t", Role: RoleViewer},              //nolint:exhaustruct
+			{Name: "unset", TokenFromEnv: "DASHA_UNSET_PII_TOKEN", Role: RoleViewer}, //nolint:exhaustruct
+		},
+	}
+
+	c := PIICatalogConfig{AllowedTokens: []string{"pii-classifier"}} //nolint:exhaustruct
+	require.NoError(t, c.ValidateSecrets(auth))
+
+	c.AllowedTokens = []string{"pii-classifier", "unset"}
+	require.EqualError(t, c.ValidateSecrets(auth),
+		`pii_catalog.allowed_tokens[1]: token "unset" has no secret (token / token_from_env)`)
+
+	c.AllowedTokens = []string{"pii-classifier"}
+	require.NoError(t, c.ValidateSecrets(auth))
 }
 
 func TestPIICatalogConfig_DuplicateAllowedTokens(t *testing.T) {

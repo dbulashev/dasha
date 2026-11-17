@@ -40,23 +40,25 @@ func NewContainer() *Container {
 	i := do.New()
 
 	do.Provide(i, func(i *do.Injector) (*zap.Logger, error) {
-		cfg := do.MustInvoke[*config.Config](i)
+		loaded := do.MustInvoke[loadedConfig](i)
 
-		logger := provideLogger(cfg.Debug)
+		logger := provideLogger(loaded.cfg.Debug)
 
-		// provideConfig runs before there is a logger, so its non-fatal
-		// findings are reported here.
-		for _, name := range cfg.PIICatalog.DuplicateAllowedTokens() {
-			logger.Warn("pii_catalog.allowed_tokens lists a token more than once", zap.String("name", name))
+		for _, w := range loaded.warnings {
+			logger.Warn(w.msg, w.fields...)
 		}
 
 		return logger, nil
 	})
 
-	do.Provide(i, func(_ *do.Injector) (*config.Config, error) {
-		cfg, err := provideConfig()
+	do.Provide(i, func(_ *do.Injector) (loadedConfig, error) {
+		cfg, warnings, err := provideConfig()
 
-		return cfg, err
+		return loadedConfig{cfg: cfg, warnings: warnings}, err
+	})
+
+	do.Provide(i, func(i *do.Injector) (*config.Config, error) {
+		return do.MustInvoke[loadedConfig](i).cfg, nil
 	})
 
 	do.Provide(i, func(i *do.Injector) (config.Clusters, error) {
@@ -212,6 +214,10 @@ func (c *Container) Metrics() *metrics.Service {
 func (c *Container) AuthMiddlewares(ctx context.Context, resolver auth.PATResolver) (*auth.Middlewares, error) {
 	cfg := c.Config()
 	logger := c.Logger()
+
+	if err := cfg.PIICatalog.ValidateSecrets(cfg.Auth); err != nil {
+		return nil, err
+	}
 
 	return auth.NewMiddlewares(ctx, cfg.Auth, cfg.BasePath, resolver, logger)
 }
@@ -564,7 +570,17 @@ func foldLookup(m map[string]any, key string) any {
 	return nil
 }
 
-func provideConfig() (*config.Config, error) {
+type configWarning struct {
+	msg    string
+	fields []zap.Field
+}
+
+type loadedConfig struct {
+	cfg      *config.Config
+	warnings []configWarning
+}
+
+func provideConfig() (*config.Config, []configWarning, error) {
 	v := newConfigViper()
 	v.SetConfigName("dasha")
 	v.SetConfigType("yaml")
@@ -573,28 +589,28 @@ func provideConfig() (*config.Config, error) {
 	v.AddConfigPath("/etc/dasha/")
 
 	if err := v.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("provideConfig | failed to read config: %w", err)
+		return nil, nil, fmt.Errorf("provideConfig | failed to read config: %w", err)
 	}
 
 	var c config.Config
 
 	err := v.Unmarshal(&c)
 	if err != nil {
-		return nil, fmt.Errorf("provideConfig | %w", err)
+		return nil, nil, fmt.Errorf("provideConfig | %w", err)
 	}
 
 	raw, err := os.ReadFile(v.ConfigFileUsed())
 	if err != nil {
-		return nil, fmt.Errorf("provideConfig | failed to read config: %w", err)
+		return nil, nil, fmt.Errorf("provideConfig | failed to read config: %w", err)
 	}
 
 	if err := restoreRoleMappingCase(&c, raw); err != nil {
-		return nil, fmt.Errorf("provideConfig | auth.oidc.role_mapping: %w", err)
+		return nil, nil, fmt.Errorf("provideConfig | auth.oidc.role_mapping: %w", err)
 	}
 
 	c.BasePath, err = config.NormalizeBasePath(c.BasePath)
 	if err != nil {
-		return nil, fmt.Errorf("provideConfig | %w", err)
+		return nil, nil, fmt.Errorf("provideConfig | %w", err)
 	}
 
 	for i := range c.Clusters {
@@ -669,36 +685,43 @@ func provideConfig() (*config.Config, error) {
 	c.PIICatalog = c.PIICatalog.WithDefaults()
 
 	if err := c.HealthScore.Validate(); err != nil {
-		return nil, fmt.Errorf("provideConfig | health_score: %w", err)
+		return nil, nil, fmt.Errorf("provideConfig | health_score: %w", err)
 	}
 
 	if err := c.HealthScore.Metrics.Validate(); err != nil {
-		return nil, fmt.Errorf("provideConfig | health_score.metrics: %w", err)
+		return nil, nil, fmt.Errorf("provideConfig | health_score.metrics: %w", err)
 	}
 
 	if err := c.Auth.Validate(); err != nil {
-		return nil, fmt.Errorf("provideConfig | auth config: %w", err)
+		return nil, nil, fmt.Errorf("provideConfig | auth config: %w", err)
 	}
 
-	// After Auth.Validate and the token_from_env resolution above: allowed_tokens
-	// is checked against the resolved static tokens.
 	if err := c.PIICatalog.Validate(c.Auth); err != nil {
-		return nil, fmt.Errorf("provideConfig | %w", err)
+		return nil, nil, fmt.Errorf("provideConfig | %w", err)
 	}
 
 	if err := c.SchemaLint.Validate(); err != nil {
-		return nil, fmt.Errorf("provideConfig | schema_lint: %w", err)
+		return nil, nil, fmt.Errorf("provideConfig | schema_lint: %w", err)
 	}
 
 	if err := c.LogSearch.Validate(c.Clusters); err != nil {
-		return nil, fmt.Errorf("provideConfig | log_search: %w", err)
+		return nil, nil, fmt.Errorf("provideConfig | log_search: %w", err)
 	}
 
 	if err := c.Activity.Validate(); err != nil {
-		return nil, fmt.Errorf("provideConfig | activity: %w", err)
+		return nil, nil, fmt.Errorf("provideConfig | activity: %w", err)
 	}
 
-	return &c, nil
+	var warnings []configWarning
+
+	for _, name := range c.PIICatalog.DuplicateAllowedTokens() {
+		warnings = append(warnings, configWarning{
+			msg:    "pii_catalog.allowed_tokens lists a token more than once",
+			fields: []zap.Field{zap.String("name", name)},
+		})
+	}
+
+	return &c, warnings, nil
 }
 
 func provideClusters(cfg config.Config) config.Clusters {

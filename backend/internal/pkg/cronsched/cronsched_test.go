@@ -16,7 +16,6 @@ func TestDue(t *testing.T) {
 	daily, err := Parse("0 3 * * *")
 	require.NoError(t, err)
 
-	// Last run 02:00 UTC → next firing 03:00 UTC.
 	assert.False(t, Due(daily, at(2, 0), at(2, 59)))
 	assert.True(t, Due(daily, at(2, 0), at(3, 0)))
 	assert.True(t, Due(daily, at(2, 0), at(15, 0)), "missed firings stay due until taken")
@@ -26,11 +25,12 @@ func TestDue(t *testing.T) {
 
 	assert.False(t, Due(every5, at(12, 5), at(12, 9)))
 	assert.True(t, Due(every5, at(12, 5), at(12, 10)))
+
+	assert.False(t, Due(nil, at(2, 0), at(2, 0).Add(FallbackInterval-time.Second)))
+	assert.True(t, Due(nil, at(2, 0), at(2, 0).Add(FallbackInterval)))
 }
 
 func TestParse_Timezone(t *testing.T) {
-	// Bare specs are pinned to UTC regardless of the process's local zone:
-	// "0 3 * * *" fires at 03:00 UTC even when last is expressed in another zone.
 	utcDaily, err := Parse("0 3 * * *")
 	require.NoError(t, err)
 
@@ -40,8 +40,6 @@ func TestParse_Timezone(t *testing.T) {
 	next := utcDaily.Next(lastMsk)
 	assert.Equal(t, time.Date(2026, 7, 19, 3, 0, 0, 0, time.UTC), next.UTC())
 
-	// An explicit CRON_TZ prefix is passed through untouched: 03:00 Moscow
-	// time is 00:00 UTC.
 	mskDaily, err := Parse("CRON_TZ=Europe/Moscow 0 3 * * *")
 	require.NoError(t, err)
 

@@ -8,16 +8,6 @@ import (
 	"github.com/dbulashev/dasha/internal/pkg/cronsched"
 )
 
-// cronDue reports whether the schedule has fired between the last capture and
-// now (nil schedule = the daily fallback an unparsable expression falls back to).
-func cronDue(sched cron.Schedule, last, now time.Time) bool {
-	if sched == nil {
-		return now.Sub(last) >= 24*time.Hour
-	}
-
-	return cronsched.Due(sched, last, now)
-}
-
 // dueForCapture reports whether one sweep target is due, recording the attempt
 // in attempts. A target with no stored snapshot is judged by its last attempt
 // instead — one that never yields a snapshot (an unreachable host, a server
@@ -38,7 +28,7 @@ func (d *Daemon) dueForCapture(
 		t, ok = attempts[key]
 	}
 
-	if ok && !cronDue(sched, t, now) {
+	if ok && !cronsched.Due(sched, t, now) {
 		return false
 	}
 
