@@ -42,7 +42,15 @@ func NewContainer() *Container {
 	do.Provide(i, func(i *do.Injector) (*zap.Logger, error) {
 		cfg := do.MustInvoke[*config.Config](i)
 
-		return provideLogger(cfg.Debug), nil
+		logger := provideLogger(cfg.Debug)
+
+		// provideConfig runs before there is a logger, so its non-fatal
+		// findings are reported here.
+		for _, name := range cfg.PIICatalog.DuplicateAllowedTokens() {
+			logger.Warn("pii_catalog.allowed_tokens lists a token more than once", zap.String("name", name))
+		}
+
+		return logger, nil
 	})
 
 	do.Provide(i, func(_ *do.Injector) (*config.Config, error) {
@@ -658,6 +666,7 @@ func provideConfig() (*config.Config, error) {
 	c.LogSearch = c.LogSearch.WithDefaults()
 	c.LogInsights = c.LogInsights.WithDefaults()
 	c.Activity = c.Activity.WithDefaults()
+	c.PIICatalog = c.PIICatalog.WithDefaults()
 
 	if err := c.HealthScore.Validate(); err != nil {
 		return nil, fmt.Errorf("provideConfig | health_score: %w", err)
@@ -669,6 +678,12 @@ func provideConfig() (*config.Config, error) {
 
 	if err := c.Auth.Validate(); err != nil {
 		return nil, fmt.Errorf("provideConfig | auth config: %w", err)
+	}
+
+	// After Auth.Validate and the token_from_env resolution above: allowed_tokens
+	// is checked against the resolved static tokens.
+	if err := c.PIICatalog.Validate(c.Auth); err != nil {
+		return nil, fmt.Errorf("provideConfig | %w", err)
 	}
 
 	if err := c.SchemaLint.Validate(); err != nil {

@@ -778,6 +778,10 @@ type Config struct {
 	IndexAdvisor indexadvisor.Config `mapstructure:"index_advisor"`
 
 	Activity activity.Config `mapstructure:"activity"`
+
+	// PIICatalog collects (column name, comment) pairs for an external PII
+	// classifier; collected by the autosnapshot daemon, served by the API.
+	PIICatalog PIICatalogConfig `mapstructure:"pii_catalog"`
 }
 
 // PoolConfig tunes a pgx connection pool. Zero MaxConns/MaxConnIdleTime fall back

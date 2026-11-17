@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -341,7 +342,121 @@ CREATE TABLE IF NOT EXISTS log_insights_groups (
 	createLogInsightsGroupsIdxSQL = `
 CREATE INDEX IF NOT EXISTS idx_log_insights_groups_query
     ON log_insights_groups (scan_id, query_id)`
+
+	// PII catalog: (column name, column comment) pairs per (cluster, database),
+	// stored as SCD2 rows so the current set, the change feed and retention are
+	// all index ranges. A few thousand pairs per database that rarely change:
+	// none of these tables is partitioned, retention is a plain DELETE.
+
+	// One row per (cluster, database): coverage status and the current version.
+	// current_version_id is NULL until the first successful collection;
+	// last_success_at doubles as "last checked".
+	createPIICatalogStatusSQL = `
+CREATE TABLE IF NOT EXISTS pii_catalog_status (
+    cluster_name       text        NOT NULL,
+    database           text        NOT NULL,
+    current_version_id bigint,
+    set_hash           bytea,
+    pair_count         int         NOT NULL DEFAULT 0,
+    last_attempt_at    timestamptz,
+    last_success_at    timestamptz,
+    last_changed_at    timestamptz,
+    last_error         text,
+    source_instance    text,
+    CONSTRAINT pii_catalog_status_pkey PRIMARY KEY (cluster_name, database)
+)`
+
+	// A version is written only when the set hash changes.
+	createPIICatalogVersionSQL = `
+CREATE TABLE IF NOT EXISTS pii_catalog_version (
+    id              bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    cluster_name    text        NOT NULL,
+    database        text        NOT NULL,
+    set_hash        bytea       NOT NULL,
+    pair_count      int         NOT NULL,
+    added_count     int         NOT NULL,
+    removed_count   int         NOT NULL,
+    source_instance text        NOT NULL,
+    server_version  int         NOT NULL,
+    created_at      timestamptz NOT NULL DEFAULT now()
+)`
+
+	createPIICatalogVersionIdxSQL = `
+CREATE INDEX IF NOT EXISTS idx_pii_catalog_version_lookup
+    ON pii_catalog_version (cluster_name, database, created_at DESC)`
+
+	// The current set is removed_at IS NULL; the diff of version v is
+	// added_version = v plus removed_version = v. Uniqueness goes through
+	// pair_hash, a sha256 of (name, comment): comments are unbounded, past the
+	// btree key limit. The version columns carry no FK — retention deletes old
+	// versions while their pairs may still be current.
+	createPIICatalogPairSQL = `
+CREATE TABLE IF NOT EXISTS pii_catalog_pair (
+    id              bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    cluster_name    text        NOT NULL,
+    database        text        NOT NULL,
+    pair_hash       bytea       NOT NULL,
+    column_name     text        NOT NULL,
+    column_comment  text,
+    added_version   bigint      NOT NULL,
+    added_at        timestamptz NOT NULL,
+    removed_version bigint,
+    removed_at      timestamptz
+)`
+
+	createPIICatalogPairCurrentIdxSQL = `
+CREATE UNIQUE INDEX IF NOT EXISTS uq_pii_catalog_pair_current
+    ON pii_catalog_pair (cluster_name, database, pair_hash) WHERE removed_at IS NULL`
+
+	// Keyset pagination of the current set; COLLATE "C" keeps the order
+	// independent of the storage database's default collation.
+	createPIICatalogPairPageIdxSQL = `
+CREATE INDEX IF NOT EXISTS idx_pii_catalog_pair_page
+    ON pii_catalog_pair (cluster_name, database, column_name COLLATE "C", id) WHERE removed_at IS NULL`
+
+	createPIICatalogPairAddedIdxSQL = `
+CREATE INDEX IF NOT EXISTS idx_pii_catalog_pair_added
+    ON pii_catalog_pair (cluster_name, database, added_at, id)`
+
+	createPIICatalogPairRemovedIdxSQL = `
+CREATE INDEX IF NOT EXISTS idx_pii_catalog_pair_removed
+    ON pii_catalog_pair (cluster_name, database, removed_at, id) WHERE removed_at IS NOT NULL`
+
+	// Every catalog request, allowed or denied. principal is the static token
+	// name (or the PAT/OIDC subject of a denied caller, NULL if anonymous);
+	// token secrets and catalog data are never stored here.
+	createPIICatalogAccessLogSQL = `
+CREATE TABLE IF NOT EXISTS pii_catalog_access_log (
+    id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    at           timestamptz NOT NULL DEFAULT now(),
+    principal    text,
+    auth_method  text,
+    operation    text NOT NULL,
+    cluster_name text,
+    database     text,
+    decision     text NOT NULL,
+    remote_ip    inet,
+    request_id   text
+)`
+
+	createPIICatalogAccessLogIdxSQL = `
+CREATE INDEX IF NOT EXISTS idx_pii_catalog_access_log_at
+    ON pii_catalog_access_log (at)`
 )
+
+// piiCatalogDDL creates the PII catalog tables, in dependency order.
+var piiCatalogDDL = []string{
+	createPIICatalogStatusSQL,
+	createPIICatalogVersionSQL,
+	createPIICatalogVersionIdxSQL,
+	createPIICatalogPairSQL,
+	createPIICatalogPairCurrentIdxSQL,
+	createPIICatalogPairPageIdxSQL,
+	createPIICatalogPairAddedIdxSQL,
+	createPIICatalogPairRemovedIdxSQL,
+	createPIICatalogAccessLogSQL,
+	createPIICatalogAccessLogIdxSQL,
+}
 
 // partitionedTables lists the day-partitioned tables managed together —
 // partitions for each table are created and dropped as a group per day.
@@ -387,7 +502,7 @@ func newFromDSN(ctx context.Context, dsn string) (*Storage, error) {
 }
 
 func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
-	for _, ddl := range []string{
+	for _, ddl := range slices.Concat([]string{
 		createSnapshotsSQL,
 		createQueryTextsSQL,
 		createSnapshotsIdxSQL,
@@ -428,7 +543,7 @@ func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
 		createLogInsightsScansSQL,
 		createLogInsightsGroupsSQL,
 		createLogInsightsGroupsIdxSQL,
-	} {
+	}, piiCatalogDDL) {
 		if _, err := s.ddlPool.Exec(ctx, ddl); err != nil {
 			return fmt.Errorf("storage: migrate: %w", err)
 		}

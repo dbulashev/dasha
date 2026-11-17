@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/dbulashev/dasha/internal/config"
+	"github.com/dbulashev/dasha/internal/pkg/cronsched"
 	"github.com/dbulashev/dasha/internal/statio"
 )
 
@@ -23,7 +24,7 @@ func (d *Daemon) processIOSnapshots(ctx context.Context, cfg Config) {
 		return
 	}
 
-	sched, err := ParseCronSchedule(cfg.IOSchedule)
+	sched, err := cronsched.Parse(cfg.IOSchedule)
 	if err != nil {
 		d.logger.Warn("io: invalid schedule, falling back to daily",
 			zap.String("schedule", cfg.IOSchedule), zap.Error(err))

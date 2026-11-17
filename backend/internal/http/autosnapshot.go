@@ -10,6 +10,7 @@ import (
 	"github.com/dbulashev/dasha/gen/serverhttp"
 	"github.com/dbulashev/dasha/internal/auth"
 	"github.com/dbulashev/dasha/internal/autosnapshot"
+	"github.com/dbulashev/dasha/internal/pkg/cronsched"
 )
 
 func userNameFromContext(ctx context.Context) string {
@@ -395,11 +396,11 @@ func configFromAPI(api serverhttp.AutoSnapshotConfig) (autosnapshot.Config, erro
 
 	// The struct validator cannot judge a cron expression; parse it here so an
 	// invalid schedule is a 400 instead of a daemon-side daily fallback.
-	if _, err := autosnapshot.ParseCronSchedule(api.HotSchedule); err != nil {
+	if _, err := cronsched.Parse(api.HotSchedule); err != nil {
 		return autosnapshot.Config{}, fmt.Errorf("hot_schedule: %w", err)
 	}
 
-	if _, err := autosnapshot.ParseCronSchedule(api.IOSchedule); err != nil {
+	if _, err := cronsched.Parse(api.IOSchedule); err != nil {
 		return autosnapshot.Config{}, fmt.Errorf("io_schedule: %w", err)
 	}
 
