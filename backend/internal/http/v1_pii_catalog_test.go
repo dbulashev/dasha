@@ -164,6 +164,7 @@ func TestGetPiiCatalogPairs_NotFound(t *testing.T) {
 		{"app", piicatalog.ErrNotCollected, serverhttp.PiiCatalogErrNotCollectedYet},
 		{"new", piicatalog.ErrNotFound, serverhttp.PiiCatalogErrNotCollectedYet},
 		{"nope", piicatalog.ErrNotFound, serverhttp.PiiCatalogErrNotFound},
+		{"nope", piicatalog.ErrNotCollected, serverhttp.PiiCatalogErrNotFound},
 	}
 
 	for _, tc := range cases {

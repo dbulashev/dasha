@@ -120,7 +120,7 @@ func (s *Handlers) GetPiiCatalogPairs(
 
 	switch {
 	case errors.Is(err, piicatalog.ErrNotFound), errors.Is(err, piicatalog.ErrNotCollected):
-		e, nfErr := s.piiNotFound(ctx, k, err)
+		e, nfErr := s.piiNotFound(ctx, k)
 		if nfErr != nil {
 			return nil, fmt.Errorf("GetPiiCatalogPairs | %w", nfErr)
 		}
@@ -145,13 +145,9 @@ func (s *Handlers) GetPiiCatalogPairs(
 	}, nil
 }
 
-// A database with no status row is not_collected_yet while it is configured,
-// otherwise not_found.
-func (s *Handlers) piiNotFound(ctx context.Context, k piicatalog.Key, err error) (serverhttp.PiiCatalogError, error) {
-	if errors.Is(err, piicatalog.ErrNotCollected) {
-		return piiError(serverhttp.PiiCatalogErrNotCollectedYet, "the database has not been collected yet"), nil
-	}
-
+// not_collected_yet while the database is configured, otherwise not_found: a
+// removed database keeps its failure-only status row until retention.
+func (s *Handlers) piiNotFound(ctx context.Context, k piicatalog.Key) (serverhttp.PiiCatalogError, error) {
 	configured, cfgErr := s.piiConfigured(ctx)
 	if cfgErr != nil {
 		return serverhttp.PiiCatalogError{}, cfgErr

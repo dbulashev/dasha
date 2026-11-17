@@ -16,8 +16,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 
 	"github.com/dbulashev/dasha/gen/serverhttp"
+	"github.com/dbulashev/dasha/internal/auth"
+	"github.com/dbulashev/dasha/internal/config"
 )
 
 func TestMapDatabaseError(t *testing.T) {
@@ -172,4 +175,41 @@ func TestWritePIIError(t *testing.T) {
 	c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/api/pii-catalog/pairs", nil), rec)
 	require.True(t, writePIIError(bindErr, c, zap.NewNop()))
 	assert.JSONEq(t, `{"code":"bad_request","message":"Invalid format for parameter database: bad"}`, rec.Body.String())
+}
+
+func TestNew_PIICatalogRateLimitedIsAudited(t *testing.T) {
+	t.Parallel()
+
+	core, logs := observer.New(zap.InfoLevel)
+	logger := zap.New(core)
+
+	pass := func(next echo.HandlerFunc) echo.HandlerFunc { return next }
+	tokenAuth := func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			auth.SetUser(c, &auth.UserContext{Name: "classifier", AuthMethod: auth.MethodToken}) //nolint:exhaustruct
+
+			return next(c)
+		}
+	}
+
+	rl := auth.NewRateLimiter(config.AuthConfig{ //nolint:exhaustruct
+		RateLimit: &config.RateLimitConfig{RequestsPerSecond: 0.001, Burst: 1},
+	}, zap.NewNop())
+	t.Cleanup(rl.Stop)
+
+	gate := auth.NewPIICatalogGate(config.PIICatalogConfig{ //nolint:exhaustruct
+		Enabled: true, AllowedTokens: []string{"classifier"},
+	}, logger)
+
+	api := New(newPIIHandlers(&fakePIIStore{}), nil, pass, rl.Middleware, pass, tokenAuth, pass, gate, logger) //nolint:exhaustruct
+
+	for i, want := range []int{http.StatusOK, http.StatusTooManyRequests} {
+		rec := httptest.NewRecorder()
+		api.Echo.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/pii-catalog/status", nil))
+
+		require.Equal(t, want, rec.Code, "request %d", i)
+		assert.Equal(t, "no-store", rec.Header().Get("Cache-Control"), "request %d", i)
+	}
+
+	assert.Equal(t, 2, logs.FilterMessage("pii_catalog access").FilterField(zap.Bool("audit", true)).Len())
 }

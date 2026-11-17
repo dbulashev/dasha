@@ -73,13 +73,23 @@ func applyPIISnapshotTx(ctx context.Context, tx pgx.Tx, k piicatalog.Key, snap p
 	}
 
 	// FOR UPDATE serializes concurrent writers (several daemons without leader election).
-	var curHash []byte
+	var (
+		curHash     []byte
+		lastAttempt *time.Time
+		lastError   *string
+	)
 
 	if err := tx.QueryRow(ctx, `
-		SELECT set_hash FROM pii_catalog_status
+		SELECT set_hash, last_attempt_at, last_error FROM pii_catalog_status
 		WHERE cluster_name = $1 AND database = $2
-		FOR UPDATE`, k.Cluster, k.Database).Scan(&curHash); err != nil {
+		FOR UPDATE`, k.Cluster, k.Database).Scan(&curHash, &lastAttempt, &lastError); err != nil {
 		return false, fmt.Errorf("storage: pii status lock: %w", err)
+	}
+
+	// Another instance has already published a set from a newer attempt. A newer
+	// failure does not count: the older success still replaces it.
+	if lastAttempt != nil && lastError == nil && !snap.AttemptAt.After(*lastAttempt) {
+		return false, nil
 	}
 
 	changed := !bytes.Equal(curHash, snap.SetHash)
@@ -125,7 +135,9 @@ func (s *Storage) RecordPIIFailure(ctx context.Context, k piicatalog.Key, attemp
 		INSERT INTO pii_catalog_status (cluster_name, database, last_attempt_at, last_error)
 		VALUES ($1, $2, $3, $4)
 		ON CONFLICT (cluster_name, database) DO UPDATE
-		SET last_attempt_at = EXCLUDED.last_attempt_at, last_error = EXCLUDED.last_error`,
+		SET last_attempt_at = EXCLUDED.last_attempt_at, last_error = EXCLUDED.last_error
+		WHERE pii_catalog_status.last_attempt_at IS NULL
+		   OR pii_catalog_status.last_attempt_at <= EXCLUDED.last_attempt_at`,
 		k.Cluster, k.Database, attemptAt, errMsg); err != nil {
 		return fmt.Errorf("storage: pii record failure: %w", err)
 	}

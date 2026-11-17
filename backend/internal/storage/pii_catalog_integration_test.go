@@ -116,6 +116,52 @@ func TestPIIApply_FailureKeepsCatalog(t *testing.T) {
 	assert.Len(t, cat.Pairs, 1)
 }
 
+// Several daemons without leader election: a slower, older attempt must not
+// overwrite the set or the status of a newer one.
+func TestPIIApply_StaleAttemptIsIgnored(t *testing.T) {
+	s := newPIITestStorage(t)
+	ctx := t.Context()
+
+	older := time.Now().UTC().Add(-time.Minute)
+	newer := older.Add(30 * time.Second)
+
+	_, err := s.ApplyPIISnapshot(ctx, piiKey, piicatalog.NewSnapshot([]piicatalog.Pair{{Name: "snils"}}, "h2", 170000, newer))
+	require.NoError(t, err)
+
+	changed, err := s.ApplyPIISnapshot(ctx, piiKey, piicatalog.NewSnapshot([]piicatalog.Pair{{Name: "id"}}, "h1", 170000, older))
+	require.NoError(t, err)
+	assert.False(t, changed)
+
+	require.NoError(t, s.RecordPIIFailure(ctx, piiKey, older, "h1: timeout"))
+
+	cat, err := s.PIICatalog(ctx, piiKey)
+	require.NoError(t, err)
+	assert.Equal(t, []piicatalog.Pair{{Name: "snils"}}, cat.Pairs)
+
+	st, err := s.ListPIIStatus(ctx)
+	require.NoError(t, err)
+	assert.Nil(t, st[piiKey].LastError)
+	assert.Equal(t, "h2", *st[piiKey].SourceInstance)
+	assert.WithinDuration(t, newer, *st[piiKey].LastAttemptAt, time.Millisecond)
+}
+
+// A newer failure does not block an older success: the catalog is still known.
+func TestPIIApply_OlderSuccessReplacesNewerFailure(t *testing.T) {
+	s := newPIITestStorage(t)
+	ctx := t.Context()
+
+	older := time.Now().UTC().Add(-time.Minute)
+
+	require.NoError(t, s.RecordPIIFailure(ctx, piiKey, older.Add(30*time.Second), "h2: timeout"))
+
+	_, err := s.ApplyPIISnapshot(ctx, piiKey, piicatalog.NewSnapshot([]piicatalog.Pair{{Name: "id"}}, "h1", 170000, older))
+	require.NoError(t, err)
+
+	cat, err := s.PIICatalog(ctx, piiKey)
+	require.NoError(t, err)
+	assert.Equal(t, []piicatalog.Pair{{Name: "id"}}, cat.Pairs)
+}
+
 func TestPIIApply_EmptyDatabaseIsCollected(t *testing.T) {
 	s := newPIITestStorage(t)
 

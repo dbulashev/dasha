@@ -134,10 +134,11 @@ func New(
 	e.Use(extendDeadlines(activityProfilePath, profileWriteTimeout, logger))
 	e.Use(requireHTTPSMW)
 	e.Use(skipPublic(piiGate.WrapAuth(authMW)))
+	// Before the rate limiters and casbin: their early exits (429, 403) are
+	// still audited and answered with no-store.
+	e.Use(piiGate.Middleware)
 	e.Use(rateLimitMW)
 	e.Use(logsRateLimitMW)
-	// Before casbin, so a request casbin would refuse is still audited as a denial.
-	e.Use(piiGate.Middleware)
 	e.Use(skipPublic(casbinMW))
 
 	serverhttp.RegisterHandlers(e, ssi)
@@ -266,7 +267,7 @@ func writePIIError(err error, c echo.Context, logger *zap.Logger) bool {
 		status, body = dbErr.Code, piiError(serverhttp.PiiCatalogErrTimeout, msg)
 		logger.Warn("request did not complete",
 			zap.Int("status", status),
-			zap.String("path", c.Request().URL.Path),
+			zap.String("route", c.Path()),
 			zap.Error(err),
 		)
 	case isHTTP && he.Code == http.StatusBadRequest:
@@ -277,7 +278,7 @@ func writePIIError(err error, c echo.Context, logger *zap.Logger) bool {
 	default:
 		status, body = http.StatusInternalServerError, piiError(serverhttp.PiiCatalogErrInternal, "internal error")
 		logger.Error("internal server error",
-			zap.String("path", c.Request().URL.Path),
+			zap.String("route", c.Path()),
 			zap.Error(err),
 		)
 	}
