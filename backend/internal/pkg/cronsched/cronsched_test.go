@@ -26,6 +26,11 @@ func TestDue(t *testing.T) {
 	assert.False(t, Due(every5, at(12, 5), at(12, 9)))
 	assert.True(t, Due(every5, at(12, 5), at(12, 10)))
 
+	never, err := Parse("0 0 31 2 *")
+	require.NoError(t, err)
+
+	assert.False(t, Due(never, at(2, 0), at(2, 0).AddDate(10, 0, 0)), "schedule with no next firing is never due")
+
 	assert.False(t, Due(nil, at(2, 0), at(2, 0).Add(FallbackInterval-time.Second)))
 	assert.True(t, Due(nil, at(2, 0), at(2, 0).Add(FallbackInterval)))
 }
@@ -48,7 +53,8 @@ func TestParse_Timezone(t *testing.T) {
 }
 
 func TestParse_Invalid(t *testing.T) {
-	for _, spec := range []string{"", "bad", "0 3 * *", "61 * * * *", "CRON_TZ=Nowhere/Land 0 3 * * *"} {
+	for _, spec := range []string{"", "bad", "0 3 * *", "61 * * * *", "CRON_TZ=Nowhere/Land 0 3 * * *",
+		"TZ=UTC", "CRON_TZ=UTC", "CRON_TZ=UTC\t0 3 * * *", "CRON_TZ=UTC "} {
 		_, err := Parse(spec)
 		assert.Error(t, err, spec)
 	}

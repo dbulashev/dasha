@@ -247,6 +247,7 @@ pii_catalog:
   allowed_tokens: [pii-classifier, pii-classifier]
 `
 
+	t.Setenv("DASHA_TEST_PII_TOKEN_UNSET", "")
 	t.Chdir(t.TempDir())
 
 	if err := os.WriteFile("dasha.yaml", []byte(yml), 0o600); err != nil {
