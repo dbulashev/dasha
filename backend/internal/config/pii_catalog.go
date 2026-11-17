@@ -66,6 +66,11 @@ func (c *PIICatalogConfig) Validate(auth AuthConfig) error {
 		return fmt.Errorf("pii_catalog.schedule: invalid cron expression %q: %w", c.Schedule, err)
 	}
 
+	// HasGap reports no gap for a schedule that never fires.
+	if sched.Next(time.Now()).IsZero() {
+		return fmt.Errorf("pii_catalog.schedule %q never fires", c.Schedule)
+	}
+
 	if c.RetentionDays < 1 || c.RetentionDays > maxPIICatalogRetentionDays {
 		return fmt.Errorf("pii_catalog.retention_days must be between 1 and %d", maxPIICatalogRetentionDays)
 	}

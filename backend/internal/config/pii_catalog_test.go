@@ -94,6 +94,12 @@ func TestPIICatalogConfig_Validate(t *testing.T) {
 			wantErr: "pii_catalog.schedule",
 		},
 		{
+			name:    "schedule that never fires",
+			mutate:  func(c *PIICatalogConfig) { c.Schedule = "0 0 31 2 *" },
+			auth:    tokenAuth,
+			wantErr: `pii_catalog.schedule "0 0 31 2 *" never fires`,
+		},
+		{
 			name:    "monthly schedule outlives retention",
 			mutate:  func(c *PIICatalogConfig) { c.Schedule = "0 3 1 * *"; c.RetentionDays = 14 },
 			auth:    tokenAuth,
