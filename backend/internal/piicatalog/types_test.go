@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func ptr(s string) *string { return &s }
@@ -35,28 +34,6 @@ func TestNewSnapshot_EmptySetHasStableHash(t *testing.T) {
 
 	assert.Equal(t, a.SetHash, b.SetHash)
 	assert.NotEqual(t, a.SetHash, NewSnapshot([]Pair{{Name: "id"}}, "h", 0, time.Now()).SetHash)
-}
-
-func TestDiff(t *testing.T) {
-	old := NewSnapshot([]Pair{{Name: "id"}, {Name: "snils"}}, "h", 0, time.Now())
-	cur := make([][]byte, 0, len(old.Pairs))
-
-	for _, p := range old.Pairs {
-		cur = append(cur, p.Hash)
-	}
-
-	snap := NewSnapshot([]Pair{{Name: "id"}, {Name: "snils", Comment: ptr("СНИЛС")}}, "h", 0, time.Now())
-
-	added, removed := Diff(cur, snap)
-	require.Len(t, added, 1)
-	assert.Equal(t, "snils", added[0].Name)
-	assert.Equal(t, "СНИЛС", *added[0].Comment)
-	require.Len(t, removed, 1)
-	assert.Equal(t, PairHash(Pair{Name: "snils"}), removed[0])
-
-	added, removed = Diff(cur, old)
-	assert.Empty(t, added)
-	assert.Empty(t, removed)
 }
 
 func TestTruncate_KeepsValidUTF8(t *testing.T) {

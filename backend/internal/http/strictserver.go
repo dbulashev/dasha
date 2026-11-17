@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -44,6 +45,7 @@ func New(
 	logsRateLimitMW echo.MiddlewareFunc,
 	authMW echo.MiddlewareFunc,
 	casbinMW echo.MiddlewareFunc,
+	piiGate *auth.PIICatalogGate,
 	logger *zap.Logger,
 ) *API {
 	// The auth middleware already bridges the user into the request's
@@ -94,6 +96,10 @@ func New(
 			return
 		}
 
+		if writePIIBadRequest(err, c, logger) {
+			return
+		}
+
 		// A cancelled request context means the client disconnected — nobody
 		// will receive the response, so don't log it as a server error.
 		if !c.Response().Committed && !errors.Is(err, context.Canceled) {
@@ -127,9 +133,11 @@ func New(
 
 	e.Use(extendDeadlines(activityProfilePath, profileWriteTimeout, logger))
 	e.Use(requireHTTPSMW)
-	e.Use(skipPublic(authMW))
+	e.Use(skipPublic(piiGate.WrapAuth(authMW)))
 	e.Use(rateLimitMW)
 	e.Use(logsRateLimitMW)
+	// Before casbin, so a request casbin would refuse is still audited as a denial.
+	e.Use(piiGate.Middleware)
 	e.Use(skipPublic(casbinMW))
 
 	serverhttp.RegisterHandlers(e, ssi)
@@ -233,4 +241,21 @@ func (api *API) Serve(optionalFn ...ServeOptFunc) error {
 	}
 
 	return nil
+}
+
+// Parameter binding in the generated wrapper fails with a plain echo 400;
+// the PII catalog contract promises a PiiCatalogError body instead.
+func writePIIBadRequest(err error, c echo.Context, logger *zap.Logger) bool {
+	he, ok := errors.AsType[*echo.HTTPError](err)
+	if !ok || he.Code != http.StatusBadRequest || c.Response().Committed ||
+		!strings.HasPrefix(c.Request().URL.Path, auth.PIICatalogPathPrefix) {
+		return false
+	}
+
+	msg, _ := he.Message.(string)
+	if respErr := c.JSON(http.StatusBadRequest, piiBadRequest(msg)); respErr != nil {
+		logger.Error("failed to write pii catalog error response", zap.Error(respErr))
+	}
+
+	return true
 }

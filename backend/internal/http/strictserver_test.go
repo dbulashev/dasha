@@ -121,3 +121,33 @@ func TestExtendDeadlines(t *testing.T) {
 
 	assert.Error(t, err, "other routes keep the server-wide WriteTimeout")
 }
+
+func TestWritePIIBadRequest(t *testing.T) {
+	t.Parallel()
+
+	bindErr := echo.NewHTTPError(http.StatusBadRequest, "Invalid format for parameter database: bad")
+
+	for _, tc := range []struct {
+		name, path string
+		err        error
+		want       bool
+	}{
+		{"pii binding error", "/api/pii-catalog/pairs", bindErr, true},
+		{"other path", "/api/clusters", bindErr, false},
+		{"not a 400", "/api/pii-catalog/pairs", echo.NewHTTPError(http.StatusNotFound), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			rec := httptest.NewRecorder()
+			c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, tc.path, nil), rec)
+
+			require.Equal(t, tc.want, writePIIBadRequest(tc.err, c, zap.NewNop()))
+
+			if tc.want {
+				assert.Equal(t, http.StatusBadRequest, rec.Code)
+				assert.JSONEq(t, `{"code":"bad_request","message":"Invalid format for parameter database: bad"}`, rec.Body.String())
+			}
+		})
+	}
+}

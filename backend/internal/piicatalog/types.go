@@ -1,5 +1,5 @@
 // Package piicatalog collects the set of distinct (column name, column comment)
-// pairs of every configured database and keeps its change history in storage.
+// pairs of every configured database and keeps the current set in storage.
 package piicatalog
 
 import (
@@ -36,32 +36,17 @@ type Snapshot struct {
 }
 
 type Status struct {
-	CurrentVersionID *int64
-	SetHash          []byte
-	PairCount        int
-	LastAttemptAt    *time.Time
-	LastSuccessAt    *time.Time
-	LastChangedAt    *time.Time
-	LastError        *string
-	SourceInstance   *string
+	// nil until the first successful collection.
+	SetHash        []byte
+	PairCount      int
+	LastAttemptAt  *time.Time
+	LastSuccessAt  *time.Time
+	LastChangedAt  *time.Time
+	LastError      *string
+	SourceInstance *string
 }
 
-type ApplyResult struct {
-	// Zero when the set did not change and no version was created.
-	VersionID int64
-	Added     int
-	Removed   int
-}
-
-type RetentionStats struct {
-	Pairs           int64
-	Versions        int64
-	AccessLog       int64
-	OrphanDatabases int64
-}
-
-// Bump together with the canonical form below; a version-only change creates
-// no catalog version (see Diff).
+// Bump together with the canonical form below; a bump rewrites every stored set once.
 const hashVersion = "v1"
 
 // PairHash = sha256("v1" 0x00 name 0x00 (0x00 | 0x01 comment)).
@@ -109,30 +94,4 @@ func NewSnapshot(pairs []Pair, sourceInstance string, serverVersion int, attempt
 		ServerVersion:  serverVersion,
 		AttemptAt:      attemptAt,
 	}
-}
-
-// Diff compares the stored current pair hashes with a snapshot.
-func Diff(current [][]byte, snap Snapshot) (added []HashedPair, removed [][]byte) {
-	have := make(map[string]struct{}, len(current))
-	for _, h := range current {
-		have[string(h)] = struct{}{}
-	}
-
-	for _, p := range snap.Pairs {
-		if _, ok := have[string(p.Hash)]; ok {
-			delete(have, string(p.Hash))
-
-			continue
-		}
-
-		added = append(added, p)
-	}
-
-	for h := range have {
-		removed = append(removed, []byte(h))
-	}
-
-	slices.SortFunc(removed, bytes.Compare)
-
-	return added, removed
 }

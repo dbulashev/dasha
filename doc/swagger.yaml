@@ -5,6 +5,12 @@ info:
 security:
   - BearerAuth: []
   - ApiKeyAuth: []
+tags:
+  - name: pii-catalog
+    description: >-
+      Read-only PII column catalog for an external classifier. Static tokens
+      from pii_catalog.allowed_tokens only; excluded from the frontend client
+      and from dasha-mcp. Every response carries Cache-Control: no-store.
 paths:
   /api/auth/info:
     get:
@@ -3444,6 +3450,81 @@ paths:
         '504':
           $ref: '#/components/responses/QueryTimeout'
 
+  /api/pii-catalog/status:
+    get:
+      operationId: getPiiCatalogStatus
+      tags: [pii-catalog]
+      security:
+        - ApiKeyAuth: []
+      description: >-
+        Coverage of the PII column catalog: every database known to the current
+        configuration or service discovery, plus every database that still has
+        collected data. Poll it and reload /api/pii-catalog/pairs only for the
+        databases whose set_hash changed.
+      parameters:
+        - in: query
+          name: cluster_name
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PiiCatalogStatusResponse'
+        '403':
+          description: >-
+            The caller is not a static token listed in pii_catalog.allowed_tokens.
+            Personal access tokens and interactive sessions are refused whatever
+            their role.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PiiCatalogError'
+  /api/pii-catalog/pairs:
+    get:
+      operationId: getPiiCatalogPairs
+      tags: [pii-catalog]
+      security:
+        - ApiKeyAuth: []
+      description: >-
+        The whole current set of distinct (column name, column comment) pairs of
+        one database, ordered by column name, then comment (byte order).
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Database'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PiiCatalogPairsResponse'
+        '400':
+          description: Invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PiiCatalogError'
+        '403':
+          description: >-
+            The caller is not a static token listed in pii_catalog.allowed_tokens.
+            Personal access tokens and interactive sessions are refused whatever
+            their role.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PiiCatalogError'
+        '404':
+          description: >-
+            not_found: the database is neither configured nor collected;
+            not_collected_yet: it is configured, but no collection has succeeded yet.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PiiCatalogError'
 components:
   securitySchemes:
     BearerAuth:
@@ -9312,3 +9393,128 @@ components:
             The database could not be read at all. Its counts are zero because nothing
             was checked, not because it is clean.
           type: boolean
+
+    PiiCatalogError:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          enum:
+            - bad_request
+            - forbidden
+            - not_found
+            - not_collected_yet
+          # Explicit names: "not_found" would otherwise clash with
+          # IndexAdvisorEvidenceState and rename its constants.
+          x-enum-varnames:
+            - PiiCatalogErrBadRequest
+            - PiiCatalogErrForbidden
+            - PiiCatalogErrNotFound
+            - PiiCatalogErrNotCollectedYet
+        message:
+          type: string
+
+    PiiCatalogStatusResponse:
+      type: object
+      required:
+        - schedule
+        - items
+      properties:
+        schedule:
+          type: string
+          example: "0 3 * * *"
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PiiCatalogDatabaseStatus'
+
+    PiiCatalogDatabaseStatus:
+      type: object
+      required:
+        - cluster_name
+        - database
+        - in_config
+        - pair_count
+      properties:
+        cluster_name:
+          type: string
+        database:
+          type: string
+        in_config:
+          type: boolean
+          description: >-
+            false: the database is gone from the configuration and service
+            discovery; its data is kept until retention removes it.
+        set_hash:
+          type: string
+          nullable: true
+          description: >-
+            Hex hash of the current set; null until the first successful
+            collection. Reload pairs only where it differs from the one you have.
+        pair_count:
+          type: integer
+        last_attempt_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_success_at:
+          type: string
+          format: date-time
+          nullable: true
+        last_changed_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the set last changed.
+        last_error:
+          type: string
+          nullable: true
+        source_instance:
+          type: string
+          nullable: true
+
+    PiiCatalogPair:
+      type: object
+      required:
+        - column_name
+        - column_comment
+      properties:
+        column_name:
+          type: string
+        column_comment:
+          type: string
+          nullable: true
+          description: null — the column has no comment (distinct from an empty one).
+
+    PiiCatalogPairsResponse:
+      type: object
+      required:
+        - cluster_name
+        - database
+        - set_hash
+        - changed_at
+        - checked_at
+        - items
+      properties:
+        cluster_name:
+          type: string
+        database:
+          type: string
+        set_hash:
+          type: string
+          description: Hex hash of this set, as in /api/pii-catalog/status.
+        changed_at:
+          type: string
+          format: date-time
+          description: When the set last changed.
+        checked_at:
+          type: string
+          format: date-time
+          description: Last successful collection.
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PiiCatalogPair'

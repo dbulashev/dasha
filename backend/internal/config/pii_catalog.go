@@ -10,10 +10,9 @@ import (
 )
 
 const (
-	DefaultPIICatalogSchedule           = "0 3 * * *"
-	DefaultPIICatalogRetentionDays      = 90
-	DefaultPIICatalogAuditRetentionDays = 365
-	DefaultPIICatalogStatementTimeout   = 30 * time.Second
+	DefaultPIICatalogSchedule         = "0 3 * * *"
+	DefaultPIICatalogRetentionDays    = 90
+	DefaultPIICatalogStatementTimeout = 30 * time.Second
 
 	maxPIICatalogRetentionDays    = 3650
 	minPIICatalogStatementTimeout = time.Second
@@ -25,10 +24,9 @@ const (
 type PIICatalogConfig struct {
 	Enabled bool `mapstructure:"enabled"`
 	// UTC unless prefixed with CRON_TZ=.
-	Schedule           string        `mapstructure:"schedule"`
-	RetentionDays      int           `mapstructure:"retention_days"`
-	AuditRetentionDays int           `mapstructure:"audit_retention_days"`
-	StatementTimeout   time.Duration `mapstructure:"statement_timeout"`
+	Schedule         string        `mapstructure:"schedule"`
+	RetentionDays    int           `mapstructure:"retention_days"`
+	StatementTimeout time.Duration `mapstructure:"statement_timeout"`
 	// LIKE patterns, case-sensitive.
 	ExcludeSchemas []string `mapstructure:"exclude_schemas"`
 	// auth.tokens names; PATs and sessions are never allowed.
@@ -43,10 +41,6 @@ func (c PIICatalogConfig) WithDefaults() PIICatalogConfig {
 
 	if c.RetentionDays == 0 {
 		c.RetentionDays = DefaultPIICatalogRetentionDays
-	}
-
-	if c.AuditRetentionDays == 0 {
-		c.AuditRetentionDays = DefaultPIICatalogAuditRetentionDays
 	}
 
 	if c.StatementTimeout == 0 {
@@ -76,14 +70,10 @@ func (c *PIICatalogConfig) Validate(auth AuthConfig) error {
 	}
 
 	// Retention treats a database not attempted for retention_days as gone from
-	// the config and deletes its whole history.
+	// the config and deletes its catalog.
 	if cronsched.HasGap(sched, time.Duration(c.RetentionDays)*24*time.Hour) {
 		return fmt.Errorf("pii_catalog.schedule %q must run more often than every retention_days (%d)",
 			c.Schedule, c.RetentionDays)
-	}
-
-	if c.AuditRetentionDays < 1 || c.AuditRetentionDays > maxPIICatalogRetentionDays {
-		return fmt.Errorf("pii_catalog.audit_retention_days must be between 1 and %d", maxPIICatalogRetentionDays)
 	}
 
 	if c.StatementTimeout < minPIICatalogStatementTimeout || c.StatementTimeout > maxPIICatalogStatementTimeout {

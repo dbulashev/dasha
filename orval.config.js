@@ -16,7 +16,14 @@ module.exports = {
             }
         },
         input: {
-            target: './doc/swagger.yaml'
+            target: './doc/swagger.yaml',
+            // The PII catalog is for an external classifier with a static token;
+            // the UI must never be able to call it.
+            filters: {
+                mode: 'exclude',
+                tags: ['pii-catalog'],
+                schemas: [/^PiiCatalog/]
+            }
         }
     }
 }

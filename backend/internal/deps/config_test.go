@@ -205,13 +205,12 @@ pii_catalog:
 
 	got := c.PIICatalog
 	want := config.PIICatalogConfig{
-		Enabled:            true,
-		Schedule:           "CRON_TZ=Europe/Moscow 0 3 * * *",
-		RetentionDays:      30,
-		AuditRetentionDays: config.DefaultPIICatalogAuditRetentionDays,
-		StatementTimeout:   45 * time.Second,
-		ExcludeSchemas:     []string{"archive%", `tmp\_%`},
-		AllowedTokens:      []string{"pii-classifier"},
+		Enabled:          true,
+		Schedule:         "CRON_TZ=Europe/Moscow 0 3 * * *",
+		RetentionDays:    30,
+		StatementTimeout: 45 * time.Second,
+		ExcludeSchemas:   []string{"archive%", `tmp\_%`},
+		AllowedTokens:    []string{"pii-classifier"},
 	}
 
 	if !reflect.DeepEqual(got, want) {

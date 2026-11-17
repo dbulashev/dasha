@@ -254,8 +254,13 @@ func dashaExec(cmd *cobra.Command, _ []string) error {
 		return logsRL.Middleware(compareRL.Middleware(next))
 	}
 
-	d := http.NewDashaHandlers(container.Config(), container.Repository(), st, container.Metrics(), logsSvc, logger)
-	svc := http.New(d, mw, authMW.RequireHTTPS, authMW.RateLimit, logsRateLimit, authMW.Auth, authMW.Casbin, logger)
+	d := http.NewDashaHandlers(
+		container.Config(), container.Repository(), st, container.Metrics(), logsSvc, container.Clusters(), logger,
+	)
+	piiGate := auth.NewPIICatalogGate(container.Config().PIICatalog.AllowedTokens, serverLogger)
+	svc := http.New(
+		d, mw, authMW.RequireHTTPS, authMW.RateLimit, logsRateLimit, authMW.Auth, authMW.Casbin, piiGate, logger,
+	)
 	svc.WithBasePath(container.Config().BasePath)
 
 	if container.Config().Auth.Mode == config.AuthModeOIDC {

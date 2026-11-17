@@ -13,20 +13,17 @@ func TestPIICatalogConfig_WithDefaults(t *testing.T) {
 
 	assert.Equal(t, DefaultPIICatalogSchedule, got.Schedule)
 	assert.Equal(t, DefaultPIICatalogRetentionDays, got.RetentionDays)
-	assert.Equal(t, DefaultPIICatalogAuditRetentionDays, got.AuditRetentionDays)
 	assert.Equal(t, DefaultPIICatalogStatementTimeout, got.StatementTimeout)
 
 	got = PIICatalogConfig{ //nolint:exhaustruct
-		Schedule: "*/5 * * * *", RetentionDays: 7, AuditRetentionDays: 30, StatementTimeout: time.Minute,
+		Schedule: "*/5 * * * *", RetentionDays: 7, StatementTimeout: time.Minute,
 	}.WithDefaults()
 	assert.Equal(t, "*/5 * * * *", got.Schedule)
 	assert.Equal(t, 7, got.RetentionDays)
-	assert.Equal(t, 30, got.AuditRetentionDays)
 	assert.Equal(t, time.Minute, got.StatementTimeout)
 
-	neg := PIICatalogConfig{RetentionDays: -5, AuditRetentionDays: -1}.WithDefaults() //nolint:exhaustruct
+	neg := PIICatalogConfig{RetentionDays: -5}.WithDefaults() //nolint:exhaustruct
 	assert.Equal(t, -5, neg.RetentionDays)
-	assert.Equal(t, -1, neg.AuditRetentionDays)
 
 	// An absent section must not fail startup.
 	zero := PIICatalogConfig{}.WithDefaults()       //nolint:exhaustruct
@@ -127,18 +124,6 @@ func TestPIICatalogConfig_Validate(t *testing.T) {
 			mutate:  func(c *PIICatalogConfig) { c.RetentionDays = -5 },
 			auth:    tokenAuth,
 			wantErr: "pii_catalog.retention_days must be between 1 and 3650",
-		},
-		{
-			name:    "negative audit retention",
-			mutate:  func(c *PIICatalogConfig) { c.AuditRetentionDays = -1 },
-			auth:    tokenAuth,
-			wantErr: "pii_catalog.audit_retention_days must be between 1 and 3650",
-		},
-		{
-			name:    "audit retention too long",
-			mutate:  func(c *PIICatalogConfig) { c.AuditRetentionDays = 5000 },
-			auth:    tokenAuth,
-			wantErr: "pii_catalog.audit_retention_days must be between 1 and 3650",
 		},
 		{
 			name:    "statement timeout too short",

@@ -77,7 +77,7 @@ func (f *fakeStore) ListPIIStatus(context.Context) (map[Key]Status, error) {
 	return out, nil
 }
 
-func (f *fakeStore) ApplyPIISnapshot(_ context.Context, k Key, snap Snapshot) (ApplyResult, error) {
+func (f *fakeStore) ApplyPIISnapshot(_ context.Context, k Key, snap Snapshot) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -86,7 +86,7 @@ func (f *fakeStore) ApplyPIISnapshot(_ context.Context, k Key, snap Snapshot) (A
 	f.applied[k] = snap
 	delete(f.failures, k)
 
-	return ApplyResult{VersionID: 1, Added: len(snap.Pairs)}, nil
+	return true, nil
 }
 
 func (f *fakeStore) RecordPIIFailure(_ context.Context, k Key, at time.Time, msg string) error {
@@ -102,13 +102,13 @@ func (f *fakeStore) RecordPIIFailure(_ context.Context, k Key, at time.Time, msg
 	return nil
 }
 
-func (f *fakeStore) PIIRetention(context.Context, time.Time, time.Time) (RetentionStats, error) {
+func (f *fakeStore) PIIRetention(context.Context, time.Time) (int64, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
 	f.retentions++
 
-	return RetentionStats{}, nil
+	return 0, nil
 }
 
 func (f *fakeStore) reset() {

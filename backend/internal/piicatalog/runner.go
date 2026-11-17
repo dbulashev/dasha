@@ -15,11 +15,12 @@ import (
 
 type Store interface {
 	ListPIIStatus(ctx context.Context) (map[Key]Status, error)
-	// Compares set hashes and, on a difference, writes a version, the SCD2
-	// pair changes and the status in one transaction.
-	ApplyPIISnapshot(ctx context.Context, k Key, snap Snapshot) (ApplyResult, error)
+	// Compares set hashes and, on a difference, replaces the stored set and the
+	// status in one transaction. Reports whether the set changed.
+	ApplyPIISnapshot(ctx context.Context, k Key, snap Snapshot) (bool, error)
 	RecordPIIFailure(ctx context.Context, k Key, attemptAt time.Time, errMsg string) error
-	PIIRetention(ctx context.Context, cutoff, auditCutoff time.Time) (RetentionStats, error)
+	// Deletes databases not attempted since cutoff; returns how many.
+	PIIRetention(ctx context.Context, cutoff time.Time) (int64, error)
 }
 
 const (
@@ -213,7 +214,7 @@ func (r *Runner) collectDatabaseSafe(ctx context.Context, cluster string, hosts 
 
 	// A storage failure is not recorded as an attempt: the database stays due
 	// and is retried on the next tick.
-	res, err := r.store.ApplyPIISnapshot(ctx, k, snap)
+	changed, err := r.store.ApplyPIISnapshot(ctx, k, snap)
 	if err != nil {
 		r.logger.Warn("pii_catalog: store snapshot failed",
 			zap.String("cluster", cluster), zap.String("database", database), zap.Error(err))
@@ -226,9 +227,8 @@ func (r *Runner) collectDatabaseSafe(ctx context.Context, cluster string, hosts 
 		zap.String("database", database),
 		zap.String("source_instance", snap.SourceInstance),
 		zap.Int("pairs", len(snap.Pairs)),
-		zap.Int64("version_id", res.VersionID),
-		zap.Int("added", res.Added),
-		zap.Int("removed", res.Removed),
+		zap.Int("server_version", snap.ServerVersion),
+		zap.Bool("changed", changed),
 		zap.Duration("duration", time.Since(start)))
 }
 
@@ -246,18 +246,12 @@ func (r *Runner) maybeRunRetention(ctx context.Context, now time.Time) {
 
 	r.lastRetention = now
 
-	stats, err := r.store.PIIRetention(ctx,
-		now.AddDate(0, 0, -r.cfg.RetentionDays),
-		now.AddDate(0, 0, -r.cfg.AuditRetentionDays))
+	orphans, err := r.store.PIIRetention(ctx, now.AddDate(0, 0, -r.cfg.RetentionDays))
 	if err != nil {
 		r.logger.Warn("pii_catalog: retention failed", zap.Error(err))
 
 		return
 	}
 
-	r.logger.Info("pii_catalog: retention done",
-		zap.Int64("pairs", stats.Pairs),
-		zap.Int64("versions", stats.Versions),
-		zap.Int64("access_log", stats.AccessLog),
-		zap.Int64("orphan_databases", stats.OrphanDatabases))
+	r.logger.Info("pii_catalog: retention done", zap.Int64("orphan_databases", orphans))
 }

@@ -22,20 +22,31 @@ type Handlers struct {
 	scorer   *healthscore.Scorer
 	fleet    *healthscore.Fleet
 	activity *activity.Sampler
+	clusters config.Clusters
+	pii      piiCatalogStore
 }
 
 // NewDashaHandlers constructs a new Handlers instance from its dependencies.
 func NewDashaHandlers(
-	cfg *config.Config, repo repository.Repository, st *storage.Storage, ms *metrics.Service, logsSvc logs.Service, logger *zap.Logger,
+	cfg *config.Config, repo repository.Repository, st *storage.Storage, ms *metrics.Service, logsSvc logs.Service,
+	clusters config.Clusters, logger *zap.Logger,
 ) *Handlers {
 	scorer := healthscore.NewScorer(cfg, repo, st, ms)
 
-	return &Handlers{
+	h := &Handlers{
 		cfg: cfg, repo: repo, storage: st, metrics: ms, logs: logsSvc,
 		scorer:   scorer,
 		fleet:    healthscore.NewFleet(cfg, scorer, ms, repo, logger),
 		activity: activity.NewSampler(repo, cfg.Activity),
+		clusters: clusters,
 	}
+
+	// A typed-nil *storage.Storage must not end up in the interface.
+	if st != nil {
+		h.pii = st
+	}
+
+	return h
 }
 
 // maxLimit caps a client-supplied pagination limit so a SQL LIMIT can never be

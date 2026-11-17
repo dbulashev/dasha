@@ -343,106 +343,36 @@ CREATE TABLE IF NOT EXISTS log_insights_groups (
 CREATE INDEX IF NOT EXISTS idx_log_insights_groups_query
     ON log_insights_groups (scan_id, query_id)`
 
-	// PII catalog tables are small and rarely change: not partitioned, and
-	// retention DELETEs by removed_at / created_at seq-scan on purpose.
-
+	// PII catalog tables are small and rarely change: not partitioned.
 	createPIICatalogStatusSQL = `
 CREATE TABLE IF NOT EXISTS pii_catalog_status (
-    cluster_name       text        NOT NULL,
-    database           text        NOT NULL,
-    current_version_id bigint,
-    set_hash           bytea,
-    pair_count         int         NOT NULL DEFAULT 0,
-    last_attempt_at    timestamptz,
-    last_success_at    timestamptz,
-    last_changed_at    timestamptz,
-    last_error         text,
-    source_instance    text,
+    cluster_name    text        NOT NULL,
+    database        text        NOT NULL,
+    set_hash        bytea,
+    pair_count      int         NOT NULL DEFAULT 0,
+    last_attempt_at timestamptz,
+    last_success_at timestamptz,
+    last_changed_at timestamptz,
+    last_error      text,
+    source_instance text,
     CONSTRAINT pii_catalog_status_pkey PRIMARY KEY (cluster_name, database)
 )`
 
-	createPIICatalogVersionSQL = `
-CREATE TABLE IF NOT EXISTS pii_catalog_version (
-    id              bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    cluster_name    text        NOT NULL,
-    database        text        NOT NULL,
-    set_hash        bytea       NOT NULL,
-    pair_count      int         NOT NULL,
-    added_count     int         NOT NULL,
-    removed_count   int         NOT NULL,
-    source_instance text        NOT NULL,
-    server_version  int         NOT NULL,
-    created_at      timestamptz NOT NULL DEFAULT now()
-)`
-
-	createPIICatalogVersionIdxSQL = `
-CREATE INDEX IF NOT EXISTS idx_pii_catalog_version_lookup
-    ON pii_catalog_version (cluster_name, database, created_at DESC)`
-
-	// Uniqueness via pair_hash: a comment can exceed the btree key limit.
-	// No FK on version columns: retention deletes versions of current pairs.
+	// Keyed by pair_hash: a comment can exceed the btree key limit.
 	createPIICatalogPairSQL = `
 CREATE TABLE IF NOT EXISTS pii_catalog_pair (
-    id              bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    cluster_name    text        NOT NULL,
-    database        text        NOT NULL,
-    pair_hash       bytea       NOT NULL,
-    column_name     text        NOT NULL,
-    column_comment  text,
-    added_version   bigint      NOT NULL,
-    added_at        timestamptz NOT NULL,
-    removed_version bigint,
-    removed_at      timestamptz
+    cluster_name   text  NOT NULL,
+    database       text  NOT NULL,
+    pair_hash      bytea NOT NULL,
+    column_name    text  NOT NULL,
+    column_comment text,
+    CONSTRAINT pii_catalog_pair_pkey PRIMARY KEY (cluster_name, database, pair_hash)
 )`
-
-	createPIICatalogPairCurrentIdxSQL = `
-CREATE UNIQUE INDEX IF NOT EXISTS uq_pii_catalog_pair_current
-    ON pii_catalog_pair (cluster_name, database, pair_hash) WHERE removed_at IS NULL`
-
-	// COLLATE "C": order must not depend on the database's default collation.
-	createPIICatalogPairPageIdxSQL = `
-CREATE INDEX IF NOT EXISTS idx_pii_catalog_pair_page
-    ON pii_catalog_pair (cluster_name, database, column_name COLLATE "C", id) WHERE removed_at IS NULL`
-
-	createPIICatalogPairAddedIdxSQL = `
-CREATE INDEX IF NOT EXISTS idx_pii_catalog_pair_added
-    ON pii_catalog_pair (cluster_name, database, added_at, id)`
-
-	createPIICatalogPairRemovedIdxSQL = `
-CREATE INDEX IF NOT EXISTS idx_pii_catalog_pair_removed
-    ON pii_catalog_pair (cluster_name, database, removed_at, id) WHERE removed_at IS NOT NULL`
-
-	// Never stores token secrets or catalog data.
-	createPIICatalogAccessLogSQL = `
-CREATE TABLE IF NOT EXISTS pii_catalog_access_log (
-    id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    at           timestamptz NOT NULL DEFAULT now(),
-    principal    text,
-    auth_method  text,
-    operation    text NOT NULL,
-    cluster_name text,
-    database     text,
-    decision     text NOT NULL,
-    remote_ip    inet,
-    request_id   text
-)`
-
-	createPIICatalogAccessLogIdxSQL = `
-CREATE INDEX IF NOT EXISTS idx_pii_catalog_access_log_at
-    ON pii_catalog_access_log (at)`
 )
 
 var piiCatalogDDL = []string{
 	createPIICatalogStatusSQL,
-	createPIICatalogVersionSQL,
-	createPIICatalogVersionIdxSQL,
 	createPIICatalogPairSQL,
-	createPIICatalogPairCurrentIdxSQL,
-	createPIICatalogPairPageIdxSQL,
-	createPIICatalogPairAddedIdxSQL,
-	createPIICatalogPairRemovedIdxSQL,
-	createPIICatalogAccessLogSQL,
-	createPIICatalogAccessLogIdxSQL,
 }
 
 // partitionedTables lists the day-partitioned tables managed together —

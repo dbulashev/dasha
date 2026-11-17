@@ -254,6 +254,14 @@ const (
 	PersonalAccessTokenCreatedRoleViewer PersonalAccessTokenCreatedRole = "viewer"
 )
 
+// Defines values for PiiCatalogErrorCode.
+const (
+	PiiCatalogErrBadRequest      PiiCatalogErrorCode = "bad_request"
+	PiiCatalogErrForbidden       PiiCatalogErrorCode = "forbidden"
+	PiiCatalogErrNotCollectedYet PiiCatalogErrorCode = "not_collected_yet"
+	PiiCatalogErrNotFound        PiiCatalogErrorCode = "not_found"
+)
+
 // Defines values for PlanFindingCode.
 const (
 	BitmapLossy        PlanFindingCode = "bitmap_lossy"
@@ -2155,6 +2163,63 @@ type PgSetting struct {
 	Unit    string `json:"Unit"`
 }
 
+// PiiCatalogDatabaseStatus defines model for PiiCatalogDatabaseStatus.
+type PiiCatalogDatabaseStatus struct {
+	ClusterName string `json:"cluster_name"`
+	Database    string `json:"database"`
+
+	// InConfig false: the database is gone from the configuration and service discovery; its data is kept until retention removes it.
+	InConfig      bool       `json:"in_config"`
+	LastAttemptAt *time.Time `json:"last_attempt_at"`
+
+	// LastChangedAt When the set last changed.
+	LastChangedAt *time.Time `json:"last_changed_at"`
+	LastError     *string    `json:"last_error"`
+	LastSuccessAt *time.Time `json:"last_success_at"`
+	PairCount     int        `json:"pair_count"`
+
+	// SetHash Hex hash of the current set; null until the first successful collection. Reload pairs only where it differs from the one you have.
+	SetHash        *string `json:"set_hash"`
+	SourceInstance *string `json:"source_instance"`
+}
+
+// PiiCatalogError defines model for PiiCatalogError.
+type PiiCatalogError struct {
+	Code    PiiCatalogErrorCode `json:"code"`
+	Message string              `json:"message"`
+}
+
+// PiiCatalogErrorCode defines model for PiiCatalogError.Code.
+type PiiCatalogErrorCode string
+
+// PiiCatalogPair defines model for PiiCatalogPair.
+type PiiCatalogPair struct {
+	// ColumnComment null — the column has no comment (distinct from an empty one).
+	ColumnComment *string `json:"column_comment"`
+	ColumnName    string  `json:"column_name"`
+}
+
+// PiiCatalogPairsResponse defines model for PiiCatalogPairsResponse.
+type PiiCatalogPairsResponse struct {
+	// ChangedAt When the set last changed.
+	ChangedAt time.Time `json:"changed_at"`
+
+	// CheckedAt Last successful collection.
+	CheckedAt   time.Time        `json:"checked_at"`
+	ClusterName string           `json:"cluster_name"`
+	Database    string           `json:"database"`
+	Items       []PiiCatalogPair `json:"items"`
+
+	// SetHash Hex hash of this set, as in /api/pii-catalog/status.
+	SetHash string `json:"set_hash"`
+}
+
+// PiiCatalogStatusResponse defines model for PiiCatalogStatusResponse.
+type PiiCatalogStatusResponse struct {
+	Items    []PiiCatalogDatabaseStatus `json:"items"`
+	Schedule string                     `json:"schedule"`
+}
+
 // PlanBuffers defines model for PlanBuffers.
 type PlanBuffers struct {
 	LocalDirtied  float64 `json:"local_dirtied"`
@@ -3802,6 +3867,17 @@ type GetMaintenanceVacuumProgressParams struct {
 	Database    Database    `form:"database" json:"database"`
 }
 
+// GetPiiCatalogPairsParams defines parameters for GetPiiCatalogPairs.
+type GetPiiCatalogPairsParams struct {
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Database    Database    `form:"database" json:"database"`
+}
+
+// GetPiiCatalogStatusParams defines parameters for GetPiiCatalogStatus.
+type GetPiiCatalogStatusParams struct {
+	ClusterName *string `form:"cluster_name,omitempty" json:"cluster_name,omitempty"`
+}
+
 // GetProgressAnalyzeParams defines parameters for GetProgressAnalyze.
 type GetProgressAnalyzeParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
@@ -4506,6 +4582,12 @@ type ClientInterface interface {
 
 	// GetMaintenanceVacuumProgress request
 	GetMaintenanceVacuumProgress(ctx context.Context, params *GetMaintenanceVacuumProgressParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetPiiCatalogPairs request
+	GetPiiCatalogPairs(ctx context.Context, params *GetPiiCatalogPairsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetPiiCatalogStatus request
+	GetPiiCatalogStatus(ctx context.Context, params *GetPiiCatalogStatusParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetProgressAnalyze request
 	GetProgressAnalyze(ctx context.Context, params *GetProgressAnalyzeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -5644,6 +5726,30 @@ func (c *Client) GetMaintenanceTransactionIdDanger(ctx context.Context, params *
 
 func (c *Client) GetMaintenanceVacuumProgress(ctx context.Context, params *GetMaintenanceVacuumProgressParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetMaintenanceVacuumProgressRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetPiiCatalogPairs(ctx context.Context, params *GetPiiCatalogPairsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetPiiCatalogPairsRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetPiiCatalogStatus(ctx context.Context, params *GetPiiCatalogStatusParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetPiiCatalogStatusRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -12441,6 +12547,112 @@ func NewGetMaintenanceVacuumProgressRequest(server string, params *GetMaintenanc
 	return req, nil
 }
 
+// NewGetPiiCatalogPairsRequest generates requests for GetPiiCatalogPairs
+func NewGetPiiCatalogPairsRequest(server string, params *GetPiiCatalogPairsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/pii-catalog/pairs")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, params.ClusterName); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "database", runtime.ParamLocationQuery, params.Database); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetPiiCatalogStatusRequest generates requests for GetPiiCatalogStatus
+func NewGetPiiCatalogStatusRequest(server string, params *GetPiiCatalogStatusParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/pii-catalog/status")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if params.ClusterName != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, *params.ClusterName); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetProgressAnalyzeRequest generates requests for GetProgressAnalyze
 func NewGetProgressAnalyzeRequest(server string, params *GetProgressAnalyzeParams) (*http.Request, error) {
 	var err error
@@ -16047,6 +16259,12 @@ type ClientWithResponsesInterface interface {
 	// GetMaintenanceVacuumProgressWithResponse request
 	GetMaintenanceVacuumProgressWithResponse(ctx context.Context, params *GetMaintenanceVacuumProgressParams, reqEditors ...RequestEditorFn) (*GetMaintenanceVacuumProgressResponse, error)
 
+	// GetPiiCatalogPairsWithResponse request
+	GetPiiCatalogPairsWithResponse(ctx context.Context, params *GetPiiCatalogPairsParams, reqEditors ...RequestEditorFn) (*GetPiiCatalogPairsResponse, error)
+
+	// GetPiiCatalogStatusWithResponse request
+	GetPiiCatalogStatusWithResponse(ctx context.Context, params *GetPiiCatalogStatusParams, reqEditors ...RequestEditorFn) (*GetPiiCatalogStatusResponse, error)
+
 	// GetProgressAnalyzeWithResponse request
 	GetProgressAnalyzeWithResponse(ctx context.Context, params *GetProgressAnalyzeParams, reqEditors ...RequestEditorFn) (*GetProgressAnalyzeResponse, error)
 
@@ -17962,6 +18180,54 @@ func (r GetMaintenanceVacuumProgressResponse) StatusCode() int {
 	return 0
 }
 
+type GetPiiCatalogPairsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PiiCatalogPairsResponse
+	JSON400      *PiiCatalogError
+	JSON403      *PiiCatalogError
+	JSON404      *PiiCatalogError
+}
+
+// Status returns HTTPResponse.Status
+func (r GetPiiCatalogPairsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetPiiCatalogPairsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetPiiCatalogStatusResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *PiiCatalogStatusResponse
+	JSON403      *PiiCatalogError
+}
+
+// Status returns HTTPResponse.Status
+func (r GetPiiCatalogStatusResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetPiiCatalogStatusResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetProgressAnalyzeResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -19655,6 +19921,24 @@ func (c *ClientWithResponses) GetMaintenanceVacuumProgressWithResponse(ctx conte
 		return nil, err
 	}
 	return ParseGetMaintenanceVacuumProgressResponse(rsp)
+}
+
+// GetPiiCatalogPairsWithResponse request returning *GetPiiCatalogPairsResponse
+func (c *ClientWithResponses) GetPiiCatalogPairsWithResponse(ctx context.Context, params *GetPiiCatalogPairsParams, reqEditors ...RequestEditorFn) (*GetPiiCatalogPairsResponse, error) {
+	rsp, err := c.GetPiiCatalogPairs(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetPiiCatalogPairsResponse(rsp)
+}
+
+// GetPiiCatalogStatusWithResponse request returning *GetPiiCatalogStatusResponse
+func (c *ClientWithResponses) GetPiiCatalogStatusWithResponse(ctx context.Context, params *GetPiiCatalogStatusParams, reqEditors ...RequestEditorFn) (*GetPiiCatalogStatusResponse, error) {
+	rsp, err := c.GetPiiCatalogStatus(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetPiiCatalogStatusResponse(rsp)
 }
 
 // GetProgressAnalyzeWithResponse request returning *GetProgressAnalyzeResponse
@@ -22165,6 +22449,86 @@ func ParseGetMaintenanceVacuumProgressResponse(rsp *http.Response) (*GetMaintena
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetPiiCatalogPairsResponse parses an HTTP response from a GetPiiCatalogPairsWithResponse call
+func ParseGetPiiCatalogPairsResponse(rsp *http.Response) (*GetPiiCatalogPairsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetPiiCatalogPairsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PiiCatalogPairsResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest PiiCatalogError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest PiiCatalogError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest PiiCatalogError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetPiiCatalogStatusResponse parses an HTTP response from a GetPiiCatalogStatusWithResponse call
+func ParseGetPiiCatalogStatusResponse(rsp *http.Response) (*GetPiiCatalogStatusResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetPiiCatalogStatusResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest PiiCatalogStatusResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest PiiCatalogError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
 
 	}
 
