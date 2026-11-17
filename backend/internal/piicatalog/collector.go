@@ -15,10 +15,11 @@ import (
 
 type Repo interface {
 	GetInstanceInfo(ctx context.Context, clusterName, instanceName string) (dto.InstanceInfo, error)
+	// Also returns server_version_num of the instance that answered.
 	GetColumnCatalog(
 		ctx context.Context, clusterName, instanceName, databaseName string,
 		excludeSchemas []string, stmtTimeout time.Duration,
-	) ([]Pair, error)
+	) ([]Pair, int, error)
 }
 
 const (
@@ -37,23 +38,13 @@ type Collector struct {
 }
 
 func NewCollector(repo Repo, excludeSchemas []string, stmtTimeout time.Duration, logger *zap.Logger) *Collector {
-	if excludeSchemas == nil {
-		// A nil slice binds as NULL, and NOT (x LIKE ANY(NULL)) excludes everything.
-		excludeSchemas = []string{}
-	}
-
 	return &Collector{repo: repo, excludeSchemas: excludeSchemas, stmtTimeout: stmtTimeout, logger: logger}
-}
-
-type host struct {
-	name    string
-	version int
 }
 
 // orderHosts puts replicas first (config order), then primaries, then hosts
 // whose role could not be determined.
-func (c *Collector) orderHosts(ctx context.Context, cl config.Cluster) []host {
-	var replicas, primaries, unknown []host
+func (c *Collector) orderHosts(ctx context.Context, cl config.Cluster) []string {
+	var replicas, primaries, unknown []string
 
 	for _, h := range cl.Hosts {
 		pctx, cancel := context.WithTimeout(ctx, probeTimeout)
@@ -66,11 +57,11 @@ func (c *Collector) orderHosts(ctx context.Context, cl config.Cluster) []host {
 			c.logger.Debug("pii_catalog: host role unknown",
 				zap.String("cluster", string(cl.Name)), zap.String("host", string(h)), zap.Error(err))
 
-			unknown = append(unknown, host{name: string(h)})
+			unknown = append(unknown, string(h))
 		case info.InRecovery:
-			replicas = append(replicas, host{name: string(h), version: info.VersionNum})
+			replicas = append(replicas, string(h))
 		default:
-			primaries = append(primaries, host{name: string(h), version: info.VersionNum})
+			primaries = append(primaries, string(h))
 		}
 	}
 
@@ -79,7 +70,7 @@ func (c *Collector) orderHosts(ctx context.Context, cl config.Cluster) []host {
 
 // collect tries hosts in order and returns the first successful snapshot.
 func (c *Collector) collect(
-	ctx context.Context, cluster string, hosts []host, database string, attemptAt time.Time,
+	ctx context.Context, cluster string, hosts []string, database string, attemptAt time.Time,
 ) (Snapshot, error) {
 	if len(hosts) == 0 {
 		return Snapshot{}, fmt.Errorf("cluster has no hosts")
@@ -95,21 +86,24 @@ func (c *Collector) collect(
 		}
 
 		actx, cancel := context.WithTimeout(ctx, c.stmtTimeout+attemptSlack)
-		pairs, err := c.repo.GetColumnCatalog(actx, cluster, h.name, database, c.excludeSchemas, c.stmtTimeout)
+		pairs, version, err := c.repo.GetColumnCatalog(actx, cluster, h, database, c.excludeSchemas, c.stmtTimeout)
 
 		cancel()
 
 		if err == nil {
-			return NewSnapshot(pairs, h.name, h.version, attemptAt), nil
+			return NewSnapshot(pairs, h, version, attemptAt), nil
 		}
 
-		errs = append(errs, h.name+": "+err.Error())
+		errs = append(errs, h+": "+err.Error())
 	}
 
 	return Snapshot{}, fmt.Errorf("%s", truncate(strings.Join(errs, "; "), maxErrorLen))
 }
 
+// truncate also replaces invalid UTF-8: a server may report a startup error in
+// its lc_messages encoding, which a text column rejects.
 func truncate(s string, n int) string {
+	s = strings.ToValidUTF8(s, "?")
 	if len(s) <= n {
 		return s
 	}

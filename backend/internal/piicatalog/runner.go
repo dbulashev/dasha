@@ -178,7 +178,7 @@ func (r *Runner) collectClusterSafe(ctx context.Context, cl config.Cluster, data
 	}
 }
 
-func (r *Runner) collectDatabaseSafe(ctx context.Context, cluster string, hosts []host, database string, attemptAt time.Time) {
+func (r *Runner) collectDatabaseSafe(ctx context.Context, cluster string, hosts []string, database string, attemptAt time.Time) {
 	k := Key{Cluster: cluster, Database: database}
 
 	defer func() {

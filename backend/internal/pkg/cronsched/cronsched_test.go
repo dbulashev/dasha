@@ -59,3 +59,28 @@ func TestParse_Invalid(t *testing.T) {
 		assert.Error(t, err, spec)
 	}
 }
+
+func TestHasGap(t *testing.T) {
+	cases := []struct {
+		spec string
+		d    time.Duration
+		want bool
+	}{
+		{"*/5 * * * *", time.Hour, true}, // within gapResolution of d
+		{"*/5 * * * *", 2 * time.Hour, false},
+		{"0 3 * * *", 2 * 24 * time.Hour, false},
+		{"0 3 * * *", 24 * time.Hour, true},
+		{"0 3 * * 0", 8 * 24 * time.Hour, false},
+		{"0 3 * * 0", 7 * 24 * time.Hour, true},
+		{"0 3 1 * *", 32 * 24 * time.Hour, false},
+		{"0 3 1 * *", 31 * 24 * time.Hour, true}, // 31-day months
+		{"0 0 29 2 *", 1000 * 24 * time.Hour, true},
+		{"0 0 31 2 *", time.Hour, false}, // never fires
+	}
+
+	for _, tc := range cases {
+		sched, err := Parse(tc.spec)
+		require.NoError(t, err)
+		assert.Equal(t, tc.want, HasGap(sched, tc.d), "%s within %s", tc.spec, tc.d)
+	}
+}

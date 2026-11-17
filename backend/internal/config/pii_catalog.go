@@ -61,12 +61,20 @@ func (c PIICatalogConfig) WithDefaults() PIICatalogConfig {
 //
 // An unknown allowed_tokens entry is never echoed: it may be a pasted secret.
 func (c *PIICatalogConfig) Validate(auth AuthConfig) error {
-	if _, err := cronsched.Parse(c.Schedule); err != nil {
+	sched, err := cronsched.Parse(c.Schedule)
+	if err != nil {
 		return fmt.Errorf("pii_catalog.schedule: invalid cron expression %q: %w", c.Schedule, err)
 	}
 
 	if c.RetentionDays < 1 || c.RetentionDays > maxPIICatalogRetentionDays {
 		return fmt.Errorf("pii_catalog.retention_days must be between 1 and %d", maxPIICatalogRetentionDays)
+	}
+
+	// Retention treats a database not attempted for retention_days as gone from
+	// the config and deletes its whole history.
+	if cronsched.HasGap(sched, time.Duration(c.RetentionDays)*24*time.Hour) {
+		return fmt.Errorf("pii_catalog.schedule %q must run more often than every retention_days (%d)",
+			c.Schedule, c.RetentionDays)
 	}
 
 	if c.AuditRetentionDays < 1 || c.AuditRetentionDays > maxPIICatalogRetentionDays {

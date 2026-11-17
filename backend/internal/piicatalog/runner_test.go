@@ -30,31 +30,27 @@ func (f *fakeRepo) GetInstanceInfo(_ context.Context, _, instance string) (dto.I
 		return dto.InstanceInfo{}, err
 	}
 
-	return dto.InstanceInfo{InRecovery: f.replicas[instance], VersionNum: 170000}, nil
+	return dto.InstanceInfo{InRecovery: f.replicas[instance]}, nil
 }
 
 func (f *fakeRepo) GetColumnCatalog(
-	_ context.Context, _, instance, database string, exclude []string, _ time.Duration,
-) ([]Pair, error) {
+	_ context.Context, _, instance, database string, _ []string, _ time.Duration,
+) ([]Pair, int, error) {
 	key := instance + "/" + database
 
 	f.mu.Lock()
 	f.attempts = append(f.attempts, key)
 	f.mu.Unlock()
 
-	if exclude == nil {
-		return nil, errors.New("nil exclude list")
-	}
-
 	if f.panicOn[key] {
 		panic("boom")
 	}
 
 	if err := f.catalogErr[key]; err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	return []Pair{{Name: "id"}, {Name: database}}, nil
+	return []Pair{{Name: "id"}, {Name: database}}, 170000, nil
 }
 
 type fakeStore struct {
@@ -182,6 +178,17 @@ func TestRunner_ReplicaFirstWithFallback(t *testing.T) {
 
 	assert.Equal(t, []string{"replica/app", "primary/app"}, repo.attempts)
 	assert.Equal(t, "primary", store.applied[Key{Cluster: "c1", Database: "app"}].SourceInstance)
+}
+
+func TestRunner_ServerVersionFromCollectingHost(t *testing.T) {
+	cls := []config.Cluster{{Name: "c1", Hosts: []config.Host{"h"}, Databases: []config.Database{"app"}}}
+	repo := &fakeRepo{infoErr: map[string]error{"h": errors.New("probe timeout")}}
+	store := newFakeStore()
+	r := newTestRunner(t, cls, repo, store, &clock{t: time.Now()})
+
+	r.runOnce(t.Context())
+
+	assert.Equal(t, 170000, store.applied[Key{Cluster: "c1", Database: "app"}].ServerVersion)
 }
 
 func TestRunner_AllHostsFailRecordedOthersCollected(t *testing.T) {

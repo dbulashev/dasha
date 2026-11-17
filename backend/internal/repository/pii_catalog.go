@@ -14,29 +14,31 @@ import (
 const maxPairsPerDatabase = 200_000
 
 // GetColumnCatalog returns the distinct (column name, comment) pairs of one
-// database. It reads pg_catalog only: no table data, no pg_stats.
+// database and the server_version_num of the instance. It reads pg_catalog
+// only: no table data, no pg_stats.
 func (p *PgxPool) GetColumnCatalog(
 	ctx context.Context,
 	clusterName, instanceName, databaseName string,
 	excludeSchemas []string,
 	stmtTimeout time.Duration,
-) ([]piicatalog.Pair, error) {
+) ([]piicatalog.Pair, int, error) {
 	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
 	if err != nil {
-		return nil, fmt.Errorf("GetColumnCatalog | %w", err)
+		return nil, 0, fmt.Errorf("GetColumnCatalog | %w", err)
 	}
 
 	vNum, err := p.getServerVersionNum(ctx, pool)
 	if err != nil {
-		return nil, fmt.Errorf("get server version | %w", err)
+		return nil, 0, fmt.Errorf("get server version | %w", err)
 	}
 
 	qStr, err := query.Get(vNum, enums.QueryPiiCatalogColumns, nil)
 	if err != nil {
-		return nil, fmt.Errorf("GetColumnCatalog | %w", err)
+		return nil, 0, fmt.Errorf("GetColumnCatalog | %w", err)
 	}
 
 	if excludeSchemas == nil {
+		// A nil slice binds as NULL, and NOT (x LIKE ANY(NULL)) excludes everything.
 		excludeSchemas = []string{}
 	}
 
@@ -50,10 +52,10 @@ func (p *PgxPool) GetColumnCatalog(
 		return err
 	})
 	if err != nil {
-		return nil, fmt.Errorf("GetColumnCatalog | %w", err)
+		return nil, 0, fmt.Errorf("GetColumnCatalog | %w", err)
 	}
 
-	return pairs, nil
+	return pairs, vNum, nil
 }
 
 func scanColumnCatalog(ctx context.Context, q querier, qStr string, excludeSchemas []string) ([]piicatalog.Pair, error) {

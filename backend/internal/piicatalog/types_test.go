@@ -64,3 +64,9 @@ func TestTruncate_KeepsValidUTF8(t *testing.T) {
 	assert.Equal(t, "а", s)
 	assert.Equal(t, "abc", truncate("abc", 5))
 }
+
+func TestTruncate_ReplacesInvalidUTF8(t *testing.T) {
+	cp1251 := "FATAL: \xcf\xee\xeb\xfc\xe7\xee\xe2\xe0\xf2\xe5\xeb\xfc"
+	assert.Equal(t, "FATAL: ?", truncate(cp1251, 100))
+	assert.Equal(t, "a?b", truncate("a\xffb", 2+len("?")))
+}

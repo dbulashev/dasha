@@ -94,6 +94,23 @@ func TestPIICatalogConfig_Validate(t *testing.T) {
 			wantErr: "pii_catalog.schedule",
 		},
 		{
+			name:    "monthly schedule outlives retention",
+			mutate:  func(c *PIICatalogConfig) { c.Schedule = "0 3 1 * *"; c.RetentionDays = 14 },
+			auth:    tokenAuth,
+			wantErr: `pii_catalog.schedule "0 3 1 * *" must run more often than every retention_days (14)`,
+		},
+		{
+			name:    "daily schedule with one-day retention",
+			mutate:  func(c *PIICatalogConfig) { c.RetentionDays = 1 },
+			auth:    tokenAuth,
+			wantErr: "must run more often than every retention_days (1)",
+		},
+		{
+			name:   "weekly schedule within retention",
+			mutate: func(c *PIICatalogConfig) { c.Schedule = "0 3 * * 0"; c.RetentionDays = 8 },
+			auth:   tokenAuth,
+		},
+		{
 			name:    "retention too long",
 			mutate:  func(c *PIICatalogConfig) { c.RetentionDays = 3651 },
 			auth:    tokenAuth,
