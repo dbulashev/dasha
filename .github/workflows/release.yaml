@@ -130,6 +130,7 @@ jobs:
       - name: Scan backend image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          version: v0.76.2
           image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/dasha-backend:${{ steps.meta-backend.outputs.version }}
           format: table
           exit-code: 1
@@ -139,6 +140,7 @@ jobs:
       - name: Scan frontend image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          version: v0.76.2
           image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/dasha-frontend:${{ steps.meta-frontend.outputs.version }}
           format: table
           exit-code: 1
@@ -148,6 +150,7 @@ jobs:
       - name: Scan mcp image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
+          version: v0.76.2
           image-ref: ${{ secrets.DOCKERHUB_USERNAME }}/dasha-mcp:${{ steps.meta-mcp.outputs.version }}
           format: table
           exit-code: 1
