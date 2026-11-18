@@ -100,10 +100,20 @@ func (c *PIICatalogConfig) Validate(auth AuthConfig) error {
 		return fmt.Errorf("pii_catalog.allowed_tokens requires auth.mode token or oidc")
 	}
 
+	seen := make(map[string]struct{}, len(c.AllowedTokens))
+
 	for i, name := range c.AllowedTokens {
 		if err := validateAllowedToken(i, name, auth.Tokens); err != nil {
 			return err
 		}
+
+		// After validateAllowedToken: by now name is a token name, safe to echo.
+		// A repeat is usually a copy-paste that left another token out.
+		if _, dup := seen[name]; dup {
+			return fmt.Errorf("pii_catalog.allowed_tokens[%d]: %q is already listed", i, name)
+		}
+
+		seen[name] = struct{}{}
 	}
 
 	return nil
@@ -157,19 +167,4 @@ func looksLikeTokenSecret(value string, tokens []AuthToken) bool {
 	}
 
 	return hit == 1
-}
-
-func (c PIICatalogConfig) DuplicateAllowedTokens() []string {
-	seen := make(map[string]int, len(c.AllowedTokens))
-
-	var dups []string
-
-	for _, name := range c.AllowedTokens {
-		seen[name]++
-		if seen[name] == 2 { //nolint:mnd // second sighting = first duplicate
-			dups = append(dups, name)
-		}
-	}
-
-	return dups
 }

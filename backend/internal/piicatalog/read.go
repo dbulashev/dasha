@@ -13,13 +13,14 @@ import (
 	"github.com/dbulashev/dasha/internal/config"
 )
 
-// Storage returns ErrNotFound when there is no status row and ErrNotCollected
-// when the row has no successful collection; Reader.Catalog re-derives both
-// from the configuration, see there.
 var (
 	ErrNotFound     = errors.New("piicatalog: database is neither configured nor collected")
 	ErrNotCollected = errors.New("piicatalog: database has not been collected yet")
 	ErrInvalidKey   = errors.New("piicatalog: cluster and database must be valid UTF-8 without NUL")
+
+	// ErrNoCatalog is the ReadStore answer for a database without a collected
+	// set; Reader turns it into ErrNotFound or ErrNotCollected.
+	ErrNoCatalog = errors.New("piicatalog: no collected catalog in storage")
 )
 
 // Catalog is the current set of one database, ordered by (name, comment).
@@ -103,7 +104,7 @@ func (r *Reader) Catalog(ctx context.Context, k Key) (Catalog, error) {
 	}
 
 	cat, err := r.store.PIICatalog(ctx, k)
-	if !errors.Is(err, ErrNotFound) && !errors.Is(err, ErrNotCollected) {
+	if !errors.Is(err, ErrNoCatalog) {
 		return cat, err
 	}
 

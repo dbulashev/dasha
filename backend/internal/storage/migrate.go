@@ -366,7 +366,9 @@ CREATE TABLE IF NOT EXISTS pii_catalog_pair (
     pair_hash      bytea NOT NULL,
     column_name    text  NOT NULL,
     column_comment text,
-    CONSTRAINT pii_catalog_pair_pkey PRIMARY KEY (cluster_name, database, pair_hash)
+    CONSTRAINT pii_catalog_pair_pkey PRIMARY KEY (cluster_name, database, pair_hash),
+    CONSTRAINT pii_catalog_pair_status_fkey FOREIGN KEY (cluster_name, database)
+        REFERENCES pii_catalog_status (cluster_name, database) ON DELETE CASCADE
 )`
 )
 

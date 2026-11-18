@@ -17,6 +17,9 @@ const PIICatalogPathPrefix = "/api/pii-catalog/"
 // Query values are client-controlled; the log keeps a bounded prefix.
 const piiAuditMaxValue = 256
 
+// The operationIds of doc/swagger.yaml, which the audit log documents. The
+// embedded spec of gen/serverhttp is no source: oapi-codegen rewrites them
+// into Go names. TestPIIOperationsMatchSpec keeps this in sync.
 var piiOperations = map[string]string{
 	"/api/pii-catalog/status": "getPiiCatalogStatus",
 	"/api/pii-catalog/pairs":  "getPiiCatalogPairs",

@@ -74,11 +74,6 @@ func TestPIICatalogConfig_Validate(t *testing.T) {
 			auth:   oidcAuth,
 		},
 		{
-			name:   "duplicate allowed name is not an error",
-			mutate: func(c *PIICatalogConfig) { c.AllowedTokens = []string{"ops", "ops"} },
-			auth:   tokenAuth,
-		},
-		{
 			name:    "bad cron",
 			mutate:  func(c *PIICatalogConfig) { c.Schedule = "bad" },
 			auth:    tokenAuth,
@@ -179,6 +174,12 @@ func TestPIICatalogConfig_Validate(t *testing.T) {
 			wantErr: "pii_catalog.allowed_tokens[0] must not be empty",
 		},
 		{
+			name:    "name listed twice",
+			mutate:  func(c *PIICatalogConfig) { c.AllowedTokens = []string{"pii-classifier", "ops", "pii-classifier"} },
+			auth:    tokenAuth,
+			wantErr: `pii_catalog.allowed_tokens[2]: "pii-classifier" is already listed`,
+		},
+		{
 			name:    "duplicate auth.tokens name",
 			mutate:  func(c *PIICatalogConfig) { c.AllowedTokens = []string{"dup"} },
 			auth:    tokenAuth,
@@ -241,12 +242,4 @@ func TestPIICatalogConfig_ValidateSecrets(t *testing.T) {
 	c.AllowedTokens = []string{"pii-classifier", "unset"}
 	require.EqualError(t, c.ValidateSecrets(auth),
 		`pii_catalog.allowed_tokens[1]: token "unset" has no secret (token / token_from_env)`)
-}
-
-func TestPIICatalogConfig_DuplicateAllowedTokens(t *testing.T) {
-	c := PIICatalogConfig{AllowedTokens: []string{"a", "b", "a", "c", "a", "b"}} //nolint:exhaustruct
-	assert.Equal(t, []string{"a", "b"}, c.DuplicateAllowedTokens())
-
-	c.AllowedTokens = []string{"a", "b"}
-	assert.Empty(t, c.DuplicateAllowedTokens())
 }

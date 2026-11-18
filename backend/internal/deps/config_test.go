@@ -198,7 +198,7 @@ pii_catalog:
 		t.Fatal(err)
 	}
 
-	c, warnings, err := provideConfig()
+	c, err := provideConfig()
 	if err != nil {
 		t.Fatalf("provideConfig: %v", err)
 	}
@@ -216,10 +216,6 @@ pii_catalog:
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("pii_catalog = %+v, want %+v", got, want)
 	}
-
-	if len(warnings) != 0 {
-		t.Fatalf("warnings = %+v, want none", warnings)
-	}
 }
 
 func TestPIICatalogInvalidScheduleFailsConfig(t *testing.T) {
@@ -229,7 +225,7 @@ func TestPIICatalogInvalidScheduleFailsConfig(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, err := provideConfig()
+	_, err := provideConfig()
 	if err == nil || !strings.Contains(err.Error(), `pii_catalog.schedule: invalid cron expression "bad"`) {
 		t.Fatalf("provideConfig error = %v, want invalid pii_catalog.schedule", err)
 	}
@@ -243,7 +239,7 @@ auth:
     - name: pii-classifier
       token_from_env: DASHA_TEST_PII_TOKEN_UNSET
 pii_catalog:
-  allowed_tokens: [pii-classifier, pii-classifier]
+  allowed_tokens: [pii-classifier]
 `
 
 	t.Setenv("DASHA_TEST_PII_TOKEN_UNSET", "")
@@ -253,13 +249,9 @@ pii_catalog:
 		t.Fatal(err)
 	}
 
-	c, warnings, err := provideConfig()
+	c, err := provideConfig()
 	if err != nil {
 		t.Fatalf("provideConfig: %v", err)
-	}
-
-	if len(warnings) != 1 || warnings[0].msg != "pii_catalog.allowed_tokens lists a token more than once" {
-		t.Fatalf("warnings = %+v, want one duplicate warning", warnings)
 	}
 
 	err = c.PIICatalog.ValidateSecrets(c.Auth)

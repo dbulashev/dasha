@@ -95,20 +95,18 @@ func TestReader_CatalogNotFound(t *testing.T) {
 
 	cases := []struct {
 		db      string
-		err     error
 		wantErr error
 	}{
-		{"app", ErrNotCollected, ErrNotCollected},
-		{"new", ErrNotFound, ErrNotCollected},
-		{"nope", ErrNotFound, ErrNotFound},
-		{"nope", ErrNotCollected, ErrNotFound},
+		{"app", ErrNotCollected},
+		{"new", ErrNotCollected},
+		{"nope", ErrNotFound},
 	}
 
 	for _, tc := range cases {
-		r := newTestReader(&fakeReadStore{err: tc.err}) //nolint:exhaustruct
+		r := newTestReader(&fakeReadStore{err: ErrNoCatalog}) //nolint:exhaustruct
 
 		_, err := r.Catalog(t.Context(), Key{Cluster: "c1", Database: tc.db})
-		assert.ErrorIs(t, err, tc.wantErr, "%s/%v", tc.db, tc.err)
+		assert.ErrorIs(t, err, tc.wantErr, tc.db)
 	}
 }
 

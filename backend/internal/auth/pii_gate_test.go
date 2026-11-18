@@ -81,7 +81,8 @@ func newGateEnv(t *testing.T, mode config.AuthMode, enabled bool, allowed []stri
 	authMW := NewAuthMiddleware(cfg, nil, nil, resolver, zap.NewNop())
 
 	logger, audit := newAccessLog()
-	gate := NewPIICatalogGate(config.PIICatalogConfig{Enabled: enabled, AllowedTokens: allowed}, logger) //nolint:exhaustruct
+	cfgPII := config.PIICatalogConfig{Enabled: enabled, AllowedTokens: allowed} //nolint:exhaustruct
+	gate := NewPIICatalogGate(cfgPII, logger)
 
 	reached := new(bool)
 	ok := func(c echo.Context) error {
@@ -190,7 +191,8 @@ func TestPIICatalogGate_OIDCSessionRefused(t *testing.T) {
 	t.Parallel()
 
 	logger, audit := newAccessLog()
-	gate := NewPIICatalogGate(config.PIICatalogConfig{Enabled: true, AllowedTokens: []string{"alice"}}, logger) //nolint:exhaustruct
+	cfgPII := config.PIICatalogConfig{Enabled: true, AllowedTokens: []string{"alice"}} //nolint:exhaustruct
+	gate := NewPIICatalogGate(cfgPII, logger)
 
 	e := echo.New()
 	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {

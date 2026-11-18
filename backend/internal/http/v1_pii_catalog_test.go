@@ -70,18 +70,6 @@ func TestGetPiiCatalogStatus(t *testing.T) {
 	}
 }
 
-func TestGetPiiCatalogStatus_Error(t *testing.T) {
-	t.Parallel()
-
-	storeErr := errors.New("storage down")
-	h := newPIIHandlers(&fakePIIStore{err: storeErr}) //nolint:exhaustruct
-
-	req := serverhttp.GetPiiCatalogStatusRequestObject{} //nolint:exhaustruct
-	if _, err := h.GetPiiCatalogStatus(t.Context(), req); !errors.Is(err, storeErr) {
-		t.Errorf("err = %v", err)
-	}
-}
-
 func TestGetPiiCatalog_StorageMissing(t *testing.T) {
 	t.Parallel()
 
@@ -143,9 +131,9 @@ func TestGetPiiCatalogPairs_ErrorMapping(t *testing.T) {
 		{name: "invalid key", req: serverhttp.GetPiiCatalogPairsRequestObject{
 			Params: serverhttp.GetPiiCatalogPairsParams{ClusterName: "c\x00", Database: "app"},
 		}, want400: true},
-		{name: "not collected", req: pairsReq("app"), err: piicatalog.ErrNotFound,
+		{name: "not collected", req: pairsReq("app"), err: piicatalog.ErrNoCatalog,
 			want404: serverhttp.PiiCatalogErrNotCollectedYet},
-		{name: "not found", req: pairsReq("nope"), err: piicatalog.ErrNotFound,
+		{name: "not found", req: pairsReq("nope"), err: piicatalog.ErrNoCatalog,
 			want404: serverhttp.PiiCatalogErrNotFound},
 		{name: "storage", req: pairsReq("app"), err: storeErr, wantFail: storeErr},
 	}

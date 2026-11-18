@@ -85,8 +85,9 @@ func (r *Runner) Run(ctx context.Context) {
 	}
 }
 
+// Truncated to the storage precision: attempt times are compared after a round trip.
 func (r *Runner) now() time.Time {
-	return r.clock().UTC()
+	return r.clock().UTC().Truncate(time.Microsecond)
 }
 
 func (r *Runner) runOnce(ctx context.Context) {

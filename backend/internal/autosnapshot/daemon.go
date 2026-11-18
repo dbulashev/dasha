@@ -2,7 +2,6 @@ package autosnapshot
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
@@ -12,7 +11,6 @@ import (
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/hotobjects"
-	"github.com/dbulashev/dasha/internal/piicatalog"
 	"github.com/dbulashev/dasha/internal/statio"
 )
 
@@ -35,7 +33,6 @@ type Repo interface {
 
 // Store is the narrow storage interface the daemon needs.
 type Store interface {
-	leaderStorage
 	GetAutosnapshotConfig(ctx context.Context) (Config, error)
 	ListClusterOverrides(ctx context.Context) (map[string]map[string]any, error)
 	LastAutoSnapshotAt(ctx context.Context) (map[string]time.Time, error)
@@ -64,13 +61,10 @@ type Store interface {
 
 // Daemon is the long-running auto-snapshot worker.
 type Daemon struct {
-	clusters       config.Clusters
-	repo           Repo
-	store          Store
-	logger         *zap.Logger
-	leaderElection bool
-	// nil when pii_catalog is disabled.
-	pii *piicatalog.Runner
+	clusters config.Clusters
+	repo     Repo
+	store    Store
+	logger   *zap.Logger
 	// clock feeds the spike state machine; nil means time.Now. Injected by tests
 	// so a multi-minute spike can be replayed without sleeping.
 	clock func() time.Time
@@ -232,55 +226,22 @@ func NewDaemon(
 	clusters config.Clusters,
 	repo Repo,
 	store Store,
-	leaderElection bool,
 	logger *zap.Logger,
-	pii *piicatalog.Runner,
 ) *Daemon {
 	return &Daemon{
 		clusters:       clusters,
 		repo:           repo,
 		store:          store,
 		logger:         logger,
-		leaderElection: leaderElection,
-		pii:            pii,
 		hosts:          map[hostKey]*hostState{},
 		lastHotAttempt: map[string]time.Time{},
 		lastIOAttempt:  map[string]time.Time{},
 	}
 }
 
-// Run optionally acquires the advisory-lock leader (opt-in, storage.leader_election;
-// off by default since the dedicated session is incompatible with transaction-pooling
-// proxies), then loops until ctx is cancelled.
+// Run loops until ctx is cancelled. Leadership, when enabled, is acquired by
+// the caller before Run.
 func (d *Daemon) Run(ctx context.Context) error {
-	leader := NewLeader(d.store, d.logger)
-
-	if d.leaderElection {
-		if err := leader.Acquire(ctx); err != nil {
-			return fmt.Errorf("autosnapshot: acquire leader: %w", err)
-		}
-
-		defer leader.Release()
-	} else {
-		d.logger.Info("autosnapshot: leader election disabled, running as single instance")
-	}
-
-	// Heartbeat always runs (a plain pooled UPDATE) so UI liveness works regardless
-	// of leader election; in HA mode only the elected leader reaches here.
-	hbCtx, cancelHB := context.WithCancel(ctx)
-	defer cancelHB()
-
-	go leader.RunHeartbeat(hbCtx)
-
-	// Waited for so it stops writing before the caller closes storage.
-	if d.pii != nil {
-		var wg sync.WaitGroup
-
-		wg.Go(func() { d.pii.Run(ctx) })
-
-		defer wg.Wait()
-	}
-
 	last, err := d.store.LastAutoSnapshotAt(ctx)
 	if err != nil {
 		d.logger.Warn("load last auto snapshot times failed", zap.Error(err))

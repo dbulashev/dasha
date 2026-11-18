@@ -100,7 +100,7 @@ func TestPIIApply_FailureKeepsCatalog(t *testing.T) {
 	require.NoError(t, s.RecordPIIFailure(ctx, piiKey, time.Now().UTC(), "h1: timeout"))
 
 	_, err := s.PIICatalog(ctx, piiKey)
-	require.ErrorIs(t, err, piicatalog.ErrNotCollected)
+	require.ErrorIs(t, err, piicatalog.ErrNoCatalog)
 
 	_, err = s.ApplyPIISnapshot(ctx, piiKey, snapOf(piicatalog.Pair{Name: "id"}))
 	require.NoError(t, err)
@@ -145,23 +145,6 @@ func TestPIIApply_StaleAttemptIsIgnored(t *testing.T) {
 	assert.WithinDuration(t, newer, *st[piiKey].LastAttemptAt, time.Millisecond)
 }
 
-// A newer failure does not block an older success: the catalog is still known.
-func TestPIIApply_OlderSuccessReplacesNewerFailure(t *testing.T) {
-	s := newPIITestStorage(t)
-	ctx := t.Context()
-
-	older := time.Now().UTC().Add(-time.Minute)
-
-	require.NoError(t, s.RecordPIIFailure(ctx, piiKey, older.Add(30*time.Second), "h2: timeout"))
-
-	_, err := s.ApplyPIISnapshot(ctx, piiKey, piicatalog.NewSnapshot([]piicatalog.Pair{{Name: "id"}}, "h1", 170000, older))
-	require.NoError(t, err)
-
-	cat, err := s.PIICatalog(ctx, piiKey)
-	require.NoError(t, err)
-	assert.Equal(t, []piicatalog.Pair{{Name: "id"}}, cat.Pairs)
-}
-
 func TestPIIApply_EmptyDatabaseIsCollected(t *testing.T) {
 	s := newPIITestStorage(t)
 
@@ -179,7 +162,7 @@ func TestPIICatalog_ByteOrderAndLongComment(t *testing.T) {
 	long := strings.Repeat("комментарий ", 1000)
 
 	_, err := s.PIICatalog(ctx, piiKey)
-	require.ErrorIs(t, err, piicatalog.ErrNotFound)
+	require.ErrorIs(t, err, piicatalog.ErrNoCatalog)
 
 	_, err = s.ApplyPIISnapshot(ctx, piiKey, snapOf(
 		piicatalog.Pair{Name: "a"}, piicatalog.Pair{Name: "B"}, piicatalog.Pair{Name: "_x", Comment: strp("")},

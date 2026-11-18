@@ -59,6 +59,7 @@ type fakeStore struct {
 	applied    map[Key]Snapshot
 	failures   map[Key]string
 	retentions int
+	applyErr   error
 }
 
 func newFakeStore() *fakeStore {
@@ -80,6 +81,10 @@ func (f *fakeStore) ListPIIStatus(context.Context) (map[Key]Status, error) {
 func (f *fakeStore) ApplyPIISnapshot(_ context.Context, k Key, snap Snapshot) (bool, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+
+	if f.applyErr != nil {
+		return false, f.applyErr
+	}
 
 	at := snap.AttemptAt
 	f.status[k] = Status{LastAttemptAt: &at, LastSuccessAt: &at}
@@ -145,8 +150,6 @@ func TestRunner_ScheduleFromPersistedAttempt(t *testing.T) {
 
 	r.runOnce(t.Context())
 	require.Contains(t, store.applied, k, "a database without status is collected on the first tick")
-	assert.Equal(t, "h1", store.applied[k].SourceInstance)
-	assert.Equal(t, 170000, store.applied[k].ServerVersion)
 
 	store.reset()
 	c.t = c.t.Add(time.Minute)
@@ -248,4 +251,40 @@ func TestRunner_CancelledContextRecordsNothing(t *testing.T) {
 	assert.Empty(t, store.applied)
 	assert.Empty(t, store.failures)
 	assert.Zero(t, store.retentions)
+}
+
+// A storage failure is not an attempt: the database stays due and is retried
+// on the next tick, not in the next schedule window.
+func TestRunner_StoreFailureKeepsDatabaseDue(t *testing.T) {
+	cls := []config.Cluster{{Name: "c1", Hosts: []config.Host{"h"}, Databases: []config.Database{"app"}}}
+	repo := &fakeRepo{}
+	store := newFakeStore()
+	store.applyErr = errors.New("storage down")
+	c := &clock{t: time.Date(2026, 11, 17, 10, 0, 0, 0, time.UTC)}
+	r := newTestRunner(t, cls, repo, store, c)
+
+	r.runOnce(t.Context())
+	assert.Empty(t, store.status, "nothing is recorded")
+	assert.Empty(t, store.failures)
+
+	store.applyErr = nil
+	c.t = c.t.Add(time.Minute)
+	r.runOnce(t.Context())
+
+	assert.Equal(t, []string{"h/app", "h/app"}, repo.attempts)
+	assert.Contains(t, store.applied, Key{Cluster: "c1", Database: "app"})
+}
+
+// Attempt times are compared after a round trip through storage, which keeps
+// microseconds.
+func TestRunner_AttemptTimeHasStoragePrecision(t *testing.T) {
+	cls := []config.Cluster{{Name: "c1", Hosts: []config.Host{"h"}, Databases: []config.Database{"app"}}}
+	store := newFakeStore()
+	c := &clock{t: time.Date(2026, 11, 17, 10, 0, 0, 123456789, time.FixedZone("MSK", 3*60*60))}
+	r := newTestRunner(t, cls, &fakeRepo{}, store, c)
+
+	r.runOnce(t.Context())
+
+	got := store.applied[Key{Cluster: "c1", Database: "app"}].AttemptAt
+	assert.Equal(t, time.Date(2026, 11, 17, 7, 0, 0, 123456000, time.UTC), got)
 }

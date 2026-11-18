@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -242,50 +241,4 @@ func (api *API) Serve(optionalFn ...ServeOptFunc) error {
 	}
 
 	return nil
-}
-
-// Errors of the catalog handlers are answered with PiiCatalogError. The cause
-// goes only to the log: with e.Debug the default handler would echo it.
-// Errors raised before the handler (401, 429, unmatched route) keep the
-// generic body.
-func writePIIError(err error, c echo.Context, logger *zap.Logger) bool {
-	if c.Response().Committed || errors.Is(err, context.Canceled) ||
-		!strings.HasPrefix(c.Request().URL.Path, auth.PIICatalogPathPrefix) {
-		return false
-	}
-
-	var (
-		status int
-		body   serverhttp.PiiCatalogError
-	)
-
-	he, isHTTP := errors.AsType[*echo.HTTPError](err)
-
-	switch dbErr := mapDatabaseError(err); {
-	case dbErr != nil:
-		msg, _ := dbErr.Message.(string)
-		status, body = dbErr.Code, piiError(serverhttp.PiiCatalogErrTimeout, msg)
-		logger.Warn("request did not complete",
-			zap.Int("status", status),
-			zap.String("route", c.Path()),
-			zap.Error(err),
-		)
-	case isHTTP && he.Code == http.StatusBadRequest:
-		msg, _ := he.Message.(string)
-		status, body = http.StatusBadRequest, piiBadRequest(msg)
-	case isHTTP:
-		return false
-	default:
-		status, body = http.StatusInternalServerError, piiError(serverhttp.PiiCatalogErrInternal, "internal error")
-		logger.Error("internal server error",
-			zap.String("route", c.Path()),
-			zap.Error(err),
-		)
-	}
-
-	if respErr := c.JSON(status, body); respErr != nil {
-		logger.Error("failed to write pii catalog error response", zap.Error(respErr))
-	}
-
-	return true
 }
