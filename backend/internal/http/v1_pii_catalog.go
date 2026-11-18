@@ -1,14 +1,10 @@
 package http
 
 import (
-	"cmp"
 	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"slices"
-	"strings"
-	"unicode/utf8"
 
 	"github.com/dbulashev/dasha/gen/serverhttp"
 	"github.com/dbulashev/dasha/internal/piicatalog"
@@ -16,33 +12,8 @@ import (
 
 // Access control and the audit log live in auth.NewPIICatalogGate; these
 // handlers are reached only by an allowed, already logged caller.
-type piiCatalogStore interface {
-	ListPIIStatus(ctx context.Context) (map[piicatalog.Key]piicatalog.Status, error)
-	PIICatalog(ctx context.Context, k piicatalog.Key) (piicatalog.Catalog, error)
-}
 
 var errPIIStorageMissing = errors.New("pii catalog: snapshot storage is not configured")
-
-func (s *Handlers) piiConfigured(ctx context.Context) (map[piicatalog.Key]struct{}, error) {
-	out := map[piicatalog.Key]struct{}{}
-
-	if s.clusters == nil {
-		return out, nil
-	}
-
-	cls, err := s.clusters.Get(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("clusters: %w", err)
-	}
-
-	for _, cl := range cls {
-		for _, db := range cl.Databases {
-			out[piicatalog.Key{Cluster: string(cl.Name), Database: string(db)}] = struct{}{}
-		}
-	}
-
-	return out, nil
-}
 
 func (s *Handlers) GetPiiCatalogStatus(
 	ctx context.Context, req serverhttp.GetPiiCatalogStatusRequestObject,
@@ -51,39 +22,23 @@ func (s *Handlers) GetPiiCatalogStatus(
 		return nil, errPIIStorageMissing
 	}
 
-	statuses, err := s.pii.ListPIIStatus(ctx)
+	var cluster string
+	if req.Params.ClusterName != nil {
+		cluster = *req.Params.ClusterName
+	}
+
+	statuses, err := s.pii.Statuses(ctx, cluster)
 	if err != nil {
 		return nil, fmt.Errorf("GetPiiCatalogStatus | %w", err)
 	}
 
-	configured, err := s.piiConfigured(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("GetPiiCatalogStatus | %w", err)
-	}
-
-	keys := make(map[piicatalog.Key]struct{}, len(statuses)+len(configured))
-	for k := range statuses {
-		keys[k] = struct{}{}
-	}
-
-	for k := range configured {
-		keys[k] = struct{}{}
-	}
-
-	items := make([]serverhttp.PiiCatalogDatabaseStatus, 0, len(keys))
-
-	for k := range keys {
-		if req.Params.ClusterName != nil && *req.Params.ClusterName != k.Cluster {
-			continue
-		}
-
-		_, inConfig := configured[k]
-		st := statuses[k]
-
-		items = append(items, serverhttp.PiiCatalogDatabaseStatus{
-			ClusterName:    k.Cluster,
-			Database:       k.Database,
-			InConfig:       inConfig,
+	items := make([]serverhttp.PiiCatalogDatabaseStatus, len(statuses))
+	for i, ds := range statuses {
+		st := ds.Status
+		items[i] = serverhttp.PiiCatalogDatabaseStatus{
+			ClusterName:    ds.Key.Cluster,
+			Database:       ds.Key.Database,
+			InConfig:       ds.InConfig,
 			SetHash:        hexOrNil(st.SetHash),
 			PairCount:      st.PairCount,
 			LastAttemptAt:  st.LastAttemptAt,
@@ -91,15 +46,11 @@ func (s *Handlers) GetPiiCatalogStatus(
 			LastChangedAt:  st.LastChangedAt,
 			LastError:      st.LastError,
 			SourceInstance: st.SourceInstance,
-		})
+		}
 	}
 
-	slices.SortFunc(items, func(a, b serverhttp.PiiCatalogDatabaseStatus) int {
-		return cmp.Or(cmp.Compare(a.ClusterName, b.ClusterName), cmp.Compare(a.Database, b.Database))
-	})
-
 	return serverhttp.GetPiiCatalogStatus200JSONResponse{
-		Schedule: s.cfg.PIICatalog.Schedule,
+		Schedule: s.pii.Schedule(),
 		Items:    items,
 	}, nil
 }
@@ -111,21 +62,20 @@ func (s *Handlers) GetPiiCatalogPairs(
 		return nil, errPIIStorageMissing
 	}
 
-	k, err := piiKey(req.Params.ClusterName, req.Params.Database)
-	if err != nil {
-		return serverhttp.GetPiiCatalogPairs400JSONResponse(piiBadRequest(err.Error())), nil
-	}
+	k := piicatalog.Key{Cluster: req.Params.ClusterName, Database: req.Params.Database}
 
-	cat, err := s.pii.PIICatalog(ctx, k)
+	cat, err := s.pii.Catalog(ctx, k)
 
 	switch {
-	case errors.Is(err, piicatalog.ErrNotFound), errors.Is(err, piicatalog.ErrNotCollected):
-		e, nfErr := s.piiNotFound(ctx, k)
-		if nfErr != nil {
-			return nil, fmt.Errorf("GetPiiCatalogPairs | %w", nfErr)
-		}
-
-		return serverhttp.GetPiiCatalogPairs404JSONResponse(e), nil
+	case errors.Is(err, piicatalog.ErrInvalidKey):
+		return serverhttp.GetPiiCatalogPairs400JSONResponse(
+			piiBadRequest("cluster_name and database must be valid UTF-8 without NUL")), nil
+	case errors.Is(err, piicatalog.ErrNotCollected):
+		return serverhttp.GetPiiCatalogPairs404JSONResponse(piiError(serverhttp.PiiCatalogErrNotCollectedYet,
+			"the database has not been collected yet")), nil
+	case errors.Is(err, piicatalog.ErrNotFound):
+		return serverhttp.GetPiiCatalogPairs404JSONResponse(piiError(serverhttp.PiiCatalogErrNotFound,
+			"the database is neither configured nor collected")), nil
 	case err != nil:
 		return nil, fmt.Errorf("GetPiiCatalogPairs | %w", err)
 	}
@@ -143,33 +93,6 @@ func (s *Handlers) GetPiiCatalogPairs(
 		CheckedAt:   cat.CheckedAt,
 		Items:       items,
 	}, nil
-}
-
-// not_collected_yet while the database is configured, otherwise not_found: a
-// removed database keeps its failure-only status row until retention.
-func (s *Handlers) piiNotFound(ctx context.Context, k piicatalog.Key) (serverhttp.PiiCatalogError, error) {
-	configured, cfgErr := s.piiConfigured(ctx)
-	if cfgErr != nil {
-		return serverhttp.PiiCatalogError{}, cfgErr
-	}
-
-	if _, ok := configured[k]; ok {
-		return piiError(serverhttp.PiiCatalogErrNotCollectedYet, "the database has not been collected yet"), nil
-	}
-
-	return piiError(serverhttp.PiiCatalogErrNotFound, "the database is neither configured nor collected"), nil
-}
-
-// Postgres text rejects NUL and invalid UTF-8; without this check such input
-// surfaces as a 500 from the storage query.
-func piiKey(cluster, database string) (piicatalog.Key, error) {
-	for _, v := range []string{cluster, database} {
-		if !utf8.ValidString(v) || strings.ContainsRune(v, 0) {
-			return piicatalog.Key{}, errors.New("cluster_name and database must be valid UTF-8 without NUL")
-		}
-	}
-
-	return piicatalog.Key{Cluster: cluster, Database: database}, nil
 }
 
 func piiError(code serverhttp.PiiCatalogErrorCode, msg string) serverhttp.PiiCatalogError {

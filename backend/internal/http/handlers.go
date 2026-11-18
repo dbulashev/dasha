@@ -8,6 +8,7 @@ import (
 	"github.com/dbulashev/dasha/internal/healthscore"
 	"github.com/dbulashev/dasha/internal/logs"
 	"github.com/dbulashev/dasha/internal/metrics"
+	"github.com/dbulashev/dasha/internal/piicatalog"
 	"github.com/dbulashev/dasha/internal/repository"
 	"github.com/dbulashev/dasha/internal/storage"
 )
@@ -22,8 +23,7 @@ type Handlers struct {
 	scorer   *healthscore.Scorer
 	fleet    *healthscore.Fleet
 	activity *activity.Sampler
-	clusters config.Clusters
-	pii      piiCatalogStore
+	pii      *piicatalog.Reader
 }
 
 // NewDashaHandlers constructs a new Handlers instance from its dependencies.
@@ -38,12 +38,11 @@ func NewDashaHandlers(
 		scorer:   scorer,
 		fleet:    healthscore.NewFleet(cfg, scorer, ms, repo, logger),
 		activity: activity.NewSampler(repo, cfg.Activity),
-		clusters: clusters,
 	}
 
-	// A typed-nil *storage.Storage must not end up in the interface.
+	// A typed-nil *storage.Storage must not end up in the store interface.
 	if st != nil {
-		h.pii = st
+		h.pii = piicatalog.NewReader(st, clusters, cfg.PIICatalog.Schedule)
 	}
 
 	return h
