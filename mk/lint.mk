@@ -5,6 +5,11 @@ lint-go: ## Lint backend (revive + gosec)
 	cd backend && REVIVE_FORCE_COLOR=1 revive -config revive.toml -formatter friendly -exclude ./gen/... ./...
 	cd backend && gosec -quiet -exclude-dir=gen ./...
 
+# Not part of lint-go: the architecture rules are not enforced yet.
+.PHONY: lint-arch
+lint-arch: ## Check package dependencies against backend/.go-arch-lint.yml
+	cd backend && go-arch-lint check
+
 .PHONY: lint-vue
 lint-vue: ## Lint frontend (eslint)
 	cd frontend && npm run lint

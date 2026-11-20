@@ -1,0 +1,116 @@
+# Architecture rules for go-arch-lint (https://github.com/fe3dback/go-arch-lint).
+# Not wired into CI yet. Run from backend/: go-arch-lint check
+#
+# Layers:
+#   transport (http, mcpserver) -> domain, auth, config, gen; http also repository
+#   domain                      -> config
+#   infra (repository, storage, discovery, log source adapters) -> domain, config
+#   composition (cmd, deps)     -> anything
+#
+# Imports between packages of one component count as dependencies too, so a
+# multi-package component lists itself in mayDependOn.
+#
+# Checks imports only: a handler that reaches storage through the Handlers
+# field without importing the package is caught at handlers.go, not in its
+# own file.
+version: 3
+workdir: .
+
+allow:
+  depOnAnyVendor: true
+  deepScan: false
+
+excludeFiles:
+  - "^.*_test\\.go$"
+
+exclude:
+  - internal/http/testdata
+  - internal/testinfra
+
+components:
+  cmd: { in: [cmd, cmd/**] }
+  deps: { in: internal/deps }
+
+  http: { in: [internal/http, internal/http/logger] }
+  mcpserver: { in: internal/mcpserver }
+  gen: { in: [gen/serverhttp, gen/apiclient] }
+
+  auth: { in: internal/auth }
+  config: { in: internal/config }
+
+  domain:
+    in:
+      - internal/activity
+      - internal/autosnapshot
+      - internal/explain
+      - internal/health
+      - internal/healthscore
+      - internal/hotobjects
+      - internal/indexadvice
+      - internal/indexadvisor
+      - internal/logs
+      - internal/logs/insights
+      - internal/logs/pattern
+      - internal/logs/stream
+      # The Source port and its registry; adapters are logsource.
+      - internal/logs/source
+      - internal/metrics
+      - internal/piicatalog
+      - internal/schemalint
+      - internal/sqlparse
+      - internal/statio
+
+  repository: { in: [internal/repository, internal/query] }
+  storage: { in: internal/storage }
+  discovery: { in: [internal/discovery, internal/discovery/**] }
+  logsource:
+    in:
+      - internal/logs/source/opensearch
+      - internal/logs/source/transport
+      - internal/logs/source/victorialogs
+      - internal/logs/source/yandexmdb
+
+  shared:
+    in:
+      - internal/pkg/**
+      - internal/version
+      - internal/enums
+      - internal/dto
+
+commonComponents:
+  - shared
+
+deps:
+  cmd:
+    anyProjectDeps: true
+  deps:
+    anyProjectDeps: true
+
+  # Handlers map requests to services. storage is excluded: whatever a handler
+  # needs from it belongs behind a domain service. repository stays allowed
+  # for the read-through endpoints and repository.ErrNotFound.
+  http:
+    mayDependOn: [http, gen, auth, config, domain, repository]
+  mcpserver:
+    mayDependOn: [gen, domain]
+
+  auth:
+    mayDependOn: [config]
+  # Feature configs live in their feature packages and are embedded here.
+  config:
+    mayDependOn: [domain]
+  # dto carries config.ClusterName and config.Host.
+  shared:
+    mayDependOn: [config]
+
+  domain:
+    mayDependOn: [domain, config]
+
+  repository:
+    mayDependOn: [repository, domain, config]
+  storage:
+    mayDependOn: [domain, config]
+  discovery:
+    mayDependOn: [discovery, config]
+  logsource:
+    mayDependOn: [logsource, domain, config, discovery]
