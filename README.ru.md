@@ -140,6 +140,7 @@ docker compose up -d
 
 ## Contributors
 
+* [@del000](https://github.com/del000)
 * [Anton Glushakov](https://github.com/glushakov)
 * [Mikhail Grigorev](https://github.com/cherts)
 * [Ilya Lukyanov](mailto:lukyanov1985@gmail.com)
