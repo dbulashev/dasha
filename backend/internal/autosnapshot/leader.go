@@ -15,21 +15,21 @@ const (
 	leaderRetryInterval = 30 * time.Second
 )
 
-type leaderStorage interface {
+type LeaderStorage interface {
 	TryAcquireLeaderLock(ctx context.Context) (*pgx.Conn, bool, error)
 	UpdateLeaderHeartbeat(ctx context.Context, instanceID string) error
 }
 
 // Leader holds an advisory lock and emits heartbeats until the context is cancelled.
 type Leader struct {
-	storage    leaderStorage
+	storage    LeaderStorage
 	logger     *zap.Logger
 	instanceID string
 
 	conn *pgx.Conn
 }
 
-func NewLeader(storage leaderStorage, logger *zap.Logger) *Leader {
+func NewLeader(storage LeaderStorage, logger *zap.Logger) *Leader {
 	host, _ := os.Hostname()
 	return &Leader{
 		storage:    storage,

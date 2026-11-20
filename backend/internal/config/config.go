@@ -778,6 +778,8 @@ type Config struct {
 	IndexAdvisor indexadvisor.Config `mapstructure:"index_advisor"`
 
 	Activity activity.Config `mapstructure:"activity"`
+
+	PIICatalog PIICatalogConfig `mapstructure:"pii_catalog"`
 }
 
 // PoolConfig tunes a pgx connection pool. Zero MaxConns/MaxConnIdleTime fall back

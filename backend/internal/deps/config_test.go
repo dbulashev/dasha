@@ -1,8 +1,11 @@
 package deps
 
 import (
+	"os"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dbulashev/dasha/internal/config"
 )
@@ -166,5 +169,93 @@ Auth:
 
 	if _, ok := m["db.admin"]; ok {
 		t.Errorf("role_mapping = %v, lower-cased key survived", m)
+	}
+}
+
+func TestPIICatalogConfigDecode(t *testing.T) {
+	const yml = `
+auth:
+  mode: token
+  tokens:
+    - name: pii-classifier
+      token_from_env: DASHA_TEST_PII_TOKEN
+pii_catalog:
+  enabled: true
+  schedule: "CRON_TZ=Europe/Moscow 0 3 * * *"
+  retention_days: 30
+  statement_timeout: 45s
+  exclude_schemas:
+    - "archive%"
+    - 'tmp\_%'
+  allowed_tokens:
+    - pii-classifier
+`
+
+	t.Setenv("DASHA_TEST_PII_TOKEN", "secret-value")
+	t.Chdir(t.TempDir())
+
+	if err := os.WriteFile("dasha.yaml", []byte(yml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c, err := provideConfig()
+	if err != nil {
+		t.Fatalf("provideConfig: %v", err)
+	}
+
+	got := c.PIICatalog
+	want := config.PIICatalogConfig{
+		Enabled:          true,
+		Schedule:         "CRON_TZ=Europe/Moscow 0 3 * * *",
+		RetentionDays:    30,
+		StatementTimeout: 45 * time.Second,
+		ExcludeSchemas:   []string{"archive%", `tmp\_%`},
+		AllowedTokens:    []string{"pii-classifier"},
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("pii_catalog = %+v, want %+v", got, want)
+	}
+}
+
+func TestPIICatalogInvalidScheduleFailsConfig(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	if err := os.WriteFile("dasha.yaml", []byte("pii_catalog:\n  schedule: bad\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := provideConfig()
+	if err == nil || !strings.Contains(err.Error(), `pii_catalog.schedule: invalid cron expression "bad"`) {
+		t.Fatalf("provideConfig error = %v, want invalid pii_catalog.schedule", err)
+	}
+}
+
+func TestPIICatalogAllowedTokenSecretNotRequiredToLoad(t *testing.T) {
+	const yml = `
+auth:
+  mode: token
+  tokens:
+    - name: pii-classifier
+      token_from_env: DASHA_TEST_PII_TOKEN_UNSET
+pii_catalog:
+  allowed_tokens: [pii-classifier]
+`
+
+	t.Setenv("DASHA_TEST_PII_TOKEN_UNSET", "")
+	t.Chdir(t.TempDir())
+
+	if err := os.WriteFile("dasha.yaml", []byte(yml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	c, err := provideConfig()
+	if err != nil {
+		t.Fatalf("provideConfig: %v", err)
+	}
+
+	err = c.PIICatalog.ValidateSecrets(c.Auth)
+	if err == nil || !strings.Contains(err.Error(), `token "pii-classifier" has no secret`) {
+		t.Fatalf("ValidateSecrets error = %v, want missing secret", err)
 	}
 }

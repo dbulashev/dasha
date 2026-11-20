@@ -205,6 +205,10 @@ func (c *Container) AuthMiddlewares(ctx context.Context, resolver auth.PATResolv
 	cfg := c.Config()
 	logger := c.Logger()
 
+	if err := cfg.PIICatalog.ValidateSecrets(cfg.Auth); err != nil {
+		return nil, err
+	}
+
 	return auth.NewMiddlewares(ctx, cfg.Auth, cfg.BasePath, resolver, logger)
 }
 
@@ -658,6 +662,7 @@ func provideConfig() (*config.Config, error) {
 	c.LogSearch = c.LogSearch.WithDefaults()
 	c.LogInsights = c.LogInsights.WithDefaults()
 	c.Activity = c.Activity.WithDefaults()
+	c.PIICatalog = c.PIICatalog.WithDefaults()
 
 	if err := c.HealthScore.Validate(); err != nil {
 		return nil, fmt.Errorf("provideConfig | health_score: %w", err)
@@ -669,6 +674,10 @@ func provideConfig() (*config.Config, error) {
 
 	if err := c.Auth.Validate(); err != nil {
 		return nil, fmt.Errorf("provideConfig | auth config: %w", err)
+	}
+
+	if err := c.PIICatalog.Validate(c.Auth); err != nil {
+		return nil, fmt.Errorf("provideConfig | %w", err)
 	}
 
 	if err := c.SchemaLint.Validate(); err != nil {

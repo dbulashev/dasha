@@ -8,6 +8,7 @@ import (
 
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/hotobjects"
+	"github.com/dbulashev/dasha/internal/pkg/cronsched"
 )
 
 // processHotSnapshots runs one hot-objects sweep: every cluster×database whose
@@ -21,7 +22,7 @@ func (d *Daemon) processHotSnapshots(ctx context.Context, cfg Config) {
 	// A 5-field cron covers both shapes users need: a fixed time of day
 	// ("0 3 * * *") and a frequency ("*/30 * * * *"). An unparsable value
 	// falls back to daily rather than silently disabling the capture.
-	sched, err := ParseCronSchedule(cfg.HotSchedule)
+	sched, err := cronsched.Parse(cfg.HotSchedule)
 	if err != nil {
 		d.logger.Warn("hot: invalid schedule, falling back to daily",
 			zap.String("schedule", cfg.HotSchedule), zap.Error(err))

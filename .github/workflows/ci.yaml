@@ -93,7 +93,27 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Run npm audit
-        run: cd frontend && npm audit --omit=dev --audit-level=high
+        working-directory: frontend
+        # GHSA-fc5q-39xc-vjpf: picomatch ReDoS, no patched release yet; only build-time
+        # tooling pulled in by vue-router 5 is affected. Remove once picomatch > 4.0.7 ships.
+        env:
+          AUDIT_ALLOWLIST: GHSA-fc5q-39xc-vjpf
+        run: |
+          npm audit --omit=dev --json > audit.json || true
+          jq -r --arg allow "$AUDIT_ALLOWLIST" '
+            ($allow | split(" ")) as $allowed
+            | [.vulnerabilities[].via[]
+               | objects
+               | select(.severity == "high" or .severity == "critical")
+               | select(.url | split("/") | last | IN($allowed[]) | not)
+               | "\(.severity)\t\(.name)\t\(.range)\t\(.url)"]
+            | unique[]
+          ' audit.json > blocking.txt
+          if [ -s blocking.txt ]; then
+            cat blocking.txt
+            echo "::error::npm audit found high/critical vulnerabilities"
+            exit 1
+          fi
 
   trivy-scan:
     runs-on: ubuntu-latest

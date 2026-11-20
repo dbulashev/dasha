@@ -8,6 +8,7 @@ import (
 	"github.com/dbulashev/dasha/internal/healthscore"
 	"github.com/dbulashev/dasha/internal/logs"
 	"github.com/dbulashev/dasha/internal/metrics"
+	"github.com/dbulashev/dasha/internal/piicatalog"
 	"github.com/dbulashev/dasha/internal/repository"
 	"github.com/dbulashev/dasha/internal/storage"
 )
@@ -22,20 +23,29 @@ type Handlers struct {
 	scorer   *healthscore.Scorer
 	fleet    *healthscore.Fleet
 	activity *activity.Sampler
+	pii      *piicatalog.Reader
 }
 
 // NewDashaHandlers constructs a new Handlers instance from its dependencies.
 func NewDashaHandlers(
-	cfg *config.Config, repo repository.Repository, st *storage.Storage, ms *metrics.Service, logsSvc logs.Service, logger *zap.Logger,
+	cfg *config.Config, repo repository.Repository, st *storage.Storage, ms *metrics.Service, logsSvc logs.Service,
+	clusters config.Clusters, logger *zap.Logger,
 ) *Handlers {
 	scorer := healthscore.NewScorer(cfg, repo, st, ms)
 
-	return &Handlers{
+	h := &Handlers{
 		cfg: cfg, repo: repo, storage: st, metrics: ms, logs: logsSvc,
 		scorer:   scorer,
 		fleet:    healthscore.NewFleet(cfg, scorer, ms, repo, logger),
 		activity: activity.NewSampler(repo, cfg.Activity),
 	}
+
+	// A typed-nil *storage.Storage must not end up in the store interface.
+	if st != nil {
+		h.pii = piicatalog.NewReader(st, clusters, cfg.PIICatalog.Schedule)
+	}
+
+	return h
 }
 
 // maxLimit caps a client-supplied pagination limit so a SQL LIMIT can never be

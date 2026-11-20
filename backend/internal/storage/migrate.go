@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -341,7 +342,42 @@ CREATE TABLE IF NOT EXISTS log_insights_groups (
 	createLogInsightsGroupsIdxSQL = `
 CREATE INDEX IF NOT EXISTS idx_log_insights_groups_query
     ON log_insights_groups (scan_id, query_id)`
+
+	// PII catalog tables are small and rarely change: not partitioned.
+	createPIICatalogStatusSQL = `
+CREATE TABLE IF NOT EXISTS pii_catalog_status (
+    cluster_name    text        NOT NULL,
+    database        text        NOT NULL,
+    set_hash        bytea,
+    column_count    int         NOT NULL DEFAULT 0,
+    last_attempt_at timestamptz,
+    last_success_at timestamptz,
+    last_changed_at timestamptz,
+    last_error      text,
+    source_instance text,
+    CONSTRAINT pii_catalog_status_pkey PRIMARY KEY (cluster_name, database)
+)`
+
+	// Keyed by column_hash: a comment can exceed the btree key limit.
+	createPIICatalogColumnSQL = `
+CREATE TABLE IF NOT EXISTS pii_catalog_column (
+    cluster_name   text  NOT NULL,
+    database       text  NOT NULL,
+    column_hash    bytea NOT NULL,
+    schema_name    text  NOT NULL,
+    table_name     text  NOT NULL,
+    column_name    text  NOT NULL,
+    column_comment text,
+    CONSTRAINT pii_catalog_column_pkey PRIMARY KEY (cluster_name, database, column_hash),
+    CONSTRAINT pii_catalog_column_status_fkey FOREIGN KEY (cluster_name, database)
+        REFERENCES pii_catalog_status (cluster_name, database) ON DELETE CASCADE
+)`
 )
+
+var piiCatalogDDL = []string{
+	createPIICatalogStatusSQL,
+	createPIICatalogColumnSQL,
+}
 
 // partitionedTables lists the day-partitioned tables managed together —
 // partitions for each table are created and dropped as a group per day.
@@ -387,7 +423,7 @@ func newFromDSN(ctx context.Context, dsn string) (*Storage, error) {
 }
 
 func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
-	for _, ddl := range []string{
+	for _, ddl := range slices.Concat([]string{
 		createSnapshotsSQL,
 		createQueryTextsSQL,
 		createSnapshotsIdxSQL,
@@ -428,7 +464,7 @@ func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
 		createLogInsightsScansSQL,
 		createLogInsightsGroupsSQL,
 		createLogInsightsGroupsIdxSQL,
-	} {
+	}, piiCatalogDDL) {
 		if _, err := s.ddlPool.Exec(ctx, ddl); err != nil {
 			return fmt.Errorf("storage: migrate: %w", err)
 		}

@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,6 +16,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
+
+	"github.com/dbulashev/dasha/gen/serverhttp"
+	"github.com/dbulashev/dasha/internal/auth"
+	"github.com/dbulashev/dasha/internal/config"
 )
 
 func TestMapDatabaseError(t *testing.T) {
@@ -120,4 +126,90 @@ func TestExtendDeadlines(t *testing.T) {
 	}
 
 	assert.Error(t, err, "other routes keep the server-wide WriteTimeout")
+}
+
+func TestWritePIIError(t *testing.T) {
+	t.Parallel()
+
+	bindErr := echo.NewHTTPError(http.StatusBadRequest, "Invalid format for parameter database: bad")
+	sqlErr := fmt.Errorf("GetPiiCatalogColumns | %w",
+		&pgconn.PgError{Code: "42P01", Message: "relation \"pii_catalog_column\" does not exist"}) //nolint:exhaustruct
+	timeoutErr := fmt.Errorf("GetPiiCatalogStatus | %w",
+		&pgconn.PgError{Code: "57014", Message: "canceling statement due to statement timeout"}) //nolint:exhaustruct
+
+	for _, tc := range []struct {
+		name, path string
+		err        error
+		wantStatus int // 0: left to the default handler
+		wantCode   string
+	}{
+		{"binding error", "/api/pii-catalog/columns", bindErr, http.StatusBadRequest, "bad_request"},
+		{"storage timeout", "/api/pii-catalog/status", timeoutErr, http.StatusGatewayTimeout, "timeout"},
+		{"internal error", "/api/pii-catalog/columns", sqlErr, http.StatusInternalServerError, "internal"},
+		{"other path", "/api/clusters", bindErr, 0, ""},
+		{"error before the handler", "/api/pii-catalog/columns", echo.NewHTTPError(http.StatusNotFound), 0, ""},
+		{"client gone", "/api/pii-catalog/columns", fmt.Errorf("x | %w", context.Canceled), 0, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			rec := httptest.NewRecorder()
+			c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, tc.path, nil), rec)
+
+			require.Equal(t, tc.wantStatus != 0, writePIIError(tc.err, c, zap.NewNop()))
+
+			if tc.wantStatus == 0 {
+				return
+			}
+
+			assert.Equal(t, tc.wantStatus, rec.Code)
+
+			var body serverhttp.PiiCatalogError
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+			assert.Equal(t, tc.wantCode, string(body.Code))
+			assert.NotContains(t, rec.Body.String(), "pii_catalog_column", "the cause must stay in the log")
+		})
+	}
+
+	rec := httptest.NewRecorder()
+	c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/api/pii-catalog/columns", nil), rec)
+	require.True(t, writePIIError(bindErr, c, zap.NewNop()))
+	assert.JSONEq(t, `{"code":"bad_request","message":"Invalid format for parameter database: bad"}`, rec.Body.String())
+}
+
+func TestNew_PIICatalogRateLimitedIsAudited(t *testing.T) {
+	t.Parallel()
+
+	core, logs := observer.New(zap.InfoLevel)
+	logger := zap.New(core)
+
+	pass := func(next echo.HandlerFunc) echo.HandlerFunc { return next }
+	tokenAuth := func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			auth.SetUser(c, &auth.UserContext{Name: "classifier", AuthMethod: auth.MethodToken}) //nolint:exhaustruct
+
+			return next(c)
+		}
+	}
+
+	rl := auth.NewRateLimiter(config.AuthConfig{ //nolint:exhaustruct
+		RateLimit: &config.RateLimitConfig{RequestsPerSecond: 0.001, Burst: 1},
+	}, zap.NewNop())
+	t.Cleanup(rl.Stop)
+
+	gate := auth.NewPIICatalogGate(config.PIICatalogConfig{ //nolint:exhaustruct
+		Enabled: true, AllowedTokens: []string{"classifier"},
+	}, logger)
+
+	api := New(newPIIHandlers(&fakePIIStore{}), nil, pass, rl.Middleware, pass, tokenAuth, pass, gate, logger) //nolint:exhaustruct
+
+	for i, want := range []int{http.StatusOK, http.StatusTooManyRequests} {
+		rec := httptest.NewRecorder()
+		api.Echo.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/pii-catalog/status", nil))
+
+		require.Equal(t, want, rec.Code, "request %d", i)
+		assert.Equal(t, "no-store", rec.Header().Get("Cache-Control"), "request %d", i)
+	}
+
+	assert.Equal(t, 2, logs.FilterMessage("pii_catalog access").FilterField(zap.Bool("audit", true)).Len())
 }

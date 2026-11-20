@@ -44,6 +44,7 @@ func New(
 	logsRateLimitMW echo.MiddlewareFunc,
 	authMW echo.MiddlewareFunc,
 	casbinMW echo.MiddlewareFunc,
+	piiGate *auth.PIICatalogGate,
 	logger *zap.Logger,
 ) *API {
 	// The auth middleware already bridges the user into the request's
@@ -59,6 +60,10 @@ func New(
 	e.IPExtractor = echo.ExtractIPFromXFFHeader()
 
 	e.HTTPErrorHandler = func(err error, c echo.Context) {
+		if writePIIError(err, c, logger) {
+			return
+		}
+
 		// Running out of time, or giving up on a lock, is not a server fault,
 		// and "500 Internal Server Error" tells the user nothing about what
 		// happened — report the deadline or the lock explicitly instead.
@@ -127,7 +132,10 @@ func New(
 
 	e.Use(extendDeadlines(activityProfilePath, profileWriteTimeout, logger))
 	e.Use(requireHTTPSMW)
-	e.Use(skipPublic(authMW))
+	e.Use(skipPublic(piiGate.WrapAuth(authMW)))
+	// Before the rate limiters and casbin: their early exits (429, 403) are
+	// still audited and answered with no-store.
+	e.Use(piiGate.Middleware)
 	e.Use(rateLimitMW)
 	e.Use(logsRateLimitMW)
 	e.Use(skipPublic(casbinMW))
