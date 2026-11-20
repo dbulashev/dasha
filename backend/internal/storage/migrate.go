@@ -349,7 +349,7 @@ CREATE TABLE IF NOT EXISTS pii_catalog_status (
     cluster_name    text        NOT NULL,
     database        text        NOT NULL,
     set_hash        bytea,
-    pair_count      int         NOT NULL DEFAULT 0,
+    column_count    int         NOT NULL DEFAULT 0,
     last_attempt_at timestamptz,
     last_success_at timestamptz,
     last_changed_at timestamptz,
@@ -358,23 +358,25 @@ CREATE TABLE IF NOT EXISTS pii_catalog_status (
     CONSTRAINT pii_catalog_status_pkey PRIMARY KEY (cluster_name, database)
 )`
 
-	// Keyed by pair_hash: a comment can exceed the btree key limit.
-	createPIICatalogPairSQL = `
-CREATE TABLE IF NOT EXISTS pii_catalog_pair (
+	// Keyed by column_hash: a comment can exceed the btree key limit.
+	createPIICatalogColumnSQL = `
+CREATE TABLE IF NOT EXISTS pii_catalog_column (
     cluster_name   text  NOT NULL,
     database       text  NOT NULL,
-    pair_hash      bytea NOT NULL,
+    column_hash    bytea NOT NULL,
+    schema_name    text  NOT NULL,
+    table_name     text  NOT NULL,
     column_name    text  NOT NULL,
     column_comment text,
-    CONSTRAINT pii_catalog_pair_pkey PRIMARY KEY (cluster_name, database, pair_hash),
-    CONSTRAINT pii_catalog_pair_status_fkey FOREIGN KEY (cluster_name, database)
+    CONSTRAINT pii_catalog_column_pkey PRIMARY KEY (cluster_name, database, column_hash),
+    CONSTRAINT pii_catalog_column_status_fkey FOREIGN KEY (cluster_name, database)
         REFERENCES pii_catalog_status (cluster_name, database) ON DELETE CASCADE
 )`
 )
 
 var piiCatalogDDL = []string{
 	createPIICatalogStatusSQL,
-	createPIICatalogPairSQL,
+	createPIICatalogColumnSQL,
 }
 
 // partitionedTables lists the day-partitioned tables managed together —

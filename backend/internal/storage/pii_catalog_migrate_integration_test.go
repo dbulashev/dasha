@@ -31,19 +31,20 @@ func TestPIICatalogDDL(t *testing.T) {
 	_, err = pool.Exec(ctx, `INSERT INTO pii_catalog_status (cluster_name, database) VALUES ('c1', 'db1')`)
 	require.NoError(t, err)
 
-	insert := `INSERT INTO pii_catalog_pair (cluster_name, database, pair_hash, column_name, column_comment)
-	    VALUES ('c1', 'db1', '\x01', 'fio', $1)`
+	insert := `INSERT INTO pii_catalog_column
+	    (cluster_name, database, column_hash, schema_name, table_name, column_name, column_comment)
+	    VALUES ('c1', 'db1', '\x01', 'public', 'users', 'fio', $1)`
 
 	_, err = pool.Exec(ctx, insert, hex.EncodeToString(raw))
 	require.NoError(t, err, "a comment over the btree key limit (~2704 bytes) must fit")
 
 	_, err = pool.Exec(ctx, insert, "x")
-	require.Error(t, err, "the same pair_hash twice in one database")
+	require.Error(t, err, "the same column_hash twice in one database")
 
 	_, err = pool.Exec(ctx, `DELETE FROM pii_catalog_status WHERE cluster_name = 'c1' AND database = 'db1'`)
 	require.NoError(t, err)
 
-	var pairs int
-	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM pii_catalog_pair`).Scan(&pairs))
-	require.Zero(t, pairs, "pairs go with their status row")
+	var cols int
+	require.NoError(t, pool.QueryRow(ctx, `SELECT count(*) FROM pii_catalog_column`).Scan(&cols))
+	require.Zero(t, cols, "columns go with their status row")
 }

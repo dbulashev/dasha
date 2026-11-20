@@ -3459,7 +3459,7 @@ paths:
       description: >-
         Coverage of the PII column catalog: every database known to the current
         configuration or service discovery, plus every database that still has
-        collected data. Poll it and reload /api/pii-catalog/pairs only for the
+        collected data. Poll it and reload /api/pii-catalog/columns only for the
         databases whose set_hash changed.
       parameters:
         - in: query
@@ -3499,15 +3499,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PiiCatalogError'
-  /api/pii-catalog/pairs:
+  /api/pii-catalog/columns:
     get:
-      operationId: getPiiCatalogPairs
+      operationId: getPiiCatalogColumns
       tags: [pii-catalog]
       security:
         - ApiKeyAuth: []
       description: >-
-        The whole current set of distinct (column name, column comment) pairs of
-        one database, ordered by column name, then comment (byte order).
+        The whole current set of columns of one database with their schema,
+        table and comment, ordered by schema, table, then column name (byte
+        order).
       parameters:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Database'
@@ -3517,7 +3518,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PiiCatalogPairsResponse'
+                $ref: '#/components/schemas/PiiCatalogColumnsResponse'
         '400':
           description: Invalid parameters
           content:
@@ -9473,7 +9474,7 @@ components:
         - cluster_name
         - database
         - in_config
-        - pair_count
+        - column_count
       properties:
         cluster_name:
           type: string
@@ -9489,8 +9490,8 @@ components:
           nullable: true
           description: >-
             Hex hash of the current set; null until the first successful
-            collection. Reload pairs only where it differs from the one you have.
-        pair_count:
+            collection. Reload columns only where it differs from the one you have.
+        column_count:
           type: integer
         last_attempt_at:
           type: string
@@ -9512,12 +9513,21 @@ components:
           type: string
           nullable: true
 
-    PiiCatalogPair:
+    PiiCatalogColumn:
       type: object
       required:
+        - schema_name
+        - table_name
         - column_name
         - column_comment
       properties:
+        schema_name:
+          type: string
+        table_name:
+          type: string
+          description: >-
+            A table, a partitioned table or a materialized view. A partition or
+            an INHERITS child appears only for a column with its own comment.
         column_name:
           type: string
         column_comment:
@@ -9525,7 +9535,7 @@ components:
           nullable: true
           description: null — the column has no comment (distinct from an empty one).
 
-    PiiCatalogPairsResponse:
+    PiiCatalogColumnsResponse:
       type: object
       required:
         - cluster_name
@@ -9553,4 +9563,4 @@ components:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/PiiCatalogPair'
+            $ref: '#/components/schemas/PiiCatalogColumn'

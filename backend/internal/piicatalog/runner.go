@@ -227,7 +227,7 @@ func (r *Runner) collectDatabaseSafe(ctx context.Context, cluster string, hosts 
 		zap.String("cluster", cluster),
 		zap.String("database", database),
 		zap.String("source_instance", snap.SourceInstance),
-		zap.Int("pairs", len(snap.Pairs)),
+		zap.Int("columns", len(snap.Columns)),
 		zap.Int("server_version", snap.ServerVersion),
 		zap.Bool("changed", changed),
 		zap.Duration("duration", time.Since(start)))

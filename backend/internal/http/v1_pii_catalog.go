@@ -46,7 +46,7 @@ func (s *Handlers) GetPiiCatalogStatus(
 			Database:       ds.Key.Database,
 			InConfig:       ds.InConfig,
 			SetHash:        hexOrNil(st.SetHash),
-			PairCount:      st.PairCount,
+			ColumnCount:    st.ColumnCount,
 			LastAttemptAt:  st.LastAttemptAt,
 			LastSuccessAt:  st.LastSuccessAt,
 			LastChangedAt:  st.LastChangedAt,
@@ -61,9 +61,9 @@ func (s *Handlers) GetPiiCatalogStatus(
 	}, nil
 }
 
-func (s *Handlers) GetPiiCatalogPairs(
-	ctx context.Context, req serverhttp.GetPiiCatalogPairsRequestObject,
-) (serverhttp.GetPiiCatalogPairsResponseObject, error) {
+func (s *Handlers) GetPiiCatalogColumns(
+	ctx context.Context, req serverhttp.GetPiiCatalogColumnsRequestObject,
+) (serverhttp.GetPiiCatalogColumnsResponseObject, error) {
 	if s.pii == nil {
 		return nil, errPIIStorageMissing
 	}
@@ -74,24 +74,26 @@ func (s *Handlers) GetPiiCatalogPairs(
 
 	switch {
 	case errors.Is(err, piicatalog.ErrInvalidKey):
-		return serverhttp.GetPiiCatalogPairs400JSONResponse(
+		return serverhttp.GetPiiCatalogColumns400JSONResponse(
 			piiBadRequest("cluster_name and database must be valid UTF-8 without NUL")), nil
 	case errors.Is(err, piicatalog.ErrNotCollected):
-		return serverhttp.GetPiiCatalogPairs404JSONResponse(piiError(serverhttp.PiiCatalogErrNotCollectedYet,
+		return serverhttp.GetPiiCatalogColumns404JSONResponse(piiError(serverhttp.PiiCatalogErrNotCollectedYet,
 			"the database has not been collected yet")), nil
 	case errors.Is(err, piicatalog.ErrNotFound):
-		return serverhttp.GetPiiCatalogPairs404JSONResponse(piiError(serverhttp.PiiCatalogErrNotFound,
+		return serverhttp.GetPiiCatalogColumns404JSONResponse(piiError(serverhttp.PiiCatalogErrNotFound,
 			"the database is neither configured nor collected")), nil
 	case err != nil:
-		return nil, fmt.Errorf("GetPiiCatalogPairs | %w", err)
+		return nil, fmt.Errorf("GetPiiCatalogColumns | %w", err)
 	}
 
-	items := make([]serverhttp.PiiCatalogPair, len(cat.Pairs))
-	for i, p := range cat.Pairs {
-		items[i] = serverhttp.PiiCatalogPair{ColumnName: p.Name, ColumnComment: p.Comment}
+	items := make([]serverhttp.PiiCatalogColumn, len(cat.Columns))
+	for i, p := range cat.Columns {
+		items[i] = serverhttp.PiiCatalogColumn{
+			SchemaName: p.Schema, TableName: p.Table, ColumnName: p.Name, ColumnComment: p.Comment,
+		}
 	}
 
-	return serverhttp.GetPiiCatalogPairs200JSONResponse{
+	return serverhttp.GetPiiCatalogColumns200JSONResponse{
 		ClusterName: k.Cluster,
 		Database:    k.Database,
 		SetHash:     hex.EncodeToString(cat.SetHash),

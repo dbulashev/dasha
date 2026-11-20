@@ -1,6 +1,6 @@
 -- rel is referenced twice, so it is materialized once (no MATERIALIZED keyword: PG < 12).
 WITH rel AS (
-    SELECT c.oid
+    SELECT c.oid, n.nspname, c.relname
     FROM pg_catalog.pg_class     c
     JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
     WHERE c.relkind IN ('r', 'p', 'm')
@@ -14,8 +14,10 @@ WITH rel AS (
               AND dep.deptype = 'e')
 )
 -- Own columns; attinhcount = 0 drops partition and INHERITS-child copies.
-SELECT a.attname::text AS column_name,
-       d.description   AS column_comment
+SELECT rel.nspname::text AS schema_name,
+       rel.relname::text AS table_name,
+       a.attname::text   AS column_name,
+       d.description     AS column_comment
 FROM rel
 JOIN pg_catalog.pg_attribute a ON a.attrelid = rel.oid
 LEFT JOIN pg_catalog.pg_description d
@@ -25,9 +27,11 @@ LEFT JOIN pg_catalog.pg_description d
 WHERE a.attnum > 0
   AND NOT a.attisdropped
   AND a.attinhcount = 0
-UNION
+UNION ALL
 -- Inherited columns with a comment of their own, driven from the small pg_description.
-SELECT a.attname::text,
+SELECT rel.nspname::text,
+       rel.relname::text,
+       a.attname::text,
        d.description
 FROM pg_catalog.pg_description d
 JOIN rel                       ON rel.oid = d.objoid

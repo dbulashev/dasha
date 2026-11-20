@@ -130,7 +130,7 @@ type Repository interface {
 	GetColumnCatalog(
 		ctx context.Context, clusterName, instanceName, databaseName string,
 		excludeSchemas []string, stmtTimeout time.Duration,
-	) ([]piicatalog.Pair, int, error)
+	) ([]piicatalog.Column, int, error)
 	GetActivitySample(ctx context.Context, clusterName, instanceName string, maxSessions int) (activity.Sample, error)
 	GetActivityAccess(ctx context.Context, clusterName, instanceName string) (activity.Access, error)
 	// GetIOSample takes no database: pg_stat_io is instance-wide.

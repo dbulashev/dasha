@@ -27,7 +27,7 @@ func ApplySuccess(cur Status, snap Snapshot) (next Status, changed, ok bool) {
 
 	next = cur
 	next.SetHash = snap.SetHash
-	next.PairCount = len(snap.Pairs)
+	next.ColumnCount = len(snap.Columns)
 	next.LastSuccessAt = &at
 	next.SourceInstance = &snap.SourceInstance
 

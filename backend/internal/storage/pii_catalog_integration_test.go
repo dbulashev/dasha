@@ -30,8 +30,8 @@ func newPIITestStorage(t *testing.T) *Storage {
 
 func strp(s string) *string { return &s }
 
-func snapOf(pairs ...piicatalog.Pair) piicatalog.Snapshot {
-	return piicatalog.NewSnapshot(pairs, "h1", 170000, time.Now().UTC())
+func snapOf(cols ...piicatalog.Column) piicatalog.Snapshot {
+	return piicatalog.NewSnapshot(cols, "h1", 170000, time.Now().UTC())
 }
 
 var piiKey = piicatalog.Key{Cluster: "c1", Database: "app"}
@@ -50,7 +50,7 @@ func TestPIIApply_SameSetIsNotAChange(t *testing.T) {
 	s := newPIITestStorage(t)
 	ctx := t.Context()
 
-	snap := snapOf(piicatalog.Pair{Name: "id"}, piicatalog.Pair{Name: "fio", Comment: strp("ФИО")})
+	snap := snapOf(piicatalog.Column{Name: "id"}, piicatalog.Column{Name: "fio", Comment: strp("ФИО")})
 
 	changed, err := s.ApplyPIISnapshot(ctx, piiKey, snap)
 	require.NoError(t, err)
@@ -59,7 +59,7 @@ func TestPIIApply_SameSetIsNotAChange(t *testing.T) {
 	first, err := s.ListPIIStatus(ctx)
 	require.NoError(t, err)
 
-	changed, err = s.ApplyPIISnapshot(ctx, piiKey, snapOf(snap.Pairs[1].Pair, snap.Pairs[0].Pair))
+	changed, err = s.ApplyPIISnapshot(ctx, piiKey, snapOf(snap.Columns[1].Column, snap.Columns[0].Column))
 	require.NoError(t, err)
 	assert.False(t, changed)
 
@@ -70,26 +70,26 @@ func TestPIIApply_SameSetIsNotAChange(t *testing.T) {
 	assert.True(t, second[piiKey].LastSuccessAt.After(*first[piiKey].LastSuccessAt))
 }
 
-// Criterion 4 (storage half): a new comment replaces the pair.
+// Criterion 4 (storage half): a new comment replaces the column.
 func TestPIIApply_CommentChange(t *testing.T) {
 	s := newPIITestStorage(t)
 	ctx := t.Context()
 
-	_, err := s.ApplyPIISnapshot(ctx, piiKey, snapOf(piicatalog.Pair{Name: "id"}, piicatalog.Pair{Name: "snils"}))
+	_, err := s.ApplyPIISnapshot(ctx, piiKey, snapOf(piicatalog.Column{Name: "id"}, piicatalog.Column{Name: "snils"}))
 	require.NoError(t, err)
 
 	changed, err := s.ApplyPIISnapshot(ctx, piiKey,
-		snapOf(piicatalog.Pair{Name: "id"}, piicatalog.Pair{Name: "snils", Comment: strp("СНИЛС")}))
+		snapOf(piicatalog.Column{Name: "id"}, piicatalog.Column{Name: "snils", Comment: strp("СНИЛС")}))
 	require.NoError(t, err)
 	assert.True(t, changed)
 
 	cat, err := s.PIICatalog(ctx, piiKey)
 	require.NoError(t, err)
-	assert.Equal(t, []piicatalog.Pair{{Name: "id"}, {Name: "snils", Comment: strp("СНИЛС")}}, cat.Pairs)
+	assert.Equal(t, []piicatalog.Column{{Name: "id"}, {Name: "snils", Comment: strp("СНИЛС")}}, cat.Columns)
 
 	st, err := s.ListPIIStatus(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, 2, st[piiKey].PairCount)
+	assert.Equal(t, 2, st[piiKey].ColumnCount)
 	assert.Equal(t, cat.SetHash, st[piiKey].SetHash)
 }
 
@@ -102,7 +102,7 @@ func TestPIIApply_FailureKeepsCatalog(t *testing.T) {
 	_, err := s.PIICatalog(ctx, piiKey)
 	require.ErrorIs(t, err, piicatalog.ErrNoCatalog)
 
-	_, err = s.ApplyPIISnapshot(ctx, piiKey, snapOf(piicatalog.Pair{Name: "id"}))
+	_, err = s.ApplyPIISnapshot(ctx, piiKey, snapOf(piicatalog.Column{Name: "id"}))
 	require.NoError(t, err)
 
 	st, err := s.ListPIIStatus(ctx)
@@ -113,7 +113,7 @@ func TestPIIApply_FailureKeepsCatalog(t *testing.T) {
 
 	cat, err := s.PIICatalog(ctx, piiKey)
 	require.NoError(t, err, "a failure keeps the last known catalog")
-	assert.Len(t, cat.Pairs, 1)
+	assert.Len(t, cat.Columns, 1)
 }
 
 // Several daemons without leader election: a slower, older attempt must not
@@ -125,10 +125,10 @@ func TestPIIApply_StaleAttemptIsIgnored(t *testing.T) {
 	older := time.Now().UTC().Add(-time.Minute)
 	newer := older.Add(30 * time.Second)
 
-	_, err := s.ApplyPIISnapshot(ctx, piiKey, piicatalog.NewSnapshot([]piicatalog.Pair{{Name: "snils"}}, "h2", 170000, newer))
+	_, err := s.ApplyPIISnapshot(ctx, piiKey, piicatalog.NewSnapshot([]piicatalog.Column{{Name: "snils"}}, "h2", 170000, newer))
 	require.NoError(t, err)
 
-	changed, err := s.ApplyPIISnapshot(ctx, piiKey, piicatalog.NewSnapshot([]piicatalog.Pair{{Name: "id"}}, "h1", 170000, older))
+	changed, err := s.ApplyPIISnapshot(ctx, piiKey, piicatalog.NewSnapshot([]piicatalog.Column{{Name: "id"}}, "h1", 170000, older))
 	require.NoError(t, err)
 	assert.False(t, changed)
 
@@ -136,7 +136,7 @@ func TestPIIApply_StaleAttemptIsIgnored(t *testing.T) {
 
 	cat, err := s.PIICatalog(ctx, piiKey)
 	require.NoError(t, err)
-	assert.Equal(t, []piicatalog.Pair{{Name: "snils"}}, cat.Pairs)
+	assert.Equal(t, []piicatalog.Column{{Name: "snils"}}, cat.Columns)
 
 	st, err := s.ListPIIStatus(ctx)
 	require.NoError(t, err)
@@ -153,7 +153,7 @@ func TestPIIApply_EmptyDatabaseIsCollected(t *testing.T) {
 
 	cat, err := s.PIICatalog(t.Context(), piiKey)
 	require.NoError(t, err)
-	assert.Empty(t, cat.Pairs)
+	assert.Empty(t, cat.Columns)
 }
 
 func TestPIICatalog_ByteOrderAndLongComment(t *testing.T) {
@@ -165,16 +165,25 @@ func TestPIICatalog_ByteOrderAndLongComment(t *testing.T) {
 	require.ErrorIs(t, err, piicatalog.ErrNoCatalog)
 
 	_, err = s.ApplyPIISnapshot(ctx, piiKey, snapOf(
-		piicatalog.Pair{Name: "a"}, piicatalog.Pair{Name: "B"}, piicatalog.Pair{Name: "_x", Comment: strp("")},
-		piicatalog.Pair{Name: "a", Comment: &long},
+		piicatalog.Column{Schema: "public", Table: "t", Name: "a"},
+		piicatalog.Column{Schema: "public", Table: "T", Name: "z"},
+		piicatalog.Column{Schema: "Archive", Table: "t", Name: "a"},
+		piicatalog.Column{Schema: "public", Table: "t", Name: "B"},
+		piicatalog.Column{Schema: "public", Table: "t", Name: "_x", Comment: strp("")},
+		piicatalog.Column{Schema: "public", Table: "u", Name: "a", Comment: &long},
 	))
 	require.NoError(t, err)
 
 	cat, err := s.PIICatalog(ctx, piiKey)
 	require.NoError(t, err)
-	assert.Equal(t, []piicatalog.Pair{
-		{Name: "B"}, {Name: "_x", Comment: strp("")}, {Name: "a"}, {Name: "a", Comment: &long},
-	}, cat.Pairs)
+	assert.Equal(t, []piicatalog.Column{
+		{Schema: "Archive", Table: "t", Name: "a"},
+		{Schema: "public", Table: "T", Name: "z"},
+		{Schema: "public", Table: "t", Name: "B"},
+		{Schema: "public", Table: "t", Name: "_x", Comment: strp("")},
+		{Schema: "public", Table: "t", Name: "a"},
+		{Schema: "public", Table: "u", Name: "a", Comment: &long},
+	}, cat.Columns)
 }
 
 func TestPIIRetention(t *testing.T) {
@@ -186,7 +195,7 @@ func TestPIIRetention(t *testing.T) {
 	gone := piicatalog.Key{Cluster: "c1", Database: "gone"}
 
 	for _, k := range []piicatalog.Key{live, failing, gone} {
-		_, err := s.ApplyPIISnapshot(ctx, k, snapOf(piicatalog.Pair{Name: "id"}))
+		_, err := s.ApplyPIISnapshot(ctx, k, snapOf(piicatalog.Column{Name: "id"}))
 		require.NoError(t, err)
 	}
 
@@ -206,5 +215,5 @@ func TestPIIRetention(t *testing.T) {
 	assert.NotContains(t, st, gone)
 	assert.Contains(t, st, live)
 	assert.Contains(t, st, failing, "a database still being attempted is not an orphan")
-	assert.Equal(t, 2, countRows(t, s, "pii_catalog_pair"))
+	assert.Equal(t, 2, countRows(t, s, "pii_catalog_column"))
 }

@@ -21,8 +21,8 @@ const piiAuditMaxValue = 256
 // embedded spec of gen/serverhttp is no source: oapi-codegen rewrites them
 // into Go names. TestPIIOperationsMatchSpec keeps this in sync.
 var piiOperations = map[string]string{
-	"/api/pii-catalog/status": "getPiiCatalogStatus",
-	"/api/pii-catalog/pairs":  "getPiiCatalogPairs",
+	"/api/pii-catalog/status":  "getPiiCatalogStatus",
+	"/api/pii-catalog/columns": "getPiiCatalogColumns",
 }
 
 type piiGateError struct {

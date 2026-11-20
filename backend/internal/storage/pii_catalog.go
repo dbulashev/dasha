@@ -13,7 +13,7 @@ import (
 
 func (s *Storage) ListPIIStatus(ctx context.Context) (map[piicatalog.Key]piicatalog.Status, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT cluster_name, database, set_hash, pair_count,
+		SELECT cluster_name, database, set_hash, column_count,
 		       last_attempt_at, last_success_at, last_changed_at, last_error, source_instance
 		FROM pii_catalog_status`)
 	if err != nil {
@@ -29,7 +29,7 @@ func (s *Storage) ListPIIStatus(ctx context.Context) (map[piicatalog.Key]piicata
 			st piicatalog.Status
 		)
 
-		if err := rows.Scan(&k.Cluster, &k.Database, &st.SetHash, &st.PairCount,
+		if err := rows.Scan(&k.Cluster, &k.Database, &st.SetHash, &st.ColumnCount,
 			&st.LastAttemptAt, &st.LastSuccessAt, &st.LastChangedAt, &st.LastError, &st.SourceInstance); err != nil {
 			return nil, fmt.Errorf("storage: scan pii status: %w", err)
 		}
@@ -76,25 +76,27 @@ func applyPIISnapshotTx(ctx context.Context, tx pgx.Tx, k piicatalog.Key, snap p
 	}
 
 	if changed {
-		if _, err := tx.Exec(ctx, `DELETE FROM pii_catalog_pair WHERE cluster_name = $1 AND database = $2`,
+		if _, err := tx.Exec(ctx, `DELETE FROM pii_catalog_column WHERE cluster_name = $1 AND database = $2`,
 			k.Cluster, k.Database); err != nil {
-			return false, fmt.Errorf("storage: pii clear pairs: %w", err)
+			return false, fmt.Errorf("storage: pii clear columns: %w", err)
 		}
 
-		hashes := make([][]byte, len(snap.Pairs))
-		names := make([]string, len(snap.Pairs))
-		comments := make([]*string, len(snap.Pairs))
+		n := len(snap.Columns)
+		hashes := make([][]byte, n)
+		schemas, tables, names := make([]string, n), make([]string, n), make([]string, n)
+		comments := make([]*string, n)
 
-		for i, p := range snap.Pairs {
-			hashes[i], names[i], comments[i] = p.Hash, p.Name, p.Comment
+		for i, p := range snap.Columns {
+			hashes[i], schemas[i], tables[i], names[i], comments[i] = p.Hash, p.Schema, p.Table, p.Name, p.Comment
 		}
 
 		if _, err := tx.Exec(ctx, `
-			INSERT INTO pii_catalog_pair (cluster_name, database, pair_hash, column_name, column_comment)
-			SELECT $1, $2, u.h, u.n, u.c
-			FROM unnest($3::bytea[], $4::text[], $5::text[]) AS u(h, n, c)`,
-			k.Cluster, k.Database, hashes, names, comments); err != nil {
-			return false, fmt.Errorf("storage: pii insert pairs: %w", err)
+			INSERT INTO pii_catalog_column
+			    (cluster_name, database, column_hash, schema_name, table_name, column_name, column_comment)
+			SELECT $1, $2, u.h, u.s, u.t, u.n, u.c
+			FROM unnest($3::bytea[], $4::text[], $5::text[], $6::text[], $7::text[]) AS u(h, s, t, n, c)`,
+			k.Cluster, k.Database, hashes, schemas, tables, names, comments); err != nil {
+			return false, fmt.Errorf("storage: pii insert columns: %w", err)
 		}
 	}
 
@@ -146,10 +148,10 @@ func lockPIIStatusTx(ctx context.Context, tx pgx.Tx, k piicatalog.Key) (piicatal
 	var st piicatalog.Status
 
 	if err := tx.QueryRow(ctx, `
-		SELECT set_hash, pair_count, last_attempt_at, last_success_at, last_changed_at, last_error, source_instance
+		SELECT set_hash, column_count, last_attempt_at, last_success_at, last_changed_at, last_error, source_instance
 		FROM pii_catalog_status
 		WHERE cluster_name = $1 AND database = $2
-		FOR UPDATE`, k.Cluster, k.Database).Scan(&st.SetHash, &st.PairCount,
+		FOR UPDATE`, k.Cluster, k.Database).Scan(&st.SetHash, &st.ColumnCount,
 		&st.LastAttemptAt, &st.LastSuccessAt, &st.LastChangedAt, &st.LastError, &st.SourceInstance); err != nil {
 		return piicatalog.Status{}, fmt.Errorf("storage: pii status lock: %w", err)
 	}
@@ -160,10 +162,10 @@ func lockPIIStatusTx(ctx context.Context, tx pgx.Tx, k piicatalog.Key) (piicatal
 func writePIIStatusTx(ctx context.Context, tx pgx.Tx, k piicatalog.Key, st piicatalog.Status) error {
 	if _, err := tx.Exec(ctx, `
 		UPDATE pii_catalog_status
-		SET set_hash = $3, pair_count = $4, last_attempt_at = $5, last_success_at = $6,
+		SET set_hash = $3, column_count = $4, last_attempt_at = $5, last_success_at = $6,
 		    last_changed_at = $7, last_error = $8, source_instance = $9
 		WHERE cluster_name = $1 AND database = $2`,
-		k.Cluster, k.Database, st.SetHash, st.PairCount, st.LastAttemptAt, st.LastSuccessAt,
+		k.Cluster, k.Database, st.SetHash, st.ColumnCount, st.LastAttemptAt, st.LastSuccessAt,
 		st.LastChangedAt, st.LastError, st.SourceInstance); err != nil {
 		return fmt.Errorf("storage: pii update status: %w", err)
 	}
@@ -175,7 +177,7 @@ func writePIIStatusTx(ctx context.Context, tx pgx.Tx, k piicatalog.Key, st piica
 // from the configuration and service discovery. A database still attempted is
 // kept even while its collection keeps failing.
 func (s *Storage) PIIRetention(ctx context.Context, cutoff time.Time) (int64, error) {
-	// Pairs go with the status row: ON DELETE CASCADE.
+	// Columns go with the status row: ON DELETE CASCADE.
 	tag, err := s.pool.Exec(ctx, `
 		DELETE FROM pii_catalog_status
 		WHERE coalesce(last_attempt_at, last_success_at) < $1`, cutoff)
@@ -186,10 +188,10 @@ func (s *Storage) PIIRetention(ctx context.Context, cutoff time.Time) (int64, er
 	return tag.RowsAffected(), nil
 }
 
-// Repeatable read keeps the status row and the pairs on the same set.
+// Repeatable read keeps the status row and the columns on the same set.
 var piiReadTx = pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly} //nolint:exhaustruct
 
-// PIICatalog returns the current set ordered by the byte order of name, then comment.
+// PIICatalog returns the current set ordered by the byte order of schema, table, column.
 func (s *Storage) PIICatalog(ctx context.Context, k piicatalog.Key) (piicatalog.Catalog, error) {
 	tx, err := s.pool.BeginTx(ctx, piiReadTx)
 	if err != nil {
@@ -223,22 +225,23 @@ func (s *Storage) PIICatalog(ctx context.Context, k piicatalog.Key) (piicatalog.
 	cat.ChangedAt, cat.CheckedAt = *changed, *checked
 
 	rows, err := tx.Query(ctx, `
-		SELECT column_name, column_comment
-		FROM pii_catalog_pair
+		SELECT schema_name, table_name, column_name, column_comment
+		FROM pii_catalog_column
 		WHERE cluster_name = $1 AND database = $2
-		ORDER BY column_name COLLATE "C", column_comment COLLATE "C" NULLS FIRST`, k.Cluster, k.Database)
+		ORDER BY schema_name COLLATE "C", table_name COLLATE "C", column_name COLLATE "C",
+		         column_comment COLLATE "C" NULLS FIRST`, k.Cluster, k.Database)
 	if err != nil {
-		return piicatalog.Catalog{}, fmt.Errorf("storage: pii pairs: %w", err)
+		return piicatalog.Catalog{}, fmt.Errorf("storage: pii columns: %w", err)
 	}
 
-	cat.Pairs, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (piicatalog.Pair, error) {
-		var p piicatalog.Pair
-		err := row.Scan(&p.Name, &p.Comment)
+	cat.Columns, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (piicatalog.Column, error) {
+		var p piicatalog.Column
+		err := row.Scan(&p.Schema, &p.Table, &p.Name, &p.Comment)
 
 		return p, err
 	})
 	if err != nil {
-		return piicatalog.Catalog{}, fmt.Errorf("storage: pii pairs: %w", err)
+		return piicatalog.Catalog{}, fmt.Errorf("storage: pii columns: %w", err)
 	}
 
 	return cat, nil

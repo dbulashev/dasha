@@ -35,7 +35,7 @@ func (f *fakeRepo) GetInstanceInfo(_ context.Context, _, instance string) (dto.I
 
 func (f *fakeRepo) GetColumnCatalog(
 	_ context.Context, _, instance, database string, _ []string, _ time.Duration,
-) ([]Pair, int, error) {
+) ([]Column, int, error) {
 	key := instance + "/" + database
 
 	f.mu.Lock()
@@ -50,7 +50,7 @@ func (f *fakeRepo) GetColumnCatalog(
 		return nil, 0, err
 	}
 
-	return []Pair{{Name: "id"}, {Name: database}}, 170000, nil
+	return []Column{{Name: "id"}, {Name: database}}, 170000, nil
 }
 
 type fakeStore struct {

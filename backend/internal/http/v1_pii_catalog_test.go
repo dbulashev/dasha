@@ -45,9 +45,9 @@ func TestGetPiiCatalogStatus(t *testing.T) {
 	h := newPIIHandlers(&fakePIIStore{ //nolint:exhaustruct
 		statuses: map[piicatalog.Key]piicatalog.Status{
 			{Cluster: "c1", Database: "app"}: { //nolint:exhaustruct
-				SetHash: []byte{0xab, 0x01}, PairCount: 7, LastAttemptAt: &attempt, LastError: ptr("boom"),
+				SetHash: []byte{0xab, 0x01}, ColumnCount: 7, LastAttemptAt: &attempt, LastError: ptr("boom"),
 			},
-			{Cluster: "c0", Database: "gone"}: {PairCount: 0}, //nolint:exhaustruct
+			{Cluster: "c0", Database: "gone"}: {ColumnCount: 0}, //nolint:exhaustruct
 		},
 	})
 
@@ -65,7 +65,7 @@ func TestGetPiiCatalogStatus(t *testing.T) {
 
 	it := got.Items[0]
 	if it.ClusterName != "c1" || it.Database != "app" || !it.InConfig || it.SetHash == nil || *it.SetHash != "ab01" ||
-		it.PairCount != 7 || it.LastAttemptAt != &attempt || it.LastError == nil || *it.LastError != "boom" {
+		it.ColumnCount != 7 || it.LastAttemptAt != &attempt || it.LastError == nil || *it.LastError != "boom" {
 		t.Errorf("item = %+v", it)
 	}
 }
@@ -80,34 +80,41 @@ func TestGetPiiCatalog_StorageMissing(t *testing.T) {
 		t.Errorf("status: err = %v", err)
 	}
 
-	if _, err := h.GetPiiCatalogPairs(t.Context(), pairsReq("app")); !errors.Is(err, errPIIStorageMissing) {
-		t.Errorf("pairs: err = %v", err)
+	if _, err := h.GetPiiCatalogColumns(t.Context(), columnsReq("app")); !errors.Is(err, errPIIStorageMissing) {
+		t.Errorf("columns: err = %v", err)
 	}
 }
 
-func pairsReq(db string) serverhttp.GetPiiCatalogPairsRequestObject {
-	return serverhttp.GetPiiCatalogPairsRequestObject{Params: serverhttp.GetPiiCatalogPairsParams{
+func columnsReq(db string) serverhttp.GetPiiCatalogColumnsRequestObject {
+	return serverhttp.GetPiiCatalogColumnsRequestObject{Params: serverhttp.GetPiiCatalogColumnsParams{
 		ClusterName: "c1", Database: db,
 	}}
 }
 
-func TestGetPiiCatalogPairs(t *testing.T) {
+func TestGetPiiCatalogColumns(t *testing.T) {
 	t.Parallel()
 
 	changed := time.Date(2026, 11, 16, 3, 0, 0, 0, time.UTC)
 	h := newPIIHandlers(&fakePIIStore{catalog: piicatalog.Catalog{ //nolint:exhaustruct
 		SetHash: []byte{0xab, 0x01}, ChangedAt: changed, CheckedAt: changed.Add(time.Hour),
-		Pairs: []piicatalog.Pair{{Name: "a"}, {Name: "b", Comment: ptr("")}},
+		Columns: []piicatalog.Column{
+			{Schema: "public", Table: "users", Name: "a"},
+			{Schema: "public", Table: "users", Name: "b", Comment: ptr("")},
+		},
 	}})
 
-	resp, err := h.GetPiiCatalogPairs(t.Context(), pairsReq("app"))
+	resp, err := h.GetPiiCatalogColumns(t.Context(), columnsReq("app"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	got, ok := resp.(serverhttp.GetPiiCatalogPairs200JSONResponse)
+	got, ok := resp.(serverhttp.GetPiiCatalogColumns200JSONResponse)
 	if !ok || got.SetHash != "ab01" || !got.ChangedAt.Equal(changed) || len(got.Items) != 2 {
 		t.Fatalf("got %T %+v", resp, resp)
+	}
+
+	if it := got.Items[0]; it.SchemaName != "public" || it.TableName != "users" || it.ColumnName != "a" {
+		t.Errorf("item 0: %+v", it)
 	}
 
 	if got.Items[0].ColumnComment != nil || got.Items[1].ColumnComment == nil {
@@ -115,33 +122,33 @@ func TestGetPiiCatalogPairs(t *testing.T) {
 	}
 }
 
-func TestGetPiiCatalogPairs_ErrorMapping(t *testing.T) {
+func TestGetPiiCatalogColumns_ErrorMapping(t *testing.T) {
 	t.Parallel()
 
 	storeErr := errors.New("storage down")
 
 	cases := []struct {
 		name     string
-		req      serverhttp.GetPiiCatalogPairsRequestObject
+		req      serverhttp.GetPiiCatalogColumnsRequestObject
 		err      error
 		want400  bool
 		want404  serverhttp.PiiCatalogErrorCode
 		wantFail error
 	}{
-		{name: "invalid key", req: serverhttp.GetPiiCatalogPairsRequestObject{
-			Params: serverhttp.GetPiiCatalogPairsParams{ClusterName: "c\x00", Database: "app"},
+		{name: "invalid key", req: serverhttp.GetPiiCatalogColumnsRequestObject{
+			Params: serverhttp.GetPiiCatalogColumnsParams{ClusterName: "c\x00", Database: "app"},
 		}, want400: true},
-		{name: "not collected", req: pairsReq("app"), err: piicatalog.ErrNoCatalog,
+		{name: "not collected", req: columnsReq("app"), err: piicatalog.ErrNoCatalog,
 			want404: serverhttp.PiiCatalogErrNotCollectedYet},
-		{name: "not found", req: pairsReq("nope"), err: piicatalog.ErrNoCatalog,
+		{name: "not found", req: columnsReq("nope"), err: piicatalog.ErrNoCatalog,
 			want404: serverhttp.PiiCatalogErrNotFound},
-		{name: "storage", req: pairsReq("app"), err: storeErr, wantFail: storeErr},
+		{name: "storage", req: columnsReq("app"), err: storeErr, wantFail: storeErr},
 	}
 
 	for _, tc := range cases {
 		h := newPIIHandlers(&fakePIIStore{err: tc.err}) //nolint:exhaustruct
 
-		resp, err := h.GetPiiCatalogPairs(t.Context(), tc.req)
+		resp, err := h.GetPiiCatalogColumns(t.Context(), tc.req)
 
 		switch {
 		case tc.wantFail != nil:
@@ -151,12 +158,12 @@ func TestGetPiiCatalogPairs_ErrorMapping(t *testing.T) {
 		case err != nil:
 			t.Errorf("%s: err = %v", tc.name, err)
 		case tc.want400:
-			r, ok := resp.(serverhttp.GetPiiCatalogPairs400JSONResponse)
+			r, ok := resp.(serverhttp.GetPiiCatalogColumns400JSONResponse)
 			if !ok || r.Code != serverhttp.PiiCatalogErrBadRequest {
 				t.Errorf("%s: got %T %+v", tc.name, resp, resp)
 			}
 		default:
-			if r, ok := resp.(serverhttp.GetPiiCatalogPairs404JSONResponse); !ok || r.Code != tc.want404 {
+			if r, ok := resp.(serverhttp.GetPiiCatalogColumns404JSONResponse); !ok || r.Code != tc.want404 {
 				t.Errorf("%s: got %T %+v, want 404 %q", tc.name, resp, resp, tc.want404)
 			}
 		}

@@ -23,12 +23,12 @@ var (
 	ErrNoCatalog = errors.New("piicatalog: no collected catalog in storage")
 )
 
-// Catalog is the current set of one database, ordered by (name, comment).
+// Catalog is the current set of one database, ordered by (schema, table, column).
 type Catalog struct {
 	SetHash   []byte
 	ChangedAt time.Time
 	CheckedAt time.Time
-	Pairs     []Pair
+	Columns   []Column
 }
 
 type DatabaseStatus struct {

@@ -19,13 +19,14 @@ import (
 	"github.com/dbulashev/dasha/internal/testinfra"
 )
 
-type pairKey struct {
+type colKey struct {
+	table   string // schema.table
 	name    string
 	comment string
 	null    bool
 }
 
-func columnCatalog(t *testing.T, p *PgxPool, pool *pgxpool.Pool, exclude []string) map[pairKey]int {
+func columnCatalog(t *testing.T, p *PgxPool, pool *pgxpool.Pool, exclude []string) map[colKey]int {
 	t.Helper()
 
 	ctx := t.Context()
@@ -36,17 +37,17 @@ func columnCatalog(t *testing.T, p *PgxPool, pool *pgxpool.Pool, exclude []strin
 	qStr, err := query.Get(vNum, enums.QueryPiiCatalogColumns, nil)
 	require.NoError(t, err)
 
-	pairs, err := scanColumnCatalog(ctx, pool, qStr, exclude)
+	cols, err := scanColumnCatalog(ctx, pool, qStr, exclude)
 	require.NoError(t, err)
 
-	return pairSet(pairs)
+	return colSet(cols)
 }
 
-func pairSet(pairs []piicatalog.Pair) map[pairKey]int {
-	out := map[pairKey]int{}
+func colSet(cols []piicatalog.Column) map[colKey]int {
+	out := map[colKey]int{}
 
-	for _, pr := range pairs {
-		k := pairKey{name: pr.Name, null: pr.Comment == nil}
+	for _, pr := range cols {
+		k := colKey{table: pr.Schema + "." + pr.Table, name: pr.Name, null: pr.Comment == nil}
 		if pr.Comment != nil {
 			k.comment = *pr.Comment
 		}
@@ -57,8 +58,11 @@ func pairSet(pairs []piicatalog.Pair) map[pairKey]int {
 	return out
 }
 
-func nullPair(name string) pairKey           { return pairKey{name: name, null: true} }
-func commented(name, comment string) pairKey { return pairKey{name: name, comment: comment} }
+func nullCol(table, name string) colKey { return colKey{table: table, name: name, null: true} }
+
+func commented(table, name, comment string) colKey {
+	return colKey{table: table, name: name, comment: comment}
+}
 
 // Criteria 4–8: sources, inheritance, partitions, extensions, exclude_schemas.
 func TestColumnCatalog_Sources(t *testing.T) {
@@ -107,27 +111,32 @@ func TestColumnCatalog_Sources(t *testing.T) {
 
 	got := columnCatalog(t, p, pool, []string{"archive%", `tmp\_%`})
 
-	want := map[pairKey]int{
-		nullPair("id"):                     1,
-		commented("fio", "ФИО"):            1,
-		commented("snils", "СНИЛС"):        1,
-		commented("snils", "СНИЛС 2024"):   1,
-		nullPair("d"):                      1,
-		nullPair("inn"):                    1,
-		commented("inn", "ИНН наследника"): 1,
-		nullPair("extra_col"):              1,
-		nullPair("mv_col"):                 1,
-		nullPair("tmpx_col"):               1,
-		nullPair("keep"):                   1,
+	// Partitions and children appear only with a comment of their own, even
+	// one equal to the parent's.
+	want := map[colKey]int{
+		nullCol("public.t_plain", "id"):                        1,
+		commented("public.t_plain", "fio", "ФИО"):              1,
+		nullCol("public.t_part", "id"):                         1,
+		commented("public.t_part", "snils", "СНИЛС"):           1,
+		nullCol("public.t_part", "d"):                          1,
+		commented("public.t_part_2024", "snils", "СНИЛС 2024"): 1,
+		commented("public.t_part_2025", "snils", "СНИЛС"):      1,
+		nullCol("public.t_parent", "id"):                       1,
+		nullCol("public.t_parent", "inn"):                      1,
+		commented("public.t_child", "inn", "ИНН наследника"):   1,
+		nullCol("public.t_child", "extra_col"):                 1,
+		nullCol("public.mv", "mv_col"):                         1,
+		nullCol("tmpx.a", "tmpx_col"):                          1,
+		nullCol("public.t_dropped", "keep"):                    1,
 	}
 	assert.Equal(t, want, got)
 
 	all := columnCatalog(t, p, pool, []string{})
-	assert.Contains(t, all, nullPair("archived_col"), "an empty exclude list excludes nothing")
-	assert.Contains(t, all, nullPair("tmp_col"))
+	assert.Contains(t, all, nullCol("archive_2023.a", "archived_col"), "an empty exclude list excludes nothing")
+	assert.Contains(t, all, nullCol("tmp_x.a", "tmp_col"))
 }
 
-// Criterion 5: partitions add no pairs and no noticeable cost.
+// Criterion 5: partitions without own comments add no rows and no noticeable cost.
 func TestColumnCatalog_ManyPartitions(t *testing.T) {
 	t.Parallel()
 
@@ -154,11 +163,15 @@ func TestColumnCatalog_ManyPartitions(t *testing.T) {
 	require.NoError(t, err)
 
 	start := time.Now()
-	pairs, err := scanColumnCatalog(ctx, pool, qStr, []string{})
+	cols, err := scanColumnCatalog(ctx, pool, qStr, []string{})
 	elapsed := time.Since(start)
 	require.NoError(t, err)
 
-	assert.Equal(t, map[pairKey]int{nullPair("id"): 1, commented("fio", "ФИО"): 1, nullPair("n"): 1}, pairSet(pairs))
+	assert.Equal(t, map[colKey]int{
+		nullCol("public.big", "id"):           1,
+		commented("public.big", "fio", "ФИО"): 1,
+		nullCol("public.big", "n"):            1,
+	}, colSet(cols))
 	assert.Less(t, elapsed, 5*time.Second)
 }
 

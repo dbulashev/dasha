@@ -95,7 +95,7 @@ func newGateEnv(t *testing.T, mode config.AuthMode, enabled bool, allowed []stri
 	e.Use(gate.WrapAuth(authMW))
 	e.Use(gate.Middleware)
 	e.GET("/api/pii-catalog/status", ok)
-	e.GET("/api/pii-catalog/pairs", ok)
+	e.GET("/api/pii-catalog/columns", ok)
 	e.GET("/api/clusters", ok)
 
 	return gateEnv{e: e, audit: audit, reached: reached}
@@ -203,10 +203,10 @@ func TestPIICatalogGate_OIDCSessionRefused(t *testing.T) {
 		}
 	})
 	e.Use(gate.Middleware)
-	e.GET("/api/pii-catalog/pairs", func(c echo.Context) error { return c.NoContent(http.StatusOK) })
+	e.GET("/api/pii-catalog/columns", func(c echo.Context) error { return c.NoContent(http.StatusOK) })
 
 	rec := httptest.NewRecorder()
-	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/pii-catalog/pairs", nil))
+	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/pii-catalog/columns", nil))
 
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403", rec.Code)

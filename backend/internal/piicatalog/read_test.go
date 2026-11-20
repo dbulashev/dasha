@@ -46,8 +46,8 @@ func TestReader_StatusesUnionOfConfigAndStorage(t *testing.T) {
 
 	r := newTestReader(&fakeReadStore{ //nolint:exhaustruct
 		statuses: map[Key]Status{
-			{Cluster: "c1", Database: "app"}:  {SetHash: []byte{0xab}, PairCount: 7}, //nolint:exhaustruct
-			{Cluster: "c0", Database: "gone"}: {SetHash: []byte{0x01}, PairCount: 2}, //nolint:exhaustruct
+			{Cluster: "c1", Database: "app"}:  {SetHash: []byte{0xab}, ColumnCount: 7}, //nolint:exhaustruct
+			{Cluster: "c0", Database: "gone"}: {SetHash: []byte{0x01}, ColumnCount: 2}, //nolint:exhaustruct
 		},
 	})
 

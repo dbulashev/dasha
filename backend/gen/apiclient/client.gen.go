@@ -2165,9 +2165,36 @@ type PgSetting struct {
 	Unit    string `json:"Unit"`
 }
 
+// PiiCatalogColumn defines model for PiiCatalogColumn.
+type PiiCatalogColumn struct {
+	// ColumnComment null — the column has no comment (distinct from an empty one).
+	ColumnComment *string `json:"column_comment"`
+	ColumnName    string  `json:"column_name"`
+	SchemaName    string  `json:"schema_name"`
+
+	// TableName A table, a partitioned table or a materialized view. A partition or an INHERITS child appears only for a column with its own comment.
+	TableName string `json:"table_name"`
+}
+
+// PiiCatalogColumnsResponse defines model for PiiCatalogColumnsResponse.
+type PiiCatalogColumnsResponse struct {
+	// ChangedAt When the set last changed.
+	ChangedAt time.Time `json:"changed_at"`
+
+	// CheckedAt Last successful collection.
+	CheckedAt   time.Time          `json:"checked_at"`
+	ClusterName string             `json:"cluster_name"`
+	Database    string             `json:"database"`
+	Items       []PiiCatalogColumn `json:"items"`
+
+	// SetHash Hex hash of this set, as in /api/pii-catalog/status.
+	SetHash string `json:"set_hash"`
+}
+
 // PiiCatalogDatabaseStatus defines model for PiiCatalogDatabaseStatus.
 type PiiCatalogDatabaseStatus struct {
 	ClusterName string `json:"cluster_name"`
+	ColumnCount int    `json:"column_count"`
 	Database    string `json:"database"`
 
 	// InConfig false: the database is gone from the configuration and service discovery; its data is kept until retention removes it.
@@ -2178,9 +2205,8 @@ type PiiCatalogDatabaseStatus struct {
 	LastChangedAt *time.Time `json:"last_changed_at"`
 	LastError     *string    `json:"last_error"`
 	LastSuccessAt *time.Time `json:"last_success_at"`
-	PairCount     int        `json:"pair_count"`
 
-	// SetHash Hex hash of the current set; null until the first successful collection. Reload pairs only where it differs from the one you have.
+	// SetHash Hex hash of the current set; null until the first successful collection. Reload columns only where it differs from the one you have.
 	SetHash        *string `json:"set_hash"`
 	SourceInstance *string `json:"source_instance"`
 }
@@ -2193,28 +2219,6 @@ type PiiCatalogError struct {
 
 // PiiCatalogErrorCode defines model for PiiCatalogError.Code.
 type PiiCatalogErrorCode string
-
-// PiiCatalogPair defines model for PiiCatalogPair.
-type PiiCatalogPair struct {
-	// ColumnComment null — the column has no comment (distinct from an empty one).
-	ColumnComment *string `json:"column_comment"`
-	ColumnName    string  `json:"column_name"`
-}
-
-// PiiCatalogPairsResponse defines model for PiiCatalogPairsResponse.
-type PiiCatalogPairsResponse struct {
-	// ChangedAt When the set last changed.
-	ChangedAt time.Time `json:"changed_at"`
-
-	// CheckedAt Last successful collection.
-	CheckedAt   time.Time        `json:"checked_at"`
-	ClusterName string           `json:"cluster_name"`
-	Database    string           `json:"database"`
-	Items       []PiiCatalogPair `json:"items"`
-
-	// SetHash Hex hash of this set, as in /api/pii-catalog/status.
-	SetHash string `json:"set_hash"`
-}
 
 // PiiCatalogStatusResponse defines model for PiiCatalogStatusResponse.
 type PiiCatalogStatusResponse struct {
@@ -3869,8 +3873,8 @@ type GetMaintenanceVacuumProgressParams struct {
 	Database    Database    `form:"database" json:"database"`
 }
 
-// GetPiiCatalogPairsParams defines parameters for GetPiiCatalogPairs.
-type GetPiiCatalogPairsParams struct {
+// GetPiiCatalogColumnsParams defines parameters for GetPiiCatalogColumns.
+type GetPiiCatalogColumnsParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
 	Database    Database    `form:"database" json:"database"`
 }
@@ -4585,8 +4589,8 @@ type ClientInterface interface {
 	// GetMaintenanceVacuumProgress request
 	GetMaintenanceVacuumProgress(ctx context.Context, params *GetMaintenanceVacuumProgressParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetPiiCatalogPairs request
-	GetPiiCatalogPairs(ctx context.Context, params *GetPiiCatalogPairsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// GetPiiCatalogColumns request
+	GetPiiCatalogColumns(ctx context.Context, params *GetPiiCatalogColumnsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetPiiCatalogStatus request
 	GetPiiCatalogStatus(ctx context.Context, params *GetPiiCatalogStatusParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -5738,8 +5742,8 @@ func (c *Client) GetMaintenanceVacuumProgress(ctx context.Context, params *GetMa
 	return c.Client.Do(req)
 }
 
-func (c *Client) GetPiiCatalogPairs(ctx context.Context, params *GetPiiCatalogPairsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetPiiCatalogPairsRequest(c.Server, params)
+func (c *Client) GetPiiCatalogColumns(ctx context.Context, params *GetPiiCatalogColumnsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetPiiCatalogColumnsRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -12549,8 +12553,8 @@ func NewGetMaintenanceVacuumProgressRequest(server string, params *GetMaintenanc
 	return req, nil
 }
 
-// NewGetPiiCatalogPairsRequest generates requests for GetPiiCatalogPairs
-func NewGetPiiCatalogPairsRequest(server string, params *GetPiiCatalogPairsParams) (*http.Request, error) {
+// NewGetPiiCatalogColumnsRequest generates requests for GetPiiCatalogColumns
+func NewGetPiiCatalogColumnsRequest(server string, params *GetPiiCatalogColumnsParams) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -12558,7 +12562,7 @@ func NewGetPiiCatalogPairsRequest(server string, params *GetPiiCatalogPairsParam
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/api/pii-catalog/pairs")
+	operationPath := fmt.Sprintf("/api/pii-catalog/columns")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -16261,8 +16265,8 @@ type ClientWithResponsesInterface interface {
 	// GetMaintenanceVacuumProgressWithResponse request
 	GetMaintenanceVacuumProgressWithResponse(ctx context.Context, params *GetMaintenanceVacuumProgressParams, reqEditors ...RequestEditorFn) (*GetMaintenanceVacuumProgressResponse, error)
 
-	// GetPiiCatalogPairsWithResponse request
-	GetPiiCatalogPairsWithResponse(ctx context.Context, params *GetPiiCatalogPairsParams, reqEditors ...RequestEditorFn) (*GetPiiCatalogPairsResponse, error)
+	// GetPiiCatalogColumnsWithResponse request
+	GetPiiCatalogColumnsWithResponse(ctx context.Context, params *GetPiiCatalogColumnsParams, reqEditors ...RequestEditorFn) (*GetPiiCatalogColumnsResponse, error)
 
 	// GetPiiCatalogStatusWithResponse request
 	GetPiiCatalogStatusWithResponse(ctx context.Context, params *GetPiiCatalogStatusParams, reqEditors ...RequestEditorFn) (*GetPiiCatalogStatusResponse, error)
@@ -18182,10 +18186,10 @@ func (r GetMaintenanceVacuumProgressResponse) StatusCode() int {
 	return 0
 }
 
-type GetPiiCatalogPairsResponse struct {
+type GetPiiCatalogColumnsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON200      *PiiCatalogPairsResponse
+	JSON200      *PiiCatalogColumnsResponse
 	JSON400      *PiiCatalogError
 	JSON403      *PiiCatalogError
 	JSON404      *PiiCatalogError
@@ -18194,7 +18198,7 @@ type GetPiiCatalogPairsResponse struct {
 }
 
 // Status returns HTTPResponse.Status
-func (r GetPiiCatalogPairsResponse) Status() string {
+func (r GetPiiCatalogColumnsResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -18202,7 +18206,7 @@ func (r GetPiiCatalogPairsResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r GetPiiCatalogPairsResponse) StatusCode() int {
+func (r GetPiiCatalogColumnsResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -19929,13 +19933,13 @@ func (c *ClientWithResponses) GetMaintenanceVacuumProgressWithResponse(ctx conte
 	return ParseGetMaintenanceVacuumProgressResponse(rsp)
 }
 
-// GetPiiCatalogPairsWithResponse request returning *GetPiiCatalogPairsResponse
-func (c *ClientWithResponses) GetPiiCatalogPairsWithResponse(ctx context.Context, params *GetPiiCatalogPairsParams, reqEditors ...RequestEditorFn) (*GetPiiCatalogPairsResponse, error) {
-	rsp, err := c.GetPiiCatalogPairs(ctx, params, reqEditors...)
+// GetPiiCatalogColumnsWithResponse request returning *GetPiiCatalogColumnsResponse
+func (c *ClientWithResponses) GetPiiCatalogColumnsWithResponse(ctx context.Context, params *GetPiiCatalogColumnsParams, reqEditors ...RequestEditorFn) (*GetPiiCatalogColumnsResponse, error) {
+	rsp, err := c.GetPiiCatalogColumns(ctx, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseGetPiiCatalogPairsResponse(rsp)
+	return ParseGetPiiCatalogColumnsResponse(rsp)
 }
 
 // GetPiiCatalogStatusWithResponse request returning *GetPiiCatalogStatusResponse
@@ -22461,22 +22465,22 @@ func ParseGetMaintenanceVacuumProgressResponse(rsp *http.Response) (*GetMaintena
 	return response, nil
 }
 
-// ParseGetPiiCatalogPairsResponse parses an HTTP response from a GetPiiCatalogPairsWithResponse call
-func ParseGetPiiCatalogPairsResponse(rsp *http.Response) (*GetPiiCatalogPairsResponse, error) {
+// ParseGetPiiCatalogColumnsResponse parses an HTTP response from a GetPiiCatalogColumnsWithResponse call
+func ParseGetPiiCatalogColumnsResponse(rsp *http.Response) (*GetPiiCatalogColumnsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &GetPiiCatalogPairsResponse{
+	response := &GetPiiCatalogColumnsResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest PiiCatalogPairsResponse
+		var dest PiiCatalogColumnsResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

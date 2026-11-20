@@ -132,8 +132,8 @@ func TestWritePIIError(t *testing.T) {
 	t.Parallel()
 
 	bindErr := echo.NewHTTPError(http.StatusBadRequest, "Invalid format for parameter database: bad")
-	sqlErr := fmt.Errorf("GetPiiCatalogPairs | %w",
-		&pgconn.PgError{Code: "42P01", Message: "relation \"pii_catalog_pair\" does not exist"}) //nolint:exhaustruct
+	sqlErr := fmt.Errorf("GetPiiCatalogColumns | %w",
+		&pgconn.PgError{Code: "42P01", Message: "relation \"pii_catalog_column\" does not exist"}) //nolint:exhaustruct
 	timeoutErr := fmt.Errorf("GetPiiCatalogStatus | %w",
 		&pgconn.PgError{Code: "57014", Message: "canceling statement due to statement timeout"}) //nolint:exhaustruct
 
@@ -143,12 +143,12 @@ func TestWritePIIError(t *testing.T) {
 		wantStatus int // 0: left to the default handler
 		wantCode   string
 	}{
-		{"binding error", "/api/pii-catalog/pairs", bindErr, http.StatusBadRequest, "bad_request"},
+		{"binding error", "/api/pii-catalog/columns", bindErr, http.StatusBadRequest, "bad_request"},
 		{"storage timeout", "/api/pii-catalog/status", timeoutErr, http.StatusGatewayTimeout, "timeout"},
-		{"internal error", "/api/pii-catalog/pairs", sqlErr, http.StatusInternalServerError, "internal"},
+		{"internal error", "/api/pii-catalog/columns", sqlErr, http.StatusInternalServerError, "internal"},
 		{"other path", "/api/clusters", bindErr, 0, ""},
-		{"error before the handler", "/api/pii-catalog/pairs", echo.NewHTTPError(http.StatusNotFound), 0, ""},
-		{"client gone", "/api/pii-catalog/pairs", fmt.Errorf("x | %w", context.Canceled), 0, ""},
+		{"error before the handler", "/api/pii-catalog/columns", echo.NewHTTPError(http.StatusNotFound), 0, ""},
+		{"client gone", "/api/pii-catalog/columns", fmt.Errorf("x | %w", context.Canceled), 0, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -167,12 +167,12 @@ func TestWritePIIError(t *testing.T) {
 			var body serverhttp.PiiCatalogError
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 			assert.Equal(t, tc.wantCode, string(body.Code))
-			assert.NotContains(t, rec.Body.String(), "pii_catalog_pair", "the cause must stay in the log")
+			assert.NotContains(t, rec.Body.String(), "pii_catalog_column", "the cause must stay in the log")
 		})
 	}
 
 	rec := httptest.NewRecorder()
-	c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/api/pii-catalog/pairs", nil), rec)
+	c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/api/pii-catalog/columns", nil), rec)
 	require.True(t, writePIIError(bindErr, c, zap.NewNop()))
 	assert.JSONEq(t, `{"code":"bad_request","message":"Invalid format for parameter database: bad"}`, rec.Body.String())
 }

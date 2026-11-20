@@ -19,7 +19,7 @@ type Repo interface {
 	GetColumnCatalog(
 		ctx context.Context, clusterName, instanceName, databaseName string,
 		excludeSchemas []string, stmtTimeout time.Duration,
-	) ([]Pair, int, error)
+	) ([]Column, int, error)
 }
 
 const (
@@ -86,12 +86,12 @@ func (c *Collector) collect(
 		}
 
 		actx, cancel := context.WithTimeout(ctx, c.stmtTimeout+attemptSlack)
-		pairs, version, err := c.repo.GetColumnCatalog(actx, cluster, h, database, c.excludeSchemas, c.stmtTimeout)
+		cols, version, err := c.repo.GetColumnCatalog(actx, cluster, h, database, c.excludeSchemas, c.stmtTimeout)
 
 		cancel()
 
 		if err == nil {
-			return NewSnapshot(pairs, h, version, attemptAt), nil
+			return NewSnapshot(cols, h, version, attemptAt), nil
 		}
 
 		errs = append(errs, h+": "+err.Error())
