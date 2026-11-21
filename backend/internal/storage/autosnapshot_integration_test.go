@@ -44,6 +44,20 @@ func mustNotRun(t *testing.T, ch <-chan struct{}, what string) {
 	}
 }
 
+// awaitEntered waits for the worker's callback to start; a worker error
+// (Begin, config read) is reported instead of hanging on entered.
+func awaitEntered(t *testing.T, entered <-chan struct{}, workerErr <-chan error) {
+	t.Helper()
+
+	select {
+	case <-entered:
+	case err := <-workerErr:
+		t.Fatalf("worker finished before entering the callback: %v", err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("callback was not entered in time")
+	}
+}
+
 func TestUpdateConfigBlocksOverrideWrite(t *testing.T) {
 	s := newAutosnapshotConfigTestStorage(t)
 	ctx := t.Context()
@@ -62,7 +76,7 @@ func TestUpdateConfigBlocksOverrideWrite(t *testing.T) {
 		})
 	}()
 
-	<-entered
+	awaitEntered(t, entered, cfgErr)
 
 	var seen autosnapshot.Config
 
@@ -107,7 +121,7 @@ func TestOverrideWriteBlocksUpdateConfig(t *testing.T) {
 		})
 	}()
 
-	<-entered
+	awaitEntered(t, entered, ovErr)
 
 	var seen map[string]map[string]any
 

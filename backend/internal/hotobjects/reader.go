@@ -221,7 +221,6 @@ func (r *Reader) liveRate(
 	class Class,
 	anchors []AnchorRow,
 ) float64 {
-	now := r.now().UTC()
 	rate := 0.0
 
 	for _, a := range anchors {
@@ -230,6 +229,8 @@ func (r *Reader) liveRate(
 			zap.String("schema", ref.Schema), zap.String("object", ref.Object))
 
 		rows, reset, err := r.sample(ctx, cluster, a.Instance, database, kind, ref)
+		sampledAt := r.now().UTC()
+
 		if err != nil {
 			log.Warn("hot percentile: host unreachable, skipped", zap.Error(err))
 
@@ -261,7 +262,7 @@ func (r *Reader) liveRate(
 			continue
 		}
 
-		days := now.Sub(a.CapturedAt).Hours() / 24
+		days := sampledAt.Sub(a.CapturedAt).Hours() / 24
 		if days <= 0 {
 			continue
 		}
