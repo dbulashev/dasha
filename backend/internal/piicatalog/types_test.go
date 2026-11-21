@@ -7,15 +7,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func ptr(s string) *string { return &s }
-
 func TestColumnHash_NullVsEmptyComment(t *testing.T) {
-	assert.NotEqual(t, ColumnHash(Column{Name: "snils"}), ColumnHash(Column{Name: "snils", Comment: ptr("")}))
+	assert.NotEqual(t, ColumnHash(Column{Name: "snils"}), ColumnHash(Column{Name: "snils", Comment: new("")}))
 }
 
 func TestColumnHash_NoBoundaryAmbiguity(t *testing.T) {
 	assert.NotEqual(t,
-		ColumnHash(Column{Name: "a", Comment: ptr("b")}),
+		ColumnHash(Column{Name: "a", Comment: new("b")}),
 		ColumnHash(Column{Name: "a\x00\x01b"}))
 }
 
@@ -34,8 +32,8 @@ func TestColumnHash_TableAndSchemaMatter(t *testing.T) {
 
 func TestNewSnapshot_OrderIndependentAndDeduplicated(t *testing.T) {
 	at := time.Now()
-	a := NewSnapshot([]Column{{Name: "fio", Comment: ptr("ФИО")}, {Name: "id"}}, "h", 170000, at)
-	b := NewSnapshot([]Column{{Name: "id"}, {Name: "fio", Comment: ptr("ФИО")}, {Name: "id"}}, "h", 170000, at)
+	a := NewSnapshot([]Column{{Name: "fio", Comment: new("ФИО")}, {Name: "id"}}, "h", 170000, at)
+	b := NewSnapshot([]Column{{Name: "id"}, {Name: "fio", Comment: new("ФИО")}, {Name: "id"}}, "h", 170000, at)
 
 	assert.Equal(t, a.SetHash, b.SetHash)
 	assert.Len(t, b.Columns, 2)

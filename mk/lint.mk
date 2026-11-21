@@ -1,4 +1,6 @@
 MODERNIZE_CMD = go run golang.org/x/tools/go/analysis/passes/modernize/cmd/modernize@v0.52.0
+# modernize has no exclude flag, so generated packages are filtered out of the package list.
+MODERNIZE_PKGS = $$(go list ./... | grep -v '/gen/')
 
 .PHONY: lint-go
 lint-go: ## Lint backend (revive + gosec)
@@ -20,9 +22,9 @@ modernize: modernize-fix ## Run gopls modernize check and fix
 .PHONY: modernize-fix
 modernize-fix: ## Run gopls modernize fix
 	@echo "Running gopls modernize with -fix..."
-	cd backend && $(MODERNIZE_CMD) -test -fix ./...
+	cd backend && $(MODERNIZE_CMD) -test -fix $(MODERNIZE_PKGS)
 
 .PHONY: modernize-check
 modernize-check: ## Run gopls modernize only check
 	@echo "Checking if code needs modernization..."
-	cd backend && $(MODERNIZE_CMD) -test ./...
+	cd backend && $(MODERNIZE_CMD) -test $(MODERNIZE_PKGS)

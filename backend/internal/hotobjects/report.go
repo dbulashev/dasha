@@ -14,7 +14,7 @@ type ObjectKey struct {
 }
 
 func Key(kind Kind, schema, object string) ObjectKey {
-	return ObjectKey{Kind: kind, ObjectRef: ObjectRef{Schema: schema, Object: object}}
+	return ObjectKey{Kind: kind, Schema: schema, Object: object}
 }
 
 // RankKey extracts the class ranking value from a counter set (cumulative or
@@ -398,11 +398,7 @@ func quantiles(vals, probs []float64) []float64 {
 	out := make([]float64, 0, len(probs))
 
 	for _, p := range probs {
-		idx := max(int(math.Ceil(p*float64(n)-1e-9)), 1)
-
-		if idx > n {
-			idx = n
-		}
+		idx := min(max(int(math.Ceil(p*float64(n)-1e-9)), 1), n)
 
 		out = append(out, sorted[idx-1])
 	}

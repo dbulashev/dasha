@@ -3,6 +3,7 @@ package piicatalog
 import (
 	"context"
 	"errors"
+	"maps"
 	"sync"
 	"testing"
 	"time"
@@ -71,9 +72,7 @@ func (f *fakeStore) ListPIIStatus(context.Context) (map[Key]Status, error) {
 	defer f.mu.Unlock()
 
 	out := make(map[Key]Status, len(f.status))
-	for k, v := range f.status {
-		out[k] = v
-	}
+	maps.Copy(out, f.status)
 
 	return out, nil
 }
