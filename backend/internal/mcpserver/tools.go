@@ -252,7 +252,7 @@ type searchLogsArgs struct {
 	Host        string   `json:"host,omitempty" jsonschema:"Optional: restrict to one cluster host"`
 	Message     []string `json:"message,omitempty" jsonschema:"Substrings that must all be present in the message (AND, case-insensitive); with text_mode=words, words instead"`
 	TextMode    string   `json:"text_mode,omitempty" jsonschema:"'substring' (default) or 'words': split message on whitespace and let the log store match whole words (much faster on large windows, misses fragments inside words); needs supports_word_search in list_clusters(cluster=<exact name>)"`
-	Preset      string   `json:"preset,omitempty" jsonschema:"Optional: 'slow' with message 'duration:' or 'plan' with message 'plan:' lets the store narrow the read by that word; other ids (autovacuum, deadlock, checkpoint, tempFiles, canceled, connections, errors) narrow nothing"`
+	Preset      string   `json:"preset,omitempty" jsonschema:"Optional preset id; with its text in message the store narrows the read by the preset's words: slow 'duration:', plan 'plan:', autovacuum 'automatic', deadlock 'deadlock', checkpoint 'point', tempFiles 'temporary file', canceled 'canceling statement'. connections and errors narrow by severity alone"`
 	Exclude     []string `json:"exclude,omitempty" jsonschema:"Drop records whose message contains any of these substrings (grep -v)"`
 	Database    string   `json:"database,omitempty" jsonschema:"Optional: restrict to one database"`
 	User        string   `json:"user,omitempty" jsonschema:"Optional: restrict to one user"`

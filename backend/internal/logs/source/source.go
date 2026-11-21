@@ -52,9 +52,10 @@ type Filter struct {
 	Host       string
 	// QueryID selects the records of one statement.
 	QueryID *int64
-	// Words are whole words every wanted record holds; the backend vouches for
-	// them, user input never lands here.
-	Words []string
+	// Words are groups of whole words: every wanted record holds at least one
+	// word of each group. The backend vouches for them, user input never lands
+	// here.
+	Words [][]string
 	// Substrings are case-insensitive substrings of the text field, as typed.
 	Substrings []string
 	// Terms are words the store matches by its own rules; Dasha does not check

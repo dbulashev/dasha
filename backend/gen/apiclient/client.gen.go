@@ -2054,7 +2054,7 @@ type LogSearchResult struct {
 	Dedup bool       `json:"dedup"`
 	Items []LogEntry `json:"items"`
 
-	// NarrowedBy what the log store filtered on itself: severity=<values>, host, query_id, text=<word> per word sent, text~<substring> per substring sent as is, database, user. Empty means the store did not narrow the read.
+	// NarrowedBy what the log store filtered on itself: severity=<values>, host, query_id, text=<word> per word sent, text=<word>|<word> per group of words a record holds one of, text~<substring> per substring sent as is, database, user. Empty means the store did not narrow the read.
 	NarrowedBy *[]string `json:"narrowed_by,omitempty"`
 
 	// NextPageToken present only when not deduped and more records are available
@@ -3785,7 +3785,7 @@ type GetLogsParams struct {
 	PageSize  *int      `form:"page_size,omitempty" json:"page_size,omitempty"`
 	PageToken *string   `form:"page_token,omitempty" json:"page_token,omitempty"`
 
-	// Preset search preset id; lets the backend narrow the store read by a word the preset text always holds, while a message filter still contains that text
+	// Preset search preset id; lets the backend narrow the store read by the words the records of the preset hold, while a message filter still contains the preset text. connections and errors have no words and narrow by severity alone
 	Preset *GetLogsParamsPreset `form:"preset,omitempty" json:"preset,omitempty"`
 
 	// TextMode how message filters match: substring (default) is a case-insensitive substring checked by Dasha; words splits them on whitespace and lets the log store match each word by its own rules (whole words, its analyzer's case folding and stemming). Words fall back to substring where the store cannot run them, see text_mode and text_skipped of the result.

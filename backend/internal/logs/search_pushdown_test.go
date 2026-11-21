@@ -41,7 +41,7 @@ func TestSearchNarrowsWithoutAQueryID(t *testing.T) {
 	}
 
 	f := p.filter
-	if !slices.Equal(f.Words, []string{"duration"}) || !slices.Equal(f.Substrings, []string{"duration:"}) ||
+	if !reflect.DeepEqual(f.Words, [][]string{{"duration"}}) || !slices.Equal(f.Substrings, []string{"duration:"}) ||
 		f.Database != "shop" || f.User != "app" {
 		t.Errorf("filter = %+v, want the preset word, the substring, database and user", f)
 	}

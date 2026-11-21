@@ -40,7 +40,7 @@ func narrowParams(f source.Filter) source.StreamParams {
 func planFilter() source.Filter {
 	id := int64(-4452854032459450605)
 
-	return source.Filter{Severities: []string{"LOG"}, Host: "db-1", QueryID: &id, Words: []string{"plan"}}
+	return source.Filter{Severities: []string{"LOG"}, Host: "db-1", QueryID: &id, Words: [][]string{{"plan"}}}
 }
 
 func TestNarrowFollowsTheMapping(t *testing.T) {

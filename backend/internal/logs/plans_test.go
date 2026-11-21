@@ -3,6 +3,7 @@ package logs
 import (
 	"context"
 	"errors"
+	"reflect"
 	"slices"
 	"testing"
 
@@ -110,7 +111,7 @@ func TestPlansAsksTheStoreToNarrowAndSaysSo(t *testing.T) {
 
 	if !slices.Equal(p.filter.Severities, []string{"LOG"}) ||
 		p.filter.QueryID == nil || *p.filter.QueryID != 111 ||
-		!slices.Equal(p.filter.Words, []string{"plan"}) {
+		!reflect.DeepEqual(p.filter.Words, [][]string{{"plan"}}) {
 		t.Errorf("filter = %+v, want severity LOG, query_id 111 and the plan word", p.filter)
 	}
 

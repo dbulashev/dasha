@@ -198,7 +198,7 @@ func (s *service) Search(ctx context.Context, q SearchQuery) (SearchResult, erro
 		return SearchResult{}, err
 	}
 
-	word, err := presetWord(q.Preset, q.Include)
+	words, err := presetWords(q.Preset, q.Include)
 	if err != nil {
 		return SearchResult{}, err
 	}
@@ -210,7 +210,7 @@ func (s *service) Search(ctx context.Context, q SearchQuery) (SearchResult, erro
 		Stream:  q.Stream,
 		From:    q.From,
 		To:      q.To,
-		Filter:  s.searchFilter(q, severities, word),
+		Filter:  s.searchFilter(q, severities, words),
 		Token:   q.PageToken,
 	}
 
@@ -254,7 +254,7 @@ func (s *service) Search(ctx context.Context, q SearchQuery) (SearchResult, erro
 
 // searchFilter is what a search asks the store to run. With pushdown off only
 // severity, host and query_id go down.
-func (s *service) searchFilter(q SearchQuery, severities []string, word string) source.Filter {
+func (s *service) searchFilter(q SearchQuery, severities, words []string) source.Filter {
 	f := source.Filter{ //nolint:exhaustruct
 		Severities: severities,
 		Host:       q.Host,
@@ -265,8 +265,8 @@ func (s *service) searchFilter(q SearchQuery, severities []string, word string) 
 		return f
 	}
 
-	if word != "" {
-		f.Words = []string{word}
+	if len(words) > 0 {
+		f.Words = [][]string{words}
 	}
 
 	if q.TextMode == TextModeWords {

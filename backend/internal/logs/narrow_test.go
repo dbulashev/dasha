@@ -15,14 +15,14 @@ func TestNarrowedBy(t *testing.T) {
 		Severities: []string{"LOG", "ERROR"},
 		Host:       "db-1",
 		QueryID:    &id,
-		Words:      []string{"duration"},
+		Words:      [][]string{{"duration"}, {"checkpoint", "restartpoint"}},
 		Substrings: []string{"select", "from t"},
 		Database:   "app",
 		User:       "bob",
 	}
 
 	want := []string{
-		"severity=LOG,ERROR", "host", "query_id", "text=duration",
+		"severity=LOG,ERROR", "host", "query_id", "text=duration", "text=checkpoint|restartpoint",
 		"text~select", "text~from t", "database", "user",
 	}
 

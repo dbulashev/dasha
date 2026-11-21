@@ -27,7 +27,7 @@ export type GetLogsParams = {
   dedup?: boolean;
   page_size?: number;
   page_token?: string;
-  /** search preset id; lets the backend narrow the store read by a word the preset text always holds, while a message filter still contains that text */
+  /** search preset id; lets the backend narrow the store read by the words the records of the preset hold, while a message filter still contains the preset text. connections and errors have no words and narrow by severity alone */
   preset?: GetLogsPreset;
   /** how message filters match: substring (default) is a case-insensitive substring checked by Dasha; words splits them on whitespace and lets the log store match each word by its own rules (whole words, its analyzer's case folding and stemming). Words fall back to substring where the store cannot run them, see text_mode and text_skipped of the result. */
   text_mode?: GetLogsTextMode;

@@ -126,7 +126,7 @@ func TestNarrowDropsTextDatabaseAndUser(t *testing.T) {
 		Severities: []string{"LOG"},
 		Host:       "db-1",
 		QueryID:    &id,
-		Words:      []string{"duration"},
+		Words:      [][]string{{"duration"}},
 		Substrings: []string{"select"},
 		Database:   "app",
 		User:       "bob",

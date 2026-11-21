@@ -16,7 +16,7 @@ export interface LogSearchResult {
   /** max_scan reached - results/counts are incomplete */
   partial: boolean;
   scanned?: number;
-  /** what the log store filtered on itself: severity=<values>, host, query_id, text=<word> per word sent, text~<substring> per substring sent as is, database, user. Empty means the store did not narrow the read. */
+  /** what the log store filtered on itself: severity=<values>, host, query_id, text=<word> per word sent, text=<word>|<word> per group of words a record holds one of, text~<substring> per substring sent as is, database, user. Empty means the store did not narrow the read. */
   narrowed_by?: string[];
   /** the mode message filters matched in; substring when words were asked for but the store could not run them */
   text_mode?: LogSearchResultTextMode;

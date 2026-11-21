@@ -100,8 +100,12 @@ func (d streamDef) logsQL(f source.Filter, from, to time.Time) string {
 		parts = append(parts, quote(d.fields.QueryID)+":="+quote(strconv.FormatInt(*f.QueryID, 10)))
 	}
 
-	for _, w := range slices.Concat(f.Words, f.Terms) {
-		parts = append(parts, quote(d.fields.Text)+":i("+quote(w)+")")
+	for _, g := range f.Words {
+		parts = append(parts, anyWord(d.fields.Text, g))
+	}
+
+	for _, w := range f.Terms {
+		parts = append(parts, word(d.fields.Text, w))
 	}
 
 	for _, sub := range f.Substrings {
@@ -125,6 +129,24 @@ func (d streamDef) logsQL(f source.Filter, from, to time.Time) string {
 	}
 
 	return strings.Join(parts, " ")
+}
+
+func word(field, w string) string {
+	return quote(field) + ":i(" + quote(w) + ")"
+}
+
+// anyWord matches a record holding at least one of words.
+func anyWord(field string, words []string) string {
+	if len(words) == 1 {
+		return word(field, words[0])
+	}
+
+	alts := make([]string, 0, len(words))
+	for _, w := range words {
+		alts = append(alts, word(field, w))
+	}
+
+	return "(" + strings.Join(alts, " or ") + ")"
 }
 
 // hostFilter matches the cluster host name against the host field. In suffix

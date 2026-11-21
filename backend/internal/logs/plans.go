@@ -211,7 +211,7 @@ func wantedPlan(q PlansQuery) func(insights.PlanRecord) bool {
 func planFilter(q PlansQuery, levels []string, fm source.FieldMap) source.Filter {
 	f := source.Filter{ //nolint:exhaustruct
 		Host:       q.Host,
-		Words:      []string{searchPresets[presetPlan].Word},
+		Words:      [][]string{searchPresets[presetPlan].Words},
 		Severities: planSeverities(levels, fm),
 	}
 

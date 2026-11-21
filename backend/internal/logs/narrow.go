@@ -2,7 +2,6 @@ package logs
 
 import (
 	"context"
-	"slices"
 	"strings"
 	"time"
 
@@ -34,7 +33,8 @@ func narrow(ctx context.Context, p source.Provider, params source.StreamParams) 
 }
 
 // narrowedBy names each part of f: severity=<values>, host, query_id,
-// text=<word> per word or term, text~<substring>, database, user.
+// text=<word>|<word> per word group, text=<word> per term, text~<substring>,
+// database, user.
 func narrowedBy(f source.Filter) []string {
 	var out []string
 
@@ -50,7 +50,11 @@ func narrowedBy(f source.Filter) []string {
 		out = append(out, NarrowedQueryID)
 	}
 
-	for _, w := range slices.Concat(f.Words, f.Terms) {
+	for _, g := range f.Words {
+		out = append(out, NarrowedText+"="+strings.Join(g, "|"))
+	}
+
+	for _, w := range f.Terms {
 		out = append(out, NarrowedText+"="+w)
 	}
 

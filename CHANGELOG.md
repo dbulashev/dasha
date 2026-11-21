@@ -4,7 +4,7 @@
 
 ### Features
 - **Hosting under a URL subpath** without rebuilding the images: `DASHA_BASE_PATH=/dasha` on the frontend and backend containers, or `config.base_path` in the Helm chart. Covers routing, assets and API requests, OIDC login, callback, logout and cookie paths, and nginx. The default `/` is unchanged. Contributed by [@del000](https://github.com/del000) (#387).
-- **Faster log search over long periods:** the log store itself now filters by text, database and user (VictoriaLogs; OpenSearch only words and the Slow queries and Plans presets). A new Words mode matches whole words by the store's own rules; where the store cannot, Dasha falls back to matching a text fragment and says why. Off with `log_search.pushdown: false`. The MCP tool `search_logs` gets `text_mode` and `preset`.
+- **Faster log search over long periods:** the log store itself now filters by text, database and user (VictoriaLogs; OpenSearch the Words mode and the presets). A new Words mode matches whole words by the store's own rules; where the store cannot, Dasha falls back to matching a text fragment and says why. Off with `log_search.pushdown: false`. The MCP tool `search_logs` gets `text_mode` and `preset`.
 
 ### Fixes
 - **Activity & Waits:** with `track_utility = off`, utility statements (`BEGIN`, `COMMIT`, `SET`, ...) no longer link to a query report that cannot exist. The MCP tool `sample_activity` explains such a `BEGIN` or `COMMIT` with a large idle-in-transaction share as an open transaction left idle.

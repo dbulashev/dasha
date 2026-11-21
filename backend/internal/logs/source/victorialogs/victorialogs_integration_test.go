@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"os"
 	"slices"
@@ -656,5 +657,21 @@ func TestTermsRunInTheStore(t *testing.T) {
 	got := collect(context.Background(), t, p, testParams(n.Filter), 0)
 	if len(got) != 1 || got[0].Fields["pid"] != "1017" {
 		t.Fatalf("records = %+v, want pid 1017 alone", got)
+	}
+}
+
+// TestWordGroupRunsAsAnyOf: a record holding one word of the group is enough.
+func TestWordGroupRunsAsAnyOf(t *testing.T) {
+	p := testProvider(nil)
+
+	f := source.Filter{Words: [][]string{{"DUPLICATE", "17"}}} //nolint:exhaustruct
+
+	byPID := map[string]int{}
+	for _, r := range collect(context.Background(), t, p, testParams(f), 0) {
+		byPID[r.Fields["pid"]]++
+	}
+
+	if want := map[string]int{"1017": 1, "9999": 2}; !maps.Equal(byPID, want) {
+		t.Fatalf("records by pid = %v, want %v", byPID, want)
 	}
 }

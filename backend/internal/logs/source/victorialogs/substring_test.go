@@ -16,7 +16,7 @@ func TestLogsQLPushesDownSubstringsDatabaseAndUser(t *testing.T) {
 
 	d := testStream(t, nil)
 	f := source.Filter{ //nolint:exhaustruct
-		Words:      []string{"duration"},
+		Words:      [][]string{{"duration"}},
 		Substrings: []string{`a\b "c" .*(`},
 		Database:   "Billing",
 		User:       "adm",
@@ -91,7 +91,7 @@ func TestNarrowDropsDatabaseAndUserTheStreamDoesNotCarry(t *testing.T) {
 
 	p := &Provider{streams: map[string]streamDef{"with": with, "without": without}} //nolint:exhaustruct
 	f := source.Filter{                                                             //nolint:exhaustruct
-		Words: []string{"duration"}, Substrings: []string{"select"}, Database: "app", User: "bob",
+		Words: [][]string{{"duration"}}, Substrings: []string{"select"}, Database: "app", User: "bob",
 	}
 
 	got := p.Narrow(context.Background(), source.StreamParams{Stream: "with", Filter: f}) //nolint:exhaustruct
