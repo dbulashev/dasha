@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
@@ -31,81 +30,23 @@ func (s *Handlers) PostSnapshot(
 	ctx context.Context,
 	req serverhttp.PostSnapshotRequestObject,
 ) (serverhttp.PostSnapshotResponseObject, error) {
-	if s.storage == nil {
+	if s.snapshots == nil {
 		return serverhttp.PostSnapshot501Response{}, nil
 	}
 
-	reports, err := s.repo.GetQueriesReport(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, nil, nil)
-	if errors.Is(err, repository.ErrNotFound) {
+	includeLocks := req.Params.IncludeLocks != nil && *req.Params.IncludeLocks
+
+	c, err := s.snapshots.Capture(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, includeLocks)
+	switch {
+	case errors.Is(err, repository.ErrNotFound), errors.Is(err, autosnapshot.ErrEmptyReport):
 		return serverhttp.PostSnapshot404Response{}, nil
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("PostSnapshot | get report: %w", err)
-	}
-
-	// No readable extension anywhere on the host yields an empty report; storing it
-	// would add a snapshot that explains nothing, as the auto-snapshot path already
-	// refuses to do.
-	if len(reports) == 0 {
-		return serverhttp.PostSnapshot404Response{}, nil
-	}
-
-	// The requested database is only a preference; store the one the statistics were
-	// actually read through, so the snapshot says where its numbers came from. Left
-	// unresolved it would be a guess, so the snapshot is not created at all.
-	provenance, err := s.repo.PgssDatabase(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
-	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.PostSnapshot404Response{}, nil
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("PostSnapshot | pgss database: %w", err)
-	}
-
-	var pgssStatsReset *time.Time
-
-	resetTime, err := s.repo.GetPgssStatsResetTime(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
-	if err == nil && resetTime != nil {
-		pgssStatsReset = &resetTime.Time
-	}
-
-	// Best-effort, like the reset time above.
-	statsSource, err := s.repo.PgssSource(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
-	if err != nil {
-		statsSource = ""
-	}
-
-	var locks *autosnapshot.LockCapture
-	if req.Params.IncludeLocks != nil && *req.Params.IncludeLocks {
-		probeCount, probeInterval := 5, 500*time.Millisecond
-		if cfg, cerr := s.storage.GetAutosnapshotConfig(ctx); cerr == nil {
-			if cfg.LockProbeCount > 0 {
-				probeCount = cfg.LockProbeCount
-			}
-
-			if cfg.LockProbeInterval > 0 {
-				probeInterval = cfg.LockProbeInterval
-			}
-		}
-
-		lc := autosnapshot.CaptureLocks(ctx, s.repo, req.Params.ClusterName, req.Params.Instance, req.Params.Database,
-			dto.ScopeInstance, probeCount, probeInterval)
-		locks = &lc
-	}
-
-	id, createdAt, err := s.storage.CreateSnapshot(ctx, req.Params.ClusterName, req.Params.Instance, provenance, reports, storage.SnapshotOpts{
-		PgssStatsReset: pgssStatsReset,
-		StatsSource:    statsSource,
-		LocksData:      locks,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("PostSnapshot | create: %w", err)
+	case err != nil:
+		return nil, fmt.Errorf("PostSnapshot | %w", err)
 	}
 
 	return serverhttp.PostSnapshot201JSONResponse{
-		Id:        openapi_types.UUID(id),
-		CreatedAt: createdAt,
+		Id:        openapi_types.UUID(c.ID),
+		CreatedAt: c.CreatedAt,
 	}, nil
 }
 

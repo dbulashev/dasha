@@ -170,8 +170,8 @@ func TestTakeSnapshotSkipsEmptyReport(t *testing.T) {
 	err := d.takeSnapshot(context.Background(), validConfig(), oneHostCluster(), "h1", "db1",
 		TriggerActivitySpike, "auto:activity_spike", map[string]any{}, nil)
 
-	if !errors.Is(err, errEmptyReport) {
-		t.Fatalf("err = %v, want errEmptyReport", err)
+	if !errors.Is(err, ErrEmptyReport) {
+		t.Fatalf("err = %v, want ErrEmptyReport", err)
 	}
 
 	if store.snapshots != 0 {

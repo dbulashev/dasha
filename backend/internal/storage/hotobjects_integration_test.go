@@ -144,7 +144,10 @@ func TestHotSnapshot_InsertReadTopHistory(t *testing.T) {
 	// Ranks map.
 	ranks, err := s.GetHotRanks(ctx, snap.ID, snap.CapturedAt, hotobjects.KindTable, hotobjects.ClassReads)
 	require.NoError(t, err)
-	assert.Equal(t, map[string]int{"public.orders": 1, "public.users": 2}, ranks)
+	assert.Equal(t, map[hotobjects.ObjectRef]int{
+		{Schema: "public", Object: "orders"}: 1,
+		{Schema: "public", Object: "users"}:  2,
+	}, ranks)
 
 	// Object history.
 	hist, err := s.GetHotObjectHistory(ctx, "c1", "db", hotobjects.KindTable, "public", "orders",

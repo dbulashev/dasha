@@ -37,7 +37,7 @@ const (
 	queryTimeout       = 10 * time.Second
 )
 
-var ErrNotFound = errors.New("not found")
+var ErrNotFound = dto.ErrNotFound
 
 // ErrPoolBusy means every connection of the pool stayed taken until the
 // caller's deadline.
