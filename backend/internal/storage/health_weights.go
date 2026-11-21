@@ -4,25 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/dbulashev/dasha/internal/health"
+	"github.com/dbulashev/dasha/internal/healthscore"
 )
-
-// HealthWeightsRecord is the persisted weights override for a cluster.
-type HealthWeightsRecord struct {
-	Weights   health.Weights
-	UpdatedAt time.Time
-	UpdatedBy string
-}
 
 // GetHealthWeights returns the per-cluster weights override, or (nil, nil) if
 // no override is configured. The caller should fall back to health.DefaultWeights().
-func (s *Storage) GetHealthWeights(ctx context.Context, clusterName string) (*HealthWeightsRecord, error) {
+func (s *Storage) GetHealthWeights(ctx context.Context, clusterName string) (*healthscore.WeightsRecord, error) {
 	var (
-		rec       HealthWeightsRecord
+		rec       healthscore.WeightsRecord
 		updatedBy *string
 	)
 

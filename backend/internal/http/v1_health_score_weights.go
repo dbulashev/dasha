@@ -2,23 +2,24 @@ package http
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"time"
 
 	"github.com/dbulashev/dasha/gen/serverhttp"
 	"github.com/dbulashev/dasha/internal/health"
+	"github.com/dbulashev/dasha/internal/healthscore"
 )
 
 func (s *Handlers) GetHealthScoreWeights(
 	ctx context.Context,
 	req serverhttp.GetHealthScoreWeightsRequestObject,
 ) (serverhttp.GetHealthScoreWeightsResponseObject, error) {
-	resp, err := s.getHealthScoreWeightsResponse(ctx, req.Params.ClusterName)
+	v, err := s.scorer.WeightsView(ctx, req.Params.ClusterName)
 	if err != nil {
 		return nil, fmt.Errorf("GetHealthScoreWeights | %w", err)
 	}
 
-	return serverhttp.GetHealthScoreWeights200JSONResponse(resp), nil
+	return serverhttp.GetHealthScoreWeights200JSONResponse(mapHealthScoreWeights(v)), nil
 }
 
 func (s *Handlers) PutHealthScoreWeights(
@@ -40,89 +41,46 @@ func (s *Handlers) PutHealthScoreWeights(
 		Locks:         req.Body.Locks,
 	}
 
-	if err := w.Validate(); err != nil {
+	v, err := s.scorer.SetWeights(ctx, req.Params.ClusterName, w, userNameFromContext(ctx))
+	switch {
+	case errors.Is(err, healthscore.ErrInvalidWeights):
 		return serverhttp.PutHealthScoreWeights400Response{}, nil
-	}
-
-	if s.storage == nil {
-		return nil, fmt.Errorf("PutHealthScoreWeights | storage is not configured")
-	}
-
-	if err := s.storage.UpsertHealthWeights(ctx, req.Params.ClusterName, w.Normalize(), ""); err != nil {
+	case err != nil:
 		return nil, fmt.Errorf("PutHealthScoreWeights | %w", err)
 	}
 
-	resp, err := s.getHealthScoreWeightsResponse(ctx, req.Params.ClusterName)
-	if err != nil {
-		return nil, fmt.Errorf("PutHealthScoreWeights | %w", err)
-	}
-
-	return serverhttp.PutHealthScoreWeights200JSONResponse(resp), nil
+	return serverhttp.PutHealthScoreWeights200JSONResponse(mapHealthScoreWeights(v)), nil
 }
 
 func (s *Handlers) DeleteHealthScoreWeights(
 	ctx context.Context,
 	req serverhttp.DeleteHealthScoreWeightsRequestObject,
 ) (serverhttp.DeleteHealthScoreWeightsResponseObject, error) {
-	if s.storage != nil {
-		if err := s.storage.DeleteHealthWeights(ctx, req.Params.ClusterName); err != nil {
-			return nil, fmt.Errorf("DeleteHealthScoreWeights | %w", err)
-		}
-	}
-
-	resp, err := s.getHealthScoreWeightsResponse(ctx, req.Params.ClusterName)
+	v, err := s.scorer.ResetWeights(ctx, req.Params.ClusterName)
 	if err != nil {
 		return nil, fmt.Errorf("DeleteHealthScoreWeights | %w", err)
 	}
 
-	return serverhttp.DeleteHealthScoreWeights200JSONResponse(resp), nil
+	return serverhttp.DeleteHealthScoreWeights200JSONResponse(mapHealthScoreWeights(v)), nil
 }
 
-func (s *Handlers) getHealthScoreWeightsResponse(
-	ctx context.Context,
-	clusterName string,
-) (serverhttp.HealthScoreWeights, error) {
-	var (
-		w         health.Weights
-		source    = serverhttp.Default
-		updatedAt *time.Time
-		updatedBy *string
-	)
-
-	if s.storage != nil {
-		rec, err := s.storage.GetHealthWeights(ctx, clusterName)
-		if err != nil {
-			return serverhttp.HealthScoreWeights{}, err
-		}
-
-		if rec != nil {
-			w = rec.Weights
-			source = serverhttp.Override
-			ts := rec.UpdatedAt
-			updatedAt = &ts
-
-			if rec.UpdatedBy != "" {
-				by := rec.UpdatedBy
-				updatedBy = &by
-			}
-		}
-	}
-
-	if source == serverhttp.Default {
-		w = health.DefaultWeights()
+func mapHealthScoreWeights(v healthscore.WeightsView) serverhttp.HealthScoreWeights {
+	source := serverhttp.Default
+	if v.Source == healthscore.WeightsOverride {
+		source = serverhttp.Override
 	}
 
 	return serverhttp.HealthScoreWeights{
-		Connections:   w.Connections,
-		Performance:   w.Performance,
-		Storage:       w.Storage,
-		Replication:   w.Replication,
-		Maintenance:   w.Maintenance,
-		Horizon:       w.Horizon,
-		WalCheckpoint: w.WalCheckpoint,
-		Locks:         w.Locks,
+		Connections:   v.Weights.Connections,
+		Performance:   v.Weights.Performance,
+		Storage:       v.Weights.Storage,
+		Replication:   v.Weights.Replication,
+		Maintenance:   v.Weights.Maintenance,
+		Horizon:       v.Weights.Horizon,
+		WalCheckpoint: v.Weights.WalCheckpoint,
+		Locks:         v.Weights.Locks,
 		Source:        source,
-		UpdatedAt:     updatedAt,
-		UpdatedBy:     updatedBy,
-	}, nil
+		UpdatedAt:     v.UpdatedAt,
+		UpdatedBy:     v.UpdatedBy,
+	}
 }

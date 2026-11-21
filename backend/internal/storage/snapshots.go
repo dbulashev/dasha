@@ -16,6 +16,7 @@ import (
 	"github.com/dbulashev/dasha/internal/autosnapshot"
 	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/pkg/sanitize"
+	"github.com/dbulashev/dasha/internal/querystats"
 	"github.com/dbulashev/dasha/internal/version"
 )
 
@@ -25,8 +26,8 @@ import (
 const (
 	currentJSONVersion = 2
 
-	// ScopedJSONVersion is the first json_version whose rows name their database.
-	ScopedJSONVersion = 2
+	// scopedJSONVersion is the first json_version whose rows name their database.
+	scopedJSONVersion = 2
 )
 
 // SnapshotListItem is a summary row returned by List.
@@ -217,10 +218,9 @@ func (s *Storage) ListSnapshots(
 	return items, rows.Err()
 }
 
-// GetSnapshot returns query report data from a stored snapshot along with its
-// json_version: version 1 carries no database attribution, so the caller must
-// serve it instance-wide rather than filtering it down to nothing.
-func (s *Storage) GetSnapshot(ctx context.Context, id uuid.UUID) ([]dto.QueryReport, int, error) {
+// GetSnapshotReport returns the query report of a stored snapshot, or
+// querystats.ErrSnapshotNotFound.
+func (s *Storage) GetSnapshotReport(ctx context.Context, id uuid.UUID) (querystats.Snapshot, error) {
 	var (
 		data        []byte
 		createdAt   time.Time
@@ -232,10 +232,10 @@ func (s *Storage) GetSnapshot(ctx context.Context, id uuid.UUID) ([]dto.QueryRep
 	).Scan(&data, &createdAt, &jsonVersion)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, 0, nil
+			return querystats.Snapshot{}, querystats.ErrSnapshotNotFound
 		}
 
-		return nil, 0, fmt.Errorf("storage: get snapshot: %w", err)
+		return querystats.Snapshot{}, fmt.Errorf("storage: get snapshot: %w", err)
 	}
 
 	type reportJSON struct {
@@ -245,7 +245,7 @@ func (s *Storage) GetSnapshot(ctx context.Context, id uuid.UUID) ([]dto.QueryRep
 
 	var items []reportJSON
 	if err := json.Unmarshal(data, &items); err != nil {
-		return nil, 0, fmt.Errorf("storage: unmarshal report: %w", err)
+		return querystats.Snapshot{}, fmt.Errorf("storage: unmarshal report: %w", err)
 	}
 
 	// Collect unique hashes and resolve texts.
@@ -256,7 +256,7 @@ func (s *Storage) GetSnapshot(ctx context.Context, id uuid.UUID) ([]dto.QueryRep
 
 	textMap, err := s.resolveQueryTexts(ctx, hashes, createdAt)
 	if err != nil {
-		return nil, 0, err
+		return querystats.Snapshot{}, err
 	}
 
 	reports := make([]dto.QueryReport, 0, len(items))
@@ -272,7 +272,7 @@ func (s *Storage) GetSnapshot(ctx context.Context, id uuid.UUID) ([]dto.QueryRep
 		reports = append(reports, r)
 	}
 
-	return reports, jsonVersion, nil
+	return querystats.Snapshot{Reports: reports, Attributed: jsonVersion >= scopedJSONVersion}, nil
 }
 
 // GetSnapshotLocks returns the raw locks_data jsonb for a snapshot. found is

@@ -11,6 +11,7 @@ import (
 	"github.com/dbulashev/dasha/internal/logs"
 	"github.com/dbulashev/dasha/internal/metrics"
 	"github.com/dbulashev/dasha/internal/piicatalog"
+	"github.com/dbulashev/dasha/internal/querystats"
 	"github.com/dbulashev/dasha/internal/repository"
 	"github.com/dbulashev/dasha/internal/storage"
 )
@@ -30,6 +31,7 @@ type Handlers struct {
 	hot       *hotobjects.Reader
 
 	autosnapshotCfg *autosnapshot.ConfigService
+	queryStats      *querystats.Service
 }
 
 // NewDashaHandlers constructs a new Handlers instance from its dependencies.
@@ -37,7 +39,13 @@ func NewDashaHandlers(
 	cfg *config.Config, repo repository.Repository, st *storage.Storage, ms *metrics.Service, logsSvc logs.Service,
 	clusters config.Clusters, logger *zap.Logger,
 ) *Handlers {
-	scorer := healthscore.NewScorer(cfg, repo, st, ms)
+	// A typed-nil *storage.Storage must not end up in a store interface.
+	var scoreStore healthscore.Store
+	if st != nil {
+		scoreStore = st
+	}
+
+	scorer := healthscore.NewScorer(cfg, repo, scoreStore, ms)
 
 	h := &Handlers{
 		cfg: cfg, repo: repo, storage: st, metrics: ms, logs: logsSvc,
@@ -46,12 +54,12 @@ func NewDashaHandlers(
 		activity: activity.NewSampler(repo, cfg.Activity),
 	}
 
-	// A typed-nil *storage.Storage must not end up in the store interface.
 	if st != nil {
 		h.pii = piicatalog.NewReader(st, clusters, cfg.PIICatalog.Schedule)
 		h.snapshots = autosnapshot.NewManualCapturer(autosnapshot.NewCapturer(repo, st, logger), st)
 		h.autosnapshotCfg = autosnapshot.NewConfigService(st, repo)
 		h.hot = hotobjects.NewReader(st, repo, logger)
+		h.queryStats = querystats.NewService(st, repo)
 	}
 
 	return h
