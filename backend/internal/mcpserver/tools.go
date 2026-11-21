@@ -4,7 +4,9 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -248,7 +250,9 @@ type searchLogsArgs struct {
 	To          string   `json:"to,omitempty" jsonschema:"Window end, RFC3339; set together with from"`
 	Severity    []string `json:"severity,omitempty" jsonschema:"Severities to include; the values a cluster accepts per stream are listed in log_severities of list_clusters(cluster=<exact name>). PostgreSQL uses upper-case (ERROR, FATAL, PANIC, WARNING, LOG)"`
 	Host        string   `json:"host,omitempty" jsonschema:"Optional: restrict to one cluster host"`
-	Message     []string `json:"message,omitempty" jsonschema:"Substrings that must all be present in the message (AND, case-insensitive)"`
+	Message     []string `json:"message,omitempty" jsonschema:"Substrings that must all be present in the message (AND, case-insensitive); with text_mode=words, words instead"`
+	TextMode    string   `json:"text_mode,omitempty" jsonschema:"'substring' (default) or 'words': split message on whitespace and let the log store match whole words (much faster on large windows, misses fragments inside words); needs supports_word_search in list_clusters(cluster=<exact name>)"`
+	Preset      string   `json:"preset,omitempty" jsonschema:"Optional: 'slow' with message 'duration:' or 'plan' with message 'plan:' lets the store narrow the read by that word; other ids (autovacuum, deadlock, checkpoint, tempFiles, canceled, connections, errors) narrow nothing"`
 	Exclude     []string `json:"exclude,omitempty" jsonschema:"Drop records whose message contains any of these substrings (grep -v)"`
 	Database    string   `json:"database,omitempty" jsonschema:"Optional: restrict to one database"`
 	User        string   `json:"user,omitempty" jsonschema:"Optional: restrict to one user"`
@@ -795,6 +799,12 @@ func registerTools(s *mcp.Server, c *DashaClient) {
 			"A dedup group's fields hold only what its text, host, database, user and severity do not say " +
 			"and come from its latest record: statement, detail, application_name, …, and the message itself " +
 			"when the template masks values in it (a table name, a size, a wait time). " +
+			"text_mode=words finds whole words the way the log store indexes them and is much faster " +
+			"on large windows; substring (default) also finds fragments inside words, such as pg_stat " +
+			"in pg_stat_activity. text_mode in the result is the mode the search ran in, and text_skipped " +
+			"says why words fell back to substring. narrowed_by lists what the store filtered on before " +
+			"Dasha scanned; an empty result with partial=true is not \"nothing found\": narrow the window, " +
+			"add filters, or with dedup=false continue with page_token. " +
 			"After a 429 back off before retrying.",
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, a searchLogsArgs) (*mcp.CallToolResult, any, error) {
 		params, errMsg := logsParams(a)
@@ -1103,6 +1113,16 @@ func logsParams(a searchLogsArgs) (*apiclient.GetLogsParams, string) {
 		pageSize = logsDefaultPageSize
 	}
 
+	textMode := apiclient.GetLogsParamsTextMode(a.TextMode)
+	if textMode != "" && !slices.Contains(logsTextModes, textMode) {
+		return nil, "text_mode must be 'substring' or 'words'"
+	}
+
+	preset := apiclient.GetLogsParamsPreset(a.Preset)
+	if preset != "" && !slices.Contains(logsPresets, preset) {
+		return nil, fmt.Sprintf("unknown preset %q; one of %v", a.Preset, logsPresets)
+	}
+
 	return &apiclient.GetLogsParams{
 		ClusterName: a.Cluster,
 		ServiceType: serviceType,
@@ -1117,5 +1137,16 @@ func logsParams(a searchLogsArgs) (*apiclient.GetLogsParams, string) {
 		Dedup:       &dedup,
 		PageSize:    &pageSize,
 		PageToken:   opt(a.PageToken),
+		TextMode:    opt(textMode),
+		Preset:      opt(preset),
 	}, ""
+}
+
+var logsTextModes = []apiclient.GetLogsParamsTextMode{
+	apiclient.GetLogsParamsTextModeSubstring, apiclient.GetLogsParamsTextModeWords,
+}
+
+var logsPresets = []apiclient.GetLogsParamsPreset{
+	apiclient.Autovacuum, apiclient.Deadlock, apiclient.Checkpoint, apiclient.TempFiles, apiclient.Canceled,
+	apiclient.Connections, apiclient.Slow, apiclient.Plan, apiclient.Errors,
 }

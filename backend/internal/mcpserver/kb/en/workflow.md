@@ -98,7 +98,12 @@ need `database`.
   storage; a 501 means the feature is off, not a broken instance.
 - `search_logs` is rate-limited per user (the operator sets the limit per
   source): combine all filters into ONE call, keep dedup on, never poll; after
-  a 429 back off before retrying.
+  a 429 back off before retrying. On a large window with
+  supports_word_search=true use text_mode=words: whole words as the log store
+  indexes them, much faster, but no fragments inside words (pg_stat does not
+  find pg_stat_activity). Check text_mode and text_skipped of the result:
+  words may fall back to substring. Empty with partial=true is not "nothing
+  found" — narrow the window.
 - One tool call per step; do not re-call a tool with the same arguments.
 - If a result is refused as too large — narrow (one database, smaller limit,
   shorter window), do not retry as-is.

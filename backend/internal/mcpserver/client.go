@@ -953,7 +953,7 @@ func (d *DashaClient) SearchLogs(ctx context.Context, params *apiclient.GetLogsP
 				"check supports_logs and log_streams in list_clusters(cluster=<exact name>) for the service_type you asked for")
 		case http.StatusBadRequest:
 			return nil, errors.New("dasha: invalid log search parameters (400) — e.g. page_token combined " +
-				"with dedup, or an unknown severity value")
+				"with dedup, an unknown severity value, preset or text_mode")
 		case http.StatusBadGateway:
 			return nil, errors.New("dasha: the log store failed upstream (502) — retry later")
 		case http.StatusGatewayTimeout:
@@ -1123,10 +1123,13 @@ func planLogsError(op string, resp *http.Response) error {
 }
 
 type logGroups struct {
-	Dedup   bool       `json:"dedup"`
-	Items   []logGroup `json:"items"`
-	Partial bool       `json:"partial"`
-	Scanned *int       `json:"scanned,omitempty"`
+	Dedup       bool                                  `json:"dedup"`
+	Items       []logGroup                            `json:"items"`
+	Partial     bool                                  `json:"partial"`
+	Scanned     *int                                  `json:"scanned,omitempty"`
+	NarrowedBy  *[]string                             `json:"narrowed_by,omitempty"`
+	TextMode    *apiclient.LogSearchResultTextMode    `json:"text_mode,omitempty"`
+	TextSkipped *apiclient.LogSearchResultTextSkipped `json:"text_skipped,omitempty"`
 }
 
 // logGroup is apiclient.LogEntry without timestamp, which in a group repeats last_seen.
@@ -1152,7 +1155,10 @@ func dedupGroups(res *apiclient.LogSearchResult) logGroups {
 		})
 	}
 
-	return logGroups{Dedup: true, Items: items, Partial: res.Partial, Scanned: res.Scanned}
+	return logGroups{
+		Dedup: true, Items: items, Partial: res.Partial, Scanned: res.Scanned,
+		NarrowedBy: res.NarrowedBy, TextMode: res.TextMode, TextSkipped: res.TextSkipped,
+	}
 }
 
 // dedupSampleFields identify the one record a dedup group was sampled from,
