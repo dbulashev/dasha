@@ -7,6 +7,7 @@ import (
 	"github.com/dbulashev/dasha/internal/autosnapshot"
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/healthscore"
+	"github.com/dbulashev/dasha/internal/hotobjects"
 	"github.com/dbulashev/dasha/internal/logs"
 	"github.com/dbulashev/dasha/internal/metrics"
 	"github.com/dbulashev/dasha/internal/piicatalog"
@@ -26,6 +27,7 @@ type Handlers struct {
 	activity  *activity.Sampler
 	pii       *piicatalog.Reader
 	snapshots *autosnapshot.ManualCapturer
+	hot       *hotobjects.Reader
 
 	autosnapshotCfg *autosnapshot.ConfigService
 }
@@ -49,6 +51,7 @@ func NewDashaHandlers(
 		h.pii = piicatalog.NewReader(st, clusters, cfg.PIICatalog.Schedule)
 		h.snapshots = autosnapshot.NewManualCapturer(autosnapshot.NewCapturer(repo, st, logger), st)
 		h.autosnapshotCfg = autosnapshot.NewConfigService(st, repo)
+		h.hot = hotobjects.NewReader(st, repo, logger)
 	}
 
 	return h
