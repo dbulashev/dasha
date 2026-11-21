@@ -36,8 +36,6 @@ func newPIIHandlers(st *fakePIIStore) *Handlers {
 	}
 }
 
-func ptr[T any](v T) *T { return &v }
-
 func TestGetPiiCatalogStatus(t *testing.T) {
 	t.Parallel()
 
@@ -45,14 +43,14 @@ func TestGetPiiCatalogStatus(t *testing.T) {
 	h := newPIIHandlers(&fakePIIStore{ //nolint:exhaustruct
 		statuses: map[piicatalog.Key]piicatalog.Status{
 			{Cluster: "c1", Database: "app"}: { //nolint:exhaustruct
-				SetHash: []byte{0xab, 0x01}, ColumnCount: 7, LastAttemptAt: &attempt, LastError: ptr("boom"),
+				SetHash: []byte{0xab, 0x01}, ColumnCount: 7, LastAttemptAt: &attempt, LastError: new("boom"),
 			},
 			{Cluster: "c0", Database: "gone"}: {ColumnCount: 0}, //nolint:exhaustruct
 		},
 	})
 
 	resp, err := h.GetPiiCatalogStatus(t.Context(), serverhttp.GetPiiCatalogStatusRequestObject{
-		Params: serverhttp.GetPiiCatalogStatusParams{ClusterName: ptr("c1")},
+		Params: serverhttp.GetPiiCatalogStatusParams{ClusterName: new("c1")},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -99,7 +97,7 @@ func TestGetPiiCatalogColumns(t *testing.T) {
 		SetHash: []byte{0xab, 0x01}, ChangedAt: changed, CheckedAt: changed.Add(time.Hour),
 		Columns: []piicatalog.Column{
 			{Schema: "public", Table: "users", Name: "a"},
-			{Schema: "public", Table: "users", Name: "b", Comment: ptr("")},
+			{Schema: "public", Table: "users", Name: "b", Comment: new("")},
 		},
 	}})
 

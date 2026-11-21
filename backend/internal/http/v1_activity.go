@@ -166,9 +166,8 @@ func (s *Handlers) GetActivityProfile(
 	case err != nil:
 		return nil, fmt.Errorf("GetActivityProfile | %w", err)
 	case len(col.Samples) == 0 && (col.LastErr == nil || repository.IsTimeout(col.LastErr)):
-		return serverhttp.GetActivityProfile504JSONResponse{QueryTimeoutJSONResponse: serverhttp.QueryTimeoutJSONResponse{
-			Message: fmt.Sprintf("no sample of pg_stat_activity completed in time (%d timed out)", col.Failed),
-		}}, nil
+		return serverhttp.GetActivityProfile504JSONResponse{
+			Message: fmt.Sprintf("no sample of pg_stat_activity completed in time (%d timed out)", col.Failed)}, nil
 	case len(col.Samples) == 0:
 		return nil, fmt.Errorf("GetActivityProfile | all %d samples failed | %w", col.Failed, col.LastErr)
 	}

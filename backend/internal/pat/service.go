@@ -137,15 +137,13 @@ func (s *Service) Mint(ctx context.Context, c Caller, req MintRequest) (Minted, 
 	}
 
 	return Minted{
-		Token: Token{
-			ID:        id,
-			Name:      req.Name,
-			Prefix:    prefix,
-			Role:      role,
-			CreatedAt: now,
-			ExpiresAt: expiresAt,
-		},
-		Secret: secret,
+		ID:        id,
+		Name:      req.Name,
+		Prefix:    prefix,
+		Role:      role,
+		CreatedAt: now,
+		ExpiresAt: expiresAt,
+		Secret:    secret,
 	}, nil
 }
 
