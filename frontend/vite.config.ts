@@ -12,6 +12,7 @@ const apiTarget = process.env.DASHA_API ?? 'http://localhost:8000'
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: './',
   build: {
     modulePreload: false,
   },

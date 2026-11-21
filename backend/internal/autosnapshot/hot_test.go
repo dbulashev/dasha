@@ -31,14 +31,14 @@ func (f *hotFakeRepo) GetHotSampleIndexes(context.Context, string, string, strin
 
 type hotFakeStore struct {
 	Store
-	anchors    map[string]hotobjects.AnchorRow
+	anchors    map[hotobjects.ObjectKey]hotobjects.AnchorRow
 	windows    map[string]hotobjects.HostWindow
 	windowsErr error
 	snaps      []hotobjects.Snapshot
 	stored     map[string][]hotobjects.AnchorRow
 }
 
-func (f *hotFakeStore) GetHotAnchors(context.Context, string, string, string) (map[string]hotobjects.AnchorRow, error) {
+func (f *hotFakeStore) GetHotAnchors(context.Context, string, string, string) (map[hotobjects.ObjectKey]hotobjects.AnchorRow, error) {
 	return f.anchors, nil
 }
 
@@ -74,7 +74,7 @@ func TestTakeHotSnapshotCarriesQuietAndObserved(t *testing.T) {
 
 	repo := &hotFakeRepo{tables: []hotobjects.AnchorRow{idle}, reset: &reset} //nolint:exhaustruct
 	store := &hotFakeStore{                                                   //nolint:exhaustruct
-		anchors: map[string]hotobjects.AnchorRow{hotobjects.Key(idle.Kind, idle.Schema, idle.Object): anchor},
+		anchors: map[hotobjects.ObjectKey]hotobjects.AnchorRow{hotobjects.Key(idle.Kind, idle.Schema, idle.Object): anchor},
 		windows: map[string]hotobjects.HostWindow{"h1": {ObservedSince: &observed}}, //nolint:exhaustruct
 	}
 

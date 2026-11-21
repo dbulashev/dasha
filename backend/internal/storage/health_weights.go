@@ -4,25 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 
 	"github.com/dbulashev/dasha/internal/health"
+	"github.com/dbulashev/dasha/internal/healthscore"
 )
 
-// HealthWeightsRecord is the persisted weights override for a cluster.
-type HealthWeightsRecord struct {
-	Weights   health.Weights
-	UpdatedAt time.Time
-	UpdatedBy string
-}
-
-// GetHealthWeights returns the per-cluster weights override, or (nil, nil) if
-// no override is configured. The caller should fall back to health.DefaultWeights().
-func (s *Storage) GetHealthWeights(ctx context.Context, clusterName string) (*HealthWeightsRecord, error) {
+func (s *Storage) GetHealthWeights(ctx context.Context, clusterName string) (*healthscore.WeightsRecord, error) {
 	var (
-		rec       HealthWeightsRecord
+		rec       healthscore.WeightsRecord
 		updatedBy *string
 	)
 
@@ -59,20 +50,20 @@ func (s *Storage) GetHealthWeights(ctx context.Context, clusterName string) (*He
 	return &rec, nil
 }
 
-// UpsertHealthWeights stores normalized weights for a cluster.
-// The caller is responsible for validation and normalization.
 func (s *Storage) UpsertHealthWeights(
 	ctx context.Context,
 	clusterName string,
 	w health.Weights,
 	updatedBy string,
-) error {
+) (healthscore.WeightsRecord, error) {
 	var by *string
 	if updatedBy != "" {
 		by = &updatedBy
 	}
 
-	_, err := s.pool.Exec(ctx, `
+	rec := healthscore.WeightsRecord{Weights: w, UpdatedBy: updatedBy} //nolint:exhaustruct
+
+	err := s.pool.QueryRow(ctx, `
 		INSERT INTO health_score_weights
 			(cluster_name,
 			 connections, performance, storage, replication, maintenance,
@@ -89,20 +80,20 @@ func (s *Storage) UpsertHealthWeights(
 			wal_checkpoint = EXCLUDED.wal_checkpoint,
 			locks          = EXCLUDED.locks,
 			updated_at     = now(),
-			updated_by     = EXCLUDED.updated_by`,
+			updated_by     = EXCLUDED.updated_by
+		RETURNING updated_at`,
 		clusterName,
 		w.Connections, w.Performance, w.Storage, w.Replication, w.Maintenance,
 		w.Horizon, w.WalCheckpoint, w.Locks,
 		by,
-	)
+	).Scan(&rec.UpdatedAt)
 	if err != nil {
-		return fmt.Errorf("storage: upsert health weights: %w", err)
+		return healthscore.WeightsRecord{}, fmt.Errorf("storage: upsert health weights: %w", err)
 	}
 
-	return nil
+	return rec, nil
 }
 
-// DeleteHealthWeights removes the per-cluster override, restoring defaults.
 func (s *Storage) DeleteHealthWeights(ctx context.Context, clusterName string) error {
 	_, err := s.pool.Exec(ctx,
 		`DELETE FROM health_score_weights WHERE cluster_name = $1`,

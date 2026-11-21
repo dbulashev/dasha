@@ -5,17 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	"github.com/dbulashev/dasha/gen/serverhttp"
 	"github.com/dbulashev/dasha/internal/autosnapshot"
-	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/pkg/mapstruct"
 	"github.com/dbulashev/dasha/internal/pkg/shortcut"
+	"github.com/dbulashev/dasha/internal/querystats"
 	"github.com/dbulashev/dasha/internal/repository"
-	"github.com/dbulashev/dasha/internal/storage"
 )
 
 func (s *Handlers) GetSnapshotsStatus(
@@ -23,7 +21,7 @@ func (s *Handlers) GetSnapshotsStatus(
 	_ serverhttp.GetSnapshotsStatusRequestObject,
 ) (serverhttp.GetSnapshotsStatusResponseObject, error) {
 	return serverhttp.GetSnapshotsStatus200JSONResponse{
-		Available: s.storage != nil,
+		Available: s.snapshotCatalog != nil,
 	}, nil
 }
 
@@ -31,81 +29,23 @@ func (s *Handlers) PostSnapshot(
 	ctx context.Context,
 	req serverhttp.PostSnapshotRequestObject,
 ) (serverhttp.PostSnapshotResponseObject, error) {
-	if s.storage == nil {
+	if s.snapshots == nil {
 		return serverhttp.PostSnapshot501Response{}, nil
 	}
 
-	reports, err := s.repo.GetQueriesReport(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, nil, nil)
-	if errors.Is(err, repository.ErrNotFound) {
+	includeLocks := req.Params.IncludeLocks != nil && *req.Params.IncludeLocks
+
+	c, err := s.snapshots.Capture(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database, includeLocks)
+	switch {
+	case errors.Is(err, repository.ErrNotFound), errors.Is(err, autosnapshot.ErrEmptyReport):
 		return serverhttp.PostSnapshot404Response{}, nil
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("PostSnapshot | get report: %w", err)
-	}
-
-	// No readable extension anywhere on the host yields an empty report; storing it
-	// would add a snapshot that explains nothing, as the auto-snapshot path already
-	// refuses to do.
-	if len(reports) == 0 {
-		return serverhttp.PostSnapshot404Response{}, nil
-	}
-
-	// The requested database is only a preference; store the one the statistics were
-	// actually read through, so the snapshot says where its numbers came from. Left
-	// unresolved it would be a guess, so the snapshot is not created at all.
-	provenance, err := s.repo.PgssDatabase(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
-	if errors.Is(err, repository.ErrNotFound) {
-		return serverhttp.PostSnapshot404Response{}, nil
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("PostSnapshot | pgss database: %w", err)
-	}
-
-	var pgssStatsReset *time.Time
-
-	resetTime, err := s.repo.GetPgssStatsResetTime(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
-	if err == nil && resetTime != nil {
-		pgssStatsReset = &resetTime.Time
-	}
-
-	// Best-effort, like the reset time above.
-	statsSource, err := s.repo.PgssSource(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database)
-	if err != nil {
-		statsSource = ""
-	}
-
-	var locks *autosnapshot.LockCapture
-	if req.Params.IncludeLocks != nil && *req.Params.IncludeLocks {
-		probeCount, probeInterval := 5, 500*time.Millisecond
-		if cfg, cerr := s.storage.GetAutosnapshotConfig(ctx); cerr == nil {
-			if cfg.LockProbeCount > 0 {
-				probeCount = cfg.LockProbeCount
-			}
-
-			if cfg.LockProbeInterval > 0 {
-				probeInterval = cfg.LockProbeInterval
-			}
-		}
-
-		lc := autosnapshot.CaptureLocks(ctx, s.repo, req.Params.ClusterName, req.Params.Instance, req.Params.Database,
-			dto.ScopeInstance, probeCount, probeInterval)
-		locks = &lc
-	}
-
-	id, createdAt, err := s.storage.CreateSnapshot(ctx, req.Params.ClusterName, req.Params.Instance, provenance, reports, storage.SnapshotOpts{
-		PgssStatsReset: pgssStatsReset,
-		StatsSource:    statsSource,
-		LocksData:      locks,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("PostSnapshot | create: %w", err)
+	case err != nil:
+		return nil, fmt.Errorf("PostSnapshot | %w", err)
 	}
 
 	return serverhttp.PostSnapshot201JSONResponse{
-		Id:        openapi_types.UUID(id),
-		CreatedAt: createdAt,
+		Id:        openapi_types.UUID(c.ID),
+		CreatedAt: c.CreatedAt,
 	}, nil
 }
 
@@ -113,18 +53,18 @@ func (s *Handlers) GetSnapshots(
 	ctx context.Context,
 	req serverhttp.GetSnapshotsRequestObject,
 ) (serverhttp.GetSnapshotsResponseObject, error) {
-	if s.storage == nil {
+	if s.snapshotCatalog == nil {
 		return serverhttp.GetSnapshots501Response{}, nil
 	}
 
-	items, err := s.storage.ListSnapshots(ctx, req.Params.ClusterName, req.Params.Instance)
+	items, err := s.snapshotCatalog.List(ctx, req.Params.ClusterName, req.Params.Instance)
 	if err != nil {
 		return nil, fmt.Errorf("GetSnapshots | %w", err)
 	}
 
 	var ret serverhttp.GetSnapshots200JSONResponse = mapstruct.SliceMap(
 		items,
-		func(item storage.SnapshotListItem) serverhttp.SnapshotListItem {
+		func(item querystats.SnapshotListItem) serverhttp.SnapshotListItem {
 			return serverhttp.SnapshotListItem{
 				Id:             openapi_types.UUID(item.ID),
 				CreatedAt:      item.CreatedAt,
@@ -146,30 +86,19 @@ func (s *Handlers) GetSnapshot(
 	ctx context.Context,
 	req serverhttp.GetSnapshotRequestObject,
 ) (serverhttp.GetSnapshotResponseObject, error) {
-	if s.storage == nil {
+	if s.queryStats == nil {
 		return serverhttp.GetSnapshot501Response{}, nil
 	}
 
-	reports, jsonVersion, err := s.storage.GetSnapshot(ctx, req.Id)
-	if err != nil {
+	reports, err := s.queryStats.Snapshot(ctx, req.Id, req.Params.Scope, deref(req.Params.Database))
+	switch {
+	case errors.Is(err, querystats.ErrSnapshotNotFound):
+		return serverhttp.GetSnapshot404Response{}, nil
+	case err != nil:
 		return nil, fmt.Errorf("GetSnapshot | %w", err)
 	}
 
-	if reports == nil {
-		return serverhttp.GetSnapshot404Response{}, nil
-	}
-
-	database := deref(req.Params.Database)
-
-	// Rows of a pre-attribution snapshot name no database; narrowing one would
-	// filter it down to nothing, so it stays instance-wide.
-	scope := resolveScope(req.Params.Scope, database)
-	if jsonVersion < storage.ScopedJSONVersion {
-		scope = dto.ScopeInstance
-	}
-
-	var ret serverhttp.GetSnapshot200JSONResponse = mapstruct.SliceMap(
-		scopeReport(reports, scope, database), mapQueryReport)
+	var ret serverhttp.GetSnapshot200JSONResponse = mapstruct.SliceMap(reports, mapQueryReport)
 
 	return ret, nil
 }
@@ -178,17 +107,17 @@ func (s *Handlers) GetSnapshotLocks(
 	ctx context.Context,
 	req serverhttp.GetSnapshotLocksRequestObject,
 ) (serverhttp.GetSnapshotLocksResponseObject, error) {
-	if s.storage == nil {
+	if s.snapshotCatalog == nil {
 		return serverhttp.GetSnapshotLocks501Response{}, nil
 	}
 
-	raw, ok, err := s.storage.GetSnapshotLocks(ctx, req.Id)
-	if err != nil {
-		return nil, fmt.Errorf("GetSnapshotLocks | %w", err)
-	}
+	raw, err := s.snapshotCatalog.Locks(ctx, req.Id)
 
-	if !ok {
+	switch {
+	case errors.Is(err, querystats.ErrNoLocks):
 		return serverhttp.GetSnapshotLocks404Response{}, nil
+	case err != nil:
+		return nil, fmt.Errorf("GetSnapshotLocks | %w", err)
 	}
 
 	var ls serverhttp.LockSnapshot

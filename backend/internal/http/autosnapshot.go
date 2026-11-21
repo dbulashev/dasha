@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -26,42 +27,23 @@ func (s *Handlers) GetAutosnapshotStatus(
 	_ serverhttp.GetAutosnapshotStatusRequestObject,
 ) (serverhttp.GetAutosnapshotStatusResponseObject, error) {
 	resp := serverhttp.GetAutosnapshotStatus200JSONResponse{
-		Available: s.storage != nil,
+		Available: s.autosnapshotStatus != nil,
 		Enabled:   false,
 	}
 
-	if s.storage == nil {
+	if s.autosnapshotStatus == nil {
 		return resp, nil
 	}
 
-	cfg, err := s.storage.GetAutosnapshotConfig(ctx)
-	if err == nil {
-		resp.Enabled = cfg.Enabled
-	}
+	st := s.autosnapshotStatus.Status(ctx)
+	resp.Enabled = st.Enabled
+	resp.LastHotSnapshotAt = st.LastHotSnapshotAt
 
-	leader, err := s.storage.GetLeaderInfo(ctx)
-	if err == nil {
+	if l := st.Leader; l != nil {
 		resp.Leader = &serverhttp.AutoSnapshotLeaderInfo{
-			InstanceId:    leader.InstanceID,
-			LastHeartbeat: leader.LastHeartbeat,
-			IsAlive:       leader.IsAlive,
-		}
-	}
-
-	// Scheduled hot-objects captures are a separate mechanism from the
-	// triggered pgss events shown next to this — surface their freshness
-	// separately so new hot snapshots are not mistaken for trigger activity.
-	if last, err := s.storage.LastHotSnapshotAt(ctx); err == nil {
-		var newest time.Time
-
-		for _, t := range last {
-			if t.After(newest) {
-				newest = t
-			}
-		}
-
-		if !newest.IsZero() {
-			resp.LastHotSnapshotAt = &newest
+			InstanceId:    l.InstanceID,
+			LastHeartbeat: l.LastHeartbeat,
+			IsAlive:       l.IsAlive,
 		}
 	}
 
@@ -73,11 +55,11 @@ func (s *Handlers) GetAutosnapshotConfig(
 	ctx context.Context,
 	_ serverhttp.GetAutosnapshotConfigRequestObject,
 ) (serverhttp.GetAutosnapshotConfigResponseObject, error) {
-	if s.storage == nil {
+	if s.autosnapshotCfg == nil {
 		return serverhttp.GetAutosnapshotConfig501Response{}, nil
 	}
 
-	cfg, err := s.storage.GetAutosnapshotConfig(ctx)
+	cfg, err := s.autosnapshotCfg.Config(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("GetAutosnapshotConfig | %w", err)
 	}
@@ -90,7 +72,7 @@ func (s *Handlers) PutAutosnapshotConfig(
 	ctx context.Context,
 	req serverhttp.PutAutosnapshotConfigRequestObject,
 ) (serverhttp.PutAutosnapshotConfigResponseObject, error) {
-	if s.storage == nil {
+	if s.autosnapshotCfg == nil {
 		return serverhttp.PutAutosnapshotConfig501Response{}, nil
 	}
 
@@ -103,38 +85,12 @@ func (s *Handlers) PutAutosnapshotConfig(
 		return serverhttp.PutAutosnapshotConfig400Response{}, nil
 	}
 
-	if req.Body.HotColdWindowDays != nil {
-		cfg.HotColdWindowDays = *req.Body.HotColdWindowDays
-	} else {
-		cur, err := s.storage.GetAutosnapshotConfig(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("PutAutosnapshotConfig | current: %w", err)
-		}
+	err = s.autosnapshotCfg.PutConfig(ctx, cfg, req.Body.HotColdWindowDays, userNameFromContext(ctx))
 
-		cfg.HotColdWindowDays = cur.HotColdWindowDays
-	}
-
-	if err := cfg.Validate(); err != nil {
+	switch {
+	case errors.Is(err, autosnapshot.ErrInvalidConfig):
 		return serverhttp.PutAutosnapshotConfig400Response{}, nil
-	}
-
-	// Reject the change if the new defaults would invalidate a stored override:
-	// EffectiveFor is lenient at read time, so an invalid merge would otherwise be
-	// used silently by the daemon.
-	overrides, err := s.storage.ListClusterOverrides(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("PutAutosnapshotConfig | overrides: %w", err)
-	}
-
-	for _, ov := range overrides {
-		if err := cfg.ValidateEffective(ov); err != nil {
-			return serverhttp.PutAutosnapshotConfig400Response{}, nil
-		}
-	}
-
-	user := userNameFromContext(ctx)
-
-	if err := s.storage.SetAutosnapshotConfig(ctx, cfg, user); err != nil {
+	case err != nil:
 		return nil, fmt.Errorf("PutAutosnapshotConfig | %w", err)
 	}
 
@@ -146,27 +102,16 @@ func (s *Handlers) GetAutosnapshotCluster(
 	ctx context.Context,
 	req serverhttp.GetAutosnapshotClusterRequestObject,
 ) (serverhttp.GetAutosnapshotClusterResponseObject, error) {
-	if s.storage == nil {
+	if s.autosnapshotCfg == nil {
 		return serverhttp.GetAutosnapshotCluster501Response{}, nil
 	}
 
-	cfg, err := s.storage.GetAutosnapshotConfig(ctx)
+	v, err := s.autosnapshotCfg.Cluster(ctx, req.Name)
 	if err != nil {
-		return nil, fmt.Errorf("GetAutosnapshotCluster | config: %w", err)
+		return nil, fmt.Errorf("GetAutosnapshotCluster | %w", err)
 	}
 
-	override, err := s.storage.GetClusterOverride(ctx, req.Name)
-	if err != nil {
-		return nil, fmt.Errorf("GetAutosnapshotCluster | override: %w", err)
-	}
-
-	effective := cfg.EffectiveFor(override.Overrides)
-
-	return serverhttp.GetAutosnapshotCluster200JSONResponse{
-		ClusterName: override.ClusterName,
-		Overrides:   override.Overrides,
-		Effective:   triggerDefaultsToAPI(effective),
-	}, nil
+	return serverhttp.GetAutosnapshotCluster200JSONResponse(clusterViewToAPI(v)), nil
 }
 
 // ListAutosnapshotClusters returns overrides + effective config for every cluster
@@ -175,35 +120,18 @@ func (s *Handlers) ListAutosnapshotClusters(
 	ctx context.Context,
 	_ serverhttp.ListAutosnapshotClustersRequestObject,
 ) (serverhttp.ListAutosnapshotClustersResponseObject, error) {
-	if s.storage == nil {
+	if s.autosnapshotCfg == nil {
 		return serverhttp.ListAutosnapshotClusters501Response{}, nil
 	}
 
-	cfg, err := s.storage.GetAutosnapshotConfig(ctx)
+	views, err := s.autosnapshotCfg.Clusters(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("ListAutosnapshotClusters | config: %w", err)
+		return nil, fmt.Errorf("ListAutosnapshotClusters | %w", err)
 	}
 
-	overrides, err := s.storage.ListClusterOverrides(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("ListAutosnapshotClusters | overrides: %w", err)
-	}
-
-	clusters, err := s.repo.Clusters(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("ListAutosnapshotClusters | clusters: %w", err)
-	}
-
-	out := make(serverhttp.ListAutosnapshotClusters200JSONResponse, 0, len(clusters))
-	for _, cl := range clusters {
-		name := cl.Name.String()
-		ov := overrides[name]
-
-		out = append(out, serverhttp.AutoSnapshotClusterOverride{
-			ClusterName: name,
-			Overrides:   ov,
-			Effective:   triggerDefaultsToAPI(cfg.EffectiveFor(ov)),
-		})
+	out := make(serverhttp.ListAutosnapshotClusters200JSONResponse, 0, len(views))
+	for _, v := range views {
+		out = append(out, clusterViewToAPI(v))
 	}
 
 	return out, nil
@@ -214,7 +142,7 @@ func (s *Handlers) PutAutosnapshotCluster(
 	ctx context.Context,
 	req serverhttp.PutAutosnapshotClusterRequestObject,
 ) (serverhttp.PutAutosnapshotClusterResponseObject, error) {
-	if s.storage == nil {
+	if s.autosnapshotCfg == nil {
 		return serverhttp.PutAutosnapshotCluster501Response{}, nil
 	}
 
@@ -222,18 +150,12 @@ func (s *Handlers) PutAutosnapshotCluster(
 		return serverhttp.PutAutosnapshotCluster400Response{}, nil
 	}
 
-	cfg, err := s.storage.GetAutosnapshotConfig(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("PutAutosnapshotCluster | config: %w", err)
-	}
+	err := s.autosnapshotCfg.PutCluster(ctx, req.Name, req.Body.Overrides, userNameFromContext(ctx))
 
-	if err := cfg.ValidateOverride(req.Body.Overrides); err != nil {
+	switch {
+	case errors.Is(err, autosnapshot.ErrInvalidConfig):
 		return serverhttp.PutAutosnapshotCluster400Response{}, nil
-	}
-
-	user := userNameFromContext(ctx)
-
-	if err := s.storage.SetClusterOverride(ctx, req.Name, req.Body.Overrides, user); err != nil {
+	case err != nil:
 		return nil, fmt.Errorf("PutAutosnapshotCluster | %w", err)
 	}
 
@@ -245,7 +167,7 @@ func (s *Handlers) GetAutosnapshotTriggerEvents(
 	ctx context.Context,
 	req serverhttp.GetAutosnapshotTriggerEventsRequestObject,
 ) (serverhttp.GetAutosnapshotTriggerEventsResponseObject, error) {
-	if s.storage == nil {
+	if s.autosnapshotStatus == nil {
 		return serverhttp.GetAutosnapshotTriggerEvents501Response{}, nil
 	}
 
@@ -273,7 +195,7 @@ func (s *Handlers) GetAutosnapshotTriggerEvents(
 		filter.Offset = *req.Params.Offset
 	}
 
-	items, err := s.storage.ListTriggerEvents(ctx, filter)
+	items, err := s.autosnapshotStatus.TriggerEvents(ctx, filter)
 	if err != nil {
 		return nil, fmt.Errorf("GetAutosnapshotTriggerEvents | %w", err)
 	}
@@ -291,11 +213,11 @@ func (s *Handlers) GetAutosnapshotSummary(
 	ctx context.Context,
 	_ serverhttp.GetAutosnapshotSummaryRequestObject,
 ) (serverhttp.GetAutosnapshotSummaryResponseObject, error) {
-	if s.storage == nil {
+	if s.autosnapshotStatus == nil {
 		return serverhttp.GetAutosnapshotSummary501Response{}, nil
 	}
 
-	items, err := s.storage.SummarizeTriggerEvents(ctx)
+	items, err := s.autosnapshotStatus.Summary(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("GetAutosnapshotSummary | %w", err)
 	}
@@ -337,6 +259,14 @@ func configToAPI(cfg autosnapshot.Config) serverhttp.AutoSnapshotConfig {
 		IOSchedule:           cfg.IOSchedule,
 		IORetentionDays:      cfg.IORetentionDays,
 		Defaults:             triggerDefaultsToAPI(cfg.Defaults),
+	}
+}
+
+func clusterViewToAPI(v autosnapshot.ClusterView) serverhttp.AutoSnapshotClusterOverride {
+	return serverhttp.AutoSnapshotClusterOverride{
+		ClusterName: v.Name,
+		Overrides:   v.Overrides,
+		Effective:   triggerDefaultsToAPI(v.Effective),
 	}
 }
 
@@ -391,16 +321,6 @@ func configFromAPI(api serverhttp.AutoSnapshotConfig) (autosnapshot.Config, erro
 	deferredInterval, err := parseOptionalDuration(api.Defaults.ActivitySpike.DeferredInterval)
 	if err != nil {
 		return autosnapshot.Config{}, fmt.Errorf("deferred_interval: %w", err)
-	}
-
-	// The struct validator cannot judge a cron expression; parse it here so an
-	// invalid schedule is a 400 instead of a daemon-side daily fallback.
-	if _, err := autosnapshot.ParseCronSchedule(api.HotSchedule); err != nil {
-		return autosnapshot.Config{}, fmt.Errorf("hot_schedule: %w", err)
-	}
-
-	if _, err := autosnapshot.ParseCronSchedule(api.IOSchedule); err != nil {
-		return autosnapshot.Config{}, fmt.Errorf("io_schedule: %w", err)
 	}
 
 	return autosnapshot.Config{

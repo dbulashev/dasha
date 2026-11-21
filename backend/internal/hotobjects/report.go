@@ -7,9 +7,14 @@ import (
 	"time"
 )
 
-// Key builds the canonical map key for one object of one kind.
-func Key(kind Kind, schema, object string) string {
-	return string(kind) + ":" + schema + "." + object
+// ObjectKey identifies one object of one kind.
+type ObjectKey struct {
+	Kind Kind
+	ObjectRef
+}
+
+func Key(kind Kind, schema, object string) ObjectKey {
+	return ObjectKey{Kind: kind, Schema: schema, Object: object}
 }
 
 // RankKey extracts the class ranking value from a counter set (cumulative or
@@ -80,7 +85,7 @@ type HostSample struct {
 // window from the latest snapshot of the database that has one.
 type BuildInput struct {
 	Sample     HostSample
-	Anchors    map[string]AnchorRow
+	Anchors    map[ObjectKey]AnchorRow
 	PrevWindow *HostWindow
 }
 
@@ -120,7 +125,7 @@ func BuildSnapshot(
 		Histograms:   map[Class]KindHistogram{},
 	}
 
-	agg := map[string]*aggObject{}
+	agg := map[ObjectKey]*aggObject{}
 
 	for _, in := range inputs {
 		complete := epochIntact(in)
@@ -273,7 +278,7 @@ func epochIntact(in BuildInput) bool {
 }
 
 // rankClass fills one kind+class top and its tail histogram/coverage.
-func (s *Snapshot) rankClass(kind Kind, class Class, agg map[string]*aggObject, topN int) {
+func (s *Snapshot) rankClass(kind Kind, class Class, agg map[ObjectKey]*aggObject, topN int) {
 	type ranked struct {
 		obj *aggObject
 		key int64
@@ -294,7 +299,11 @@ func (s *Snapshot) rankClass(kind Kind, class Class, agg map[string]*aggObject, 
 			return all[i].key > all[j].key
 		}
 		// Deterministic order among equals.
-		return all[i].obj.schema+all[i].obj.object < all[j].obj.schema+all[j].obj.object
+		if all[i].obj.schema != all[j].obj.schema {
+			return all[i].obj.schema < all[j].obj.schema
+		}
+
+		return all[i].obj.object < all[j].obj.object
 	})
 
 	n := min(topN, len(all))
@@ -389,11 +398,7 @@ func quantiles(vals, probs []float64) []float64 {
 	out := make([]float64, 0, len(probs))
 
 	for _, p := range probs {
-		idx := max(int(math.Ceil(p*float64(n)-1e-9)), 1)
-
-		if idx > n {
-			idx = n
-		}
+		idx := min(max(int(math.Ceil(p*float64(n)-1e-9)), 1), n)
 
 		out = append(out, sorted[idx-1])
 	}

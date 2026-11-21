@@ -160,7 +160,7 @@ func newTestService(t *testing.T, p *fakeProvider, cfg config.LogSearchConfig) S
 		}},
 	})
 
-	return NewService(clusters, reg, cfg, config.LogInsightsConfig{}, nil, nil, zap.NewNop())
+	return NewService(clusters, reg, cfg, config.LogInsightsConfig{}, nil, nil, nil, zap.NewNop())
 }
 
 func testQuery() SearchQuery {

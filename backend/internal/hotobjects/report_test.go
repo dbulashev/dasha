@@ -32,8 +32,8 @@ func TestDelta(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func anchorsOf(capturedAt time.Time, reset *time.Time, rows ...AnchorRow) map[string]AnchorRow {
-	m := make(map[string]AnchorRow, len(rows))
+func anchorsOf(capturedAt time.Time, reset *time.Time, rows ...AnchorRow) map[ObjectKey]AnchorRow {
+	m := make(map[ObjectKey]AnchorRow, len(rows))
 
 	for _, r := range rows {
 		r.CapturedAt = capturedAt
@@ -97,6 +97,35 @@ func TestBuildSnapshot_SumsHostsAndRanks(t *testing.T) {
 	require.Len(t, snap.Windows, 2)
 	assert.True(t, snap.Windows["h1"].Complete)
 	assert.Equal(t, ts(1), snap.Windows["h1"].From)
+}
+
+func TestBuildSnapshot_DottedNamesDoNotCollide(t *testing.T) {
+	reset := ts(0)
+
+	anchors := anchorsOf(ts(1), &reset,
+		tableRow("a.b", "c", 100, Counters{"seq_tup_read": 100}),
+		tableRow("a", "b.c", 100, Counters{"seq_tup_read": 1000}),
+	)
+
+	sample := HostSample{Instance: "h1", CapturedAt: ts(25), StatsReset: &reset, Rows: []AnchorRow{
+		tableRow("a.b", "c", 100, Counters{"seq_tup_read": 130}),
+		tableRow("a", "b.c", 100, Counters{"seq_tup_read": 1500}),
+	}}
+
+	snap := BuildSnapshot("c1", "db", ts(25), []BuildInput{{Sample: sample, Anchors: anchors}}, nil, 10)
+
+	got := map[ObjectRef]int64{}
+
+	for _, e := range snap.Top {
+		if e.Class == ClassReads {
+			got[ObjectRef{Schema: e.Schema, Object: e.Object}] = RankKey(KindTable, ClassReads, e.Delta)
+		}
+	}
+
+	assert.Equal(t, map[ObjectRef]int64{
+		{Schema: "a.b", Object: "c"}: 30,
+		{Schema: "a", Object: "b.c"}: 500,
+	}, got)
 }
 
 func TestBuildSnapshot_EpochBreak(t *testing.T) {

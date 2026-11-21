@@ -1,8 +1,8 @@
 # MCP connector (dasha-mcp) behind the UI host: clients point at https://<host>/mcp
 # and send their own PAT per request (Authorization: Bearer / X-API-Key), which
 # nginx forwards untouched. Rendered only when MCP_URL is set.
-location /mcp {
-    rewrite ^/mcp/?(.*)$ /$1 break;
+location ${DASHA_BASE_PATH}/mcp {
+    rewrite ^${BASE_PATH_REGEX}/mcp/?(.*)$ /$1 break;
     proxy_pass http://${MCP_URL};
     proxy_http_version 1.1;
     proxy_set_header Host $host;

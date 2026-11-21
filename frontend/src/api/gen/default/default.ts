@@ -2812,10 +2812,15 @@ export type putHealthScoreWeightsResponse400 = {
   status: 400
 }
 
+export type putHealthScoreWeightsResponse501 = {
+  data: void
+  status: 501
+}
+
 export type putHealthScoreWeightsResponseSuccess = (putHealthScoreWeightsResponse200) & {
   headers: Headers;
 };
-export type putHealthScoreWeightsResponseError = (putHealthScoreWeightsResponse400) & {
+export type putHealthScoreWeightsResponseError = (putHealthScoreWeightsResponse400 | putHealthScoreWeightsResponse501) & {
   headers: Headers;
 };
 

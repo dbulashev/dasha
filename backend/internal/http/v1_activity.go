@@ -141,8 +141,6 @@ const (
 	profileWriteTimeout = profileMaxDuration*time.Second + profileWindowSlack + 5*time.Second
 )
 
-var errWindowElapsed = errors.New("activity window elapsed")
-
 func (s *Handlers) GetActivityProfile(
 	ctx context.Context,
 	req serverhttp.GetActivityProfileRequestObject,
@@ -157,11 +155,7 @@ func (s *Handlers) GetActivityProfile(
 		return serverhttp.GetActivityProfile400JSONResponse{Message: msg}, nil
 	}
 
-	get := func(ctx context.Context) (activity.Sample, activity.Access, error) {
-		return s.activity.Get(ctx, p.ClusterName, p.Instance)
-	}
-
-	col, err := collectActivity(ctx, get, duration/period, time.Duration(period)*time.Second,
+	col, err := s.activity.Collect(ctx, p.ClusterName, p.Instance, duration/period, time.Duration(period)*time.Second,
 		time.Duration(duration)*time.Second+profileWindowSlack)
 
 	switch {
@@ -171,26 +165,25 @@ func (s *Handlers) GetActivityProfile(
 		return serverhttp.GetActivityProfile404Response{}, nil
 	case err != nil:
 		return nil, fmt.Errorf("GetActivityProfile | %w", err)
-	case len(col.samples) == 0 && (col.lastErr == nil || repository.IsTimeout(col.lastErr)):
-		return serverhttp.GetActivityProfile504JSONResponse{QueryTimeoutJSONResponse: serverhttp.QueryTimeoutJSONResponse{
-			Message: fmt.Sprintf("no sample of pg_stat_activity completed in time (%d timed out)", col.failed),
-		}}, nil
-	case len(col.samples) == 0:
-		return nil, fmt.Errorf("GetActivityProfile | all %d samples failed | %w", col.failed, col.lastErr)
+	case len(col.Samples) == 0 && (col.LastErr == nil || repository.IsTimeout(col.LastErr)):
+		return serverhttp.GetActivityProfile504JSONResponse{
+			Message: fmt.Sprintf("no sample of pg_stat_activity completed in time (%d timed out)", col.Failed)}, nil
+	case len(col.Samples) == 0:
+		return nil, fmt.Errorf("GetActivityProfile | all %d samples failed | %w", col.Failed, col.LastErr)
 	}
 
 	filter := activity.Filter{
 		Database:          deref(p.Database),
-		IncludeBackground: deref(p.IncludeBackground) && col.access.CanReadAllStats,
+		IncludeBackground: deref(p.IncludeBackground) && col.Access.CanReadAllStats,
 	}
 
 	if p.Class != nil {
 		filter.Class = string(*p.Class)
 	}
 
-	prof := activity.Aggregate(col.samples, filter, top)
+	prof := activity.Aggregate(col.Samples, filter, top)
 
-	return serverhttp.GetActivityProfile200JSONResponse(activityProfileToAPI(prof, col.access, col.failed)), nil
+	return serverhttp.GetActivityProfile200JSONResponse(activityProfileToAPI(prof, col.Access, col.Failed)), nil
 }
 
 func intOr(p *int, def int) int {
@@ -216,73 +209,6 @@ func profileParamsError(duration, period, top int, class *serverhttp.ActivityCla
 	}
 
 	return ""
-}
-
-type activityCollection struct {
-	samples []activity.Sample
-	access  activity.Access
-	failed  int
-	lastErr error
-}
-
-// collectActivity takes n samples period apart. A failed sample is counted and
-// skipped; a missing host, an unsupported version or a gone caller ends the window.
-// Past budget the window ends early with the samples taken so far.
-func collectActivity(
-	ctx context.Context,
-	get func(context.Context) (activity.Sample, activity.Access, error),
-	n int,
-	period, budget time.Duration,
-) (activityCollection, error) {
-	var col activityCollection
-
-	ctx, cancel := context.WithTimeoutCause(ctx, budget, errWindowElapsed)
-	defer cancel()
-
-	stop := func() (activityCollection, error) {
-		if errors.Is(context.Cause(ctx), errWindowElapsed) {
-			return col, nil
-		}
-
-		return col, ctx.Err()
-	}
-
-	ticker := time.NewTicker(period)
-	defer ticker.Stop()
-
-	for i := range n {
-		if i > 0 {
-			select {
-			case <-ticker.C:
-			case <-ctx.Done():
-				return stop()
-			}
-		}
-
-		smp, acc, err := get(ctx)
-
-		switch {
-		case errors.Is(err, activity.ErrUnsupportedVersion), errors.Is(err, repository.ErrNotFound):
-			return col, err
-		case ctx.Err() != nil:
-			return stop()
-		case err != nil:
-			col.failed++
-			col.lastErr = err
-
-			continue
-		}
-
-		col.access = acc
-
-		if k := len(col.samples); k > 0 && col.samples[k-1].At.Equal(smp.At) {
-			continue
-		}
-
-		col.samples = append(col.samples, smp)
-	}
-
-	return col, nil
 }
 
 func activityProfileToAPI(p activity.Profile, acc activity.Access, failed int) serverhttp.ActivityProfile {

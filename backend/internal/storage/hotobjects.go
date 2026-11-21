@@ -97,7 +97,7 @@ func upsertHotAnchorsTx(
 func (s *Storage) GetHotAnchors(
 	ctx context.Context,
 	clusterName, instance, database string,
-) (map[string]hotobjects.AnchorRow, error) {
+) (map[hotobjects.ObjectKey]hotobjects.AnchorRow, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT kind, schema_name, object_name, COALESCE(table_name, ''), captured_at, stats_reset, size_bytes, part_sig, counters, quiet_since
 		FROM hot_anchor
@@ -108,7 +108,7 @@ func (s *Storage) GetHotAnchors(
 	}
 	defer rows.Close()
 
-	ret := make(map[string]hotobjects.AnchorRow)
+	ret := make(map[hotobjects.ObjectKey]hotobjects.AnchorRow)
 
 	for rows.Next() {
 		var (
@@ -627,7 +627,7 @@ func (s *Storage) GetHotTop(
 	return ret, rows.Err()
 }
 
-// GetHotRanks returns rank by schema.object for one snapshot+kind+class — a
+// GetHotRanks returns rank by object for one snapshot+kind+class — a
 // single lookup that lets the API attach PrevRank without loading a second
 // full snapshot.
 func (s *Storage) GetHotRanks(
@@ -636,7 +636,7 @@ func (s *Storage) GetHotRanks(
 	capturedAt time.Time,
 	kind hotobjects.Kind,
 	class hotobjects.Class,
-) (map[string]int, error) {
+) (map[hotobjects.ObjectRef]int, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT schema_name, object_name, rank
 		FROM hot_top
@@ -647,19 +647,19 @@ func (s *Storage) GetHotRanks(
 	}
 	defer rows.Close()
 
-	ret := make(map[string]int)
+	ret := make(map[hotobjects.ObjectRef]int)
 
 	for rows.Next() {
 		var (
-			schema, object string
-			rank           int
+			ref  hotobjects.ObjectRef
+			rank int
 		)
 
-		if err := rows.Scan(&schema, &object, &rank); err != nil {
+		if err := rows.Scan(&ref.Schema, &ref.Object, &rank); err != nil {
 			return nil, fmt.Errorf("storage: scan hot rank: %w", err)
 		}
 
-		ret[schema+"."+object] = rank
+		ret[ref] = rank
 	}
 
 	return ret, rows.Err()

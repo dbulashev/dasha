@@ -147,3 +147,48 @@ type HistoryEntry struct {
 	SizeBytes  int64
 	Delta      Counters
 }
+
+// ObjectRef names one object within a kind. A struct key rather than
+// schema+"."+object: "a.b"+"c" and "a"+"b.c" must not collide.
+type ObjectRef struct {
+	Schema string
+	Object string
+}
+
+// WindowDays is the longest complete host window in days — the normalization
+// base for per-day rates. Zero when no host has a complete window.
+func (s *Snapshot) WindowDays() float64 {
+	var maxDays float64
+
+	for _, w := range s.Windows {
+		if !w.Complete {
+			continue
+		}
+
+		if d := w.To.Sub(w.From).Hours() / 24; d > maxDays {
+			maxDays = d
+		}
+	}
+
+	return maxDays
+}
+
+// Histogram returns the tail histogram of one kind within a class; nil when
+// the snapshot has none (indexes in the writes class, or an empty tail).
+func (s *Snapshot) Histogram(kind Kind, class Class) *Histogram {
+	h := s.Histograms[class]
+	if kind == KindIndex {
+		return h.Indexes
+	}
+
+	return h.Tables
+}
+
+func (s *Snapshot) CoverageFor(kind Kind, class Class) float64 {
+	c := s.Coverage[class]
+	if kind == KindIndex {
+		return c.Indexes
+	}
+
+	return c.Tables
+}

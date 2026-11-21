@@ -1,40 +1,80 @@
 package http
 
 import (
-	"go.uber.org/zap"
-
 	"github.com/dbulashev/dasha/internal/activity"
+	"github.com/dbulashev/dasha/internal/autosnapshot"
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/healthscore"
+	"github.com/dbulashev/dasha/internal/hotobjects"
 	"github.com/dbulashev/dasha/internal/logs"
 	"github.com/dbulashev/dasha/internal/metrics"
+	"github.com/dbulashev/dasha/internal/pat"
+	"github.com/dbulashev/dasha/internal/piicatalog"
+	"github.com/dbulashev/dasha/internal/querystats"
 	"github.com/dbulashev/dasha/internal/repository"
-	"github.com/dbulashev/dasha/internal/storage"
+	"github.com/dbulashev/dasha/internal/statio"
 )
 
 // Handlers holds the HTTP handler dependencies used by the server.
 type Handlers struct {
-	cfg      *config.Config
-	repo     repository.Repository
-	storage  *storage.Storage
-	metrics  *metrics.Service
-	logs     logs.Service
-	scorer   *healthscore.Scorer
-	fleet    *healthscore.Fleet
-	activity *activity.Sampler
+	cfg       *config.Config
+	repo      repository.Repository
+	metrics   *metrics.Service
+	logs      logs.Service
+	scorer    *healthscore.Scorer
+	fleet     *healthscore.Fleet
+	activity  *activity.Sampler
+	pii       *piicatalog.Reader
+	snapshots *autosnapshot.ManualCapturer
+	hot       *hotobjects.Reader
+	pats      *pat.Service
+
+	tokenAdmin         *pat.Admin
+	autosnapshotCfg    *autosnapshot.ConfigService
+	autosnapshotStatus *autosnapshot.StatusReader
+	queryStats         *querystats.Service
+	snapshotCatalog    *querystats.SnapshotCatalog
+	ioHistory          *statio.HistoryReader
+}
+
+// Services are built in internal/deps. The storage-backed ones are nil when
+// storage is not configured, and their endpoints answer 501.
+type Services struct {
+	Scorer     *healthscore.Scorer
+	Fleet      *healthscore.Fleet
+	Activity   *activity.Sampler
+	PATs       *pat.Service
+	TokenAdmin *pat.Admin
+
+	PII                *piicatalog.Reader
+	Snapshots          *autosnapshot.ManualCapturer
+	Hot                *hotobjects.Reader
+	AutosnapshotCfg    *autosnapshot.ConfigService
+	AutosnapshotStatus *autosnapshot.StatusReader
+	QueryStats         *querystats.Service
+	SnapshotCatalog    *querystats.SnapshotCatalog
+	IOHistory          *statio.HistoryReader
 }
 
 // NewDashaHandlers constructs a new Handlers instance from its dependencies.
 func NewDashaHandlers(
-	cfg *config.Config, repo repository.Repository, st *storage.Storage, ms *metrics.Service, logsSvc logs.Service, logger *zap.Logger,
+	cfg *config.Config, repo repository.Repository, ms *metrics.Service, logsSvc logs.Service, svc Services,
 ) *Handlers {
-	scorer := healthscore.NewScorer(cfg, repo, st, ms)
-
 	return &Handlers{
-		cfg: cfg, repo: repo, storage: st, metrics: ms, logs: logsSvc,
-		scorer:   scorer,
-		fleet:    healthscore.NewFleet(cfg, scorer, ms, repo, logger),
-		activity: activity.NewSampler(repo, cfg.Activity),
+		cfg: cfg, repo: repo, metrics: ms, logs: logsSvc,
+		scorer:             svc.Scorer,
+		fleet:              svc.Fleet,
+		activity:           svc.Activity,
+		pii:                svc.PII,
+		snapshots:          svc.Snapshots,
+		hot:                svc.Hot,
+		pats:               svc.PATs,
+		tokenAdmin:         svc.TokenAdmin,
+		autosnapshotCfg:    svc.AutosnapshotCfg,
+		autosnapshotStatus: svc.AutosnapshotStatus,
+		queryStats:         svc.QueryStats,
+		snapshotCatalog:    svc.SnapshotCatalog,
+		ioHistory:          svc.IOHistory,
 	}
 }
 

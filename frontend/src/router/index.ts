@@ -1,9 +1,10 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { appBasePath, appURL } from '@/basePath'
 import HomeView from '../views/HomeView.vue'
 import { useAuthStore } from '@/stores/auth'
 
 const router = createRouter({
-  history: createWebHistory(import.meta.env.BASE_URL),
+  history: createWebHistory(appBasePath()),
   routes: [
     {
       path: '/',
@@ -152,8 +153,11 @@ router.beforeEach(async (to) => {
 
   if (auth.isAuthenticated) {
     const returnUrl = auth.consumeReturnUrl()
-    if (returnUrl && returnUrl !== to.fullPath) {
-      return returnUrl
+    // Convert the saved browser URL to a base-relative route.
+    const base = appURL('')
+    const route = returnUrl ? returnUrl.slice(base.length) || '/' : null
+    if (route && route !== to.fullPath) {
+      return route
     }
   }
 })

@@ -108,7 +108,7 @@ func NewContainer() *Container {
 		}
 
 		return logs.NewService(
-			clusters, sources, cfg.LogSearch, cfg.LogInsights, newScanSnapshots(st), repo, logger,
+			clusters, sources, cfg.LogSearch, cfg.LogInsights, newScanSnapshots(st), repo, auditActor, logger,
 		), nil
 	})
 
@@ -119,6 +119,8 @@ func NewContainer() *Container {
 
 		return metrics.NewService(cfg.HealthScore.Metrics, clusterMetaProvider{clusters: clusters}, logger)
 	})
+
+	provideServices(i)
 
 	return &Container{i: i}
 }
@@ -181,7 +183,8 @@ func (c *Container) Discovery() *discovery.Engine {
 }
 
 // ProvideStorage registers the snapshot storage. Services the container builds
-// afterwards reach it from there, so it has to run before Logs().
+// afterwards reach it from there, so it has to run before Logs() and
+// HandlerServices().
 func (c *Container) ProvideStorage(st *storage.Storage) {
 	do.ProvideValue(c.i, st)
 }
@@ -205,7 +208,11 @@ func (c *Container) AuthMiddlewares(ctx context.Context, resolver auth.PATResolv
 	cfg := c.Config()
 	logger := c.Logger()
 
-	return auth.NewMiddlewares(ctx, cfg.Auth, resolver, logger)
+	if err := cfg.PIICatalog.ValidateSecrets(cfg.Auth); err != nil {
+		return nil, err
+	}
+
+	return auth.NewMiddlewares(ctx, cfg.Auth, cfg.BasePath, resolver, logger)
 }
 
 // PAT resolution tuning. The cache keeps the hot path (every API request that
@@ -493,7 +500,10 @@ func provideLogger(debug bool) *zap.Logger {
 // newConfigViper keeps dots inside map keys (keyword_fields "host.name",
 // selector "kubernetes.labels.app") instead of splitting them into nested maps.
 func newConfigViper() *viper.Viper {
-	return viper.NewWithOptions(viper.KeyDelimiter("::"))
+	v := viper.NewWithOptions(viper.KeyDelimiter("::"))
+	v.SetDefault("base_path", "")
+	v.MustBindEnv("base_path", "DASHA_BASE_PATH")
+	return v
 }
 
 // restoreRoleMappingCase reloads role_mapping keys from the raw YAML: viper
@@ -581,6 +591,11 @@ func provideConfig() (*config.Config, error) {
 		return nil, fmt.Errorf("provideConfig | auth.oidc.role_mapping: %w", err)
 	}
 
+	c.BasePath, err = config.NormalizeBasePath(c.BasePath)
+	if err != nil {
+		return nil, fmt.Errorf("provideConfig | %w", err)
+	}
+
 	for i := range c.Clusters {
 		if c.Clusters[i].PasswordFromEnv != "" {
 			c.Clusters[i].Password = os.Getenv(c.Clusters[i].PasswordFromEnv)
@@ -650,6 +665,7 @@ func provideConfig() (*config.Config, error) {
 	c.LogSearch = c.LogSearch.WithDefaults()
 	c.LogInsights = c.LogInsights.WithDefaults()
 	c.Activity = c.Activity.WithDefaults()
+	c.PIICatalog = c.PIICatalog.WithDefaults()
 
 	if err := c.HealthScore.Validate(); err != nil {
 		return nil, fmt.Errorf("provideConfig | health_score: %w", err)
@@ -661,6 +677,10 @@ func provideConfig() (*config.Config, error) {
 
 	if err := c.Auth.Validate(); err != nil {
 		return nil, fmt.Errorf("provideConfig | auth config: %w", err)
+	}
+
+	if err := c.PIICatalog.Validate(c.Auth); err != nil {
+		return nil, fmt.Errorf("provideConfig | %w", err)
 	}
 
 	if err := c.SchemaLint.Validate(); err != nil {
@@ -753,4 +773,12 @@ func buildLogSource(
 	default:
 		return nil, fmt.Errorf("unknown log source type %q", cfg.Type)
 	}
+}
+
+func auditActor(ctx context.Context) string {
+	if u := auth.UserFromContext(ctx); u != nil {
+		return u.Name
+	}
+
+	return ""
 }

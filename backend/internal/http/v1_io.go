@@ -45,31 +45,16 @@ func (s *Handlers) GetIOHistory(
 	ctx context.Context,
 	req serverhttp.GetIOHistoryRequestObject,
 ) (serverhttp.GetIOHistoryResponseObject, error) {
-	if s.storage == nil {
+	if s.ioHistory == nil {
 		return serverhttp.GetIOHistory501Response{}, nil
 	}
 
-	cluster, instance := req.Params.ClusterName, req.Params.Instance
+	instance := req.Params.Instance
 	from, to := ioWindow(req.Params.From, req.Params.To)
 
-	metas, err := s.storage.GetIOSnapshotMetas(ctx, cluster, instance, from, to)
+	hist, err := s.ioHistory.Read(ctx, req.Params.ClusterName, instance, from, to, ioPoints(req.Params.Points))
 	if err != nil {
 		return nil, fmt.Errorf("GetIOHistory | %w", err)
-	}
-
-	earliest, latest, err := s.storage.IOSnapshotRange(ctx, cluster, instance)
-	if err != nil {
-		return nil, fmt.Errorf("GetIOHistory | %w", err)
-	}
-
-	plan := statio.PlanBuckets(metas, ioPoints(req.Params.Points))
-
-	var snaps []statio.Snapshot
-
-	if at := plan.At(); len(at) > 0 {
-		if snaps, err = s.storage.GetIOSnapshotsAt(ctx, cluster, instance, at); err != nil {
-			return nil, fmt.Errorf("GetIOHistory | %w", err)
-		}
 	}
 
 	filter := statio.Filter{
@@ -79,8 +64,8 @@ func (s *Handlers) GetIOHistory(
 	}
 
 	out := serverhttp.IOHistory{
-		Meta:   ioHistoryMeta(instance, earliest, latest, metas),
-		Series: ioSeries(plan.Assemble(snaps), filter, ioGroupBy(string(deref(req.Params.GroupBy)))),
+		Meta:   ioHistoryMeta(instance, hist.Earliest, hist.Latest, hist.Metas),
+		Series: ioSeries(hist.Buckets, filter, ioGroupBy(string(deref(req.Params.GroupBy)))),
 	}
 
 	return serverhttp.GetIOHistory200JSONResponse(out), nil

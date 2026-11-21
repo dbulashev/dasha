@@ -33,7 +33,7 @@ func (s *Handlers) GetAuthInfo(
 	// exists here. The minimum role ships as its own field and the client checks
 	// it against the role it knows from /auth/me; the server-side enforcement
 	// lives in CreatePersonalToken, where the identity is guaranteed.
-	patEnabled := s.cfg.Auth.Mode == config.AuthModeOIDC && s.storage.APITokensReady(ctx)
+	patEnabled := s.cfg.Auth.Mode == config.AuthModeOIDC && s.pats != nil && s.pats.Ready(ctx)
 	patMinRole := serverhttp.AuthInfoPatMinRole(s.cfg.Auth.PATMinRole)
 	activityWindow := s.cfg.Activity.WindowMinutes
 	resp := serverhttp.GetAuthInfo200JSONResponse{
@@ -45,7 +45,7 @@ func (s *Handlers) GetAuthInfo(
 	}
 
 	if s.cfg.Auth.Mode == config.AuthModeOIDC {
-		loginURL := "/auth/login"
+		loginURL := s.cfg.BasePath + "/auth/login"
 		resp.OidcLoginUrl = &loginURL
 	}
 

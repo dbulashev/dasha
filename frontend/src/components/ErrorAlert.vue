@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { statusMessageKey } from '@/utils/error'
+import { appURL } from '@/basePath'
 
 const { t } = useI18n()
 
@@ -21,6 +22,6 @@ const text = computed(() => {
     :headline="String(code)"
     :title="t('Something went wrong')"
     :text="text"
-    image="/dasha-appology.png"
+    :image="appURL('/dasha-appology.png')"
   />
 </template>

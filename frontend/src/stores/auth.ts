@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { getAuthInfo } from '@/api/gen/default/default'
 import { AuthInfoMode } from '@/api/models'
+import { appBasePath, appURL } from '@/basePath'
 
 interface UserInfo {
   name: string
@@ -36,7 +37,8 @@ export function isSafeReturnUrl(url: string): boolean {
   if (!url.startsWith('/') || url.startsWith('//') || url.startsWith('/\\')) return false
   try {
     const parsed = new URL(url, window.location.origin)
-    return parsed.origin === window.location.origin && !parsed.pathname.startsWith('/auth/')
+    return parsed.origin === window.location.origin &&
+      parsed.pathname.startsWith(appBasePath()) && !parsed.pathname.startsWith(appURL('/auth/'))
   } catch {
     return false
   }
@@ -104,7 +106,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     if (mode.value === AuthInfoMode.oidc) {
       try {
-        const meRes = await fetch('/auth/me')
+        const meRes = await fetch(appURL('/auth/me'))
         if (meRes.ok) {
           user.value = await meRes.json()
         }
@@ -152,7 +154,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function logout() {
     try {
-      const res = await fetch('/auth/logout', { method: 'POST' })
+      const res = await fetch(appURL('/auth/logout'), { method: 'POST' })
 
       if (res.ok) {
         const data = await res.json()
@@ -168,7 +170,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     user.value = null
-    window.location.href = '/'
+    window.location.href = appBasePath()
   }
 
   return { mode, oidcLoginUrl, user, initialized, isAuthenticated, requiresLogin, isAdmin, enableQueryStatsReset, patEnabled, patMinRole, activityWindowMinutes, canManageTokens, canAdminTokens, init, doLoginRedirect, handleUnauthorized, consumeReturnUrl, logout }

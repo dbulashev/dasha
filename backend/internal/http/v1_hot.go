@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"sort"
@@ -18,26 +19,21 @@ func (s *Handlers) GetTablesHot(
 	ctx context.Context,
 	req serverhttp.GetTablesHotRequestObject,
 ) (serverhttp.GetTablesHotResponseObject, error) {
-	if s.storage == nil {
+	if s.hot == nil {
 		return serverhttp.GetTablesHot501Response{}, nil
 	}
 
-	class := hotobjects.ClassReads
-	if req.Params.Class != nil {
-		class = hotobjects.Class(*req.Params.Class)
+	report, err := s.hotReport(ctx, req.Params.ClusterName, req.Params.Database,
+		hotobjects.KindTable, hotClass(req.Params.Class), req.Params.At, req.Params.Limit, req.Params.Offset)
+	if errors.Is(err, hotobjects.ErrNoSnapshot) {
+		return serverhttp.GetTablesHot404Response{}, nil
 	}
 
-	report, err := s.hotReport(ctx, req.Params.ClusterName, req.Params.Database,
-		hotobjects.KindTable, class, req.Params.At, req.Params.Limit, req.Params.Offset)
 	if err != nil {
 		return nil, fmt.Errorf("GetTablesHot | %w", err)
 	}
 
-	if report == nil {
-		return serverhttp.GetTablesHot404Response{}, nil
-	}
-
-	return serverhttp.GetTablesHot200JSONResponse(*report), nil
+	return serverhttp.GetTablesHot200JSONResponse(report), nil
 }
 
 // GetIndexesHot serves the stored hot-indexes top for one class.
@@ -45,32 +41,23 @@ func (s *Handlers) GetIndexesHot(
 	ctx context.Context,
 	req serverhttp.GetIndexesHotRequestObject,
 ) (serverhttp.GetIndexesHotResponseObject, error) {
-	if s.storage == nil {
+	if s.hot == nil {
 		return serverhttp.GetIndexesHot501Response{}, nil
 	}
 
-	class := hotobjects.ClassReads
-	if req.Params.Class != nil {
-		class = hotobjects.Class(*req.Params.Class)
+	report, err := s.hotReport(ctx, req.Params.ClusterName, req.Params.Database,
+		hotobjects.KindIndex, hotClass(req.Params.Class), req.Params.At, req.Params.Limit, req.Params.Offset)
+	if errors.Is(err, hotobjects.ErrNoSnapshot) {
+		return serverhttp.GetIndexesHot404Response{}, nil
 	}
 
-	report, err := s.hotReport(ctx, req.Params.ClusterName, req.Params.Database,
-		hotobjects.KindIndex, class, req.Params.At, req.Params.Limit, req.Params.Offset)
 	if err != nil {
 		return nil, fmt.Errorf("GetIndexesHot | %w", err)
 	}
 
-	if report == nil {
-		return serverhttp.GetIndexesHot404Response{}, nil
-	}
-
-	return serverhttp.GetIndexesHot200JSONResponse(*report), nil
+	return serverhttp.GetIndexesHot200JSONResponse(report), nil
 }
 
-// hotDatesLimit bounds the day-selector list.
-const hotDatesLimit = 60
-
-// hotReport assembles a HotReport from storage; nil when no snapshot exists.
 func (s *Handlers) hotReport(
 	ctx context.Context,
 	clusterName, database string,
@@ -78,74 +65,36 @@ func (s *Handlers) hotReport(
 	class hotobjects.Class,
 	at *time.Time,
 	limitPtr, offsetPtr *int,
-) (*serverhttp.HotReport, error) {
+) (serverhttp.HotReport, error) {
 	limit, offset := paginationDefaults(limitPtr, offsetPtr, defaultHotLimit)
 
-	snap, err := s.storage.GetHotSnapshot(ctx, clusterName, database, at)
+	report, err := s.hot.Report(ctx, hotobjects.ReportQuery{
+		Cluster:  clusterName,
+		Database: database,
+		Kind:     kind,
+		Class:    class,
+		At:       at,
+		Limit:    limit,
+		Offset:   offset,
+	})
 	if err != nil {
-		return nil, err
+		return serverhttp.HotReport{}, err //nolint:exhaustruct
 	}
-
-	if snap == nil {
-		return nil, nil //nolint:nilnil
-	}
-
-	entries, err := s.storage.GetHotTop(ctx, snap.ID, snap.CapturedAt, kind, class, limit, offset)
-	if err != nil {
-		return nil, err
-	}
-
-	// PrevRank from the snapshot immediately preceding this one — a single
-	// indexed lookup; trend arrows in the UI come from this.
-	prevRanks := map[string]int{}
-
-	if prev, err := s.storage.GetHotSnapshotBefore(ctx, clusterName, database, snap.CapturedAt); err == nil && prev != nil {
-		prevRanks, _ = s.storage.GetHotRanks(ctx, prev.ID, prev.CapturedAt, kind, class)
-	}
-
-	dates, err := s.storage.ListHotSnapshotDates(ctx, clusterName, database, hotDatesLimit)
-	if err != nil {
-		return nil, err
-	}
-
-	windowDays := hotWindowDays(snap)
 
 	out := serverhttp.HotReport{
-		Snapshot: hotSnapshotMeta(snap, kind, class, dates),
-		Entries:  make([]serverhttp.HotEntry, 0, len(entries)),
+		Snapshot: hotSnapshotMeta(report),
+		Entries:  make([]serverhttp.HotEntry, 0, len(report.Entries)),
 	}
 
-	for _, e := range entries {
-		out.Entries = append(out.Entries, hotEntry(e, kind, class, windowDays, prevRanks))
+	for _, e := range report.Entries {
+		out.Entries = append(out.Entries, hotEntry(e))
 	}
 
-	return &out, nil
+	return out, nil
 }
 
-// hotWindowDays returns the longest complete host window in days — the
-// normalization base for per-day rates.
-func hotWindowDays(snap *hotobjects.Snapshot) float64 {
-	var maxDays float64
-
-	for _, w := range snap.Windows {
-		if !w.Complete {
-			continue
-		}
-
-		if d := w.To.Sub(w.From).Hours() / 24; d > maxDays {
-			maxDays = d
-		}
-	}
-
-	return maxDays
-}
-
-func hotSnapshotMeta(
-	snap *hotobjects.Snapshot,
-	kind hotobjects.Kind,
-	class hotobjects.Class,
-	dates []time.Time,
-) serverhttp.HotSnapshotMeta {
+func hotSnapshotMeta(r hotobjects.Report) serverhttp.HotSnapshotMeta {
+	snap := r.Snapshot
 	windows := make(map[string]serverhttp.HotHostWindow, len(snap.Windows))
 
 	for host, w := range snap.Windows {
@@ -157,45 +106,27 @@ func hotSnapshotMeta(
 		}
 	}
 
-	coverage := snap.Coverage[class].Tables
-	hist := snap.Histograms[class].Tables
-
-	if kind == hotobjects.KindIndex {
-		coverage = snap.Coverage[class].Indexes
-		hist = snap.Histograms[class].Indexes
-	}
-
 	var outHist *serverhttp.HotHistogram
-	if hist != nil {
+	if h := r.Histogram; h != nil {
 		outHist = &serverhttp.HotHistogram{
-			Deciles: hist.Deciles,
-			Count:   hist.Count,
-			Sum:     hist.Sum,
-			Max:     hist.Max,
+			Deciles: h.Deciles,
+			Count:   h.Count,
+			Sum:     h.Sum,
+			Max:     h.Max,
 		}
-	}
-
-	if dates == nil {
-		dates = []time.Time{}
 	}
 
 	return serverhttp.HotSnapshotMeta{
 		CapturedAt:   snap.CapturedAt,
 		Windows:      windows,
 		HostsMissing: snap.HostsMissing,
-		Coverage:     coverage,
+		Coverage:     r.Coverage,
 		Histogram:    outHist,
-		Dates:        dates,
+		Dates:        emptyIfNil(r.Dates),
 	}
 }
 
-func hotEntry(
-	e hotobjects.TopEntry,
-	kind hotobjects.Kind,
-	class hotobjects.Class,
-	windowDays float64,
-	prevRanks map[string]int,
-) serverhttp.HotEntry {
+func hotEntry(e hotobjects.ReportEntry) serverhttp.HotEntry {
 	perHost := make([]serverhttp.HotHostDelta, 0, len(e.PerHost))
 
 	for host, hd := range e.PerHost {
@@ -210,16 +141,6 @@ func hotEntry(
 	// Map iteration order is random; the UI counts on a stable host order.
 	sort.Slice(perHost, func(i, j int) bool { return perHost[i].Instance < perHost[j].Instance })
 
-	rate := 0.0
-	if windowDays > 0 {
-		rate = float64(hotobjects.RankKey(kind, class, e.Delta)) / windowDays
-	}
-
-	var prevRank *int
-	if r, ok := prevRanks[e.Schema+"."+e.Object]; ok {
-		prevRank = &r
-	}
-
 	var tableName *string
 	if e.TableName != "" {
 		tableName = &e.TableName
@@ -227,13 +148,13 @@ func hotEntry(
 
 	return serverhttp.HotEntry{
 		Rank:       e.Rank,
-		PrevRank:   prevRank,
+		PrevRank:   e.PrevRank,
 		Schema:     e.Schema,
 		Object:     e.Object,
 		TableName:  tableName,
 		SizeBytes:  e.SizeBytes,
 		Delta:      countersMap(e.Delta),
-		RatePerDay: rate,
+		RatePerDay: e.RatePerDay,
 		PerHost:    perHost,
 	}
 }
@@ -251,21 +172,18 @@ func (s *Handlers) GetHotObjectHistory(
 	ctx context.Context,
 	req serverhttp.GetHotObjectHistoryRequestObject,
 ) (serverhttp.GetHotObjectHistoryResponseObject, error) {
-	if s.storage == nil {
+	if s.hot == nil {
 		return serverhttp.GetHotObjectHistory501Response{}, nil
 	}
 
-	days := 30
-	if req.Params.Days != nil && *req.Params.Days > 0 {
+	days := 0
+	if req.Params.Days != nil {
 		days = *req.Params.Days
 	}
 
-	to := time.Now().UTC()
-	from := to.AddDate(0, 0, -days)
-
-	items, err := s.storage.GetHotObjectHistory(ctx,
-		req.Params.ClusterName, req.Params.Database,
-		hotKind(string(req.Params.Kind)), req.Params.Schema, req.Params.Object, from, to)
+	items, err := s.hot.History(ctx, req.Params.ClusterName, req.Params.Database,
+		hotKind(string(req.Params.Kind)),
+		hotobjects.ObjectRef{Schema: req.Params.Schema, Object: req.Params.Object}, days)
 	if err != nil {
 		return nil, fmt.Errorf("GetHotObjectHistory | %w", err)
 	}
@@ -285,139 +203,43 @@ func (s *Handlers) GetHotObjectHistory(
 	return serverhttp.GetHotObjectHistory200JSONResponse(ret), nil
 }
 
-// GetHotPercentile computes an object's live delta against its anchors and
-// projects the per-day rate onto the latest snapshot's tail histogram.
+// GetHotPercentile projects an object's live per-day rate onto the latest
+// snapshot's tail histogram.
 func (s *Handlers) GetHotPercentile(
 	ctx context.Context,
 	req serverhttp.GetHotPercentileRequestObject,
 ) (serverhttp.GetHotPercentileResponseObject, error) {
-	if s.storage == nil {
+	if s.hot == nil {
 		return serverhttp.GetHotPercentile501Response{}, nil
 	}
 
-	kind := hotKind(string(req.Params.Kind))
+	class := hotClass(req.Params.Class)
 
-	class := hotobjects.ClassReads
-	if req.Params.Class != nil {
-		class = hotobjects.Class(*req.Params.Class)
-	}
+	p, err := s.hot.Percentile(ctx, req.Params.ClusterName, req.Params.Database,
+		hotKind(string(req.Params.Kind)),
+		hotobjects.ObjectRef{Schema: req.Params.Schema, Object: req.Params.Object}, class)
 
-	snap, err := s.storage.GetHotSnapshot(ctx, req.Params.ClusterName, req.Params.Database, nil)
-	if err != nil {
+	switch {
+	case errors.Is(err, hotobjects.ErrNoSnapshot), errors.Is(err, hotobjects.ErrNoAnchors):
+		return serverhttp.GetHotPercentile404Response{}, nil
+	case err != nil:
 		return nil, fmt.Errorf("GetHotPercentile | %w", err)
 	}
 
-	if snap == nil {
-		return serverhttp.GetHotPercentile404Response{}, nil
-	}
-
-	anchors, err := s.storage.GetHotAnchorsForObject(ctx,
-		req.Params.ClusterName, req.Params.Database, kind, req.Params.Schema, req.Params.Object)
-	if err != nil {
-		return nil, fmt.Errorf("GetHotPercentile | anchors: %w", err)
-	}
-
-	if len(anchors) == 0 {
-		return serverhttp.GetHotPercentile404Response{}, nil
-	}
-
-	rate := s.hotLiveRate(ctx, req, kind, class, anchors)
-
-	hist := snap.Histograms[class].Tables
-	if kind == hotobjects.KindIndex {
-		hist = snap.Histograms[class].Indexes
-	}
-
-	// The histogram holds raw deltas accumulated over the snapshot window,
-	// which the schedule makes arbitrary (5 minutes on the demo lab, an hour
-	// or a day elsewhere). Scale the live per-day rate back into window units
-	// before projecting, or the comparison is off by the window/day ratio.
-	value := rate
-	if days := hotWindowDays(snap); days > 0 {
-		value = rate * days
-	}
-
-	percentile := hist.Percentile(value)
-
-	ranks, err := s.storage.GetHotRanks(ctx, snap.ID, snap.CapturedAt, kind, class)
-	if err != nil {
-		return nil, fmt.Errorf("GetHotPercentile | ranks: %w", err)
-	}
-
-	_, inTop := ranks[req.Params.Schema+"."+req.Params.Object]
-
 	return serverhttp.GetHotPercentile200JSONResponse{
-		Percentile: percentile,
-		RatePerDay: rate,
-		InTop:      inTop,
+		Percentile: p.Percentile,
+		RatePerDay: p.RatePerDay,
+		InTop:      p.InTop,
 		Class:      string(class),
 	}, nil
 }
 
-// hotLiveRate sums per-host live deltas (skipping hosts with a broken epoch or
-// unreachable ones) normalized by each host's own anchor age.
-func (s *Handlers) hotLiveRate(
-	ctx context.Context,
-	req serverhttp.GetHotPercentileRequestObject,
-	kind hotobjects.Kind,
-	class hotobjects.Class,
-	anchors []hotobjects.AnchorRow,
-) float64 {
-	now := time.Now().UTC()
-	rate := 0.0
-
-	for _, a := range anchors {
-		var (
-			rows  []hotobjects.AnchorRow
-			reset *time.Time
-			err   error
-		)
-
-		if kind == hotobjects.KindIndex {
-			rows, reset, _, err = s.repo.GetHotSampleIndexes(ctx,
-				req.Params.ClusterName, a.Instance, req.Params.Database, &req.Params.Schema, &req.Params.Object)
-		} else {
-			rows, reset, _, err = s.repo.GetHotSampleTables(ctx,
-				req.Params.ClusterName, a.Instance, req.Params.Database, &req.Params.Schema, &req.Params.Object)
-		}
-
-		if err != nil || len(rows) == 0 {
-			continue
-		}
-
-		if !sameReset(a.StatsReset, reset) {
-			continue // epoch broke since the anchor; delta not measurable
-		}
-
-		if a.PartSig != rows[0].PartSig {
-			continue // partition set changed since the anchor; summed delta not comparable
-		}
-
-		d, ok := hotobjects.Delta(a.Counters, rows[0].Counters)
-		if !ok {
-			continue
-		}
-
-		days := now.Sub(a.CapturedAt).Hours() / 24
-		if days <= 0 {
-			continue
-		}
-
-		rate += float64(hotobjects.RankKey(kind, class, d)) / days
+func hotClass[T ~string](s *T) hotobjects.Class {
+	if s == nil {
+		return hotobjects.ClassReads
 	}
 
-	return rate
-}
-
-func sameReset(a, b *time.Time) bool {
-	switch {
-	case a == nil && b == nil:
-		return true
-	case a == nil || b == nil:
-		return false
-	default:
-		return a.Equal(*b)
-	}
+	return hotobjects.Class(*s)
 }
 
 func hotKind(s string) hotobjects.Kind {

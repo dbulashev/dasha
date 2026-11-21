@@ -1,145 +1,125 @@
 package http
 
 import (
-	"reflect"
+	"context"
 	"testing"
 
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/dbulashev/dasha/gen/serverhttp"
 	"github.com/dbulashev/dasha/internal/dto"
+	"github.com/dbulashev/dasha/internal/querystats"
+	"github.com/dbulashev/dasha/internal/repository"
 )
 
-func TestExcludeReportsByUser(t *testing.T) {
-	t.Parallel()
+type statsSnapshots map[uuid.UUID]querystats.Snapshot
 
-	reports := []dto.QueryReport{
-		{QueryID: 1, Usernames: []string{"app"}},              //nolint:exhaustruct
-		{QueryID: 2, Usernames: []string{"reporting"}},        //nolint:exhaustruct
-		{QueryID: 3, Usernames: []string{"app", "reporting"}}, //nolint:exhaustruct
-		{QueryID: 4, Usernames: nil},                          //nolint:exhaustruct
+func (f statsSnapshots) GetSnapshotReport(_ context.Context, id uuid.UUID) (querystats.Snapshot, error) {
+	s, ok := f[id]
+	if !ok {
+		return querystats.Snapshot{}, querystats.ErrSnapshotNotFound //nolint:exhaustruct
 	}
 
-	got := excludeReportsByUser(reports, []string{"reporting"})
+	return s, nil
+}
 
-	ids := make([]int64, 0, len(got))
-	for _, r := range got {
-		ids = append(ids, r.QueryID)
-	}
+type statsLive struct {
+	reports []dto.QueryReport
+	err     error
+}
 
-	// 2 dropped (solely excluded); 3 kept (shared), 4 kept (unknown attribution).
-	if want := []int64{1, 3, 4}; !reflect.DeepEqual(ids, want) {
-		t.Fatalf("got ids %v, want %v", ids, want)
+func (f statsLive) GetQueriesReport(context.Context, string, string, string, []string, *int64) ([]dto.QueryReport, error) {
+	return f.reports, f.err
+}
+
+func statsHandlers(snaps statsSnapshots, live statsLive) *Handlers {
+	return &Handlers{queryStats: querystats.NewService(snaps, live)} //nolint:exhaustruct
+}
+
+func compareReq(a uuid.UUID) serverhttp.GetQueriesCompareRequestObject {
+	return serverhttp.GetQueriesCompareRequestObject{
+		Params: serverhttp.GetQueriesCompareParams{ //nolint:exhaustruct
+			ClusterName: "c1", Instance: "h1", Database: "app", SnapshotA: a,
+		},
 	}
 }
 
-func TestResolveScope(t *testing.T) {
+func TestQueryStatsWithoutStorage(t *testing.T) {
 	t.Parallel()
 
-	instance := dto.ScopeInstance
-	database := dto.ScopeDatabase
+	h := &Handlers{} //nolint:exhaustruct
 
-	cases := []struct {
-		name     string
-		scope    *string
-		database string
-		want     string
-	}{
-		{"no database can only be instance-wide", nil, "", dto.ScopeInstance},
-		{"database defaults to its own scope", nil, "app", dto.ScopeDatabase},
-		{"explicit instance wins over a named database", &instance, "app", dto.ScopeInstance},
-		{"explicit database without one falls back", &database, "", dto.ScopeInstance},
-	}
+	resp, err := h.GetQueriesCompare(context.Background(), compareReq(uuid.New()))
+	require.NoError(t, err)
+	assert.IsType(t, serverhttp.GetQueriesCompare501Response{}, resp)
 
-	for _, c := range cases {
-		if got := resolveScope(c.scope, c.database); got != c.want {
-			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
-		}
-	}
+	sResp, err := h.GetSnapshot(context.Background(), serverhttp.GetSnapshotRequestObject{Id: uuid.New()}) //nolint:exhaustruct
+	require.NoError(t, err)
+	assert.IsType(t, serverhttp.GetSnapshot501Response{}, sResp)
 }
 
-func TestScopeReportDatabase(t *testing.T) {
+func TestGetQueriesCompareErrors(t *testing.T) {
 	t.Parallel()
 
-	dbPct, instPct := 60.0, 12.0
-	reports := []dto.QueryReport{
-		{QueryID: 1, Datname: "app", TotalTimePct: &dbPct, TotalTimePctInstance: &instPct}, //nolint:exhaustruct
-		{QueryID: 2, Datname: "other"}, //nolint:exhaustruct
-		{QueryID: 3, Datname: ""},      //nolint:exhaustruct
+	legacy, scoped := uuid.New(), uuid.New()
+	snaps := statsSnapshots{
+		legacy: {Attributed: false}, //nolint:exhaustruct
+		scoped: {Attributed: true},  //nolint:exhaustruct
 	}
 
-	got := scopeReport(reports, dto.ScopeDatabase, "app")
-	if len(got) != 1 || got[0].QueryID != 1 {
-		t.Fatalf("expected only the app row, got %+v", got)
-	}
+	resp, err := statsHandlers(snaps, statsLive{}).GetQueriesCompare(context.Background(), compareReq(uuid.New())) //nolint:exhaustruct
+	require.NoError(t, err)
+	assert.IsType(t, serverhttp.GetQueriesCompare404Response{}, resp)
 
-	// Database scope keeps the shares the SQL computed within the database.
-	if *got[0].TotalTimePct != dbPct {
-		t.Fatalf("got share %v, want %v", *got[0].TotalTimePct, dbPct)
-	}
+	resp, err = statsHandlers(snaps, statsLive{}).GetQueriesCompare(context.Background(), compareReq(legacy)) //nolint:exhaustruct
+	require.NoError(t, err)
+	require.IsType(t, serverhttp.GetQueriesCompare409JSONResponse{}, resp)
+	assert.Equal(t, msgIncomparableSnapshots, resp.(serverhttp.GetQueriesCompare409JSONResponse).Message)
+
+	live := statsLive{err: repository.ErrNotFound} //nolint:exhaustruct
+	resp, err = statsHandlers(snaps, live).GetQueriesCompare(context.Background(), compareReq(scoped))
+	require.NoError(t, err)
+	assert.IsType(t, serverhttp.GetQueriesCompare404Response{}, resp)
 }
 
-func TestScopeReportInstanceSwapsShares(t *testing.T) {
+func TestGetQueriesCompareMapsPairs(t *testing.T) {
 	t.Parallel()
 
-	dbPct, instPct := 60.0, 12.0
-	reports := []dto.QueryReport{
-		{QueryID: 1, Datname: "app", TotalTimePct: &dbPct, TotalTimePctInstance: &instPct}, //nolint:exhaustruct
-		{QueryID: 2, Datname: "other"}, //nolint:exhaustruct
+	a := uuid.New()
+	snaps := statsSnapshots{a: {Attributed: true, Reports: []dto.QueryReport{
+		{QueryID: 7, Datname: "app", Query: "select 1"}, //nolint:exhaustruct
+	}}}
+	live := statsLive{reports: []dto.QueryReport{ //nolint:exhaustruct
+		{QueryID: 8, Datname: "app", Query: "select 2"}, //nolint:exhaustruct
+	}}
+
+	resp, err := statsHandlers(snaps, live).GetQueriesCompare(context.Background(), compareReq(a))
+	require.NoError(t, err)
+
+	items, ok := resp.(serverhttp.GetQueriesCompare200JSONResponse)
+	require.True(t, ok, "got %T", resp)
+	require.Len(t, items, 2)
+
+	byID := map[string]serverhttp.QueryCompareItem{}
+	for _, it := range items {
+		byID[it.QueryID] = it
 	}
 
-	got := scopeReport(reports, dto.ScopeInstance, "app")
-	if len(got) != 2 {
-		t.Fatalf("instance scope must keep every database, got %d rows", len(got))
-	}
-
-	if *got[0].TotalTimePct != instPct {
-		t.Fatalf("got share %v, want the instance-wide %v", *got[0].TotalTimePct, instPct)
-	}
+	assert.NotNil(t, byID["7"].Left)
+	assert.Nil(t, byID["7"].Right)
+	assert.Nil(t, byID["8"].Left)
+	assert.NotNil(t, byID["8"].Right)
+	assert.Equal(t, "app", *byID["8"].Datname)
+	assert.NotEmpty(t, byID["8"].Query)
 }
 
-func TestCompareScope(t *testing.T) {
+func TestGetSnapshotNotFound(t *testing.T) {
 	t.Parallel()
 
-	instance := dto.ScopeInstance
-
-	cases := []struct {
-		name             string
-		attribA, attribB bool
-		scope            *string
-		database         string
-		want             string
-		wantOK           bool
-	}{
-		{"both attributed follow the requested scope", true, true, nil, "app", dto.ScopeDatabase, true},
-		{"both attributed honour an explicit instance", true, true, &instance, "app", dto.ScopeInstance, true},
-		{"two legacy sides compare instance-wide", false, false, nil, "app", dto.ScopeInstance, true},
-		{"legacy A against live or a newer B is refused", false, true, nil, "app", "", false},
-		{"newer A against a legacy B is refused", true, false, nil, "app", "", false},
-	}
-
-	for _, c := range cases {
-		got, ok := compareScope(c.attribA, c.attribB, c.scope, c.database)
-		if ok != c.wantOK || got != c.want {
-			t.Errorf("%s: got (%q, %v), want (%q, %v)", c.name, got, ok, c.want, c.wantOK)
-		}
-	}
-}
-
-func TestReportKeyOfSeparatesDatabases(t *testing.T) {
-	t.Parallel()
-
-	a := reportKeyOf(dto.QueryReport{QueryID: 42, Datname: "app"})   //nolint:exhaustruct
-	b := reportKeyOf(dto.QueryReport{QueryID: 42, Datname: "other"}) //nolint:exhaustruct
-
-	if a == b {
-		t.Fatal("the same queryid in two databases must not share a key")
-	}
-}
-
-func TestExcludeReportsByUserEmptyExclude(t *testing.T) {
-	t.Parallel()
-
-	reports := []dto.QueryReport{{QueryID: 1, Usernames: []string{"reporting"}}} //nolint:exhaustruct
-
-	if got := excludeReportsByUser(reports, nil); len(got) != 1 {
-		t.Fatalf("empty exclude should keep all, got %d", len(got))
-	}
+	resp, err := statsHandlers(statsSnapshots{}, statsLive{}).GetSnapshot( //nolint:exhaustruct
+		context.Background(), serverhttp.GetSnapshotRequestObject{Id: uuid.New()}) //nolint:exhaustruct
+	require.NoError(t, err)
+	assert.IsType(t, serverhttp.GetSnapshot404Response{}, resp)
 }

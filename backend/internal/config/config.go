@@ -731,6 +731,8 @@ func (s *StorageConfig) MigrationDSN() string {
 
 // Config is the top-level application configuration.
 type Config struct {
+	// BasePath is the external URL prefix; an empty string means root.
+	BasePath  string                    `mapstructure:"base_path"`
 	Debug     bool                      `mapstructure:"debug"`
 	Clusters  []Cluster                 `mapstructure:"clusters"`
 	Discovery map[string]DiscoveryEntry `mapstructure:"discovery"`
@@ -782,6 +784,8 @@ type Config struct {
 	IndexAdvisor indexadvisor.Config `mapstructure:"index_advisor"`
 
 	Activity activity.Config `mapstructure:"activity"`
+
+	PIICatalog PIICatalogConfig `mapstructure:"pii_catalog"`
 }
 
 // PoolConfig tunes a pgx connection pool. Zero MaxConns/MaxConnIdleTime fall back

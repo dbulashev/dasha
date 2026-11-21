@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.11.0
+
+### Features
+- **Hosting under a URL subpath** without rebuilding the images: `DASHA_BASE_PATH=/dasha` on the frontend and backend containers, or `config.base_path` in the Helm chart. Covers routing, assets and API requests, OIDC login, callback, logout and cookie paths, and nginx. The default `/` is unchanged. Contributed by [@del000](https://github.com/del000) (#387).
+
+### Fixes
+- **Activity & Waits:** with `track_utility = off`, utility statements (`BEGIN`, `COMMIT`, `SET`, ...) no longer link to a query report that cannot exist. The MCP tool `sample_activity` explains such a `BEGIN` or `COMMIT` with a large idle-in-transaction share as an open transaction left idle.
+- **pg_stat_statements / pgpro_stats detection** no longer depends on reading `shared_preload_libraries`, which a role without `pg_read_all_settings` cannot see. The statistics probe is cached, and query pages and the index advisor check it only after a failed query.
+- **Client IP:** `X-Forwarded-For` is honoured only from loopback, link-local and private-network peers.
+
+### Dependencies
+- **Security updates:** Go toolchain 1.27.3→1.27.4, echo 4.16.1→4.16.5 (CVE-2026-118653, CVE-2026-118651, GHSA-3f6j-cw5h-qw9c, GHSA-h6x5-phvw-c55c), golang.org/x/net 0.61.0→0.62.0, libxslt in the frontend image.
+
 ## v1.10.3
 
 ### Features

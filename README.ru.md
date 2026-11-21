@@ -30,7 +30,7 @@
 | **Проверки схемы** | 17 проверок структуры, от исчерпания последовательностей до таблиц без первичного ключа; к каждой находке — чем она грозит и как исправить — [настройка](doc/ru/configuration.md#проверки-схемы-опционально) |
 | **Доступ** | Без аутентификации, по статическим токенам или через **OIDC** (Keycloak, Google и др.); роли `admin` и `viewer`, персональные токены — [Аутентификация](doc/ru/auth.md) |
 | **AI-ассистенты** | `dasha-mcp` — MCP-сервер только для чтения: 35 инструментов, чтобы диагностировать кластеры из AI-ассистента — [MCP-коннектор](doc/ru/mcp.md) |
-| **Развёртывание** | Docker Compose, образы на Docker Hub, Helm chart — [Развёртывание](doc/ru/deployment.md) |
+| **Развёртывание** | Docker Compose, образы на Docker Hub, Helm chart — [Развёртывание](doc/ru/deployment.md) · [Подкаталог URL без пересборки](doc/ru/configuration.md#размещение-в-подкаталоге-url) |
 
 Поддерживаются PostgreSQL 14–18 и Postgres Pro: вместо `pg_stat_statements` Dasha сама использует `pgpro_stats`.
 
@@ -140,6 +140,7 @@ docker compose up -d
 
 ## Contributors
 
+* [@del000](https://github.com/del000)
 * [Anton Glushakov](https://github.com/glushakov)
 * [Mikhail Grigorev](https://github.com/cherts)
 * [Ilya Lukyanov](mailto:lukyanov1985@gmail.com)

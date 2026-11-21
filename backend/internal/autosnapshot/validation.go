@@ -7,16 +7,28 @@ import (
 	"fmt"
 
 	"github.com/go-playground/validator/v10"
+
+	"github.com/dbulashev/dasha/internal/pkg/cronsched"
 )
 
 // validate is shared and safe for concurrent use (it caches struct metadata).
 var validate = validator.New()
 
 // Validate checks the full global config. Field-level bounds live in struct
-// `validate` tags; only the cross-field arithmetic rule is hand-written.
+// `validate` tags; cron expressions and the cross-field rule are hand-written.
 func (c Config) Validate() error {
 	if err := validate.Struct(c); err != nil {
 		return fmt.Errorf("invalid config | %w", err)
+	}
+
+	// The daemon falls back to a daily run on an unparsable schedule, so a bad
+	// expression would otherwise be accepted and quietly ignored.
+	if _, err := cronsched.Parse(c.HotSchedule); err != nil {
+		return fmt.Errorf("invalid config | hot_schedule: %w", err)
+	}
+
+	if _, err := cronsched.Parse(c.IOSchedule); err != nil {
+		return fmt.Errorf("invalid config | io_schedule: %w", err)
 	}
 
 	return validateSpikeCross(c.Defaults.ActivitySpike)

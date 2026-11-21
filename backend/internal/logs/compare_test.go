@@ -106,7 +106,7 @@ func newCompareService(
 		}},
 	})
 
-	return NewService(clusters, reg, config.LogSearchConfig{}, cfg, snapshots, nil, zap.NewNop())
+	return NewService(clusters, reg, config.LogSearchConfig{}, cfg, snapshots, nil, nil, zap.NewNop())
 }
 
 func TestCompareReadsBothWindowsAndNamesTheRegression(t *testing.T) {

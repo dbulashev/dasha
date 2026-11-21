@@ -20,6 +20,7 @@ import (
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/deps"
 	"github.com/dbulashev/dasha/internal/http"
+	"github.com/dbulashev/dasha/internal/piicatalog"
 	"github.com/dbulashev/dasha/internal/repository"
 	"github.com/dbulashev/dasha/internal/storage"
 	"github.com/dbulashev/dasha/internal/version"
@@ -137,19 +138,63 @@ func autosnapshotExec(cmd *cobra.Command, _ []string) error {
 		logger,
 	)
 
-	daemon := autosnapshot.NewDaemon(
-		container.Clusters(),
-		repo,
-		st,
-		cfg.Storage.LeaderElection,
-		logger,
-	)
+	var pii *piicatalog.Runner
 
-	if err := daemon.Run(cmd.Context()); err != nil {
-		return fmt.Errorf("autosnapshot daemon: %w", err)
+	if cfg.PIICatalog.Enabled {
+		pii, err = piicatalog.NewRunner(cfg.PIICatalog, container.Clusters(), repo, st, logger)
+		if err != nil {
+			return fmt.Errorf("pii catalog: %w", err)
+		}
+	}
+
+	daemon := autosnapshot.NewDaemon(container.Clusters(), repo, st, logger)
+
+	if err := runBackground(cmd.Context(), st, cfg.Storage.LeaderElection, daemon, pii, logger); err != nil {
+		return err
 	}
 
 	logger.Info("autosnapshot shutdown complete")
+
+	return nil
+}
+
+// runBackground runs the background jobs under the advisory-lock leader
+// (opt-in, storage.leader_election: the dedicated session is incompatible with
+// transaction-pooling proxies). pii is nil when the PII catalog is disabled.
+func runBackground(
+	ctx context.Context, st *storage.Storage, leaderElection bool,
+	daemon *autosnapshot.Daemon, pii *piicatalog.Runner, logger *zap.Logger,
+) error {
+	leader := autosnapshot.NewLeader(st, logger)
+
+	if leaderElection {
+		if err := leader.Acquire(ctx); err != nil {
+			return fmt.Errorf("autosnapshot: acquire leader: %w", err)
+		}
+
+		defer leader.Release()
+	} else {
+		logger.Info("autosnapshot: leader election disabled, running as single instance")
+	}
+
+	// Jobs are cancelled, then waited for, so they stop writing before the
+	// caller closes storage, even when the daemon returns on its own.
+	var wg sync.WaitGroup
+	defer wg.Wait()
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Heartbeat always runs so UI liveness works regardless of leader election.
+	wg.Go(func() { leader.RunHeartbeat(ctx) })
+
+	if pii != nil {
+		wg.Go(func() { pii.Run(ctx) })
+	}
+
+	if err := daemon.Run(ctx); err != nil {
+		return fmt.Errorf("autosnapshot daemon: %w", err)
+	}
 
 	return nil
 }
@@ -243,8 +288,14 @@ func dashaExec(cmd *cobra.Command, _ []string) error {
 		return logsRL.Middleware(compareRL.Middleware(next))
 	}
 
-	d := http.NewDashaHandlers(container.Config(), container.Repository(), st, container.Metrics(), logsSvc, logger)
-	svc := http.New(d, mw, authMW.RequireHTTPS, authMW.RateLimit, logsRateLimit, authMW.Auth, authMW.Casbin, logger)
+	d := http.NewDashaHandlers(
+		container.Config(), container.Repository(), container.Metrics(), logsSvc, container.HandlerServices(),
+	)
+	piiGate := auth.NewPIICatalogGate(container.Config().PIICatalog, serverLogger)
+	svc := http.New(
+		d, mw, authMW.RequireHTTPS, authMW.RateLimit, logsRateLimit, authMW.Auth, authMW.Casbin, piiGate, logger,
+	)
+	svc.WithBasePath(container.Config().BasePath)
 
 	if container.Config().Auth.Mode == config.AuthModeOIDC {
 		auth.RegisterBFFRoutes(svc.Echo, authMW.OIDCProvider, authMW.SessionManager, deps.NewLoginRecorder(st), logger)

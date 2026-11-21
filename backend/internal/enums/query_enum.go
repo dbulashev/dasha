@@ -133,6 +133,8 @@ const (
 	QueryMaintenanceTransactionIdDanger Query = "maintenance/transaction_id_danger"
 	// QueryMaintenanceVacuumProgress is a Query of type maintenance/vacuum_progress.
 	QueryMaintenanceVacuumProgress Query = "maintenance/vacuum_progress"
+	// QueryPiiCatalogColumns is a Query of type pii_catalog/columns.
+	QueryPiiCatalogColumns Query = "pii_catalog/columns"
 	// QueryProgressAnalyze is a Query of type progress/analyze.
 	QueryProgressAnalyze Query = "progress/analyze"
 	// QueryProgressBaseBackup is a Query of type progress/base_backup.
@@ -295,6 +297,7 @@ var _QueryNames = []string{
 	string(QueryMaintenanceInfo),
 	string(QueryMaintenanceTransactionIdDanger),
 	string(QueryMaintenanceVacuumProgress),
+	string(QueryPiiCatalogColumns),
 	string(QueryProgressAnalyze),
 	string(QueryProgressBaseBackup),
 	string(QueryProgressCluster),
@@ -416,6 +419,7 @@ func QueryValues() []Query {
 		QueryMaintenanceInfo,
 		QueryMaintenanceTransactionIdDanger,
 		QueryMaintenanceVacuumProgress,
+		QueryPiiCatalogColumns,
 		QueryProgressAnalyze,
 		QueryProgressBaseBackup,
 		QueryProgressCluster,
@@ -541,6 +545,7 @@ var _QueryValue = map[string]Query{
 	"maintenance/info":                              QueryMaintenanceInfo,
 	"maintenance/transaction_id_danger":             QueryMaintenanceTransactionIdDanger,
 	"maintenance/vacuum_progress":                   QueryMaintenanceVacuumProgress,
+	"pii_catalog/columns":                           QueryPiiCatalogColumns,
 	"progress/analyze":                              QueryProgressAnalyze,
 	"progress/base_backup":                          QueryProgressBaseBackup,
 	"progress/cluster":                              QueryProgressCluster,

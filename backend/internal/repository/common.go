@@ -25,6 +25,7 @@ import (
 	"github.com/dbulashev/dasha/internal/hotobjects"
 	"github.com/dbulashev/dasha/internal/indexadvisor"
 	"github.com/dbulashev/dasha/internal/logs/insights"
+	"github.com/dbulashev/dasha/internal/piicatalog"
 	"github.com/dbulashev/dasha/internal/pkg/mapstruct"
 	"github.com/dbulashev/dasha/internal/schemalint"
 	"github.com/dbulashev/dasha/internal/sqlparse"
@@ -36,7 +37,7 @@ const (
 	queryTimeout       = 10 * time.Second
 )
 
-var ErrNotFound = errors.New("not found")
+var ErrNotFound = dto.ErrNotFound
 
 // ErrPoolBusy means every connection of the pool stayed taken until the
 // caller's deadline.
@@ -126,6 +127,10 @@ type Repository interface {
 	GetMaintenanceAutovacuumSummary(ctx context.Context, clusterName, instanceName, databaseName string) (*dto.MaintenanceAutovacuumSummary, error)
 	GetHotSampleTables(ctx context.Context, clusterName, instanceName, databaseName string, schema, object *string) ([]hotobjects.AnchorRow, *time.Time, bool, error)
 	GetHotSampleIndexes(ctx context.Context, clusterName, instanceName, databaseName string, schema, object *string) ([]hotobjects.AnchorRow, *time.Time, bool, error)
+	GetColumnCatalog(
+		ctx context.Context, clusterName, instanceName, databaseName string,
+		excludeSchemas []string, stmtTimeout time.Duration,
+	) ([]piicatalog.Column, int, error)
 	GetActivitySample(ctx context.Context, clusterName, instanceName string, maxSessions int) (activity.Sample, error)
 	GetActivityAccess(ctx context.Context, clusterName, instanceName string) (activity.Access, error)
 	// GetIOSample takes no database: pg_stat_io is instance-wide.
@@ -819,6 +824,12 @@ type querier interface {
 // quickly, so a table held by DDL (ALTER TABLE, VACUUM FULL, REINDEX) fails with
 // SQLSTATE 55P03 — reported as 423 with the reason — instead of stalling until
 // the query deadline and surfacing as an opaque timeout.
+func (p *PgxPool) withLockTimeout(ctx context.Context, pool *pgxpool.Pool, fn func(querier) error) error {
+	return p.withTxSettings(ctx, pool, []string{"SET LOCAL lock_timeout = '" + lockTimeout + "'"}, fn)
+}
+
+// withTxSettings runs fn inside a read-only transaction after the given
+// SET LOCAL statements.
 //
 // SET LOCAL, not a session SET, and not a startup parameter: PgBouncer refuses a
 // connection carrying an untracked startup parameter, and a transaction-pooling
@@ -826,11 +837,11 @@ type querier interface {
 // always stays on one backend.
 //
 // A pooler in statement mode rejects BEGIN outright; there the query still runs,
-// just without a lock timeout — as it did before this existed.
-func (p *PgxPool) withLockTimeout(ctx context.Context, pool *pgxpool.Pool, fn func(querier) error) error {
+// just without the settings — bounded only by the context deadline.
+func (p *PgxPool) withTxSettings(ctx context.Context, pool *pgxpool.Pool, settings []string, fn func(querier) error) error {
 	tx, err := pool.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly}) //nolint:exhaustruct
 	if err != nil {
-		p.logger.Debug("no transaction available, running without lock_timeout", zap.Error(err))
+		p.logger.Debug("no transaction available, running without transaction settings", zap.Error(err))
 
 		return fn(pool)
 	}
@@ -847,8 +858,10 @@ func (p *PgxPool) withLockTimeout(ctx context.Context, pool *pgxpool.Pool, fn fu
 		_ = tx.Rollback(rbCtx)
 	}()
 
-	if _, err := tx.Exec(ctx, "SET LOCAL lock_timeout = '"+lockTimeout+"'"); err != nil {
-		return fmt.Errorf("set lock_timeout | %w", err)
+	for _, stmt := range settings {
+		if _, err := tx.Exec(ctx, stmt); err != nil {
+			return fmt.Errorf("%s | %w", stmt, err)
+		}
 	}
 
 	return fn(tx)
