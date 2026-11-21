@@ -24,11 +24,14 @@ jobs:
         run: |
           go install github.com/mgechev/revive@latest
           go install github.com/securego/gosec/v2/cmd/gosec@latest
+          go install github.com/fe3dback/go-arch-lint@latest
       - name: Lint Go
         run: |
           cd backend
           revive -config revive.toml -formatter friendly -exclude ./gen/... ./...
           gosec -quiet -exclude-dir=gen ./...
+      - name: Check architecture
+        run: cd backend && go-arch-lint check
 
   lint-frontend:
     runs-on: ubuntu-latest

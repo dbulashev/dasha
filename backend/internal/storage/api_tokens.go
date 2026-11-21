@@ -7,29 +7,9 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+
+	"github.com/dbulashev/dasha/internal/pat"
 )
-
-// APIToken is one personal access token as shown to its owner (never the secret).
-// RevokedAt is nil for a live token; it is only ever non-nil when the caller asked
-// for revoked tokens to be included.
-type APIToken struct {
-	ID         string
-	Prefix     string
-	Name       string
-	Role       string
-	CreatedAt  time.Time
-	LastUsedAt *time.Time
-	ExpiresAt  *time.Time
-	RevokedAt  *time.Time
-}
-
-// AdminAPIToken is a token as shown to an administrator: the owner's view plus
-// the owning subject, which a user never needs (their tokens are all their own).
-type AdminAPIToken struct {
-	APIToken
-
-	Subject string
-}
 
 // APITokenIdentity is the (subject, role) a presented token resolves to, plus
 // its expiry (nil = never) so the caller can bound how long it caches the result.
@@ -114,7 +94,7 @@ func (s *Storage) TouchAPIToken(ctx context.Context, hash []byte) error {
 // ListAPITokens returns the owner's tokens, newest first. Revoked tokens are
 // excluded unless includeRevoked is set — revoked rows are kept in the table as
 // an audit trail, so they can be shown on request without ever being usable.
-func (s *Storage) ListAPITokens(ctx context.Context, subject string, includeRevoked bool) ([]APIToken, error) {
+func (s *Storage) ListAPITokens(ctx context.Context, subject string, includeRevoked bool) ([]pat.Token, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id::text, token_prefix, name, role, created_at, last_used_at, expires_at, revoked_at
 		FROM api_tokens
@@ -127,10 +107,10 @@ func (s *Storage) ListAPITokens(ctx context.Context, subject string, includeRevo
 	}
 	defer rows.Close()
 
-	out := make([]APIToken, 0, 8)
+	out := make([]pat.Token, 0, 8)
 
 	for rows.Next() {
-		var t APIToken
+		var t pat.Token
 		if err := rows.Scan(
 			&t.ID, &t.Prefix, &t.Name, &t.Role,
 			&t.CreatedAt, &t.LastUsedAt, &t.ExpiresAt, &t.RevokedAt,
@@ -162,7 +142,7 @@ func (s *Storage) RevokeAPIToken(ctx context.Context, subject, id string) (bool,
 // ListAllAPITokens returns every owner's tokens, newest first, for the
 // administration view. Revoked tokens are excluded unless includeRevoked is set.
 // Callers must gate this on an admin role.
-func (s *Storage) ListAllAPITokens(ctx context.Context, includeRevoked bool) ([]AdminAPIToken, error) {
+func (s *Storage) ListAllAPITokens(ctx context.Context, includeRevoked bool) ([]pat.AdminToken, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id::text, token_prefix, name, role, created_at, last_used_at, expires_at, revoked_at, subject
 		FROM api_tokens
@@ -175,10 +155,10 @@ func (s *Storage) ListAllAPITokens(ctx context.Context, includeRevoked bool) ([]
 	}
 	defer rows.Close()
 
-	out := make([]AdminAPIToken, 0, 16)
+	out := make([]pat.AdminToken, 0, 16)
 
 	for rows.Next() {
-		var t AdminAPIToken
+		var t pat.AdminToken
 		if err := rows.Scan(
 			&t.ID, &t.Prefix, &t.Name, &t.Role,
 			&t.CreatedAt, &t.LastUsedAt, &t.ExpiresAt, &t.RevokedAt, &t.Subject,

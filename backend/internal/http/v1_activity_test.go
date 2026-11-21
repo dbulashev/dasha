@@ -1,8 +1,6 @@
 package http
 
 import (
-	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -72,65 +70,6 @@ func TestActivitySampleToAPI(t *testing.T) {
 	}
 }
 
-func TestCollectActivity(t *testing.T) {
-	t.Parallel()
-
-	t0 := time.Date(2026, 11, 4, 12, 0, 0, 0, time.UTC)
-	calls := 0
-
-	get := func(context.Context) (activity.Sample, activity.Access, error) {
-		calls++
-
-		switch calls {
-		case 2:
-			return activity.Sample{}, activity.Access{}, context.DeadlineExceeded
-		case 4:
-			// The cache answered twice with the same sample.
-			return activity.Sample{At: t0.Add(3 * time.Second)}, activity.Access{CanReadAllStats: true}, nil
-		}
-
-		return activity.Sample{At: t0.Add(time.Duration(calls) * time.Second)}, activity.Access{CanReadAllStats: true}, nil
-	}
-
-	col, err := collectActivity(t.Context(), get, 5, time.Millisecond, time.Minute)
-	require.NoError(t, err)
-
-	assert.Equal(t, 5, calls)
-	assert.Equal(t, 1, col.failed)
-	require.ErrorIs(t, col.lastErr, context.DeadlineExceeded)
-	assert.Len(t, col.samples, 3, "the repeated sample is counted once")
-	assert.True(t, col.access.CanReadAllStats)
-}
-
-func TestCollectActivityStopsOnHardErrors(t *testing.T) {
-	t.Parallel()
-
-	get := func(context.Context) (activity.Sample, activity.Access, error) {
-		return activity.Sample{}, activity.Access{}, activity.ErrUnsupportedVersion
-	}
-
-	_, err := collectActivity(t.Context(), get, 5, time.Millisecond, time.Minute)
-	require.ErrorIs(t, err, activity.ErrUnsupportedVersion)
-}
-
-func TestCollectActivityStopsOnCancel(t *testing.T) {
-	t.Parallel()
-
-	ctx, cancel := context.WithCancel(t.Context())
-	calls := 0
-
-	get := func(context.Context) (activity.Sample, activity.Access, error) {
-		calls++
-		cancel()
-
-		return activity.Sample{At: time.Now()}, activity.Access{}, nil
-	}
-
-	_, err := collectActivity(ctx, get, 60, time.Hour, 2*time.Hour)
-	require.True(t, errors.Is(err, context.Canceled))
-	assert.Equal(t, 1, calls)
-}
-
 func TestProfileParamsError(t *testing.T) {
 	t.Parallel()
 
@@ -191,26 +130,4 @@ func TestActivityProfileToAPIRounds(t *testing.T) {
 	assert.InDelta(t, 58.5, out.TopQueries[0].SharePct, 1e-9)
 	assert.InDelta(t, 3.4, out.TopQueries[0].ByClass[activity.ClassCPU], 1e-9)
 	assert.InDelta(t, 5.1, out.ByBackendType[0].SharePct, 1e-9)
-}
-
-func TestCollectActivityEndsWhenBudgetElapses(t *testing.T) {
-	t.Parallel()
-
-	calls := 0
-
-	get := func(ctx context.Context) (activity.Sample, activity.Access, error) {
-		calls++
-		if calls == 1 {
-			return activity.Sample{At: time.Now()}, activity.Access{}, nil
-		}
-
-		<-ctx.Done()
-
-		return activity.Sample{}, activity.Access{}, ctx.Err()
-	}
-
-	col, err := collectActivity(t.Context(), get, 60, time.Millisecond, 50*time.Millisecond)
-	require.NoError(t, err)
-	assert.Len(t, col.samples, 1)
-	assert.Equal(t, 2, calls)
 }

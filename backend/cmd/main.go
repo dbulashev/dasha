@@ -289,7 +289,7 @@ func dashaExec(cmd *cobra.Command, _ []string) error {
 	}
 
 	d := http.NewDashaHandlers(
-		container.Config(), container.Repository(), st, container.Metrics(), logsSvc, container.Clusters(), logger,
+		container.Config(), container.Repository(), container.Metrics(), logsSvc, container.HandlerServices(),
 	)
 	piiGate := auth.NewPIICatalogGate(container.Config().PIICatalog, serverLogger)
 	svc := http.New(

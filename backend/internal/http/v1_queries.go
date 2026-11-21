@@ -13,8 +13,8 @@ import (
 	"github.com/dbulashev/dasha/internal/pkg/mapstruct"
 	"github.com/dbulashev/dasha/internal/pkg/sanitize"
 	"github.com/dbulashev/dasha/internal/pkg/shortcut"
+	"github.com/dbulashev/dasha/internal/querystats"
 	"github.com/dbulashev/dasha/internal/repository"
-	"github.com/dbulashev/dasha/internal/storage"
 )
 
 const msgIncomparableSnapshots = "these two cannot be compared: one names the database of every " +
@@ -47,7 +47,7 @@ func (s *Handlers) GetQueriesBlocked(
 	req serverhttp.GetQueriesBlockedRequestObject,
 ) (serverhttp.GetQueriesBlockedResponseObject, error) {
 	queries, err := s.repo.GetQueriesBlocked(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database,
-		resolveScope(req.Params.Scope, req.Params.Database))
+		querystats.ResolveScope(req.Params.Scope, req.Params.Database))
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.GetQueriesBlocked404Response{}, nil
 	}
@@ -145,7 +145,7 @@ func (s *Handlers) GetQueriesTop10ByTime(
 	database := deref(req.Params.Database)
 
 	queries, err := s.repo.GetQueriesTop10ByTime(ctx, req.Params.ClusterName, req.Params.Instance, database,
-		resolveScope(req.Params.Scope, database))
+		querystats.ResolveScope(req.Params.Scope, database))
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.GetQueriesTop10ByTime404Response{}, nil
 	}
@@ -179,7 +179,7 @@ func (s *Handlers) GetQueriesTop10ByWal(
 	database := deref(req.Params.Database)
 
 	queries, err := s.repo.GetQueriesTop10ByWal(ctx, req.Params.ClusterName, req.Params.Instance, database,
-		resolveScope(req.Params.Scope, database))
+		querystats.ResolveScope(req.Params.Scope, database))
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.GetQueriesTop10ByWal404Response{}, nil
 	}
@@ -210,7 +210,7 @@ func (s *Handlers) GetQueriesTop10Chart(
 	database := deref(req.Params.Database)
 
 	items, err := s.repo.GetQueriesTop10Chart(ctx, req.Params.ClusterName, req.Params.Instance, database,
-		resolveScope(req.Params.Scope, database))
+		querystats.ResolveScope(req.Params.Scope, database))
 	if errors.Is(err, repository.ErrNotFound) {
 		return serverhttp.GetQueriesTop10Chart404Response{}, nil
 	}
@@ -290,7 +290,7 @@ func (s *Handlers) GetQueriesReport(
 	}
 
 	var ret serverhttp.GetQueriesReport200JSONResponse = mapstruct.SliceMap(
-		scopeReport(queries, resolveScope(req.Params.Scope, database), database),
+		querystats.ScopeReport(queries, querystats.ResolveScope(req.Params.Scope, database), database),
 		func(t dto.QueryReport) serverhttp.QueryReport {
 			t.Query = sanitize.SQL(t.Query)
 			return mapQueryReport(t)
@@ -303,161 +303,60 @@ func (s *Handlers) GetQueriesCompare(
 	ctx context.Context,
 	req serverhttp.GetQueriesCompareRequestObject,
 ) (serverhttp.GetQueriesCompareResponseObject, error) {
-	if s.storage == nil {
+	if s.queryStats == nil {
 		return serverhttp.GetQueriesCompare501Response{}, nil
 	}
 
-	// Load source A (always a snapshot).
-	reportsA, versionA, err := s.storage.GetSnapshot(ctx, uuid.UUID(req.Params.SnapshotA))
-	if err != nil {
-		return nil, fmt.Errorf("GetQueriesCompare | snapshot A: %w", err)
+	creq := querystats.CompareRequest{
+		SnapshotA: uuid.UUID(req.Params.SnapshotA),
+		Cluster:   req.Params.ClusterName,
+		Instance:  req.Params.Instance,
+		Database:  req.Params.Database,
+		Scope:     req.Params.Scope,
 	}
-
-	if reportsA == nil {
-		return serverhttp.GetQueriesCompare404Response{}, nil
-	}
-
-	// Live statistics always name the database of each row, so an absent B is
-	// the newer generation.
-	attributedA := versionA >= storage.ScopedJSONVersion
-	attributedB := true
-
-	var reportsB []dto.QueryReport
 
 	if req.Params.SnapshotB != nil {
-		var versionB int
-
-		reportsB, versionB, err = s.storage.GetSnapshot(ctx, uuid.UUID(*req.Params.SnapshotB))
-		if err != nil {
-			return nil, fmt.Errorf("GetQueriesCompare | snapshot B: %w", err)
-		}
-
-		if reportsB == nil {
-			return serverhttp.GetQueriesCompare404Response{}, nil
-		}
-
-		attributedB = versionB >= storage.ScopedJSONVersion
+		b := uuid.UUID(*req.Params.SnapshotB)
+		creq.SnapshotB = &b
 	}
 
-	// Decided before the live report is read: on a refusal its rows are thrown
-	// away, and it is a full pass over pg_stat_statements.
-	scope, pairable := compareScope(attributedA, attributedB, req.Params.Scope, req.Params.Database)
-	if !pairable {
-		return serverhttp.GetQueriesCompare409JSONResponse{
-			Message: msgIncomparableSnapshots,
-		}, nil
+	if req.Params.ExcludeUsers != nil {
+		creq.ExcludeUsers = *req.Params.ExcludeUsers
 	}
 
-	if req.Params.SnapshotB == nil {
-		var excludeUsers []string
-		if req.Params.ExcludeUsers != nil {
-			excludeUsers = *req.Params.ExcludeUsers
-		}
-
-		reportsB, err = s.repo.GetQueriesReport(ctx, req.Params.ClusterName, req.Params.Instance,
-			req.Params.Database, excludeUsers, nil)
-		if errors.Is(err, repository.ErrNotFound) {
-			return serverhttp.GetQueriesCompare404Response{}, nil
-		}
-
-		if err != nil {
-			return nil, fmt.Errorf("GetQueriesCompare | live report: %w", err)
-		}
-
-		// The live SQL already excludes these users from B; snapshot A was captured
-		// unfiltered, so drop its solely-excluded queries too or they'd survive the join.
-		reportsA = excludeReportsByUser(reportsA, excludeUsers)
+	pairs, err := s.queryStats.Compare(ctx, creq)
+	switch {
+	case errors.Is(err, querystats.ErrSnapshotNotFound), errors.Is(err, repository.ErrNotFound):
+		return serverhttp.GetQueriesCompare404Response{}, nil
+	case errors.Is(err, querystats.ErrIncomparable):
+		return serverhttp.GetQueriesCompare409JSONResponse{Message: msgIncomparableSnapshots}, nil
+	case err != nil:
+		return nil, fmt.Errorf("GetQueriesCompare | %w", err)
 	}
 
-	joined := mapstruct.SliceFullJoin(
-		scopeReport(reportsA, scope, req.Params.Database),
-		scopeReport(reportsB, scope, req.Params.Database),
-		reportKeyOf, reportKeyOf,
-	)
+	items := make([]serverhttp.QueryCompareItem, 0, len(pairs))
 
-	items := make([]serverhttp.QueryCompareItem, 0, len(joined))
-
-	for _, pair := range joined {
-		var key reportKey
-
-		var query string
-
-		var left, right *serverhttp.QueryReportMetrics
-
-		if pair.Left != nil {
-			pair.Left.Query = sanitize.SQL(pair.Left.Query)
-			key = reportKeyOf(*pair.Left)
-			query = pair.Left.Query
-			m := mapQueryReportMetrics(*pair.Left)
-			left = &m
-		}
-
-		if pair.Right != nil {
-			pair.Right.Query = sanitize.SQL(pair.Right.Query)
-			if key.QueryID == 0 {
-				key = reportKeyOf(*pair.Right)
-			}
-
-			if query == "" {
-				query = pair.Right.Query
-			}
-
-			m := mapQueryReportMetrics(*pair.Right)
-			right = &m
-		}
-
+	for _, p := range pairs {
 		items = append(items, serverhttp.QueryCompareItem{
-			QueryID: strconv.FormatInt(key.QueryID, 10),
-			Datname: shortcut.Ptr(key.Datname),
-			Query:   query,
-			Left:    left,
-			Right:   right,
+			QueryID: strconv.FormatInt(p.Key.QueryID, 10),
+			Datname: shortcut.Ptr(p.Key.Datname),
+			Query:   sanitize.SQL(p.Query),
+			Left:    compareSide(p.Left),
+			Right:   compareSide(p.Right),
 		})
 	}
 
 	return serverhttp.GetQueriesCompare200JSONResponse(items), nil
 }
 
-// excludeReportsByUser drops reports run solely by the excluded users. Snapshot
-// stats are pre-aggregated, so a query shared with a non-excluded user can't be
-// trimmed per user and is kept as-is (matching the live side, which retains it).
-func excludeReportsByUser(reports []dto.QueryReport, exclude []string) []dto.QueryReport {
-	if len(exclude) == 0 {
-		return reports
+func compareSide(r *dto.QueryReport) *serverhttp.QueryReportMetrics {
+	if r == nil {
+		return nil
 	}
 
-	excluded := make(map[string]struct{}, len(exclude))
-	for _, u := range exclude {
-		excluded[u] = struct{}{}
-	}
+	m := mapQueryReportMetrics(*r)
 
-	out := make([]dto.QueryReport, 0, len(reports))
-
-	for _, r := range reports {
-		if onlyExcludedUsers(r.Usernames, excluded) {
-			continue
-		}
-
-		out = append(out, r)
-	}
-
-	return out
-}
-
-// onlyExcludedUsers is true when every user that ran the query is excluded;
-// unknown attribution (no usernames) is kept.
-func onlyExcludedUsers(usernames []string, excluded map[string]struct{}) bool {
-	if len(usernames) == 0 {
-		return false
-	}
-
-	for _, u := range usernames {
-		if _, ok := excluded[u]; !ok {
-			return false
-		}
-	}
-
-	return true
+	return &m
 }
 
 func (s *Handlers) GetQueryStatsStatus(

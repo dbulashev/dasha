@@ -27,42 +27,23 @@ func (s *Handlers) GetAutosnapshotStatus(
 	_ serverhttp.GetAutosnapshotStatusRequestObject,
 ) (serverhttp.GetAutosnapshotStatusResponseObject, error) {
 	resp := serverhttp.GetAutosnapshotStatus200JSONResponse{
-		Available: s.storage != nil,
+		Available: s.autosnapshotStatus != nil,
 		Enabled:   false,
 	}
 
-	if s.storage == nil {
+	if s.autosnapshotStatus == nil {
 		return resp, nil
 	}
 
-	cfg, err := s.storage.GetAutosnapshotConfig(ctx)
-	if err == nil {
-		resp.Enabled = cfg.Enabled
-	}
+	st := s.autosnapshotStatus.Status(ctx)
+	resp.Enabled = st.Enabled
+	resp.LastHotSnapshotAt = st.LastHotSnapshotAt
 
-	leader, err := s.storage.GetLeaderInfo(ctx)
-	if err == nil {
+	if l := st.Leader; l != nil {
 		resp.Leader = &serverhttp.AutoSnapshotLeaderInfo{
-			InstanceId:    leader.InstanceID,
-			LastHeartbeat: leader.LastHeartbeat,
-			IsAlive:       leader.IsAlive,
-		}
-	}
-
-	// Scheduled hot-objects captures are a separate mechanism from the
-	// triggered pgss events shown next to this — surface their freshness
-	// separately so new hot snapshots are not mistaken for trigger activity.
-	if last, err := s.storage.LastHotSnapshotAt(ctx); err == nil {
-		var newest time.Time
-
-		for _, t := range last {
-			if t.After(newest) {
-				newest = t
-			}
-		}
-
-		if !newest.IsZero() {
-			resp.LastHotSnapshotAt = &newest
+			InstanceId:    l.InstanceID,
+			LastHeartbeat: l.LastHeartbeat,
+			IsAlive:       l.IsAlive,
 		}
 	}
 
@@ -186,7 +167,7 @@ func (s *Handlers) GetAutosnapshotTriggerEvents(
 	ctx context.Context,
 	req serverhttp.GetAutosnapshotTriggerEventsRequestObject,
 ) (serverhttp.GetAutosnapshotTriggerEventsResponseObject, error) {
-	if s.storage == nil {
+	if s.autosnapshotStatus == nil {
 		return serverhttp.GetAutosnapshotTriggerEvents501Response{}, nil
 	}
 
@@ -214,7 +195,7 @@ func (s *Handlers) GetAutosnapshotTriggerEvents(
 		filter.Offset = *req.Params.Offset
 	}
 
-	items, err := s.storage.ListTriggerEvents(ctx, filter)
+	items, err := s.autosnapshotStatus.TriggerEvents(ctx, filter)
 	if err != nil {
 		return nil, fmt.Errorf("GetAutosnapshotTriggerEvents | %w", err)
 	}
@@ -232,11 +213,11 @@ func (s *Handlers) GetAutosnapshotSummary(
 	ctx context.Context,
 	_ serverhttp.GetAutosnapshotSummaryRequestObject,
 ) (serverhttp.GetAutosnapshotSummaryResponseObject, error) {
-	if s.storage == nil {
+	if s.autosnapshotStatus == nil {
 		return serverhttp.GetAutosnapshotSummary501Response{}, nil
 	}
 
-	items, err := s.storage.SummarizeTriggerEvents(ctx)
+	items, err := s.autosnapshotStatus.Summary(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("GetAutosnapshotSummary | %w", err)
 	}

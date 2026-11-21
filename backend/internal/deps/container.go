@@ -108,7 +108,7 @@ func NewContainer() *Container {
 		}
 
 		return logs.NewService(
-			clusters, sources, cfg.LogSearch, cfg.LogInsights, newScanSnapshots(st), repo, logger,
+			clusters, sources, cfg.LogSearch, cfg.LogInsights, newScanSnapshots(st), repo, auditActor, logger,
 		), nil
 	})
 
@@ -119,6 +119,8 @@ func NewContainer() *Container {
 
 		return metrics.NewService(cfg.HealthScore.Metrics, clusterMetaProvider{clusters: clusters}, logger)
 	})
+
+	provideServices(i)
 
 	return &Container{i: i}
 }
@@ -181,7 +183,8 @@ func (c *Container) Discovery() *discovery.Engine {
 }
 
 // ProvideStorage registers the snapshot storage. Services the container builds
-// afterwards reach it from there, so it has to run before Logs().
+// afterwards reach it from there, so it has to run before Logs() and
+// HandlerServices().
 func (c *Container) ProvideStorage(st *storage.Storage) {
 	do.ProvideValue(c.i, st)
 }
@@ -770,4 +773,12 @@ func buildLogSource(
 	default:
 		return nil, fmt.Errorf("unknown log source type %q", cfg.Type)
 	}
+}
+
+func auditActor(ctx context.Context) string {
+	if u := auth.UserFromContext(ctx); u != nil {
+		return u.Name
+	}
+
+	return ""
 }

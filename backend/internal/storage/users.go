@@ -3,19 +3,9 @@ package storage
 import (
 	"context"
 	"fmt"
-	"time"
-)
 
-// User is one principal that has signed in at least once, with a count of the
-// personal access tokens it currently owns.
-type User struct {
-	Subject     string
-	Name        string
-	Role        string
-	CreatedAt   time.Time
-	LastLoginAt *time.Time
-	Tokens      int
-}
+	"github.com/dbulashev/dasha/internal/pat"
+)
 
 // RecordLogin upserts the principal and stamps last_login_at. Name and role are
 // refreshed from the identity provider on every login, so the row tracks the IdP
@@ -41,7 +31,7 @@ func (s *Storage) RecordLogin(ctx context.Context, subject, name, role string) e
 // ListUsers returns every principal that has signed in, most recent login first.
 // Tokens counts non-revoked tokens — the same set the token lists return — so the
 // number always matches the rows an administrator sees for that owner.
-func (s *Storage) ListUsers(ctx context.Context) ([]User, error) {
+func (s *Storage) ListUsers(ctx context.Context) ([]pat.User, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT u.subject, u.name, u.role, u.created_at, u.last_login_at,
 		       count(t.subject) AS tokens
@@ -56,10 +46,10 @@ func (s *Storage) ListUsers(ctx context.Context) ([]User, error) {
 	}
 	defer rows.Close()
 
-	out := make([]User, 0, 8)
+	out := make([]pat.User, 0, 8)
 
 	for rows.Next() {
-		var u User
+		var u pat.User
 		if err := rows.Scan(&u.Subject, &u.Name, &u.Role, &u.CreatedAt, &u.LastLoginAt, &u.Tokens); err != nil {
 			return nil, fmt.Errorf("storage: scan user: %w", err)
 		}
