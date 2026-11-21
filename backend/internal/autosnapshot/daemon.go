@@ -47,7 +47,7 @@ type Store interface {
 	DropDayPartitions(ctx context.Context, day time.Time) error
 
 	LastHotSnapshotAt(ctx context.Context) (map[string]time.Time, error)
-	GetHotAnchors(ctx context.Context, clusterName, instance, database string) (map[string]hotobjects.AnchorRow, error)
+	GetHotAnchors(ctx context.Context, clusterName, instance, database string) (map[hotobjects.ObjectKey]hotobjects.AnchorRow, error)
 	GetLatestHotWindows(ctx context.Context, clusterName, database string, instances []string, since time.Time) (map[string]hotobjects.HostWindow, error)
 	InsertHotSnapshotWithAnchors(ctx context.Context, snap hotobjects.Snapshot, anchors map[string][]hotobjects.AnchorRow) (uuid.UUID, error)
 	DropHotPartitionsBefore(ctx context.Context, cutoff time.Time) error

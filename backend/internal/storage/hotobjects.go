@@ -97,7 +97,7 @@ func upsertHotAnchorsTx(
 func (s *Storage) GetHotAnchors(
 	ctx context.Context,
 	clusterName, instance, database string,
-) (map[string]hotobjects.AnchorRow, error) {
+) (map[hotobjects.ObjectKey]hotobjects.AnchorRow, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT kind, schema_name, object_name, COALESCE(table_name, ''), captured_at, stats_reset, size_bytes, part_sig, counters, quiet_since
 		FROM hot_anchor
@@ -108,7 +108,7 @@ func (s *Storage) GetHotAnchors(
 	}
 	defer rows.Close()
 
-	ret := make(map[string]hotobjects.AnchorRow)
+	ret := make(map[hotobjects.ObjectKey]hotobjects.AnchorRow)
 
 	for rows.Next() {
 		var (
