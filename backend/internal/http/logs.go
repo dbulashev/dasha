@@ -8,6 +8,7 @@ import (
 
 	"github.com/dbulashev/dasha/gen/serverhttp"
 	"github.com/dbulashev/dasha/internal/logs"
+	"github.com/dbulashev/dasha/internal/logs/source"
 	"github.com/dbulashev/dasha/internal/pkg/shortcut"
 )
 
@@ -36,6 +37,8 @@ func (s *Handlers) GetLogs(
 		Dedup:      deref(p.Dedup),
 		PageSize:   deref(p.PageSize),
 		PageToken:  deref(p.PageToken),
+		Preset:     string(deref(p.Preset)),
+		TextMode:   logs.TextMode(deref(p.TextMode)),
 	}
 
 	if p.QueryId != nil {
@@ -85,6 +88,18 @@ func mapLogResult(res logs.SearchResult) serverhttp.GetLogs200JSONResponse {
 
 	if res.NextPageToken != "" {
 		out.NextPageToken = shortcut.Ptr(res.NextPageToken)
+	}
+
+	if len(res.NarrowedBy) > 0 {
+		out.NarrowedBy = &res.NarrowedBy
+	}
+
+	if res.TextMode != "" {
+		out.TextMode = shortcut.Ptr(serverhttp.LogSearchResultTextMode(res.TextMode))
+	}
+
+	if res.TextSkipped != source.TextSkipNone {
+		out.TextSkipped = shortcut.Ptr(serverhttp.LogSearchResultTextSkipped(res.TextSkipped))
 	}
 
 	return serverhttp.GetLogs200JSONResponse(out)

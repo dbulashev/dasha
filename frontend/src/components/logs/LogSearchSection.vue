@@ -2,7 +2,14 @@
 import { computed, ref, onMounted, onUnmounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getLogs } from '@/api/gen/default/default'
-import type { GetLogsParams, LogEntry, LogSearchResult } from '@/api/models'
+import type {
+  GetLogsParams,
+  GetLogsPreset,
+  LogEntry,
+  LogSearchResult,
+  LogSearchResultTextMode,
+  LogSearchResultTextSkipped,
+} from '@/api/models'
 import { ApiError, assertOk } from '@/utils/api'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { logErrorText } from './errors'
@@ -24,6 +31,8 @@ const dedup = ref(false)
 const partial = ref(false)
 const scanned = ref(0)
 const nextToken = ref<string | undefined>(undefined)
+const textMode = ref<LogSearchResultTextMode | undefined>(undefined)
+const textSkipped = ref<LogSearchResultTextSkipped | undefined>(undefined)
 const errorMsg = ref<string>('')
 const searched = ref(false)
 
@@ -39,9 +48,23 @@ const streams = computed(() => currentCluster.value?.log_streams ?? [])
 
 const sourceSeverities = computed(() => currentCluster.value?.log_severities ?? {})
 
+const wordSearch = computed(() => currentCluster.value?.supports_word_search ?? false)
+
 const hasMore = computed(() => !dedup.value && !!nextToken.value)
 
-const activeIncludes = computed(() => lastFilters.value?.includes ?? [])
+// Words mode matches each word on its own, so each one is highlighted apart.
+const activeIncludes = computed(() => {
+  const inc = lastFilters.value?.includes ?? []
+  return textMode.value === 'words' ? inc.flatMap(s => s.split(/\s+/)).filter(Boolean) : inc
+})
+
+// Why the text stayed behind matters when the scan stopped short, or when words
+// were asked for and the search fell back to substrings.
+const skipReason = computed(() => {
+  if (!textSkipped.value) return ''
+  const fellBack = lastFilters.value?.textMode === 'words' && textMode.value !== 'words'
+  return fellBack || partial.value ? t(`logs.textSkipped.${textSkipped.value}`) : ''
+})
 
 // Dedup groups keep their count-ranked order; chronological results are sorted
 // by timestamp per the selected order (newest or oldest first).
@@ -93,6 +116,8 @@ async function runSearch(filters: LogFilters, append: boolean) {
       severity: filters.severities.length ? filters.severities : undefined,
       host: filters.host || undefined,
       message: filters.includes.length ? filters.includes : undefined,
+      text_mode: filters.textMode === 'words' ? 'words' : undefined,
+      preset: (filters.preset || undefined) as GetLogsPreset | undefined,
       exclude: filters.excludes.length ? filters.excludes : undefined,
       database: filters.database || undefined,
       user: filters.user || undefined,
@@ -109,6 +134,8 @@ async function runSearch(filters: LogFilters, append: boolean) {
     partial.value = res.partial
     scanned.value = res.scanned ?? 0
     nextToken.value = res.next_page_token
+    textMode.value = res.text_mode
+    textSkipped.value = res.text_skipped
     lastFilters.value = filters
     searched.value = true
   } catch (err) {
@@ -124,6 +151,8 @@ async function runSearch(filters: LogFilters, append: boolean) {
       dedup.value = false
       partial.value = false
       scanned.value = 0
+      textMode.value = undefined
+      textSkipped.value = undefined
     }
   } finally {
     loading.value = false
@@ -176,6 +205,7 @@ onUnmounted(() => {
     :streams="streams"
     :source-severities="sourceSeverities"
     :loading="loading"
+    :word-search="wordSearch"
     @search="onSearch"
   />
 
@@ -214,6 +244,7 @@ onUnmounted(() => {
     :has-more="hasMore"
     :messages="activeIncludes"
     :searched="searched"
+    :skip-reason="skipReason"
     @load-more="onLoadMore"
     @filter="onDrill"
     @exclude="onExclude"

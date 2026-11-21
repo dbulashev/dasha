@@ -31,8 +31,8 @@ func (p stubProvider) Stream(context.Context, source.StreamParams, func(source.R
 	return nil
 }
 
-func (p stubProvider) Narrow(_ context.Context, sp source.StreamParams) source.Filter {
-	return sp.Filter
+func (p stubProvider) Narrow(_ context.Context, sp source.StreamParams) source.Narrowed {
+	return source.Narrowed{Filter: sp.Filter, TextSkip: source.TextSkipNone}
 }
 
 func (p stubProvider) Check(context.Context, config.Cluster, string) (source.CheckResult, error) {
@@ -148,5 +148,27 @@ func TestRegistrySeveritiesPerStream(t *testing.T) {
 
 	if unbound := r.Severities(config.Cluster{Name: "b", LogSource: "other"}); unbound != nil {
 		t.Errorf("severities of an unbound cluster = %v, want nil", unbound)
+	}
+}
+
+type wordStub struct {
+	stubProvider
+	words bool
+}
+
+func (p wordStub) WordSearch() bool { return p.words }
+
+func TestRegistryWordSearch(t *testing.T) {
+	t.Parallel()
+
+	reg := source.NewRegistry()
+	reg.Register("plain", stubProvider{claims: ""})
+	reg.Register("words", wordStub{stubProvider: stubProvider{claims: ""}, words: true})
+	reg.Register("off", wordStub{stubProvider: stubProvider{claims: ""}, words: false})
+
+	for name, want := range map[string]bool{"plain": false, "words": true, "off": false, "missing": false} {
+		if got := reg.WordSearch(config.Cluster{Name: "a", LogSource: name}); got != want {
+			t.Errorf("source %s: word search = %v, want %v", name, got, want)
+		}
 	}
 }

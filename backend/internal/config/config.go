@@ -258,6 +258,9 @@ type LogSearchConfig struct {
 	MaxScan        int `mapstructure:"max_scan"`        // max records scanned per search; default 5000
 	MaxPageSize    int `mapstructure:"max_page_size"`   // upper bound for page_size; default 1000
 	TimeoutSeconds int `mapstructure:"timeout_seconds"` // upstream read timeout; default 30
+	// Pushdown lets a search hand its message, database and user filters to the
+	// store; defaults to true.
+	Pushdown *bool `mapstructure:"pushdown"`
 
 	// RateLimit / AdminRateLimit throttle GET /api/logs per user (per IP when
 	// anonymous). Unset = built-in defaults; requests_per_second <= 0 disables
@@ -271,6 +274,9 @@ type LogSearchConfig struct {
 	// references in log_source.
 	Sources map[string]LogSourceConfig `mapstructure:"sources"`
 }
+
+// PushdownEnabled reports the flag with its default applied: an absent key means on.
+func (c LogSearchConfig) PushdownEnabled() bool { return c.Pushdown == nil || *c.Pushdown }
 
 // Log source types.
 const (

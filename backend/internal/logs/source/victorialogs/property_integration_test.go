@@ -25,12 +25,12 @@ type replayProvider struct {
 	records []source.Record
 }
 
-func newReplayProvider(t *testing.T, fields source.FieldMap) *replayProvider {
+func newReplayProvider(t *testing.T, fields source.FieldMap, seeds []seedRecord) *replayProvider {
 	t.Helper()
 
-	records := make([]source.Record, 0, len(seedRecords()))
+	records := make([]source.Record, 0, len(seeds))
 
-	for i, r := range seedRecords() {
+	for i, r := range seeds {
 		ts, err := time.Parse(time.RFC3339Nano, r.Time)
 		if err != nil {
 			t.Fatalf("seed timestamp %q: %v", r.Time, err)
@@ -108,8 +108,8 @@ func (p *replayProvider) Stream(_ context.Context, sp source.StreamParams, fn fu
 	return nil
 }
 
-func (p *replayProvider) Narrow(_ context.Context, sp source.StreamParams) source.Filter {
-	return sp.Filter
+func (p *replayProvider) Narrow(_ context.Context, sp source.StreamParams) source.Narrowed {
+	return source.Narrowed{Filter: sp.Filter, TextSkip: source.TextSkipNone}
 }
 
 func (p *replayProvider) Check(context.Context, config.Cluster, string) (source.CheckResult, error) {
@@ -119,12 +119,18 @@ func (p *replayProvider) Check(context.Context, config.Cluster, string) (source.
 func newTestService(t *testing.T, p source.Provider) logs.Service {
 	t.Helper()
 
+	return newClusterService(t, p, testCluster)
+}
+
+func newClusterService(t *testing.T, p source.Provider, cluster string) logs.Service {
+	t.Helper()
+
 	reg := source.NewRegistry()
 	reg.Register("main", p)
 
 	clusters := config.NewClustersFromConfig(config.Config{
 		Clusters: []config.Cluster{{
-			Name:      testCluster,
+			Name:      config.ClusterName(cluster),
 			Hosts:     []config.Host{"db-1", "db-2"},
 			LogSource: "main",
 		}},
@@ -182,7 +188,7 @@ func searchAll(t *testing.T, s logs.Service, q logs.SearchQuery) []logs.Entry {
 // store and by a provider that pushes nothing down gives the same results.
 func TestSearchSemanticsDoNotDependOnTheSource(t *testing.T) {
 	store := testProvider(nil)
-	reference := newReplayProvider(t, store.Fields(source.StreamPostgreSQL))
+	reference := newReplayProvider(t, store.Fields(source.StreamPostgreSQL), seedRecords())
 
 	fromStore := newTestService(t, store)
 	fromReference := newTestService(t, reference)
@@ -260,4 +266,72 @@ func dedupKeys(entries []logs.Entry) []string {
 	sort.Strings(out)
 
 	return out
+}
+
+// TestPushedTextDropsNoRecord: a message, database or user filter the store
+// runs itself answers the same as the reference that filters after reading.
+func TestPushedTextDropsNoRecord(t *testing.T) {
+	store := testProvider(nil)
+	reference := newReplayProvider(t, store.Fields(source.StreamPostgreSQL), corpusRecords())
+
+	fromStore := newClusterService(t, store, corpusCluster)
+	fromReference := newClusterService(t, reference, corpusCluster)
+
+	corpusSearch := func(mutate func(*logs.SearchQuery)) logs.SearchQuery {
+		q := testSearch(5)
+		q.Cluster = corpusCluster
+		mutate(&q)
+
+		return q
+	}
+
+	queries := map[string]logs.SearchQuery{
+		"database case":   corpusSearch(func(q *logs.SearchQuery) { q.Database = "Billing" }),
+		"database prefix": corpusSearch(func(q *logs.SearchQuery) { q.Database = "BILLING_P" }),
+		"user":            corpusSearch(func(q *logs.SearchQuery) { q.User = "ADM" }),
+		"preset slow": corpusSearch(func(q *logs.SearchQuery) {
+			q.Preset = "slow"
+			q.Include = []string{"duration:"}
+		}),
+		"preset plan": corpusSearch(func(q *logs.SearchQuery) {
+			q.Preset = "plan"
+			q.Include = []string{"PLAN:"}
+		}),
+	}
+
+	for _, sub := range []string{
+		"a.b", "b c d", "x:y", ":y", "foo_b", "o_bar b", "duration:", "DURATION", "длительность", "Длит",
+		"istanbul", "i", "İ", "日本", "本語の", `C:\tmp "q`, "(x)*", "ß", "strasse", "ς", "σοφ", "\there",
+		"due", "ue to", "user=", "authorized: user=",
+	} {
+		queries["include "+sub] = corpusSearch(func(q *logs.SearchQuery) { q.Include = []string{sub} })
+	}
+
+	for name, q := range queries {
+		t.Run(name, func(t *testing.T) {
+			want := entryKeys(searchAll(t, fromReference, q))
+			got := entryKeys(searchAll(t, fromStore, q))
+
+			if !slices.Equal(got, want) {
+				t.Fatalf("store %q\nreference %q", got, want)
+			}
+		})
+	}
+
+	t.Run("the store narrowed", func(t *testing.T) {
+		q := corpusSearch(func(q *logs.SearchQuery) { q.Include = []string{"a.b"}; q.Database = "billing" })
+
+		res, err := fromStore.Search(context.Background(), q)
+		if err != nil {
+			t.Fatalf("search: %v", err)
+		}
+
+		if !slices.Contains(res.NarrowedBy, "text~a.b") || !slices.Contains(res.NarrowedBy, logs.NarrowedDatabase) {
+			t.Errorf("narrowed_by = %v, want the substring and the database", res.NarrowedBy)
+		}
+
+		if res.Scanned != 1 {
+			t.Errorf("scanned = %d, want the one record the store let through", res.Scanned)
+		}
+	})
 }

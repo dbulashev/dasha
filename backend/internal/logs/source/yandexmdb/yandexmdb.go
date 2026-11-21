@@ -75,10 +75,13 @@ func (p *Provider) Fields(stream string) source.FieldMap {
 // whose filter expression is the only one Yandex MDB offers; it is not
 // documented to match a numeric column or a substring of the message, so a
 // query_id or a phrase is filtered on the Dasha side after a full scan.
-func (p *Provider) Narrow(_ context.Context, sp source.StreamParams) source.Filter {
-	return source.Filter{ //nolint:exhaustruct
-		Severities: sp.Filter.Severities,
-		Host:       sp.Filter.Host,
+func (p *Provider) Narrow(_ context.Context, sp source.StreamParams) source.Narrowed {
+	return source.Narrowed{
+		Filter: source.Filter{ //nolint:exhaustruct
+			Severities: sp.Filter.Severities,
+			Host:       sp.Filter.Host,
+		},
+		TextSkip: source.SkipText(sp.Filter, source.TextSkipUnsupported),
 	}
 }
 

@@ -962,6 +962,16 @@
           "slower": "p95 gestiegen"
         }
       }
+    },
+    "textMode": {
+      "substring": "Teilstring",
+      "words": "Wörter",
+      "substringHint": "Findet einen Textausschnitt ohne Beachtung der Groß-/Kleinschreibung, auch innerhalb von Wörtern (pg_stat findet pg_stat_activity). Der Text wird nach dem Lesen geprüft, bei langen Zeiträumen kann das Scan-Limit erreicht werden.",
+      "wordsHint": "Der Log-Speicher sucht die Wörter nach seinen eigenen Regeln: ganze Wörter, ohne Groß-/Kleinschreibung. Schnell bei langen Zeiträumen, aber ein Ausschnitt innerhalb eines Wortes wird nicht gefunden."
+    },
+    "textSkipped": {
+      "unsupported": "Der Log-Speicher durchsucht keinen Text; der Text wird nach dem Lesen geprüft.",
+      "mapping": "Der Index speichert den Text ohne Aufteilung in Wörter; der Text wird nach dem Lesen geprüft."
     }
   },
   "Replication": "Replikation",

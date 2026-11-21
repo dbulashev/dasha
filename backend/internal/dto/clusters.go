@@ -8,12 +8,14 @@ type Instance struct {
 }
 
 type ClusterInfo struct {
-	Name          config.ClusterName
-	Source        string
-	SupportsLogs  bool
-	LogStreams    []string
-	LogSeverities map[string][]string
-	Instances     []Instance
-	Databases     []string
-	StandbyOf     string
+	Name         config.ClusterName
+	Source       string
+	SupportsLogs bool
+	// SupportsWordSearch means the log source runs a words-mode text filter.
+	SupportsWordSearch bool
+	LogStreams         []string
+	LogSeverities      map[string][]string
+	Instances          []Instance
+	Databases          []string
+	StandbyOf          string
 }

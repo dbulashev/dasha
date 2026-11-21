@@ -1,6 +1,7 @@
 package yandexmdb
 
 import (
+	"context"
 	"testing"
 
 	"github.com/dbulashev/dasha/internal/config"
@@ -113,5 +114,46 @@ func TestBuildFilterUsesAllowlistedValuesOnly(t *testing.T) {
 
 	if got := buildFilter(fm, source.Filter{}); got != "" {
 		t.Errorf("empty filter = %q, want empty", got)
+	}
+}
+
+func TestNarrowDropsTextDatabaseAndUser(t *testing.T) {
+	t.Parallel()
+
+	p := New(nil)
+	id := int64(7)
+	in := source.Filter{
+		Severities: []string{"LOG"},
+		Host:       "db-1",
+		QueryID:    &id,
+		Words:      [][]string{{"duration"}},
+		Substrings: []string{"select"},
+		Database:   "app",
+		User:       "bob",
+	}
+
+	got := p.Narrow(context.Background(), source.StreamParams{Filter: in}) //nolint:exhaustruct
+
+	want := source.Filter{Severities: []string{"LOG"}, Host: "db-1"} //nolint:exhaustruct
+	if got.Host != want.Host || len(got.Severities) != 1 || got.QueryID != nil ||
+		got.Words != nil || got.Substrings != nil || got.Database != "" || got.User != "" {
+		t.Errorf("narrowed = %+v, want %+v", got.Filter, want)
+	}
+
+	if got.TextSkip != source.TextSkipUnsupported {
+		t.Errorf("text skip = %q, want unsupported", got.TextSkip)
+	}
+
+	in.Substrings = nil
+	in.Terms = []string{"deadlock"}
+
+	got = p.Narrow(context.Background(), source.StreamParams{Filter: in}) //nolint:exhaustruct
+	if got.Terms != nil || got.TextSkip != source.TextSkipUnsupported {
+		t.Errorf("narrowed = %+v, want terms dropped as unsupported", got)
+	}
+
+	in.Terms = nil
+	if got := p.Narrow(context.Background(), source.StreamParams{Filter: in}); got.TextSkip != source.TextSkipNone { //nolint:exhaustruct
+		t.Errorf("text skip without substrings = %q, want none", got.TextSkip)
 	}
 }

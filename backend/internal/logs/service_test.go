@@ -36,6 +36,12 @@ type fakeProvider struct {
 	check source.CheckResult
 	// narrow drops the filter parts this store cannot run; nil keeps them all.
 	narrow func(source.Filter) source.Filter
+	// textSkip is what Narrow reports when the input held substrings.
+	textSkip source.TextSkip
+	// narrowed is what each Narrow call was asked to run.
+	narrowed []source.Filter
+	// streamed is what each read was handed.
+	streamed []source.Filter
 	// filter is what the last read was handed.
 	filter source.Filter
 	calls  int
@@ -51,17 +57,21 @@ func (p *fakeProvider) Fields(stream string) source.FieldMap {
 	return p.fields
 }
 
-func (p *fakeProvider) Narrow(_ context.Context, sp source.StreamParams) source.Filter {
+func (p *fakeProvider) Narrow(_ context.Context, sp source.StreamParams) source.Narrowed {
+	p.narrowed = append(p.narrowed, sp.Filter)
+	skip := source.SkipText(sp.Filter, p.textSkip)
+
 	if p.narrow == nil {
-		return sp.Filter
+		return source.Narrowed{Filter: sp.Filter, TextSkip: skip}
 	}
 
-	return p.narrow(sp.Filter)
+	return source.Narrowed{Filter: p.narrow(sp.Filter), TextSkip: skip}
 }
 
 func (p *fakeProvider) Stream(ctx context.Context, sp source.StreamParams, fn func(source.Record) bool) error {
 	p.calls++
 	p.filter = sp.Filter
+	p.streamed = append(p.streamed, sp.Filter)
 
 	start := 0
 

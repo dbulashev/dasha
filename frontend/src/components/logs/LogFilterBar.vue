@@ -6,7 +6,14 @@ import type { LocationQuery } from 'vue-router'
 import type { GetLogsServiceType } from '@/api/models'
 import { copyToClipboard } from '@/utils/sql'
 import { fromDateTimeInput, toDateTimeInput, withZoneLabel } from '@/utils/format'
-import { LOG_PRESETS, severityOptions, type LogFilters, type LogOrder, type LogPreset } from './types'
+import {
+  LOG_PRESETS,
+  severityOptions,
+  type LogFilters,
+  type LogOrder,
+  type LogPreset,
+  type LogTextMode,
+} from './types'
 
 const props = withDefaults(defineProps<{
   hosts: string[]
@@ -18,7 +25,9 @@ const props = withDefaults(defineProps<{
   mode?: 'search' | 'window'
   autoSubmit?: boolean
   submitLabel?: string
-}>(), { mode: 'search', autoSubmit: true })
+  // The source runs whole-word search itself (supports_word_search).
+  wordSearch?: boolean
+}>(), { mode: 'search', autoSubmit: true, wordSearch: false })
 
 const windowOnly = computed(() => props.mode === 'window')
 
@@ -43,6 +52,7 @@ const dedup = ref<boolean>(false)
 const pageSize = ref<number>(100)
 const order = ref<LogOrder>('desc')
 const preset = ref<string | null>(null)
+const textMode = ref<LogTextMode>('substring')
 
 // Custom range bounds — datetime-local strings, read as wall clock in the zone
 // the UI renders timestamps in (settings), not in the browser's own zone.
@@ -138,15 +148,15 @@ function sameArr(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((v, i) => v === b[i])
 }
 
+function presetMatches(p: LogPreset): boolean {
+  return serviceType.value === 'postgresql' &&
+    sameArr(includes.value ?? [], p.message ? [p.message] : []) &&
+    sameArr(severities.value ?? [], presetSeverities(p))
+}
+
 watch([serviceType, includes, severities], () => {
   const p = LOG_PRESETS.find(x => x.id === preset.value)
-  if (!p) return
-  const wantIncludes = p.message ? [p.message] : []
-  const matches =
-    serviceType.value === 'postgresql' &&
-    sameArr(includes.value ?? [], wantIncludes) &&
-    sameArr(severities.value ?? [], presetSeverities(p))
-  if (!matches) preset.value = null
+  if (p && !presetMatches(p)) preset.value = null
 })
 
 const rangeMs: Record<string, number> = {
@@ -284,7 +294,7 @@ const WINDOW_QUERY_KEYS = ['service', 'range', 'from', 'to', 'log_host']
 
 const SEARCH_QUERY_KEYS = [
   ...WINDOW_QUERY_KEYS, 'severity',
-  'message', 'exclude', 'database', 'user', 'query_id', 'dedup', 'page_size', 'order', 'preset',
+  'message', 'text_mode', 'exclude', 'database', 'user', 'query_id', 'dedup', 'page_size', 'order', 'preset',
 ]
 
 const queryKeys = computed(() => (windowOnly.value ? WINDOW_QUERY_KEYS : SEARCH_QUERY_KEYS))
@@ -307,6 +317,7 @@ function toState(): FilterState {
   if (severities.value.length) s.severity = [...severities.value]
   if (host.value) s.log_host = host.value
   if (includes.value.length) s.message = [...includes.value]
+  if (textMode.value === 'words') s.text_mode = 'words'
   if (excludes.value.length) s.exclude = [...excludes.value]
   if (database.value) s.database = database.value
   if (user.value) s.user = user.value
@@ -314,6 +325,7 @@ function toState(): FilterState {
   if (dedup.value) s.dedup = '1'
   if (pageSize.value !== 100) s.page_size = String(pageSize.value)
   if (order.value !== 'desc') s.order = order.value
+  if (preset.value) s.preset = preset.value
   return s
 }
 
@@ -346,6 +358,7 @@ function applyState(raw: FilterState) {
   const h = asStr(s.log_host)
   host.value = props.hosts.includes(h) ? h : ''
   includes.value = asArr(s.message)
+  textMode.value = asStr(s.text_mode) === 'words' ? 'words' : 'substring'
   excludes.value = asArr(s.exclude)
   database.value = asStr(s.database)
   user.value = asStr(s.user)
@@ -354,6 +367,8 @@ function applyState(raw: FilterState) {
   const ps = Number(asStr(s.page_size))
   pageSize.value = pageSizeItems.includes(ps) ? ps : 100
   order.value = asStr(s.order) === 'asc' ? 'asc' : 'desc'
+  const p = LOG_PRESETS.find(x => x.id === asStr(s.preset))
+  preset.value = p && presetMatches(p) ? p.id : null
 }
 
 function syncQuery(state: FilterState) {
@@ -366,12 +381,16 @@ function syncQuery(state: FilterState) {
 onMounted(() => {
   const q = route.query as LocationQuery
   const presetId = asStr(q.preset)
-  if (!windowOnly.value && presetId && LOG_PRESETS.some(p => p.id === presetId)) {
+  // A bare ?preset= link; a saved search also carries its preset, but beside
+  // the fields it restores.
+  const bare = SEARCH_QUERY_KEYS.every(k => k === 'preset' || k === 'text_mode' || q[k] == null)
+  if (!windowOnly.value && bare && presetId && LOG_PRESETS.some(p => p.id === presetId)) {
     preset.value = presetId
     // The preset watcher fires asynchronously; apply now so the deep link
     // searches with the preset already in place. Deep links investigate rare
     // events (deadlocks), so widen the default window from 1h to 24h.
     applyPreset(presetId)
+    textMode.value = asStr(q.text_mode) === 'words' ? 'words' : 'substring'
     range.value = '24h'
     onSubmit()
     return
@@ -417,6 +436,8 @@ function onSubmit() {
     severities: [...(severities.value ?? [])],
     host: host.value ?? '',
     includes: (includes.value ?? []).map(s => s.trim()).filter(Boolean),
+    textMode: props.wordSearch ? textMode.value : 'substring',
+    preset: preset.value ?? '',
     excludes: (excludes.value ?? []).map(s => s.trim()).filter(Boolean),
     database: (database.value ?? '').trim(),
     user: (user.value ?? '').trim(),
@@ -629,7 +650,28 @@ defineExpose({ applyDrill, addExclude, applyAbsoluteRange })
               autocomplete="off"
               prepend-inner-icon="mdi-magnify"
               class="flex-grow-1"
-            />
+            >
+              <template v-if="props.wordSearch" #append-inner>
+                <v-btn-toggle
+                  v-model="textMode"
+                  mandatory
+                  density="compact"
+                  color="primary"
+                  variant="outlined"
+                  divided
+                  class="log-text-mode"
+                  @mousedown.stop
+                  @click.stop
+                >
+                  <v-btn value="substring" size="x-small" :title="t('logs.textMode.substringHint')">
+                    {{ t('logs.textMode.substring') }}
+                  </v-btn>
+                  <v-btn value="words" size="x-small" :title="t('logs.textMode.wordsHint')">
+                    {{ t('logs.textMode.words') }}
+                  </v-btn>
+                </v-btn-toggle>
+              </template>
+            </v-combobox>
             <v-badge :model-value="!moreOpen && hasMoreValues" dot color="primary">
               <v-btn
                 variant="text"
@@ -765,3 +807,10 @@ defineExpose({ applyDrill, addExclude, applyAbsoluteRange })
     </v-card-text>
   </v-card>
 </template>
+
+<style scoped>
+.log-text-mode {
+  height: 24px;
+  align-self: center;
+}
+</style>

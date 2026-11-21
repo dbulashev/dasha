@@ -236,6 +236,18 @@ const (
 	LogScanInfoServiceTypePostgresql LogScanInfoServiceType = "postgresql"
 )
 
+// Defines values for LogSearchResultTextMode.
+const (
+	LogSearchResultTextModeSubstring LogSearchResultTextMode = "substring"
+	LogSearchResultTextModeWords     LogSearchResultTextMode = "words"
+)
+
+// Defines values for LogSearchResultTextSkipped.
+const (
+	Mapping     LogSearchResultTextSkipped = "mapping"
+	Unsupported LogSearchResultTextSkipped = "unsupported"
+)
+
 // Defines values for PersonalAccessTokenRole.
 const (
 	PersonalAccessTokenRoleAdmin  PersonalAccessTokenRole = "admin"
@@ -397,6 +409,25 @@ const (
 const (
 	GetLogsParamsServiceTypePooler     GetLogsParamsServiceType = "pooler"
 	GetLogsParamsServiceTypePostgresql GetLogsParamsServiceType = "postgresql"
+)
+
+// Defines values for GetLogsParamsPreset.
+const (
+	Autovacuum  GetLogsParamsPreset = "autovacuum"
+	Canceled    GetLogsParamsPreset = "canceled"
+	Checkpoint  GetLogsParamsPreset = "checkpoint"
+	Connections GetLogsParamsPreset = "connections"
+	Deadlock    GetLogsParamsPreset = "deadlock"
+	Errors      GetLogsParamsPreset = "errors"
+	Plan        GetLogsParamsPreset = "plan"
+	Slow        GetLogsParamsPreset = "slow"
+	TempFiles   GetLogsParamsPreset = "tempFiles"
+)
+
+// Defines values for GetLogsParamsTextMode.
+const (
+	GetLogsParamsTextModeSubstring GetLogsParamsTextMode = "substring"
+	GetLogsParamsTextModeWords     GetLogsParamsTextMode = "words"
 )
 
 // Defines values for GetLogsCheckParamsServiceType.
@@ -774,6 +805,9 @@ type Cluster struct {
 
 	// SupportsLogs true when cluster logs can be searched via GET /api/logs
 	SupportsLogs *bool `json:"supports_logs,omitempty"`
+
+	// SupportsWordSearch true when GET /api/logs accepts text_mode=words for the cluster
+	SupportsWordSearch *bool `json:"supports_word_search,omitempty"`
 }
 
 // ClusterInstance defines model for ClusterInstance.
@@ -1803,7 +1837,7 @@ type LogInsights struct {
 	// CoveredTo latest record read; absent when nothing was read
 	CoveredTo *time.Time `json:"covered_to,omitempty"`
 
-	// NarrowedBy what the log store filtered on itself, so an empty result is not mistaken for an empty window: severity=<values> is the level auto_explain logs with, query_id an exact match on the statement id, text the phrase of a plan record. A store that cannot run a filter without dropping matching records leaves it out and Dasha scans wider.
+	// NarrowedBy what the log store filtered on itself, so an empty result is not mistaken for an empty window: severity=<values> is the level auto_explain logs with, host the host asked for, query_id an exact match on the statement id, text=plan the word of a plan record. A store that cannot run a filter without dropping matching records leaves it out and Dasha scans wider.
 	NarrowedBy *[]string `json:"narrowed_by,omitempty"`
 
 	// Partial the summary covers less than the whole window
@@ -2020,13 +2054,28 @@ type LogSearchResult struct {
 	Dedup bool       `json:"dedup"`
 	Items []LogEntry `json:"items"`
 
+	// NarrowedBy what the log store filtered on itself: severity=<values>, host, query_id, text=<word> per word sent, text=<word>|<word> per group of words a record holds one of, text~<substring> per substring sent as is, database, user. Empty means the store did not narrow the read.
+	NarrowedBy *[]string `json:"narrowed_by,omitempty"`
+
 	// NextPageToken present only when not deduped and more records are available
 	NextPageToken *string `json:"next_page_token,omitempty"`
 
 	// Partial max_scan reached - results/counts are incomplete
 	Partial bool `json:"partial"`
 	Scanned *int `json:"scanned,omitempty"`
+
+	// TextMode the mode message filters matched in; substring when words were asked for but the store could not run them
+	TextMode *LogSearchResultTextMode `json:"text_mode,omitempty"`
+
+	// TextSkipped why the message filter did not reach the store: unsupported - the store or the configuration does not take it; mapping - the index does not analyze the message field. Present only when a message filter was given.
+	TextSkipped *LogSearchResultTextSkipped `json:"text_skipped,omitempty"`
 }
+
+// LogSearchResultTextMode the mode message filters matched in; substring when words were asked for but the store could not run them
+type LogSearchResultTextMode string
+
+// LogSearchResultTextSkipped why the message filter did not reach the store: unsupported - the store or the configuration does not take it; mapping - the index does not analyze the message field. Present only when a message filter was given.
+type LogSearchResultTextSkipped string
 
 // LogSourceCheck defines model for LogSourceCheck.
 type LogSourceCheck struct {
@@ -3735,10 +3784,22 @@ type GetLogsParams struct {
 	Dedup     *bool     `form:"dedup,omitempty" json:"dedup,omitempty"`
 	PageSize  *int      `form:"page_size,omitempty" json:"page_size,omitempty"`
 	PageToken *string   `form:"page_token,omitempty" json:"page_token,omitempty"`
+
+	// Preset search preset id; lets the backend narrow the store read by the words the records of the preset hold, while a message filter still contains the preset text. connections and errors have no words and narrow by severity alone
+	Preset *GetLogsParamsPreset `form:"preset,omitempty" json:"preset,omitempty"`
+
+	// TextMode how message filters match: substring (default) is a case-insensitive substring checked by Dasha; words splits them on whitespace and lets the log store match each word by its own rules (whole words, its analyzer's case folding and stemming). Words fall back to substring where the store cannot run them, see text_mode and text_skipped of the result.
+	TextMode *GetLogsParamsTextMode `form:"text_mode,omitempty" json:"text_mode,omitempty"`
 }
 
 // GetLogsParamsServiceType defines parameters for GetLogs.
 type GetLogsParamsServiceType string
+
+// GetLogsParamsPreset defines parameters for GetLogs.
+type GetLogsParamsPreset string
+
+// GetLogsParamsTextMode defines parameters for GetLogs.
+type GetLogsParamsTextMode string
 
 // GetLogsCheckParams defines parameters for GetLogsCheck.
 type GetLogsCheckParams struct {
@@ -11408,6 +11469,38 @@ func NewGetLogsRequest(server string, params *GetLogsParams) (*http.Request, err
 		if params.PageToken != nil {
 
 			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "page_token", runtime.ParamLocationQuery, *params.PageToken); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Preset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "preset", runtime.ParamLocationQuery, *params.Preset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.TextMode != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "text_mode", runtime.ParamLocationQuery, *params.TextMode); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err

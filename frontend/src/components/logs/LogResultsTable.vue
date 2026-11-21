@@ -18,6 +18,8 @@ const props = defineProps<{
   // Applied include terms, highlighted in the message column.
   messages: string[]
   searched: boolean
+  // Why the message filter did not reach the store, when that matters.
+  skipReason?: string
 }>()
 
 const emit = defineEmits<{
@@ -167,6 +169,10 @@ function copyEntry(item: LogEntry, what: 'all' | 'query' | 'message' | 'queryId'
       >
         {{ t('logs.partial', { scanned: props.scanned }) }}
       </v-alert>
+
+      <div v-if="props.searched && props.skipReason" class="text-caption text-medium-emphasis mb-3">
+        <v-icon icon="mdi-information-outline" size="small" class="me-1" />{{ props.skipReason }}
+      </div>
 
       <v-alert
         v-if="props.searched && !props.loading && props.items.length === 0"

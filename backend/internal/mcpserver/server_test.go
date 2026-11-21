@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 	"unicode/utf8"
 
 	"github.com/dbulashev/dasha/gen/apiclient"
+	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -233,6 +235,8 @@ func TestLogsParams_Errors(t *testing.T) {
 		{"bad from", searchLogsArgs{Cluster: "c", From: "10.07.2026", To: "2026-07-10T13:00:00Z"}},                //nolint:exhaustruct
 		{"from after to", searchLogsArgs{Cluster: "c", From: "2026-07-10T13:00:00Z", To: "2026-07-10T12:00:00Z"}}, //nolint:exhaustruct
 		{"page_token with dedup", searchLogsArgs{Cluster: "c", PageToken: "tok", Dedup: boolPtr(true)}},           //nolint:exhaustruct
+		{"bad text_mode", searchLogsArgs{Cluster: "c", TextMode: "regex"}},                                        //nolint:exhaustruct
+		{"unknown preset", searchLogsArgs{Cluster: "c", Preset: "vacuum"}},                                        //nolint:exhaustruct
 	}
 
 	for _, tt := range tests {
@@ -260,6 +264,61 @@ func TestLogsParams_PageTokenImpliesRaw(t *testing.T) {
 
 	if p.PageToken == nil || *p.PageToken != "tok" {
 		t.Errorf("page_token must pass through")
+	}
+}
+
+func TestLogsParams_TextModeAndPreset(t *testing.T) {
+	t.Parallel()
+
+	p, errMsg := logsParams(searchLogsArgs{ //nolint:exhaustruct
+		Cluster: "c", Message: []string{"duration:"}, TextMode: "words", Preset: "slow",
+	})
+	if errMsg != "" {
+		t.Fatalf("logsParams error = %q, want none", errMsg)
+	}
+
+	if p.TextMode == nil || *p.TextMode != apiclient.GetLogsParamsTextModeWords {
+		t.Errorf("text_mode = %v, want words", p.TextMode)
+	}
+
+	if p.Preset == nil || *p.Preset != apiclient.Slow {
+		t.Errorf("preset = %v, want slow", p.Preset)
+	}
+
+	p, _ = logsParams(searchLogsArgs{Cluster: "c"}) //nolint:exhaustruct
+	if p.TextMode != nil || p.Preset != nil {
+		t.Errorf("unset text_mode and preset must be omitted")
+	}
+}
+
+func TestLogsPresetsMatchSpec(t *testing.T) {
+	t.Parallel()
+
+	spec, err := openapi3.NewLoader().LoadFromFile("../../../doc/swagger.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var want []string
+
+	for _, prm := range spec.Paths.Value("/api/logs").Get.Parameters {
+		if prm.Value.Name == "preset" {
+			for _, v := range prm.Value.Schema.Value.Enum {
+				want = append(want, v.(string))
+			}
+		}
+	}
+
+	got := make([]string, 0, len(logsPresets))
+	for _, p := range logsPresets {
+		got = append(got, string(p))
+	}
+
+	slices.Sort(want)
+	slices.Sort(got)
+
+	if !slices.Equal(got, want) {
+		t.Errorf("logsPresets = %v, swagger enum = %v", got, want)
 	}
 }
 
@@ -414,6 +473,30 @@ func TestDedupGroupsDropTimestamp(t *testing.T) {
 
 	if !strings.Contains(string(out), `"last_seen":"2026-01-01T00:00:00Z"`) {
 		t.Errorf("last_seen must stay: %s", out)
+	}
+}
+
+func TestDedupGroupsKeepNarrowing(t *testing.T) {
+	t.Parallel()
+
+	narrowed := []string{"severity=LOG", "text=duration"}
+	mode := apiclient.LogSearchResultTextModeSubstring
+	skipped := apiclient.Mapping
+	res := &apiclient.LogSearchResult{ //nolint:exhaustruct
+		Dedup: true, NarrowedBy: &narrowed, TextMode: &mode, TextSkipped: &skipped,
+	}
+
+	out, err := json.Marshal(dedupGroups(res))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, want := range []string{
+		`"narrowed_by":["severity=LOG","text=duration"]`, `"text_mode":"substring"`, `"text_skipped":"mapping"`,
+	} {
+		if !strings.Contains(string(out), want) {
+			t.Errorf("dedup result must carry %s: %s", want, out)
+		}
 	}
 }
 

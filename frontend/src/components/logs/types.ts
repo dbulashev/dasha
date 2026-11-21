@@ -8,8 +8,12 @@ export interface LogFilters {
   to: string
   severities: string[]
   host: string
-  // Message substrings that must all match (AND), filtered Dasha-side.
+  // Message filters that must all match (AND): substrings, or words the log
+  // store matches itself when textMode is 'words'.
   includes: string[]
+  textMode: LogTextMode
+  // Preset id while its fields are untouched; lets the backend narrow the read.
+  preset: string
   // Negative message substrings (grep -v), filtered Dasha-side.
   excludes: string[]
   database: string
@@ -23,6 +27,8 @@ export interface LogFilters {
 }
 
 export type LogOrder = 'asc' | 'desc'
+
+export type LogTextMode = 'substring' | 'words'
 
 // Fallback severity options, used for a cluster whose source declares no
 // vocabulary of its own (log_severities): PostgreSQL upper case, the pooler in

@@ -70,8 +70,9 @@ func (d streamDef) target() string {
 
 // logsQL assembles the expression of one read from the filter Narrow has
 // already reduced to what the store can execute. User input reaches the
-// expression as a quoted value and only after validation — severities come from
-// the field map, hosts from the cluster, query_id is a number.
+// expression as a quoted value: severities come from the field map, hosts from
+// the cluster, query_id is a number, substrings go in as escaped regexps.
+// Words and terms precede the regexps: a word filter uses the token index.
 func (d streamDef) logsQL(f source.Filter, from, to time.Time) string {
 	var parts []string
 
@@ -99,8 +100,24 @@ func (d streamDef) logsQL(f source.Filter, from, to time.Time) string {
 		parts = append(parts, quote(d.fields.QueryID)+":="+quote(strconv.FormatInt(*f.QueryID, 10)))
 	}
 
-	for _, phrase := range f.Contains {
-		parts = append(parts, quote(d.fields.Text)+":"+quote(phrase))
+	for _, g := range f.Words {
+		parts = append(parts, anyWord(d.fields.Text, g))
+	}
+
+	for _, w := range f.Terms {
+		parts = append(parts, word(d.fields.Text, w))
+	}
+
+	for _, sub := range f.Substrings {
+		parts = append(parts, substringFilter(d.fields.Text, sub))
+	}
+
+	if f.Database != "" {
+		parts = append(parts, substringFilter(d.fields.Database, f.Database))
+	}
+
+	if f.User != "" {
+		parts = append(parts, substringFilter(d.fields.User, f.User))
 	}
 
 	for _, k := range sortedKeys(d.selector) {
@@ -112,6 +129,24 @@ func (d streamDef) logsQL(f source.Filter, from, to time.Time) string {
 	}
 
 	return strings.Join(parts, " ")
+}
+
+func word(field, w string) string {
+	return quote(field) + ":i(" + quote(w) + ")"
+}
+
+// anyWord matches a record holding at least one of words.
+func anyWord(field string, words []string) string {
+	if len(words) == 1 {
+		return word(field, words[0])
+	}
+
+	alts := make([]string, 0, len(words))
+	for _, w := range words {
+		alts = append(alts, word(field, w))
+	}
+
+	return "(" + strings.Join(alts, " or ") + ")"
 }
 
 // hostFilter matches the cluster host name against the host field. In suffix
@@ -155,7 +190,12 @@ var bareIdent = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_.]*$`)
 
 // quote renders a value as a LogsQL string literal.
 func quote(v string) string {
-	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(v) + `"`
+	return strconv.Quote(v)
+}
+
+// substringFilter matches field values holding s, case-insensitively.
+func substringFilter(field, s string) string {
+	return quote(field) + ":~" + quote(substringPattern(s))
 }
 
 func sortedKeys(m map[string]string) []string {

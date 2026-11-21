@@ -224,6 +224,7 @@ type LogCapability interface {
 	Supports(cluster config.Cluster) bool
 	Streams(cluster config.Cluster) []string
 	Severities(cluster config.Cluster) map[string][]string
+	WordSearch(cluster config.Cluster) bool
 }
 
 // PlanEvidenceSource reads the plans a log window holds for the given
@@ -305,6 +306,7 @@ func (p *PgxPool) Clusters(ctx context.Context) ([]dto.ClusterInfo, error) {
 	// its logs are searchable.
 	sources := make(map[config.ClusterName]string)
 	supportsLogs := make(map[config.ClusterName]bool)
+	wordSearch := make(map[config.ClusterName]bool)
 	logStreams := make(map[config.ClusterName][]string)
 	logSeverities := make(map[config.ClusterName]map[string][]string)
 	hostMeta := make(map[config.ClusterName]map[config.Host]config.HostMeta)
@@ -321,6 +323,7 @@ func (p *PgxPool) Clusters(ctx context.Context) ([]dto.ClusterInfo, error) {
 			}
 
 			supportsLogs[c.Name] = p.logSources.Supports(c)
+			wordSearch[c.Name] = p.logSources.WordSearch(c)
 			logStreams[c.Name] = p.logSources.Streams(c)
 			logSeverities[c.Name] = p.logSources.Severities(c)
 		}
@@ -348,14 +351,15 @@ func (p *PgxPool) Clusters(ctx context.Context) ([]dto.ClusterInfo, error) {
 		})
 
 		ret = append(ret, dto.ClusterInfo{
-			Name:          clusterName,
-			Source:        sources[clusterName],
-			SupportsLogs:  supportsLogs[clusterName],
-			LogStreams:    logStreams[clusterName],
-			LogSeverities: logSeverities[clusterName],
-			Instances:     instances,
-			Databases:     databases,
-			StandbyOf:     standbyOf[clusterName],
+			Name:               clusterName,
+			Source:             sources[clusterName],
+			SupportsLogs:       supportsLogs[clusterName],
+			SupportsWordSearch: wordSearch[clusterName],
+			LogStreams:         logStreams[clusterName],
+			LogSeverities:      logSeverities[clusterName],
+			Instances:          instances,
+			Databases:          databases,
+			StandbyOf:          standbyOf[clusterName],
 		})
 	}
 

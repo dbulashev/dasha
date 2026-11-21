@@ -36,6 +36,7 @@ type Provider struct {
 	batchSize      int
 	maxBoundaryIDs int
 	timeout        time.Duration
+	wordSearch     bool
 	logger         *zap.Logger
 }
 
@@ -84,9 +85,13 @@ func New(cfg config.LogSourceConfig, global config.LogSearchConfig, logger *zap.
 		batchSize:      batchSize,
 		maxBoundaryIDs: maxBoundaryIDs,
 		timeout:        timeout,
+		wordSearch:     global.PushdownEnabled(),
 		logger:         logger,
 	}, nil
 }
+
+// WordSearch reports whether Filter.Terms reach the store; pushdown off turns it off.
+func (p *Provider) WordSearch() bool { return p.wordSearch }
 
 func tenantHeaders(t config.LogSourceTenantConfig) map[string]string {
 	if t.AccountID == 0 && t.ProjectID == 0 {
@@ -108,15 +113,25 @@ func (p *Provider) Fields(stream string) source.FieldMap {
 }
 
 // Narrow keeps every filter part the store can execute. VictoriaLogs holds
-// each field as a string and indexes it for both exact and word matching, so
-// only a query_id the stream does not carry is dropped.
-func (p *Provider) Narrow(_ context.Context, sp source.StreamParams) source.Filter {
+// each field as a string and runs words and regexps on any of them, so only
+// the parts on a role the stream does not carry are dropped.
+func (p *Provider) Narrow(_ context.Context, sp source.StreamParams) source.Narrowed {
 	f := sp.Filter
-	if p.streams[sp.Stream].fields.QueryID == "" {
+	fm := p.streams[sp.Stream].fields
+
+	if fm.QueryID == "" {
 		f.QueryID = nil
 	}
 
-	return f
+	if fm.Database == "" {
+		f.Database = ""
+	}
+
+	if fm.User == "" {
+		f.User = ""
+	}
+
+	return source.Narrowed{Filter: f, TextSkip: source.TextSkipNone}
 }
 
 // Stream reads the range in batches, resuming from the cursor of the last

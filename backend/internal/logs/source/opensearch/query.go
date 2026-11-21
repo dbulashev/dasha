@@ -73,10 +73,12 @@ func buildSearch(
 		})
 	}
 
-	for _, phrase := range f.Contains {
-		filters = append(filters, map[string]any{
-			"match_phrase": map[string]any{fm.Text: phrase},
-		})
+	for _, g := range f.Words {
+		filters = append(filters, anyPhrase(fm.Text, g))
+	}
+
+	for _, w := range f.Terms {
+		filters = append(filters, phrase(fm.Text, w))
 	}
 
 	for _, k := range sortedKeys(selector) {
@@ -91,6 +93,24 @@ func buildSearch(
 		Query:          map[string]any{"bool": map[string]any{"filter": filters}},
 		TrackTotalHits: trackTotal,
 	}
+}
+
+func phrase(field, w string) map[string]any {
+	return map[string]any{"match_phrase": map[string]any{field: w}}
+}
+
+// anyPhrase matches a record holding at least one of words.
+func anyPhrase(field string, words []string) map[string]any {
+	if len(words) == 1 {
+		return phrase(field, words[0])
+	}
+
+	should := make([]map[string]any, 0, len(words))
+	for _, w := range words {
+		should = append(should, phrase(field, w))
+	}
+
+	return map[string]any{"bool": map[string]any{"should": should, "minimum_should_match": 1}}
 }
 
 // hostFilter matches the cluster host name against the host field. In suffix
@@ -159,7 +179,8 @@ func (s *hitSource) UnmarshalJSON(b []byte) error {
 // the field.
 type fieldCapsResponse struct {
 	Fields map[string]map[string]struct {
-		Type string `json:"type"`
+		Type       string `json:"type"`
+		Searchable bool   `json:"searchable"`
 	} `json:"fields"`
 }
 

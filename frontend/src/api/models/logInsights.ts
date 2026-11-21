@@ -25,7 +25,7 @@ export interface LogInsights {
   covered_to?: string;
   /** event categories seen in the window, most frequent first; absent on a plans scan, which reads the window for plan records alone */
   categories?: LogCategory[];
-  /** what the log store filtered on itself, so an empty result is not mistaken for an empty window: severity=<values> is the level auto_explain logs with, query_id an exact match on the statement id, text the phrase of a plan record. A store that cannot run a filter without dropping matching records leaves it out and Dasha scans wider. */
+  /** what the log store filtered on itself, so an empty result is not mistaken for an empty window: severity=<values> is the level auto_explain logs with, host the host asked for, query_id an exact match on the statement id, text=plan the word of a plan record. A store that cannot run a filter without dropping matching records leaves it out and Dasha scans wider. */
   narrowed_by?: string[];
   configuration?: LogPlanConfiguration;
   plans: LogPlansSummary;

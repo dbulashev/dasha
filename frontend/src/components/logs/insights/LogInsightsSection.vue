@@ -10,6 +10,7 @@ import { fmtCompact, fmtDateTime } from '@/utils/format'
 import { copyToClipboard } from '@/utils/sql'
 import LogFilterBar from '../LogFilterBar.vue'
 import { logErrorText } from '../errors'
+import NarrowedChips from '../NarrowedChips.vue'
 import type { LogFilters } from '../types'
 import CategoryBreakdown from './CategoryBreakdown.vue'
 import LogInsightsAbout from './LogInsightsAbout.vue'
@@ -261,16 +262,7 @@ function copyLink() {
           <v-chip v-if="insights.partial" color="warning" size="small" variant="tonal" label>
             {{ t('logs.insights.partial', { reasons: partialReasons }) }}
           </v-chip>
-          <v-chip
-            v-for="n in insights.narrowed_by ?? []"
-            :key="n"
-            size="small"
-            variant="tonal"
-            label
-            class="text-mono"
-          >
-            {{ n }}
-          </v-chip>
+          <NarrowedChips :items="insights.narrowed_by ?? []" />
           <v-chip v-if="snapshotInfo" size="small" variant="tonal" label prepend-icon="mdi-camera">
             {{ t('logs.insights.snapshotAt', { at: fmtDateTime(snapshotInfo.created_at) }) }}
           </v-chip>
