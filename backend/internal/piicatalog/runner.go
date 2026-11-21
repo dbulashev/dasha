@@ -120,14 +120,12 @@ func (r *Runner) runOnce(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 		case sem <- struct{}{}:
-			wg.Add(1)
 
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				defer func() { <-sem }()
 
 				r.collectClusterSafe(ctx, cl, due, now)
-			}()
+			})
 		}
 	}
 

@@ -2,6 +2,7 @@ package activity
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"time"
 
@@ -156,9 +157,9 @@ func (s *Sampler) Recent(cluster, instance string, at time.Time) (Sample, bool) 
 		return Sample{}, false
 	}
 
-	for i := len(e.recent) - 1; i >= 0; i-- {
-		if e.recent[i].At.Equal(at) {
-			return e.recent[i], true
+	for _, v := range slices.Backward(e.recent) {
+		if v.At.Equal(at) {
+			return v, true
 		}
 	}
 
