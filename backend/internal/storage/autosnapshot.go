@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/dbulashev/dasha/internal/autosnapshot"
 )
@@ -16,8 +17,94 @@ import (
 // leaderLockKey is the key used for pg_try_advisory_lock across all autosnapshot daemons.
 const leaderLockKey int64 = 0x7461736a // "tasj"
 
+// dbtx is satisfied by both the pool and a transaction.
+type dbtx interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
 // GetAutosnapshotConfig returns the global auto-snapshot config.
 func (s *Storage) GetAutosnapshotConfig(ctx context.Context) (autosnapshot.Config, error) {
+	return getAutosnapshotConfig(ctx, s.pool, "")
+}
+
+// UpdateConfig rewrites the global config with what fn returns. fn runs under
+// FOR UPDATE on the config row, which UpdateClusterOverride takes FOR SHARE, so
+// the overrides fn sees cannot change before the commit.
+func (s *Storage) UpdateConfig(
+	ctx context.Context, user string,
+	fn func(cur autosnapshot.Config, overrides map[string]map[string]any) (autosnapshot.Config, error),
+) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("storage: update autosnapshot config begin: %w", err)
+	}
+
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	cur, err := getAutosnapshotConfig(ctx, tx, "FOR UPDATE")
+	if err != nil {
+		return err
+	}
+
+	overrides, err := listClusterOverrides(ctx, tx)
+	if err != nil {
+		return err
+	}
+
+	next, err := fn(cur, overrides)
+	if err != nil {
+		return err
+	}
+
+	if err := setAutosnapshotConfig(ctx, tx, next, user); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("storage: update autosnapshot config commit: %w", err)
+	}
+
+	return nil
+}
+
+// UpdateClusterOverride stores what fn returns as the cluster's override; an
+// empty result deletes the row. fn runs under FOR SHARE on the config row.
+func (s *Storage) UpdateClusterOverride(
+	ctx context.Context, clusterName, user string,
+	fn func(cfg autosnapshot.Config) (map[string]any, error),
+) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("storage: update cluster override begin: %w", err)
+	}
+
+	defer tx.Rollback(ctx) //nolint:errcheck
+
+	cfg, err := getAutosnapshotConfig(ctx, tx, "FOR SHARE")
+	if err != nil {
+		return err
+	}
+
+	overrides, err := fn(cfg)
+	if err != nil {
+		return err
+	}
+
+	if err := setClusterOverride(ctx, tx, clusterName, overrides, user); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("storage: update cluster override commit: %w", err)
+	}
+
+	return nil
+}
+
+// lock is a row-locking clause appended verbatim, never user input.
+func getAutosnapshotConfig(ctx context.Context, q dbtx, lock string) (autosnapshot.Config, error) {
 	var (
 		cfg          autosnapshot.Config
 		pollInterval time.Duration
@@ -26,7 +113,7 @@ func (s *Storage) GetAutosnapshotConfig(ctx context.Context) (autosnapshot.Confi
 		defaultsJSON []byte
 	)
 
-	err := s.pool.QueryRow(ctx, `
+	err := q.QueryRow(ctx, `
 		SELECT enabled, poll_interval, max_snapshot_frequency,
 		       retention_bytes, retention_min_days, min_baseline_active,
 		       capture_locks, lock_probe_count, lock_probe_interval,
@@ -34,7 +121,7 @@ func (s *Storage) GetAutosnapshotConfig(ctx context.Context) (autosnapshot.Confi
 		       hot_enabled, hot_schedule, hot_top_n, hot_retention_days, hot_cold_window_days,
 		       io_enabled, io_schedule, io_retention_days,
 		       defaults, updated_at, updated_by
-		FROM autosnapshot_config_global WHERE id = 1`,
+		FROM autosnapshot_config_global WHERE id = 1 `+lock,
 	).Scan(
 		&cfg.Enabled, &pollInterval, &maxFreq,
 		&cfg.RetentionBytes, &cfg.RetentionMinDays, &cfg.MinBaselineActive,
@@ -105,8 +192,7 @@ func (s *Storage) GetAutosnapshotConfig(ctx context.Context) (autosnapshot.Confi
 	return cfg, nil
 }
 
-// SetAutosnapshotConfig replaces the global config.
-func (s *Storage) SetAutosnapshotConfig(ctx context.Context, cfg autosnapshot.Config, updatedBy string) error {
+func setAutosnapshotConfig(ctx context.Context, q dbtx, cfg autosnapshot.Config, updatedBy string) error {
 	defaults := map[string]any{
 		"activity_spike": map[string]any{
 			"enabled":              cfg.Defaults.ActivitySpike.Enabled,
@@ -127,7 +213,7 @@ func (s *Storage) SetAutosnapshotConfig(ctx context.Context, cfg autosnapshot.Co
 		return fmt.Errorf("storage: marshal defaults: %w", err)
 	}
 
-	_, err = s.pool.Exec(ctx, `
+	_, err = q.Exec(ctx, `
 		UPDATE autosnapshot_config_global
 		SET enabled = $1, poll_interval = $2, max_snapshot_frequency = $3,
 		    retention_bytes = $4, retention_min_days = $5, min_baseline_active = $6,
@@ -190,10 +276,10 @@ func (s *Storage) GetClusterOverride(ctx context.Context, clusterName string) (a
 	return result, nil
 }
 
-// SetClusterOverride upserts per-cluster overrides. Empty map removes the row.
-func (s *Storage) SetClusterOverride(ctx context.Context, clusterName string, overrides map[string]any, updatedBy string) error {
+// setClusterOverride upserts per-cluster overrides. Empty map removes the row.
+func setClusterOverride(ctx context.Context, q dbtx, clusterName string, overrides map[string]any, updatedBy string) error {
 	if len(overrides) == 0 {
-		if _, err := s.pool.Exec(ctx,
+		if _, err := q.Exec(ctx,
 			`DELETE FROM autosnapshot_config_cluster WHERE cluster_name = $1`, clusterName,
 		); err != nil {
 			return fmt.Errorf("storage: delete cluster override: %w", err)
@@ -207,7 +293,7 @@ func (s *Storage) SetClusterOverride(ctx context.Context, clusterName string, ov
 		return fmt.Errorf("storage: marshal overrides: %w", err)
 	}
 
-	_, err = s.pool.Exec(ctx, `
+	_, err = q.Exec(ctx, `
 		INSERT INTO autosnapshot_config_cluster (cluster_name, overrides, updated_by)
 		VALUES ($1, $2::jsonb, $3)
 		ON CONFLICT (cluster_name) DO UPDATE
@@ -225,7 +311,11 @@ func (s *Storage) SetClusterOverride(ctx context.Context, clusterName string, ov
 
 // ListClusterOverrides returns all per-cluster overrides keyed by cluster name.
 func (s *Storage) ListClusterOverrides(ctx context.Context) (map[string]map[string]any, error) {
-	rows, err := s.pool.Query(ctx,
+	return listClusterOverrides(ctx, s.pool)
+}
+
+func listClusterOverrides(ctx context.Context, q dbtx) (map[string]map[string]any, error) {
+	rows, err := q.Query(ctx,
 		`SELECT cluster_name, overrides FROM autosnapshot_config_cluster`,
 	)
 	if err != nil {

@@ -55,6 +55,9 @@ func TestConfigValidate(t *testing.T) {
 		{"hot_retention_days zero", func(c *Config) { c.HotRetentionDays = 0 }, true},
 		{"hot_cold_window_days zero", func(c *Config) { c.HotColdWindowDays = 0 }, true},
 		{"hot_cold_window_days too high", func(c *Config) { c.HotColdWindowDays = 91 }, true},
+		{"hot_schedule not cron", func(c *Config) { c.HotSchedule = "daily" }, true},
+		{"hot_schedule empty", func(c *Config) { c.HotSchedule = "" }, true},
+		{"io_schedule not cron", func(c *Config) { c.IOSchedule = "*/5 * *" }, true},
 		{
 			name:    "spike_duration at half the window is allowed",
 			mutate:  func(c *Config) { c.Defaults.ActivitySpike.SpikeDuration = 15 * time.Second },

@@ -26,6 +26,8 @@ type Handlers struct {
 	activity  *activity.Sampler
 	pii       *piicatalog.Reader
 	snapshots *autosnapshot.ManualCapturer
+
+	autosnapshotCfg *autosnapshot.ConfigService
 }
 
 // NewDashaHandlers constructs a new Handlers instance from its dependencies.
@@ -46,6 +48,7 @@ func NewDashaHandlers(
 	if st != nil {
 		h.pii = piicatalog.NewReader(st, clusters, cfg.PIICatalog.Schedule)
 		h.snapshots = autosnapshot.NewManualCapturer(autosnapshot.NewCapturer(repo, st, logger), st)
+		h.autosnapshotCfg = autosnapshot.NewConfigService(st, repo)
 	}
 
 	return h
