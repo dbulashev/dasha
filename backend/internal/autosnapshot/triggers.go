@@ -2,20 +2,13 @@ package autosnapshot
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"math"
 	"time"
 
 	"go.uber.org/zap"
 
 	"github.com/dbulashev/dasha/internal/config"
-	"github.com/dbulashev/dasha/internal/dto"
 )
-
-// errEmptyReport marks a skipped snapshot: nothing was stored, so the caller
-// must not advance the incident state as if it had been.
-var errEmptyReport = errors.New("autosnapshot: empty report")
 
 func (d *Daemon) processCluster(
 	ctx context.Context,
@@ -312,11 +305,9 @@ func (d *Daemon) tickRoleChange(
 	_ = d.takeSnapshot(ctx, cfg, cl, instance, database, TriggerRoleChange, "auto:role_change", trigCtx, nil)
 }
 
-// takeSnapshot stores one instance-wide pgss snapshot for a host. The database
-// is a preference only: pg_stat_statements holds the same instance-wide rows in
-// every database that has the extension, so one snapshot per host is enough —
-// what varies is which database it could be read through, and that is recorded
-// as the snapshot's provenance.
+// takeSnapshot captures a snapshot and records the outcome as a trigger event.
+// Debounce, the event and the post-snapshot stats reset belong to the trigger,
+// not to the snapshot, so they stay here rather than in Capturer.
 func (d *Daemon) takeSnapshot(
 	ctx context.Context,
 	cfg Config,
@@ -327,96 +318,41 @@ func (d *Daemon) takeSnapshot(
 	trigCtx map[string]any,
 	bgPeak *BackgroundPeak,
 ) error {
-	reports, err := d.repo.GetQueriesReport(ctx, string(cl.Name), instance, database, nil, nil)
-	if err != nil {
-		d.insertEvent(ctx, TriggerEvent{
-			ClusterName:    string(cl.Name),
-			Instance:       instance,
-			Database:       &database,
-			TriggerType:    trigType,
-			Outcome:        OutcomeError,
-			TriggerContext: trigCtx,
-			ErrorMessage:   new(fmt.Sprintf("get report: %v", err)),
-		})
-
-		return err
-	}
-
-	// No readable extension anywhere on the host yields an empty report; storing
-	// it would fill the snapshot selector with entries that explain nothing.
-	if len(reports) == 0 {
-		d.insertEvent(ctx, TriggerEvent{
-			ClusterName:    string(cl.Name),
-			Instance:       instance,
-			Database:       &database,
-			TriggerType:    trigType,
-			Outcome:        OutcomeError,
-			TriggerContext: trigCtx,
-			ErrorMessage:   new("empty report: no query-statistics extension is readable in any database of the host"),
-		})
-
-		return errEmptyReport
-	}
-
-	// Provenance is recorded, not guessed: the report may have been read through
-	// a database other than the requested one, so falling back to the request
-	// would label the snapshot with numbers it did not come from.
-	provenance, err := d.repo.PgssDatabase(ctx, string(cl.Name), instance, database)
-	if err != nil {
-		d.insertEvent(ctx, TriggerEvent{
-			ClusterName:    string(cl.Name),
-			Instance:       instance,
-			Database:       &database,
-			TriggerType:    trigType,
-			Outcome:        OutcomeError,
-			TriggerContext: trigCtx,
-			ErrorMessage:   new(fmt.Sprintf("pgss database: %v", err)),
-		})
-
-		return err
-	}
-
-	var pgssReset *time.Time
-	if t, err := d.repo.GetPgssStatsResetTime(ctx, string(cl.Name), instance, database); err == nil && t != nil {
-		pgssReset = &t.Time
-	}
-
-	// Best-effort, like the reset time above.
-	statsSource, err := d.repo.PgssSource(ctx, string(cl.Name), instance, database)
-	if err != nil {
-		d.logger.Warn("stats source lookup failed; snapshot stored unlabelled", zap.Error(err))
-	}
-
-	// Locks are captured only for activity spikes (contention correlates with load,
-	// not role changes). Best-effort: capture failure never fails the snapshot.
-	var locks *LockCapture
-	if cfg.CaptureLocks && trigType == TriggerActivitySpike {
-		lc := CaptureLocks(ctx, d.repo, string(cl.Name), instance, provenance, dto.ScopeInstance,
-			cfg.LockProbeCount, cfg.LockProbeInterval)
-		lc.BackgroundPeak = bgPeak
-		locks = &lc
-	}
-
-	id, createdAt, err := d.store.CreateSnapshot(ctx, string(cl.Name), instance, provenance, reports, SnapshotOpts{
-		PgssStatsReset: pgssReset,
-		StatsSource:    statsSource,
+	req := CaptureRequest{ //nolint:exhaustruct
+		Cluster:        string(cl.Name),
+		Instance:       instance,
+		Database:       database,
 		Reason:         reason,
 		TriggerContext: trigCtx,
-		LocksData:      locks,
-	})
+	}
+
+	// Contention correlates with load, not role changes. Best-effort: a failed
+	// capture never fails the snapshot.
+	if cfg.CaptureLocks && trigType == TriggerActivitySpike {
+		req.Locks = &LockProbe{Count: cfg.LockProbeCount, Interval: cfg.LockProbeInterval, BackgroundPeak: bgPeak}
+	}
+
+	c, err := NewCapturer(d.repo, d.store, d.logger).Capture(ctx, req)
 	if err != nil {
+		eventDB := database
+		if c.Database != "" {
+			eventDB = c.Database
+		}
+
 		d.insertEvent(ctx, TriggerEvent{
 			ClusterName:    string(cl.Name),
 			Instance:       instance,
-			Database:       &provenance,
+			Database:       &eventDB,
 			TriggerType:    trigType,
 			Outcome:        OutcomeError,
 			TriggerContext: trigCtx,
-			ErrorMessage:   new(fmt.Sprintf("create snapshot: %v", err)),
+			ErrorMessage:   new(err.Error()),
 		})
 
 		return err
 	}
+
+	id, createdAt, provenance := c.ID, c.CreatedAt, c.Database
 
 	d.mu.Lock()
 	if d.lastAuto == nil {

@@ -4,6 +4,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/dbulashev/dasha/internal/activity"
+	"github.com/dbulashev/dasha/internal/autosnapshot"
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/healthscore"
 	"github.com/dbulashev/dasha/internal/logs"
@@ -15,15 +16,16 @@ import (
 
 // Handlers holds the HTTP handler dependencies used by the server.
 type Handlers struct {
-	cfg      *config.Config
-	repo     repository.Repository
-	storage  *storage.Storage
-	metrics  *metrics.Service
-	logs     logs.Service
-	scorer   *healthscore.Scorer
-	fleet    *healthscore.Fleet
-	activity *activity.Sampler
-	pii      *piicatalog.Reader
+	cfg       *config.Config
+	repo      repository.Repository
+	storage   *storage.Storage
+	metrics   *metrics.Service
+	logs      logs.Service
+	scorer    *healthscore.Scorer
+	fleet     *healthscore.Fleet
+	activity  *activity.Sampler
+	pii       *piicatalog.Reader
+	snapshots *autosnapshot.ManualCapturer
 }
 
 // NewDashaHandlers constructs a new Handlers instance from its dependencies.
@@ -43,6 +45,7 @@ func NewDashaHandlers(
 	// A typed-nil *storage.Storage must not end up in the store interface.
 	if st != nil {
 		h.pii = piicatalog.NewReader(st, clusters, cfg.PIICatalog.Schedule)
+		h.snapshots = autosnapshot.NewManualCapturer(autosnapshot.NewCapturer(repo, st, logger), st)
 	}
 
 	return h
