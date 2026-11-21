@@ -2,6 +2,7 @@ package opensearch
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -97,6 +98,37 @@ func TestNarrowDropsAPhraseOnAMixedMapping(t *testing.T) {
 
 	if got.QueryID == nil {
 		t.Errorf("filter = %+v, want the id kept: its own mapping is exact", got)
+	}
+}
+
+// A field mapped with index: false fails the whole search when queried, so
+// neither a phrase nor a term may go to it.
+func TestNarrowDropsWhatTheIndexCannotSearch(t *testing.T) {
+	t.Parallel()
+
+	caps := fieldCapsResponse{}
+	if err := json.Unmarshal([]byte(`{"fields": {
+		"query_id": {"long": {"type": "long", "searchable": false}},
+		"message":  {"text": {"type": "text", "searchable": false}},
+		"other":    {"unmapped": {"type": "unmapped", "searchable": false}}
+	}}`), &caps); err != nil {
+		t.Fatal(err)
+	}
+
+	types := fieldTypesOf(caps)
+	if types["other"][0] != unmappedType {
+		t.Errorf("types = %v, want an unmapped index to stay unmapped", types)
+	}
+
+	p := narrowProvider(t, types)
+
+	f := planFilter()
+	f.Terms = []string{"seq"}
+
+	got := p.Narrow(context.Background(), narrowParams(f))
+
+	if got.QueryID != nil || got.Words != nil || got.Terms != nil || got.TextSkip != source.TextSkipMapping {
+		t.Errorf("narrowed = %+v, want nothing on the unsearchable fields and a mapping skip", got)
 	}
 }
 

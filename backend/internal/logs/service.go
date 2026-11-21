@@ -198,7 +198,7 @@ func (s *service) Search(ctx context.Context, q SearchQuery) (SearchResult, erro
 		return SearchResult{}, err
 	}
 
-	words, err := presetWords(q.Preset, q.Include)
+	pm, err := matchPreset(q.Preset, q.Include)
 	if err != nil {
 		return SearchResult{}, err
 	}
@@ -210,7 +210,7 @@ func (s *service) Search(ctx context.Context, q SearchQuery) (SearchResult, erro
 		Stream:  q.Stream,
 		From:    q.From,
 		To:      q.To,
-		Filter:  s.searchFilter(q, severities, words),
+		Filter:  s.searchFilter(q, severities, pm),
 		Token:   q.PageToken,
 	}
 
@@ -219,12 +219,20 @@ func (s *service) Search(ctx context.Context, q SearchQuery) (SearchResult, erro
 	n := narrow(ctx, b.provider, params)
 	params.Filter = n.Filter
 
-	// Terms the store runs are the message filter; toEntry must not apply the
-	// includes again as substrings.
-	mode := TextModeSubstring
-	if len(n.Terms) > 0 {
-		mode = TextModeWords
-		q.Include = nil
+	// Terms the store runs are the message filter; toEntry checks only the
+	// preset text, which stays a substring in either mode.
+	mode, skipped := TextModeSubstring, n.TextSkip
+
+	if q.TextMode == TextModeWords {
+		switch {
+		case len(terms(pm.Rest)) == 0:
+			mode, skipped = TextModeWords, source.TextSkipNone
+		case len(n.Terms) > 0:
+			mode, skipped = TextModeWords, source.TextSkipNone
+			q.Include = pm.Preset
+		case skipped == source.TextSkipNone:
+			skipped = source.TextSkipUnsupported
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(s.cfg.TimeoutSeconds)*time.Second)
@@ -243,18 +251,16 @@ func (s *service) Search(ctx context.Context, q SearchQuery) (SearchResult, erro
 
 	res.NarrowedBy = narrowedBy(n.Filter)
 	res.TextMode = mode
-	res.TextSkipped = n.TextSkip
-
-	if q.TextMode == TextModeWords && mode != TextModeWords && n.TextSkip == source.TextSkipNone {
-		res.TextSkipped = source.TextSkipUnsupported
-	}
+	res.TextSkipped = skipped
 
 	return res, nil
 }
 
 // searchFilter is what a search asks the store to run. With pushdown off only
-// severity, host and query_id go down.
-func (s *service) searchFilter(q SearchQuery, severities, words []string) source.Filter {
+// severity, host and query_id go down. In words mode the preset text goes as a
+// substring: the checkpoint preset holds "point", which no checkpoint record
+// holds as a whole word.
+func (s *service) searchFilter(q SearchQuery, severities []string, pm presetMatch) source.Filter {
 	f := source.Filter{ //nolint:exhaustruct
 		Severities: severities,
 		Host:       q.Host,
@@ -265,17 +271,19 @@ func (s *service) searchFilter(q SearchQuery, severities, words []string) source
 		return f
 	}
 
-	if len(words) > 0 {
-		f.Words = [][]string{words}
+	if len(pm.Words) > 0 {
+		f.Words = [][]string{pm.Words}
 	}
 
+	substrings := q.Include
 	if q.TextMode == TextModeWords {
-		f.Terms = terms(q.Include)
-	} else {
-		for _, inc := range q.Include {
-			if inc != "" {
-				f.Substrings = append(f.Substrings, inc)
-			}
+		f.Terms = terms(pm.Rest)
+		substrings = pm.Preset
+	}
+
+	for _, inc := range substrings {
+		if inc != "" {
+			f.Substrings = append(f.Substrings, inc)
 		}
 	}
 

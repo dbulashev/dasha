@@ -1005,7 +1005,7 @@
       "substring": "Substring",
       "words": "Words",
       "substringHint": "Finds a case-insensitive fragment of text, inside words too (pg_stat finds pg_stat_activity). The text is checked after reading, so a long period may hit the scan limit.",
-      "wordsHint": "The log store finds the words by its own rules: whole words, case-insensitive, word forms included. Fast on long periods, but a fragment inside a word is not found."
+      "wordsHint": "The log store finds the words by its own rules: whole words, case-insensitive. Fast on long periods, but a fragment inside a word is not found."
     },
     "textSkipped": {
       "unsupported": "The log store does not search text; the text is checked after reading.",

@@ -8,35 +8,40 @@ import (
 	"unicode"
 )
 
-func TestPresetWords(t *testing.T) {
+func TestMatchPreset(t *testing.T) {
 	t.Parallel()
+
+	cp := searchPresets["checkpoint"].Words
 
 	for _, tt := range []struct {
 		name    string
 		id      string
 		include []string
-		want    []string
+		words   []string
+		preset  []string
 		err     bool
 	}{
-		{name: "no preset", id: "", include: []string{"duration:"}, want: nil},
-		{name: "slow", id: "slow", include: []string{"duration:"}, want: []string{"duration"}},
-		{name: "plan", id: "plan", include: []string{"plan:"}, want: []string{"plan"}},
-		{name: "case does not matter", id: "slow", include: []string{"DURATION:"}, want: []string{"duration"}},
-		{name: "text extended", id: "slow", include: []string{"duration: 1"}, want: []string{"duration"}},
-		{name: "one of several", id: "slow", include: []string{"select", "duration:"}, want: []string{"duration"}},
-		{name: "text edited", id: "slow", include: []string{"durat"}, want: nil},
-		{name: "text cleared", id: "slow", include: nil, want: nil},
-		{
-			name: "group", id: "checkpoint", include: []string{"point"},
-			want: []string{"checkpoint", "checkpoints", "restartpoint", "point", "checkpointer", "checkpointed"},
-		},
-		{name: "preset without words", id: "errors", include: []string{"error"}, want: nil},
+		{name: "no preset", id: "", include: []string{"duration:"}},
+		{name: "slow", id: "slow", include: []string{"duration:"}, words: []string{"duration"}, preset: []string{"duration:"}},
+		{name: "plan", id: "plan", include: []string{"plan:"}, words: []string{"plan"}, preset: []string{"plan:"}},
+		{name: "case does not matter", id: "slow", include: []string{"DURATION:"}, words: []string{"duration"}, preset: []string{"DURATION:"}},
+		{name: "text extended", id: "slow", include: []string{"duration: 1"}, words: []string{"duration"}, preset: []string{"duration: 1"}},
+		{name: "one of several", id: "slow", include: []string{"select", "duration:"}, words: []string{"duration"}, preset: []string{"duration:"}},
+		{name: "text edited", id: "slow", include: []string{"durat"}},
+		{name: "text cleared", id: "slow", include: nil},
+		{name: "glued on the left", id: "slow", include: []string{"xduration:"}},
+		{name: "glued on the right", id: "deadlock", include: []string{"deadlock_timeout"}},
+		{name: "longer word", id: "autovacuum", include: []string{"automatically"}},
+		{name: "dot inside a token", id: "deadlock", include: []string{"deadlock.c"}},
+		{name: "later occurrence counts", id: "deadlock", include: []string{"deadlocks, deadlock"}, words: []string{"deadlock"}, preset: []string{"deadlocks, deadlock"}},
+		{name: "group", id: "checkpoint", include: []string{"point"}, words: cp, preset: []string{"point"}},
+		{name: "preset without words", id: "errors", include: []string{"error"}},
 		{name: "unknown preset", id: "nope", include: []string{"duration:"}, err: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := presetWords(tt.id, tt.include)
+			got, err := matchPreset(tt.id, tt.include)
 			if tt.err {
 				if !errors.Is(err, ErrInvalid) {
 					t.Fatalf("err = %v, want ErrInvalid", err)
@@ -49,8 +54,12 @@ func TestPresetWords(t *testing.T) {
 				t.Fatalf("err = %v", err)
 			}
 
-			if !slices.Equal(got, tt.want) {
-				t.Errorf("words = %q, want %q", got, tt.want)
+			if !slices.Equal(got.Words, tt.words) || !slices.Equal(got.Preset, tt.preset) {
+				t.Errorf("words = %q, preset = %q, want %q and %q", got.Words, got.Preset, tt.words, tt.preset)
+			}
+
+			if len(got.Preset)+len(got.Rest) != len(tt.include) {
+				t.Errorf("preset %q and rest %q do not split %q", got.Preset, got.Rest, tt.include)
 			}
 		})
 	}

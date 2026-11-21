@@ -384,6 +384,7 @@ onMounted(() => {
     // searches with the preset already in place. Deep links investigate rare
     // events (deadlocks), so widen the default window from 1h to 24h.
     applyPreset(presetId)
+    textMode.value = asStr(q.text_mode) === 'words' ? 'words' : 'substring'
     range.value = '24h'
     onSubmit()
     return

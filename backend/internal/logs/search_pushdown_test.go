@@ -305,3 +305,75 @@ func TestSearchRejectsAnUnknownTextMode(t *testing.T) {
 		t.Errorf("err = %v, want ErrInvalid", err)
 	}
 }
+
+func TestSearchInWordsWithoutTextSkipsNothing(t *testing.T) {
+	t.Parallel()
+
+	p := &fakeProvider{fields: testFieldMap(t), records: records(2), textSkip: source.TextSkipUnsupported}
+	svc := newTestService(t, p, config.LogSearchConfig{})
+
+	q := testQuery()
+	q.TextMode = TextModeWords
+
+	res, err := svc.Search(context.Background(), q)
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+
+	if res.TextMode != TextModeWords || res.TextSkipped != source.TextSkipNone {
+		t.Errorf("mode = %q, skip = %q, want words and none: no text was asked for", res.TextMode, res.TextSkipped)
+	}
+}
+
+// The checkpoint preset holds "point", which no checkpoint record holds as a
+// whole word: in words mode it stays a substring Dasha checks, beside the
+// preset words and the terms of the rest.
+func TestSearchInWordsKeepsThePresetTextASubstring(t *testing.T) {
+	t.Parallel()
+
+	recs := []source.Record{
+		record(0, "checkpoint starting: time"),
+		record(1, "restartpoint starting: time"),
+		record(2, "replication starting"),
+	}
+
+	for _, tt := range []struct {
+		name    string
+		include []string
+		terms   []string
+	}{
+		{name: "preset alone", include: []string{"point"}, terms: nil},
+		{name: "preset and a word", include: []string{"point", "starting"}, terms: []string{"starting"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			p := &fakeProvider{fields: testFieldMap(t), records: recs}
+			svc := newTestService(t, p, config.LogSearchConfig{})
+
+			q := testQuery()
+			q.TextMode = TextModeWords
+			q.Preset = "checkpoint"
+			q.Include = tt.include
+
+			res, err := svc.Search(context.Background(), q)
+			if err != nil {
+				t.Fatalf("search: %v", err)
+			}
+
+			f := p.filter
+			if !slices.Equal(f.Terms, tt.terms) || !slices.Equal(f.Substrings, []string{"point"}) ||
+				!reflect.DeepEqual(f.Words, [][]string{searchPresets["checkpoint"].Words}) {
+				t.Errorf("filter = %+v, want terms %q, the preset text as a substring and the preset words", f, tt.terms)
+			}
+
+			if res.TextMode != TextModeWords || res.TextSkipped != source.TextSkipNone {
+				t.Errorf("mode = %q, skip = %q, want words and none", res.TextMode, res.TextSkipped)
+			}
+
+			if len(res.Items) != 2 {
+				t.Errorf("items = %+v, want the checkpoint and the restartpoint", res.Items)
+			}
+		})
+	}
+}

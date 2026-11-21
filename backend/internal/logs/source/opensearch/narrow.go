@@ -18,6 +18,10 @@ const fieldTypeTTL = 15 * time.Minute
 // hold the field at all.
 const unmappedType = "unmapped"
 
+// unsearchableType stands for a type mapped with index: false: a query on such
+// a field fails instead of matching nothing.
+const unsearchableType = "unsearchable"
+
 type fieldTypeEntry struct {
 	types map[string][]string
 	at    time.Time
@@ -108,7 +112,7 @@ func exact(types map[string][]string, field string) bool {
 	}
 
 	for _, t := range types[field] {
-		if t == unmappedType || analyzedType(t) {
+		if t == unmappedType || t == unsearchableType || analyzedType(t) {
 			return false
 		}
 	}
@@ -133,18 +137,29 @@ func (p *Provider) fieldTypes(ctx context.Context, index string) map[string][]st
 		return nil
 	}
 
+	types := fieldTypesOf(caps)
+	p.fieldTypeCache.Store(index, fieldTypeEntry{types: types, at: time.Now()})
+
+	return types
+}
+
+// fieldTypesOf lists the types of every field across the indices, a type mapped
+// with index: false as unsearchableType.
+func fieldTypesOf(caps fieldCapsResponse) map[string][]string {
 	types := make(map[string][]string, len(caps.Fields))
 
 	for field, byType := range caps.Fields {
 		names := make([]string, 0, len(byType))
-		for name := range byType {
+		for name, c := range byType {
+			if !c.Searchable && name != unmappedType {
+				name = unsearchableType
+			}
+
 			names = append(names, name)
 		}
 
 		types[field] = names
 	}
-
-	p.fieldTypeCache.Store(index, fieldTypeEntry{types: types, at: time.Now()})
 
 	return types
 }

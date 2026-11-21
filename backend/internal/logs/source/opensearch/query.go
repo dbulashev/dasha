@@ -179,7 +179,8 @@ func (s *hitSource) UnmarshalJSON(b []byte) error {
 // the field.
 type fieldCapsResponse struct {
 	Fields map[string]map[string]struct {
-		Type string `json:"type"`
+		Type       string `json:"type"`
+		Searchable bool   `json:"searchable"`
 	} `json:"fields"`
 }
 
