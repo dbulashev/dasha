@@ -55,6 +55,7 @@ components:
       # The Source port and its registry; adapters are logsource.
       - internal/logs/source
       - internal/metrics
+      - internal/pat
       - internal/piicatalog
       - internal/querystats
       - internal/schemalint

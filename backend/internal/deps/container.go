@@ -108,7 +108,7 @@ func NewContainer() *Container {
 		}
 
 		return logs.NewService(
-			clusters, sources, cfg.LogSearch, cfg.LogInsights, newScanSnapshots(st), repo, logger,
+			clusters, sources, cfg.LogSearch, cfg.LogInsights, newScanSnapshots(st), repo, auditActor, logger,
 		), nil
 	})
 
@@ -770,4 +770,12 @@ func buildLogSource(
 	default:
 		return nil, fmt.Errorf("unknown log source type %q", cfg.Type)
 	}
+}
+
+func auditActor(ctx context.Context) string {
+	if u := auth.UserFromContext(ctx); u != nil {
+		return u.Name
+	}
+
+	return ""
 }

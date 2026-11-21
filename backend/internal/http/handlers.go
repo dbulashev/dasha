@@ -10,6 +10,7 @@ import (
 	"github.com/dbulashev/dasha/internal/hotobjects"
 	"github.com/dbulashev/dasha/internal/logs"
 	"github.com/dbulashev/dasha/internal/metrics"
+	"github.com/dbulashev/dasha/internal/pat"
 	"github.com/dbulashev/dasha/internal/piicatalog"
 	"github.com/dbulashev/dasha/internal/querystats"
 	"github.com/dbulashev/dasha/internal/repository"
@@ -29,6 +30,7 @@ type Handlers struct {
 	pii       *piicatalog.Reader
 	snapshots *autosnapshot.ManualCapturer
 	hot       *hotobjects.Reader
+	pats      *pat.Service
 
 	autosnapshotCfg *autosnapshot.ConfigService
 	queryStats      *querystats.Service
@@ -40,9 +42,14 @@ func NewDashaHandlers(
 	clusters config.Clusters, logger *zap.Logger,
 ) *Handlers {
 	// A typed-nil *storage.Storage must not end up in a store interface.
-	var scoreStore healthscore.Store
+	var (
+		scoreStore healthscore.Store
+		patStore   pat.Store
+	)
+
 	if st != nil {
 		scoreStore = st
+		patStore = st
 	}
 
 	scorer := healthscore.NewScorer(cfg, repo, scoreStore, ms)
@@ -52,6 +59,7 @@ func NewDashaHandlers(
 		scorer:   scorer,
 		fleet:    healthscore.NewFleet(cfg, scorer, ms, repo, logger),
 		activity: activity.NewSampler(repo, cfg.Activity),
+		pats:     pat.NewService(patStore, cfg.Auth.PATMinRole),
 	}
 
 	if st != nil {

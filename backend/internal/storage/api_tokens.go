@@ -7,26 +7,14 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-)
 
-// APIToken is one personal access token as shown to its owner (never the secret).
-// RevokedAt is nil for a live token; it is only ever non-nil when the caller asked
-// for revoked tokens to be included.
-type APIToken struct {
-	ID         string
-	Prefix     string
-	Name       string
-	Role       string
-	CreatedAt  time.Time
-	LastUsedAt *time.Time
-	ExpiresAt  *time.Time
-	RevokedAt  *time.Time
-}
+	"github.com/dbulashev/dasha/internal/pat"
+)
 
 // AdminAPIToken is a token as shown to an administrator: the owner's view plus
 // the owning subject, which a user never needs (their tokens are all their own).
 type AdminAPIToken struct {
-	APIToken
+	pat.Token
 
 	Subject string
 }
@@ -114,7 +102,7 @@ func (s *Storage) TouchAPIToken(ctx context.Context, hash []byte) error {
 // ListAPITokens returns the owner's tokens, newest first. Revoked tokens are
 // excluded unless includeRevoked is set — revoked rows are kept in the table as
 // an audit trail, so they can be shown on request without ever being usable.
-func (s *Storage) ListAPITokens(ctx context.Context, subject string, includeRevoked bool) ([]APIToken, error) {
+func (s *Storage) ListAPITokens(ctx context.Context, subject string, includeRevoked bool) ([]pat.Token, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id::text, token_prefix, name, role, created_at, last_used_at, expires_at, revoked_at
 		FROM api_tokens
@@ -127,10 +115,10 @@ func (s *Storage) ListAPITokens(ctx context.Context, subject string, includeRevo
 	}
 	defer rows.Close()
 
-	out := make([]APIToken, 0, 8)
+	out := make([]pat.Token, 0, 8)
 
 	for rows.Next() {
-		var t APIToken
+		var t pat.Token
 		if err := rows.Scan(
 			&t.ID, &t.Prefix, &t.Name, &t.Role,
 			&t.CreatedAt, &t.LastUsedAt, &t.ExpiresAt, &t.RevokedAt,

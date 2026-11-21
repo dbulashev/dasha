@@ -10,7 +10,7 @@ import (
 )
 
 // patAdmin reports whether the caller may administer other principals' tokens.
-// The bar is the same as for minting (see patSubject): an interactive OIDC
+// The bar is the same as for minting (see pat.Caller): an interactive OIDC
 // session, here additionally holding the admin role. PAT-authenticated callers
 // are excluded even when the token carries the admin role — anti-chaining, so a
 // leaked token cannot enumerate or revoke the tokens that would replace it.

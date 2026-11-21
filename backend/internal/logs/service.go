@@ -17,7 +17,6 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
-	"github.com/dbulashev/dasha/internal/auth"
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/logs/insights"
 	"github.com/dbulashev/dasha/internal/logs/pattern"
@@ -133,13 +132,15 @@ type service struct {
 	insights  config.LogInsightsConfig
 	snapshots SnapshotStore
 	settings  ClusterSettings
+	actor     func(context.Context) string
 	logger    *zap.Logger
 
 	pendingMu sync.Mutex
 	pending   map[uuid.UUID]chan struct{}
 }
 
-// NewService builds the log search service.
+// NewService builds the log search service. actor names the caller in the read
+// audit lines; it may be nil.
 func NewService(
 	clusters config.Clusters,
 	sources *source.Registry,
@@ -147,6 +148,7 @@ func NewService(
 	insightsCfg config.LogInsightsConfig,
 	snapshots SnapshotStore,
 	settings ClusterSettings,
+	actor func(context.Context) string,
 	logger *zap.Logger,
 ) Service {
 	return &service{ //nolint:exhaustruct
@@ -156,6 +158,7 @@ func NewService(
 		insights:  insightsCfg.WithDefaults(),
 		snapshots: snapshots,
 		settings:  settings,
+		actor:     actor,
 		logger:    logger,
 		pending:   make(map[uuid.UUID]chan struct{}),
 	}
@@ -266,8 +269,8 @@ func (s *service) resolve(ctx context.Context, cluster, stream string) (binding,
 
 func (s *service) logRead(ctx context.Context, msg, cluster, sourceName, stream string) {
 	user := ""
-	if u := auth.UserFromContext(ctx); u != nil {
-		user = u.Name
+	if s.actor != nil {
+		user = s.actor(ctx)
 	}
 
 	s.logger.Info(msg,

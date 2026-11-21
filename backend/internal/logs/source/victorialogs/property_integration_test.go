@@ -134,7 +134,7 @@ func newTestService(t *testing.T, p source.Provider) logs.Service {
 		MaxScan:        1000,
 		MaxPageSize:    1000,
 		TimeoutSeconds: 30,
-	}, config.LogInsightsConfig{}, nil, nil, zap.NewNop())
+	}, config.LogInsightsConfig{}, nil, nil, nil, zap.NewNop())
 }
 
 func testSearch(pageSize int) logs.SearchQuery {

@@ -78,7 +78,7 @@ func newInsightsServiceWithSettings(
 		}},
 	})
 
-	return NewService(clusters, reg, config.LogSearchConfig{}, cfg, snapshots, settings, zap.NewNop())
+	return NewService(clusters, reg, config.LogSearchConfig{}, cfg, snapshots, settings, nil, zap.NewNop())
 }
 
 func insightsQuery() InsightsQuery {
