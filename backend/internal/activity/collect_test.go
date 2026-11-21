@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -81,23 +82,29 @@ func TestCollectStopsOnCancel(t *testing.T) {
 func TestCollectEndsWhenBudgetElapses(t *testing.T) {
 	t.Parallel()
 
-	calls := 0
+	synctest.Test(t, func(t *testing.T) {
+		const budget = 50 * time.Millisecond
 
-	get := func(ctx context.Context) (Sample, Access, error) {
-		calls++
-		if calls == 1 {
-			return Sample{At: time.Now()}, Access{}, nil
+		start := time.Now()
+		calls := 0
+
+		get := func(ctx context.Context) (Sample, Access, error) {
+			calls++
+			if calls == 1 {
+				return Sample{At: time.Now()}, Access{}, nil
+			}
+
+			<-ctx.Done()
+
+			return Sample{}, Access{}, ctx.Err()
 		}
 
-		<-ctx.Done()
-
-		return Sample{}, Access{}, ctx.Err()
-	}
-
-	col, err := collect(t.Context(), get, 60, time.Millisecond, 50*time.Millisecond)
-	require.NoError(t, err)
-	assert.Len(t, col.Samples, 1)
-	assert.Equal(t, 2, calls)
+		col, err := collect(t.Context(), get, 60, time.Millisecond, budget)
+		require.NoError(t, err)
+		assert.Len(t, col.Samples, 1, "samples taken before the budget elapsed are kept")
+		assert.Equal(t, 2, calls)
+		assert.Equal(t, budget, time.Since(start))
+	})
 }
 
 func TestSamplerCollect(t *testing.T) {

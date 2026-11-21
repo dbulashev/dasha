@@ -1,8 +1,6 @@
 package http
 
 import (
-	"go.uber.org/zap"
-
 	"github.com/dbulashev/dasha/internal/activity"
 	"github.com/dbulashev/dasha/internal/autosnapshot"
 	"github.com/dbulashev/dasha/internal/config"
@@ -14,14 +12,13 @@ import (
 	"github.com/dbulashev/dasha/internal/piicatalog"
 	"github.com/dbulashev/dasha/internal/querystats"
 	"github.com/dbulashev/dasha/internal/repository"
-	"github.com/dbulashev/dasha/internal/storage"
+	"github.com/dbulashev/dasha/internal/statio"
 )
 
 // Handlers holds the HTTP handler dependencies used by the server.
 type Handlers struct {
 	cfg       *config.Config
 	repo      repository.Repository
-	storage   *storage.Storage
 	metrics   *metrics.Service
 	logs      logs.Service
 	scorer    *healthscore.Scorer
@@ -32,45 +29,53 @@ type Handlers struct {
 	hot       *hotobjects.Reader
 	pats      *pat.Service
 
-	autosnapshotCfg *autosnapshot.ConfigService
-	queryStats      *querystats.Service
+	tokenAdmin         *pat.Admin
+	autosnapshotCfg    *autosnapshot.ConfigService
+	autosnapshotStatus *autosnapshot.StatusReader
+	queryStats         *querystats.Service
+	snapshotCatalog    *querystats.SnapshotCatalog
+	ioHistory          *statio.HistoryReader
+}
+
+// Services are built in internal/deps. The storage-backed ones are nil when
+// storage is not configured, and their endpoints answer 501.
+type Services struct {
+	Scorer     *healthscore.Scorer
+	Fleet      *healthscore.Fleet
+	Activity   *activity.Sampler
+	PATs       *pat.Service
+	TokenAdmin *pat.Admin
+
+	PII                *piicatalog.Reader
+	Snapshots          *autosnapshot.ManualCapturer
+	Hot                *hotobjects.Reader
+	AutosnapshotCfg    *autosnapshot.ConfigService
+	AutosnapshotStatus *autosnapshot.StatusReader
+	QueryStats         *querystats.Service
+	SnapshotCatalog    *querystats.SnapshotCatalog
+	IOHistory          *statio.HistoryReader
 }
 
 // NewDashaHandlers constructs a new Handlers instance from its dependencies.
 func NewDashaHandlers(
-	cfg *config.Config, repo repository.Repository, st *storage.Storage, ms *metrics.Service, logsSvc logs.Service,
-	clusters config.Clusters, logger *zap.Logger,
+	cfg *config.Config, repo repository.Repository, ms *metrics.Service, logsSvc logs.Service, svc Services,
 ) *Handlers {
-	// A typed-nil *storage.Storage must not end up in a store interface.
-	var (
-		scoreStore healthscore.Store
-		patStore   pat.Store
-	)
-
-	if st != nil {
-		scoreStore = st
-		patStore = st
+	return &Handlers{
+		cfg: cfg, repo: repo, metrics: ms, logs: logsSvc,
+		scorer:             svc.Scorer,
+		fleet:              svc.Fleet,
+		activity:           svc.Activity,
+		pii:                svc.PII,
+		snapshots:          svc.Snapshots,
+		hot:                svc.Hot,
+		pats:               svc.PATs,
+		tokenAdmin:         svc.TokenAdmin,
+		autosnapshotCfg:    svc.AutosnapshotCfg,
+		autosnapshotStatus: svc.AutosnapshotStatus,
+		queryStats:         svc.QueryStats,
+		snapshotCatalog:    svc.SnapshotCatalog,
+		ioHistory:          svc.IOHistory,
 	}
-
-	scorer := healthscore.NewScorer(cfg, repo, scoreStore, ms)
-
-	h := &Handlers{
-		cfg: cfg, repo: repo, storage: st, metrics: ms, logs: logsSvc,
-		scorer:   scorer,
-		fleet:    healthscore.NewFleet(cfg, scorer, ms, repo, logger),
-		activity: activity.NewSampler(repo, cfg.Activity),
-		pats:     pat.NewService(patStore, cfg.Auth.PATMinRole),
-	}
-
-	if st != nil {
-		h.pii = piicatalog.NewReader(st, clusters, cfg.PIICatalog.Schedule)
-		h.snapshots = autosnapshot.NewManualCapturer(autosnapshot.NewCapturer(repo, st, logger), st)
-		h.autosnapshotCfg = autosnapshot.NewConfigService(st, repo)
-		h.hot = hotobjects.NewReader(st, repo, logger)
-		h.queryStats = querystats.NewService(st, repo)
-	}
-
-	return h
 }
 
 // maxLimit caps a client-supplied pagination limit so a SQL LIMIT can never be

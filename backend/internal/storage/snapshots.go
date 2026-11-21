@@ -30,20 +30,6 @@ const (
 	scopedJSONVersion = 2
 )
 
-// SnapshotListItem is a summary row returned by List.
-type SnapshotListItem struct {
-	ID             uuid.UUID
-	CreatedAt      time.Time
-	Database       string // database the snapshot was read through, not its content
-	Databases      []string
-	DashaVersion   string
-	JsonVersion    int
-	PgssStatsReset *time.Time
-	StatsSource    *string // extension read through; nil when not recorded
-	HasLocks       bool
-	Reason         string // "manual" or "auto:<trigger_type>"
-}
-
 // SnapshotOpts is re-exported from autosnapshot to keep storage callers working.
 type SnapshotOpts = autosnapshot.SnapshotOpts
 
@@ -190,7 +176,7 @@ func reportDatabases(reports []dto.QueryReport) []string {
 func (s *Storage) ListSnapshots(
 	ctx context.Context,
 	clusterName, instance string,
-) ([]SnapshotListItem, error) {
+) ([]querystats.SnapshotListItem, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, created_at, database, COALESCE(databases, '{}'), dasha_version, json_version, pgss_stats_reset, locks_data IS NOT NULL, reason, stats_source
 		FROM snapshots
@@ -204,10 +190,10 @@ func (s *Storage) ListSnapshots(
 	}
 	defer rows.Close()
 
-	var items []SnapshotListItem
+	var items []querystats.SnapshotListItem
 
 	for rows.Next() {
-		var item SnapshotListItem
+		var item querystats.SnapshotListItem
 		if err := rows.Scan(&item.ID, &item.CreatedAt, &item.Database, &item.Databases, &item.DashaVersion, &item.JsonVersion, &item.PgssStatsReset, &item.HasLocks, &item.Reason, &item.StatsSource); err != nil {
 			return nil, fmt.Errorf("storage: scan snapshot: %w", err)
 		}

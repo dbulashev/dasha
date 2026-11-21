@@ -1,5 +1,5 @@
 # Architecture rules for go-arch-lint (https://github.com/fe3dback/go-arch-lint).
-# Not wired into CI yet. Run from backend/: go-arch-lint check
+# Checked in CI (lint-backend). Locally: make lint-arch
 #
 # Layers:
 #   transport (http, mcpserver) -> domain, auth, config, gen; http also repository
@@ -10,9 +10,8 @@
 # Imports between packages of one component count as dependencies too, so a
 # multi-package component lists itself in mayDependOn.
 #
-# Checks imports only: a handler that reaches storage through the Handlers
-# field without importing the package is caught at handlers.go, not in its
-# own file.
+# Checks imports only. Handlers has no storage field, so the http rule below
+# covers every handler file.
 version: 3
 workdir: .
 

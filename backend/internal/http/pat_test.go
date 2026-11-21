@@ -38,6 +38,8 @@ func (f *fakePATStore) RevokeAPIToken(_ context.Context, subject, _ string) (boo
 	return f.revokeOK, nil
 }
 
+func (*fakePATStore) APITokensReady(context.Context) bool { return true }
+
 func userCtx(u *auth.UserContext) context.Context {
 	c := echo.New().NewContext(httptest.NewRequest("GET", "/", nil), httptest.NewRecorder())
 	auth.SetUser(c, u)

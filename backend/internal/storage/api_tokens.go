@@ -11,14 +11,6 @@ import (
 	"github.com/dbulashev/dasha/internal/pat"
 )
 
-// AdminAPIToken is a token as shown to an administrator: the owner's view plus
-// the owning subject, which a user never needs (their tokens are all their own).
-type AdminAPIToken struct {
-	pat.Token
-
-	Subject string
-}
-
 // APITokenIdentity is the (subject, role) a presented token resolves to, plus
 // its expiry (nil = never) so the caller can bound how long it caches the result.
 type APITokenIdentity struct {
@@ -150,7 +142,7 @@ func (s *Storage) RevokeAPIToken(ctx context.Context, subject, id string) (bool,
 // ListAllAPITokens returns every owner's tokens, newest first, for the
 // administration view. Revoked tokens are excluded unless includeRevoked is set.
 // Callers must gate this on an admin role.
-func (s *Storage) ListAllAPITokens(ctx context.Context, includeRevoked bool) ([]AdminAPIToken, error) {
+func (s *Storage) ListAllAPITokens(ctx context.Context, includeRevoked bool) ([]pat.AdminToken, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT id::text, token_prefix, name, role, created_at, last_used_at, expires_at, revoked_at, subject
 		FROM api_tokens
@@ -163,10 +155,10 @@ func (s *Storage) ListAllAPITokens(ctx context.Context, includeRevoked bool) ([]
 	}
 	defer rows.Close()
 
-	out := make([]AdminAPIToken, 0, 16)
+	out := make([]pat.AdminToken, 0, 16)
 
 	for rows.Next() {
-		var t AdminAPIToken
+		var t pat.AdminToken
 		if err := rows.Scan(
 			&t.ID, &t.Prefix, &t.Name, &t.Role,
 			&t.CreatedAt, &t.LastUsedAt, &t.ExpiresAt, &t.RevokedAt, &t.Subject,

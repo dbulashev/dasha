@@ -40,6 +40,8 @@ type Store interface {
 	CreateAPIToken(ctx context.Context, hash []byte, prefix, name, subject, role string, expiresAt *time.Time) (string, error)
 	ListAPITokens(ctx context.Context, subject string, includeRevoked bool) ([]Token, error)
 	RevokeAPIToken(ctx context.Context, subject, id string) (bool, error)
+	// APITokensReady reports whether the token table has been migrated.
+	APITokensReady(ctx context.Context) bool
 }
 
 // Caller is what the policy needs to know about whoever is asking. The handler
@@ -77,6 +79,12 @@ type Service struct {
 // storage is configured: nothing is listed or revoked, and minting fails.
 func NewService(store Store, minRole string) *Service {
 	return &Service{store: store, minRole: minRole, now: time.Now}
+}
+
+// Ready reports whether tokens can be used at all: storage is configured and
+// its token table exists.
+func (s *Service) Ready(ctx context.Context) bool {
+	return s.store != nil && s.store.APITokensReady(ctx)
 }
 
 func (s *Service) Mint(ctx context.Context, c Caller, req MintRequest) (Minted, error) {

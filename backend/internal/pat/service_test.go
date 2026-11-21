@@ -45,6 +45,8 @@ func (f *fakeStore) RevokeAPIToken(_ context.Context, subject, id string) (bool,
 	return f.revokeOK, f.err
 }
 
+func (*fakeStore) APITokensReady(context.Context) bool { return true }
+
 var (
 	t0     = time.Date(2026, 11, 21, 12, 0, 0, 0, time.UTC)
 	admin  = Caller{OIDC: true, Email: "dba@corp", Role: "admin"}
