@@ -650,6 +650,8 @@ paths:
                 $ref: '#/components/schemas/HealthScoreWeights'
         '400':
           description: Invalid weights
+        '501':
+          description: Storage not configured
     delete:
       operationId: deleteHealthScoreWeights
       parameters:

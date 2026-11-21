@@ -25,10 +25,10 @@ func (f *weightsStore) GetHealthWeights(context.Context, string) (*healthscore.W
 	return f.rec, f.readErr
 }
 
-func (f *weightsStore) UpsertHealthWeights(_ context.Context, _ string, w health.Weights, user string) error {
+func (f *weightsStore) UpsertHealthWeights(_ context.Context, _ string, w health.Weights, user string) (healthscore.WeightsRecord, error) {
 	f.rec = &healthscore.WeightsRecord{Weights: w, UpdatedAt: time.Unix(1, 0), UpdatedBy: user}
 
-	return nil
+	return *f.rec, nil
 }
 
 func (f *weightsStore) DeleteHealthWeights(context.Context, string) error {
@@ -66,9 +66,10 @@ func TestPutHealthScoreWeightsInvalid(t *testing.T) {
 func TestPutHealthScoreWeightsWithoutStorage(t *testing.T) {
 	t.Parallel()
 
-	_, err := weightsHandlers(nil).PutHealthScoreWeights(context.Background(),
+	resp, err := weightsHandlers(nil).PutHealthScoreWeights(context.Background(),
 		weightsReq(serverhttp.HealthScoreWeightsUpdate{Locks: 1})) //nolint:exhaustruct
-	require.Error(t, err)
+	require.NoError(t, err)
+	assert.IsType(t, serverhttp.PutHealthScoreWeights501Response{}, resp)
 }
 
 func TestPutHealthScoreWeightsReturnsOverride(t *testing.T) {

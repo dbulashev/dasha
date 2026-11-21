@@ -45,6 +45,8 @@ func (s *Handlers) PutHealthScoreWeights(
 	switch {
 	case errors.Is(err, healthscore.ErrInvalidWeights):
 		return serverhttp.PutHealthScoreWeights400Response{}, nil
+	case errors.Is(err, healthscore.ErrNoWeightsStore):
+		return serverhttp.PutHealthScoreWeights501Response{}, nil
 	case err != nil:
 		return nil, fmt.Errorf("PutHealthScoreWeights | %w", err)
 	}

@@ -106,21 +106,14 @@ func (s *Service) Compare(ctx context.Context, req CompareRequest) ([]Pair, erro
 	pairs := make([]Pair, 0, len(joined))
 
 	for _, j := range joined {
-		p := Pair{Left: j.Left, Right: j.Right} //nolint:exhaustruct
-
-		if j.Left != nil {
-			p.Key = KeyOf(*j.Left)
-			p.Query = j.Left.Query
+		side := j.Left
+		if side == nil {
+			side = j.Right
 		}
 
-		if j.Right != nil {
-			if p.Key.QueryID == 0 {
-				p.Key = KeyOf(*j.Right)
-			}
-
-			if p.Query == "" {
-				p.Query = j.Right.Query
-			}
+		p := Pair{Left: j.Left, Right: j.Right, Key: KeyOf(*side), Query: side.Query}
+		if p.Query == "" && j.Right != nil {
+			p.Query = j.Right.Query
 		}
 
 		pairs = append(pairs, p)
@@ -133,7 +126,7 @@ func (s *Service) Compare(ctx context.Context, req CompareRequest) ([]Pair, erro
 func (s *Service) Snapshot(ctx context.Context, id uuid.UUID, scope *string, database string) ([]dto.QueryReport, error) {
 	snap, err := s.snaps.GetSnapshotReport(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("snapshot: %w", err)
 	}
 
 	// Rows of a pre-attribution snapshot name no database; narrowing one would

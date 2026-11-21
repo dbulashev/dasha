@@ -32,10 +32,11 @@ func (f *fakeWeights) GetHealthWeights(_ context.Context, cluster string) (*Weig
 	return &rec, nil
 }
 
-func (f *fakeWeights) UpsertHealthWeights(_ context.Context, cluster string, w health.Weights, user string) error {
-	f.recs[cluster] = WeightsRecord{Weights: w, UpdatedAt: time.Unix(1, 0), UpdatedBy: user}
+func (f *fakeWeights) UpsertHealthWeights(_ context.Context, cluster string, w health.Weights, user string) (WeightsRecord, error) {
+	rec := WeightsRecord{Weights: w, UpdatedAt: time.Unix(1, 0), UpdatedBy: user}
+	f.recs[cluster] = rec
 
-	return nil
+	return rec, nil
 }
 
 func (f *fakeWeights) DeleteHealthWeights(_ context.Context, cluster string) error {
@@ -109,7 +110,7 @@ func TestSetWeightsWithoutStoreFails(t *testing.T) {
 	t.Parallel()
 
 	_, err := weightsScorer(nil).SetWeights(context.Background(), "c1", health.DefaultWeights(), "")
-	require.Error(t, err)
+	require.ErrorIs(t, err, ErrNoWeightsStore)
 	require.NotErrorIs(t, err, ErrInvalidWeights)
 }
 

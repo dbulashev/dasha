@@ -60,10 +60,11 @@ type WeightsRecord struct {
 }
 
 // WeightsStore keeps per-cluster overrides. GetHealthWeights returns nil, nil
-// when there is none; UpsertHealthWeights expects validated, normalized weights.
+// when there is none; UpsertHealthWeights expects validated, normalized weights
+// and returns the record as stored.
 type WeightsStore interface {
 	GetHealthWeights(ctx context.Context, cluster string) (*WeightsRecord, error)
-	UpsertHealthWeights(ctx context.Context, cluster string, w health.Weights, user string) error
+	UpsertHealthWeights(ctx context.Context, cluster string, w health.Weights, user string) (WeightsRecord, error)
 	DeleteHealthWeights(ctx context.Context, cluster string) error
 }
 
@@ -89,8 +90,7 @@ type WeightsView struct {
 
 var (
 	ErrInvalidWeights = errors.New("healthscore: invalid weights")
-
-	errNoWeightsStore = errors.New("healthscore: storage is not configured")
+	ErrNoWeightsStore = errors.New("healthscore: storage is not configured")
 )
 
 type Scorer struct {
@@ -231,30 +231,36 @@ func (s *Scorer) WeightsView(ctx context.Context, cluster string) (WeightsView, 
 		return def, nil
 	}
 
+	return overrideView(*rec), nil
+}
+
+func overrideView(rec WeightsRecord) WeightsView {
 	v := WeightsView{Weights: rec.Weights, Source: WeightsOverride, UpdatedAt: &rec.UpdatedAt} //nolint:exhaustruct
 	if rec.UpdatedBy != "" {
 		v.UpdatedBy = &rec.UpdatedBy
 	}
 
-	return v, nil
+	return v
 }
 
 // SetWeights stores a normalized override. Invalid weights are rejected with
-// ErrInvalidWeights even when there is no storage.
+// ErrInvalidWeights even when there is no storage; valid ones without storage
+// with ErrNoWeightsStore.
 func (s *Scorer) SetWeights(ctx context.Context, cluster string, w health.Weights, user string) (WeightsView, error) {
 	if err := w.Validate(); err != nil {
 		return WeightsView{}, fmt.Errorf("%w: %w", ErrInvalidWeights, err)
 	}
 
 	if s.weights == nil {
-		return WeightsView{}, errNoWeightsStore
+		return WeightsView{}, ErrNoWeightsStore
 	}
 
-	if err := s.weights.UpsertHealthWeights(ctx, cluster, w.Normalize(), user); err != nil {
+	rec, err := s.weights.UpsertHealthWeights(ctx, cluster, w.Normalize(), user)
+	if err != nil {
 		return WeightsView{}, err
 	}
 
-	return s.WeightsView(ctx, cluster)
+	return overrideView(rec), nil
 }
 
 // ResetWeights drops the override; without storage there is none to drop.
