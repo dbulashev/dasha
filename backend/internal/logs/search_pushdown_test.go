@@ -325,6 +325,27 @@ func TestSearchInWordsWithoutTextSkipsNothing(t *testing.T) {
 	}
 }
 
+func TestSearchInWordsKeepsTheSkipOfThePresetText(t *testing.T) {
+	t.Parallel()
+
+	p := &fakeProvider{fields: testFieldMap(t), records: records(2), textSkip: source.TextSkipUnsupported}
+	svc := newTestService(t, p, config.LogSearchConfig{})
+
+	q := testQuery()
+	q.TextMode = TextModeWords
+	q.Preset = "slow"
+	q.Include = []string{"duration:"}
+
+	res, err := svc.Search(context.Background(), q)
+	if err != nil {
+		t.Fatalf("search: %v", err)
+	}
+
+	if res.TextMode != TextModeWords || res.TextSkipped != source.TextSkipUnsupported {
+		t.Errorf("mode = %q, skip = %q, want words and unsupported", res.TextMode, res.TextSkipped)
+	}
+}
+
 // The checkpoint preset holds "point", which no checkpoint record holds as a
 // whole word: in words mode it stays a substring Dasha checks, beside the
 // preset words and the terms of the rest.

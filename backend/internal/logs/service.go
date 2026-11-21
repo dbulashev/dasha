@@ -226,7 +226,7 @@ func (s *service) Search(ctx context.Context, q SearchQuery) (SearchResult, erro
 	if q.TextMode == TextModeWords {
 		switch {
 		case len(terms(pm.Rest)) == 0:
-			mode, skipped = TextModeWords, source.TextSkipNone
+			mode = TextModeWords
 		case len(n.Terms) > 0:
 			mode, skipped = TextModeWords, source.TextSkipNone
 			q.Include = pm.Preset

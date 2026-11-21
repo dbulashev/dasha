@@ -148,15 +148,15 @@ function sameArr(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((v, i) => v === b[i])
 }
 
+function presetMatches(p: LogPreset): boolean {
+  return serviceType.value === 'postgresql' &&
+    sameArr(includes.value ?? [], p.message ? [p.message] : []) &&
+    sameArr(severities.value ?? [], presetSeverities(p))
+}
+
 watch([serviceType, includes, severities], () => {
   const p = LOG_PRESETS.find(x => x.id === preset.value)
-  if (!p) return
-  const wantIncludes = p.message ? [p.message] : []
-  const matches =
-    serviceType.value === 'postgresql' &&
-    sameArr(includes.value ?? [], wantIncludes) &&
-    sameArr(severities.value ?? [], presetSeverities(p))
-  if (!matches) preset.value = null
+  if (p && !presetMatches(p)) preset.value = null
 })
 
 const rangeMs: Record<string, number> = {
@@ -325,6 +325,7 @@ function toState(): FilterState {
   if (dedup.value) s.dedup = '1'
   if (pageSize.value !== 100) s.page_size = String(pageSize.value)
   if (order.value !== 'desc') s.order = order.value
+  if (preset.value) s.preset = preset.value
   return s
 }
 
@@ -366,6 +367,8 @@ function applyState(raw: FilterState) {
   const ps = Number(asStr(s.page_size))
   pageSize.value = pageSizeItems.includes(ps) ? ps : 100
   order.value = asStr(s.order) === 'asc' ? 'asc' : 'desc'
+  const p = LOG_PRESETS.find(x => x.id === asStr(s.preset))
+  preset.value = p && presetMatches(p) ? p.id : null
 }
 
 function syncQuery(state: FilterState) {
@@ -378,7 +381,10 @@ function syncQuery(state: FilterState) {
 onMounted(() => {
   const q = route.query as LocationQuery
   const presetId = asStr(q.preset)
-  if (!windowOnly.value && presetId && LOG_PRESETS.some(p => p.id === presetId)) {
+  // A bare ?preset= link; a saved search also carries its preset, but beside
+  // the fields it restores.
+  const bare = SEARCH_QUERY_KEYS.every(k => k === 'preset' || k === 'text_mode' || q[k] == null)
+  if (!windowOnly.value && bare && presetId && LOG_PRESETS.some(p => p.id === presetId)) {
     preset.value = presetId
     // The preset watcher fires asynchronously; apply now so the deep link
     // searches with the preset already in place. Deep links investigate rare
