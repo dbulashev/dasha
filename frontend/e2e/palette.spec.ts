@@ -45,7 +45,7 @@ test.beforeEach(async ({ page }) => {
   await mockApi(page)
 })
 
-const palette = (page: Page) => page.locator('input[role="combobox"]')
+const palette = (page: Page) => page.getByRole('combobox', { name: 'Command palette' })
 
 test('Ctrl-K, 1 goes to the primary of the current cluster', async ({ page }) => {
   await page.goto('/locks/prod-billing?host=pg-02&db=app')
@@ -78,7 +78,7 @@ test('digits are text once the field is not empty', async ({ page }) => {
 
 test('opens from a text field and gives the focus back on Esc', async ({ page }) => {
   await page.goto('/logs/prod-billing?host=pg-01&db=app')
-  const field = page.getByLabel('Search in text')
+  const field = page.getByRole('combobox', { name: 'Search in text' })
   await field.click()
   await page.keyboard.press(`${mod}+k`)
   await expect(palette(page)).toBeFocused()
