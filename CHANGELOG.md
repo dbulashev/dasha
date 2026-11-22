@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Features
+- **Command palette** (<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>K</kbd> or the search button in the toolbar): one search over clusters, sections, hosts and databases, with recent places first. <kbd>1</kbd> goes to the primary of the current cluster, <kbd>2</kbd>…<kbd>9</kbd> to its replicas, staying in the same section; from primary-only sections (Maintenance, Schema Checks) a replica opens on Summary.
+
 ## v1.11.0
 
 ### Features
