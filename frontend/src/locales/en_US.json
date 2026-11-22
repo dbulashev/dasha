@@ -2249,5 +2249,27 @@
     "idleStoppedHint": "No activity on the page for {n} minutes — sampling stopped to spare the database. Press Resume to continue.",
     "menuCurrent": "Current queries",
     "showText": "Open the statement text"
+  },
+  "palette": {
+    "title": "Command palette",
+    "placeholder": "Cluster, section, host or database…",
+    "button": "Search ({key})",
+    "hosts": "Hosts of {cluster}",
+    "recent": "Recent",
+    "nothingFound": "Nothing found",
+    "here": "here",
+    "defaultHost": "default host {host}",
+    "fallbackMain": "{section} unavailable → {main}",
+    "waitingRoles": "Waiting for host roles…",
+    "noPrimary": "No primary found: all hosts are replicas or did not answer",
+    "manyPrimaries": "Several primaries: {hosts}",
+    "noHost": "No host under {digit}",
+    "db": "Database",
+    "hint": {
+      "move": "↑↓ select",
+      "go": "Enter to open",
+      "newTab": "{key} in a new tab",
+      "close": "Esc to close"
+    }
   }
 }

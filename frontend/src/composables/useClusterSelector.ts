@@ -4,7 +4,7 @@ import { useClustersStore } from '@/stores/clusters'
 import { getClusters } from '@/api/gen/default/default'
 import { assertOk, ApiError } from '@/utils/api'
 import { getErrorMessage } from '@/utils/error'
-import { hostItems } from '@/utils/clusters'
+import { defaultDb, defaultHost, hostItems } from '@/utils/clusters'
 import { useViewError } from '@/composables/useViewError'
 import { useI18n } from 'vue-i18n'
 
@@ -213,12 +213,9 @@ export function useClusterSelector() {
     const cluster = clusterStore.clusterList?.find(c => c.name === newCluster)
     if (!cluster) return
 
-    const hosts = cluster.instances?.map(i => i.host_name).filter(Boolean) as string[] ?? []
-    const dbs = cluster.databases ?? []
-
     isSyncing.value = true
-    selectedHost.value = resolveHost(null, hosts)
-    selectedDb.value = resolveDb(null, dbs)
+    selectedHost.value = defaultHost(cluster)
+    selectedDb.value = defaultDb(cluster)
     pushToUrl(true)
     // Keep isSyncing=true past watcher flush to suppress the [selectedHost, selectedDb]
     // watcher that would otherwise fire pushToUrl() without clearExtras and re-add schema/table.

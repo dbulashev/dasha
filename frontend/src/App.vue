@@ -10,8 +10,8 @@ import { useAutosnapshotStatusStore } from './stores/autosnapshotStatus'
 import { useI18n } from 'vue-i18n'
 import { AuthInfoMode } from '@/api/models'
 import { errorKey, type GlobalError } from './composables/useViewError'
-import { IO_MIN_VERSION_NUM } from '@/components/io/types'
-import { ACTIVITY_MIN_VERSION_NUM } from '@/components/activity/classes'
+import { useSectionVisibility } from './composables/useSectionVisibility'
+import { sectionByRouteName } from './utils/palette/sections'
 
 const { t } = useI18n()
 const themeStore = useThemeStore()
@@ -32,15 +32,6 @@ watch(
   { immediate: true },
 )
 
-const isAdmin = computed(
-  () => authStore.mode === AuthInfoMode.none || authStore.user?.role === 'admin',
-)
-const autosnapshotVisible = computed(
-  () =>
-    autosnapshotStatusStore.available &&
-    (autosnapshotStatusStore.enabled || isAdmin.value),
-)
-
 const globalError = ref<GlobalError | null>(null)
 provide(errorKey, globalError)
 
@@ -55,8 +46,11 @@ import LoginCard from './components/auth/LoginCard.vue'
 import UserMenu from './components/auth/UserMenu.vue'
 import SettingsDialog from './components/prefs/SettingsDialog.vue'
 import ErrorAlert from './components/ErrorAlert.vue'
+import CommandPalette from './components/palette/CommandPalette.vue'
+import PaletteButton from './components/palette/PaletteButton.vue'
 
 const settingsOpen = ref(false)
+const paletteOpen = ref(false)
 
 // Settings live in the user menu, which only exists for a signed-in OIDC user.
 // Without one there is no menu, so the gear moves to the toolbar — otherwise the
@@ -139,32 +133,13 @@ watch(
   { immediate: true },
 )
 
-const isReplica = computed(() =>
-  instanceInfoStore.isReplica(currentCluster.value, currentHost.value),
-)
-
-const activityVisible = computed(
-  () =>
-    (instanceInfoStore.known(currentCluster.value, currentHost.value)?.VersionNum ?? 0) >=
-    ACTIVITY_MIN_VERSION_NUM,
-)
-
-// On a host without pg_stat_io the I/O page has no subject: no menu item at all.
-const ioVisible = computed(
-  () =>
-    (instanceInfoStore.known(currentCluster.value, currentHost.value)?.VersionNum ?? 0) >=
-    IO_MIN_VERSION_NUM,
-)
-
-const primaryOnlyRoutes = ['/maintenance', '/schema-lint']
+const { isAdmin, isReplica, menuVisible } =
+  useSectionVisibility({ cluster: currentCluster, host: currentHost })
 
 watch(
-  [isReplica, () => route.path],
-  ([replica, path]) => {
-    const primaryOnly = primaryOnlyRoutes.some(
-      (base) => path === base || path.startsWith(`${base}/`),
-    )
-    if (replica && primaryOnly) {
+  [isReplica, () => route.name],
+  ([replica, name]) => {
+    if (replica && sectionByRouteName(name)?.rule === 'primaryOnly') {
       router.replace({ path: `/main/${currentCluster.value}`, query: route.query })
     }
   },
@@ -246,6 +221,7 @@ watch(() => route.path, () => {
           <cluster-host-db-selector class="ml-4 mr-2" />
         </div>
         <template v-slot:append>
+          <PaletteButton @click="paletteOpen = true" />
           <v-btn
             v-if="settingsInToolbar"
             icon="mdi-cog-outline"
@@ -258,6 +234,7 @@ watch(() => route.path, () => {
       </v-app-bar>
 
       <SettingsDialog v-if="settingsInToolbar" v-model="settingsOpen" />
+      <CommandPalette v-model="paletteOpen" />
 
       <v-navigation-drawer v-model="drawer"
         :location="$vuetify.display.mobile ? 'bottom' : undefined"
@@ -271,11 +248,11 @@ watch(() => route.path, () => {
               <v-list-item v-bind="props" :title="t('Active Queries')" prepend-icon="mdi-database-clock-outline"></v-list-item>
             </template>
             <v-list-item :title="t('activity.menuCurrent')" link :to="queriesLink"></v-list-item>
-            <v-list-item v-if="activityVisible" :title="t('activity.menu')" link :to="activityLink"></v-list-item>
+            <v-list-item v-if="menuVisible('activity')" :title="t('activity.menu')" link :to="activityLink"></v-list-item>
           </v-list-group>
           <v-list-item :title="t('Query Stats')" prepend-icon="mdi-chart-bar" link :to="queryStatsLink"></v-list-item>
           <v-list-item :title="t('Query Report')" prepend-icon="mdi-file-chart-outline" link :to="queryReportLink"></v-list-item>
-          <v-list-item v-if="snapshotsStatusStore.available" :title="t('Query Compare')" prepend-icon="mdi-compare" link :to="queryCompareLink"></v-list-item>
+          <v-list-item v-if="menuVisible('query-compare')" :title="t('Query Compare')" prepend-icon="mdi-compare" link :to="queryCompareLink"></v-list-item>
           <v-list-group value="tables" :model-value="tablesGroupOpen">
             <template #activator="{ props }">
               <v-list-item v-bind="props" :title="t('Tables')" prepend-icon="mdi-table"></v-list-item>
@@ -296,9 +273,9 @@ watch(() => route.path, () => {
           <v-list-item :title="t('Operation progress')" prepend-icon="mdi-progress-question" link :to="progressLink"></v-list-item>
           <v-list-item :title="t('FK Analysis')" prepend-icon="mdi-relation-many-to-many" link :to="fkAnalysisLink"></v-list-item>
           <v-list-item :title="t('Replication')" prepend-icon="mdi-database-sync-outline" link :to="replicationLink"></v-list-item>
-          <v-list-item v-if="ioVisible" :title="t('io.menu')" prepend-icon="mdi-harddisk" link :to="ioLink"></v-list-item>
-          <v-list-item v-if="!isReplica" :title="t('Maintenance')" prepend-icon="mdi-wrench-outline" link :to="maintenanceLink"></v-list-item>
-          <v-list-item v-if="!isReplica" :title="t('schemaLint.page.menuItem')" prepend-icon="mdi-clipboard-check-outline" link :to="schemaLintLink"></v-list-item>
+          <v-list-item v-if="menuVisible('io')" :title="t('io.menu')" prepend-icon="mdi-harddisk" link :to="ioLink"></v-list-item>
+          <v-list-item v-if="menuVisible('maintenance')" :title="t('Maintenance')" prepend-icon="mdi-wrench-outline" link :to="maintenanceLink"></v-list-item>
+          <v-list-item v-if="menuVisible('schema-lint')" :title="t('schemaLint.page.menuItem')" prepend-icon="mdi-clipboard-check-outline" link :to="schemaLintLink"></v-list-item>
           <v-list-item :title="t('Settings')" prepend-icon="mdi-database-settings-outline" link :to="settingsLink"></v-list-item>
           <v-list-group v-if="hasLogSearchClusters" value="logs" :model-value="logsGroupOpen">
             <template #activator="{ props }">
@@ -307,7 +284,7 @@ watch(() => route.path, () => {
             <v-list-item :title="t('logs.menuSearch')" link :to="logsLink"></v-list-item>
             <v-list-item :title="t('logs.menuInsights')" link :to="logInsightsLink"></v-list-item>
           </v-list-group>
-          <v-list-item v-if="autosnapshotVisible" :title="t('autosnapshot.menu')" prepend-icon="mdi-camera-timer" link :to="autoSnapshotLink"></v-list-item>
+          <v-list-item v-if="menuVisible('auto-snapshot')" :title="t('autosnapshot.menu')" prepend-icon="mdi-camera-timer" link :to="autoSnapshotLink"></v-list-item>
         </v-list>
       </v-navigation-drawer>
 
