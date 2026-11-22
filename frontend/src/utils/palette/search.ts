@@ -57,6 +57,16 @@ export function prepareField(text: string): PreparedField {
   return { text, norm, words }
 }
 
+export interface PreparedHost {
+  host: HostItem
+  /** the title, then the address when it differs */
+  terms: PreparedField[]
+}
+
+export function prepareHost(host: HostItem): PreparedHost {
+  return { host, terms: [prepareField(host.title), ...(host.address ? [prepareField(host.address)] : [])] }
+}
+
 export interface FieldMatch {
   level: MatchLevel
   ranges: Range[]
@@ -174,9 +184,9 @@ export interface SearchInput {
   /** prepared once per cluster list, see prepareField */
   clusters: PreparedField[]
   sections: SectionIndexEntry[]
-  /** hosts and databases of the current cluster */
-  hosts: HostItem[]
-  dbs: string[]
+  /** hosts and databases of the current cluster, prepared once per opening */
+  hosts: PreparedHost[]
+  dbs: PreparedField[]
   /** null on Fleet: there are no section results then, only clusters to go to */
   currentCluster: string | null
   /** slug of the current section; a cluster result leads there */
@@ -289,8 +299,7 @@ export function search(input: SearchInput): SearchResult[] {
     })
   }
 
-  for (const host of input.hosts) {
-    const terms = [prepareField(host.title), ...(host.address ? [prepareField(host.address)] : [])]
+  for (const { host, terms } of input.hosts) {
     const mh = tokens.map(tok => matchTerms(tok, terms))
     if (!all(mh)) continue
     const synonymTerm = mh.find(m => m.term !== 0)
@@ -308,8 +317,9 @@ export function search(input: SearchInput): SearchResult[] {
     })
   }
 
-  for (const db of input.dbs) {
-    const md = tokens.map(tok => matchTerms(tok, [prepareField(db)]))
+  for (const field of input.dbs) {
+    const db = field.text
+    const md = tokens.map(tok => matchTerms(tok, [field]))
     if (!all(md)) continue
     out.push({
       kind: 'db',

@@ -2211,5 +2211,27 @@
     "idleStoppedHint": "{n} Minuten keine Aktivität auf der Seite — die Abtastung wurde angehalten, um die Datenbank zu schonen. Klicken Sie auf „Fortsetzen“.",
     "menuCurrent": "Aktuelle Abfragen",
     "showText": "Anweisungstext öffnen"
+  },
+  "palette": {
+    "title": "Befehlspalette",
+    "placeholder": "Cluster, Bereich, Host oder Datenbank…",
+    "button": "Suche ({key})",
+    "hosts": "Hosts von {cluster}",
+    "recent": "Zuletzt verwendet",
+    "nothingFound": "Nichts gefunden",
+    "here": "hier",
+    "defaultHost": "Standard-Host {host}",
+    "fallbackMain": "{section} nicht verfügbar → {main}",
+    "waitingRoles": "Warte auf Host-Rollen…",
+    "noPrimary": "Kein Primary gefunden: alle Hosts sind Replikate oder antworten nicht",
+    "manyPrimaries": "Mehrere Primaries: {hosts}",
+    "noHost": "Kein Host unter {digit}",
+    "db": "Datenbank",
+    "hint": {
+      "move": "↑↓ auswählen",
+      "go": "Enter öffnen",
+      "newTab": "{key} in neuem Tab",
+      "close": "Esc schließen"
+    }
   }
 }

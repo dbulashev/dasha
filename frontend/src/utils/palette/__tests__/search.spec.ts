@@ -11,6 +11,7 @@ import {
   matchField,
   normalize,
   prepareField,
+  prepareHost,
   RESULT_LIMIT,
   search,
   tokenize,
@@ -229,7 +230,7 @@ describe('search', () => {
         { host_name: '10.0.0.12', display_name: 'pg-02' },
       ],
     }
-    const over = { hosts: hostItems(cluster), dbs: ['app', 'db01'] }
+    const over = { hosts: hostItems(cluster).map(prepareHost), dbs: ['app', 'db01'].map(prepareField) }
     expect(labels('pg-02', over)).toEqual(['host:10.0.0.12'])
     const [byAddress] = search(input('10.0.0.11', over))
     expect(label(byAddress!)).toBe('host:10.0.0.11')
@@ -242,8 +243,8 @@ describe('search', () => {
     const results = labels('locks', {
       clusters,
       visibleIn: () => () => true,
-      hosts: [{ value: 'locks', title: 'locks' }],
-      dbs: ['locks'],
+      hosts: [prepareHost({ value: 'locks', title: 'locks' })],
+      dbs: [prepareField('locks')],
     })
     expect(results).toEqual(['section:locks', 'cluster:locks', 'host:locks', 'db:locks'])
   })
@@ -328,8 +329,8 @@ describe('current place (§5.5)', () => {
       hosts: [
         { value: 'pg-01', title: 'pg-01' },
         { value: 'pg-02', title: 'pg-02' },
-      ],
-      dbs: ['app', 'app2'],
+      ].map(prepareHost),
+      dbs: ['app', 'app2'].map(prepareField),
       currentHost: 'pg-01',
       currentDb: 'app',
     }

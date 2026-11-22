@@ -46,8 +46,11 @@ import LoginCard from './components/auth/LoginCard.vue'
 import UserMenu from './components/auth/UserMenu.vue'
 import SettingsDialog from './components/prefs/SettingsDialog.vue'
 import ErrorAlert from './components/ErrorAlert.vue'
+import CommandPalette from './components/palette/CommandPalette.vue'
+import PaletteButton from './components/palette/PaletteButton.vue'
 
 const settingsOpen = ref(false)
+const paletteOpen = ref(false)
 
 // Settings live in the user menu, which only exists for a signed-in OIDC user.
 // Without one there is no menu, so the gear moves to the toolbar — otherwise the
@@ -218,6 +221,7 @@ watch(() => route.path, () => {
           <cluster-host-db-selector class="ml-4 mr-2" />
         </div>
         <template v-slot:append>
+          <PaletteButton @click="paletteOpen = true" />
           <v-btn
             v-if="settingsInToolbar"
             icon="mdi-cog-outline"
@@ -230,6 +234,7 @@ watch(() => route.path, () => {
       </v-app-bar>
 
       <SettingsDialog v-if="settingsInToolbar" v-model="settingsOpen" />
+      <CommandPalette v-model="paletteOpen" />
 
       <v-navigation-drawer v-model="drawer"
         :location="$vuetify.display.mobile ? 'bottom' : undefined"
