@@ -153,6 +153,9 @@ export function usePaletteHosts(options: {
     { flush: 'sync' },
   )
 
+  // A digit pressed for one cluster must not open a host of another (browser Back).
+  watch(options.cluster, cancelPending, { flush: 'sync' })
+
   watch([assignment, () => options.listLoading?.value], () => {
     if (pendingDigit.value !== null) resolve(pendingDigit.value)
   })

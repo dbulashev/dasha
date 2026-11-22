@@ -38,8 +38,9 @@ function setup(hostNames: string[]) {
   const scope = effectScope()
   const hosts = ref<HostItem[]>(hostNames.map(h => ({ value: h, title: h })))
   const listLoading = ref(false)
-  const api = scope.run(() => usePaletteHosts({ cluster: ref('c'), hosts, listLoading, onDigit }))!
-  return { api, onDigit, scope, hosts, listLoading }
+  const cluster = ref<string | null>('c')
+  const api = scope.run(() => usePaletteHosts({ cluster, hosts, listLoading, onDigit }))!
+  return { api, onDigit, scope, hosts, listLoading, cluster }
 }
 
 beforeEach(() => {
@@ -194,6 +195,23 @@ describe('usePaletteHosts', () => {
     answer('pg-02', PRIMARY)
     await flushPromises()
     expect(onDigit).toHaveBeenCalledWith('pg-02')
+  })
+
+  it('is cancelled by a cluster change, not by a host list change', async () => {
+    const { api, onDigit, hosts, cluster } = setup(['pg-01', 'pg-02'])
+    api.start()
+    api.press(1)
+    hosts.value = [...hosts.value, { value: 'pg-03', title: 'pg-03' }]
+    expect(api.pendingDigit.value).toBe(1)
+
+    cluster.value = 'd'
+    hosts.value = [{ value: 'pg-04', title: 'pg-04' }, { value: 'pg-05', title: 'pg-05' }]
+    expect(api.pendingDigit.value).toBeNull()
+    expect(api.notice.value).toBeNull()
+    answer('pg-04', PRIMARY)
+    answer('pg-05', REPLICA)
+    await flushPromises()
+    expect(onDigit).not.toHaveBeenCalled()
   })
 
   it('waits for the hosts while the cluster list is loading', async () => {

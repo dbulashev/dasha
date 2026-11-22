@@ -80,6 +80,7 @@ function onOpen() {
 
 // The list may be stale; a failure leaves it as it is, the selector reports errors.
 async function refreshClusters() {
+  if (clustersLoading.value) return
   clustersLoading.value = true
   try {
     const data = assertOk<Cluster[]>(await getClusters()) ?? []
