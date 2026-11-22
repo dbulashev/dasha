@@ -27,6 +27,8 @@ type RoundResult = 'primary' | 'replica' | 'failed'
 export function usePaletteHosts(options: {
   cluster: Ref<string | null>
   hosts: Ref<HostItem[]>
+  /** the cluster list is being fetched: the current cluster's hosts may be on the way */
+  listLoading?: Ref<boolean>
   onDigit: (host: string) => void
 }) {
   const instanceInfoStore = useInstanceInfoStore()
@@ -37,6 +39,7 @@ export function usePaletteHosts(options: {
   // this opening only; their requests go on and land in the store.
   const expired = ref(false)
   let round = 0
+  let active = false
 
   const pendingDigit = ref<number | null>(null)
   const notice = ref<DigitNotice | null>(null)
@@ -68,10 +71,21 @@ export function usePaletteHosts(options: {
 
   function start() {
     stop()
+    active = true
+    poll()
+  }
+
+  // The pending digit survives a new round: the hosts it waits for are in it.
+  function poll() {
+    const id = ++round
+    results.clear()
+    expired.value = false
     const cluster = options.cluster.value
     const hosts = options.hosts.value
-    if (!cluster || !hosts.length) return
-    const id = ++round
+    if (!cluster || !hosts.length) {
+      loading.value = false
+      return
+    }
     loading.value = true
     void Promise.allSettled(
       hosts.map(async h => {
@@ -92,6 +106,7 @@ export function usePaletteHosts(options: {
   }
 
   function stop() {
+    active = false
     round++
     cancelPending()
     results.clear()
@@ -100,7 +115,11 @@ export function usePaletteHosts(options: {
     notice.value = null
   }
 
+  const hostsComing = () =>
+    !!options.listLoading?.value && !!options.cluster.value && !options.hosts.value.length && !expired.value
+
   function resolve(digit: number): boolean {
+    if (hostsComing()) return false
     const r = hostForDigit(assignment.value, digit)
     if ('pending' in r) return false
     cancelPending()
@@ -124,7 +143,17 @@ export function usePaletteHosts(options: {
     }, DIGIT_WAIT_MS)
   }
 
-  watch(assignment, () => {
+  // The list may arrive or change while the palette is open (a stale cache is
+  // refreshed on opening); sync so that new hosts never read as failed meanwhile.
+  watch(
+    () => [options.cluster.value, ...options.hosts.value.map(h => h.value)].join('\n'),
+    () => {
+      if (active) poll()
+    },
+    { flush: 'sync' },
+  )
+
+  watch([assignment, () => options.listLoading?.value], () => {
     if (pendingDigit.value !== null) resolve(pendingDigit.value)
   })
 

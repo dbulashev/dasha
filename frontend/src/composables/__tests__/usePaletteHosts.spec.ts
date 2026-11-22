@@ -37,8 +37,9 @@ function setup(hostNames: string[]) {
   const onDigit = vi.fn()
   const scope = effectScope()
   const hosts = ref<HostItem[]>(hostNames.map(h => ({ value: h, title: h })))
-  const api = scope.run(() => usePaletteHosts({ cluster: ref('c'), hosts, onDigit }))!
-  return { api, onDigit, scope }
+  const listLoading = ref(false)
+  const api = scope.run(() => usePaletteHosts({ cluster: ref('c'), hosts, listLoading, onDigit }))!
+  return { api, onDigit, scope, hosts, listLoading }
 }
 
 beforeEach(() => {
@@ -178,6 +179,46 @@ describe('usePaletteHosts', () => {
     expect(api.notice.value?.kind).toBe('problem')
     api.press(2)
     expect(api.notice.value).toEqual({ kind: 'no-host', digit: 2 })
+    expect(onDigit).not.toHaveBeenCalled()
+  })
+
+  it('polls hosts that arrive while the palette is open', async () => {
+    const { api, onDigit, hosts } = setup([])
+    api.start()
+    hosts.value = [{ value: 'pg-01', title: 'pg-01' }, { value: 'pg-02', title: 'pg-02' }]
+    expect(api.stateOf('pg-01')).toBe('loading')
+    api.press(1)
+    expect(api.notice.value).toEqual({ kind: 'waiting', digit: 1 })
+
+    answer('pg-01', REPLICA)
+    answer('pg-02', PRIMARY)
+    await flushPromises()
+    expect(onDigit).toHaveBeenCalledWith('pg-02')
+  })
+
+  it('waits for the hosts while the cluster list is loading', async () => {
+    const { api, onDigit, hosts, listLoading } = setup([])
+    listLoading.value = true
+    await nextTick()
+    api.start()
+    api.press(1)
+    expect(api.notice.value).toEqual({ kind: 'waiting', digit: 1 })
+
+    hosts.value = [{ value: 'pg-01', title: 'pg-01' }]
+    listLoading.value = false
+    await nextTick()
+    expect(onDigit).toHaveBeenCalledWith('pg-01')
+  })
+
+  it('reports no host once the cluster list comes without any', async () => {
+    const { api, onDigit, listLoading } = setup([])
+    listLoading.value = true
+    await nextTick()
+    api.start()
+    api.press(1)
+    listLoading.value = false
+    await nextTick()
+    expect(api.notice.value).toEqual({ kind: 'no-host', digit: 1 })
     expect(onDigit).not.toHaveBeenCalled()
   })
 })

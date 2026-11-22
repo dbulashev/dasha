@@ -192,4 +192,24 @@ describe('CommandPalette', () => {
     ])
     expect(rows.map(r => r.querySelector('kbd')?.textContent)).toEqual(['1', '2', '3'])
   })
+
+  it('shows no digits in the search results, where they do not work', async () => {
+    await mountPalette()
+    await type('pg')
+    const kbds = [...document.querySelectorAll('[role="option"] kbd')].map(k => k.textContent)
+    expect(kbds).toEqual(['↵'])
+  })
+
+  it('treats a field of spaces as empty for digits', async () => {
+    const { pushed } = await mountPalette()
+    await type('  ')
+    expect(key('1').defaultPrevented).toBe(true)
+    await flushPromises()
+    expect(pushed()).toEqual(['/locks/c1?host=pg-01&db=app'])
+  })
+
+  it('keeps the list out of the tab order', async () => {
+    await mountPalette()
+    expect(document.getElementById('palette-list')?.getAttribute('tabindex')).toBe('-1')
+  })
 })

@@ -177,7 +177,6 @@ export function usePaletteItems(
     const section = place.section ?? MAIN_SECTION
     const fallback = replica && section.rule === 'primaryOnly'
     const role = roleLabel(host.value)
-    const digit = roles.digitOf.value.get(host.value)
     return {
       id: `host:${host.value}`,
       kind: 'host',
@@ -190,7 +189,6 @@ export function usePaletteItems(
         ...(role ? [role] : []),
         ...(fallback ? [fallbackNote(section)] : []),
       ],
-      ...(digit !== undefined ? { digit } : {}),
       current,
       fallback,
       to: hostLocation(place, host.value, replica),
@@ -216,11 +214,14 @@ export function usePaletteItems(
           recent: { cluster: ctx.cluster.value!, section: r.section!.slug },
         }
       case 'cluster':
-        return sectionItem(
-          { id: `cluster:${r.cluster}`, kind: 'cluster', icon: CLUSTER_ICON, title: r.title, titleMarks: r.titleMarks },
-          r.cluster!,
-          place.section,
-        )
+        return {
+          ...sectionItem(
+            { id: `cluster:${r.cluster}`, kind: 'cluster', icon: CLUSTER_ICON, title: r.title, titleMarks: r.titleMarks },
+            r.cluster!,
+            place.section,
+          ),
+          current: r.current,
+        }
       case 'cluster-section':
         return {
           ...sectionItem(
@@ -255,8 +256,11 @@ export function usePaletteItems(
     }
   }
 
-  const results = computed<PaletteItem[]>(() => {
-    if (!query.value.trim()) return []
+  const blank = computed(() => !query.value.trim())
+
+  // Kept apart from the mapping: role answers change the rows, not the ranking.
+  const found = computed<SearchResult[]>(() => {
+    if (blank.value) return []
     return search({
       query: query.value,
       clusters: preparedClusters.value,
@@ -269,16 +273,23 @@ export function usePaletteItems(
       currentDb: ctx.db.value,
       visibleIn: visibleIn.value,
       recent: recentPairs.value,
-    }).map(fromResult)
+    })
   })
 
+  const results = computed<PaletteItem[]>(() => found.value.map(fromResult))
+
   // Primary with 1 first, replicas by their digits, then hosts without one.
+  // Digits work in an empty field only, so only these rows show them.
   const hostRows = computed<PaletteItem[]>(() => {
     if (!ctx.cluster.value) return []
+    const digits = roles.digitOf.value
     return ctx.hosts.value
-      .map((h, i) => ({ row: hostItem(h, [], h.value === ctx.host.value), i }))
-      .sort((a, b) => (a.row.digit ?? Infinity) - (b.row.digit ?? Infinity) || a.i - b.i)
-      .map(({ row }) => row)
+      .map((h, i) => ({ h, i, digit: digits.get(h.value) }))
+      .sort((a, b) => (a.digit ?? Infinity) - (b.digit ?? Infinity) || a.i - b.i)
+      .map(({ h, digit }) => {
+        const row = hostItem(h, [], h.value === ctx.host.value)
+        return digit !== undefined ? { ...row, digit } : row
+      })
   })
 
   const recentRows = computed<PaletteItem[]>(() =>
@@ -298,7 +309,7 @@ export function usePaletteItems(
   )
 
   const groups = computed<PaletteGroup[]>(() => {
-    if (query.value.trim()) return results.value.length ? [{ key: 'results', title: null, items: results.value }] : []
+    if (!blank.value) return results.value.length ? [{ key: 'results', title: null, items: results.value }] : []
     const out: PaletteGroup[] = []
     if (hostRows.value.length) {
       out.push({ key: 'hosts', title: t('palette.hosts', { cluster: ctx.cluster.value }), items: hostRows.value })
@@ -309,5 +320,5 @@ export function usePaletteItems(
 
   const items = computed(() => groups.value.flatMap(g => g.items))
 
-  return { groups, items }
+  return { groups, items, blank }
 }

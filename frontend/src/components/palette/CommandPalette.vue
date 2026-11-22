@@ -32,16 +32,19 @@ const selected = ref(-1)
 const field = useTemplateRef<{ $el: HTMLElement }>('field')
 watch(field, f => f?.$el.querySelector('input')?.setAttribute('role', 'combobox'))
 
+const clustersLoading = ref(false)
+
 const ctx = usePaletteContext()
 const roles = usePaletteHosts({
   cluster: ctx.cluster,
   hosts: ctx.hosts,
+  listLoading: clustersLoading,
   onDigit: host => {
     const item = items.value.find(i => i.id === `host:${host}`)
     if (item) go(item, false)
   },
 })
-const { groups, items } = usePaletteItems(ctx, query, roles)
+const { groups, items, blank } = usePaletteItems(ctx, query, roles)
 
 function toggle() {
   open.value = !open.value
@@ -77,11 +80,14 @@ function onOpen() {
 
 // The list may be stale; a failure leaves it as it is, the selector reports errors.
 async function refreshClusters() {
+  clustersLoading.value = true
   try {
     const data = assertOk<Cluster[]>(await getClusters()) ?? []
     clusterStore.setClusters(data)
   } catch {
     // ignored on purpose
+  } finally {
+    clustersLoading.value = false
   }
 }
 
@@ -140,7 +146,7 @@ function onKeydown(e: KeyboardEvent) {
       return
     }
   }
-  if (!query.value && !hasAnyModifier(e) && /^[1-9]$/.test(e.key)) {
+  if (blank.value && !hasAnyModifier(e) && /^[1-9]$/.test(e.key)) {
     e.preventDefault()
     roles.press(Number(e.key))
   }
@@ -169,11 +175,11 @@ function noticeText(notice: DigitNotice): string {
 
 // A digit the user pressed speaks first; otherwise why 1 is empty, if it is.
 const statusLine = computed(() => {
-  if (query.value) return null
+  if (!blank.value) return null
   const notice = roles.notice.value
-  if (notice) return { text: noticeText(notice), waiting: notice.kind === 'waiting' }
+  if (notice) return { text: noticeText(notice), waiting: notice.kind === 'waiting' ? roles.pendingDigit.value : null }
   const problem = roles.problem.value
-  return problem ? { text: problemText(problem), waiting: false } : null
+  return problem ? { text: problemText(problem), waiting: null } : null
 })
 
 const mod = modKeyLabel()
@@ -213,10 +219,21 @@ const mod = modKeyLabel()
       <v-divider />
       <v-card-text class="pa-0">
         <div v-if="statusLine" class="palette-status text-body-2 text-medium-emphasis px-4 pt-2" role="status">
-          <v-progress-circular v-if="statusLine.waiting" indeterminate size="14" width="2" class="mr-2" />
+          <template v-if="statusLine.waiting !== null">
+            <v-progress-circular indeterminate size="14" width="2" class="mr-1" />
+            <kbd class="palette-status-kbd mr-2">{{ statusLine.waiting }}</kbd>
+          </template>
           {{ statusLine.text }}
         </div>
-        <v-list id="palette-list" role="listbox" :aria-label="t('palette.title')" density="compact">
+        <!-- v-list makes itself a tab stop; the focus has to stay in the field. -->
+        <v-list
+          id="palette-list"
+          role="listbox"
+          :aria-label="t('palette.title')"
+          density="compact"
+          tabindex="-1"
+          @mousedown.prevent
+        >
           <template v-for="g in indexed" :key="g.key">
             <v-list-subheader v-if="g.title" role="presentation">
               {{ g.title }}
@@ -238,7 +255,7 @@ const mod = modKeyLabel()
               @mouseenter="selected = row.index"
             />
           </template>
-          <v-list-item v-if="query.trim() && !items.length" role="presentation" class="text-medium-emphasis">
+          <v-list-item v-if="!blank && !items.length" role="presentation" class="text-medium-emphasis">
             {{ t('palette.nothingFound') }}
           </v-list-item>
         </v-list>
@@ -258,5 +275,16 @@ const mod = modKeyLabel()
   align-self: flex-start;
   margin-top: 12vh;
   max-height: 76vh;
+}
+</style>
+
+<style scoped>
+.palette-status-kbd {
+  min-width: 1.5em;
+  padding: 0 0.35em;
+  border: 1px solid rgba(var(--v-border-color), var(--v-border-opacity));
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 0.75rem;
 }
 </style>
