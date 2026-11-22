@@ -22,6 +22,17 @@ export function hostItems(cluster: Cluster | null | undefined): HostItem[] {
   return items.sort((a, b) => a.title.localeCompare(b.title) || a.value.localeCompare(b.value))
 }
 
+// The host and database a cluster switch lands on. Instance and database order is
+// the backend's, unsorted: the selector has always picked these, and the palette
+// must land on the same place.
+export function defaultHost(cluster: Cluster | null | undefined): string | null {
+  return cluster?.instances?.find(i => i.host_name)?.host_name ?? null
+}
+
+export function defaultDb(cluster: Cluster | null | undefined): string | null {
+  return cluster?.databases?.[0] ?? null
+}
+
 /** Name of the primary cluster, or null when it is unknown or not in the list. */
 export function primaryOf(clusters: Cluster[] | null | undefined, name: string | null | undefined): string | null {
   if (!name) return null

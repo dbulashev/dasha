@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Cluster } from '@/api/models'
-import { hostItems, primaryOf, standbysOf } from '@/utils/clusters'
+import { defaultDb, defaultHost, hostItems, primaryOf, standbysOf } from '@/utils/clusters'
 
 describe('hostItems', () => {
   it('uses the display name as the title and keeps the host name as the value', () => {
@@ -67,5 +67,23 @@ describe('standby links', () => {
     expect(standbysOf(clusters, 'beta-standby')).toEqual([])
     expect(standbysOf(null, 'beta')).toEqual([])
     expect(standbysOf(clusters, null)).toEqual([])
+  })
+})
+
+describe('defaultHost and defaultDb', () => {
+  it('take the first host and database in backend order, unsorted', () => {
+    const cluster: Cluster = {
+      instances: [{ display_name: 'no-host' }, { host_name: 'pg-2' }, { host_name: 'pg-1' }],
+      databases: ['zeta', 'alpha'],
+    }
+    expect(defaultHost(cluster)).toBe('pg-2')
+    expect(defaultDb(cluster)).toBe('zeta')
+  })
+
+  it('are null for a cluster without hosts or databases', () => {
+    expect(defaultHost({ name: 'x' })).toBeNull()
+    expect(defaultDb({ name: 'x', databases: [] })).toBeNull()
+    expect(defaultHost(null)).toBeNull()
+    expect(defaultDb(undefined)).toBeNull()
   })
 })
