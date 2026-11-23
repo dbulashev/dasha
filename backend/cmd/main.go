@@ -304,7 +304,7 @@ func dashaExec(cmd *cobra.Command, _ []string) error {
 	httpServerCfg := container.Config().HTTPServer
 	if httpServerCfg.WriteCutsRead() {
 		serverLogger.Warn("http_server.write_timeout is shorter than read_timeout: "+
-			"a long request loses its response before it is cancelled",
+			"a slow request body can leave no time to write the response",
 			zap.Duration("write_timeout", httpServerCfg.WriteTimeout),
 			zap.Duration("read_timeout", httpServerCfg.ReadTimeout))
 	}

@@ -15,9 +15,12 @@ const (
 	maxHTTPServerTimeout = 10 * time.Minute
 )
 
-// HTTPServerConfig bounds the API server's connections. A long page (a bloated
-// pg_stat_statements) needs both read_timeout and write_timeout raised: when
-// the read deadline passes, net/http cancels the request context.
+// HTTPServerConfig bounds the API server's socket reads and writes. ReadTimeout
+// covers only reading the request (headers and body); net/http clears the read
+// deadline before the handler runs. WriteTimeout runs from the end of the headers
+// to the end of the response, so a long page (a bloated pg_stat_statements) needs
+// it raised. Neither cancels the handler: the request context is cancelled only
+// when the client closes the connection.
 type HTTPServerConfig struct {
 	ReadTimeout       time.Duration `mapstructure:"read_timeout"`
 	ReadHeaderTimeout time.Duration `mapstructure:"read_header_timeout"`
@@ -65,9 +68,8 @@ func (c HTTPServerConfig) Validate() error {
 	return nil
 }
 
-// WriteCutsRead reports a write deadline that ends the response before the
-// read deadline would cancel the request: the handler keeps running for a
-// client that can no longer get the answer.
+// WriteCutsRead reports a write deadline shorter than the read deadline: a body
+// that read_timeout still accepts can use up the time left to write the response.
 func (c HTTPServerConfig) WriteCutsRead() bool {
 	return c.WriteTimeout < c.ReadTimeout
 }

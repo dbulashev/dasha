@@ -204,28 +204,28 @@ An API request has 30 seconds by default. On some installations the pg_stat_stat
 
    ```yaml
    http_server:
-     read_timeout: 30s         # on expiry the database query is cancelled
+     read_timeout: 30s         # reading the request: headers and body
      read_header_timeout: 10s
-     write_timeout: 30s        # on expiry the response is cut off
+     write_timeout: 30s        # from the request headers to the end of the response; on expiry the response is cut off
      idle_timeout: 30s
    ```
 
-   Raise both `read_timeout` and `write_timeout`. When `write_timeout` is shorter than `read_timeout`, the backend logs a warning at startup: the response is cut off before the query is cancelled.
+   A long page needs a larger `write_timeout`: the database query runs inside it. `read_timeout` covers only reading the request and does not bound the query. Neither timeout cancels the query: it is cancelled only when the client closes the connection, for example when nginx gives up after `proxy_read_timeout`. Until then the query keeps running, even after the response has been cut off. When `write_timeout` is shorter than `read_timeout`, the backend logs a warning at startup: a slow request body can leave no time to write the response.
 
 2. nginx in the frontend image: the `API_PROXY_READ_TIMEOUT` environment variable (`frontend.proxyReadTimeout` in Helm), `30s` by default. It sets `proxy_read_timeout` for `/api/` and must be at least `write_timeout`.
 
-3. The proxy in front of Dasha. ingress-nginx has its own `proxy-read-timeout`, 60 seconds by default; raise it with the `nginx.ingress.kubernetes.io/proxy-read-timeout` and `proxy-send-timeout` annotations in `ingress.annotations`. With Gateway API it is `timeouts.request` on the HTTPRoute or a policy of the implementation.
+3. The proxy in front of Dasha. ingress-nginx has its own `proxy-read-timeout`, 60 seconds by default; raise it with the `nginx.ingress.kubernetes.io/proxy-read-timeout` and `proxy-send-timeout` annotations in `ingress.annotations`. They apply only to the Ingress the chart renders with `ingress.enabled: true`; an Ingress managed outside the chart needs the same annotations set on it. With Gateway API it is `timeouts.request` on the HTTPRoute or a policy of the implementation.
 
 Helm example for a page that may take up to two minutes:
 
 ```yaml
 config:
   http_server:
-    read_timeout: 2m
     write_timeout: 2m
 frontend:
   proxyReadTimeout: 150s
 ingress:
+  enabled: true
   annotations:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "180"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "180"

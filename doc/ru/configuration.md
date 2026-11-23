@@ -203,28 +203,28 @@ clusters:
 
    ```yaml
    http_server:
-     read_timeout: 30s         # когда истекает, запрос к базе отменяется
+     read_timeout: 30s         # чтение запроса: заголовки и тело
      read_header_timeout: 10s
-     write_timeout: 30s        # когда истекает, ответ обрывается
+     write_timeout: 30s        # от заголовков запроса до конца ответа; когда истекает, ответ обрывается
      idle_timeout: 30s
    ```
 
-   Поднимать нужно и `read_timeout`, и `write_timeout`. Если `write_timeout` меньше `read_timeout`, бэкенд при старте пишет предупреждение: ответ оборвётся раньше, чем отменится запрос к базе.
+   Для долгой страницы поднимайте `write_timeout`: запрос к базе выполняется внутри него. `read_timeout` ограничивает только чтение запроса, на запрос к базе он не влияет. Ни один из таймаутов запрос к базе не отменяет: он отменяется, только когда клиент закрывает соединение, например nginx по истечении `proxy_read_timeout`. До тех пор запрос продолжает выполняться, даже если ответ уже оборван. Если `write_timeout` меньше `read_timeout`, бэкенд при старте пишет предупреждение: на медленно пришедшее тело запроса может уйти всё время, отведённое на ответ.
 
 2. nginx во фронтенд-образе: переменная окружения `API_PROXY_READ_TIMEOUT` (в Helm — `frontend.proxyReadTimeout`), по умолчанию `30s`. Задаёт `proxy_read_timeout` для `/api/` и должна быть не меньше `write_timeout`.
 
-3. Прокси перед Dasha. У ingress-nginx свой `proxy-read-timeout`, по умолчанию 60 секунд; его поднимают аннотациями `nginx.ingress.kubernetes.io/proxy-read-timeout` и `proxy-send-timeout` в `ingress.annotations`. С Gateway API таймаут задаётся в `timeouts.request` у HTTPRoute или политикой конкретной реализации.
+3. Прокси перед Dasha. У ingress-nginx свой `proxy-read-timeout`, по умолчанию 60 секунд; его поднимают аннотациями `nginx.ingress.kubernetes.io/proxy-read-timeout` и `proxy-send-timeout` в `ingress.annotations`. Они попадут только на Ingress, который чарт создаёт при `ingress.enabled: true`; если Ingress управляется вне чарта, те же аннотации нужно поставить на него. С Gateway API таймаут задаётся в `timeouts.request` у HTTPRoute или политикой конкретной реализации.
 
 Пример для Helm, страница может считаться до двух минут:
 
 ```yaml
 config:
   http_server:
-    read_timeout: 2m
     write_timeout: 2m
 frontend:
   proxyReadTimeout: 150s
 ingress:
+  enabled: true
   annotations:
     nginx.ingress.kubernetes.io/proxy-read-timeout: "180"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "180"

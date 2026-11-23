@@ -101,9 +101,20 @@ done
 
 # The rendered nginx.conf does not depend on the browser run.
 if [ "${DASHA_SUBPATH_BROWSER:-false}" != true ]; then
-    # check_proxy_timeout <expected line>... -- <docker run options>...
+    # Prints the top-level directives of one location block, so a value from
+    # another location cannot satisfy a check.
+    location_body() {
+        awk -v want="location $1 {" '
+            { t = $0; sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t) }
+            !depth { if (t == want) depth = 1; next }
+            t ~ /\{$/ { depth++; next }
+            t == "}" { if (!--depth) exit; next }
+            depth == 1 { print t }'
+    }
+
+    # check_proxy_timeout <location> <proxy_read_timeout>... -- <docker run options>...
     check_proxy_timeout() {
-        local name="dasha-timeout-$$-${#names[@]}" line rendered=false
+        local name="dasha-timeout-$$-${#names[@]}" location value body rendered=false
         local -a expected=()
         while [ "$1" != -- ]; do expected+=("$1"); shift; done
         shift
@@ -121,18 +132,21 @@ if [ "${DASHA_SUBPATH_BROWSER:-false}" != true ]; then
             docker logs "$name" >&2
             return 1
         fi
-        for line in "${expected[@]}"; do
-            if ! docker exec "$name" grep -Fq "$line" /etc/nginx/conf.d/default.conf; then
-                echo "Missing '$line' in the rendered nginx config ($*)" >&2
-                docker exec "$name" grep -F proxy_read_timeout /etc/nginx/conf.d/default.conf >&2 || true
-                docker logs "$name" >&2
+        set -- "${expected[@]}"
+        while [ $# -gt 0 ]; do
+            location="$1" value="$2"
+            shift 2
+            body=$(docker exec "$name" cat /etc/nginx/conf.d/default.conf | location_body "$location")
+            if ! grep -Fxq "proxy_read_timeout $value;" <<<"$body"; then
+                echo "Missing 'proxy_read_timeout $value;' in 'location $location' of the rendered nginx config" >&2
+                docker exec "$name" cat /etc/nginx/conf.d/default.conf >&2 || true
                 return 1
             fi
         done
     }
 
-    check_proxy_timeout 'proxy_read_timeout 30s;' --
-    check_proxy_timeout 'proxy_read_timeout 150s;' 'proxy_read_timeout 90s;' -- -e API_PROXY_READ_TIMEOUT=150s
+    check_proxy_timeout /api/ 30s --
+    check_proxy_timeout /api/ 150s '= /api/activity/profile' 90s /auth/ 30s -- -e API_PROXY_READ_TIMEOUT=150s
     for value in 0s 1d '30s;' '30 s' $'30s\nx'; do
         name="dasha-timeout-$$-${#names[@]}"
         names+=("$name")

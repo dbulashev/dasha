@@ -23,9 +23,10 @@ config:
   # pgss_reset_function: monitoring.reset_pgss  # SECURITY DEFINER wrapper when the role lacks EXECUTE on pg_stat_statements_reset()
 
   # -- API server timeouts (Go duration, 1s..10m each); defaults shown. A page that
-  # outgrows them (e.g. a bloated pg_stat_statements on PostgreSQL <= 17) needs both
-  # read_timeout and write_timeout raised, and frontend.proxyReadTimeout at least as
-  # long as write_timeout — plus the ingress/gateway timeout in front of the chart.
+  # outgrows them (e.g. a bloated pg_stat_statements on PostgreSQL <= 17) needs
+  # write_timeout raised (read_timeout covers only reading the request), and
+  # frontend.proxyReadTimeout at least as long as write_timeout — plus the
+  # ingress/gateway timeout in front of the chart.
   # http_server:
   #   read_timeout: 30s
   #   read_header_timeout: 10s
