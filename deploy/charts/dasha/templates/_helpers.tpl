@@ -233,7 +233,11 @@ Name of the secret containing password env vars
 nginx proxy_read_timeout for /api/; the entrypoint applies the same check.
 */}}
 {{- define "dasha.proxyReadTimeout" -}}
-{{- $v := toString (default "30s" .Values.frontend.proxyReadTimeout) -}}
+{{- $raw := .Values.frontend.proxyReadTimeout -}}
+{{- $v := "30s" -}}
+{{- if not (kindIs "invalid" $raw) -}}
+{{- $v = toString $raw | default "30s" -}}
+{{- end -}}
 {{- if not (regexMatch "^[1-9][0-9]*(ms|s|m|h)?$" $v) -}}
 {{- fail (printf "frontend.proxyReadTimeout %q must be an nginx duration such as 30s, 2m" $v) -}}
 {{- end -}}

@@ -206,11 +206,11 @@ An API request has 30 seconds by default. On some installations the pg_stat_stat
    http_server:
      read_timeout: 30s         # reading the request: headers and body
      read_header_timeout: 10s
-     write_timeout: 30s        # from the request headers to the end of the response; on expiry the response is cut off
+     write_timeout: 30s        # write deadline, counted from the request headers to the end of the response
      idle_timeout: 30s
    ```
 
-   A long page needs a larger `write_timeout`: the database query runs inside it. `read_timeout` covers only reading the request and does not bound the query. Neither timeout cancels the query: it is cancelled only when the client closes the connection, for example when nginx gives up after `proxy_read_timeout`. Until then the query keeps running, even after the response has been cut off. When `write_timeout` is shorter than `read_timeout`, the backend logs a warning at startup: a slow request body can leave no time to write the response.
+   A long page needs a larger `write_timeout`: the database query runs inside it. `read_timeout` covers only reading the request and does not bound the query. `write_timeout` is a deadline for writing to the socket: after it a response write fails, but a query that is still running is not interrupted, and the client keeps waiting until the backend attempts the write or a proxy in front gives up. The HTTP timeouts do not cancel the query. Dasha cancels it when the client closes the connection, for example when nginx gives up after `proxy_read_timeout`. PostgreSQL may abort it earlier on its own `statement_timeout` (set on the instance, database or role); then raising the HTTP timeouts does not help. When `write_timeout` is shorter than `read_timeout`, the backend logs a warning at startup: a slow request body can leave no time to write the response.
 
 2. nginx in the frontend image: the `API_PROXY_READ_TIMEOUT` environment variable (`frontend.proxyReadTimeout` in Helm), `30s` by default. It sets `proxy_read_timeout` for `/api/` and must be at least `write_timeout`.
 

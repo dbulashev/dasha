@@ -115,6 +115,8 @@ for expected in 'read_timeout: 2m' 'write_timeout: 2m'; do
 done
 
 render_ok "proxyReadTimeout: bare seconds" --set frontend.proxyReadTimeout=90
+render_ok "proxyReadTimeout: null falls back to 30s" --set frontend.proxyReadTimeout=null
+render_fails "proxyReadTimeout: integer 0" "frontend.proxyReadTimeout" --set frontend.proxyReadTimeout=0
 for value in 0s 1d '30 s' '30s;'; do
   render_fails "proxyReadTimeout: invalid $value" "frontend.proxyReadTimeout" --set-string "frontend.proxyReadTimeout=$value"
 done
