@@ -196,6 +196,41 @@ clusters:
       - pg-staging.example.com
 ```
 
+## HTTP timeouts
+
+An API request has 30 seconds by default. On some installations the pg_stat_statements pages do not make it: up to PostgreSQL 17 every `IN ($1, …, $N)` with a different list length is a separate entry, and the view grows to tens of thousands of rows. Raise the timeouts along the whole request path:
+
+1. Backend, the `http_server` section of `dasha.yaml` (`config.http_server` in Helm). Each value is `1s` to `10m`; the defaults are shown:
+
+   ```yaml
+   http_server:
+     read_timeout: 30s         # on expiry the database query is cancelled
+     read_header_timeout: 10s
+     write_timeout: 30s        # on expiry the response is cut off
+     idle_timeout: 30s
+   ```
+
+   Raise both `read_timeout` and `write_timeout`. When `write_timeout` is shorter than `read_timeout`, the backend logs a warning at startup: the response is cut off before the query is cancelled.
+
+2. nginx in the frontend image: the `API_PROXY_READ_TIMEOUT` environment variable (`frontend.proxyReadTimeout` in Helm), `30s` by default. It sets `proxy_read_timeout` for `/api/` and must be at least `write_timeout`.
+
+3. The proxy in front of Dasha. ingress-nginx has its own `proxy-read-timeout`, 60 seconds by default; raise it with the `nginx.ingress.kubernetes.io/proxy-read-timeout` and `proxy-send-timeout` annotations in `ingress.annotations`. With Gateway API it is `timeouts.request` on the HTTPRoute or a policy of the implementation.
+
+Helm example for a page that may take up to two minutes:
+
+```yaml
+config:
+  http_server:
+    read_timeout: 2m
+    write_timeout: 2m
+frontend:
+  proxyReadTimeout: 150s
+ingress:
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "180"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "180"
+```
+
 ## Yandex MDB Service Discovery (optional)
 
 ```yaml

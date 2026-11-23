@@ -4,6 +4,7 @@
 
 ### Features
 - **Command palette** (<kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>K</kbd> or the search button in the toolbar): one search over clusters, sections, hosts and databases, with recent places first. <kbd>1</kbd> goes to the primary of the current cluster, <kbd>2</kbd>…<kbd>9</kbd> to its replicas, staying in the same section; from primary-only sections (Maintenance, Schema Checks) a replica opens on Summary.
+- **Configurable HTTP timeouts** for installations where the pg_stat_statements pages do not fit in 30 seconds (bloated statistics on PostgreSQL before 18, queries with `IN ($1, …, $N)`): the `http_server` section of the backend config and `API_PROXY_READ_TIMEOUT` on the frontend; `config.http_server` and `frontend.proxyReadTimeout` in Helm. Defaults are unchanged. See [HTTP timeouts](doc/en/configuration.md#http-timeouts).
 
 ## v1.11.0
 

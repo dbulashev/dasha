@@ -23,7 +23,7 @@ Multi-architecture images (`linux/amd64`, `linux/arm64`) are published to Docker
 | `dbulashev/dasha-frontend` | Nginx + Vue SPA, proxies `/api/` to backend |
 | `dbulashev/dasha-mcp` | MCP connector for AI assistants (stdio / HTTP) |
 
-The frontend accepts `BACKEND_URL` environment variable (default: `backend:8000`).
+The frontend accepts `BACKEND_URL` environment variable (default: `backend:8000`). `API_PROXY_READ_TIMEOUT` (default `30s`) sets `proxy_read_timeout` for `/api/`, see [HTTP timeouts](configuration.md#http-timeouts).
 
 ## Helm Chart
 

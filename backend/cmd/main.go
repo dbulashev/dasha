@@ -301,11 +301,19 @@ func dashaExec(cmd *cobra.Command, _ []string) error {
 		auth.RegisterBFFRoutes(svc.Echo, authMW.OIDCProvider, authMW.SessionManager, deps.NewLoginRecorder(st), logger)
 	}
 
+	httpServerCfg := container.Config().HTTPServer
+	if httpServerCfg.WriteCutsRead() {
+		serverLogger.Warn("http_server.write_timeout is shorter than read_timeout: "+
+			"a long request loses its response before it is cancelled",
+			zap.Duration("write_timeout", httpServerCfg.WriteTimeout),
+			zap.Duration("read_timeout", httpServerCfg.ReadTimeout))
+	}
+
 	wg := sync.WaitGroup{}
 
 	wg.Go(
 		func() {
-			if err := svc.Serve(); err != nil && !errors.Is(err, nethttp.ErrServerClosed) {
+			if err := svc.Serve(http.WithTimeouts(httpServerCfg)); err != nil && !errors.Is(err, nethttp.ErrServerClosed) {
 				serverLogger.Fatal("unexpected error", zap.Error(err))
 			}
 		})

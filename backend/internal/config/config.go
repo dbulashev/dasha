@@ -786,6 +786,8 @@ type Config struct {
 	Activity activity.Config `mapstructure:"activity"`
 
 	PIICatalog PIICatalogConfig `mapstructure:"pii_catalog"`
+
+	HTTPServer HTTPServerConfig `mapstructure:"http_server"`
 }
 
 // PoolConfig tunes a pgx connection pool. Zero MaxConns/MaxConnIdleTime fall back

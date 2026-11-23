@@ -22,6 +22,16 @@ config:
   # enable_query_stats_reset: false  # allow resetting pg_stat_statements via UI
   # pgss_reset_function: monitoring.reset_pgss  # SECURITY DEFINER wrapper when the role lacks EXECUTE on pg_stat_statements_reset()
 
+  # -- API server timeouts (Go duration, 1s..10m each); defaults shown. A page that
+  # outgrows them (e.g. a bloated pg_stat_statements on PostgreSQL <= 17) needs both
+  # read_timeout and write_timeout raised, and frontend.proxyReadTimeout at least as
+  # long as write_timeout — plus the ingress/gateway timeout in front of the chart.
+  # http_server:
+  #   read_timeout: 30s
+  #   read_header_timeout: 10s
+  #   write_timeout: 30s
+  #   idle_timeout: 30s
+
   # -- Log search (page /logs). Limits apply to every source; yandex-mdb clusters
   # need no source of their own. sources[] adds external log stores; a cluster
   # picks one with log_source, otherwise default_source serves it — including
@@ -355,6 +365,9 @@ frontend:
   enabled: true
   replicaCount: 1
   port: 3000
+  # -- nginx proxy_read_timeout for /api/ (nginx duration: 30s, 2m).
+  # Keep it >= config.http_server.write_timeout.
+  proxyReadTimeout: 30s
   resources: {}
   # nginx official image runs as UID/GID 101
   podSecurityContext:
@@ -462,6 +475,10 @@ service:
 ingress:
   enabled: false
   className: ""
+  # When raising config.http_server timeouts, raise the controller's too, e.g. for
+  # ingress-nginx (default 60s):
+  #   nginx.ingress.kubernetes.io/proxy-read-timeout: "180"
+  #   nginx.ingress.kubernetes.io/proxy-send-timeout: "180"
   annotations: {}
   domain: dasha.example.com
   tls:
@@ -481,6 +498,9 @@ ingress:
 
 # -- Kubernetes Gateway API (gateway.networking.k8s.io/v1)
 # Portable alternative to Ingress. Mutually exclusive with ingress.enabled.
+# Implementations bound a request with their own timeout (HTTPRoute
+# rules[].timeouts.request or an implementation policy); keep it above
+# config.http_server.write_timeout when raising the latter.
 gatewayAPI:
   enabled: false
   # gatewayClassName: istio | nginx | envoy | cilium | ...

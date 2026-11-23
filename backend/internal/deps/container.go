@@ -666,6 +666,7 @@ func provideConfig() (*config.Config, error) {
 	c.LogInsights = c.LogInsights.WithDefaults()
 	c.Activity = c.Activity.WithDefaults()
 	c.PIICatalog = c.PIICatalog.WithDefaults()
+	c.HTTPServer = c.HTTPServer.WithDefaults()
 
 	if err := c.HealthScore.Validate(); err != nil {
 		return nil, fmt.Errorf("provideConfig | health_score: %w", err)
@@ -693,6 +694,10 @@ func provideConfig() (*config.Config, error) {
 
 	if err := c.Activity.Validate(); err != nil {
 		return nil, fmt.Errorf("provideConfig | activity: %w", err)
+	}
+
+	if err := c.HTTPServer.Validate(); err != nil {
+		return nil, fmt.Errorf("provideConfig | %w", err)
 	}
 
 	return &c, nil

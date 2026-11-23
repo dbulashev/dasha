@@ -13,6 +13,7 @@ import (
 
 	"github.com/dbulashev/dasha/gen/serverhttp"
 	"github.com/dbulashev/dasha/internal/auth"
+	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/http/logger"
 	"github.com/dbulashev/dasha/internal/repository"
 )
@@ -33,6 +34,15 @@ type ServeOptFunc func(opt *serveOptions)
 func WithPort(port int) ServeOptFunc {
 	return func(opt *serveOptions) {
 		opt.port = port
+	}
+}
+
+func WithTimeouts(c config.HTTPServerConfig) ServeOptFunc {
+	return func(opt *serveOptions) {
+		opt.readTimeout = c.ReadTimeout
+		opt.readHeaderTimeout = c.ReadHeaderTimeout
+		opt.writeTimeout = c.WriteTimeout
+		opt.idleTimeout = c.IdleTimeout
 	}
 }
 
@@ -194,21 +204,15 @@ func extendDeadlines(path string, d time.Duration, logger *zap.Logger) echo.Midd
 	}
 }
 
-const (
-	defaultPort              = 8000
-	defaultReadTimeout       = time.Second * 30
-	defaultReadHeaderTimeout = time.Second * 10
-	defaultWriteTimeout      = time.Second * 30
-	defaultIdleTimeout       = time.Second * 30
-)
+const defaultPort = 8000
 
 func (api *API) Serve(optionalFn ...ServeOptFunc) error {
 	opts := serveOptions{
 		port:              defaultPort,
-		readTimeout:       defaultReadTimeout,
-		readHeaderTimeout: defaultReadHeaderTimeout,
-		writeTimeout:      defaultWriteTimeout,
-		idleTimeout:       defaultIdleTimeout,
+		readTimeout:       config.DefaultHTTPServerReadTimeout,
+		readHeaderTimeout: config.DefaultHTTPServerReadHeaderTimeout,
+		writeTimeout:      config.DefaultHTTPServerWriteTimeout,
+		idleTimeout:       config.DefaultHTTPServerIdleTimeout,
 		logger:            api.Logger,
 	}
 
