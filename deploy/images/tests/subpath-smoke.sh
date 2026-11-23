@@ -98,3 +98,68 @@ for prefix in '//example.test' '/tools/../dasha' '/a//b' '/bad?query' $'/ok\nbad
     fi
     docker logs "$name" 2>&1 | grep -Fq 'Invalid DASHA_BASE_PATH'
 done
+
+# The rendered nginx.conf does not depend on the browser run.
+if [ "${DASHA_SUBPATH_BROWSER:-false}" != true ]; then
+    # Prints the top-level directives of one location block, so a value from
+    # another location cannot satisfy a check.
+    location_body() {
+        awk -v want="location $1 {" '
+            { t = $0; sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t) }
+            !depth { if (t == want) depth = 1; next }
+            t ~ /\{$/ { depth++; next }
+            t == "}" { if (!--depth) exit; next }
+            depth == 1 { print t }'
+    }
+
+    # check_proxy_timeout <location> <proxy_read_timeout>... -- <docker run options>...
+    check_proxy_timeout() {
+        local name="dasha-timeout-$$-${#names[@]}" location value body rendered=false
+        local -a expected=()
+        while [ "$1" != -- ]; do expected+=("$1"); shift; done
+        shift
+        names+=("$name")
+        docker run -d --name "$name" -e BACKEND_URL=127.0.0.1:8000 "$@" "$image" >/dev/null
+        for _ in $(seq 10); do
+            if docker exec "$name" test -s /etc/nginx/conf.d/default.conf 2>/dev/null; then
+                rendered=true
+                break
+            fi
+            sleep 1
+        done
+        if [ "$rendered" != true ]; then
+            echo "nginx config was not rendered ($*)" >&2
+            docker logs "$name" >&2
+            return 1
+        fi
+        set -- "${expected[@]}"
+        while [ $# -gt 0 ]; do
+            location="$1" value="$2"
+            shift 2
+            body=$(docker exec "$name" cat /etc/nginx/conf.d/default.conf | location_body "$location")
+            if ! grep -Fxq "proxy_read_timeout $value;" <<<"$body"; then
+                echo "Missing 'proxy_read_timeout $value;' in 'location $location' of the rendered nginx config" >&2
+                docker exec "$name" cat /etc/nginx/conf.d/default.conf >&2 || true
+                return 1
+            fi
+        done
+    }
+
+    check_proxy_timeout /api/ 30s --
+    check_proxy_timeout /api/ 150s '= /api/activity/profile' 90s /auth/ 30s -- -e API_PROXY_READ_TIMEOUT=150s
+    for value in 0s 1d '30s;' '30 s' $'30s\nx'; do
+        name="dasha-timeout-$$-${#names[@]}"
+        names+=("$name")
+        docker run -d --name "$name" -e BACKEND_URL=127.0.0.1:8000 -e API_PROXY_READ_TIMEOUT="$value" "$image" >/dev/null
+        if ! status=$(timeout 10 docker wait "$name") || [ "$status" = 0 ]; then
+            printf 'Accepted an invalid API_PROXY_READ_TIMEOUT: %q\n' "$value" >&2
+            exit 1
+        fi
+        if ! docker logs "$name" 2>&1 | grep -Fq 'Invalid API_PROXY_READ_TIMEOUT'; then
+            printf 'Rejected API_PROXY_READ_TIMEOUT %q for another reason:\n' "$value" >&2
+            docker logs "$name" >&2
+            exit 1
+        fi
+    done
+    echo "OK: API_PROXY_READ_TIMEOUT"
+fi

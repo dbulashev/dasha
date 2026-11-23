@@ -23,7 +23,7 @@ docker compose up -d
 | `dbulashev/dasha-frontend` | Nginx + Vue SPA, проксирует `/api/` на бэкенд |
 | `dbulashev/dasha-mcp` | MCP-коннектор для AI-ассистентов (stdio / HTTP) |
 
-Фронтенд принимает переменную окружения `BACKEND_URL` (по умолчанию: `backend:8000`).
+Фронтенд принимает переменную окружения `BACKEND_URL` (по умолчанию: `backend:8000`). `API_PROXY_READ_TIMEOUT` (по умолчанию `30s`) задаёт `proxy_read_timeout` для `/api/`, см. [Таймауты HTTP](configuration.md#таймауты-http).
 
 ## Helm Chart
 

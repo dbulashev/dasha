@@ -19,6 +19,18 @@ if [ -n "$DASHA_BASE_PATH" ]; then
         exit 1
     fi
 fi
+# Validated: it lands in nginx.conf verbatim.
+export API_PROXY_READ_TIMEOUT="${API_PROXY_READ_TIMEOUT:-30s}"
+case "$API_PROXY_READ_TIMEOUT" in
+    *[!0-9hms]*)
+        echo 'Invalid API_PROXY_READ_TIMEOUT' >&2
+        exit 1
+        ;;
+esac
+if ! printf '%s\n' "$API_PROXY_READ_TIMEOUT" | grep -Eqx '[1-9][0-9]*(ms|s|m|h)?'; then
+    echo 'Invalid API_PROXY_READ_TIMEOUT' >&2
+    exit 1
+fi
 export BASE_PATH_REDIRECT_BLOCK=''
 export OUTSIDE_BASE_PATH_BLOCK=''
 export BASE_PATH_REGEX
@@ -70,6 +82,6 @@ if [ -n "${MCP_URL:-}" ]; then
 fi
 
 # shellcheck disable=SC2016
-envsubst '${BACKEND_URL} ${HTTPS_REDIRECT_BLOCK} ${DASHA_BASE_PATH} ${BASE_PATH_REGEX} ${BASE_PATH_REDIRECT_BLOCK} ${OUTSIDE_BASE_PATH_BLOCK}' < /etc/nginx/templates/nginx.conf.template > /etc/nginx/conf.d/default.conf
+envsubst '${BACKEND_URL} ${API_PROXY_READ_TIMEOUT} ${HTTPS_REDIRECT_BLOCK} ${DASHA_BASE_PATH} ${BASE_PATH_REGEX} ${BASE_PATH_REDIRECT_BLOCK} ${OUTSIDE_BASE_PATH_BLOCK}' < /etc/nginx/templates/nginx.conf.template > /etc/nginx/conf.d/default.conf
 
 exec nginx -g 'daemon off;'

@@ -195,6 +195,41 @@ clusters:
       - pg-staging.example.com
 ```
 
+## Таймауты HTTP
+
+По умолчанию запрос к API должен уложиться в 30 секунд. На некоторых инсталляциях страницы по pg_stat_statements не успевают: до PostgreSQL 17 включительно каждый `IN ($1, …, $N)` с другой длиной списка попадает в статистику отдельной записью, и представление разрастается до десятков тысяч строк. В таком случае поднимите таймауты на всём пути запроса:
+
+1. Бэкенд, секция `http_server` в `dasha.yaml` (в Helm — `config.http_server`). Каждое значение от `1s` до `10m`, ниже указаны значения по умолчанию:
+
+   ```yaml
+   http_server:
+     read_timeout: 30s         # на чтение запроса вместе с телом
+     read_header_timeout: 10s
+     write_timeout: 30s        # на ответ, считая от прихода заголовков запроса
+     idle_timeout: 30s
+   ```
+
+   Если страница считается долго, поднимите `write_timeout`: отсчёт идёт с момента, когда пришли заголовки запроса, и запрос к базе должен успеть до его конца. `read_timeout` касается только чтения самого запроса, на долгие страницы он не влияет. Когда `write_timeout` истёк, бэкенд уже не сможет отдать ответ. Но запрос к базе на этом не останавливается, и клиент ждёт дальше: пока бэкенд не начнёт отвечать или пока не истечёт таймаут прокси перед ним. Ни один HTTP-таймаут запрос к базе не отменяет. Бэкенд прерывает его, только когда клиент закрывает соединение, например nginx по `proxy_read_timeout`. А вот PostgreSQL может оборвать запрос и сам, если на инстансе, базе или роли задан `statement_timeout` короче. Тогда поднимать HTTP-таймауты бесполезно. Если `write_timeout` меньше `read_timeout`, бэкенд предупредит об этом при старте: пока медленно читается тело запроса, время на ответ может кончиться.
+
+2. nginx во фронтенд-образе: переменная окружения `API_PROXY_READ_TIMEOUT` (в Helm — `frontend.proxyReadTimeout`), по умолчанию `30s`. Задаёт `proxy_read_timeout` для `/api/` и должна быть не меньше `write_timeout`.
+
+3. Прокси перед Dasha. У ingress-nginx свой `proxy-read-timeout`, по умолчанию 60 секунд; его поднимают аннотациями `nginx.ingress.kubernetes.io/proxy-read-timeout` и `proxy-send-timeout` в `ingress.annotations`. Чарт создаёт Ingress только при `ingress.enabled: true`. Если Ingress у вас свой, аннотации ставят на него. С Gateway API таймаут задаётся в `timeouts.request` у HTTPRoute или политикой конкретной реализации.
+
+Пример для Helm, страница может считаться до двух минут:
+
+```yaml
+config:
+  http_server:
+    write_timeout: 2m
+frontend:
+  proxyReadTimeout: 150s
+ingress:
+  enabled: true
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "180"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "180"
+```
+
 ## Сервис-дискавери Yandex MDB (опционально)
 
 ```yaml

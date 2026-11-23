@@ -90,4 +90,35 @@ for expected in 'base_path: /tools/dasha' 'value: "/tools/dasha"' 'path: "/tools
   fi
 done
 
+
+out=$(helm template test "$CHART")
+if ! grep -A1 -F 'name: API_PROXY_READ_TIMEOUT' <<<"$out" | grep -Fq 'value: "30s"'; then
+  echo "FAIL: default API_PROXY_READ_TIMEOUT is not 30s"
+  FAILED=1
+fi
+if grep -Fq 'http_server' <<<"$out"; then
+  echo "FAIL: http_server rendered without being set"
+  FAILED=1
+fi
+
+out=$(helm template test "$CHART" --set frontend.proxyReadTimeout=150s \
+  --set config.http_server.read_timeout=2m --set config.http_server.write_timeout=2m)
+if ! grep -A1 -F 'name: API_PROXY_READ_TIMEOUT' <<<"$out" | grep -Fq 'value: "150s"'; then
+  echo "FAIL: frontend.proxyReadTimeout not passed to the frontend"
+  FAILED=1
+fi
+for expected in 'read_timeout: 2m' 'write_timeout: 2m'; do
+  if ! grep -Fq "$expected" <<<"$out"; then
+    echo "FAIL: http_server lost: $expected"
+    FAILED=1
+  fi
+done
+
+render_ok "proxyReadTimeout: bare seconds" --set frontend.proxyReadTimeout=90
+render_ok "proxyReadTimeout: null falls back to 30s" --set frontend.proxyReadTimeout=null
+render_fails "proxyReadTimeout: integer 0" "frontend.proxyReadTimeout" --set frontend.proxyReadTimeout=0
+for value in 0s 1d '30 s' '30s;'; do
+  render_fails "proxyReadTimeout: invalid $value" "frontend.proxyReadTimeout" --set-string "frontend.proxyReadTimeout=$value"
+done
+
 exit "$FAILED"
