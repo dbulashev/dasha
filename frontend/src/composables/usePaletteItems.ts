@@ -10,6 +10,7 @@ import { useInstanceInfoStore } from '@/stores/instanceInfo'
 import { usePaletteRecentStore } from '@/stores/paletteRecent'
 import { defaultHost, hostItems, type HostItem } from '@/utils/clusters'
 import {
+  clusterHostLocation,
   clusterSectionLocation,
   dbLocation,
   hostLocation,
@@ -23,12 +24,13 @@ import {
   prepareField,
   prepareHost,
   search,
+  type PreparedClusterHost,
   type Range,
   type SearchResult,
 } from '@/utils/palette/search'
 import { buildSectionIndex, MAIN_SECTION, type SectionDef } from '@/utils/palette/sections'
 
-export type ItemKind = 'host' | 'section' | 'cluster' | 'cluster-section' | 'db' | 'recent'
+export type ItemKind = 'host' | 'cluster-host' | 'section' | 'cluster' | 'cluster-section' | 'db' | 'recent'
 
 export interface PaletteItem {
   id: string
@@ -107,6 +109,11 @@ export function usePaletteItems(
     clusterList.value.filter(c => c.name).map(c => prepareField(c.name!)),
   )
   const preparedHosts = computed(() => ctx.hosts.value.map(prepareHost))
+  const preparedForeignHosts = computed<PreparedClusterHost[]>(() =>
+    clusterList.value
+      .filter(c => c.name && c.name !== ctx.cluster.value)
+      .flatMap(c => hostItems(c).map(h => ({ cluster: c.name!, ...prepareHost(h) }))),
+  )
   const preparedDbs = computed(() => (ctx.clusterObj.value?.databases ?? []).map(prepareField))
   const visibleIn = computed(() => visibleByName(clusterList.value))
 
@@ -196,6 +203,36 @@ export function usePaletteItems(
     }
   }
 
+  // Roles of other clusters are not asked for: a primary-only section opens only
+  // on a host known to be the primary, otherwise the summary does.
+  function clusterHostItem(name: string, host: HostItem, titleMarks: Range[], synonym?: string): PaletteItem {
+    const wanted = ctx.place.value.section
+    let { section, fallback } = resolveSection(wanted, visibilityOf(name))
+    const role = instanceInfoStore.role(name, host.value)
+    if (section.rule === 'primaryOnly' && role !== 'primary') {
+      section = MAIN_SECTION
+      fallback = true
+    }
+    return {
+      id: `ch:${name}:${host.value}`,
+      kind: 'cluster-host',
+      icon: HOST_ICON,
+      title: host.title,
+      titleMarks,
+      subtitle: [
+        name,
+        ...(host.address && host.address !== synonym ? [host.address] : []),
+        ...(synonym ? [synonym] : []),
+        ...(role ? [t(`hostRole.${role}`)] : []),
+        fallback ? fallbackNote(wanted!) : `→ ${titleOf(section)}`,
+      ],
+      current: false,
+      fallback,
+      to: clusterHostLocation(clusterOf(name), host.value, section),
+      recent: { cluster: name, section: section.slug },
+    }
+  }
+
   function fromResult(r: SearchResult): PaletteItem {
     const synonym = r.synonym ? [r.synonym] : []
     const place = ctx.place.value
@@ -240,6 +277,8 @@ export function usePaletteItems(
         }
       case 'host':
         return hostItem(r.host!, r.titleMarks, r.current, r.synonym)
+      case 'cluster-host':
+        return clusterHostItem(r.cluster!, r.host!, r.titleMarks, r.synonym)
       case 'db':
         return {
           id: `db:${r.db}`,
@@ -267,6 +306,7 @@ export function usePaletteItems(
       sections: sectionIndex.value,
       hosts: preparedHosts.value,
       dbs: preparedDbs.value,
+      foreignHosts: preparedForeignHosts.value,
       currentCluster: ctx.cluster.value,
       currentSection: ctx.place.value.section?.slug ?? null,
       currentHost: ctx.host.value,

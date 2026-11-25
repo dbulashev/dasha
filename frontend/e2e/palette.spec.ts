@@ -66,6 +66,15 @@ test('a cluster and a section in one query', async ({ page }) => {
   await expect(page).toHaveURL(/\/replication\/prod-billing\?host=pg-01/)
 })
 
+test('a host of another cluster by its name', async ({ page }) => {
+  await page.goto('/locks/prod-billing?host=pg-02&db=app')
+  await expect(page.locator('nav').first()).toBeVisible()
+  await page.keyboard.press(`${mod}+k`)
+  await palette(page).fill('auth-01')
+  await page.keyboard.press('Enter')
+  await expect(page).toHaveURL(/\/locks\/prod-auth\?host=auth-01&db=auth$/)
+})
+
 test('digits are text once the field is not empty', async ({ page }) => {
   await page.goto('/locks/prod-billing?host=pg-02&db=app')
   await expect(page.locator('nav').first()).toBeVisible()

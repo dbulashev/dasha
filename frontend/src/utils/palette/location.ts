@@ -77,3 +77,9 @@ export function clusterSectionLocation(place: Place, cluster: Cluster, section: 
     ...(db ? { db } : {}),
   })
 }
+
+/** A given host of another cluster: its default database, nothing else of the current URL. */
+export function clusterHostLocation(cluster: Cluster, host: string, section: SectionDef): RouteLocationNamedRaw {
+  const db = defaultDb(cluster)
+  return to(section, cluster.name ?? '', { host, ...(db ? { db } : {}) })
+}

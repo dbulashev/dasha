@@ -52,6 +52,7 @@ function input(query: string, over: Partial<SearchInput> = {}): SearchInput {
     sections: ru,
     hosts: [],
     dbs: [],
+    foreignHosts: [],
     currentCluster: 'prod-auth',
     currentSection: 'main',
     currentHost: null,
@@ -71,7 +72,9 @@ const label = (r: SearchResult) =>
         ? `cluster:${r.cluster}`
         : r.kind === 'host'
           ? `host:${r.host!.value}`
-          : `db:${r.db}`
+          : r.kind === 'cluster-host'
+            ? `ch:${r.cluster}:${r.host!.value}`
+            : `db:${r.db}`
 
 const labels = (q: string, over?: Partial<SearchInput>) => search(input(q, over)).map(label)
 
@@ -247,6 +250,57 @@ describe('search', () => {
       dbs: [prepareField('locks')],
     })
     expect(results).toEqual(['section:locks', 'cluster:locks', 'host:locks', 'db:locks'])
+  })
+
+  describe('hosts of other clusters', () => {
+    const foreign = (cluster: Cluster) => hostItems(cluster).map(h => ({ cluster: cluster.name!, ...prepareHost(h) }))
+    const billing = foreign({
+      name: 'prod-billing',
+      instances: [
+        { host_name: 'rc1a-abcde.mdb.yandex' },
+        { host_name: 'rc1b-fghij.mdb.yandex', display_name: 'billing-replica' },
+      ],
+    })
+
+    it('finds a pasted host name first', () => {
+      const results = search(input('rc1a-abcde.mdb.yandex', { foreignHosts: billing }))
+      expect(results.map(label)).toEqual(['ch:prod-billing:rc1a-abcde.mdb.yandex'])
+      expect(results[0]!.level).toBe(LEVEL_EXACT)
+      expect(results[0]!.current).toBe(false)
+    })
+
+    it('finds a host by a substring of its name or address', () => {
+      expect(labels('bcde', { foreignHosts: billing })).toEqual(['ch:prod-billing:rc1a-abcde.mdb.yandex'])
+      const [byAddress] = search(input('ghij', { foreignHosts: billing }))
+      expect(label(byAddress!)).toBe('ch:prod-billing:rc1b-fghij.mdb.yandex')
+      expect(byAddress!.synonym).toBe('rc1b-fghij.mdb.yandex')
+    })
+
+    it('drops fuzzy matches there, unlike the current cluster', () => {
+      const hosts = [prepareHost({ value: 'rc1a-abcde', title: 'rc1a-abcde' })]
+      expect(labels('rcabc', { foreignHosts: billing })).toEqual([])
+      expect(labels('rcabc', { hosts })).toEqual(['host:rc1a-abcde'])
+    })
+
+    it('puts a host of the current cluster before one of another', () => {
+      const same = { value: 'pg-01', title: 'pg-01' }
+      const results = labels('pg-01', {
+        hosts: [prepareHost(same)],
+        foreignHosts: [{ cluster: 'stage', ...prepareHost(same) }],
+      })
+      expect(results).toEqual(['host:pg-01', 'ch:stage:pg-01'])
+    })
+
+    it('keeps one row per cluster for a name found in two of them', () => {
+      const same = { value: 'pg-01', title: 'pg-01' }
+      const results = labels('pg-01', {
+        foreignHosts: [
+          { cluster: 'stage', ...prepareHost(same) },
+          { cluster: 'billing-eu', ...prepareHost(same) },
+        ],
+      })
+      expect(results).toEqual(['ch:stage:pg-01', 'ch:billing-eu:pg-01'])
+    })
   })
 
   it('prefers shorter titles, then alphabetical', () => {

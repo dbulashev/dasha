@@ -67,6 +67,10 @@ export function prepareHost(host: HostItem): PreparedHost {
   return { host, terms: [prepareField(host.title), ...(host.address ? [prepareField(host.address)] : [])] }
 }
 
+export interface PreparedClusterHost extends PreparedHost {
+  cluster: string
+}
+
 export interface FieldMatch {
   level: MatchLevel
   ranges: Range[]
@@ -147,19 +151,20 @@ function matchTerms(token: string, terms: PreparedField[]): TermsMatch | null {
   return best
 }
 
-export type SearchKind = 'section' | 'cluster' | 'cluster-section' | 'host' | 'db'
+export type SearchKind = 'section' | 'cluster' | 'cluster-section' | 'host' | 'cluster-host' | 'db'
 
 const KIND_ORDER: Record<SearchKind, number> = {
   section: 0,
   cluster: 1,
   'cluster-section': 2,
   host: 3,
-  db: 4,
+  'cluster-host': 4,
+  db: 5,
 }
 
 export interface SearchResult {
   kind: SearchKind
-  /** for 'cluster' and 'cluster-section' */
+  /** for 'cluster', 'cluster-section' and 'cluster-host' */
   cluster?: string
   /** for 'section' and 'cluster-section' */
   section?: SectionDef
@@ -187,6 +192,8 @@ export interface SearchInput {
   /** hosts and databases of the current cluster, prepared once per opening */
   hosts: PreparedHost[]
   dbs: PreparedField[]
+  /** hosts of every cluster but the current one; fuzzy matches are dropped there */
+  foreignHosts: PreparedClusterHost[]
   /** null on Fleet: there are no section results then, only clusters to go to */
   currentCluster: string | null
   /** slug of the current section; a cluster result leads there */
@@ -308,6 +315,26 @@ export function search(input: SearchInput): SearchResult[] {
       host,
       title: host.title,
       current: host.value === input.currentHost,
+      describe: () => ({
+        titleMarks: marksOf(mh),
+        ...(synonymTerm ? { synonym: terms[synonymTerm.term]!.text } : {}),
+      }),
+      ...score(mh),
+      recentWeight: 0,
+    })
+  }
+
+  // Fuzzy matching over the hosts of the whole fleet finds half of it.
+  for (const { cluster, host, terms } of input.foreignHosts) {
+    const mh = tokens.map(tok => matchTerms(tok, terms))
+    if (!all(mh) || mh.some(m => m.level === LEVEL_FUZZY)) continue
+    const synonymTerm = mh.find(m => m.term !== 0)
+    out.push({
+      kind: 'cluster-host',
+      cluster,
+      host,
+      title: host.title,
+      current: false,
       describe: () => ({
         titleMarks: marksOf(mh),
         ...(synonymTerm ? { synonym: terms[synonymTerm.term]!.text } : {}),

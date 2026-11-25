@@ -63,11 +63,17 @@ async function mountPalette(path = '/locks/c1?host=pg-02&db=app') {
       instances: [{ host_name: 'pg-01' }, { host_name: 'pg-02' }, { host_name: 'pg-03' }],
       databases: ['app'],
     },
+    {
+      name: 'c2',
+      instances: [{ host_name: 'rc1a-aaaaa.mdb.yandex' }, { host_name: 'rc1b-bbbbb.mdb.yandex' }],
+      databases: ['billing'],
+    },
   ])
   const info = useInstanceInfoStore()
   info.byHost['c1::pg-01'] = { info: { InRecovery: false, VersionNum: 170000 }, fetchedAt: Date.now() }
   info.byHost['c1::pg-02'] = { info: { InRecovery: true, VersionNum: 170000 }, fetchedAt: Date.now() }
   info.byHost['c1::pg-03'] = { info: { InRecovery: true, VersionNum: 170000 }, fetchedAt: Date.now() }
+  info.byHost['c2::rc1b-bbbbb.mdb.yandex'] = { info: { InRecovery: false, VersionNum: 170000 }, fetchedAt: Date.now() }
 
   router = makeRouter()
   const open = ref(false)
@@ -116,6 +122,8 @@ async function type(text: string) {
 const active = () => input().getAttribute('aria-activedescendant')
 const optionTitle = (id: string | null) =>
   document.getElementById(id ?? '')?.querySelector('.v-list-item-title')?.textContent?.trim()
+const optionSubtitle = (id: string | null) =>
+  document.getElementById(id ?? '')?.querySelector('.v-list-item-subtitle')?.textContent?.trim()
 
 beforeEach(() => {
   localStorage.clear()
@@ -211,5 +219,51 @@ describe('CommandPalette', () => {
   it('keeps the list out of the tab order', async () => {
     await mountPalette()
     expect(document.getElementById('palette-list')?.getAttribute('tabindex')).toBe('-1')
+  })
+
+  describe('hosts of other clusters', () => {
+    it('opens a pasted host in its cluster, in the same section', async () => {
+      const { pushed } = await mountPalette()
+      await type('rc1a-aaaaa.mdb.yandex')
+      expect(optionTitle(active())).toBe('rc1a-aaaaa.mdb.yandex')
+      expect(optionSubtitle(active())).toBe('c2 · → Locks')
+      key('Enter')
+      await flushPromises()
+      expect(pushed()).toEqual(['/locks/c2?host=rc1a-aaaaa.mdb.yandex&db=billing'])
+      expect(usePaletteRecentStore().items).toEqual([{ cluster: 'c2', section: 'locks' }])
+    })
+
+    it('finds a host by a substring of its name', async () => {
+      await mountPalette()
+      await type('aaaaa')
+      expect(optionTitle(active())).toBe('rc1a-aaaaa.mdb.yandex')
+    })
+
+    it('opens the summary from a primary-only section when the role is not known', async () => {
+      const { pushed } = await mountPalette('/maintenance/c1?host=pg-01&db=app')
+      await type('aaaaa')
+      expect(optionSubtitle(active())).toContain('unavailable')
+      key('Enter')
+      await flushPromises()
+      expect(pushed()).toEqual(['/main/c2?host=rc1a-aaaaa.mdb.yandex&db=billing'])
+    })
+
+    it('stays in a primary-only section on a host known to be the primary', async () => {
+      const { pushed } = await mountPalette('/maintenance/c1?host=pg-01&db=app')
+      await type('bbbbb')
+      expect(optionSubtitle(active())).toBe('c2 · Primary · → Maintenance')
+      key('Enter')
+      await flushPromises()
+      expect(pushed()).toEqual(['/maintenance/c2?host=rc1b-bbbbb.mdb.yandex&db=billing'])
+    })
+
+    it('searches the hosts of every cluster on Fleet', async () => {
+      const { pushed } = await mountPalette('/fleet/c1')
+      await type('pg-03')
+      expect(optionSubtitle(active())).toContain('c1')
+      key('Enter')
+      await flushPromises()
+      expect(pushed()).toEqual(['/main/c1?host=pg-03&db=app'])
+    })
   })
 })
