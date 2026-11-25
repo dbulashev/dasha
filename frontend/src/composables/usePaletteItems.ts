@@ -204,12 +204,14 @@ export function usePaletteItems(
   }
 
   // Roles of other clusters are not asked for: a primary-only section opens only
-  // on a host known to be the primary, otherwise the summary does.
+  // on a host whose answer within the TTL says primary, otherwise the summary
+  // does. A role remembered from before a failover only labels the row (D6).
   function clusterHostItem(name: string, host: HostItem, titleMarks: Range[], synonym?: string): PaletteItem {
     const wanted = ctx.place.value.section
     let { section, fallback } = resolveSection(wanted, visibilityOf(name))
     const role = instanceInfoStore.role(name, host.value)
-    if (section.rule === 'primaryOnly' && role !== 'primary') {
+    const freshPrimary = instanceInfoStore.get(name, host.value)?.InRecovery === false
+    if (section.rule === 'primaryOnly' && !freshPrimary) {
       section = MAIN_SECTION
       fallback = true
     }

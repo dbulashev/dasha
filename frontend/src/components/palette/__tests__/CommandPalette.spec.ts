@@ -257,6 +257,16 @@ describe('CommandPalette', () => {
       expect(pushed()).toEqual(['/maintenance/c2?host=rc1b-bbbbb.mdb.yandex&db=billing'])
     })
 
+    it('does not trust a primary role older than the TTL in a primary-only section', async () => {
+      const { pushed } = await mountPalette('/maintenance/c1?host=pg-01&db=app')
+      useInstanceInfoStore().byHost['c2::rc1b-bbbbb.mdb.yandex']!.fetchedAt = Date.now() - 60_000
+      await type('bbbbb')
+      expect(optionSubtitle(active())).toContain('unavailable')
+      key('Enter')
+      await flushPromises()
+      expect(pushed()).toEqual(['/main/c2?host=rc1b-bbbbb.mdb.yandex&db=billing'])
+    })
+
     it('searches the hosts of every cluster on Fleet', async () => {
       const { pushed } = await mountPalette('/fleet/c1')
       await type('pg-03')
