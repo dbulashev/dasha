@@ -148,6 +148,53 @@ func (s *Handlers) GetMaintenanceAutovacuumSummary(
 	}, nil
 }
 
+const (
+	defaultAutovacuumQueueLimit = 50
+	maxAutovacuumQueueLimit     = 500
+)
+
+func (s *Handlers) GetMaintenanceAutovacuumQueue(
+	ctx context.Context,
+	req serverhttp.GetMaintenanceAutovacuumQueueRequestObject,
+) (serverhttp.GetMaintenanceAutovacuumQueueResponseObject, error) {
+	limit, offset := paginationDefaults(req.Params.Limit, req.Params.Offset, defaultAutovacuumQueueLimit)
+	limit = min(limit, maxAutovacuumQueueLimit)
+
+	data, err := s.repo.GetMaintenanceAutovacuumQueue(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database,
+		limit, offset)
+
+	switch {
+	case errors.Is(err, repository.ErrAutovacuumScoresUnsupported):
+		return serverhttp.GetMaintenanceAutovacuumQueue501JSONResponse{
+			Reason: serverhttp.FeatureUnavailableUnsupportedVersion,
+		}, nil
+	case errors.Is(err, repository.ErrNotFound):
+		return serverhttp.GetMaintenanceAutovacuumQueue404Response{}, nil
+	case err != nil:
+		return nil, fmt.Errorf("GetMaintenanceAutovacuumQueue | %w", err)
+	}
+
+	return serverhttp.GetMaintenanceAutovacuumQueue200JSONResponse{
+		Total: data.Total,
+		Rows: mapstruct.SliceMap(data.Rows, func(t dto.MaintenanceAutovacuumQueueRow) serverhttp.MaintenanceAutovacuumQueueRow {
+			return serverhttp.MaintenanceAutovacuumQueueRow{
+				Schema:            t.Schema,
+				Table:             t.Table,
+				Score:             t.Score,
+				XidScore:          t.XidScore,
+				MxidScore:         t.MxidScore,
+				VacuumScore:       t.VacuumScore,
+				VacuumInsertScore: t.VacuumInsertScore,
+				AnalyzeScore:      t.AnalyzeScore,
+				DoVacuum:          t.DoVacuum,
+				DoAnalyze:         t.DoAnalyze,
+				ForWraparound:     t.ForWraparound,
+				Dominant:          (*string)(t.Dominant),
+			}
+		}),
+	}, nil
+}
+
 func (s *Handlers) GetMaintenanceVacuumProgress(
 	ctx context.Context,
 	req serverhttp.GetMaintenanceVacuumProgressRequestObject,

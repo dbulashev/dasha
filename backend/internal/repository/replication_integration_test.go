@@ -4,12 +4,16 @@ package repository
 
 import (
 	"context"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/testinfra"
 )
 
@@ -66,6 +70,26 @@ func TestGetReplicationConfig(t *testing.T) {
 	}
 	assert.True(t, validModes[syncCommit],
 		"synchronous_commit should be a valid mode, got: %s", syncCommit)
+}
+
+func TestGetReplicationRecovery_Primary(t *testing.T) {
+	t.Parallel()
+	pool := testinfra.IsolatePool(t)
+	p := NewTestPgxPool(pool, zap.NewNop())
+	ctx := t.Context()
+
+	vNum, err := p.getServerVersionNum(ctx, pool)
+	require.NoError(t, err)
+
+	got, err := p.getReplicationRecovery(ctx, vNum, pool)
+	require.NoError(t, err)
+
+	want := dto.RecoveryStateNotInRecovery
+	if vNum < pg19VersionNum {
+		want = dto.RecoveryStateUnsupportedVersion
+	}
+
+	assert.Equal(t, dto.ReplicationRecovery{State: want}, *got)
 }
 
 // TestReplication_WithReplica groups all tests that require a streaming replica.
@@ -167,6 +191,64 @@ func TestReplication_WithReplica(t *testing.T) {
 			}
 		}
 		assert.True(t, found, "replica_slot should exist")
+	})
+
+	t.Run("Recovery_Replica", func(t *testing.T) {
+		p := NewTestPgxPool(replica.Pool, zap.NewNop())
+
+		vNum, err := p.getServerVersionNum(ctx, replica.Pool)
+		require.NoError(t, err)
+
+		got, err := p.getReplicationRecovery(ctx, vNum, replica.Pool)
+		require.NoError(t, err)
+
+		if vNum < pg19VersionNum {
+			assert.Equal(t, dto.ReplicationRecovery{State: dto.RecoveryStateUnsupportedVersion}, *got)
+
+			return
+		}
+
+		assert.Equal(t, dto.RecoveryStateOK, got.State)
+		require.NotNil(t, got.PauseState)
+		assert.Equal(t, "not paused", *got.PauseState)
+		require.NotNil(t, got.PromoteTriggered)
+		assert.False(t, *got.PromoteTriggered)
+		assert.NotNil(t, got.LastReplayedEndLsn)
+		assert.NotNil(t, got.LastReplayedTli)
+	})
+
+	t.Run("Recovery_Replica_NoPrivilege", func(t *testing.T) {
+		p := NewTestPgxPool(replica.Pool, zap.NewNop())
+
+		vNum, err := p.getServerVersionNum(ctx, replica.Pool)
+		require.NoError(t, err)
+
+		if vNum < pg19VersionNum {
+			t.Skip("pg_stat_recovery requires PG19+")
+		}
+
+		const role = "recovery_watcher"
+
+		_, err = tc.Admin.Exec(ctx, `CREATE ROLE `+role+` LOGIN PASSWORD 'secret'`)
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			_, _ = tc.Admin.Exec(context.Background(), `DROP ROLE IF EXISTS `+role)
+		})
+
+		require.Eventually(t, func() bool {
+			var n int
+			err := replica.Pool.QueryRow(ctx, `SELECT count(*) FROM pg_roles WHERE rolname = $1`, role).Scan(&n)
+
+			return err == nil && n == 1
+		}, 15*time.Second, 100*time.Millisecond, "role did not replay to the standby")
+
+		rolePool, err := pgxpool.New(ctx, strings.Replace(replica.DSN, "test:test@", role+":secret@", 1))
+		require.NoError(t, err)
+		defer rolePool.Close()
+
+		got, err := p.getReplicationRecovery(ctx, vNum, rolePool)
+		require.NoError(t, err)
+		assert.Equal(t, dto.ReplicationRecovery{State: dto.RecoveryStateNoPrivilege}, *got)
 	})
 
 	t.Run("Slots_Replica", func(t *testing.T) {

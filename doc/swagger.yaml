@@ -2064,6 +2064,45 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
 
+  /api/maintenance/autovacuum-queue:
+    get:
+      operationId: getMaintenanceAutovacuumQueue
+      description: >-
+        Autovacuum's own queue of the current database (pg_stat_autovacuum_scores,
+        PostgreSQL 19+), highest score first, system catalogs included.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - $ref: '#/components/parameters/Database'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+            maximum: 500
+          required: false
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+          required: false
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceAutovacuumQueue'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: The host runs PostgreSQL older than 19 and has no pg_stat_autovacuum_scores
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureUnavailable'
+
   /api/maintenance/transaction-id-danger:
     get:
       operationId: getMaintenanceTransactionIdDanger
@@ -2640,6 +2679,24 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ReplicationConfig'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /api/replication/recovery:
+    get:
+      operationId: getReplicationRecovery
+      description: >-
+        Recovery state of a standby (pg_stat_recovery, PostgreSQL 19+). A host
+        that cannot answer is reported through state, not an error status.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecoveryStatus'
         '404':
           $ref: '#/components/responses/NotFound'
   /api/settings/pg-settings:
@@ -6792,6 +6849,87 @@ components:
           format: int32
           description: ANALYZE processes currently running in the database (pg_stat_progress_analyze).
 
+    MaintenanceAutovacuumQueue:
+      type: object
+      required:
+        - total
+        - rows
+      properties:
+        total:
+          type: integer
+          format: int32
+          description: Tables in pg_stat_autovacuum_scores, regardless of limit and offset.
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/MaintenanceAutovacuumQueueRow'
+
+    MaintenanceAutovacuumQueueRow:
+      type: object
+      required:
+        - schema
+        - table
+        - score
+        - xid_score
+        - mxid_score
+        - vacuum_score
+        - vacuum_insert_score
+        - analyze_score
+        - do_vacuum
+        - do_analyze
+        - for_wraparound
+      properties:
+        schema:
+          type: string
+        table:
+          type: string
+        score:
+          type: number
+          format: double
+        xid_score:
+          type: number
+          format: double
+        mxid_score:
+          type: number
+          format: double
+        vacuum_score:
+          type: number
+          format: double
+        vacuum_insert_score:
+          type: number
+          format: double
+        analyze_score:
+          type: number
+          format: double
+        do_vacuum:
+          type: boolean
+        do_analyze:
+          type: boolean
+        for_wraparound:
+          type: boolean
+        dominant:
+          type: string
+          nullable: true
+          description: >-
+            The component with the largest value: xid | mxid | vacuum |
+            vacuum_insert | analyze. Ties go to the earlier one in that order.
+            Null when every component is zero.
+
+    FeatureUnavailable:
+      type: object
+      required:
+        - reason
+      properties:
+        reason:
+          type: string
+          enum: [unsupported_version, no_storage, no_privilege]
+          # Explicit names: these values exist in other enums and would rename
+          # their constants.
+          x-enum-varnames:
+            - FeatureUnavailableUnsupportedVersion
+            - FeatureUnavailableNoStorage
+            - FeatureUnavailableNoPrivilege
+
     QueryBlocked:
       type: object
       required:
@@ -8120,6 +8258,61 @@ components:
         BacklogBytes:
           type: integer
           format: int64
+          nullable: true
+
+    RecoveryStatus:
+      type: object
+      required:
+        - state
+      properties:
+        state:
+          type: string
+          enum: [ok, not_in_recovery, no_privilege, unsupported_version]
+          # Explicit names: no_privilege and unsupported_version exist in other
+          # enums and would rename their constants.
+          x-enum-varnames:
+            - RecoveryStateOk
+            - RecoveryStateNotInRecovery
+            - RecoveryStateNoPrivilege
+            - RecoveryStateUnsupportedVersion
+          description: >-
+            ok — the fields below are filled; not_in_recovery — the host is a
+            primary (it may have just been promoted); no_privilege — the role
+            lacks pg_read_all_stats and the view hides its values;
+            unsupported_version — PostgreSQL older than 19.
+        pause_state:
+          type: string
+          nullable: true
+          description: 'not paused | pause requested | paused'
+        promote_triggered:
+          type: boolean
+          nullable: true
+        last_replayed_end_lsn:
+          type: string
+          nullable: true
+        last_replayed_tli:
+          type: integer
+          format: int64
+          nullable: true
+        replay_end_lsn:
+          type: string
+          nullable: true
+        replay_end_tli:
+          type: integer
+          format: int64
+          nullable: true
+        recovery_last_xact_time:
+          type: string
+          format: date-time
+          nullable: true
+        since_last_xact_seconds:
+          type: number
+          format: double
+          nullable: true
+          description: Age of recovery_last_xact_time by the server clock.
+        current_chunk_start_time:
+          type: string
+          format: date-time
           nullable: true
 
     ReplicationWalPosition:

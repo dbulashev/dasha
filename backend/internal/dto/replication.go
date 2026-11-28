@@ -45,6 +45,30 @@ type ReplicationSlots struct {
 	Slots     []ReplicationSlot
 }
 
+type RecoveryState string
+
+const (
+	RecoveryStateOK                 RecoveryState = "ok"
+	RecoveryStateNotInRecovery      RecoveryState = "not_in_recovery"
+	RecoveryStateNoPrivilege        RecoveryState = "no_privilege"
+	RecoveryStateUnsupportedVersion RecoveryState = "unsupported_version"
+)
+
+// ReplicationRecovery is pg_stat_recovery (PG 19+). Every field but State is
+// nil unless State is ok.
+type ReplicationRecovery struct {
+	State                 RecoveryState
+	PauseState            *string
+	PromoteTriggered      *bool
+	LastReplayedEndLsn    *string
+	LastReplayedTli       *int64
+	ReplayEndLsn          *string
+	ReplayEndTli          *int64
+	RecoveryLastXactTime  *time.Time
+	SinceLastXactSeconds  *float64
+	CurrentChunkStartTime *time.Time
+}
+
 type WalPosition struct {
 	Lsn        *string
 	CapturedAt time.Time

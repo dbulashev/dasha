@@ -159,3 +159,30 @@ func (s *Handlers) GetReplicationConfig(
 
 	return ret, nil
 }
+
+func (s *Handlers) GetReplicationRecovery(
+	ctx context.Context,
+	req serverhttp.GetReplicationRecoveryRequestObject,
+) (serverhttp.GetReplicationRecoveryResponseObject, error) {
+	rec, err := s.repo.GetReplicationRecovery(ctx, req.Params.ClusterName, req.Params.Instance)
+	if errors.Is(err, repository.ErrNotFound) {
+		return serverhttp.GetReplicationRecovery404Response{}, nil
+	}
+
+	if err != nil {
+		return nil, fmt.Errorf("GetReplicationRecovery | %w", err)
+	}
+
+	return serverhttp.GetReplicationRecovery200JSONResponse{
+		State:                 serverhttp.RecoveryStatusState(rec.State),
+		PauseState:            rec.PauseState,
+		PromoteTriggered:      rec.PromoteTriggered,
+		LastReplayedEndLsn:    rec.LastReplayedEndLsn,
+		LastReplayedTli:       rec.LastReplayedTli,
+		ReplayEndLsn:          rec.ReplayEndLsn,
+		ReplayEndTli:          rec.ReplayEndTli,
+		RecoveryLastXactTime:  rec.RecoveryLastXactTime,
+		SinceLastXactSeconds:  rec.SinceLastXactSeconds,
+		CurrentChunkStartTime: rec.CurrentChunkStartTime,
+	}, nil
+}

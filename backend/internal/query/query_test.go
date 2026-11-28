@@ -253,6 +253,12 @@ func TestFindTemplate_PG19Selection(t *testing.T) {
 		{"replication/slots", 180000, "    failover,\n", "    slotsync_skip_reason,\n"},
 		{"replication/slots", 170000, "    failover,\n", "NULL::bool AS failover"},
 		{"replication/slots", 160000, "NULL::bool AS failover", "    failover,\n"},
+
+		{"maintenance/autovacuum_summary", 190000, "pg_stat_autovacuum_scores", "NULL::int AS running_vacuums_manual"},
+		{"maintenance/autovacuum_summary", 180000, "NULL::int AS running_vacuums_manual", "pg_stat_autovacuum_scores"},
+
+		{"replication/recovery", 190000, "pg_stat_recovery", ""},
+		{"maintenance/autovacuum_scores", 190000, "pg_stat_autovacuum_scores", ""},
 	}
 
 	for _, tt := range tests {

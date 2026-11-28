@@ -47,6 +47,7 @@ import type {
   DatabaseSize,
   DeleteHealthScoreWeightsParams,
   ErrorMessage,
+  FeatureUnavailable,
   FkTypeMismatch,
   FksPossibleNulls,
   FksPossibleSimilar,
@@ -105,6 +106,7 @@ import type {
   GetLogsPlansParams,
   GetLogsScanGroupsParams,
   GetMaintenanceAutovacuumFreezeMaxAgeParams,
+  GetMaintenanceAutovacuumQueueParams,
   GetMaintenanceAutovacuumSummaryParams,
   GetMaintenanceColdStatusParams,
   GetMaintenanceInfoParams,
@@ -129,6 +131,7 @@ import type {
   GetQueriesTop10ChartParams,
   GetQueryStatsStatusParams,
   GetReplicationConfigParams,
+  GetReplicationRecoveryParams,
   GetReplicationSlotsForecastParams,
   GetReplicationSlotsParams,
   GetReplicationStatusParams,
@@ -196,6 +199,7 @@ import type {
   LogSearchResult,
   LogSourceCheck,
   MaintenanceAutovacuumFreezeMaxAge,
+  MaintenanceAutovacuumQueue,
   MaintenanceAutovacuumSummary,
   MaintenanceInfo,
   MaintenanceTransactionIdDanger,
@@ -224,6 +228,7 @@ import type {
   QueryTop10ByTime,
   QueryTop10ByWal,
   QueryTop10Chart,
+  RecoveryStatus,
   ReplicationConfig,
   ReplicationSlot,
   ReplicationSlotsForecast,
@@ -7762,6 +7767,112 @@ export function useGetMaintenanceAutovacuumSummary<TData = Awaited<ReturnType<ty
 
 
 
+export type getMaintenanceAutovacuumQueueResponse200 = {
+  data: MaintenanceAutovacuumQueue
+  status: 200
+}
+
+export type getMaintenanceAutovacuumQueueResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getMaintenanceAutovacuumQueueResponse501 = {
+  data: FeatureUnavailable
+  status: 501
+}
+
+export type getMaintenanceAutovacuumQueueResponseSuccess = (getMaintenanceAutovacuumQueueResponse200) & {
+  headers: Headers;
+};
+export type getMaintenanceAutovacuumQueueResponseError = (getMaintenanceAutovacuumQueueResponse404 | getMaintenanceAutovacuumQueueResponse501) & {
+  headers: Headers;
+};
+
+export type getMaintenanceAutovacuumQueueResponse = (getMaintenanceAutovacuumQueueResponseSuccess | getMaintenanceAutovacuumQueueResponseError)
+
+export const getGetMaintenanceAutovacuumQueueUrl = (params: GetMaintenanceAutovacuumQueueParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/maintenance/autovacuum-queue?${stringifiedParams}` : `/api/maintenance/autovacuum-queue`
+}
+
+/**
+ * Autovacuum's own queue of the current database (pg_stat_autovacuum_scores, PostgreSQL 19+), highest score first, system catalogs included.
+ */
+export const getMaintenanceAutovacuumQueue = async (params: GetMaintenanceAutovacuumQueueParams, options?: Parameters<typeof customFetch>[1]): Promise<getMaintenanceAutovacuumQueueResponse> => {
+
+  return customFetch<getMaintenanceAutovacuumQueueResponse>(getGetMaintenanceAutovacuumQueueUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetMaintenanceAutovacuumQueueQueryKey = (params?: MaybeRef<GetMaintenanceAutovacuumQueueParams>,) => {
+    return [
+    'api','maintenance','autovacuum-queue', ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetMaintenanceAutovacuumQueueQueryOptions = <TData = Awaited<ReturnType<typeof getMaintenanceAutovacuumQueue>>, TError = NotFoundResponse | FeatureUnavailable>(params: MaybeRef<GetMaintenanceAutovacuumQueueParams>, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMaintenanceAutovacuumQueue>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  getGetMaintenanceAutovacuumQueueQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getMaintenanceAutovacuumQueue>>> = ({ signal }) => getMaintenanceAutovacuumQueue(unref(params), { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getMaintenanceAutovacuumQueue>>, TError, TData>
+}
+
+export type GetMaintenanceAutovacuumQueueQueryResult = NonNullable<Awaited<ReturnType<typeof getMaintenanceAutovacuumQueue>>>
+export type GetMaintenanceAutovacuumQueueQueryError = NotFoundResponse | FeatureUnavailable
+
+
+
+export function useGetMaintenanceAutovacuumQueue<TData = Awaited<ReturnType<typeof getMaintenanceAutovacuumQueue>>, TError = NotFoundResponse | FeatureUnavailable>(
+ params: MaybeRef<GetMaintenanceAutovacuumQueueParams>, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getMaintenanceAutovacuumQueue>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetMaintenanceAutovacuumQueueQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey };
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey;
+
+  return query;
+}
+
+
+
+
+
+
 export type getMaintenanceTransactionIdDangerResponse200 = {
   data: MaintenanceTransactionIdDanger[]
   status: 200
@@ -10410,6 +10521,107 @@ export function useGetReplicationConfig<TData = Awaited<ReturnType<typeof getRep
  ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getGetReplicationConfigQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey };
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey;
+
+  return query;
+}
+
+
+
+
+
+
+export type getReplicationRecoveryResponse200 = {
+  data: RecoveryStatus
+  status: 200
+}
+
+export type getReplicationRecoveryResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getReplicationRecoveryResponseSuccess = (getReplicationRecoveryResponse200) & {
+  headers: Headers;
+};
+export type getReplicationRecoveryResponseError = (getReplicationRecoveryResponse404) & {
+  headers: Headers;
+};
+
+export type getReplicationRecoveryResponse = (getReplicationRecoveryResponseSuccess | getReplicationRecoveryResponseError)
+
+export const getGetReplicationRecoveryUrl = (params: GetReplicationRecoveryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/replication/recovery?${stringifiedParams}` : `/api/replication/recovery`
+}
+
+/**
+ * Recovery state of a standby (pg_stat_recovery, PostgreSQL 19+). A host that cannot answer is reported through state, not an error status.
+ */
+export const getReplicationRecovery = async (params: GetReplicationRecoveryParams, options?: Parameters<typeof customFetch>[1]): Promise<getReplicationRecoveryResponse> => {
+
+  return customFetch<getReplicationRecoveryResponse>(getGetReplicationRecoveryUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetReplicationRecoveryQueryKey = (params?: MaybeRef<GetReplicationRecoveryParams>,) => {
+    return [
+    'api','replication','recovery', ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetReplicationRecoveryQueryOptions = <TData = Awaited<ReturnType<typeof getReplicationRecovery>>, TError = NotFoundResponse>(params: MaybeRef<GetReplicationRecoveryParams>, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getReplicationRecovery>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  getGetReplicationRecoveryQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getReplicationRecovery>>> = ({ signal }) => getReplicationRecovery(unref(params), { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getReplicationRecovery>>, TError, TData>
+}
+
+export type GetReplicationRecoveryQueryResult = NonNullable<Awaited<ReturnType<typeof getReplicationRecovery>>>
+export type GetReplicationRecoveryQueryError = NotFoundResponse
+
+
+
+export function useGetReplicationRecovery<TData = Awaited<ReturnType<typeof getReplicationRecovery>>, TError = NotFoundResponse>(
+ params: MaybeRef<GetReplicationRecoveryParams>, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getReplicationRecovery>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetReplicationRecoveryQueryOptions(params,options)
 
   const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey };
 

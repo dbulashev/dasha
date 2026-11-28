@@ -125,6 +125,11 @@ type Repository interface {
 	) ([]dto.MaintenanceTransactionIdDanger, error)
 	GetMaintenanceVacuumProgress(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.MaintenanceVacuumProgress, error)
 	GetMaintenanceAutovacuumSummary(ctx context.Context, clusterName, instanceName, databaseName string) (*dto.MaintenanceAutovacuumSummary, error)
+	GetMaintenanceAutovacuumQueue(
+		ctx context.Context,
+		clusterName, instanceName, databaseName string,
+		limit, offset int,
+	) (*dto.MaintenanceAutovacuumQueue, error)
 	GetHotSampleTables(ctx context.Context, clusterName, instanceName, databaseName string, schema, object *string) ([]hotobjects.AnchorRow, *time.Time, bool, error)
 	GetHotSampleIndexes(ctx context.Context, clusterName, instanceName, databaseName string, schema, object *string) ([]hotobjects.AnchorRow, *time.Time, bool, error)
 	GetColumnCatalog(
@@ -174,6 +179,7 @@ type Repository interface {
 	GetReplicationWalPosition(ctx context.Context, clusterName, instanceName string) (*dto.WalPosition, error)
 	GetReplicationSlotsForecast(ctx context.Context, clusterName, instanceName, fromLsn string, fromTime time.Time) (*dto.ReplicationSlotsForecast, error)
 	GetReplicationConfig(ctx context.Context, clusterName, instanceName string) (*dto.ReplicationConfig, error)
+	GetReplicationRecovery(ctx context.Context, clusterName, instanceName string) (*dto.ReplicationRecovery, error)
 	GetTablesSchemas(ctx context.Context, clusterName, instanceName, databaseName string) ([]string, error)
 	GetTablesSearch(ctx context.Context, clusterName, instanceName, databaseName, schemaName, q string, limit int) ([]string, error)
 	GetTablesTopKBySize(ctx context.Context, clusterName, instanceName, databaseName string, limit int) ([]dto.TableTopKBySize, error)

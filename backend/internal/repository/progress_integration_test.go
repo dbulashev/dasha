@@ -57,6 +57,12 @@ func TestVersionedQueries_ColumnShape(t *testing.T) {
 			"tablespaces_total", "tablespaces_streamed", "backup_type",
 		}},
 		{enums.QueryMaintenanceVacuumProgress, []string{"pid", "phase", "started_by", "mode"}},
+		{enums.QueryMaintenanceAutovacuumSummary, []string{
+			"tables_due_vacuum_only", "tables_due_analyze_only", "tables_due_both", "tables_total",
+			"running_vacuums", "running_analyzes",
+			"running_vacuums_manual", "running_vacuums_autovacuum", "running_vacuums_wraparound",
+			"running_analyzes_manual", "running_analyzes_autovacuum",
+		}},
 		{enums.QueryReplicationSlots, []string{
 			"slot_name", "slot_type", "database", "active", "wal_status", "safe_wal_size", "backlog_bytes",
 			"failover", "synced", "slotsync_skip_reason", "on_standby",

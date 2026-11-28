@@ -195,6 +195,83 @@ func (p *PgxPool) getReplicationSlots(
 	return ret, nil
 }
 
+const recoveryMinVersionNum = 190000
+
+// GetReplicationRecovery reads pg_stat_recovery. A host that cannot answer —
+// too old, not in recovery, or hiding the view from this role — is reported
+// through State rather than an error: it is an ordinary state of the host.
+func (p *PgxPool) GetReplicationRecovery(ctx context.Context, clusterName, instanceName string) (*dto.ReplicationRecovery, error) {
+	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, "")
+	if err != nil {
+		return nil, fmt.Errorf("GetReplicationRecovery | %w", err)
+	}
+
+	vNum, err := p.getServerVersionNum(ctx, pool)
+	if err != nil {
+		return nil, fmt.Errorf("get server version | %w", err)
+	}
+
+	ret, err := p.getReplicationRecovery(ctx, vNum, pool)
+	if err != nil {
+		return nil, fmt.Errorf("getReplicationRecovery | %w", err)
+	}
+
+	return ret, nil
+}
+
+func (p *PgxPool) getReplicationRecovery(
+	ctx context.Context,
+	serverVersion int,
+	pool *pgxpool.Pool,
+) (*dto.ReplicationRecovery, error) {
+	if serverVersion < recoveryMinVersionNum {
+		return &dto.ReplicationRecovery{State: dto.RecoveryStateUnsupportedVersion}, nil
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	qStr, err := query.Get(serverVersion, enums.QueryReplicationRecovery, nil)
+	if err != nil {
+		return nil, fmt.Errorf("getReplicationRecovery | %w", err)
+	}
+
+	var (
+		inRecovery, canReadAllStats bool
+		ret                         dto.ReplicationRecovery
+	)
+
+	err = pool.QueryRow(ctx, qStr).Scan(
+		&inRecovery, &canReadAllStats,
+		&ret.PauseState, &ret.PromoteTriggered,
+		&ret.LastReplayedEndLsn, &ret.LastReplayedTli,
+		&ret.ReplayEndLsn, &ret.ReplayEndTli,
+		&ret.RecoveryLastXactTime, &ret.SinceLastXactSeconds,
+		&ret.CurrentChunkStartTime,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("getReplicationRecovery | %w", err)
+	}
+
+	switch {
+	case !inRecovery:
+		return &dto.ReplicationRecovery{State: dto.RecoveryStateNotInRecovery}, nil
+	case !canReadAllStats && recoveryIsEmpty(&ret):
+		return &dto.ReplicationRecovery{State: dto.RecoveryStateNoPrivilege}, nil
+	}
+
+	ret.State = dto.RecoveryStateOK
+
+	return &ret, nil
+}
+
+func recoveryIsEmpty(r *dto.ReplicationRecovery) bool {
+	return r.PauseState == nil && r.PromoteTriggered == nil &&
+		r.LastReplayedEndLsn == nil && r.LastReplayedTli == nil &&
+		r.ReplayEndLsn == nil && r.ReplayEndTli == nil &&
+		r.RecoveryLastXactTime == nil && r.CurrentChunkStartTime == nil
+}
+
 func (p *PgxPool) GetReplicationWalPosition(ctx context.Context, clusterName, instanceName string) (*dto.WalPosition, error) {
 	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, "")
 	if err != nil {
