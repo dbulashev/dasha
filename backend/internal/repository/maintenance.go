@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -320,19 +321,17 @@ func (p *PgxPool) getMaintenanceVacuumProgress(
 
 	for rows.Next() {
 		var (
-			pid   int32
+			row   dto.MaintenanceVacuumProgress
 			phase pgtype.Text
 		)
 
-		err = rows.Scan(&pid, &phase)
+		err = rows.Scan(&row.Pid, &phase, &row.StartedBy, &row.Mode)
 		if err != nil {
 			return nil, fmt.Errorf("getMaintenanceVacuumProgress | %w", err)
 		}
 
-		ret = append(ret, dto.MaintenanceVacuumProgress{
-			Pid:   pid,
-			Phase: phase.String,
-		})
+		row.Phase = phase.String
+		ret = append(ret, row)
 	}
 
 	if err := rows.Err(); err != nil {
@@ -364,12 +363,120 @@ func (p *PgxPool) getMaintenanceAutovacuumSummary(
 		&ret.TablesTotal,
 		&ret.RunningVacuums,
 		&ret.RunningAnalyzes,
+		&ret.RunningVacuumsManual,
+		&ret.RunningVacuumsAutovacuum,
+		&ret.RunningVacuumsWraparound,
+		&ret.RunningAnalyzesManual,
+		&ret.RunningAnalyzesAutovacuum,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("getMaintenanceAutovacuumSummary | %w", err)
 	}
 
+	ret.Source = dto.AutovacuumSummarySourceFormula
+	if serverVersion >= autovacuumScoresMinVersionNum {
+		ret.Source = dto.AutovacuumSummarySourceScores
+	}
+
 	return &ret, nil
+}
+
+const autovacuumScoresMinVersionNum = 190000
+
+var ErrAutovacuumScoresUnsupported = errors.New("pg_stat_autovacuum_scores requires PostgreSQL 19 or newer")
+
+// GetMaintenanceAutovacuumQueue reads pg_stat_autovacuum_scores of one
+// database, highest score first.
+func (p *PgxPool) GetMaintenanceAutovacuumQueue(
+	ctx context.Context,
+	clusterName, instanceName, databaseName string,
+	limit, offset int,
+) (*dto.MaintenanceAutovacuumQueue, error) {
+	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, databaseName)
+	if err != nil {
+		return nil, fmt.Errorf("GetMaintenanceAutovacuumQueue | %w", err)
+	}
+
+	vNum, err := p.getServerVersionNum(ctx, pool)
+	if err != nil {
+		return nil, fmt.Errorf("get server version | %w", err)
+	}
+
+	ret, err := p.getMaintenanceAutovacuumQueue(ctx, vNum, pool, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("getMaintenanceAutovacuumQueue | %w", err)
+	}
+
+	return ret, nil
+}
+
+func (p *PgxPool) getMaintenanceAutovacuumQueue(
+	ctx context.Context,
+	serverVersion int,
+	pool *pgxpool.Pool,
+	limit, offset int,
+) (*dto.MaintenanceAutovacuumQueue, error) {
+	if serverVersion < autovacuumScoresMinVersionNum {
+		return nil, ErrAutovacuumScoresUnsupported
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
+	defer cancel()
+
+	qStr, err := query.Get(serverVersion, enums.QueryMaintenanceAutovacuumScores, nil)
+	if err != nil {
+		return nil, fmt.Errorf("getMaintenanceAutovacuumQueue | %w", err)
+	}
+
+	rows, err := pool.Query(ctx, qStr, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("getMaintenanceAutovacuumQueue | %w", err)
+	}
+	defer rows.Close()
+
+	ret := &dto.MaintenanceAutovacuumQueue{Rows: make([]dto.MaintenanceAutovacuumQueueRow, 0, limit)}
+
+	for rows.Next() {
+		var (
+			schema, table                         pgtype.Text
+			score, xid, mxid, vac, vacIns, analyz pgtype.Float8
+			doVacuum, doAnalyze, forWraparound    pgtype.Bool
+		)
+
+		err = rows.Scan(&ret.Total, &schema, &table,
+			&score, &xid, &mxid, &vac, &vacIns, &analyz,
+			&doVacuum, &doAnalyze, &forWraparound)
+		if err != nil {
+			return nil, fmt.Errorf("getMaintenanceAutovacuumQueue | %w", err)
+		}
+
+		if !table.Valid {
+			continue
+		}
+
+		row := dto.MaintenanceAutovacuumQueueRow{
+			Schema:            schema.String,
+			Table:             table.String,
+			Score:             score.Float64,
+			XidScore:          xid.Float64,
+			MxidScore:         mxid.Float64,
+			VacuumScore:       vac.Float64,
+			VacuumInsertScore: vacIns.Float64,
+			AnalyzeScore:      analyz.Float64,
+			DoVacuum:          doVacuum.Bool,
+			DoAnalyze:         doAnalyze.Bool,
+			ForWraparound:     forWraparound.Bool,
+		}
+		row.Dominant = row.DominantComponent()
+
+		ret.Rows = append(ret.Rows, row)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("getMaintenanceAutovacuumQueue | %w", err)
+	}
+
+	return ret, nil
 }
 
 func convertPgTimestampToTime(ts pgtype.Timestamp) *time.Time {

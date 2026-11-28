@@ -9,8 +9,8 @@ import (
 )
 
 // dueForCapture reports whether one sweep target is due, recording the attempt
-// in attempts. A target with no stored snapshot is judged by its last attempt
-// instead — one that never yields a snapshot (an unreachable host, a server
+// in attempts. The target is judged by the newer of its stored snapshot and its
+// last attempt — one that keeps failing to store (an unreachable host, a server
 // without the source view) would otherwise be retried on every daemon tick
 // rather than once per schedule tick.
 func (d *Daemon) dueForCapture(
@@ -24,8 +24,8 @@ func (d *Daemon) dueForCapture(
 	defer d.mu.Unlock()
 
 	t, ok := last[key]
-	if !ok {
-		t, ok = attempts[key]
+	if a, tried := attempts[key]; tried && (!ok || a.After(t)) {
+		t, ok = a, true
 	}
 
 	if ok && !cronsched.Due(sched, t, now) {

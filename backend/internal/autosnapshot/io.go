@@ -5,15 +5,18 @@ import (
 	"errors"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
 
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/pkg/cronsched"
 	"github.com/dbulashev/dasha/internal/statio"
+	"github.com/dbulashev/dasha/internal/statlock"
 )
 
 // processIOSnapshots runs one pg_stat_io sweep: every cluster×host whose cron
-// schedule has fired since its last capture gets a fresh raw cumulative slice.
+// schedule has fired since its last capture gets a fresh raw cumulative slice,
+// and a pg_stat_lock one beside it. Both follow the pg_stat_io schedule.
 // Runs on the leader inside the daemon loop.
 //
 // Unlike hot-objects there is no anchor to seed: the previous snapshot is the
@@ -46,7 +49,7 @@ func (d *Daemon) processIOSnapshots(ctx context.Context, cfg Config) {
 		return
 	}
 
-	now := time.Now().UTC()
+	now := d.nowUTC()
 
 	for _, cl := range cls {
 		for _, h := range cl.Hosts {
@@ -57,14 +60,20 @@ func (d *Daemon) processIOSnapshots(ctx context.Context, cfg Config) {
 				continue
 			}
 
-			d.takeIOSnapshotSafe(ctx, cl, host)
+			if d.takeIOSnapshotSafe(ctx, cl, host) {
+				d.takeLockSnapshotSafe(ctx, cl, host)
+			}
 		}
 	}
 }
 
 // takeIOSnapshotSafe bounds one capture with the per-host budget and recovers
-// panics, mirroring processClusterSafe.
-func (d *Daemon) takeIOSnapshotSafe(ctx context.Context, cl config.Cluster, host string) {
+// panics, mirroring processClusterSafe. It reports false only when the host
+// could not be reached, so the pg_stat_lock capture does not wait out a second
+// timeout on it.
+func (d *Daemon) takeIOSnapshotSafe(ctx context.Context, cl config.Cluster, host string) (reachable bool) {
+	reachable = true
+
 	defer func() {
 		if r := recover(); r != nil {
 			d.logger.Error("io: recovered panic taking snapshot",
@@ -78,10 +87,10 @@ func (d *Daemon) takeIOSnapshotSafe(ctx context.Context, cl config.Cluster, host
 	cctx, cancel := context.WithTimeout(ctx, clusterTickBudgetPerHost)
 	defer cancel()
 
-	d.takeIOSnapshot(cctx, string(cl.Name), host)
+	return d.takeIOSnapshot(cctx, string(cl.Name), host)
 }
 
-func (d *Daemon) takeIOSnapshot(ctx context.Context, clusterName, host string) {
+func (d *Daemon) takeIOSnapshot(ctx context.Context, clusterName, host string) (reachable bool) {
 	snap, err := d.repo.GetIOSample(ctx, clusterName, host)
 
 	// A host older than PG 16 has no pg_stat_io: a deployment fact, not a
@@ -90,7 +99,7 @@ func (d *Daemon) takeIOSnapshot(ctx context.Context, clusterName, host string) {
 		d.logger.Debug("io: host has no pg_stat_io, skipping",
 			zap.String("cluster", clusterName), zap.String("host", host))
 
-		return
+		return true
 	}
 
 	if err != nil {
@@ -99,23 +108,84 @@ func (d *Daemon) takeIOSnapshot(ctx context.Context, clusterName, host string) {
 		d.logger.Warn("io: sample failed",
 			zap.String("cluster", clusterName), zap.String("host", host), zap.Error(err))
 
-		return
+		return !hostUnreachable(ctx, err)
 	}
 
 	if err := d.store.InsertIOSnapshot(ctx, clusterName, host, *snap); err != nil {
 		d.logger.Warn("io: store snapshot failed",
 			zap.String("cluster", clusterName), zap.String("host", host), zap.Error(err))
 
-		return
+		return true
 	}
 
 	d.logger.Debug("io: snapshot stored",
 		zap.String("cluster", clusterName),
 		zap.String("host", host),
 		zap.Int("rows", len(snap.Rows)))
+
+	return true
 }
 
-// maybeRunIORetention drops pg_stat_io partitions older than
+// hostUnreachable tells a failed connection or a spent host budget from a
+// failed query on a live host. A child deadline alone (a busy pool, a slow
+// query) does not count: a dead host fails the shorter connect timeout first.
+func hostUnreachable(ctx context.Context, err error) bool {
+	var connErr *pgconn.ConnectError
+
+	return errors.As(err, &connErr) || ctx.Err() != nil
+}
+
+// takeLockSnapshotSafe has its own budget and recover, so a pg_stat_lock
+// failure never costs the pg_stat_io capture of the same tick, nor the reverse
+// unless the host is down altogether.
+func (d *Daemon) takeLockSnapshotSafe(ctx context.Context, cl config.Cluster, host string) {
+	defer func() {
+		if r := recover(); r != nil {
+			d.logger.Error("locks stat: recovered panic taking snapshot",
+				zap.String("cluster", string(cl.Name)),
+				zap.String("host", host),
+				zap.Any("panic", r),
+				zap.Stack("stack"))
+		}
+	}()
+
+	cctx, cancel := context.WithTimeout(ctx, clusterTickBudgetPerHost)
+	defer cancel()
+
+	d.takeLockSnapshot(cctx, string(cl.Name), host)
+}
+
+func (d *Daemon) takeLockSnapshot(ctx context.Context, clusterName, host string) {
+	snap, err := d.repo.GetLockSample(ctx, clusterName, host)
+
+	if errors.Is(err, statlock.ErrUnsupportedVersion) {
+		d.logger.Debug("locks stat: host has no pg_stat_lock, skipping",
+			zap.String("cluster", clusterName), zap.String("host", host))
+
+		return
+	}
+
+	if err != nil {
+		d.logger.Warn("locks stat: sample failed",
+			zap.String("cluster", clusterName), zap.String("host", host), zap.Error(err))
+
+		return
+	}
+
+	if err := d.store.InsertLockSnapshot(ctx, clusterName, host, *snap); err != nil {
+		d.logger.Warn("locks stat: store snapshot failed",
+			zap.String("cluster", clusterName), zap.String("host", host), zap.Error(err))
+
+		return
+	}
+
+	d.logger.Debug("locks stat: snapshot stored",
+		zap.String("cluster", clusterName),
+		zap.String("host", host),
+		zap.Int("rows", len(snap.Rows)))
+}
+
+// maybeRunIORetention drops pg_stat_io and pg_stat_lock partitions older than
 // cfg.IORetentionDays. Age-based and independent from both the size-based pgss
 // retention and the hot-objects one; runs at most once per retentionInterval.
 func (d *Daemon) maybeRunIORetention(ctx context.Context, cfg Config) {

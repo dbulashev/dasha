@@ -1,7 +1,8 @@
--- duplicate
 SELECT
     pid,
-    phase
+    phase,
+    started_by,
+    mode
 FROM
     pg_stat_progress_vacuum
 WHERE

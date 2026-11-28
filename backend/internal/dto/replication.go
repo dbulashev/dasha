@@ -33,6 +33,40 @@ type ReplicationSlot struct {
 	WalStatus    string
 	SafeWalSize  *int64
 	BacklogBytes *int64
+	// Failover / Synced are PG 17+, SlotsyncSkipReason is PG 19+.
+	Failover           *bool
+	Synced             *bool
+	SlotsyncSkipReason *string
+}
+
+type ReplicationSlots struct {
+	// OnStandby comes from the slot rows, so it is nil when there are none.
+	OnStandby *bool
+	Slots     []ReplicationSlot
+}
+
+type RecoveryState string
+
+const (
+	RecoveryStateOK                 RecoveryState = "ok"
+	RecoveryStateNotInRecovery      RecoveryState = "not_in_recovery"
+	RecoveryStateNoPrivilege        RecoveryState = "no_privilege"
+	RecoveryStateUnsupportedVersion RecoveryState = "unsupported_version"
+)
+
+// ReplicationRecovery is pg_stat_recovery (PG 19+). Every field but State is
+// nil unless State is ok.
+type ReplicationRecovery struct {
+	State                 RecoveryState
+	PauseState            *string
+	PromoteTriggered      *bool
+	LastReplayedEndLsn    *string
+	LastReplayedTli       *int64
+	ReplayEndLsn          *string
+	ReplayEndTli          *int64
+	RecoveryLastXactTime  *time.Time
+	SinceLastXactSeconds  *float64
+	CurrentChunkStartTime *time.Time
 }
 
 type WalPosition struct {

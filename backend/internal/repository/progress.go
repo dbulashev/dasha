@@ -149,10 +149,12 @@ func (p *PgxPool) getProgressAnalyze(ctx context.Context, serverVersion int, poo
 			datname, tableName, currentChildTable                               string
 			phase                                                               pgtype.Text
 			sampleBlksTotal, sampleBlksScanned, extStatsTotal, extStatsComputed int64
+			startedBy                                                           *string
 		)
 
 		err = rows.Scan(&pid, &datname, &tableName, &phase,
-			&sampleBlksTotal, &sampleBlksScanned, &extStatsTotal, &extStatsComputed, &currentChildTable)
+			&sampleBlksTotal, &sampleBlksScanned, &extStatsTotal, &extStatsComputed, &currentChildTable,
+			&startedBy)
 		if err != nil {
 			return nil, fmt.Errorf("getProgressAnalyze | %w", err)
 		}
@@ -167,6 +169,7 @@ func (p *PgxPool) getProgressAnalyze(ctx context.Context, serverVersion int, poo
 			ExtStatsTotal:     extStatsTotal,
 			ExtStatsComputed:  extStatsComputed,
 			CurrentChildTable: currentChildTable,
+			StartedBy:         startedBy,
 		})
 	}
 
@@ -200,10 +203,11 @@ func (p *PgxPool) getProgressBaseBackup(ctx context.Context, serverVersion int, 
 			backupTotal, backupStreamed           int64
 			progressPercentage                    pgtype.Float8
 			tablespacesTotal, tablespacesStreamed int64
+			backupType                            *string
 		)
 
 		err = rows.Scan(&pid, &phase, &backupTotal, &backupStreamed,
-			&progressPercentage, &tablespacesTotal, &tablespacesStreamed)
+			&progressPercentage, &tablespacesTotal, &tablespacesStreamed, &backupType)
 		if err != nil {
 			return nil, fmt.Errorf("getProgressBaseBackup | %w", err)
 		}
@@ -221,6 +225,7 @@ func (p *PgxPool) getProgressBaseBackup(ctx context.Context, serverVersion int, 
 			ProgressPercentage:  pct,
 			TablespacesTotal:    tablespacesTotal,
 			TablespacesStreamed: tablespacesStreamed,
+			BackupType:          backupType,
 		})
 	}
 
@@ -249,32 +254,20 @@ func (p *PgxPool) getProgressCluster(ctx context.Context, serverVersion int, poo
 
 	for rows.Next() {
 		var (
-			pid                                                                                     int32
-			datname, tableName, command, clusterIndex                                               string
-			phase                                                                                   pgtype.Text
-			heapTuplesScanned, heapTuplesWritten, heapBlksTotal, heapBlksScanned, indexRebuildCount int64
+			row   dto.ProgressCluster
+			phase pgtype.Text
 		)
 
-		err = rows.Scan(&pid, &datname, &tableName, &command, &phase,
-			&clusterIndex, &heapTuplesScanned, &heapTuplesWritten,
-			&heapBlksTotal, &heapBlksScanned, &indexRebuildCount)
+		err = rows.Scan(&row.Pid, &row.Datname, &row.TableName, &row.Command, &phase,
+			&row.ClusterIndex, &row.HeapTuplesScanned, &row.HeapTuplesWritten,
+			&row.HeapTuplesInserted, &row.HeapTuplesUpdated, &row.HeapTuplesDeleted,
+			&row.HeapBlksTotal, &row.HeapBlksScanned, &row.IndexRebuildCount)
 		if err != nil {
 			return nil, fmt.Errorf("getProgressCluster | %w", err)
 		}
 
-		ret = append(ret, dto.ProgressCluster{
-			Pid:               pid,
-			Datname:           datname,
-			TableName:         tableName,
-			Command:           command,
-			Phase:             phase.String,
-			ClusterIndex:      clusterIndex,
-			HeapTuplesScanned: heapTuplesScanned,
-			HeapTuplesWritten: heapTuplesWritten,
-			HeapBlksTotal:     heapBlksTotal,
-			HeapBlksScanned:   heapBlksScanned,
-			IndexRebuildCount: indexRebuildCount,
-		})
+		row.Phase = phase.String
+		ret = append(ret, row)
 	}
 
 	if err := rows.Err(); err != nil {
@@ -472,12 +465,13 @@ func (p *PgxPool) getProgressVacuum(ctx context.Context, serverVersion int, pool
 			heapBlksTotal, heapBlksScanned, heapBlksVacuumed, indexVacuumCount int64
 			numDeadTuples                                                      int64
 			maxDeadTuples, deadTupleBytes, maxDeadTupleBytes                   pgtype.Int8
+			startedBy, mode                                                    *string
 		)
 
 		err = rows.Scan(&pid, &datname, &tableName, &phase,
 			&heapBlksTotal, &heapBlksScanned, &heapBlksVacuumed,
 			&indexVacuumCount, &maxDeadTuples, &numDeadTuples,
-			&deadTupleBytes, &maxDeadTupleBytes)
+			&deadTupleBytes, &maxDeadTupleBytes, &startedBy, &mode)
 		if err != nil {
 			return nil, fmt.Errorf("getProgressVacuum | %w", err)
 		}
@@ -492,6 +486,8 @@ func (p *PgxPool) getProgressVacuum(ctx context.Context, serverVersion int, pool
 			HeapBlksVacuumed: heapBlksVacuumed,
 			IndexVacuumCount: indexVacuumCount,
 			NumDeadTuples:    numDeadTuples,
+			StartedBy:        startedBy,
+			Mode:             mode,
 		}
 
 		if maxDeadTuples.Valid {

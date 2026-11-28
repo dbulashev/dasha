@@ -491,7 +491,8 @@
         "writing new heap": "Neuen Heap schreiben",
         "swapping relation files": "Relationsdateien tauschen",
         "rebuilding index": "Index neu aufbauen",
-        "performing final cleanup": "Abschlussbereinigung"
+        "performing final cleanup": "Abschlussbereinigung",
+        "catch-up": "Änderungen nachholen"
       },
       "index": {
         "initializing": "Initialisierung",
@@ -517,6 +518,37 @@
         "waiting for wal archiving to finish": "Auf WAL-Archivierung warten",
         "transferring wal files": "WAL-Dateien übertragen"
       }
+    },
+    "startedByTitle": "Gestartet von",
+    "modeTitle": "Modus",
+    "startedBy": {
+      "manual": "manuell",
+      "autovacuum": "Autovacuum",
+      "autovacuum_wraparound": "Wraparound"
+    },
+    "mode": {
+      "normal": "normal",
+      "aggressive": "aggressiv",
+      "failsafe": "Failsafe"
+    },
+    "modeHint": {
+      "aggressive": "Ein aggressiver VACUUM besucht jede nicht vollständig eingefrorene Seite, um relfrozenxid voranzubringen.",
+      "failsafe": "Die Tabelle ist nahe am Wraparound: VACUUM hat Cost Delay und Indexbereinigung abgeschaltet, um schneller einzufrieren."
+    },
+    "vacuumWarning": {
+      "failsafe": "VACUUM ist in den Failsafe-Modus gewechselt: Die Tabelle ist nahe am Transaction-ID-Wraparound. Cost Delay und Indexbereinigung sind abgeschaltet, damit das Einfrieren so schnell wie möglich endet.",
+      "wraparound": "VACUUM wurde gegen Wraparound gestartet: Die Tabelle hat autovacuum_freeze_max_age erreicht. Ein solcher Prozess gibt Sperren nicht frei und wird nicht abgebrochen."
+    },
+    "repack": {
+      "inserted": "Eingefügte Tupel",
+      "updated": "Aktualisierte Tupel",
+      "deleted": "Gelöschte Tupel",
+      "catchUpHint": "holt die während des Kopierens angefallenen Änderungen nach",
+      "noOrdering": "ohne Sortierung"
+    },
+    "baseBackupType": {
+      "full": "vollständig",
+      "incremental": "inkrementell"
     }
   },
   "slotForecast": {
@@ -545,7 +577,30 @@
     "table": "Alle Sperren (Tabelle)",
     "noActiveLocks": "Keine aktiven Sperren",
     "blockedProcesses": "Blockierte Prozesse: {count}",
-    "foreignObjectHint": "Objekte anderer Datenbanken erscheinen als Kennung (OID): den Namen liefert nur der Katalog jener Datenbank, die Verbindung geht aber zur gewählten."
+    "foreignObjectHint": "Objekte anderer Datenbanken erscheinen als Kennung (OID): den Namen liefert nur der Katalog jener Datenbank, die Verbindung geht aber zur gewählten.",
+    "stats": {
+      "title": "Statistik der Sperrwartezeiten",
+      "hostWide": "ganzer Host",
+      "metric": {
+        "waits": "Wartevorgänge",
+        "waitTime": "Zeit"
+      },
+      "axisWaits": "Wartevorgänge pro Intervall",
+      "axisWaitTime": "Wartezeit pro Intervall",
+      "deadlockTimeoutHint": "Gezählt werden nur Wartevorgänge, die länger als deadlock_timeout (derzeit {value}) dauern: kürzere erscheinen nicht in pg_stat_lock.",
+      "deadlockTimeoutChanged": "deadlock_timeout wurde in diesem Zeitraum geändert, die Zählschwelle war also nicht durchgehend gleich.",
+      "partial": "Einige Intervalle sind unvollständig: Statistik-Reset, Neustart oder Major-Upgrade haben die Reihe unterbrochen. Im Diagramm ist das eine Lücke, keine Null.",
+      "noSnapshots": "In diesem Zeitraum gibt es noch keine Snapshots. pg_stat_lock wird nach dem Zeitplan der pg_stat_io-Snapshots erfasst.",
+      "window": "Summen über das gemessene Fenster: {window}",
+      "col": {
+        "waits": "Wartevorgänge",
+        "waitTime": "Gesamt",
+        "avgWait": "Durchschnitt",
+        "share": "Zeitanteil"
+      },
+      "noWaits": "In diesem Fenster gab es keine Wartevorgänge länger als deadlock_timeout.",
+      "fastpathAdvice": "fastpath_exceeded ist größer als null: Transaktionen hatten keine freien Fast-Path-Slots mehr, ihre Sperren landeten in der gemeinsamen Sperrtabelle. Eine Erhöhung von max_locks_per_transaction (derzeit {value}) hilft."
+    }
   },
   "queries": {
     "minDurationLabel": "Min. Dauer, ms ≥",
@@ -1026,6 +1081,45 @@
       "extended": "max_wal_size überschritten, aber Dateien werden beibehalten (wal_keep_size oder Slot benötigt sie)",
       "unreserved": "WAL-Dateien werden nicht mehr reserviert, einige werden beim nächsten Checkpoint gelöscht",
       "lost": "Benötigte WAL-Dateien sind verloren, Slot ist nicht mehr verwendbar"
+    },
+    "recovery": {
+      "title": "Recovery-Status",
+      "pauseState": {
+        "not paused": "Wiedergabe läuft",
+        "pause requested": "Pause angefordert",
+        "paused": "pausiert"
+      },
+      "promoteTriggered": "Promotion angefordert",
+      "notInRecovery": "Der Host ist nicht im Recovery-Modus: Er wurde offenbar bereits zum Primary hochgestuft.",
+      "noPrivilege": "Die Rolle von Dasha sieht keine Werte aus pg_stat_recovery: Sie braucht die Rolle pg_read_all_stats.",
+      "lastReplayed": "Zuletzt wiedergegebener Eintrag",
+      "replayEnd": "Wird gerade wiedergegeben (Ende)",
+      "lastXactTime": "Zuletzt wiedergegebene Transaktion",
+      "ago": "vor {age}",
+      "chunkStart": "Beginn des aktuellen WAL-Blocks",
+      "chunkStartHint": "Wann der Startup-Prozess begonnen hat, den aktuellen WAL-Block anzuwenden. Bleibt diese Zeit stehen und die LSN bewegt sich nicht, hängt die Wiedergabe."
+    },
+    "slotSync": {
+      "column": "Synchronisierung",
+      "synced": "synchron",
+      "skipReason": {
+        "wal_or_rows_removed": {
+          "label": "WAL oder Zeilen entfernt",
+          "hint": "Der Primary hat WAL oder Katalogzeilen bereits entfernt, die der Slot auf dem Standby braucht. Die Synchronisierung wird übersprungen, bis der Slot auf dem Primary weiterrückt."
+        },
+        "wal_not_flushed": {
+          "label": "WAL nicht geschrieben",
+          "hint": "Der Standby hat WAL bis zur Slot-Position auf dem Primary noch nicht empfangen und auf Platte geschrieben."
+        },
+        "no_consistent_snapshot": {
+          "label": "kein konsistenter Snapshot",
+          "hint": "Die logische Dekodierung auf dem Standby hat noch keinen konsistenten Punkt erreicht."
+        },
+        "slot_invalidated": {
+          "label": "Slot ungültig",
+          "hint": "Der Slot auf dem Standby ist ungültig und kann nicht synchronisiert werden. Er muss neu angelegt werden."
+        }
+      }
     }
   },
   "FK Analysis": "FK-Analyse",
@@ -1331,12 +1425,35 @@
       "ok": "Innerhalb der Schwellwerte",
       "allOk": "Alle Tabellen innerhalb der Schwellwerte — Autovacuum hat gerade nichts zu tun.",
       "runningVacuums": "VACUUM läuft",
-      "runningAnalyzes": "ANALYZE läuft"
+      "runningAnalyzes": "ANALYZE läuft",
+      "hintScores": "PostgreSQL 19: Tabellen werden nach der Entscheidung von Autovacuum selbst gezählt (do_vacuum und do_analyze in pg_stat_autovacuum_scores), Systemkataloge eingeschlossen. Rechts die Wartungsprozesse, die gerade in dieser Datenbank laufen.",
+      "includingSystem": "einschließlich Systemtabellen",
+      "startedBy": {
+        "manual": "manuell",
+        "autovacuum": "Autovacuum",
+        "wraparound": "Wraparound"
+      }
     },
     "activity": {
       "all": "Alle",
       "active": "Aktiv",
       "cold": "Kalt"
+    },
+    "queue": {
+      "title": "Autovacuum-Warteschlange",
+      "hint": "pg_stat_autovacuum_scores: die eigene Bewertung von Autovacuum für die Tabellen der aktuellen Datenbank, Systemkataloge eingeschlossen. Je höher der Score, desto früher wird die Tabelle bearbeitet. Hervorgehoben ist die Komponente, die den Score bestimmt.",
+      "shown": "{shown} von {total} angezeigt",
+      "component": {
+        "xid": "xid",
+        "mxid": "mxid",
+        "vacuum": "vacuum",
+        "vacuum_insert": "vacuum_insert",
+        "analyze": "analyze"
+      },
+      "flags": "Flags",
+      "doVacuum": "Autovacuum führt VACUUM aus",
+      "doAnalyze": "Autovacuum führt ANALYZE aus",
+      "forWraparound": "VACUUM gegen Transaction-ID-Wraparound: Er lässt sich nicht abbrechen und läuft auch bei ausgeschaltetem Autovacuum."
     }
   },
   "fleetHealth": {
@@ -2233,5 +2350,10 @@
       "newTab": "{key} in neuem Tab",
       "close": "Esc schließen"
     }
+  },
+  "common": {
+    "pg19Required": "{feature} gibt es seit PostgreSQL 19. Dieser Host läuft mit einer älteren Version, daher ist der Bereich ausgeblendet.",
+    "noSnapshotStorage": "Kein Snapshot-Speicher konfiguriert: Es gibt keinen Verlauf, daher ist der Bereich ausgeblendet.",
+    "noPrivilege": "Keine ausreichenden Rechte, um {feature} auf diesem Host zu lesen, daher ist der Bereich ausgeblendet."
   }
 }

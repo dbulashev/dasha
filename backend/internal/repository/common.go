@@ -30,6 +30,7 @@ import (
 	"github.com/dbulashev/dasha/internal/schemalint"
 	"github.com/dbulashev/dasha/internal/sqlparse"
 	"github.com/dbulashev/dasha/internal/statio"
+	"github.com/dbulashev/dasha/internal/statlock"
 )
 
 const (
@@ -125,6 +126,11 @@ type Repository interface {
 	) ([]dto.MaintenanceTransactionIdDanger, error)
 	GetMaintenanceVacuumProgress(ctx context.Context, clusterName, instanceName, databaseName string) ([]dto.MaintenanceVacuumProgress, error)
 	GetMaintenanceAutovacuumSummary(ctx context.Context, clusterName, instanceName, databaseName string) (*dto.MaintenanceAutovacuumSummary, error)
+	GetMaintenanceAutovacuumQueue(
+		ctx context.Context,
+		clusterName, instanceName, databaseName string,
+		limit, offset int,
+	) (*dto.MaintenanceAutovacuumQueue, error)
 	GetHotSampleTables(ctx context.Context, clusterName, instanceName, databaseName string, schema, object *string) ([]hotobjects.AnchorRow, *time.Time, bool, error)
 	GetHotSampleIndexes(ctx context.Context, clusterName, instanceName, databaseName string, schema, object *string) ([]hotobjects.AnchorRow, *time.Time, bool, error)
 	GetColumnCatalog(
@@ -135,6 +141,9 @@ type Repository interface {
 	GetActivityAccess(ctx context.Context, clusterName, instanceName string) (activity.Access, error)
 	// GetIOSample takes no database: pg_stat_io is instance-wide.
 	GetIOSample(ctx context.Context, clusterName, instanceName string) (*statio.Snapshot, error)
+	// GetLockSample takes no database: pg_stat_lock is instance-wide.
+	GetLockSample(ctx context.Context, clusterName, instanceName string) (*statlock.Snapshot, error)
+	GetServerVersionNum(ctx context.Context, clusterName, instanceName string) (int, error)
 	// GetIndexAdvisorReport takes no instance: pg_stat_statements is per-host and
 	// not replicated, so the candidates are built from the whole cluster's load.
 	GetIndexAdvisorReport(
@@ -170,10 +179,11 @@ type Repository interface {
 	GetTablesDescribeRowEstimate(ctx context.Context, clusterName, instanceName, databaseName, schemaName, tableName string) (*dto.RowEstimate, error)
 	GetPgstattupleAvailable(ctx context.Context, clusterName, instanceName, databaseName string) (bool, error)
 	GetReplicationStatus(ctx context.Context, clusterName, instanceName string) ([]dto.ReplicationStatus, error)
-	GetReplicationSlots(ctx context.Context, clusterName, instanceName string) ([]dto.ReplicationSlot, error)
+	GetReplicationSlots(ctx context.Context, clusterName, instanceName string) (*dto.ReplicationSlots, error)
 	GetReplicationWalPosition(ctx context.Context, clusterName, instanceName string) (*dto.WalPosition, error)
 	GetReplicationSlotsForecast(ctx context.Context, clusterName, instanceName, fromLsn string, fromTime time.Time) (*dto.ReplicationSlotsForecast, error)
 	GetReplicationConfig(ctx context.Context, clusterName, instanceName string) (*dto.ReplicationConfig, error)
+	GetReplicationRecovery(ctx context.Context, clusterName, instanceName string) (*dto.ReplicationRecovery, error)
 	GetTablesSchemas(ctx context.Context, clusterName, instanceName, databaseName string) ([]string, error)
 	GetTablesSearch(ctx context.Context, clusterName, instanceName, databaseName, schemaName, q string, limit int) ([]string, error)
 	GetTablesTopKBySize(ctx context.Context, clusterName, instanceName, databaseName string, limit int) ([]dto.TableTopKBySize, error)

@@ -16,6 +16,7 @@ import (
 	"github.com/dbulashev/dasha/internal/querystats"
 	"github.com/dbulashev/dasha/internal/repository"
 	"github.com/dbulashev/dasha/internal/statio"
+	"github.com/dbulashev/dasha/internal/statlock"
 	"github.com/dbulashev/dasha/internal/storage"
 )
 
@@ -105,6 +106,7 @@ func newHandlerServices(i *do.Injector) dashahttp.Services {
 	svc.QueryStats = querystats.NewService(st, repo)
 	svc.SnapshotCatalog = querystats.NewSnapshotCatalog(st)
 	svc.IOHistory = statio.NewHistoryReader(st)
+	svc.LockHistory = statlock.NewHistoryReader(st)
 
 	return svc
 }

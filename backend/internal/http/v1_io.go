@@ -11,15 +11,6 @@ import (
 	"github.com/dbulashev/dasha/internal/statio"
 )
 
-const (
-	defaultIOPoints = 200
-	maxIOPoints     = 1000
-
-	// The matrix bodies of a window are read per bucket, but its capture
-	// headers are read whole — hence a cap on how long a window may be.
-	maxIOWindow = 31 * 24 * time.Hour
-)
-
 // GetIOCurrent serves one host's raw cumulative pg_stat_io slice. It needs no
 // snapshot storage: this is what the live mode polls.
 func (s *Handlers) GetIOCurrent(
@@ -50,9 +41,9 @@ func (s *Handlers) GetIOHistory(
 	}
 
 	instance := req.Params.Instance
-	from, to := ioWindow(req.Params.From, req.Params.To)
+	from, to := historyWindow(req.Params.From, req.Params.To)
 
-	hist, err := s.ioHistory.Read(ctx, req.Params.ClusterName, instance, from, to, ioPoints(req.Params.Points))
+	hist, err := s.ioHistory.Read(ctx, req.Params.ClusterName, instance, from, to, historyPoints(req.Params.Points))
 	if err != nil {
 		return nil, fmt.Errorf("GetIOHistory | %w", err)
 	}
@@ -227,30 +218,4 @@ func ioGroupBy(raw string) statio.GroupBy {
 	default:
 		return statio.GroupByContext
 	}
-}
-
-// ioWindow bounds the requested period. An inverted one collapses to empty
-// rather than being read as "everything".
-func ioWindow(from, to time.Time) (time.Time, time.Time) {
-	if to.Before(from) {
-		return to, to
-	}
-
-	if to.Sub(from) > maxIOWindow {
-		from = to.Add(-maxIOWindow)
-	}
-
-	return from, to
-}
-
-func ioPoints(p *int) int {
-	if p == nil || *p <= 0 {
-		return defaultIOPoints
-	}
-
-	if *p > maxIOPoints {
-		return maxIOPoints
-	}
-
-	return *p
 }

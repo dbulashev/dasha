@@ -9,6 +9,7 @@ import type { MaintenanceAutovacuumSummary } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useApiLoader } from '@/composables/useApiLoader'
 import { useViewError } from '@/composables/useViewError'
+import { startedByChips } from './autovacuumQueue'
 
 ChartJS.register(ArcElement, Tooltip)
 
@@ -91,6 +92,18 @@ const chartOptions = computed(() => ({
   },
 }))
 
+const fromScores = computed(() => summary.value?.Source === 'scores')
+
+const vacuumChips = computed(() => {
+  const s = summary.value
+  return s ? startedByChips(s.RunningVacuumsManual, s.RunningVacuumsAutovacuum, s.RunningVacuumsWraparound) : null
+})
+
+const analyzeChips = computed(() => {
+  const s = summary.value
+  return s ? startedByChips(s.RunningAnalyzesManual, s.RunningAnalyzesAutovacuum) : null
+})
+
 const pct = (v: number) => dueTotal.value ? `${((v / dueTotal.value) * 100).toFixed(1)}%` : ''
 </script>
 
@@ -98,7 +111,11 @@ const pct = (v: number) => dueTotal.value ? `${((v / dueTotal.value) * 100).toFi
   <v-card class="mb-4">
     <v-card-title class="d-flex align-center ga-2 flex-wrap">
       <v-icon start icon="mdi-chart-pie" /><span>{{ t('maintenance.summary.title') }}</span>
-      <v-tooltip :text="t('maintenance.summary.hint')" location="bottom" max-width="420">
+      <v-tooltip
+        :text="fromScores ? t('maintenance.summary.hintScores') : t('maintenance.summary.hint')"
+        location="bottom"
+        max-width="420"
+      >
         <template #activator="{ props }">
           <v-icon v-bind="props" size="small" color="medium-emphasis">mdi-help-circle-outline</v-icon>
         </template>
@@ -106,6 +123,9 @@ const pct = (v: number) => dueTotal.value ? `${((v / dueTotal.value) * 100).toFi
       <v-chip v-if="hasData" size="small" variant="tonal">
         {{ t('maintenance.summary.due') }}: {{ dueTotal }} / {{ num(summary!.TablesTotal) }}
       </v-chip>
+      <span v-if="fromScores" class="text-caption text-medium-emphasis">
+        {{ t('maintenance.summary.includingSystem') }}
+      </span>
     </v-card-title>
     <v-card-text>
       <v-progress-linear v-if="loading" indeterminate />
@@ -138,10 +158,20 @@ const pct = (v: number) => dueTotal.value ? `${((v / dueTotal.value) * 100).toFi
             <div class="text-center">
               <div class="text-h4">{{ num(summary!.RunningVacuums) }}</div>
               <div class="text-caption text-medium-emphasis">{{ t('maintenance.summary.runningVacuums') }}</div>
+              <div v-if="vacuumChips?.length" class="d-flex flex-wrap justify-center ga-1 mt-1">
+                <v-chip v-for="c in vacuumChips" :key="c.key" size="x-small" variant="tonal" :color="c.color">
+                  {{ t(`maintenance.summary.startedBy.${c.key}`) }}: {{ c.value }}
+                </v-chip>
+              </div>
             </div>
             <div class="text-center">
               <div class="text-h4">{{ num(summary!.RunningAnalyzes) }}</div>
               <div class="text-caption text-medium-emphasis">{{ t('maintenance.summary.runningAnalyzes') }}</div>
+              <div v-if="analyzeChips?.length" class="d-flex flex-wrap justify-center ga-1 mt-1">
+                <v-chip v-for="c in analyzeChips" :key="c.key" size="x-small" variant="tonal" :color="c.color">
+                  {{ t(`maintenance.summary.startedBy.${c.key}`) }}: {{ c.value }}
+                </v-chip>
+              </div>
             </div>
           </div>
         </v-col>

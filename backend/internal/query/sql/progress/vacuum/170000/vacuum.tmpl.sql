@@ -11,6 +11,8 @@ SELECT
     max_dead_tuples,
     num_dead_tuples,
     NULL::bigint AS dead_tuple_bytes,
-    NULL::bigint AS max_dead_tuple_bytes
+    NULL::bigint AS max_dead_tuple_bytes,
+    NULL::text AS started_by,
+    NULL::text AS mode
 FROM
     pg_stat_progress_vacuum;

@@ -239,7 +239,7 @@ func TestIOSummary_EmptyReason(t *testing.T) {
 			res := ioSummaryOf(t, c, ioSummaryArgs{Cluster: "demo", Instance: "h1"}) //nolint:exhaustruct
 
 			if res.EmptyReason != tt.want {
-				t.Errorf("empty_reason = %q, want %q", res.EmptyReason, tt.want)
+				t.Errorf("empty_reason = %q (%s), want %q", res.EmptyReason, res.EmptyDetail, tt.want)
 			}
 		})
 	}

@@ -15,4 +15,24 @@ export interface ReplicationSlot {
   SafeWalSize?: number | null;
   /** @nullable */
   BacklogBytes?: number | null;
+  /**
+     * PG 17+; null before.
+     * @nullable
+     */
+  Failover?: boolean | null;
+  /**
+     * The slot is synchronized from the primary (standby only). PG 17+; null before.
+     * @nullable
+     */
+  Synced?: boolean | null;
+  /**
+     * Why the last synchronization of a synced slot was skipped: wal_or_rows_removed | wal_not_flushed | no_consistent_snapshot | slot_invalidated; null — in sync. Meaningful only for Synced slots on a standby. PG 19+; null before.
+     * @nullable
+     */
+  SlotsyncSkipReason?: string | null;
+  /**
+     * The host is in recovery; the same for every slot of the response.
+     * @nullable
+     */
+  OnStandby?: boolean | null;
 }

@@ -139,12 +139,65 @@ func (s *Handlers) GetMaintenanceAutovacuumSummary(
 	}
 
 	return serverhttp.GetMaintenanceAutovacuumSummary200JSONResponse{
-		TablesDueVacuumOnly:  data.TablesDueVacuumOnly,
-		TablesDueAnalyzeOnly: data.TablesDueAnalyzeOnly,
-		TablesDueBoth:        data.TablesDueBoth,
-		TablesTotal:          data.TablesTotal,
-		RunningVacuums:       data.RunningVacuums,
-		RunningAnalyzes:      data.RunningAnalyzes,
+		TablesDueVacuumOnly:       data.TablesDueVacuumOnly,
+		TablesDueAnalyzeOnly:      data.TablesDueAnalyzeOnly,
+		TablesDueBoth:             data.TablesDueBoth,
+		TablesTotal:               data.TablesTotal,
+		RunningVacuums:            data.RunningVacuums,
+		RunningAnalyzes:           data.RunningAnalyzes,
+		RunningVacuumsManual:      data.RunningVacuumsManual,
+		RunningVacuumsAutovacuum:  data.RunningVacuumsAutovacuum,
+		RunningVacuumsWraparound:  data.RunningVacuumsWraparound,
+		RunningAnalyzesManual:     data.RunningAnalyzesManual,
+		RunningAnalyzesAutovacuum: data.RunningAnalyzesAutovacuum,
+		Source:                    serverhttp.MaintenanceAutovacuumSummarySource(data.Source),
+	}, nil
+}
+
+const (
+	defaultAutovacuumQueueLimit = 50
+	maxAutovacuumQueueLimit     = 500
+)
+
+func (s *Handlers) GetMaintenanceAutovacuumQueue(
+	ctx context.Context,
+	req serverhttp.GetMaintenanceAutovacuumQueueRequestObject,
+) (serverhttp.GetMaintenanceAutovacuumQueueResponseObject, error) {
+	limit, offset := paginationDefaults(req.Params.Limit, req.Params.Offset, defaultAutovacuumQueueLimit)
+	limit = min(limit, maxAutovacuumQueueLimit)
+
+	data, err := s.repo.GetMaintenanceAutovacuumQueue(ctx, req.Params.ClusterName, req.Params.Instance, req.Params.Database,
+		limit, offset)
+
+	switch {
+	case errors.Is(err, repository.ErrAutovacuumScoresUnsupported):
+		return serverhttp.GetMaintenanceAutovacuumQueue501JSONResponse{
+			Reason: serverhttp.FeatureUnavailableUnsupportedVersion,
+		}, nil
+	case errors.Is(err, repository.ErrNotFound):
+		return serverhttp.GetMaintenanceAutovacuumQueue404Response{}, nil
+	case err != nil:
+		return nil, fmt.Errorf("GetMaintenanceAutovacuumQueue | %w", err)
+	}
+
+	return serverhttp.GetMaintenanceAutovacuumQueue200JSONResponse{
+		Total: data.Total,
+		Rows: mapstruct.SliceMap(data.Rows, func(t dto.MaintenanceAutovacuumQueueRow) serverhttp.MaintenanceAutovacuumQueueRow {
+			return serverhttp.MaintenanceAutovacuumQueueRow{
+				Schema:            t.Schema,
+				Table:             t.Table,
+				Score:             t.Score,
+				XidScore:          t.XidScore,
+				MxidScore:         t.MxidScore,
+				VacuumScore:       t.VacuumScore,
+				VacuumInsertScore: t.VacuumInsertScore,
+				AnalyzeScore:      t.AnalyzeScore,
+				DoVacuum:          t.DoVacuum,
+				DoAnalyze:         t.DoAnalyze,
+				ForWraparound:     t.ForWraparound,
+				Dominant:          (*string)(t.Dominant),
+			}
+		}),
 	}, nil
 }
 
@@ -165,8 +218,10 @@ func (s *Handlers) GetMaintenanceVacuumProgress(
 		data,
 		func(t dto.MaintenanceVacuumProgress) serverhttp.MaintenanceVacuumProgress {
 			return serverhttp.MaintenanceVacuumProgress{
-				Pid:   t.Pid,
-				Phase: t.Phase,
+				Pid:       t.Pid,
+				Phase:     t.Phase,
+				StartedBy: t.StartedBy,
+				Mode:      t.Mode,
 			}
 		})
 

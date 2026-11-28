@@ -13,6 +13,7 @@ import (
 	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/hotobjects"
 	"github.com/dbulashev/dasha/internal/statio"
+	"github.com/dbulashev/dasha/internal/statlock"
 )
 
 // fakeRepo scripts the two probes the tested paths touch; the rest are inert.
@@ -76,6 +77,10 @@ func (f *fakeRepo) GetHotSampleIndexes(context.Context, string, string, string, 
 
 func (f *fakeRepo) GetIOSample(context.Context, string, string) (*statio.Snapshot, error) {
 	return nil, nil
+}
+
+func (f *fakeRepo) GetLockSample(context.Context, string, string) (*statlock.Snapshot, error) {
+	return nil, statlock.ErrUnsupportedVersion
 }
 
 func newTestDaemon(repo Repo, logger *zap.Logger) *Daemon {

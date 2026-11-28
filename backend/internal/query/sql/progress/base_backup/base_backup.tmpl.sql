@@ -8,6 +8,7 @@ SELECT
         ELSE NULL
         END AS progress_percentage,
     tablespaces_total,
-    tablespaces_streamed
+    tablespaces_streamed,
+    backup_type
 FROM
     pg_stat_progress_basebackup;

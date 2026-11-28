@@ -61,7 +61,9 @@ package enums
 //	indexes/unused
 //	indexes/unused_report
 //	indexes/usage
+//	locks/stat_snapshot
 //	maintenance/autovacuum_freeze_max_age
+//	maintenance/autovacuum_scores
 //	maintenance/autovacuum_summary
 //	maintenance/info
 //	maintenance/transaction_id_danger
@@ -80,6 +82,7 @@ package enums
 //	queries/top_10_by_wal
 //	queries/top_10_chart
 //	replication/lag
+//	replication/recovery
 //	replication/slots
 //	replication/slots_forecast
 //	replication/status

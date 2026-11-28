@@ -12,6 +12,7 @@ import (
 	"github.com/dbulashev/dasha/internal/dto"
 	"github.com/dbulashev/dasha/internal/hotobjects"
 	"github.com/dbulashev/dasha/internal/statio"
+	"github.com/dbulashev/dasha/internal/statlock"
 )
 
 // Repo is the narrow repository interface the daemon needs.
@@ -29,6 +30,7 @@ type Repo interface {
 	GetHotSampleTables(ctx context.Context, clusterName, instanceName, databaseName string, schema, object *string) ([]hotobjects.AnchorRow, *time.Time, bool, error)
 	GetHotSampleIndexes(ctx context.Context, clusterName, instanceName, databaseName string, schema, object *string) ([]hotobjects.AnchorRow, *time.Time, bool, error)
 	GetIOSample(ctx context.Context, clusterName, instanceName string) (*statio.Snapshot, error)
+	GetLockSample(ctx context.Context, clusterName, instanceName string) (*statlock.Snapshot, error)
 }
 
 // Store is the narrow storage interface the daemon needs.
@@ -54,6 +56,7 @@ type Store interface {
 
 	LastIOSnapshotAt(ctx context.Context) (map[string]time.Time, error)
 	InsertIOSnapshot(ctx context.Context, clusterName, instance string, snap statio.Snapshot) error
+	InsertLockSnapshot(ctx context.Context, clusterName, instance string, snap statlock.Snapshot) error
 	DropIOPartitionsBefore(ctx context.Context, cutoff time.Time) error
 
 	TruncateInsightsScans(ctx context.Context) error
@@ -65,8 +68,9 @@ type Daemon struct {
 	repo     Repo
 	store    Store
 	logger   *zap.Logger
-	// clock feeds the spike state machine; nil means time.Now. Injected by tests
-	// so a multi-minute spike can be replayed without sleeping.
+	// clock feeds the spike state machine and the pg_stat_io schedule; nil means
+	// time.Now. Injected by tests so a multi-minute spike can be replayed without
+	// sleeping and repeated sweeps stay inside one schedule tick.
 	clock func() time.Time
 
 	mu                    sync.Mutex

@@ -15,4 +15,9 @@ export interface ProgressAnalyze {
   ExtStatsTotal: number;
   ExtStatsComputed: number;
   CurrentChildTable: string;
+  /**
+     * manual | autovacuum. PG 19+; null before.
+     * @nullable
+     */
+  StartedBy?: string | null;
 }

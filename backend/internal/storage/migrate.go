@@ -301,6 +301,22 @@ CREATE TABLE IF NOT EXISTS io_snapshot (
 ALTER TABLE io_snapshot
     ADD COLUMN IF NOT EXISTS track_wal_io_timing boolean`
 
+	// pg_stat_lock slices share the pg_stat_io schedule, partitions and
+	// retention. The settings are stored per capture: the hints must name the
+	// values that were in force in the window being read.
+	createLockStatSnapshotSQL = `
+CREATE TABLE IF NOT EXISTS lock_stat_snapshot (
+    cluster_name              text        NOT NULL,
+    instance                  text        NOT NULL,
+    captured_at               timestamptz NOT NULL DEFAULT now(),
+    version_num               int         NOT NULL,
+    stats_reset               timestamptz,
+    deadlock_timeout_ms       int         NOT NULL,
+    max_locks_per_transaction int         NOT NULL,
+    rows                      jsonb       NOT NULL,
+    CONSTRAINT lock_stat_snapshot_pkey PRIMARY KEY (cluster_name, instance, captured_at)
+) PARTITION BY RANGE (captured_at)`
+
 	addAutosnapshotIOConfigSQL = `
 ALTER TABLE autosnapshot_config_global
     ADD COLUMN IF NOT EXISTS io_enabled        boolean NOT NULL DEFAULT true,
@@ -390,9 +406,9 @@ var partitionedTables = []string{"snapshots", "query_texts", "trigger_events"}
 var hotPartitionedTables = []string{"hot_snapshot", "hot_top"}
 
 // ioPartitionedTables is a third partition group, for the same reason as the
-// hot one: pg_stat_io history is far denser and ages out much faster
-// (io_retention_days).
-var ioPartitionedTables = []string{"io_snapshot"}
+// hot one: pg_stat_io and pg_stat_lock history is far denser and ages out much
+// faster (io_retention_days).
+var ioPartitionedTables = []string{"io_snapshot", "lock_stat_snapshot"}
 
 // Migrate creates parent tables and partitions for the next partitionDaysAhead days.
 func Migrate(ctx context.Context, cfg string, logger *zap.Logger) error {
@@ -460,6 +476,7 @@ func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
 		addSnapshotDatabasesSQL,
 		createIOSnapshotSQL,
 		addIOSnapshotWALTimingSQL,
+		createLockStatSnapshotSQL,
 		addAutosnapshotIOConfigSQL,
 		createLogInsightsScansSQL,
 		createLogInsightsGroupsSQL,
@@ -484,7 +501,7 @@ func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
 			return fmt.Errorf("storage: create hot partition: %w", err)
 		}
 
-		if err := s.ensureIOPartitions(ctx, day); err != nil {
+		if err := s.ensureIOPartitions(ctx, day, ioPartitionedTables...); err != nil {
 			return fmt.Errorf("storage: create io partition: %w", err)
 		}
 	}
@@ -517,13 +534,14 @@ func (s *Storage) ensurePartitions(ctx context.Context, day time.Time) error {
 }
 
 // ensureIOPartitions mirrors ensurePartitions for the pg_stat_io partition
-// group (separate retention lifecycle — see ioPartitionedTables).
-func (s *Storage) ensureIOPartitions(ctx context.Context, day time.Time) error {
+// group (separate retention lifecycle — see ioPartitionedTables). Each insert
+// names only its own table, so a tick does not repeat the DDL of its neighbour.
+func (s *Storage) ensureIOPartitions(ctx context.Context, day time.Time, tables ...string) error {
 	dayStr := day.Format("20060102")
 	from := day.Format("2006-01-02")
 	to := day.AddDate(0, 0, 1).Format("2006-01-02")
 
-	for _, table := range ioPartitionedTables {
+	for _, table := range tables {
 		sql := fmt.Sprintf(
 			`CREATE TABLE IF NOT EXISTS %s_%s PARTITION OF %s FOR VALUES FROM ('%s') TO ('%s')`,
 			table, dayStr, table, from, to,

@@ -83,6 +83,13 @@ const (
 	ColdTablesStatusStatusWarmingUp ColdTablesStatusStatus = "warming_up"
 )
 
+// Defines values for FeatureUnavailableReason.
+const (
+	FeatureUnavailableNoPrivilege        FeatureUnavailableReason = "no_privilege"
+	FeatureUnavailableNoStorage          FeatureUnavailableReason = "no_storage"
+	FeatureUnavailableUnsupportedVersion FeatureUnavailableReason = "unsupported_version"
+)
+
 // Defines values for HealthScoreDatasourceRoleMatch.
 const (
 	Anchor   HealthScoreDatasourceRoleMatch = "anchor"
@@ -248,6 +255,12 @@ const (
 	Unsupported LogSearchResultTextSkipped = "unsupported"
 )
 
+// Defines values for MaintenanceAutovacuumSummarySource.
+const (
+	AutovacuumSummarySourceFormula MaintenanceAutovacuumSummarySource = "formula"
+	AutovacuumSummarySourceScores  MaintenanceAutovacuumSummarySource = "scores"
+)
+
 // Defines values for PersonalAccessTokenRole.
 const (
 	PersonalAccessTokenRoleAdmin  PersonalAccessTokenRole = "admin"
@@ -323,6 +336,14 @@ const (
 const (
 	PlanSummaryFormatJson PlanSummaryFormat = "json"
 	PlanSummaryFormatText PlanSummaryFormat = "text"
+)
+
+// Defines values for RecoveryStatusState.
+const (
+	RecoveryStateNoPrivilege        RecoveryStatusState = "no_privilege"
+	RecoveryStateNotInRecovery      RecoveryStatusState = "not_in_recovery"
+	RecoveryStateOk                 RecoveryStatusState = "ok"
+	RecoveryStateUnsupportedVersion RecoveryStatusState = "unsupported_version"
 )
 
 // Defines values for RoleChangeTriggerDirection.
@@ -908,6 +929,14 @@ type ErrorMessage struct {
 	// Message Human-readable reason the request could not be answered.
 	Message string `json:"message"`
 }
+
+// FeatureUnavailable defines model for FeatureUnavailable.
+type FeatureUnavailable struct {
+	Reason FeatureUnavailableReason `json:"reason"`
+}
+
+// FeatureUnavailableReason defines model for FeatureUnavailable.Reason.
+type FeatureUnavailableReason string
 
 // FkTypeMismatch defines model for FkTypeMismatch.
 type FkTypeMismatch struct {
@@ -1765,6 +1794,55 @@ type LockSnapshot struct {
 	Rows          *[]QueryBlocked `json:"rows,omitempty"`
 }
 
+// LockStatsHistory defines model for LockStatsHistory.
+type LockStatsHistory struct {
+	Meta   LockStatsHistoryMeta `json:"meta"`
+	Series []LockStatsSeries    `json:"series"`
+}
+
+// LockStatsHistoryMeta defines model for LockStatsHistoryMeta.
+type LockStatsHistoryMeta struct {
+	// DeadlockTimeoutChanged The setting changed inside the period, so the counting threshold was not the same throughout.
+	DeadlockTimeoutChanged bool `json:"deadlock_timeout_changed"`
+
+	// DeadlockTimeoutMs Value at the newest capture in the period; only waits longer than this are counted.
+	DeadlockTimeoutMs *int `json:"deadlock_timeout_ms"`
+
+	// EarliestAt Oldest stored capture of this host — from when history exists at all.
+	EarliestAt *time.Time `json:"earliest_at"`
+	Instance   string     `json:"instance"`
+	LatestAt   *time.Time `json:"latest_at"`
+
+	// MaxLocksPerTransaction Value at the newest capture in the period.
+	MaxLocksPerTransaction        *int `json:"max_locks_per_transaction"`
+	MaxLocksPerTransactionChanged bool `json:"max_locks_per_transaction_changed"`
+
+	// VersionChanged The server was upgraded inside the period; the intervals spanning the upgrade are incomplete.
+	VersionChanged bool `json:"version_changed"`
+}
+
+// LockStatsPoint defines model for LockStatsPoint.
+type LockStatsPoint struct {
+	// Complete False when a broken epoch fell into this bucket; draw a gap, not a zero.
+	Complete bool `json:"complete"`
+
+	// DurationSeconds Measured length of the summed intervals. Zero when no interval in the bucket was complete.
+	DurationSeconds  float64   `json:"duration_seconds"`
+	FastpathExceeded int64     `json:"fastpath_exceeded"`
+	From             time.Time `json:"from"`
+	To               time.Time `json:"to"`
+	WaitTimeMs       int64     `json:"wait_time_ms"`
+	Waits            int64     `json:"waits"`
+}
+
+// LockStatsSeries defines model for LockStatsSeries.
+type LockStatsSeries struct {
+	Locktype string `json:"locktype"`
+
+	// Points One point per bucket, aligned by index across all series.
+	Points []LockStatsPoint `json:"points"`
+}
+
 // LogCategory defines model for LogCategory.
 type LogCategory struct {
 	// Code Matched by SQLSTATE where the stream carries it, then by the record itself (an auto_explain plan, a statement duration), then by the English message text. other is whatever matched nothing.
@@ -2107,26 +2185,73 @@ type MaintenanceAutovacuumFreezeMaxAge struct {
 	AutovacuumFreezeMaxAge int64 `json:"AutovacuumFreezeMaxAge"`
 }
 
+// MaintenanceAutovacuumQueue defines model for MaintenanceAutovacuumQueue.
+type MaintenanceAutovacuumQueue struct {
+	Rows []MaintenanceAutovacuumQueueRow `json:"rows"`
+
+	// Total Tables in pg_stat_autovacuum_scores, regardless of limit and offset.
+	Total int32 `json:"total"`
+}
+
+// MaintenanceAutovacuumQueueRow defines model for MaintenanceAutovacuumQueueRow.
+type MaintenanceAutovacuumQueueRow struct {
+	AnalyzeScore float64 `json:"analyze_score"`
+	DoAnalyze    bool    `json:"do_analyze"`
+	DoVacuum     bool    `json:"do_vacuum"`
+
+	// Dominant The component with the largest value: xid | mxid | vacuum | vacuum_insert | analyze. Ties go to the earlier one in that order. Null when every component is zero.
+	Dominant          *string `json:"dominant"`
+	ForWraparound     bool    `json:"for_wraparound"`
+	MxidScore         float64 `json:"mxid_score"`
+	Schema            string  `json:"schema"`
+	Score             float64 `json:"score"`
+	Table             string  `json:"table"`
+	VacuumInsertScore float64 `json:"vacuum_insert_score"`
+	VacuumScore       float64 `json:"vacuum_score"`
+	XidScore          float64 `json:"xid_score"`
+}
+
 // MaintenanceAutovacuumSummary defines model for MaintenanceAutovacuumSummary.
 type MaintenanceAutovacuumSummary struct {
 	// RunningAnalyzes ANALYZE processes currently running in the database (pg_stat_progress_analyze).
 	RunningAnalyzes int32 `json:"RunningAnalyzes"`
 
+	// RunningAnalyzesAutovacuum Running ANALYZEs with started_by = autovacuum. PG 19+; null before.
+	RunningAnalyzesAutovacuum *int32 `json:"RunningAnalyzesAutovacuum"`
+
+	// RunningAnalyzesManual Running ANALYZEs with started_by = manual. PG 19+; null before.
+	RunningAnalyzesManual *int32 `json:"RunningAnalyzesManual"`
+
 	// RunningVacuums VACUUM processes currently running in the database (pg_stat_progress_vacuum).
 	RunningVacuums int32 `json:"RunningVacuums"`
 
-	// TablesDueAnalyzeOnly Tables past the autoanalyze trigger only.
+	// RunningVacuumsAutovacuum Running VACUUMs with started_by = autovacuum. PG 19+; null before.
+	RunningVacuumsAutovacuum *int32 `json:"RunningVacuumsAutovacuum"`
+
+	// RunningVacuumsManual Running VACUUMs with started_by = manual. PG 19+; null before.
+	RunningVacuumsManual *int32 `json:"RunningVacuumsManual"`
+
+	// RunningVacuumsWraparound Running VACUUMs with started_by = autovacuum_wraparound. PG 19+; null before.
+	RunningVacuumsWraparound *int32 `json:"RunningVacuumsWraparound"`
+
+	// Source Where the table counts come from: scores — pg_stat_autovacuum_scores (PG 19+, system catalogs included); formula — the trigger formula over pg_stat_user_tables.
+	Source MaintenanceAutovacuumSummarySource `json:"Source"`
+
+	// TablesDueAnalyzeOnly Tables due for autoanalyze only (PG 19+ do_analyze; before 19 the autoanalyze trigger formula).
 	TablesDueAnalyzeOnly int32 `json:"TablesDueAnalyzeOnly"`
 
-	// TablesDueBoth Tables past both triggers.
+	// TablesDueBoth Tables due for both, by the same version-dependent rule.
 	TablesDueBoth int32 `json:"TablesDueBoth"`
 
-	// TablesDueVacuumOnly Tables past the autovacuum trigger (dead-tuple or insert formula) but not the autoanalyze one.
+	// TablesDueVacuumOnly Tables due for autovacuum but not autoanalyze. PG 19+ — autovacuum's own decision (do_vacuum in pg_stat_autovacuum_scores); before 19 — the dead-tuple or insert trigger formula.
 	TablesDueVacuumOnly int32 `json:"TablesDueVacuumOnly"`
 
-	// TablesTotal Total user tables considered.
+	// TablesTotal Tables considered. PG 19+ — every row of pg_stat_autovacuum_scores, system catalogs included; before 19 — pg_stat_user_tables.
 	TablesTotal int32 `json:"TablesTotal"`
 }
+
+// MaintenanceAutovacuumSummarySource Where the table counts come from: scores — pg_stat_autovacuum_scores (PG 19+, system catalogs included); formula — the trigger formula over pg_stat_user_tables.
+type MaintenanceAutovacuumSummarySource string
 
 // MaintenanceInfo defines model for MaintenanceInfo.
 type MaintenanceInfo struct {
@@ -2152,8 +2277,13 @@ type MaintenanceTransactionIdDanger struct {
 
 // MaintenanceVacuumProgress defines model for MaintenanceVacuumProgress.
 type MaintenanceVacuumProgress struct {
-	Phase string `json:"Phase"`
-	Pid   int32  `json:"Pid"`
+	// Mode normal | aggressive | failsafe. PG 19+; null before. Can switch to failsafe while the vacuum runs.
+	Mode  *string `json:"Mode"`
+	Phase string  `json:"Phase"`
+	Pid   int32   `json:"Pid"`
+
+	// StartedBy manual | autovacuum | autovacuum_wraparound. PG 19+; null before.
+	StartedBy *string `json:"StartedBy"`
 }
 
 // PersonalAccessToken defines model for PersonalAccessToken.
@@ -2481,13 +2611,19 @@ type ProgressAnalyze struct {
 	Pid               int32  `json:"Pid"`
 	SampleBlksScanned int64  `json:"SampleBlksScanned"`
 	SampleBlksTotal   int64  `json:"SampleBlksTotal"`
-	TableName         string `json:"TableName"`
+
+	// StartedBy manual | autovacuum. PG 19+; null before.
+	StartedBy *string `json:"StartedBy"`
+	TableName string  `json:"TableName"`
 }
 
 // ProgressBaseBackup defines model for ProgressBaseBackup.
 type ProgressBaseBackup struct {
-	BackupStreamed      int64    `json:"BackupStreamed"`
-	BackupTotal         int64    `json:"BackupTotal"`
+	BackupStreamed int64 `json:"BackupStreamed"`
+	BackupTotal    int64 `json:"BackupTotal"`
+
+	// BackupType full | incremental. PG 19+; null before.
+	BackupType          *string  `json:"BackupType"`
 	Phase               string   `json:"Phase"`
 	Pid                 int32    `json:"Pid"`
 	ProgressPercentage  *float64 `json:"ProgressPercentage"`
@@ -2497,17 +2633,33 @@ type ProgressBaseBackup struct {
 
 // ProgressCluster defines model for ProgressCluster.
 type ProgressCluster struct {
-	ClusterIndex      string `json:"ClusterIndex"`
-	Command           string `json:"Command"`
-	Datname           string `json:"Datname"`
-	HeapBlksScanned   int64  `json:"HeapBlksScanned"`
-	HeapBlksTotal     int64  `json:"HeapBlksTotal"`
-	HeapTuplesScanned int64  `json:"HeapTuplesScanned"`
-	HeapTuplesWritten int64  `json:"HeapTuplesWritten"`
-	IndexRebuildCount int64  `json:"IndexRebuildCount"`
-	Phase             string `json:"Phase"`
-	Pid               int32  `json:"Pid"`
-	TableName         string `json:"TableName"`
+	// ClusterIndex Index the table is ordered by; null when it is rewritten without ordering.
+	ClusterIndex *string `json:"ClusterIndex"`
+
+	// Command CLUSTER | VACUUM FULL; PG 19+ also REPACK (read from pg_stat_progress_repack).
+	Command         string `json:"Command"`
+	Datname         string `json:"Datname"`
+	HeapBlksScanned int64  `json:"HeapBlksScanned"`
+	HeapBlksTotal   int64  `json:"HeapBlksTotal"`
+
+	// HeapTuplesDeleted PG 19+; null before.
+	HeapTuplesDeleted *int64 `json:"HeapTuplesDeleted"`
+
+	// HeapTuplesInserted PG 19+; null before.
+	HeapTuplesInserted *int64 `json:"HeapTuplesInserted"`
+	HeapTuplesScanned  int64  `json:"HeapTuplesScanned"`
+
+	// HeapTuplesUpdated PG 19+; null before.
+	HeapTuplesUpdated *int64 `json:"HeapTuplesUpdated"`
+
+	// HeapTuplesWritten Tuples written to the new heap. PG 19+ reports inserted, updated and deleted separately; this field is then inserted + updated.
+	HeapTuplesWritten int64 `json:"HeapTuplesWritten"`
+	IndexRebuildCount int64 `json:"IndexRebuildCount"`
+
+	// Phase Includes catch-up for REPACK CONCURRENTLY on PG 19+.
+	Phase     string `json:"Phase"`
+	Pid       int32  `json:"Pid"`
+	TableName string `json:"TableName"`
 }
 
 // ProgressCopy COPY commands in progress (pg_stat_progress_copy, PG 14+; empty on older servers).
@@ -2585,11 +2737,17 @@ type ProgressVacuum struct {
 	// MaxDeadTuples Dead-tuple buffer capacity in rows (from maintenance_work_mem). PG < 17 only; PG 17+ caps by memory instead (MaxDeadTupleBytes).
 	MaxDeadTuples *int64 `json:"MaxDeadTuples"`
 
+	// Mode normal | aggressive | failsafe. PG 19+; null before. Can switch to failsafe while the vacuum runs.
+	Mode *string `json:"Mode"`
+
 	// NumDeadTuples Dead item identifiers collected in the current vacuum cycle (resets after each index vacuum pass), not the table's total dead rows. PG 17+ reports num_dead_item_ids.
 	NumDeadTuples int64  `json:"NumDeadTuples"`
 	Phase         string `json:"Phase"`
 	Pid           int32  `json:"Pid"`
-	TableName     string `json:"TableName"`
+
+	// StartedBy manual | autovacuum | autovacuum_wraparound. PG 19+; null before.
+	StartedBy *string `json:"StartedBy"`
+	TableName string  `json:"TableName"`
 }
 
 // QueryBlocked defines model for QueryBlocked.
@@ -2796,6 +2954,29 @@ type QueryTop10ChartItem struct {
 	QueryID string `json:"QueryID"`
 }
 
+// RecoveryStatus defines model for RecoveryStatus.
+type RecoveryStatus struct {
+	CurrentChunkStartTime *time.Time `json:"current_chunk_start_time"`
+	LastReplayedEndLsn    *string    `json:"last_replayed_end_lsn"`
+	LastReplayedTli       *int64     `json:"last_replayed_tli"`
+
+	// PauseState not paused | pause requested | paused
+	PauseState           *string    `json:"pause_state"`
+	PromoteTriggered     *bool      `json:"promote_triggered"`
+	RecoveryLastXactTime *time.Time `json:"recovery_last_xact_time"`
+	ReplayEndLsn         *string    `json:"replay_end_lsn"`
+	ReplayEndTli         *int64     `json:"replay_end_tli"`
+
+	// SinceLastXactSeconds Age of recovery_last_xact_time by the server clock.
+	SinceLastXactSeconds *float64 `json:"since_last_xact_seconds"`
+
+	// State ok — the fields below are filled; not_in_recovery — the host is a primary (it may have just been promoted); no_privilege — the role lacks pg_read_all_stats and the view hides its values; unsupported_version — PostgreSQL older than 19.
+	State RecoveryStatusState `json:"state"`
+}
+
+// RecoveryStatusState ok — the fields below are filled; not_in_recovery — the host is a primary (it may have just been promoted); no_privilege — the role lacks pg_read_all_stats and the view hides its values; unsupported_version — PostgreSQL older than 19.
+type RecoveryStatusState string
+
 // ReplicationConfig defines model for ReplicationConfig.
 type ReplicationConfig struct {
 	SynchronousCommit       string `json:"SynchronousCommit"`
@@ -2807,10 +2988,22 @@ type ReplicationSlot struct {
 	Active       bool    `json:"Active"`
 	BacklogBytes *int64  `json:"BacklogBytes"`
 	Database     *string `json:"Database,omitempty"`
-	SafeWalSize  *int64  `json:"SafeWalSize"`
-	SlotName     string  `json:"SlotName"`
-	SlotType     string  `json:"SlotType"`
-	WalStatus    *string `json:"WalStatus,omitempty"`
+
+	// Failover PG 17+; null before.
+	Failover *bool `json:"Failover"`
+
+	// OnStandby The host is in recovery; the same for every slot of the response.
+	OnStandby   *bool  `json:"OnStandby"`
+	SafeWalSize *int64 `json:"SafeWalSize"`
+	SlotName    string `json:"SlotName"`
+	SlotType    string `json:"SlotType"`
+
+	// SlotsyncSkipReason Why the last synchronization of a synced slot was skipped: wal_or_rows_removed | wal_not_flushed | no_consistent_snapshot | slot_invalidated; null — in sync. Meaningful only for Synced slots on a standby. PG 19+; null before.
+	SlotsyncSkipReason *string `json:"SlotsyncSkipReason"`
+
+	// Synced The slot is synchronized from the primary (standby only). PG 17+; null before.
+	Synced    *bool   `json:"Synced"`
+	WalStatus *string `json:"WalStatus,omitempty"`
 }
 
 // ReplicationSlotForecast defines model for ReplicationSlotForecast.
@@ -3762,6 +3955,19 @@ type GetIOHistoryParams struct {
 // GetIOHistoryParamsGroupBy defines parameters for GetIOHistory.
 type GetIOHistoryParamsGroupBy string
 
+// GetLockStatsHistoryParams defines parameters for GetLockStatsHistory.
+type GetLockStatsHistoryParams struct {
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance    `form:"instance" json:"instance"`
+
+	// From Start of the period. A window longer than 31 days is trimmed to the 31 days ending at `to`.
+	From time.Time `form:"from" json:"from"`
+	To   time.Time `form:"to" json:"to"`
+
+	// Points Maximum number of points per series; adjacent intervals are summed to fit.
+	Points *int `form:"points,omitempty" json:"points,omitempty"`
+}
+
 // GetLogsParams defines parameters for GetLogs.
 type GetLogsParams struct {
 	ClusterName ClusterName              `form:"cluster_name" json:"cluster_name"`
@@ -3886,6 +4092,15 @@ type GetLogsScanGroupsParamsOrder string
 type GetMaintenanceAutovacuumFreezeMaxAgeParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
 	Instance    Instance    `form:"instance" json:"instance"`
+}
+
+// GetMaintenanceAutovacuumQueueParams defines parameters for GetMaintenanceAutovacuumQueue.
+type GetMaintenanceAutovacuumQueueParams struct {
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance    `form:"instance" json:"instance"`
+	Database    Database    `form:"database" json:"database"`
+	Limit       *int        `form:"limit,omitempty" json:"limit,omitempty"`
+	Offset      *int        `form:"offset,omitempty" json:"offset,omitempty"`
 }
 
 // GetMaintenanceAutovacuumSummaryParams defines parameters for GetMaintenanceAutovacuumSummary.
@@ -4126,6 +4341,12 @@ type GetQueriesTop10ChartParams struct {
 
 // GetReplicationConfigParams defines parameters for GetReplicationConfig.
 type GetReplicationConfigParams struct {
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance    `form:"instance" json:"instance"`
+}
+
+// GetReplicationRecoveryParams defines parameters for GetReplicationRecovery.
+type GetReplicationRecoveryParams struct {
 	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
 	Instance    Instance    `form:"instance" json:"instance"`
 }
@@ -4608,6 +4829,9 @@ type ClientInterface interface {
 	// GetIOHistory request
 	GetIOHistory(ctx context.Context, params *GetIOHistoryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetLockStatsHistory request
+	GetLockStatsHistory(ctx context.Context, params *GetLockStatsHistoryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetLogs request
 	GetLogs(ctx context.Context, params *GetLogsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -4634,6 +4858,9 @@ type ClientInterface interface {
 
 	// GetMaintenanceAutovacuumFreezeMaxAge request
 	GetMaintenanceAutovacuumFreezeMaxAge(ctx context.Context, params *GetMaintenanceAutovacuumFreezeMaxAgeParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetMaintenanceAutovacuumQueue request
+	GetMaintenanceAutovacuumQueue(ctx context.Context, params *GetMaintenanceAutovacuumQueueParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetMaintenanceAutovacuumSummary request
 	GetMaintenanceAutovacuumSummary(ctx context.Context, params *GetMaintenanceAutovacuumSummaryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -4718,6 +4945,9 @@ type ClientInterface interface {
 
 	// GetReplicationConfig request
 	GetReplicationConfig(ctx context.Context, params *GetReplicationConfigParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetReplicationRecovery request
+	GetReplicationRecovery(ctx context.Context, params *GetReplicationRecoveryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetReplicationSlots request
 	GetReplicationSlots(ctx context.Context, params *GetReplicationSlotsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -5635,6 +5865,18 @@ func (c *Client) GetIOHistory(ctx context.Context, params *GetIOHistoryParams, r
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetLockStatsHistory(ctx context.Context, params *GetLockStatsHistoryParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetLockStatsHistoryRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetLogs(ctx context.Context, params *GetLogsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetLogsRequest(c.Server, params)
 	if err != nil {
@@ -5733,6 +5975,18 @@ func (c *Client) GetLogsScanGroup(ctx context.Context, scanId ScanID, ord int, r
 
 func (c *Client) GetMaintenanceAutovacuumFreezeMaxAge(ctx context.Context, params *GetMaintenanceAutovacuumFreezeMaxAgeParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetMaintenanceAutovacuumFreezeMaxAgeRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetMaintenanceAutovacuumQueue(ctx context.Context, params *GetMaintenanceAutovacuumQueueParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetMaintenanceAutovacuumQueueRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -6069,6 +6323,18 @@ func (c *Client) GetQueriesTop10Chart(ctx context.Context, params *GetQueriesTop
 
 func (c *Client) GetReplicationConfig(ctx context.Context, params *GetReplicationConfigParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetReplicationConfigRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetReplicationRecovery(ctx context.Context, params *GetReplicationRecoveryParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetReplicationRecoveryRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -11252,6 +11518,103 @@ func NewGetIOHistoryRequest(server string, params *GetIOHistoryParams) (*http.Re
 	return req, nil
 }
 
+// NewGetLockStatsHistoryRequest generates requests for GetLockStatsHistory
+func NewGetLockStatsHistoryRequest(server string, params *GetLockStatsHistoryParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/locks/stats/history")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, params.ClusterName); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "instance", runtime.ParamLocationQuery, params.Instance); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "from", runtime.ParamLocationQuery, params.From); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "to", runtime.ParamLocationQuery, params.To); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.Points != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "points", runtime.ParamLocationQuery, *params.Points); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetLogsRequest generates requests for GetLogs
 func NewGetLogsRequest(server string, params *GetLogsParams) (*http.Request, error) {
 	var err error
@@ -12224,6 +12587,107 @@ func NewGetMaintenanceAutovacuumFreezeMaxAgeRequest(server string, params *GetMa
 					queryValues.Add(k, v2)
 				}
 			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetMaintenanceAutovacuumQueueRequest generates requests for GetMaintenanceAutovacuumQueue
+func NewGetMaintenanceAutovacuumQueueRequest(server string, params *GetMaintenanceAutovacuumQueueParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/maintenance/autovacuum-queue")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, params.ClusterName); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "instance", runtime.ParamLocationQuery, params.Instance); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "database", runtime.ParamLocationQuery, params.Database); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.Limit != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "limit", runtime.ParamLocationQuery, *params.Limit); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.Offset != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "offset", runtime.ParamLocationQuery, *params.Offset); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
 		}
 
 		queryURL.RawQuery = queryValues.Encode()
@@ -14315,6 +14779,63 @@ func NewGetReplicationConfigRequest(server string, params *GetReplicationConfigP
 	return req, nil
 }
 
+// NewGetReplicationRecoveryRequest generates requests for GetReplicationRecovery
+func NewGetReplicationRecoveryRequest(server string, params *GetReplicationRecoveryParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/replication/recovery")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, params.ClusterName); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "instance", runtime.ParamLocationQuery, params.Instance); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetReplicationSlotsRequest generates requests for GetReplicationSlots
 func NewGetReplicationSlotsRequest(server string, params *GetReplicationSlotsParams) (*http.Request, error) {
 	var err error
@@ -16316,6 +16837,9 @@ type ClientWithResponsesInterface interface {
 	// GetIOHistoryWithResponse request
 	GetIOHistoryWithResponse(ctx context.Context, params *GetIOHistoryParams, reqEditors ...RequestEditorFn) (*GetIOHistoryResponse, error)
 
+	// GetLockStatsHistoryWithResponse request
+	GetLockStatsHistoryWithResponse(ctx context.Context, params *GetLockStatsHistoryParams, reqEditors ...RequestEditorFn) (*GetLockStatsHistoryResponse, error)
+
 	// GetLogsWithResponse request
 	GetLogsWithResponse(ctx context.Context, params *GetLogsParams, reqEditors ...RequestEditorFn) (*GetLogsResponse, error)
 
@@ -16342,6 +16866,9 @@ type ClientWithResponsesInterface interface {
 
 	// GetMaintenanceAutovacuumFreezeMaxAgeWithResponse request
 	GetMaintenanceAutovacuumFreezeMaxAgeWithResponse(ctx context.Context, params *GetMaintenanceAutovacuumFreezeMaxAgeParams, reqEditors ...RequestEditorFn) (*GetMaintenanceAutovacuumFreezeMaxAgeResponse, error)
+
+	// GetMaintenanceAutovacuumQueueWithResponse request
+	GetMaintenanceAutovacuumQueueWithResponse(ctx context.Context, params *GetMaintenanceAutovacuumQueueParams, reqEditors ...RequestEditorFn) (*GetMaintenanceAutovacuumQueueResponse, error)
 
 	// GetMaintenanceAutovacuumSummaryWithResponse request
 	GetMaintenanceAutovacuumSummaryWithResponse(ctx context.Context, params *GetMaintenanceAutovacuumSummaryParams, reqEditors ...RequestEditorFn) (*GetMaintenanceAutovacuumSummaryResponse, error)
@@ -16426,6 +16953,9 @@ type ClientWithResponsesInterface interface {
 
 	// GetReplicationConfigWithResponse request
 	GetReplicationConfigWithResponse(ctx context.Context, params *GetReplicationConfigParams, reqEditors ...RequestEditorFn) (*GetReplicationConfigResponse, error)
+
+	// GetReplicationRecoveryWithResponse request
+	GetReplicationRecoveryWithResponse(ctx context.Context, params *GetReplicationRecoveryParams, reqEditors ...RequestEditorFn) (*GetReplicationRecoveryResponse, error)
 
 	// GetReplicationSlotsWithResponse request
 	GetReplicationSlotsWithResponse(ctx context.Context, params *GetReplicationSlotsParams, reqEditors ...RequestEditorFn) (*GetReplicationSlotsResponse, error)
@@ -17966,6 +18496,29 @@ func (r GetIOHistoryResponse) StatusCode() int {
 	return 0
 }
 
+type GetLockStatsHistoryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *LockStatsHistory
+	JSON501      *FeatureUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetLockStatsHistoryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetLockStatsHistoryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetLogsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -18163,6 +18716,29 @@ func (r GetMaintenanceAutovacuumFreezeMaxAgeResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetMaintenanceAutovacuumFreezeMaxAgeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetMaintenanceAutovacuumQueueResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *MaintenanceAutovacuumQueue
+	JSON501      *FeatureUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetMaintenanceAutovacuumQueueResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetMaintenanceAutovacuumQueueResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -18787,6 +19363,28 @@ func (r GetReplicationConfigResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetReplicationConfigResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetReplicationRecoveryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *RecoveryStatus
+}
+
+// Status returns HTTPResponse.Status
+func (r GetReplicationRecoveryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetReplicationRecoveryResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -19900,6 +20498,15 @@ func (c *ClientWithResponses) GetIOHistoryWithResponse(ctx context.Context, para
 	return ParseGetIOHistoryResponse(rsp)
 }
 
+// GetLockStatsHistoryWithResponse request returning *GetLockStatsHistoryResponse
+func (c *ClientWithResponses) GetLockStatsHistoryWithResponse(ctx context.Context, params *GetLockStatsHistoryParams, reqEditors ...RequestEditorFn) (*GetLockStatsHistoryResponse, error) {
+	rsp, err := c.GetLockStatsHistory(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetLockStatsHistoryResponse(rsp)
+}
+
 // GetLogsWithResponse request returning *GetLogsResponse
 func (c *ClientWithResponses) GetLogsWithResponse(ctx context.Context, params *GetLogsParams, reqEditors ...RequestEditorFn) (*GetLogsResponse, error) {
 	rsp, err := c.GetLogs(ctx, params, reqEditors...)
@@ -19979,6 +20586,15 @@ func (c *ClientWithResponses) GetMaintenanceAutovacuumFreezeMaxAgeWithResponse(c
 		return nil, err
 	}
 	return ParseGetMaintenanceAutovacuumFreezeMaxAgeResponse(rsp)
+}
+
+// GetMaintenanceAutovacuumQueueWithResponse request returning *GetMaintenanceAutovacuumQueueResponse
+func (c *ClientWithResponses) GetMaintenanceAutovacuumQueueWithResponse(ctx context.Context, params *GetMaintenanceAutovacuumQueueParams, reqEditors ...RequestEditorFn) (*GetMaintenanceAutovacuumQueueResponse, error) {
+	rsp, err := c.GetMaintenanceAutovacuumQueue(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetMaintenanceAutovacuumQueueResponse(rsp)
 }
 
 // GetMaintenanceAutovacuumSummaryWithResponse request returning *GetMaintenanceAutovacuumSummaryResponse
@@ -20231,6 +20847,15 @@ func (c *ClientWithResponses) GetReplicationConfigWithResponse(ctx context.Conte
 		return nil, err
 	}
 	return ParseGetReplicationConfigResponse(rsp)
+}
+
+// GetReplicationRecoveryWithResponse request returning *GetReplicationRecoveryResponse
+func (c *ClientWithResponses) GetReplicationRecoveryWithResponse(ctx context.Context, params *GetReplicationRecoveryParams, reqEditors ...RequestEditorFn) (*GetReplicationRecoveryResponse, error) {
+	rsp, err := c.GetReplicationRecovery(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetReplicationRecoveryResponse(rsp)
 }
 
 // GetReplicationSlotsWithResponse request returning *GetReplicationSlotsResponse
@@ -22159,6 +22784,39 @@ func ParseGetIOHistoryResponse(rsp *http.Response) (*GetIOHistoryResponse, error
 	return response, nil
 }
 
+// ParseGetLockStatsHistoryResponse parses an HTTP response from a GetLockStatsHistoryWithResponse call
+func ParseGetLockStatsHistoryResponse(rsp *http.Response) (*GetLockStatsHistoryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetLockStatsHistoryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest LockStatsHistory
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 501:
+		var dest FeatureUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON501 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseGetLogsResponse parses an HTTP response from a GetLogsWithResponse call
 func ParseGetLogsResponse(rsp *http.Response) (*GetLogsResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -22422,6 +23080,39 @@ func ParseGetMaintenanceAutovacuumFreezeMaxAgeResponse(rsp *http.Response) (*Get
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetMaintenanceAutovacuumQueueResponse parses an HTTP response from a GetMaintenanceAutovacuumQueueWithResponse call
+func ParseGetMaintenanceAutovacuumQueueResponse(rsp *http.Response) (*GetMaintenanceAutovacuumQueueResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetMaintenanceAutovacuumQueueResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest MaintenanceAutovacuumQueue
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 501:
+		var dest FeatureUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON501 = &dest
 
 	}
 
@@ -23199,6 +23890,32 @@ func ParseGetReplicationConfigResponse(rsp *http.Response) (*GetReplicationConfi
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest ReplicationConfig
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetReplicationRecoveryResponse parses an HTTP response from a GetReplicationRecoveryWithResponse call
+func ParseGetReplicationRecoveryResponse(rsp *http.Response) (*GetReplicationRecoveryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetReplicationRecoveryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest RecoveryStatus
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

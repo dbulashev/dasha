@@ -123,8 +123,12 @@ const (
 	QueryIndexesUnusedReport Query = "indexes/unused_report"
 	// QueryIndexesUsage is a Query of type indexes/usage.
 	QueryIndexesUsage Query = "indexes/usage"
+	// QueryLocksStatSnapshot is a Query of type locks/stat_snapshot.
+	QueryLocksStatSnapshot Query = "locks/stat_snapshot"
 	// QueryMaintenanceAutovacuumFreezeMaxAge is a Query of type maintenance/autovacuum_freeze_max_age.
 	QueryMaintenanceAutovacuumFreezeMaxAge Query = "maintenance/autovacuum_freeze_max_age"
+	// QueryMaintenanceAutovacuumScores is a Query of type maintenance/autovacuum_scores.
+	QueryMaintenanceAutovacuumScores Query = "maintenance/autovacuum_scores"
 	// QueryMaintenanceAutovacuumSummary is a Query of type maintenance/autovacuum_summary.
 	QueryMaintenanceAutovacuumSummary Query = "maintenance/autovacuum_summary"
 	// QueryMaintenanceInfo is a Query of type maintenance/info.
@@ -161,6 +165,8 @@ const (
 	QueryQueriesTop10Chart Query = "queries/top_10_chart"
 	// QueryReplicationLag is a Query of type replication/lag.
 	QueryReplicationLag Query = "replication/lag"
+	// QueryReplicationRecovery is a Query of type replication/recovery.
+	QueryReplicationRecovery Query = "replication/recovery"
 	// QueryReplicationSlots is a Query of type replication/slots.
 	QueryReplicationSlots Query = "replication/slots"
 	// QueryReplicationSlotsForecast is a Query of type replication/slots_forecast.
@@ -292,7 +298,9 @@ var _QueryNames = []string{
 	string(QueryIndexesUnused),
 	string(QueryIndexesUnusedReport),
 	string(QueryIndexesUsage),
+	string(QueryLocksStatSnapshot),
 	string(QueryMaintenanceAutovacuumFreezeMaxAge),
+	string(QueryMaintenanceAutovacuumScores),
 	string(QueryMaintenanceAutovacuumSummary),
 	string(QueryMaintenanceInfo),
 	string(QueryMaintenanceTransactionIdDanger),
@@ -311,6 +319,7 @@ var _QueryNames = []string{
 	string(QueryQueriesTop10ByWal),
 	string(QueryQueriesTop10Chart),
 	string(QueryReplicationLag),
+	string(QueryReplicationRecovery),
 	string(QueryReplicationSlots),
 	string(QueryReplicationSlotsForecast),
 	string(QueryReplicationStatus),
@@ -414,7 +423,9 @@ func QueryValues() []Query {
 		QueryIndexesUnused,
 		QueryIndexesUnusedReport,
 		QueryIndexesUsage,
+		QueryLocksStatSnapshot,
 		QueryMaintenanceAutovacuumFreezeMaxAge,
+		QueryMaintenanceAutovacuumScores,
 		QueryMaintenanceAutovacuumSummary,
 		QueryMaintenanceInfo,
 		QueryMaintenanceTransactionIdDanger,
@@ -433,6 +444,7 @@ func QueryValues() []Query {
 		QueryQueriesTop10ByWal,
 		QueryQueriesTop10Chart,
 		QueryReplicationLag,
+		QueryReplicationRecovery,
 		QueryReplicationSlots,
 		QueryReplicationSlotsForecast,
 		QueryReplicationStatus,
@@ -540,7 +552,9 @@ var _QueryValue = map[string]Query{
 	"indexes/unused":                                QueryIndexesUnused,
 	"indexes/unused_report":                         QueryIndexesUnusedReport,
 	"indexes/usage":                                 QueryIndexesUsage,
+	"locks/stat_snapshot":                           QueryLocksStatSnapshot,
 	"maintenance/autovacuum_freeze_max_age":         QueryMaintenanceAutovacuumFreezeMaxAge,
+	"maintenance/autovacuum_scores":                 QueryMaintenanceAutovacuumScores,
 	"maintenance/autovacuum_summary":                QueryMaintenanceAutovacuumSummary,
 	"maintenance/info":                              QueryMaintenanceInfo,
 	"maintenance/transaction_id_danger":             QueryMaintenanceTransactionIdDanger,
@@ -559,6 +573,7 @@ var _QueryValue = map[string]Query{
 	"queries/top_10_by_wal":                         QueryQueriesTop10ByWal,
 	"queries/top_10_chart":                          QueryQueriesTop10Chart,
 	"replication/lag":                               QueryReplicationLag,
+	"replication/recovery":                          QueryReplicationRecovery,
 	"replication/slots":                             QueryReplicationSlots,
 	"replication/slots_forecast":                    QueryReplicationSlotsForecast,
 	"replication/status":                            QueryReplicationStatus,
