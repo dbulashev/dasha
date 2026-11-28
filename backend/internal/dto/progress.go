@@ -10,6 +10,7 @@ type ProgressAnalyze struct {
 	ExtStatsTotal     int64
 	ExtStatsComputed  int64
 	CurrentChildTable string
+	StartedBy         *string
 }
 
 type ProgressBaseBackup struct {
@@ -20,20 +21,26 @@ type ProgressBaseBackup struct {
 	ProgressPercentage  *float64
 	TablespacesTotal    int64
 	TablespacesStreamed int64
+	BackupType          *string
 }
 
 type ProgressCluster struct {
-	Pid               int32
-	Datname           string
-	TableName         string
-	Command           string
-	Phase             string
-	ClusterIndex      string
+	Pid       int32
+	Datname   string
+	TableName string
+	Command   string
+	Phase     string
+	// ClusterIndex is nil when the table is rewritten without ordering.
+	ClusterIndex      *string
 	HeapTuplesScanned int64
-	HeapTuplesWritten int64
-	HeapBlksTotal     int64
-	HeapBlksScanned   int64
-	IndexRebuildCount int64
+	// HeapTuplesWritten is PG < 19; Inserted/Updated/Deleted are PG 19+.
+	HeapTuplesWritten  *int64
+	HeapTuplesInserted *int64
+	HeapTuplesUpdated  *int64
+	HeapTuplesDeleted  *int64
+	HeapBlksTotal      int64
+	HeapBlksScanned    int64
+	IndexRebuildCount  int64
 }
 
 type ProgressCopy struct {
@@ -88,4 +95,7 @@ type ProgressVacuum struct {
 	// DeadTupleBytes / MaxDeadTupleBytes are PG 17+ only (NULL before).
 	DeadTupleBytes    *int64
 	MaxDeadTupleBytes *int64
+	// StartedBy / Mode are PG 19+ only (NULL before).
+	StartedBy *string
+	Mode      *string
 }

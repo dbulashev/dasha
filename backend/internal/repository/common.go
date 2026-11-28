@@ -170,7 +170,7 @@ type Repository interface {
 	GetTablesDescribeRowEstimate(ctx context.Context, clusterName, instanceName, databaseName, schemaName, tableName string) (*dto.RowEstimate, error)
 	GetPgstattupleAvailable(ctx context.Context, clusterName, instanceName, databaseName string) (bool, error)
 	GetReplicationStatus(ctx context.Context, clusterName, instanceName string) ([]dto.ReplicationStatus, error)
-	GetReplicationSlots(ctx context.Context, clusterName, instanceName string) ([]dto.ReplicationSlot, error)
+	GetReplicationSlots(ctx context.Context, clusterName, instanceName string) (*dto.ReplicationSlots, error)
 	GetReplicationWalPosition(ctx context.Context, clusterName, instanceName string) (*dto.WalPosition, error)
 	GetReplicationSlotsForecast(ctx context.Context, clusterName, instanceName, fromLsn string, fromTime time.Time) (*dto.ReplicationSlotsForecast, error)
 	GetReplicationConfig(ctx context.Context, clusterName, instanceName string) (*dto.ReplicationConfig, error)

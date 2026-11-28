@@ -1,6 +1,7 @@
 package query
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -183,18 +184,6 @@ func TestFindTemplate_VersionSelection(t *testing.T) {
 			wantContains:  "shared_blk_read_time", // no dir > 180000 → base
 		},
 
-		// progress/vacuum — dir: 170000
-		{
-			name:          "vacuum_pg16_uses_170000_dir",
-			queryName:     "progress/vacuum",
-			serverVersion: 160000,
-		},
-		{
-			name:          "vacuum_pg17_uses_base",
-			queryName:     "progress/vacuum",
-			serverVersion: 170000,
-		},
-
 		// progress/copy — dirs: 140000, 170000
 		{
 			name:          "copy_pg13_uses_140000_stub",
@@ -228,6 +217,54 @@ func TestFindTemplate_VersionSelection(t *testing.T) {
 				assert.Contains(t, result, tt.wantContains,
 					"template for %s at version %d should contain %q",
 					tt.queryName, tt.serverVersion, tt.wantContains)
+			}
+		})
+	}
+}
+
+// PG 19 columns: the previous base template moved to 190000/, older dirs stay.
+func TestFindTemplate_PG19Selection(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		queryName     string
+		serverVersion int
+		want, notWant string
+	}{
+		{"progress/vacuum", 190000, "    started_by,\n", "NULL::text AS started_by"},
+		{"progress/vacuum", 180000, "NULL::text AS started_by", "    max_dead_tuples,\n"},
+		{"progress/vacuum", 170000, "num_dead_item_ids", "    started_by,\n"},
+		{"progress/vacuum", 160000, "    max_dead_tuples,\n", "num_dead_item_ids"},
+
+		{"progress/analyze", 190000, "    started_by\n", "NULL::text AS started_by"},
+		{"progress/analyze", 180000, "NULL::text AS started_by", ""},
+
+		{"maintenance/vacuum_progress", 190000, "    started_by,\n", "NULL::text AS started_by"},
+		{"maintenance/vacuum_progress", 180000, "NULL::text AS started_by", "WHERE false"},
+		{"maintenance/vacuum_progress", 90500, "WHERE false", ""},
+
+		{"progress/cluster", 190000, "pg_stat_progress_repack", "pg_stat_progress_cluster;"},
+		{"progress/cluster", 180000, "FROM\n    pg_stat_progress_cluster", "pg_stat_progress_repack;"},
+
+		{"progress/base_backup", 190000, "    backup_type\n", "NULL::text AS backup_type"},
+		{"progress/base_backup", 180000, "NULL::text AS backup_type", ""},
+
+		{"replication/slots", 190000, "    slotsync_skip_reason,\n", "NULL::text AS slotsync_skip_reason"},
+		{"replication/slots", 180000, "    failover,\n", "    slotsync_skip_reason,\n"},
+		{"replication/slots", 170000, "    failover,\n", "NULL::bool AS failover"},
+		{"replication/slots", 160000, "NULL::bool AS failover", "    failover,\n"},
+	}
+
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("%s_%d", tt.queryName, tt.serverVersion), func(t *testing.T) {
+			t.Parallel()
+
+			got, err := findTemplate(tt.serverVersion, tt.queryName)
+			require.NoError(t, err)
+			assert.Contains(t, got, tt.want)
+
+			if tt.notWant != "" {
+				assert.NotContains(t, got, tt.notWant)
 			}
 		})
 	}

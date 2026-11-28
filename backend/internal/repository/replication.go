@@ -107,7 +107,7 @@ func (p *PgxPool) getReplicationStatus(
 	return ret, nil
 }
 
-func (p *PgxPool) GetReplicationSlots(ctx context.Context, clusterName, instanceName string) ([]dto.ReplicationSlot, error) {
+func (p *PgxPool) GetReplicationSlots(ctx context.Context, clusterName, instanceName string) (*dto.ReplicationSlots, error) {
 	pool, err := p.getPoolByClusterNameAndInstance(ctx, clusterName, instanceName, "")
 	if err != nil {
 		return nil, fmt.Errorf("GetReplicationSlots | %w", err)
@@ -130,7 +130,7 @@ func (p *PgxPool) getReplicationSlots(
 	ctx context.Context,
 	serverVersion int,
 	pool *pgxpool.Pool,
-) ([]dto.ReplicationSlot, error) {
+) (*dto.ReplicationSlots, error) {
 	ctx, cancel := context.WithTimeout(ctx, queryTimeout)
 	defer cancel()
 
@@ -144,7 +144,7 @@ func (p *PgxPool) getReplicationSlots(
 		return nil, fmt.Errorf("getReplicationSlots | %w", err)
 	}
 
-	ret := make([]dto.ReplicationSlot, 0, 4) //nolint:mnd
+	ret := &dto.ReplicationSlots{Slots: make([]dto.ReplicationSlot, 0, 4)} //nolint:mnd
 
 	for rows.Next() {
 		var (
@@ -155,19 +155,26 @@ func (p *PgxPool) getReplicationSlots(
 			walStatus    string
 			safeWalSize  pgtype.Int8
 			backlogBytes pgtype.Int8
+			failover     *bool
+			synced       *bool
+			skipReason   *string
 		)
 
-		err = rows.Scan(&slotName, &slotType, &database, &active, &walStatus, &safeWalSize, &backlogBytes)
+		err = rows.Scan(&slotName, &slotType, &database, &active, &walStatus, &safeWalSize, &backlogBytes,
+			&failover, &synced, &skipReason, &ret.OnStandby)
 		if err != nil {
 			return nil, fmt.Errorf("getReplicationSlots | %w", err)
 		}
 
 		item := dto.ReplicationSlot{
-			SlotName:  slotName,
-			SlotType:  slotType,
-			Database:  database,
-			Active:    active,
-			WalStatus: walStatus,
+			SlotName:           slotName,
+			SlotType:           slotType,
+			Database:           database,
+			Active:             active,
+			WalStatus:          walStatus,
+			Failover:           failover,
+			Synced:             synced,
+			SlotsyncSkipReason: skipReason,
 		}
 
 		if safeWalSize.Valid {
@@ -178,7 +185,7 @@ func (p *PgxPool) getReplicationSlots(
 			item.BacklogBytes = &backlogBytes.Int64
 		}
 
-		ret = append(ret, item)
+		ret.Slots = append(ret.Slots, item)
 	}
 
 	if err := rows.Err(); err != nil {

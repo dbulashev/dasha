@@ -25,8 +25,10 @@ type MaintenanceTransactionIdDanger struct {
 }
 
 type MaintenanceVacuumProgress struct {
-	Pid   int32
-	Phase string
+	Pid       int32
+	Phase     string
+	StartedBy *string
+	Mode      *string
 }
 
 type MaintenanceAutovacuumSummary struct {

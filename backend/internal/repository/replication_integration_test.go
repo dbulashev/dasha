@@ -3,6 +3,7 @@
 package repository
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -38,7 +39,14 @@ func TestGetReplicationSlots_Standalone(t *testing.T) {
 
 	result, err := p.getReplicationSlots(ctx, vNum, pool)
 	require.NoError(t, err)
-	assert.NotNil(t, result)
+	require.NotNil(t, result)
+
+	if len(result.Slots) > 0 {
+		require.NotNil(t, result.OnStandby)
+		assert.False(t, *result.OnStandby)
+	} else {
+		assert.Nil(t, result.OnStandby)
+	}
 }
 
 func TestGetReplicationConfig(t *testing.T) {
@@ -132,16 +140,30 @@ func TestReplication_WithReplica(t *testing.T) {
 
 		result, err := p.getReplicationSlots(ctx, vNum, pool)
 		require.NoError(t, err)
-		assert.NotEmpty(t, result, "should have at least the replica_slot")
+		require.NotEmpty(t, result.Slots, "should have at least the replica_slot")
+		require.NotNil(t, result.OnStandby)
+		assert.False(t, *result.OnStandby)
 
 		found := false
-		for _, slot := range result {
+		for _, slot := range result.Slots {
 			assert.NotEmpty(t, slot.SlotName)
 			assert.NotEmpty(t, slot.SlotType)
 			if slot.SlotName == "replica_slot" {
 				found = true
 				assert.True(t, slot.Active, "replica_slot should be active while replica is connected")
 				assert.Equal(t, "physical", slot.SlotType)
+
+				if vNum >= 170000 {
+					require.NotNil(t, slot.Failover)
+					require.NotNil(t, slot.Synced)
+					assert.False(t, *slot.Failover)
+					assert.False(t, *slot.Synced)
+				} else {
+					assert.Nil(t, slot.Failover)
+					assert.Nil(t, slot.Synced)
+				}
+
+				assert.Nil(t, slot.SlotsyncSkipReason, "skip reason is set only for synced slots on a standby")
 			}
 		}
 		assert.True(t, found, "replica_slot should exist")
@@ -154,8 +176,31 @@ func TestReplication_WithReplica(t *testing.T) {
 		vNum, err := p.getServerVersionNum(ctx, replica.Pool)
 		require.NoError(t, err)
 
+		_, err = replica.Pool.Exec(ctx, "SELECT pg_create_physical_replication_slot('standby_slot')")
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			_, _ = replica.Pool.Exec(context.Background(), "SELECT pg_drop_replication_slot('standby_slot')")
+		})
+
 		result, err := p.getReplicationSlots(ctx, vNum, replica.Pool)
 		require.NoError(t, err)
-		assert.NotNil(t, result)
+		require.NotEmpty(t, result.Slots)
+		require.NotNil(t, result.OnStandby)
+		assert.True(t, *result.OnStandby)
+
+		for _, slot := range result.Slots {
+			if slot.SlotName != "standby_slot" {
+				continue
+			}
+
+			if vNum >= 170000 {
+				require.NotNil(t, slot.Synced)
+				assert.False(t, *slot.Synced, "a slot created on the standby is not a synced one")
+			} else {
+				assert.Nil(t, slot.Synced)
+			}
+
+			assert.Nil(t, slot.SlotsyncSkipReason)
+		}
 	})
 }

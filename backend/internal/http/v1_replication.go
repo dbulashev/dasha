@@ -65,7 +65,7 @@ func (s *Handlers) GetReplicationSlots(
 	}
 
 	var ret serverhttp.GetReplicationSlots200JSONResponse = mapstruct.SliceMap(
-		items,
+		items.Slots,
 		func(t dto.ReplicationSlot) serverhttp.ReplicationSlot {
 			return serverhttp.ReplicationSlot{
 				SlotName:     t.SlotName,

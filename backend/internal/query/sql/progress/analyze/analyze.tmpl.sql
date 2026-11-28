@@ -7,6 +7,7 @@ SELECT
     sample_blks_scanned,
     ext_stats_total,
     ext_stats_computed,
-    current_child_table_relid::regclass AS current_child_table
+    current_child_table_relid::regclass AS current_child_table,
+    started_by
 FROM
     pg_stat_progress_analyze;

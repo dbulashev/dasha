@@ -1,6 +1,3 @@
--- PG 17+ replaced the dead-tuple row counters with TID-store memory counters
--- (dead_tuple_bytes / max_dead_tuple_bytes) and added num_dead_item_ids for
--- the collected count; a row-count limit no longer exists, hence NULL.
 SELECT
     pid,
     datname,
@@ -13,6 +10,8 @@ SELECT
     NULL::bigint AS max_dead_tuples,
     num_dead_item_ids AS num_dead_tuples,
     dead_tuple_bytes,
-    max_dead_tuple_bytes
+    max_dead_tuple_bytes,
+    started_by,
+    mode
 FROM
     pg_stat_progress_vacuum;

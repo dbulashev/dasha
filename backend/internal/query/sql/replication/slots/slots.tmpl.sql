@@ -8,6 +8,10 @@ SELECT
     CASE WHEN NOT pg_is_in_recovery()
          THEN (pg_current_wal_lsn() - restart_lsn)::bigint
          ELSE NULL
-    END AS backlog_bytes
+    END AS backlog_bytes,
+    failover,
+    synced,
+    slotsync_skip_reason,
+    pg_is_in_recovery() AS on_standby
 FROM pg_replication_slots
 ORDER BY slot_name

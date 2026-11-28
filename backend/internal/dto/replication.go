@@ -33,6 +33,16 @@ type ReplicationSlot struct {
 	WalStatus    string
 	SafeWalSize  *int64
 	BacklogBytes *int64
+	// Failover / Synced are PG 17+, SlotsyncSkipReason is PG 19+.
+	Failover           *bool
+	Synced             *bool
+	SlotsyncSkipReason *string
+}
+
+type ReplicationSlots struct {
+	// OnStandby comes from the slot rows, so it is nil when there are none.
+	OnStandby *bool
+	Slots     []ReplicationSlot
 }
 
 type WalPosition struct {
