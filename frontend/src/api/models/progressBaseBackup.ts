@@ -14,4 +14,9 @@ export interface ProgressBaseBackup {
   ProgressPercentage?: number | null;
   TablespacesTotal: number;
   TablespacesStreamed: number;
+  /**
+     * full | incremental. PG 19+; null before.
+     * @nullable
+     */
+  BackupType?: string | null;
 }

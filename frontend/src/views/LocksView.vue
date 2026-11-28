@@ -7,6 +7,7 @@ import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useViewError } from '@/composables/useViewError'
 import { assertOk } from '@/utils/api'
 import { getErrorMessage } from '@/utils/error'
+import LockStatsSection from '@/components/locks/LockStatsSection.vue'
 import LockTree from '@/components/locks/LockTree.vue'
 import ScopeSwitch from '@/components/queries/ScopeSwitch.vue'
 import { useQueryScope } from '@/composables/useQueryScope'
@@ -62,5 +63,7 @@ watch([clusterName, hostName, databaseName, scope], () => {
       <LockTree :items="blockedItems" :loading="blockedLoading" :show-database="isInstanceScope" />
     </v-card-text>
   </v-card>
+
+  <LockStatsSection />
 
 </template>

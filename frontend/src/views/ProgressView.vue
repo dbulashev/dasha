@@ -27,9 +27,10 @@ import { fmtBytes, fmtMs } from '@/utils/format'
 import ProgressCard from '@/components/progress/ProgressCard.vue'
 import type { ProgressCardData } from '@/components/progress/ProgressCard.vue'
 import SlotForecastDialog from '@/components/progress/SlotForecastDialog.vue'
+import { modeColor, startedByColor, vacuumWarning } from '@/components/progress/pg19'
 
 const { clusterName, hostName } = useClusterInfo()
-const { t } = useI18n()
+const { t, te } = useI18n()
 const { onError, clearError } = useViewError()
 const loading = ref(false)
 const slotForecastOpen = ref(false)
@@ -72,6 +73,34 @@ function phaseLabel(type: ProgressCardData['type'], phase: string): string {
   return translated === key ? phase : translated
 }
 
+function startedByChip(startedBy: string | null | undefined) {
+  if (!startedBy) return []
+  return [{ label: t(`progress.startedBy.${startedBy}`, startedBy), color: startedByColor(startedBy) }]
+}
+
+function modeChip(mode: string | null | undefined) {
+  if (!mode) return []
+  const hintKey = `progress.modeHint.${mode}`
+  return [{ label: t(`progress.mode.${mode}`, mode), color: modeColor(mode), hint: te(hintKey) ? t(hintKey) : undefined }]
+}
+
+function vacuumWarningText(item: ProgressVacuum): string | undefined {
+  const w = vacuumWarning(item.StartedBy, item.Mode)
+  return w ? t(`progress.vacuumWarning.${w}`) : undefined
+}
+
+// PG 19 splits the written tuples into inserted/updated/deleted.
+function clusterTupleMetrics(item: ProgressCluster) {
+  if (item.HeapTuplesInserted == null) {
+    return [{ label: t('progress.heapTuplesWritten'), value: fmtNum(item.HeapTuplesWritten) }]
+  }
+  return [
+    { label: t('progress.repack.inserted'), value: fmtNum(item.HeapTuplesInserted) },
+    { label: t('progress.repack.updated'), value: fmtNum(item.HeapTuplesUpdated ?? 0) },
+    { label: t('progress.repack.deleted'), value: fmtNum(item.HeapTuplesDeleted ?? 0) },
+  ]
+}
+
 // Phases where a numeric progress bar is meaningful
 const analyzeProgressPhases = new Set(['acquiring sample rows'])
 const clusterProgressPhases = new Set(['seq scanning heap', 'index scanning heap'])
@@ -103,6 +132,7 @@ const cards = computed<ProgressCardData[]>(() => {
       target: [item.Datname, item.TableName].filter(Boolean).join('.'),
       phase: phaseLabel('analyze', item.Phase),
       progress: analyzeProgressPhases.has(item.Phase) ? calcPct(item.SampleBlksScanned, item.SampleBlksTotal) : null,
+      chips: startedByChip(item.StartedBy),
       metrics: [
         { label: t('progress.sampleBlksScanned'), value: `${fmtNum(item.SampleBlksScanned)} / ${fmtNum(item.SampleBlksTotal)}` },
         { label: t('progress.extStatsComputed'), value: `${fmtNum(item.ExtStatsComputed)} / ${fmtNum(item.ExtStatsTotal)}` },
@@ -117,6 +147,8 @@ const cards = computed<ProgressCardData[]>(() => {
       target: [item.Datname, item.TableName].filter(Boolean).join('.'),
       phase: phaseLabel('vacuum', item.Phase),
       progress: vacuumProgress(item),
+      chips: [...startedByChip(item.StartedBy), ...modeChip(item.Mode)],
+      warning: vacuumWarningText(item),
       metrics: [
         { label: t('progress.heapBlksScanned'), value: `${fmtNum(item.HeapBlksScanned)} / ${fmtNum(item.HeapBlksTotal)}` },
         { label: t('progress.heapBlksVacuumed'), value: `${fmtNum(item.HeapBlksVacuumed)} / ${fmtNum(item.HeapBlksTotal)}` },
@@ -145,13 +177,14 @@ const cards = computed<ProgressCardData[]>(() => {
       target: [item.Datname, item.TableName].filter(Boolean).join('.'),
       phase: phaseLabel('cluster', item.Phase),
       progress: clusterProgress(item),
+      title: item.Command || undefined,
+      phaseHint: item.Phase === 'catch-up' ? t('progress.repack.catchUpHint') : undefined,
       metrics: [
-        { label: t('progress.command'), value: item.Command },
         { label: t('progress.heapBlksScanned'), value: `${fmtNum(item.HeapBlksScanned)} / ${fmtNum(item.HeapBlksTotal)}` },
         { label: t('progress.heapTuplesScanned'), value: fmtNum(item.HeapTuplesScanned) },
-        { label: t('progress.heapTuplesWritten'), value: fmtNum(item.HeapTuplesWritten) },
+        ...clusterTupleMetrics(item),
         { label: t('progress.indexRebuildCount'), value: fmtNum(item.IndexRebuildCount) },
-        ...(item.ClusterIndex ? [{ label: t('progress.clusterIndex'), value: item.ClusterIndex }] : []),
+        { label: t('progress.clusterIndex'), value: item.ClusterIndex ?? t('progress.repack.noOrdering') },
       ],
     })
   }
@@ -177,6 +210,9 @@ const cards = computed<ProgressCardData[]>(() => {
       target: '',
       phase: phaseLabel('baseBackup', item.Phase),
       progress: item.ProgressPercentage ?? null,
+      chips: item.BackupType
+        ? [{ label: t(`progress.baseBackupType.${item.BackupType}`, item.BackupType), color: item.BackupType === 'incremental' ? 'info' : 'default' }]
+        : [],
       metrics: [
         { label: t('progress.backupStreamed'), value: `${fmtNum(item.BackupStreamed)} / ${fmtNum(item.BackupTotal)}` },
         { label: t('progress.progressPct'), value: item.ProgressPercentage != null ? item.ProgressPercentage + '%' : '-' },

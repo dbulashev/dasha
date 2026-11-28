@@ -37,6 +37,7 @@ func (s *Handlers) GetProgressAnalyze(
 				ExtStatsTotal:     t.ExtStatsTotal,
 				ExtStatsComputed:  t.ExtStatsComputed,
 				CurrentChildTable: t.CurrentChildTable,
+				StartedBy:         t.StartedBy,
 			}
 		})
 
@@ -67,6 +68,7 @@ func (s *Handlers) GetProgressBaseBackup(
 				ProgressPercentage:  t.ProgressPercentage,
 				TablespacesTotal:    t.TablespacesTotal,
 				TablespacesStreamed: t.TablespacesStreamed,
+				BackupType:          t.BackupType,
 			}
 		})
 
@@ -90,17 +92,20 @@ func (s *Handlers) GetProgressCluster(
 		progress,
 		func(t dto.ProgressCluster) serverhttp.ProgressCluster {
 			return serverhttp.ProgressCluster{
-				Pid:               t.Pid,
-				Datname:           t.Datname,
-				TableName:         t.TableName,
-				Command:           t.Command,
-				Phase:             t.Phase,
-				ClusterIndex:      deref(t.ClusterIndex),
-				HeapTuplesScanned: t.HeapTuplesScanned,
-				HeapTuplesWritten: heapTuplesWritten(t),
-				HeapBlksTotal:     t.HeapBlksTotal,
-				HeapBlksScanned:   t.HeapBlksScanned,
-				IndexRebuildCount: t.IndexRebuildCount,
+				Pid:                t.Pid,
+				Datname:            t.Datname,
+				TableName:          t.TableName,
+				Command:            t.Command,
+				Phase:              t.Phase,
+				ClusterIndex:       t.ClusterIndex,
+				HeapTuplesScanned:  t.HeapTuplesScanned,
+				HeapTuplesWritten:  heapTuplesWritten(t),
+				HeapTuplesInserted: t.HeapTuplesInserted,
+				HeapTuplesUpdated:  t.HeapTuplesUpdated,
+				HeapTuplesDeleted:  t.HeapTuplesDeleted,
+				HeapBlksTotal:      t.HeapBlksTotal,
+				HeapBlksScanned:    t.HeapBlksScanned,
+				IndexRebuildCount:  t.IndexRebuildCount,
 			}
 		})
 
@@ -222,6 +227,8 @@ func (s *Handlers) GetProgressVacuum(
 				NumDeadTuples:     t.NumDeadTuples,
 				DeadTupleBytes:    t.DeadTupleBytes,
 				MaxDeadTupleBytes: t.MaxDeadTupleBytes,
+				StartedBy:         t.StartedBy,
+				Mode:              t.Mode,
 			}
 		})
 

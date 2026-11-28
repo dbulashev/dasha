@@ -68,13 +68,17 @@ func (s *Handlers) GetReplicationSlots(
 		items.Slots,
 		func(t dto.ReplicationSlot) serverhttp.ReplicationSlot {
 			return serverhttp.ReplicationSlot{
-				SlotName:     t.SlotName,
-				SlotType:     t.SlotType,
-				Active:       t.Active,
-				Database:     shortcut.Ptr(t.Database),
-				WalStatus:    shortcut.Ptr(t.WalStatus),
-				SafeWalSize:  t.SafeWalSize,
-				BacklogBytes: t.BacklogBytes,
+				SlotName:           t.SlotName,
+				SlotType:           t.SlotType,
+				Active:             t.Active,
+				Database:           shortcut.Ptr(t.Database),
+				WalStatus:          shortcut.Ptr(t.WalStatus),
+				SafeWalSize:        t.SafeWalSize,
+				BacklogBytes:       t.BacklogBytes,
+				Failover:           t.Failover,
+				Synced:             t.Synced,
+				SlotsyncSkipReason: t.SlotsyncSkipReason,
+				OnStandby:          items.OnStandby,
 			}
 		})
 

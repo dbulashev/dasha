@@ -22,6 +22,18 @@ type pg19Repo struct {
 	offset   int
 
 	recovery *dto.ReplicationRecovery
+	summary  *dto.MaintenanceAutovacuumSummary
+	slots    *dto.ReplicationSlots
+}
+
+func (r *pg19Repo) GetMaintenanceAutovacuumSummary(
+	context.Context, string, string, string,
+) (*dto.MaintenanceAutovacuumSummary, error) {
+	return r.summary, nil
+}
+
+func (r *pg19Repo) GetReplicationSlots(context.Context, string, string) (*dto.ReplicationSlots, error) {
+	return r.slots, nil
 }
 
 func (r *pg19Repo) GetMaintenanceAutovacuumQueue(
@@ -151,4 +163,55 @@ func TestHeapTuplesWritten(t *testing.T) {
 	}), "PG 19 falls back to inserted + updated")
 
 	assert.Zero(t, heapTuplesWritten(dto.ProgressCluster{}))
+}
+
+func TestGetMaintenanceAutovacuumSummary_Source(t *testing.T) {
+	t.Parallel()
+
+	repo := &pg19Repo{summary: &dto.MaintenanceAutovacuumSummary{
+		TablesTotal:              12,
+		RunningVacuums:           3,
+		RunningVacuumsWraparound: shortcut.Ptr[int32](1),
+		Source:                   dto.AutovacuumSummarySourceScores,
+	}}
+	h := &Handlers{repo: repo} //nolint:exhaustruct
+
+	resp, err := h.GetMaintenanceAutovacuumSummary(t.Context(), serverhttp.GetMaintenanceAutovacuumSummaryRequestObject{})
+	require.NoError(t, err)
+
+	got, ok := resp.(serverhttp.GetMaintenanceAutovacuumSummary200JSONResponse)
+	require.True(t, ok, "got %T", resp)
+	assert.Equal(t, serverhttp.AutovacuumSummarySourceScores, got.Source)
+	require.NotNil(t, got.RunningVacuumsWraparound)
+	assert.EqualValues(t, 1, *got.RunningVacuumsWraparound)
+	assert.Nil(t, got.RunningVacuumsManual)
+}
+
+func TestGetReplicationSlots_OnStandby(t *testing.T) {
+	t.Parallel()
+
+	repo := &pg19Repo{slots: &dto.ReplicationSlots{
+		OnStandby: shortcut.Ptr(true),
+		Slots: []dto.ReplicationSlot{
+			{SlotName: "a", Synced: shortcut.Ptr(true), SlotsyncSkipReason: shortcut.Ptr("wal_not_flushed")},
+			{SlotName: "b"},
+		},
+	}}
+	h := &Handlers{repo: repo} //nolint:exhaustruct
+
+	resp, err := h.GetReplicationSlots(t.Context(), serverhttp.GetReplicationSlotsRequestObject{})
+	require.NoError(t, err)
+
+	got, ok := resp.(serverhttp.GetReplicationSlots200JSONResponse)
+	require.True(t, ok, "got %T", resp)
+	require.Len(t, got, 2)
+
+	for _, slot := range got {
+		require.NotNil(t, slot.OnStandby)
+		assert.True(t, *slot.OnStandby)
+	}
+
+	require.NotNil(t, got[0].SlotsyncSkipReason)
+	assert.Equal(t, "wal_not_flushed", *got[0].SlotsyncSkipReason)
+	assert.Nil(t, got[1].Synced)
 }

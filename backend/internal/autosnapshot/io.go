@@ -49,7 +49,7 @@ func (d *Daemon) processIOSnapshots(ctx context.Context, cfg Config) {
 		return
 	}
 
-	now := time.Now().UTC()
+	now := d.nowUTC()
 
 	for _, cl := range cls {
 		for _, h := range cl.Hosts {

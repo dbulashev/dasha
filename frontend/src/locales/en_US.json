@@ -667,7 +667,8 @@
         "writing new heap": "Writing new heap",
         "swapping relation files": "Swapping relation files",
         "rebuilding index": "Rebuilding indexes",
-        "performing final cleanup": "Performing final cleanup"
+        "performing final cleanup": "Performing final cleanup",
+        "catch-up": "Catching up"
       },
       "index": {
         "initializing": "Initializing",
@@ -693,6 +694,37 @@
         "waiting for wal archiving to finish": "Waiting for WAL archiving to finish",
         "transferring wal files": "Transferring WAL files"
       }
+    },
+    "startedByTitle": "Started by",
+    "modeTitle": "Mode",
+    "startedBy": {
+      "manual": "manual",
+      "autovacuum": "autovacuum",
+      "autovacuum_wraparound": "wraparound"
+    },
+    "mode": {
+      "normal": "normal",
+      "aggressive": "aggressive",
+      "failsafe": "failsafe"
+    },
+    "modeHint": {
+      "aggressive": "An aggressive VACUUM visits every page that is not all-frozen so it can advance relfrozenxid.",
+      "failsafe": "The table is close to wraparound: VACUUM dropped the cost delay and index cleanup to finish freezing sooner."
+    },
+    "vacuumWarning": {
+      "failsafe": "VACUUM switched to failsafe: the table is close to transaction ID wraparound. The cost delay and index cleanup are off so that freezing finishes as fast as possible.",
+      "wraparound": "VACUUM was started to prevent wraparound: the table reached autovacuum_freeze_max_age. Such a worker does not give way on locks and is not cancelled."
+    },
+    "repack": {
+      "inserted": "Tuples inserted",
+      "updated": "Tuples updated",
+      "deleted": "Tuples deleted",
+      "catchUpHint": "catching up with the changes made while copying",
+      "noOrdering": "no ordering"
+    },
+    "baseBackupType": {
+      "full": "full",
+      "incremental": "incremental"
     }
   },
   "slotForecast": {
@@ -721,7 +753,30 @@
     "table": "All locks (table)",
     "noActiveLocks": "No active locks",
     "blockedProcesses": "Blocked processes: {count}",
-    "foreignObjectHint": "Objects of other databases are shown as an identifier (OID): the name comes from that database’s catalog, and the connection goes to the selected one."
+    "foreignObjectHint": "Objects of other databases are shown as an identifier (OID): the name comes from that database’s catalog, and the connection goes to the selected one.",
+    "stats": {
+      "title": "Lock wait statistics",
+      "hostWide": "whole host",
+      "metric": {
+        "waits": "Waits",
+        "waitTime": "Time"
+      },
+      "axisWaits": "waits per interval",
+      "axisWaitTime": "wait time per interval",
+      "deadlockTimeoutHint": "Only waits longer than deadlock_timeout (now {value}) are counted: shorter waits never reach pg_stat_lock.",
+      "deadlockTimeoutChanged": "deadlock_timeout changed during this period, so the counting threshold was not the same throughout.",
+      "partial": "Some intervals are incomplete: a stats reset, a restart or a major upgrade broke the series. The chart shows a gap there, not a zero.",
+      "noSnapshots": "No snapshots in this period yet. pg_stat_lock is captured on the pg_stat_io snapshot schedule.",
+      "window": "Totals over the measured window: {window}",
+      "col": {
+        "waits": "Waits",
+        "waitTime": "Total",
+        "avgWait": "Average",
+        "share": "Share of time"
+      },
+      "noWaits": "No waits longer than deadlock_timeout in this window.",
+      "fastpathAdvice": "fastpath_exceeded is above zero: transactions ran out of fast-path slots and their locks went to the shared lock table. Raising max_locks_per_transaction (now {value}) helps."
+    }
   },
   "hostRole": {
     "primary": "Primary",
@@ -1064,6 +1119,45 @@
       "extended": "max_wal_size is exceeded, but the files are retained (wal_keep_size, or the slot needs them)",
       "unreserved": "WAL files are no longer reserved; some will be removed at the next checkpoint",
       "lost": "The required WAL files are lost and the slot is no longer usable"
+    },
+    "recovery": {
+      "title": "Recovery state",
+      "pauseState": {
+        "not paused": "replaying",
+        "pause requested": "pause requested",
+        "paused": "paused"
+      },
+      "promoteTriggered": "Promotion requested",
+      "notInRecovery": "The host is not in recovery: it seems to have been promoted to primary already.",
+      "noPrivilege": "Dasha's role cannot see pg_stat_recovery values: it needs the pg_read_all_stats role.",
+      "lastReplayed": "Last replayed record",
+      "replayEnd": "Being replayed (end)",
+      "lastXactTime": "Last replayed transaction",
+      "ago": "{age} ago",
+      "chunkStart": "Current WAL chunk started",
+      "chunkStartHint": "When the startup process began applying the current chunk of WAL. If this time stays put while the LSN does not move, replay is stuck."
+    },
+    "slotSync": {
+      "column": "Synchronization",
+      "synced": "in sync",
+      "skipReason": {
+        "wal_or_rows_removed": {
+          "label": "WAL or rows removed",
+          "hint": "The primary has already removed WAL or catalog rows the standby slot needs. Synchronization is skipped until the slot on the primary moves on."
+        },
+        "wal_not_flushed": {
+          "label": "WAL not flushed",
+          "hint": "The standby has not yet received and flushed WAL up to the slot's position on the primary."
+        },
+        "no_consistent_snapshot": {
+          "label": "no consistent snapshot",
+          "hint": "Logical decoding on the standby has not reached a consistent point yet."
+        },
+        "slot_invalidated": {
+          "label": "slot invalidated",
+          "hint": "The slot on the standby is invalidated and cannot be synchronized. It has to be recreated."
+        }
+      }
     }
   },
   "FK Analysis": "FK Analysis",
@@ -1369,12 +1463,35 @@
       "ok": "Within thresholds",
       "allOk": "All tables are within thresholds — autovacuum has nothing to do right now.",
       "runningVacuums": "VACUUM running",
-      "runningAnalyzes": "ANALYZE running"
+      "runningAnalyzes": "ANALYZE running",
+      "hintScores": "PostgreSQL 19: tables are counted by autovacuum's own decision (do_vacuum and do_analyze in pg_stat_autovacuum_scores), system catalogs included. On the right are the maintenance processes running in this database now.",
+      "includingSystem": "system tables included",
+      "startedBy": {
+        "manual": "manual",
+        "autovacuum": "autovacuum",
+        "wraparound": "wraparound"
+      }
     },
     "activity": {
       "all": "All",
       "active": "Active",
       "cold": "Cold"
+    },
+    "queue": {
+      "title": "Autovacuum queue",
+      "hint": "pg_stat_autovacuum_scores: autovacuum's own assessment of the tables in the current database, system catalogs included. The higher the score, the sooner the table is processed. The component that produced the score is highlighted.",
+      "shown": "{shown} of {total} shown",
+      "component": {
+        "xid": "xid",
+        "mxid": "mxid",
+        "vacuum": "vacuum",
+        "vacuum_insert": "vacuum_insert",
+        "analyze": "analyze"
+      },
+      "flags": "Flags",
+      "doVacuum": "Autovacuum will run VACUUM",
+      "doAnalyze": "Autovacuum will run ANALYZE",
+      "forWraparound": "VACUUM to prevent transaction ID wraparound: it cannot be cancelled and runs even with autovacuum turned off."
     }
   },
   "fleetHealth": {
@@ -2271,5 +2388,9 @@
       "newTab": "{key} in a new tab",
       "close": "Esc to close"
     }
+  },
+  "common": {
+    "pg19Required": "{feature} was added in PostgreSQL 19. This host runs an older version, so the section is hidden.",
+    "noSnapshotStorage": "Snapshot storage is not configured: there is no history, so the section is hidden."
   }
 }

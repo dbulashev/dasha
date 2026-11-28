@@ -153,12 +153,16 @@ func TestTakeIOSnapshotWarnsOnSampleFailure(t *testing.T) {
 	}
 }
 
+// Both sweeps of a test run at this instant, so they cannot straddle a */5 tick.
+var midScheduleTick = time.Date(2026, 7, 19, 3, 2, 30, 0, time.UTC)
+
 func TestProcessIOSnapshotsHoldsScheduleWithoutStoredSnapshot(t *testing.T) {
 	t.Parallel()
 
 	repo := &ioFakeRepo{err: errors.New("host unreachable")}
 	d := newIOTestDaemon(repo, &ioFakeStore{}, zap.NewNop())
 	d.clusters = &ioFakeClusters{cls: []config.Cluster{oneHostCluster()}}
+	d.clock = func() time.Time { return midScheduleTick }
 
 	cfg := Config{IOEnabled: true, IOSchedule: "*/5 * * * *"} //nolint:exhaustruct
 
@@ -179,9 +183,10 @@ func TestProcessIOSnapshotsHoldsScheduleWithStaleStoredSnapshot(t *testing.T) {
 		err:      errors.New("pg_stat_io failed"),
 		lockSnap: &statlock.Snapshot{VersionNum: 190001},
 	}
-	store := &ioFakeStore{last: map[string]time.Time{"c1/h1": time.Now().UTC().Add(-time.Hour)}}
+	store := &ioFakeStore{last: map[string]time.Time{"c1/h1": midScheduleTick.Add(-time.Hour)}}
 	d := newIOTestDaemon(repo, store, zap.NewNop())
 	d.clusters = &ioFakeClusters{cls: []config.Cluster{oneHostCluster()}}
+	d.clock = func() time.Time { return midScheduleTick }
 
 	cfg := Config{IOEnabled: true, IOSchedule: "*/5 * * * *"} //nolint:exhaustruct
 

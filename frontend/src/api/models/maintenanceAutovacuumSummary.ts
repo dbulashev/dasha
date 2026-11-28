@@ -4,8 +4,11 @@
  * User API
  * OpenAPI spec version: 1.0.0
  */
+import type { MaintenanceAutovacuumSummarySource } from './maintenanceAutovacuumSummarySource';
 
 export interface MaintenanceAutovacuumSummary {
+  /** Where the table counts come from: scores — pg_stat_autovacuum_scores (PG 19+, system catalogs included); formula — the trigger formula over pg_stat_user_tables. */
+  Source: MaintenanceAutovacuumSummarySource;
   /** Tables due for autovacuum but not autoanalyze. PG 19+ — autovacuum's own decision (do_vacuum in pg_stat_autovacuum_scores); before 19 — the dead-tuple or insert trigger formula. */
   TablesDueVacuumOnly: number;
   /** Tables due for autoanalyze only (PG 19+ do_analyze; before 19 the autoanalyze trigger formula). */
@@ -18,4 +21,29 @@ export interface MaintenanceAutovacuumSummary {
   RunningVacuums: number;
   /** ANALYZE processes currently running in the database (pg_stat_progress_analyze). */
   RunningAnalyzes: number;
+  /**
+     * Running VACUUMs with started_by = manual. PG 19+; null before.
+     * @nullable
+     */
+  RunningVacuumsManual?: number | null;
+  /**
+     * Running VACUUMs with started_by = autovacuum. PG 19+; null before.
+     * @nullable
+     */
+  RunningVacuumsAutovacuum?: number | null;
+  /**
+     * Running VACUUMs with started_by = autovacuum_wraparound. PG 19+; null before.
+     * @nullable
+     */
+  RunningVacuumsWraparound?: number | null;
+  /**
+     * Running ANALYZEs with started_by = manual. PG 19+; null before.
+     * @nullable
+     */
+  RunningAnalyzesManual?: number | null;
+  /**
+     * Running ANALYZEs with started_by = autovacuum. PG 19+; null before.
+     * @nullable
+     */
+  RunningAnalyzesAutovacuum?: number | null;
 }

@@ -68,8 +68,9 @@ type Daemon struct {
 	repo     Repo
 	store    Store
 	logger   *zap.Logger
-	// clock feeds the spike state machine; nil means time.Now. Injected by tests
-	// so a multi-minute spike can be replayed without sleeping.
+	// clock feeds the spike state machine and the pg_stat_io schedule; nil means
+	// time.Now. Injected by tests so a multi-minute spike can be replayed without
+	// sleeping and repeated sweeps stay inside one schedule tick.
 	clock func() time.Time
 
 	mu                    sync.Mutex

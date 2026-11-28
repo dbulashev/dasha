@@ -307,6 +307,7 @@ export * from './maintenanceAutovacuumFreezeMaxAge';
 export * from './maintenanceAutovacuumQueue';
 export * from './maintenanceAutovacuumQueueRow';
 export * from './maintenanceAutovacuumSummary';
+export * from './maintenanceAutovacuumSummarySource';
 export * from './maintenanceInfo';
 export * from './maintenanceTransactionIdDanger';
 export * from './maintenanceVacuumProgress';

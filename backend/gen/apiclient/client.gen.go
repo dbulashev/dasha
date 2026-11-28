@@ -255,6 +255,12 @@ const (
 	Unsupported LogSearchResultTextSkipped = "unsupported"
 )
 
+// Defines values for MaintenanceAutovacuumSummarySource.
+const (
+	AutovacuumSummarySourceFormula MaintenanceAutovacuumSummarySource = "formula"
+	AutovacuumSummarySourceScores  MaintenanceAutovacuumSummarySource = "scores"
+)
+
 // Defines values for PersonalAccessTokenRole.
 const (
 	PersonalAccessTokenRoleAdmin  PersonalAccessTokenRole = "admin"
@@ -2210,8 +2216,26 @@ type MaintenanceAutovacuumSummary struct {
 	// RunningAnalyzes ANALYZE processes currently running in the database (pg_stat_progress_analyze).
 	RunningAnalyzes int32 `json:"RunningAnalyzes"`
 
+	// RunningAnalyzesAutovacuum Running ANALYZEs with started_by = autovacuum. PG 19+; null before.
+	RunningAnalyzesAutovacuum *int32 `json:"RunningAnalyzesAutovacuum"`
+
+	// RunningAnalyzesManual Running ANALYZEs with started_by = manual. PG 19+; null before.
+	RunningAnalyzesManual *int32 `json:"RunningAnalyzesManual"`
+
 	// RunningVacuums VACUUM processes currently running in the database (pg_stat_progress_vacuum).
 	RunningVacuums int32 `json:"RunningVacuums"`
+
+	// RunningVacuumsAutovacuum Running VACUUMs with started_by = autovacuum. PG 19+; null before.
+	RunningVacuumsAutovacuum *int32 `json:"RunningVacuumsAutovacuum"`
+
+	// RunningVacuumsManual Running VACUUMs with started_by = manual. PG 19+; null before.
+	RunningVacuumsManual *int32 `json:"RunningVacuumsManual"`
+
+	// RunningVacuumsWraparound Running VACUUMs with started_by = autovacuum_wraparound. PG 19+; null before.
+	RunningVacuumsWraparound *int32 `json:"RunningVacuumsWraparound"`
+
+	// Source Where the table counts come from: scores — pg_stat_autovacuum_scores (PG 19+, system catalogs included); formula — the trigger formula over pg_stat_user_tables.
+	Source MaintenanceAutovacuumSummarySource `json:"Source"`
 
 	// TablesDueAnalyzeOnly Tables due for autoanalyze only (PG 19+ do_analyze; before 19 the autoanalyze trigger formula).
 	TablesDueAnalyzeOnly int32 `json:"TablesDueAnalyzeOnly"`
@@ -2225,6 +2249,9 @@ type MaintenanceAutovacuumSummary struct {
 	// TablesTotal Tables considered. PG 19+ — every row of pg_stat_autovacuum_scores, system catalogs included; before 19 — pg_stat_user_tables.
 	TablesTotal int32 `json:"TablesTotal"`
 }
+
+// MaintenanceAutovacuumSummarySource Where the table counts come from: scores — pg_stat_autovacuum_scores (PG 19+, system catalogs included); formula — the trigger formula over pg_stat_user_tables.
+type MaintenanceAutovacuumSummarySource string
 
 // MaintenanceInfo defines model for MaintenanceInfo.
 type MaintenanceInfo struct {
@@ -2250,8 +2277,13 @@ type MaintenanceTransactionIdDanger struct {
 
 // MaintenanceVacuumProgress defines model for MaintenanceVacuumProgress.
 type MaintenanceVacuumProgress struct {
-	Phase string `json:"Phase"`
-	Pid   int32  `json:"Pid"`
+	// Mode normal | aggressive | failsafe. PG 19+; null before. Can switch to failsafe while the vacuum runs.
+	Mode  *string `json:"Mode"`
+	Phase string  `json:"Phase"`
+	Pid   int32   `json:"Pid"`
+
+	// StartedBy manual | autovacuum | autovacuum_wraparound. PG 19+; null before.
+	StartedBy *string `json:"StartedBy"`
 }
 
 // PersonalAccessToken defines model for PersonalAccessToken.
@@ -2579,13 +2611,19 @@ type ProgressAnalyze struct {
 	Pid               int32  `json:"Pid"`
 	SampleBlksScanned int64  `json:"SampleBlksScanned"`
 	SampleBlksTotal   int64  `json:"SampleBlksTotal"`
-	TableName         string `json:"TableName"`
+
+	// StartedBy manual | autovacuum. PG 19+; null before.
+	StartedBy *string `json:"StartedBy"`
+	TableName string  `json:"TableName"`
 }
 
 // ProgressBaseBackup defines model for ProgressBaseBackup.
 type ProgressBaseBackup struct {
-	BackupStreamed      int64    `json:"BackupStreamed"`
-	BackupTotal         int64    `json:"BackupTotal"`
+	BackupStreamed int64 `json:"BackupStreamed"`
+	BackupTotal    int64 `json:"BackupTotal"`
+
+	// BackupType full | incremental. PG 19+; null before.
+	BackupType          *string  `json:"BackupType"`
 	Phase               string   `json:"Phase"`
 	Pid                 int32    `json:"Pid"`
 	ProgressPercentage  *float64 `json:"ProgressPercentage"`
@@ -2595,17 +2633,33 @@ type ProgressBaseBackup struct {
 
 // ProgressCluster defines model for ProgressCluster.
 type ProgressCluster struct {
-	ClusterIndex      string `json:"ClusterIndex"`
-	Command           string `json:"Command"`
-	Datname           string `json:"Datname"`
-	HeapBlksScanned   int64  `json:"HeapBlksScanned"`
-	HeapBlksTotal     int64  `json:"HeapBlksTotal"`
-	HeapTuplesScanned int64  `json:"HeapTuplesScanned"`
-	HeapTuplesWritten int64  `json:"HeapTuplesWritten"`
-	IndexRebuildCount int64  `json:"IndexRebuildCount"`
-	Phase             string `json:"Phase"`
-	Pid               int32  `json:"Pid"`
-	TableName         string `json:"TableName"`
+	// ClusterIndex Index the table is ordered by; null when it is rewritten without ordering.
+	ClusterIndex *string `json:"ClusterIndex"`
+
+	// Command CLUSTER | VACUUM FULL; PG 19+ also REPACK (read from pg_stat_progress_repack).
+	Command         string `json:"Command"`
+	Datname         string `json:"Datname"`
+	HeapBlksScanned int64  `json:"HeapBlksScanned"`
+	HeapBlksTotal   int64  `json:"HeapBlksTotal"`
+
+	// HeapTuplesDeleted PG 19+; null before.
+	HeapTuplesDeleted *int64 `json:"HeapTuplesDeleted"`
+
+	// HeapTuplesInserted PG 19+; null before.
+	HeapTuplesInserted *int64 `json:"HeapTuplesInserted"`
+	HeapTuplesScanned  int64  `json:"HeapTuplesScanned"`
+
+	// HeapTuplesUpdated PG 19+; null before.
+	HeapTuplesUpdated *int64 `json:"HeapTuplesUpdated"`
+
+	// HeapTuplesWritten Tuples written to the new heap. PG 19+ reports inserted, updated and deleted separately; this field is then inserted + updated.
+	HeapTuplesWritten int64 `json:"HeapTuplesWritten"`
+	IndexRebuildCount int64 `json:"IndexRebuildCount"`
+
+	// Phase Includes catch-up for REPACK CONCURRENTLY on PG 19+.
+	Phase     string `json:"Phase"`
+	Pid       int32  `json:"Pid"`
+	TableName string `json:"TableName"`
 }
 
 // ProgressCopy COPY commands in progress (pg_stat_progress_copy, PG 14+; empty on older servers).
@@ -2683,11 +2737,17 @@ type ProgressVacuum struct {
 	// MaxDeadTuples Dead-tuple buffer capacity in rows (from maintenance_work_mem). PG < 17 only; PG 17+ caps by memory instead (MaxDeadTupleBytes).
 	MaxDeadTuples *int64 `json:"MaxDeadTuples"`
 
+	// Mode normal | aggressive | failsafe. PG 19+; null before. Can switch to failsafe while the vacuum runs.
+	Mode *string `json:"Mode"`
+
 	// NumDeadTuples Dead item identifiers collected in the current vacuum cycle (resets after each index vacuum pass), not the table's total dead rows. PG 17+ reports num_dead_item_ids.
 	NumDeadTuples int64  `json:"NumDeadTuples"`
 	Phase         string `json:"Phase"`
 	Pid           int32  `json:"Pid"`
-	TableName     string `json:"TableName"`
+
+	// StartedBy manual | autovacuum | autovacuum_wraparound. PG 19+; null before.
+	StartedBy *string `json:"StartedBy"`
+	TableName string  `json:"TableName"`
 }
 
 // QueryBlocked defines model for QueryBlocked.
@@ -2928,10 +2988,22 @@ type ReplicationSlot struct {
 	Active       bool    `json:"Active"`
 	BacklogBytes *int64  `json:"BacklogBytes"`
 	Database     *string `json:"Database,omitempty"`
-	SafeWalSize  *int64  `json:"SafeWalSize"`
-	SlotName     string  `json:"SlotName"`
-	SlotType     string  `json:"SlotType"`
-	WalStatus    *string `json:"WalStatus,omitempty"`
+
+	// Failover PG 17+; null before.
+	Failover *bool `json:"Failover"`
+
+	// OnStandby The host is in recovery; the same for every slot of the response.
+	OnStandby   *bool  `json:"OnStandby"`
+	SafeWalSize *int64 `json:"SafeWalSize"`
+	SlotName    string `json:"SlotName"`
+	SlotType    string `json:"SlotType"`
+
+	// SlotsyncSkipReason Why the last synchronization of a synced slot was skipped: wal_or_rows_removed | wal_not_flushed | no_consistent_snapshot | slot_invalidated; null — in sync. Meaningful only for Synced slots on a standby. PG 19+; null before.
+	SlotsyncSkipReason *string `json:"SlotsyncSkipReason"`
+
+	// Synced The slot is synchronized from the primary (standby only). PG 17+; null before.
+	Synced    *bool   `json:"Synced"`
+	WalStatus *string `json:"WalStatus,omitempty"`
 }
 
 // ReplicationSlotForecast defines model for ReplicationSlotForecast.

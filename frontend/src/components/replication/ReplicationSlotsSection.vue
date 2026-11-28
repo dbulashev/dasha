@@ -7,20 +7,11 @@ import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useApiLoader } from '@/composables/useApiLoader'
 import { useViewError } from '@/composables/useViewError'
 import { fmtBytes } from '@/utils/format'
+import { hasFailoverColumns, hasSyncColumn, isKnownSkipReason, showsSyncState } from './slotSync'
 
 const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
 const { onError } = useViewError()
-
-const headers = computed(() => [
-  { title: t('replication.slotName'), key: 'SlotName' },
-  { title: t('replication.slotType'), key: 'SlotType' },
-  { title: t('header.database'), key: 'Database' },
-  { title: t('replication.active'), key: 'Active' },
-  { title: t('replication.walStatus'), key: 'WalStatus' },
-  { title: t('replication.backlog'), key: 'BacklogBytes' },
-  { title: t('replication.safeWalSize'), key: 'SafeWalSize' },
-])
 
 const { items, loading } = useApiLoader<ReplicationSlot[]>(
   () => getReplicationSlots({
@@ -33,6 +24,25 @@ const { items, loading } = useApiLoader<ReplicationSlot[]>(
     onError,
   },
 )
+
+const headers = computed(() => [
+  { title: t('replication.slotName'), key: 'SlotName' },
+  { title: t('replication.slotType'), key: 'SlotType' },
+  { title: t('header.database'), key: 'Database' },
+  { title: t('replication.active'), key: 'Active' },
+  { title: t('replication.walStatus'), key: 'WalStatus' },
+  { title: t('replication.backlog'), key: 'BacklogBytes' },
+  { title: t('replication.safeWalSize'), key: 'SafeWalSize' },
+  ...(hasFailoverColumns(items.value)
+    ? [
+        { title: 'failover', key: 'Failover' },
+        { title: 'synced', key: 'Synced' },
+      ]
+    : []),
+  ...(hasSyncColumn(items.value)
+    ? [{ title: t('replication.slotSync.column'), key: 'SlotsyncSkipReason', sortable: false }]
+    : []),
+])
 
 function walStatusColor(status: string | undefined): string {
   if (!status) return 'default'
@@ -77,6 +87,32 @@ function walStatusColor(status: string | undefined): string {
         </template>
         <template #item.SafeWalSize="{ item }">
           {{ fmtBytes(item.SafeWalSize) }}
+        </template>
+        <template #item.Failover="{ item }">
+          <v-icon v-if="item.Failover != null" size="small" :color="item.Failover ? 'success' : 'medium-emphasis'">
+            {{ item.Failover ? 'mdi-check' : 'mdi-minus' }}
+          </v-icon>
+        </template>
+        <template #item.Synced="{ item }">
+          <v-icon v-if="item.Synced != null" size="small" :color="item.Synced ? 'success' : 'medium-emphasis'">
+            {{ item.Synced ? 'mdi-check' : 'mdi-minus' }}
+          </v-icon>
+        </template>
+        <template #item.SlotsyncSkipReason="{ item }">
+          <template v-if="showsSyncState(item)">
+            <v-chip v-if="!item.SlotsyncSkipReason" size="small" color="success" variant="tonal">
+              {{ t('replication.slotSync.synced') }}
+            </v-chip>
+            <v-tooltip v-else-if="isKnownSkipReason(item.SlotsyncSkipReason)" location="top" max-width="420">
+              <template #activator="{ props }">
+                <v-chip v-bind="props" size="small" color="warning" variant="tonal">
+                  {{ t('replication.slotSync.skipReason.' + item.SlotsyncSkipReason + '.label') }}
+                </v-chip>
+              </template>
+              {{ t('replication.slotSync.skipReason.' + item.SlotsyncSkipReason + '.hint') }}
+            </v-tooltip>
+            <v-chip v-else size="small" color="warning" variant="tonal">{{ item.SlotsyncSkipReason }}</v-chip>
+          </template>
         </template>
       </v-data-table>
     </v-card-text>

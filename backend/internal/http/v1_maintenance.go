@@ -139,12 +139,18 @@ func (s *Handlers) GetMaintenanceAutovacuumSummary(
 	}
 
 	return serverhttp.GetMaintenanceAutovacuumSummary200JSONResponse{
-		TablesDueVacuumOnly:  data.TablesDueVacuumOnly,
-		TablesDueAnalyzeOnly: data.TablesDueAnalyzeOnly,
-		TablesDueBoth:        data.TablesDueBoth,
-		TablesTotal:          data.TablesTotal,
-		RunningVacuums:       data.RunningVacuums,
-		RunningAnalyzes:      data.RunningAnalyzes,
+		TablesDueVacuumOnly:       data.TablesDueVacuumOnly,
+		TablesDueAnalyzeOnly:      data.TablesDueAnalyzeOnly,
+		TablesDueBoth:             data.TablesDueBoth,
+		TablesTotal:               data.TablesTotal,
+		RunningVacuums:            data.RunningVacuums,
+		RunningAnalyzes:           data.RunningAnalyzes,
+		RunningVacuumsManual:      data.RunningVacuumsManual,
+		RunningVacuumsAutovacuum:  data.RunningVacuumsAutovacuum,
+		RunningVacuumsWraparound:  data.RunningVacuumsWraparound,
+		RunningAnalyzesManual:     data.RunningAnalyzesManual,
+		RunningAnalyzesAutovacuum: data.RunningAnalyzesAutovacuum,
+		Source:                    serverhttp.MaintenanceAutovacuumSummarySource(data.Source),
 	}, nil
 }
 
@@ -212,8 +218,10 @@ func (s *Handlers) GetMaintenanceVacuumProgress(
 		data,
 		func(t dto.MaintenanceVacuumProgress) serverhttp.MaintenanceVacuumProgress {
 			return serverhttp.MaintenanceVacuumProgress{
-				Pid:   t.Pid,
-				Phase: t.Phase,
+				Pid:       t.Pid,
+				Phase:     t.Phase,
+				StartedBy: t.StartedBy,
+				Mode:      t.Mode,
 			}
 		})
 

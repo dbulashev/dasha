@@ -6243,6 +6243,14 @@ components:
           format: int32
         Phase:
           type: string
+        StartedBy:
+          type: string
+          nullable: true
+          description: 'manual | autovacuum | autovacuum_wraparound. PG 19+; null before.'
+        Mode:
+          type: string
+          nullable: true
+          description: 'normal | aggressive | failsafe. PG 19+; null before. Can switch to failsafe while the vacuum runs.'
 
     HotHostWindow:
       type: object
@@ -6879,7 +6887,18 @@ components:
         - TablesTotal
         - RunningVacuums
         - RunningAnalyzes
+        - Source
       properties:
+        Source:
+          type: string
+          enum: [scores, formula]
+          x-enum-varnames:
+            - AutovacuumSummarySourceScores
+            - AutovacuumSummarySourceFormula
+          description: >-
+            Where the table counts come from: scores — pg_stat_autovacuum_scores
+            (PG 19+, system catalogs included); formula — the trigger formula
+            over pg_stat_user_tables.
         TablesDueVacuumOnly:
           type: integer
           format: int32
@@ -6904,6 +6923,31 @@ components:
           type: integer
           format: int32
           description: ANALYZE processes currently running in the database (pg_stat_progress_analyze).
+        RunningVacuumsManual:
+          type: integer
+          format: int32
+          nullable: true
+          description: Running VACUUMs with started_by = manual. PG 19+; null before.
+        RunningVacuumsAutovacuum:
+          type: integer
+          format: int32
+          nullable: true
+          description: Running VACUUMs with started_by = autovacuum. PG 19+; null before.
+        RunningVacuumsWraparound:
+          type: integer
+          format: int32
+          nullable: true
+          description: Running VACUUMs with started_by = autovacuum_wraparound. PG 19+; null before.
+        RunningAnalyzesManual:
+          type: integer
+          format: int32
+          nullable: true
+          description: Running ANALYZEs with started_by = manual. PG 19+; null before.
+        RunningAnalyzesAutovacuum:
+          type: integer
+          format: int32
+          nullable: true
+          description: Running ANALYZEs with started_by = autovacuum. PG 19+; null before.
 
     MaintenanceAutovacuumQueue:
       type: object
@@ -7648,6 +7692,10 @@ components:
           format: int64
         CurrentChildTable:
           type: string
+        StartedBy:
+          type: string
+          nullable: true
+          description: 'manual | autovacuum. PG 19+; null before.'
 
     ProgressBaseBackup:
       type: object
@@ -7680,6 +7728,10 @@ components:
         TablespacesStreamed:
           type: integer
           format: int64
+        BackupType:
+          type: string
+          nullable: true
+          description: 'full | incremental. PG 19+; null before.'
 
     ProgressCluster:
       type: object
@@ -7705,16 +7757,38 @@ components:
           type: string
         Command:
           type: string
+          description: 'CLUSTER | VACUUM FULL; PG 19+ also REPACK (read from pg_stat_progress_repack).'
         Phase:
           type: string
+          description: Includes catch-up for REPACK CONCURRENTLY on PG 19+.
         ClusterIndex:
           type: string
+          nullable: true
+          description: Index the table is ordered by; null when it is rewritten without ordering.
         HeapTuplesScanned:
           type: integer
           format: int64
         HeapTuplesWritten:
           type: integer
           format: int64
+          description: >-
+            Tuples written to the new heap. PG 19+ reports inserted, updated and
+            deleted separately; this field is then inserted + updated.
+        HeapTuplesInserted:
+          type: integer
+          format: int64
+          nullable: true
+          description: PG 19+; null before.
+        HeapTuplesUpdated:
+          type: integer
+          format: int64
+          nullable: true
+          description: PG 19+; null before.
+        HeapTuplesDeleted:
+          type: integer
+          format: int64
+          nullable: true
+          description: PG 19+; null before.
         HeapBlksTotal:
           type: integer
           format: int64
@@ -7911,6 +7985,14 @@ components:
           format: int64
           nullable: true
           description: Memory limit for the dead-tuple TID store. PG 17+ only.
+        StartedBy:
+          type: string
+          nullable: true
+          description: 'manual | autovacuum | autovacuum_wraparound. PG 19+; null before.'
+        Mode:
+          type: string
+          nullable: true
+          description: 'normal | aggressive | failsafe. PG 19+; null before. Can switch to failsafe while the vacuum runs.'
 
     QueryStatsStatus:
       type: object
@@ -8412,6 +8494,26 @@ components:
           type: integer
           format: int64
           nullable: true
+        Failover:
+          type: boolean
+          nullable: true
+          description: PG 17+; null before.
+        Synced:
+          type: boolean
+          nullable: true
+          description: The slot is synchronized from the primary (standby only). PG 17+; null before.
+        SlotsyncSkipReason:
+          type: string
+          nullable: true
+          description: >-
+            Why the last synchronization of a synced slot was skipped:
+            wal_or_rows_removed | wal_not_flushed | no_consistent_snapshot |
+            slot_invalidated; null — in sync. Meaningful only for Synced slots
+            on a standby. PG 19+; null before.
+        OnStandby:
+          type: boolean
+          nullable: true
+          description: The host is in recovery; the same for every slot of the response.
 
     RecoveryStatus:
       type: object

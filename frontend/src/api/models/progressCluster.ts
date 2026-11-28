@@ -9,11 +9,33 @@ export interface ProgressCluster {
   Pid: number;
   Datname: string;
   TableName: string;
+  /** CLUSTER | VACUUM FULL; PG 19+ also REPACK (read from pg_stat_progress_repack). */
   Command: string;
+  /** Includes catch-up for REPACK CONCURRENTLY on PG 19+. */
   Phase: string;
-  ClusterIndex: string;
+  /**
+     * Index the table is ordered by; null when it is rewritten without ordering.
+     * @nullable
+     */
+  ClusterIndex: string | null;
   HeapTuplesScanned: number;
+  /** Tuples written to the new heap. PG 19+ reports inserted, updated and deleted separately; this field is then inserted + updated. */
   HeapTuplesWritten: number;
+  /**
+     * PG 19+; null before.
+     * @nullable
+     */
+  HeapTuplesInserted?: number | null;
+  /**
+     * PG 19+; null before.
+     * @nullable
+     */
+  HeapTuplesUpdated?: number | null;
+  /**
+     * PG 19+; null before.
+     * @nullable
+     */
+  HeapTuplesDeleted?: number | null;
   HeapBlksTotal: number;
   HeapBlksScanned: number;
   IndexRebuildCount: number;

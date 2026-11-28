@@ -8,4 +8,14 @@
 export interface MaintenanceVacuumProgress {
   Pid: number;
   Phase: string;
+  /**
+     * manual | autovacuum | autovacuum_wraparound. PG 19+; null before.
+     * @nullable
+     */
+  StartedBy?: string | null;
+  /**
+     * normal | aggressive | failsafe. PG 19+; null before. Can switch to failsafe while the vacuum runs.
+     * @nullable
+     */
+  Mode?: string | null;
 }

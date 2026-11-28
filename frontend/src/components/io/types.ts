@@ -1,4 +1,7 @@
 import { fmtCompact, fmtCompactFloat, fmtScaled, pickTimeScale } from '@/utils/format'
+import { NEUTRAL_SLOT, SERIES_SLOTS, neutralColor, paletteColor } from '@/utils/seriesColors'
+
+export { neutralColor, paletteColor }
 
 export type MetricMode = 'count' | 'time'
 
@@ -34,21 +37,6 @@ export const BUFFER_OBJECTS = ['relation', 'temp relation']
 
 export const CONTEXTS = ['normal', 'vacuum', 'bulkread', 'bulkwrite'] as const
 
-// Categorical slots as [light, dark]; the dark step is picked for the dark
-// surface, not derived. Both orders are validated for colour-vision deficiency.
-const SERIES_SLOTS: readonly (readonly [string, string])[] = [
-  ['#2a78d6', '#3987e5'],
-  ['#eb6834', '#d95926'],
-  ['#1baf7a', '#199e70'],
-  ['#eda100', '#c98500'],
-  ['#e87ba4', '#d55181'],
-  ['#008300', '#008300'],
-  ['#4a3aa7', '#9085e9'],
-  ['#e34948', '#e66767'],
-]
-
-const NEUTRAL_SLOT: readonly [string, string] = ['#6d6c66', '#a8a79c']
-
 // Colour follows the entity, not its rank: filtering must not repaint a series.
 const CONTEXT_SLOTS: Record<string, readonly [string, string]> = {
   normal: SERIES_SLOTS[0],
@@ -71,10 +59,6 @@ const BACKEND_TYPE_SLOTS: Record<string, number> = {
   walsender: 7,
 }
 
-export function paletteColor(index: number, dark: boolean): string {
-  return (SERIES_SLOTS[index] ?? NEUTRAL_SLOT)[dark ? 1 : 0]
-}
-
 export function contextColor(context: string, dark: boolean): string {
   return (CONTEXT_SLOTS[context] ?? NEUTRAL_SLOT)[dark ? 1 : 0]
 }
@@ -82,10 +66,6 @@ export function contextColor(context: string, dark: boolean): string {
 export function backendTypeColor(backendType: string, dark: boolean): string | null {
   const slot = BACKEND_TYPE_SLOTS[backendType]
   return slot === undefined ? null : paletteColor(slot, dark)
-}
-
-export function neutralColor(dark: boolean): string {
-  return NEUTRAL_SLOT[dark ? 1 : 0]
 }
 
 // Sequential ramp on one hue: transparent for idle, saturated for the peak.
