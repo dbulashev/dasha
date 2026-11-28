@@ -3,26 +3,22 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { getMaintenanceAutovacuumQueue } from '@/api/gen/default/default'
-import type { MaintenanceAutovacuumQueue, MaintenanceAutovacuumQueueRow } from '@/api/models/index'
+import type {
+  FeatureUnavailableReason,
+  MaintenanceAutovacuumQueue,
+  MaintenanceAutovacuumQueueRow,
+} from '@/api/models/index'
 import { PG19_VERSION_NUM } from '@/constants/pg'
 import { useClusterInfo } from '@/composables/useClusterInfo'
-import { useViewError } from '@/composables/useViewError'
-import { useInstanceInfoStore } from '@/stores/instanceInfo'
+import { useServerVersion } from '@/composables/useServerVersion'
 import { assertOk, featureUnavailableReason } from '@/utils/api'
 import { getErrorMessage } from '@/utils/error'
 import { fmtDecimal } from '@/utils/format'
-import {
-  SCORE_COMPONENTS,
-  componentValue,
-  dominantColor,
-  isDominant,
-  scoreBar,
-} from './autovacuumQueue'
+import { SCORE_COMPONENTS, dominantColor, isDominant, scoreBar } from './autovacuumQueue'
 
 const { clusterName, databaseName, hostName } = useClusterInfo()
 const { t } = useI18n()
-const { onError } = useViewError()
-const instanceInfo = useInstanceInfoStore()
+const serverVersion = useServerVersion()
 
 const PAGE_SIZES = [25, 50, 100, 500]
 
@@ -30,22 +26,13 @@ const page = ref(1)
 const itemsPerPage = ref(50)
 const queue = ref<MaintenanceAutovacuumQueue | null>(null)
 const loading = ref(false)
-const unsupported = ref(false)
+// A 501 is explained in the card rather than hiding it: the version check
+// already hides the card on hosts known to be older.
+const unavailable = ref<FeatureUnavailableReason | null>(null)
+// Kept in the card: the global error would replace the whole page.
+const error = ref<string | null>(null)
 
-const versionNum = computed(
-  () => instanceInfo.known(clusterName.value ?? '', hostName.value ?? '')?.VersionNum ?? null,
-)
-const visible = computed(
-  () => versionNum.value !== null && versionNum.value >= PG19_VERSION_NUM && !unsupported.value,
-)
-
-watch(
-  [clusterName, hostName],
-  ([cluster, host]) => {
-    if (cluster && host) instanceInfo.ensure(cluster, host)
-  },
-  { immediate: true },
-)
+const visible = computed(() => serverVersion.atLeast(PG19_VERSION_NUM))
 
 let requestId = 0
 
@@ -53,6 +40,7 @@ async function load() {
   if (!clusterName.value || !hostName.value || !databaseName.value || !visible.value) return
   const id = ++requestId
   loading.value = true
+  error.value = null
   try {
     const res = await getMaintenanceAutovacuumQueue({
       cluster_name: clusterName.value,
@@ -66,18 +54,18 @@ async function load() {
   } catch (err) {
     if (id !== requestId) return
     queue.value = null
-    if (featureUnavailableReason(err, 'unsupported_version')) {
-      unsupported.value = true
-      return
-    }
-    onError(getErrorMessage(err), err)
+    unavailable.value = featureUnavailableReason(err, 'unsupported_version')
+    if (!unavailable.value) error.value = getErrorMessage(err)
   } finally {
     if (id === requestId) loading.value = false
   }
 }
 
 watch([clusterName, hostName, databaseName], () => {
-  unsupported.value = false
+  requestId++
+  unavailable.value = null
+  error.value = null
+  loading.value = false
   queue.value = null
   page.value = 1
 })
@@ -122,7 +110,15 @@ const fmtScore = (v: number) => fmtDecimal(v, 2)
       </v-chip>
     </v-card-title>
     <v-card-text>
+      <v-alert v-if="unavailable === 'no_privilege'" type="info" variant="tonal" density="compact">
+        {{ t('common.noPrivilege', { feature: 'pg_stat_autovacuum_scores' }) }}
+      </v-alert>
+      <v-alert v-else-if="unavailable" type="info" variant="tonal" density="compact">
+        {{ t('common.pg19Required', { feature: 'pg_stat_autovacuum_scores' }) }}
+      </v-alert>
+      <v-alert v-else-if="error" type="error" variant="tonal" density="compact">{{ error }}</v-alert>
       <v-data-table-server
+        v-else
         v-model:page="page"
         v-model:items-per-page="itemsPerPage"
         :items-per-page-options="PAGE_SIZES"
@@ -156,7 +152,7 @@ const fmtScore = (v: number) => fmtDecimal(v, 2)
           <span
             :class="isDominant(item, c.key) ? `font-weight-bold text-${dominantColor(c.key)}` : 'text-medium-emphasis'"
           >
-            {{ fmtScore(componentValue(item, c.key)) }}
+            {{ fmtScore(item[c.field]) }}
           </span>
         </template>
         <template #item.flags="{ item }">

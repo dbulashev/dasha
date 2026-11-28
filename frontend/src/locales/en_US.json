@@ -2391,6 +2391,7 @@
   },
   "common": {
     "pg19Required": "{feature} was added in PostgreSQL 19. This host runs an older version, so the section is hidden.",
-    "noSnapshotStorage": "Snapshot storage is not configured: there is no history, so the section is hidden."
+    "noSnapshotStorage": "Snapshot storage is not configured: there is no history, so the section is hidden.",
+    "noPrivilege": "Not enough privileges to read {feature} on this host, so the section is hidden."
   }
 }

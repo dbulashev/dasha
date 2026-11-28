@@ -2,7 +2,6 @@ import { ref } from 'vue'
 
 import { getLockStatsHistory } from '@/api/gen/default/default'
 import type { FeatureUnavailableReason, LockStatsHistory } from '@/api/models/index'
-import { useViewError } from '@/composables/useViewError'
 import { assertOk, featureUnavailableReason } from '@/utils/api'
 import { getErrorMessage } from '@/utils/error'
 
@@ -28,8 +27,8 @@ export function useLockStatsHistory() {
   const totals = ref<LockStatsHistory | null>(null)
   const loading = ref(false)
   const unavailable = ref<FeatureUnavailableReason | null>(null)
-
-  const { onError } = useViewError()
+  // Kept in the section: the global error would replace the whole page.
+  const error = ref<string | null>(null)
 
   let requestId = 0
 
@@ -38,12 +37,14 @@ export function useLockStatsHistory() {
     history.value = null
     totals.value = null
     unavailable.value = null
+    error.value = null
     loading.value = false
   }
 
   async function load(query: LockStatsQuery) {
     const id = ++requestId
     loading.value = true
+    error.value = null
 
     const to = new Date()
     const from = new Date(to.getTime() - LOCK_STATS_RANGES[query.rangeKey] * 1000)
@@ -78,11 +79,11 @@ export function useLockStatsHistory() {
         return
       }
 
-      onError(getErrorMessage(err), err)
+      error.value = getErrorMessage(err)
     } finally {
       if (id === requestId) loading.value = false
     }
   }
 
-  return { history, totals, loading, unavailable, load, clear }
+  return { history, totals, loading, unavailable, error, load, clear }
 }

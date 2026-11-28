@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { MaintenanceAutovacuumQueueRow } from '@/api/models/index'
-import { componentValue, isDominant, scoreBar, startedByChips } from '../autovacuumQueue'
+import { isDominant, scoreBar, startedByChips } from '../autovacuumQueue'
 
 const row: MaintenanceAutovacuumQueueRow = {
   schema: 'public',
@@ -23,7 +23,6 @@ describe('autovacuum queue', () => {
     expect(isDominant(row, 'xid')).toBe(true)
     expect(isDominant(row, 'vacuum')).toBe(false)
     expect(isDominant({ ...row, dominant: null }, 'xid')).toBe(false)
-    expect(componentValue(row, 'vacuum')).toBe(1.2)
   })
 
   it('scales the bar to the page top but not below 1', () => {

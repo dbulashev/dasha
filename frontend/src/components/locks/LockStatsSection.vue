@@ -15,7 +15,7 @@ import { useI18n } from 'vue-i18n'
 import { fmtIoTime } from '@/components/io/types'
 import { PG19_VERSION_NUM } from '@/constants/pg'
 import { useClusterInfo } from '@/composables/useClusterInfo'
-import { useInstanceInfoStore } from '@/stores/instanceInfo'
+import { useServerVersion } from '@/composables/useServerVersion'
 import { useSnapshotsStatusStore } from '@/stores/snapshotsStatus'
 import { useThemeStore } from '@/stores/theme'
 import { fmtChartTime, fmtCompactFloat, fmtInt, fmtMs, fmtPct } from '@/utils/format'
@@ -35,7 +35,7 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip,
 
 const { t } = useI18n()
 const { clusterName, hostName } = useClusterInfo()
-const instanceInfo = useInstanceInfoStore()
+const serverVersion = useServerVersion()
 const snapshotsStatus = useSnapshotsStatusStore()
 const themeStore = useThemeStore()
 const isDark = computed(() => themeStore.currentTheme() === 'dark')
@@ -45,43 +45,41 @@ snapshotsStatus.ensureLoaded()
 const range = ref('1h')
 const metric = ref<LockMetric>('waits')
 
-const { history, totals, loading, unavailable, load, clear } = useLockStatsHistory()
-
-const versionNum = computed(
-  () => instanceInfo.known(clusterName.value ?? '', hostName.value ?? '')?.VersionNum ?? null,
-)
+const { history, totals, loading, unavailable, error, load, clear } = useLockStatsHistory()
 
 // The live version decides first; the 501 reason covers a host upgraded or
-// downgraded since the instance info was cached.
+// downgraded since the instance info was cached, and a version that could not
+// be fetched at all.
 const reason = computed(() => {
-  if (versionNum.value !== null && versionNum.value < PG19_VERSION_NUM) return 'unsupported_version'
+  if (serverVersion.below(PG19_VERSION_NUM)) return 'unsupported_version'
   if (snapshotsStatus.cachedAt !== null && !snapshotsStatus.available) return 'no_storage'
   return unavailable.value
 })
 
 const ready = computed(
-  () => versionNum.value !== null && snapshotsStatus.cachedAt !== null && reason.value === null,
+  () => !serverVersion.pending.value && snapshotsStatus.cachedAt !== null && reason.value === null,
 )
 
 function reload() {
   if (!clusterName.value || !hostName.value) return
   if (reason.value === 'unsupported_version' || reason.value === 'no_storage') return
-  if (versionNum.value === null || snapshotsStatus.cachedAt === null) return
+  if (serverVersion.pending.value || snapshotsStatus.cachedAt === null) return
 
   load({ clusterName: clusterName.value, hostName: hostName.value, rangeKey: range.value })
 }
 
-watch(
-  [clusterName, hostName],
-  ([cluster, host]) => {
-    if (cluster && host) instanceInfo.ensure(cluster, host)
-    clear()
-  },
-  { immediate: true },
-)
+watch([clusterName, hostName], clear, { immediate: true })
 
 watch(
-  [clusterName, hostName, range, versionNum, () => snapshotsStatus.cachedAt, () => snapshotsStatus.available],
+  [
+    clusterName,
+    hostName,
+    range,
+    serverVersion.versionNum,
+    serverVersion.pending,
+    () => snapshotsStatus.cachedAt,
+    () => snapshotsStatus.available,
+  ],
   reload,
   { immediate: true },
 )
@@ -185,7 +183,11 @@ const chartOptions = computed(() => ({
       <v-alert v-else-if="reason === 'no_storage'" type="info" variant="tonal" density="compact">
         {{ t('common.noSnapshotStorage') }}
       </v-alert>
+      <v-alert v-else-if="reason === 'no_privilege'" type="info" variant="tonal" density="compact">
+        {{ t('common.noPrivilege', { feature: 'pg_stat_lock' }) }}
+      </v-alert>
       <v-skeleton-loader v-else-if="!ready" type="image" height="120" />
+      <v-alert v-else-if="error" type="error" variant="tonal" density="compact">{{ error }}</v-alert>
 
       <template v-else>
         <v-alert type="info" variant="tonal" density="compact" class="mb-3" icon="mdi-information-outline">

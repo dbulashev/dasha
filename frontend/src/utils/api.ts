@@ -1,4 +1,4 @@
-import type { FeatureUnavailableReason } from '@/api/models/index'
+import { FeatureUnavailableReason } from '@/api/models/index'
 
 export class ApiError extends Error {
   status: number
@@ -29,7 +29,7 @@ export function assertOk<T>(response: { data: T; status: number } | { data: unkn
   return response.data as T
 }
 
-const FEATURE_REASONS: readonly string[] = ['unsupported_version', 'no_storage', 'no_privilege']
+const FEATURE_REASONS: readonly string[] = Object.values(FeatureUnavailableReason)
 
 // The reason of a 501 FeatureUnavailable, or null for any other error.
 export function featureUnavailableReason(

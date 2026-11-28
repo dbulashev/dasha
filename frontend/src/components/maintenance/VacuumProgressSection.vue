@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { getMaintenanceVacuumProgress } from '@/api/gen/default/default'
 import type { MaintenanceVacuumProgress } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useApiLoader } from '@/composables/useApiLoader'
+import { useAutoRefresh } from '@/composables/useAutoRefresh'
+import AutoRefreshControls from '@/components/AutoRefreshControls.vue'
 import { useViewError } from '@/composables/useViewError'
 import { modeColor, startedByColor, vacuumWarning } from '@/components/progress/pg19'
 
@@ -23,7 +25,7 @@ const headers = computed(() => [
     : []),
 ])
 
-const { items, loading } = useApiLoader<MaintenanceVacuumProgress[]>(
+const { items, loading, load } = useApiLoader<MaintenanceVacuumProgress[]>(
   () => getMaintenanceVacuumProgress({
     cluster_name: clusterName.value!,
     instance: hostName.value!,
@@ -36,6 +38,11 @@ const { items, loading } = useApiLoader<MaintenanceVacuumProgress[]>(
   },
 )
 
+// The page has no refresh of its own, and a switch to failsafe mid-run only
+// shows up on the next fetch.
+const autoRefresh = useAutoRefresh({ onTick: load })
+watch([clusterName, hostName, databaseName], () => autoRefresh.stop())
+
 const hasPg19Columns = computed(() => items.value.some(i => i.StartedBy != null || i.Mode != null))
 
 const warnings = computed(() => {
@@ -46,7 +53,17 @@ const warnings = computed(() => {
 
 <template>
   <v-card class="mb-4">
-    <v-card-title><v-icon start icon="mdi-broom" />{{ t('maintenance.vacuumProgress') }}</v-card-title>
+    <v-card-title class="d-flex align-center ga-2 flex-wrap">
+      <v-icon start icon="mdi-broom" />{{ t('maintenance.vacuumProgress') }}
+      <v-spacer />
+      <AutoRefreshControls
+        :active="autoRefresh.active.value"
+        :remaining="autoRefresh.remaining.value"
+        :loading="loading"
+        @toggle="autoRefresh.toggle"
+        @refresh="load"
+      />
+    </v-card-title>
     <v-card-text>
       <v-alert
         v-for="w in warnings"

@@ -2353,6 +2353,7 @@
   },
   "common": {
     "pg19Required": "{feature} gibt es seit PostgreSQL 19. Dieser Host läuft mit einer älteren Version, daher ist der Bereich ausgeblendet.",
-    "noSnapshotStorage": "Kein Snapshot-Speicher konfiguriert: Es gibt keinen Verlauf, daher ist der Bereich ausgeblendet."
+    "noSnapshotStorage": "Kein Snapshot-Speicher konfiguriert: Es gibt keinen Verlauf, daher ist der Bereich ausgeblendet.",
+    "noPrivilege": "Keine ausreichenden Rechte, um {feature} auf diesem Host zu lesen, daher ist der Bereich ausgeblendet."
   }
 }

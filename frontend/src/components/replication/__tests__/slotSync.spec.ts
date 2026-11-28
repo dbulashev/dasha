@@ -15,10 +15,16 @@ describe('slot sync columns', () => {
   })
 
   it('shows the sync state only for synced slots on a standby', () => {
-    expect(showsSyncState(slot({ Synced: true, OnStandby: true }))).toBe(true)
-    expect(showsSyncState(slot({ Synced: true, OnStandby: false }))).toBe(false)
-    expect(showsSyncState(slot({ Synced: false, OnStandby: true }))).toBe(false)
-    expect(hasSyncColumn([slot({ Synced: false, OnStandby: true })])).toBe(false)
+    expect(showsSyncState(slot({ Synced: true, OnStandby: true }), true)).toBe(true)
+    expect(showsSyncState(slot({ Synced: true, OnStandby: false }), true)).toBe(false)
+    expect(showsSyncState(slot({ Synced: false, OnStandby: true }), true)).toBe(false)
+    expect(hasSyncColumn([slot({ Synced: false, OnStandby: true })], true)).toBe(false)
+  })
+
+  it('hides the sync state before PG 19, where the reason is always null', () => {
+    const synced = slot({ Synced: true, OnStandby: true, SlotsyncSkipReason: null })
+    expect(showsSyncState(synced, false)).toBe(false)
+    expect(hasSyncColumn([synced], false)).toBe(false)
   })
 
   it('decodes the known reasons and passes others through', () => {

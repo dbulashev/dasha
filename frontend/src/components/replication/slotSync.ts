@@ -12,13 +12,14 @@ export function hasFailoverColumns(slots: ReplicationSlot[]): boolean {
   return slots.some((s) => s.Failover != null || s.Synced != null)
 }
 
-// The skip reason only means something for a synced slot on a standby.
-export function showsSyncState(slot: ReplicationSlot): boolean {
-  return slot.OnStandby === true && slot.Synced === true
+// The skip reason only means something for a synced slot on a standby, and
+// before PG 19 the column is always null, so a null there is no "in sync".
+export function showsSyncState(slot: ReplicationSlot, hasSkipReason: boolean): boolean {
+  return hasSkipReason && slot.OnStandby === true && slot.Synced === true
 }
 
-export function hasSyncColumn(slots: ReplicationSlot[]): boolean {
-  return slots.some(showsSyncState)
+export function hasSyncColumn(slots: ReplicationSlot[], hasSkipReason: boolean): boolean {
+  return slots.some((s) => showsSyncState(s, hasSkipReason))
 }
 
 export function isKnownSkipReason(reason: string): boolean {

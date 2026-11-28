@@ -33,7 +33,6 @@ export interface LockStatsRow {
   fastpathExceeded: number
   // Share of the window's total wait time.
   sharePct: number | null
-  complete: boolean
 }
 
 // Totals over the window, longest waits first.
@@ -42,12 +41,10 @@ export function windowRows(history: LockStatsHistory | null): LockStatsRow[] {
     let waits = 0
     let waitTimeMs = 0
     let fastpathExceeded = 0
-    let complete = true
     for (const p of s.points) {
       waits += p.waits
       waitTimeMs += p.wait_time_ms
       fastpathExceeded += p.fastpath_exceeded
-      if (!p.complete) complete = false
     }
     return {
       locktype: s.locktype,
@@ -56,7 +53,6 @@ export function windowRows(history: LockStatsHistory | null): LockStatsRow[] {
       avgWaitMs: waits > 0 ? waitTimeMs / waits : null,
       fastpathExceeded,
       sharePct: null as number | null,
-      complete,
     }
   })
 

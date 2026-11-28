@@ -1,49 +1,54 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { getReplicationRecovery } from '@/api/gen/default/default'
 import type { RecoveryStatus } from '@/api/models/index'
 import { PG19_VERSION_NUM } from '@/constants/pg'
-import { useApiLoader } from '@/composables/useApiLoader'
 import { useClusterInfo } from '@/composables/useClusterInfo'
-import { useViewError } from '@/composables/useViewError'
-import { useInstanceInfoStore } from '@/stores/instanceInfo'
+import { useServerVersion } from '@/composables/useServerVersion'
+import { assertOk } from '@/utils/api'
+import { getErrorMessage } from '@/utils/error'
 import { fmtDateTime, fmtMs } from '@/utils/format'
 import { pauseHighlighted, recoveryAttention } from './recovery'
 
 const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
-const { onError } = useViewError()
-const instanceInfo = useInstanceInfoStore()
+const serverVersion = useServerVersion()
 
-watch(
-  [clusterName, hostName],
-  ([cluster, host]) => {
-    if (cluster && host) instanceInfo.ensure(cluster, host)
-  },
-  { immediate: true },
+const visible = computed(
+  () => serverVersion.info.value?.InRecovery === true && serverVersion.atLeast(PG19_VERSION_NUM),
 )
 
-const visible = computed(() => {
-  if (!clusterName.value || !hostName.value) return false
-  const info = instanceInfo.known(clusterName.value, hostName.value)
-  return !!info && info.InRecovery === true && info.VersionNum >= PG19_VERSION_NUM
-})
+const recovery = ref<RecoveryStatus | null>(null)
+const loading = ref(false)
+// Kept in the card: the global error would replace the whole page.
+const error = ref<string | null>(null)
 
-const { items: recovery, loading } = useApiLoader<RecoveryStatus | null>(
-  () =>
-    getReplicationRecovery({
-      cluster_name: clusterName.value!,
-      instance: hostName.value!,
-    }),
-  {
-    deps: [clusterName, hostName, visible],
-    guard: () => visible.value,
-    onError,
-    defaultValue: null,
-  },
-)
+let requestId = 0
+
+async function load() {
+  // A previous host's pause state must not linger under the new host's name.
+  const id = ++requestId
+  recovery.value = null
+  error.value = null
+  loading.value = false
+  if (!clusterName.value || !hostName.value || !visible.value) return
+
+  loading.value = true
+  try {
+    const res = await getReplicationRecovery({ cluster_name: clusterName.value, instance: hostName.value })
+    if (id !== requestId) return
+    recovery.value = assertOk<RecoveryStatus>(res)
+  } catch (err) {
+    if (id !== requestId) return
+    error.value = getErrorMessage(err)
+  } finally {
+    if (id === requestId) loading.value = false
+  }
+}
+
+watch([clusterName, hostName, visible], load, { immediate: true })
 
 const ok = computed(() => recovery.value?.state === 'ok')
 const attention = computed(() => recoveryAttention(recovery.value))
@@ -80,6 +85,7 @@ const lastXactAge = computed(() => {
     </v-card-title>
     <v-card-text>
       <v-progress-linear v-if="loading && !recovery" indeterminate />
+      <v-alert v-else-if="error" type="error" variant="tonal" density="compact">{{ error }}</v-alert>
       <v-alert v-else-if="recovery?.state === 'not_in_recovery'" type="info" variant="tonal" density="compact">
         {{ t('replication.recovery.notInRecovery') }}
       </v-alert>

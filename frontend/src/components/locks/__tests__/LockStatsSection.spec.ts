@@ -100,6 +100,33 @@ describe('LockStatsSection', () => {
     expect(onError).not.toHaveBeenCalled()
   })
 
+  it('explains a missing privilege', async () => {
+    setup(190000, true)
+    getLockStatsHistory.mockResolvedValue({ status: 501, data: { reason: 'no_privilege' } })
+    const wrapper = await render()
+
+    expect(wrapper.text()).toContain('Not enough privileges')
+  })
+
+  it('loads when the instance info cannot be fetched', async () => {
+    setup(190000, true)
+    getInstanceInfo.mockResolvedValue({ status: 500, data: { message: 'boom' } })
+    getLockStatsHistory.mockResolvedValue({ status: 200, data: emptyHistory })
+    const wrapper = await render()
+
+    expect(getLockStatsHistory).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('No snapshots in this period yet')
+  })
+
+  it('keeps a failed request inside the section', async () => {
+    setup(190000, true)
+    getLockStatsHistory.mockResolvedValue({ status: 500, data: { message: 'storage is down' } })
+    const wrapper = await render()
+
+    expect(wrapper.text()).toContain('storage is down')
+    expect(onError).not.toHaveBeenCalled()
+  })
+
   it('loads the series and the window totals on PG 19', async () => {
     setup(190000, true)
     getLockStatsHistory.mockResolvedValue({ status: 200, data: emptyHistory })

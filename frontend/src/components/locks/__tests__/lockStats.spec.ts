@@ -49,11 +49,6 @@ describe('windowRows', () => {
     expect(row.avgWaitMs).toBeNull()
     expect(row.sharePct).toBeNull()
   })
-
-  it('marks a row with a broken interval', () => {
-    const [row] = windowRows(history({ relation: [point(), point({ complete: false })] }))
-    expect(row.complete).toBe(false)
-  })
 })
 
 describe('series helpers', () => {

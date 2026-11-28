@@ -5,13 +5,17 @@ import { getReplicationSlots } from '@/api/gen/default/default'
 import type { ReplicationSlot } from '@/api/models/index'
 import { useClusterInfo } from '@/composables/useClusterInfo'
 import { useApiLoader } from '@/composables/useApiLoader'
+import { useServerVersion } from '@/composables/useServerVersion'
 import { useViewError } from '@/composables/useViewError'
+import { PG19_VERSION_NUM } from '@/constants/pg'
 import { fmtBytes } from '@/utils/format'
 import { hasFailoverColumns, hasSyncColumn, isKnownSkipReason, showsSyncState } from './slotSync'
 
 const { clusterName, hostName } = useClusterInfo()
 const { t } = useI18n()
 const { onError } = useViewError()
+const serverVersion = useServerVersion()
+const hasSkipReason = computed(() => serverVersion.atLeast(PG19_VERSION_NUM))
 
 const { items, loading } = useApiLoader<ReplicationSlot[]>(
   () => getReplicationSlots({
@@ -39,7 +43,7 @@ const headers = computed(() => [
         { title: 'synced', key: 'Synced' },
       ]
     : []),
-  ...(hasSyncColumn(items.value)
+  ...(hasSyncColumn(items.value, hasSkipReason.value)
     ? [{ title: t('replication.slotSync.column'), key: 'SlotsyncSkipReason', sortable: false }]
     : []),
 ])
@@ -99,7 +103,7 @@ function walStatusColor(status: string | undefined): string {
           </v-icon>
         </template>
         <template #item.SlotsyncSkipReason="{ item }">
-          <template v-if="showsSyncState(item)">
+          <template v-if="showsSyncState(item, hasSkipReason)">
             <v-chip v-if="!item.SlotsyncSkipReason" size="small" color="success" variant="tonal">
               {{ t('replication.slotSync.synced') }}
             </v-chip>

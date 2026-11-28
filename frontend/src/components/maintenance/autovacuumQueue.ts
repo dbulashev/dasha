@@ -3,19 +3,15 @@ import type { MaintenanceAutovacuumQueueRow } from '@/api/models/index'
 export type ScoreComponent = 'xid' | 'mxid' | 'vacuum' | 'vacuum_insert' | 'analyze'
 
 // Same order as the backend tie-break: wraparound reasons first.
-export const SCORE_COMPONENTS: readonly { key: ScoreComponent; field: keyof MaintenanceAutovacuumQueueRow }[] = [
+type ScoreField = 'xid_score' | 'mxid_score' | 'vacuum_score' | 'vacuum_insert_score' | 'analyze_score'
+
+export const SCORE_COMPONENTS: readonly { key: ScoreComponent; field: ScoreField }[] = [
   { key: 'xid', field: 'xid_score' },
   { key: 'mxid', field: 'mxid_score' },
   { key: 'vacuum', field: 'vacuum_score' },
   { key: 'vacuum_insert', field: 'vacuum_insert_score' },
   { key: 'analyze', field: 'analyze_score' },
 ]
-
-export function componentValue(row: MaintenanceAutovacuumQueueRow, key: ScoreComponent): number {
-  const c = SCORE_COMPONENTS.find((x) => x.key === key)
-  const v = c ? row[c.field] : 0
-  return typeof v === 'number' ? v : 0
-}
 
 export function isDominant(row: MaintenanceAutovacuumQueueRow, key: ScoreComponent): boolean {
   return row.dominant === key
