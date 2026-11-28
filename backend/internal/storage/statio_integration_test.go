@@ -29,7 +29,7 @@ func newIOTestStorage(t *testing.T) *Storage {
 
 	s := &Storage{pool: pool, ddlPool: pool, logger: zap.NewNop()}
 
-	require.NoError(t, s.ensureIOPartitions(ctx, time.Now().UTC()))
+	require.NoError(t, s.ensureIOPartitions(ctx, time.Now().UTC(), ioPartitionedTables...))
 
 	return s
 }
@@ -203,7 +203,7 @@ func TestDropIOPartitionsBefore(t *testing.T) {
 	now := time.Now().UTC()
 	old := now.AddDate(0, 0, -40)
 
-	require.NoError(t, s.ensureIOPartitions(ctx, old))
+	require.NoError(t, s.ensureIOPartitions(ctx, old, ioPartitionedTables...))
 
 	require.NoError(t, s.DropIOPartitionsBefore(ctx, now.AddDate(0, 0, -30)))
 

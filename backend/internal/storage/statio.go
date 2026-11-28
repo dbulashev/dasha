@@ -26,7 +26,7 @@ func (s *Storage) InsertIOSnapshot(
 	clusterName, instance string,
 	snap statio.Snapshot,
 ) error {
-	if err := s.ensureIOPartitions(ctx, snap.CapturedAt); err != nil {
+	if err := s.ensureIOPartitions(ctx, snap.CapturedAt, "io_snapshot"); err != nil {
 		return err
 	}
 

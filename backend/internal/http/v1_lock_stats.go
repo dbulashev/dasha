@@ -4,12 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/dbulashev/dasha/gen/serverhttp"
 	"github.com/dbulashev/dasha/internal/repository"
 	"github.com/dbulashev/dasha/internal/statlock"
 )
+
+// lockStatsVersionTimeout keeps a down host from holding every history request
+// for the full queryTimeout: the stored history is served without the version.
+const lockStatsVersionTimeout = 2 * time.Second
 
 // GetLockStatsHistory serves the pg_stat_lock delta series of one host over a
 // period, one series per lock type.
@@ -25,7 +30,10 @@ func (s *Handlers) GetLockStatsHistory(
 
 	// Any other error means the host is unreachable; its stored history is
 	// still readable.
-	vNum, err := s.repo.GetServerVersionNum(ctx, cluster, instance)
+	vctx, cancel := context.WithTimeout(ctx, lockStatsVersionTimeout)
+	vNum, err := s.repo.GetServerVersionNum(vctx, cluster, instance)
+
+	cancel()
 
 	switch {
 	case errors.Is(err, repository.ErrNotFound):
@@ -47,8 +55,10 @@ func (s *Handlers) GetLockStatsHistory(
 	}, nil
 }
 
-// lockStatsSeries transposes the buckets into one series per lock type. Every
-// series carries a point for every bucket, so series align by index.
+// lockStatsSeries transposes the buckets into one series per lock type, ordered
+// by lock type so colours stay put between windows. Every series carries a point
+// for every bucket, so series align by index. pg_stat_lock lists every lock type
+// always, so a type missing from a complete bucket had no baseline: a gap.
 func lockStatsSeries(buckets []statlock.Bucket) []serverhttp.LockStatsSeries {
 	perBucket := make([]map[string]statlock.Row, 0, len(buckets))
 	types := make([]string, 0)
@@ -70,19 +80,21 @@ func lockStatsSeries(buckets []statlock.Bucket) []serverhttp.LockStatsSeries {
 		perBucket = append(perBucket, rows)
 	}
 
+	sort.Strings(types)
+
 	out := make([]serverhttp.LockStatsSeries, 0, len(types))
 
 	for _, lt := range types {
 		points := make([]serverhttp.LockStatsPoint, 0, len(buckets))
 
 		for i, b := range buckets {
-			r := perBucket[i][lt]
+			r, measured := perBucket[i][lt]
 
 			points = append(points, serverhttp.LockStatsPoint{
 				From:             b.From,
 				To:               b.To,
 				DurationSeconds:  b.Duration.Seconds(),
-				Complete:         !b.Partial,
+				Complete:         measured && !b.Partial,
 				Waits:            r.Waits,
 				WaitTimeMs:       r.WaitTimeMs,
 				FastpathExceeded: r.FastpathExceeded,

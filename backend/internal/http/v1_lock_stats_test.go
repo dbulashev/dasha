@@ -172,10 +172,16 @@ func TestLockStatsSeriesKeepsOnePointPerBucket(t *testing.T) {
 		assert.False(t, s.Points[1].Complete, "the partial bucket is a gap in every series")
 	}
 
-	assert.Equal(t, "relation", series[0].Locktype)
-	assert.EqualValues(t, 3000, series[0].Points[0].WaitTimeMs)
-	assert.Zero(t, series[0].Points[2].Waits)
-	assert.InDelta(t, 60, series[1].Points[2].DurationSeconds, 0.001)
+	advisory, relation := series[0], series[1]
+	assert.Equal(t, "advisory", advisory.Locktype, "series are ordered by lock type, not by first appearance")
+	assert.Equal(t, "relation", relation.Locktype)
+
+	assert.EqualValues(t, 3000, relation.Points[0].WaitTimeMs)
+	assert.True(t, relation.Points[0].Complete)
+	assert.InDelta(t, 60, advisory.Points[2].DurationSeconds, 0.001)
+
+	assert.False(t, relation.Points[2].Complete, "a lock type absent from a complete bucket was not measured")
+	assert.False(t, advisory.Points[0].Complete)
 }
 
 func TestLockStatsMetaReportsSettingChanges(t *testing.T) {

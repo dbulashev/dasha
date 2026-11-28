@@ -3,6 +3,7 @@ package autosnapshot
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -216,6 +217,24 @@ func TestProcessIOSnapshotsTakesLockSnapshotWhenIOFails(t *testing.T) {
 
 	if repo.lockCalls != 1 || len(store.lockInserted) != 1 {
 		t.Fatalf("lock sample calls = %d, stored = %d; want 1 and 1", repo.lockCalls, len(store.lockInserted))
+	}
+}
+
+// A host that timed out on the first capture would only burn a second budget.
+func TestProcessIOSnapshotsSkipsLockSnapshotOfAnUnreachableHost(t *testing.T) {
+	t.Parallel()
+
+	repo := &ioFakeRepo{
+		err:      fmt.Errorf("get server version | %w", context.DeadlineExceeded),
+		lockSnap: &statlock.Snapshot{VersionNum: 190001},
+	}
+	d := newIOTestDaemon(repo, &ioFakeStore{}, zap.NewNop())
+	d.clusters = &ioFakeClusters{cls: []config.Cluster{oneHostCluster()}}
+
+	d.processIOSnapshots(context.Background(), Config{IOEnabled: true, IOSchedule: "*/5 * * * *"}) //nolint:exhaustruct
+
+	if repo.lockCalls != 0 {
+		t.Fatalf("lock sample calls = %d on an unreachable host, want 0", repo.lockCalls)
 	}
 }
 

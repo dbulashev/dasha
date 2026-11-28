@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"go.uber.org/zap"
 
 	"github.com/dbulashev/dasha/internal/config"
@@ -59,15 +60,20 @@ func (d *Daemon) processIOSnapshots(ctx context.Context, cfg Config) {
 				continue
 			}
 
-			d.takeIOSnapshotSafe(ctx, cl, host)
-			d.takeLockSnapshotSafe(ctx, cl, host)
+			if d.takeIOSnapshotSafe(ctx, cl, host) {
+				d.takeLockSnapshotSafe(ctx, cl, host)
+			}
 		}
 	}
 }
 
 // takeIOSnapshotSafe bounds one capture with the per-host budget and recovers
-// panics, mirroring processClusterSafe.
-func (d *Daemon) takeIOSnapshotSafe(ctx context.Context, cl config.Cluster, host string) {
+// panics, mirroring processClusterSafe. It reports false only when the host
+// could not be reached, so the pg_stat_lock capture does not wait out a second
+// timeout on it.
+func (d *Daemon) takeIOSnapshotSafe(ctx context.Context, cl config.Cluster, host string) (reachable bool) {
+	reachable = true
+
 	defer func() {
 		if r := recover(); r != nil {
 			d.logger.Error("io: recovered panic taking snapshot",
@@ -81,10 +87,10 @@ func (d *Daemon) takeIOSnapshotSafe(ctx context.Context, cl config.Cluster, host
 	cctx, cancel := context.WithTimeout(ctx, clusterTickBudgetPerHost)
 	defer cancel()
 
-	d.takeIOSnapshot(cctx, string(cl.Name), host)
+	return d.takeIOSnapshot(cctx, string(cl.Name), host)
 }
 
-func (d *Daemon) takeIOSnapshot(ctx context.Context, clusterName, host string) {
+func (d *Daemon) takeIOSnapshot(ctx context.Context, clusterName, host string) (reachable bool) {
 	snap, err := d.repo.GetIOSample(ctx, clusterName, host)
 
 	// A host older than PG 16 has no pg_stat_io: a deployment fact, not a
@@ -93,7 +99,7 @@ func (d *Daemon) takeIOSnapshot(ctx context.Context, clusterName, host string) {
 		d.logger.Debug("io: host has no pg_stat_io, skipping",
 			zap.String("cluster", clusterName), zap.String("host", host))
 
-		return
+		return true
 	}
 
 	if err != nil {
@@ -102,24 +108,34 @@ func (d *Daemon) takeIOSnapshot(ctx context.Context, clusterName, host string) {
 		d.logger.Warn("io: sample failed",
 			zap.String("cluster", clusterName), zap.String("host", host), zap.Error(err))
 
-		return
+		return !hostUnreachable(err)
 	}
 
 	if err := d.store.InsertIOSnapshot(ctx, clusterName, host, *snap); err != nil {
 		d.logger.Warn("io: store snapshot failed",
 			zap.String("cluster", clusterName), zap.String("host", host), zap.Error(err))
 
-		return
+		return true
 	}
 
 	d.logger.Debug("io: snapshot stored",
 		zap.String("cluster", clusterName),
 		zap.String("host", host),
 		zap.Int("rows", len(snap.Rows)))
+
+	return true
+}
+
+// hostUnreachable tells a failed connection from a failed query on a live host.
+func hostUnreachable(err error) bool {
+	var connErr *pgconn.ConnectError
+
+	return errors.As(err, &connErr) || errors.Is(err, context.DeadlineExceeded)
 }
 
 // takeLockSnapshotSafe has its own budget and recover, so a pg_stat_lock
-// failure never costs the pg_stat_io capture of the same tick, nor the reverse.
+// failure never costs the pg_stat_io capture of the same tick, nor the reverse
+// unless the host is down altogether.
 func (d *Daemon) takeLockSnapshotSafe(ctx context.Context, cl config.Cluster, host string) {
 	defer func() {
 		if r := recover(); r != nil {

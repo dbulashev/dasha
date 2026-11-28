@@ -23,7 +23,7 @@ func (s *Storage) InsertLockSnapshot(
 	clusterName, instance string,
 	snap statlock.Snapshot,
 ) error {
-	if err := s.ensureIOPartitions(ctx, snap.CapturedAt); err != nil {
+	if err := s.ensureIOPartitions(ctx, snap.CapturedAt, "lock_stat_snapshot"); err != nil {
 		return err
 	}
 

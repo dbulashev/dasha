@@ -501,7 +501,7 @@ func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
 			return fmt.Errorf("storage: create hot partition: %w", err)
 		}
 
-		if err := s.ensureIOPartitions(ctx, day); err != nil {
+		if err := s.ensureIOPartitions(ctx, day, ioPartitionedTables...); err != nil {
 			return fmt.Errorf("storage: create io partition: %w", err)
 		}
 	}
@@ -534,13 +534,14 @@ func (s *Storage) ensurePartitions(ctx context.Context, day time.Time) error {
 }
 
 // ensureIOPartitions mirrors ensurePartitions for the pg_stat_io partition
-// group (separate retention lifecycle — see ioPartitionedTables).
-func (s *Storage) ensureIOPartitions(ctx context.Context, day time.Time) error {
+// group (separate retention lifecycle — see ioPartitionedTables). Each insert
+// names only its own table, so a tick does not repeat the DDL of its neighbour.
+func (s *Storage) ensureIOPartitions(ctx context.Context, day time.Time, tables ...string) error {
 	dayStr := day.Format("20060102")
 	from := day.Format("2006-01-02")
 	to := day.AddDate(0, 0, 1).Format("2006-01-02")
 
-	for _, table := range ioPartitionedTables {
+	for _, table := range tables {
 		sql := fmt.Sprintf(
 			`CREATE TABLE IF NOT EXISTS %s_%s PARTITION OF %s FOR VALUES FROM ('%s') TO ('%s')`,
 			table, dayStr, table, from, to,
