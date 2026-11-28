@@ -24,7 +24,7 @@ require (
 	github.com/wasilibs/go-pgquery v0.0.0-20260728010200-155ebad2880e
 	github.com/yandex-cloud/go-genproto v0.127.0
 	github.com/yandex-cloud/go-sdk v0.36.0
-	go.etcd.io/etcd/client/v3 v3.7.3
+	go.etcd.io/etcd/client/v3 v3.7.4
 	go.uber.org/zap v1.28.0
 	go.yaml.in/yaml/v3 v3.0.6
 	golang.org/x/oauth2 v0.38.0
@@ -114,8 +114,8 @@ require (
 	github.com/wasilibs/wazero-helpers v0.0.0-20250123031827-cd30c44769bb // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
-	go.etcd.io/etcd/api/v3 v3.7.3 // indirect
-	go.etcd.io/etcd/client/pkg/v3 v3.7.3 // indirect
+	go.etcd.io/etcd/api/v3 v3.7.4 // indirect
+	go.etcd.io/etcd/client/pkg/v3 v3.7.4 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.69.0 // indirect
 	go.opentelemetry.io/otel v1.44.0 // indirect
