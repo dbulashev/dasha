@@ -25,7 +25,7 @@
     "highlight.js": "^11.12.0",
     "pinia": "^4.1.0",
     "pinia-plugin-persistedstate": "^4.7.1",
-    "vue": "^3.5.45",
+    "vue": "^3.5.46",
     "vue-chartjs": "^5.3.4",
     "vue-i18n": "^11.4.22",
     "vue-router": "^5.5.1",
