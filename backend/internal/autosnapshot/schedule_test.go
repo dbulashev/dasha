@@ -31,4 +31,10 @@ func TestDueForCapture(t *testing.T) {
 	assert.True(t, d.dueForCapture(attempts, sched, last, "c1/db2", at(3, 6)))
 	assert.False(t, d.dueForCapture(attempts, sched, last, "c1/db2", at(3, 7)))
 	assert.True(t, d.dueForCapture(attempts, sched, last, "c1/db2", at(3, 10)))
+
+	// A stale stored snapshot does not outvote a newer attempt.
+	last["c1/db3"] = at(3, 0)
+	assert.True(t, d.dueForCapture(attempts, sched, last, "c1/db3", at(3, 6)))
+	assert.False(t, d.dueForCapture(attempts, sched, last, "c1/db3", at(3, 7)))
+	assert.True(t, d.dueForCapture(attempts, sched, last, "c1/db3", at(3, 10)))
 }

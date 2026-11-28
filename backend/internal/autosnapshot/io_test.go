@@ -47,6 +47,7 @@ func (f *ioFakeRepo) GetLockSample(context.Context, string, string) (*statlock.S
 
 type ioFakeStore struct {
 	Store
+	last         map[string]time.Time
 	inserted     []statio.Snapshot
 	lockInserted []statlock.Snapshot
 }
@@ -58,7 +59,12 @@ func (f *ioFakeStore) InsertLockSnapshot(_ context.Context, _, _ string, snap st
 }
 
 func (f *ioFakeStore) LastIOSnapshotAt(context.Context) (map[string]time.Time, error) {
-	return map[string]time.Time{}, nil
+	last := map[string]time.Time{}
+	for k, v := range f.last {
+		last[k] = v
+	}
+
+	return last, nil
 }
 
 func (f *ioFakeStore) InsertIOSnapshot(_ context.Context, _, _ string, snap statio.Snapshot) error {
@@ -164,6 +170,30 @@ func TestProcessIOSnapshotsHoldsScheduleWithoutStoredSnapshot(t *testing.T) {
 	}
 }
 
+// The stored pg_stat_io time stays stale while its sample keeps failing; the
+// lock capture riding on it must still wait for the next schedule tick.
+func TestProcessIOSnapshotsHoldsScheduleWithStaleStoredSnapshot(t *testing.T) {
+	t.Parallel()
+
+	repo := &ioFakeRepo{
+		err:      errors.New("pg_stat_io failed"),
+		lockSnap: &statlock.Snapshot{VersionNum: 190001},
+	}
+	store := &ioFakeStore{last: map[string]time.Time{"c1/h1": time.Now().UTC().Add(-time.Hour)}}
+	d := newIOTestDaemon(repo, store, zap.NewNop())
+	d.clusters = &ioFakeClusters{cls: []config.Cluster{oneHostCluster()}}
+
+	cfg := Config{IOEnabled: true, IOSchedule: "*/5 * * * *"} //nolint:exhaustruct
+
+	d.processIOSnapshots(context.Background(), cfg)
+	d.processIOSnapshots(context.Background(), cfg)
+
+	if repo.calls != 1 || repo.lockCalls != 1 || len(store.lockInserted) != 1 {
+		t.Fatalf("io calls = %d, lock calls = %d, lock stored = %d; want 1, 1, 1",
+			repo.calls, repo.lockCalls, len(store.lockInserted))
+	}
+}
+
 func TestTakeLockSnapshotStores(t *testing.T) {
 	t.Parallel()
 
@@ -220,7 +250,8 @@ func TestProcessIOSnapshotsTakesLockSnapshotWhenIOFails(t *testing.T) {
 	}
 }
 
-// A host that timed out on the first capture would only burn a second budget.
+// A host that spent the whole budget on the first capture would only burn a
+// second one.
 func TestProcessIOSnapshotsSkipsLockSnapshotOfAnUnreachableHost(t *testing.T) {
 	t.Parallel()
 
@@ -231,10 +262,33 @@ func TestProcessIOSnapshotsSkipsLockSnapshotOfAnUnreachableHost(t *testing.T) {
 	d := newIOTestDaemon(repo, &ioFakeStore{}, zap.NewNop())
 	d.clusters = &ioFakeClusters{cls: []config.Cluster{oneHostCluster()}}
 
-	d.processIOSnapshots(context.Background(), Config{IOEnabled: true, IOSchedule: "*/5 * * * *"}) //nolint:exhaustruct
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancel()
+
+	d.processIOSnapshots(ctx, Config{IOEnabled: true, IOSchedule: "*/5 * * * *"}) //nolint:exhaustruct
 
 	if repo.lockCalls != 0 {
 		t.Fatalf("lock sample calls = %d on an unreachable host, want 0", repo.lockCalls)
+	}
+}
+
+// A child deadline (a busy pool, a slow query) leaves the host budget intact,
+// so the lock capture still gets its own.
+func TestProcessIOSnapshotsTakesLockSnapshotAfterChildDeadline(t *testing.T) {
+	t.Parallel()
+
+	repo := &ioFakeRepo{
+		err:      fmt.Errorf("GetIOSample | %w", context.DeadlineExceeded),
+		lockSnap: &statlock.Snapshot{VersionNum: 190001},
+	}
+	store := &ioFakeStore{}
+	d := newIOTestDaemon(repo, store, zap.NewNop())
+	d.clusters = &ioFakeClusters{cls: []config.Cluster{oneHostCluster()}}
+
+	d.processIOSnapshots(context.Background(), Config{IOEnabled: true, IOSchedule: "*/5 * * * *"}) //nolint:exhaustruct
+
+	if repo.lockCalls != 1 || len(store.lockInserted) != 1 {
+		t.Fatalf("lock sample calls = %d, stored = %d; want 1 and 1", repo.lockCalls, len(store.lockInserted))
 	}
 }
 

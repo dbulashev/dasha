@@ -108,7 +108,7 @@ func (d *Daemon) takeIOSnapshot(ctx context.Context, clusterName, host string) (
 		d.logger.Warn("io: sample failed",
 			zap.String("cluster", clusterName), zap.String("host", host), zap.Error(err))
 
-		return !hostUnreachable(err)
+		return !hostUnreachable(ctx, err)
 	}
 
 	if err := d.store.InsertIOSnapshot(ctx, clusterName, host, *snap); err != nil {
@@ -126,11 +126,13 @@ func (d *Daemon) takeIOSnapshot(ctx context.Context, clusterName, host string) (
 	return true
 }
 
-// hostUnreachable tells a failed connection from a failed query on a live host.
-func hostUnreachable(err error) bool {
+// hostUnreachable tells a failed connection or a spent host budget from a
+// failed query on a live host. A child deadline alone (a busy pool, a slow
+// query) does not count: a dead host fails the shorter connect timeout first.
+func hostUnreachable(ctx context.Context, err error) bool {
 	var connErr *pgconn.ConnectError
 
-	return errors.As(err, &connErr) || errors.Is(err, context.DeadlineExceeded)
+	return errors.As(err, &connErr) || ctx.Err() != nil
 }
 
 // takeLockSnapshotSafe has its own budget and recover, so a pg_stat_lock
