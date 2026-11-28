@@ -1926,6 +1926,60 @@ paths:
         '501':
           description: Snapshot storage not configured
 
+  /api/locks/stats/history:
+    get:
+      operationId: getLockStatsHistory
+      summary: Series of pg_stat_lock deltas over a period
+      description: >-
+        Deltas of the lock wait counters between the stored snapshots of one
+        host, one series per lock type, thinned to at most `points` buckets by
+        summing adjacent intervals. Only waits longer than deadlock_timeout are
+        counted. A stats reset, a restart or a major upgrade breaks the epoch:
+        the affected point is reported as incomplete rather than as a zero. The
+        totals of the window are this endpoint with `points=1`. Snapshots are
+        taken on the pg_stat_io schedule; PostgreSQL 19+.
+      parameters:
+        - $ref: '#/components/parameters/ClusterName'
+        - $ref: '#/components/parameters/Instance'
+        - in: query
+          name: from
+          required: true
+          schema:
+            type: string
+            format: date-time
+          description: >-
+            Start of the period. A window longer than 31 days is trimmed to the
+            31 days ending at `to`.
+        - in: query
+          name: to
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - in: query
+          name: points
+          schema:
+            type: integer
+            default: 200
+          description: Maximum number of points per series; adjacent intervals are summed to fit.
+      responses:
+        '200':
+          description: Success. An empty series list on PostgreSQL 19 means nothing was captured in the period yet.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LockStatsHistory'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '501':
+          description: >-
+            Snapshot storage is not configured (no_storage), or the host runs
+            PostgreSQL older than 19 and has no pg_stat_lock (unsupported_version).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeatureUnavailable'
+
   /api/activity/sample:
     get:
       operationId: getActivitySample
@@ -2685,8 +2739,10 @@ paths:
     get:
       operationId: getReplicationRecovery
       description: >-
-        Recovery state of a standby (pg_stat_recovery, PostgreSQL 19+). A host
-        that cannot answer is reported through state, not an error status.
+        Recovery state of a standby (pg_stat_recovery, PostgreSQL 19+).
+        PostgreSQL older than 19, a primary and a role without
+        pg_read_all_stats are reported through state; connection and query
+        failures remain errors.
       parameters:
         - $ref: '#/components/parameters/ClusterName'
         - $ref: '#/components/parameters/Instance'
@@ -6827,19 +6883,19 @@ components:
         TablesDueVacuumOnly:
           type: integer
           format: int32
-          description: Tables past the autovacuum trigger (dead-tuple or insert formula) but not the autoanalyze one.
+          description: Tables due for autovacuum but not autoanalyze. PG 19+ — autovacuum's own decision (do_vacuum in pg_stat_autovacuum_scores); before 19 — the dead-tuple or insert trigger formula.
         TablesDueAnalyzeOnly:
           type: integer
           format: int32
-          description: Tables past the autoanalyze trigger only.
+          description: Tables due for autoanalyze only (PG 19+ do_analyze; before 19 the autoanalyze trigger formula).
         TablesDueBoth:
           type: integer
           format: int32
-          description: Tables past both triggers.
+          description: Tables due for both, by the same version-dependent rule.
         TablesTotal:
           type: integer
           format: int32
-          description: Total user tables considered.
+          description: Tables considered. PG 19+ — every row of pg_stat_autovacuum_scores, system catalogs included; before 19 — pg_stat_user_tables.
         RunningVacuums:
           type: integer
           format: int32
@@ -6914,6 +6970,103 @@ components:
             The component with the largest value: xid | mxid | vacuum |
             vacuum_insert | analyze. Ties go to the earlier one in that order.
             Null when every component is zero.
+
+    LockStatsPoint:
+      type: object
+      required:
+        - from
+        - to
+        - duration_seconds
+        - complete
+        - waits
+        - wait_time_ms
+        - fastpath_exceeded
+      properties:
+        from:
+          type: string
+          format: date-time
+        to:
+          type: string
+          format: date-time
+        duration_seconds:
+          type: number
+          format: double
+          description: Measured length of the summed intervals. Zero when no interval in the bucket was complete.
+        complete:
+          type: boolean
+          description: False when a broken epoch fell into this bucket; draw a gap, not a zero.
+        waits:
+          type: integer
+          format: int64
+        wait_time_ms:
+          type: integer
+          format: int64
+        fastpath_exceeded:
+          type: integer
+          format: int64
+
+    LockStatsSeries:
+      type: object
+      required:
+        - locktype
+        - points
+      properties:
+        locktype:
+          type: string
+        points:
+          type: array
+          description: One point per bucket, aligned by index across all series.
+          items:
+            $ref: '#/components/schemas/LockStatsPoint'
+
+    LockStatsHistoryMeta:
+      type: object
+      required:
+        - instance
+        - version_changed
+        - deadlock_timeout_changed
+        - max_locks_per_transaction_changed
+      properties:
+        instance:
+          type: string
+        earliest_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Oldest stored capture of this host — from when history exists at all.
+        latest_at:
+          type: string
+          format: date-time
+          nullable: true
+        version_changed:
+          type: boolean
+          description: The server was upgraded inside the period; the intervals spanning the upgrade are incomplete.
+        deadlock_timeout_ms:
+          type: integer
+          nullable: true
+          description: Value at the newest capture in the period; only waits longer than this are counted.
+        deadlock_timeout_changed:
+          type: boolean
+          description: The setting changed inside the period, so the counting threshold was not the same throughout.
+        max_locks_per_transaction:
+          type: integer
+          nullable: true
+          description: Value at the newest capture in the period.
+        max_locks_per_transaction_changed:
+          type: boolean
+
+    LockStatsHistory:
+      type: object
+      required:
+        - meta
+        - series
+      properties:
+        meta:
+          $ref: '#/components/schemas/LockStatsHistoryMeta'
+        series:
+          type: array
+          items:
+            $ref: '#/components/schemas/LockStatsSeries'
 
     FeatureUnavailable:
       type: object

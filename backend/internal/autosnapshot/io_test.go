@@ -12,6 +12,7 @@ import (
 
 	"github.com/dbulashev/dasha/internal/config"
 	"github.com/dbulashev/dasha/internal/statio"
+	"github.com/dbulashev/dasha/internal/statlock"
 )
 
 // The embedded interfaces stay nil on purpose: a call outside the tested path
@@ -21,6 +22,10 @@ type ioFakeRepo struct {
 	snap  *statio.Snapshot
 	err   error
 	calls int
+
+	lockSnap  *statlock.Snapshot
+	lockErr   error
+	lockCalls int
 }
 
 func (f *ioFakeRepo) GetIOSample(context.Context, string, string) (*statio.Snapshot, error) {
@@ -29,9 +34,26 @@ func (f *ioFakeRepo) GetIOSample(context.Context, string, string) (*statio.Snaps
 	return f.snap, f.err
 }
 
+func (f *ioFakeRepo) GetLockSample(context.Context, string, string) (*statlock.Snapshot, error) {
+	f.lockCalls++
+
+	if f.lockSnap == nil && f.lockErr == nil {
+		return nil, statlock.ErrUnsupportedVersion
+	}
+
+	return f.lockSnap, f.lockErr
+}
+
 type ioFakeStore struct {
 	Store
-	inserted []statio.Snapshot
+	inserted     []statio.Snapshot
+	lockInserted []statlock.Snapshot
+}
+
+func (f *ioFakeStore) InsertLockSnapshot(_ context.Context, _, _ string, snap statlock.Snapshot) error {
+	f.lockInserted = append(f.lockInserted, snap)
+
+	return nil
 }
 
 func (f *ioFakeStore) LastIOSnapshotAt(context.Context) (map[string]time.Time, error) {
@@ -138,5 +160,75 @@ func TestProcessIOSnapshotsHoldsScheduleWithoutStoredSnapshot(t *testing.T) {
 
 	if repo.calls != 1 {
 		t.Fatalf("expected one sample attempt per schedule tick, got %d", repo.calls)
+	}
+}
+
+func TestTakeLockSnapshotStores(t *testing.T) {
+	t.Parallel()
+
+	snap := &statlock.Snapshot{
+		VersionNum: 190001,
+		Rows:       []statlock.Row{{LockType: "relation", Waits: 3}},
+	}
+
+	store := &ioFakeStore{}
+	d := newIOTestDaemon(&ioFakeRepo{lockSnap: snap}, store, zap.NewNop())
+
+	d.takeLockSnapshot(context.Background(), "c1", "h1")
+
+	if len(store.lockInserted) != 1 || store.lockInserted[0].Rows[0].Waits != 3 {
+		t.Fatalf("stored %+v, want the one sampled snapshot", store.lockInserted)
+	}
+}
+
+func TestTakeLockSnapshotSkipsUnsupportedVersionQuietly(t *testing.T) {
+	t.Parallel()
+
+	core, logs := observer.New(zapcore.WarnLevel)
+	store := &ioFakeStore{}
+
+	d := newIOTestDaemon(&ioFakeRepo{lockErr: statlock.ErrUnsupportedVersion}, store, zap.New(core))
+	d.takeLockSnapshot(context.Background(), "c1", "h1")
+
+	if logs.Len() != 0 {
+		t.Errorf("host without pg_stat_lock logged %d warnings, want none", logs.Len())
+	}
+
+	if len(store.lockInserted) != 0 {
+		t.Errorf("stored %d snapshots for a host without pg_stat_lock", len(store.lockInserted))
+	}
+}
+
+// The two captures of a tick are independent: a failed pg_stat_io sample must
+// not cost the pg_stat_lock one.
+func TestProcessIOSnapshotsTakesLockSnapshotWhenIOFails(t *testing.T) {
+	t.Parallel()
+
+	repo := &ioFakeRepo{
+		err:      errors.New("pg_stat_io failed"),
+		lockSnap: &statlock.Snapshot{VersionNum: 190001},
+	}
+	store := &ioFakeStore{}
+	d := newIOTestDaemon(repo, store, zap.NewNop())
+	d.clusters = &ioFakeClusters{cls: []config.Cluster{oneHostCluster()}}
+
+	d.processIOSnapshots(context.Background(), Config{IOEnabled: true, IOSchedule: "*/5 * * * *"}) //nolint:exhaustruct
+
+	if repo.lockCalls != 1 || len(store.lockInserted) != 1 {
+		t.Fatalf("lock sample calls = %d, stored = %d; want 1 and 1", repo.lockCalls, len(store.lockInserted))
+	}
+}
+
+func TestProcessIOSnapshotsSkipsLockSnapshotWhenDisabled(t *testing.T) {
+	t.Parallel()
+
+	repo := &ioFakeRepo{lockSnap: &statlock.Snapshot{VersionNum: 190001}}
+	d := newIOTestDaemon(repo, &ioFakeStore{}, zap.NewNop())
+	d.clusters = &ioFakeClusters{cls: []config.Cluster{oneHostCluster()}}
+
+	d.processIOSnapshots(context.Background(), Config{IOEnabled: false, IOSchedule: "*/5 * * * *"}) //nolint:exhaustruct
+
+	if repo.lockCalls != 0 {
+		t.Fatalf("lock sample calls = %d with io snapshots disabled", repo.lockCalls)
 	}
 }

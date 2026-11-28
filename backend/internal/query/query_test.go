@@ -259,6 +259,7 @@ func TestFindTemplate_PG19Selection(t *testing.T) {
 
 		{"replication/recovery", 190000, "pg_stat_recovery", ""},
 		{"maintenance/autovacuum_scores", 190000, "pg_stat_autovacuum_scores", ""},
+		{"locks/stat_snapshot", 190000, "pg_stat_lock", ""},
 	}
 
 	for _, tt := range tests {

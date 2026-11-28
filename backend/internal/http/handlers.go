@@ -13,6 +13,7 @@ import (
 	"github.com/dbulashev/dasha/internal/querystats"
 	"github.com/dbulashev/dasha/internal/repository"
 	"github.com/dbulashev/dasha/internal/statio"
+	"github.com/dbulashev/dasha/internal/statlock"
 )
 
 // Handlers holds the HTTP handler dependencies used by the server.
@@ -35,6 +36,7 @@ type Handlers struct {
 	queryStats         *querystats.Service
 	snapshotCatalog    *querystats.SnapshotCatalog
 	ioHistory          *statio.HistoryReader
+	lockHistory        *statlock.HistoryReader
 }
 
 // Services are built in internal/deps. The storage-backed ones are nil when
@@ -54,6 +56,7 @@ type Services struct {
 	QueryStats         *querystats.Service
 	SnapshotCatalog    *querystats.SnapshotCatalog
 	IOHistory          *statio.HistoryReader
+	LockHistory        *statlock.HistoryReader
 }
 
 // NewDashaHandlers constructs a new Handlers instance from its dependencies.
@@ -75,6 +78,7 @@ func NewDashaHandlers(
 		queryStats:         svc.QueryStats,
 		snapshotCatalog:    svc.SnapshotCatalog,
 		ioHistory:          svc.IOHistory,
+		lockHistory:        svc.LockHistory,
 	}
 }
 

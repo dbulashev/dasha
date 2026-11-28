@@ -135,3 +135,20 @@ func TestGetReplicationRecovery_State(t *testing.T) {
 		})
 	}
 }
+
+func TestHeapTuplesWritten(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, int64(7), heapTuplesWritten(dto.ProgressCluster{
+		HeapTuplesWritten:  shortcut.Ptr[int64](7),
+		HeapTuplesInserted: shortcut.Ptr[int64](100),
+	}), "PG < 19 keeps its own counter")
+
+	assert.Equal(t, int64(130), heapTuplesWritten(dto.ProgressCluster{
+		HeapTuplesInserted: shortcut.Ptr[int64](100),
+		HeapTuplesUpdated:  shortcut.Ptr[int64](30),
+		HeapTuplesDeleted:  shortcut.Ptr[int64](5),
+	}), "PG 19 falls back to inserted + updated")
+
+	assert.Zero(t, heapTuplesWritten(dto.ProgressCluster{}))
+}

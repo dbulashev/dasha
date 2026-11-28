@@ -214,18 +214,18 @@ func TestIOPointsClamped(t *testing.T) {
 		in   *int
 		want int
 	}{
-		"absent":   {nil, defaultIOPoints},
-		"zero":     {new(int), defaultIOPoints},
+		"absent":   {nil, defaultHistoryPoints},
+		"zero":     {new(int), defaultHistoryPoints},
 		"in range": {new(50), 50},
-		"over cap": {new(5000), maxIOPoints},
+		"over cap": {new(5000), maxHistoryPoints},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := ioPoints(tc.in); got != tc.want {
-				t.Errorf("ioPoints = %d, want %d", got, tc.want)
+			if got := historyPoints(tc.in); got != tc.want {
+				t.Errorf("historyPoints = %d, want %d", got, tc.want)
 			}
 		})
 	}
@@ -241,7 +241,7 @@ func TestIOWindowBounded(t *testing.T) {
 		wantFrom time.Time
 	}{
 		"within cap": {to.Add(-6 * time.Hour), to.Add(-6 * time.Hour)},
-		"over cap":   {to.AddDate(-1, 0, 0), to.Add(-maxIOWindow)},
+		"over cap":   {to.AddDate(-1, 0, 0), to.Add(-maxHistoryWindow)},
 		"inverted":   {to.Add(time.Hour), to},
 	}
 
@@ -249,7 +249,7 @@ func TestIOWindowBounded(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			gotFrom, gotTo := ioWindow(tc.from, to)
+			gotFrom, gotTo := historyWindow(tc.from, to)
 
 			if !gotFrom.Equal(tc.wantFrom) {
 				t.Errorf("from = %s, want %s", gotFrom, tc.wantFrom)

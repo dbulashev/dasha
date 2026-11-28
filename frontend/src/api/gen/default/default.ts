@@ -99,6 +99,7 @@ import type {
   GetIndexesUsageParams,
   GetInstanceInfoParams,
   GetInvalidConstraintsParams,
+  GetLockStatsHistoryParams,
   GetLogsCheckParams,
   GetLogsInsightsParams,
   GetLogsParams,
@@ -192,6 +193,7 @@ import type {
   ListAllPersonalTokensParams,
   ListPersonalTokensParams,
   LockSnapshot,
+  LockStatsHistory,
   LogInsights,
   LogPlanComparison,
   LogPlanGroup,
@@ -7431,6 +7433,116 @@ export function useGetIOHistory<TData = Awaited<ReturnType<typeof getIOHistory>>
 
 
 
+export type getLockStatsHistoryResponse200 = {
+  data: LockStatsHistory
+  status: 200
+}
+
+export type getLockStatsHistoryResponse404 = {
+  data: NotFoundResponse
+  status: 404
+}
+
+export type getLockStatsHistoryResponse501 = {
+  data: FeatureUnavailable
+  status: 501
+}
+
+export type getLockStatsHistoryResponseSuccess = (getLockStatsHistoryResponse200) & {
+  headers: Headers;
+};
+export type getLockStatsHistoryResponseError = (getLockStatsHistoryResponse404 | getLockStatsHistoryResponse501) & {
+  headers: Headers;
+};
+
+export type getLockStatsHistoryResponse = (getLockStatsHistoryResponseSuccess | getLockStatsHistoryResponseError)
+
+export const getGetLockStatsHistoryUrl = (params: GetLockStatsHistoryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/locks/stats/history?${stringifiedParams}` : `/api/locks/stats/history`
+}
+
+/**
+ * Deltas of the lock wait counters between the stored snapshots of one host, one series per lock type, thinned to at most `points` buckets by summing adjacent intervals. Only waits longer than deadlock_timeout are counted. A stats reset, a restart or a major upgrade breaks the epoch: the affected point is reported as incomplete rather than as a zero. The totals of the window are this endpoint with `points=1`. Snapshots are taken on the pg_stat_io schedule; PostgreSQL 19+.
+ * @summary Series of pg_stat_lock deltas over a period
+ */
+export const getLockStatsHistory = async (params: GetLockStatsHistoryParams, options?: Parameters<typeof customFetch>[1]): Promise<getLockStatsHistoryResponse> => {
+
+  return customFetch<getLockStatsHistoryResponse>(getGetLockStatsHistoryUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetLockStatsHistoryQueryKey = (params?: MaybeRef<GetLockStatsHistoryParams>,) => {
+    return [
+    'api','locks','stats','history', ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetLockStatsHistoryQueryOptions = <TData = Awaited<ReturnType<typeof getLockStatsHistory>>, TError = NotFoundResponse | FeatureUnavailable>(params: MaybeRef<GetLockStatsHistoryParams>, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLockStatsHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  getGetLockStatsHistoryQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getLockStatsHistory>>> = ({ signal }) => getLockStatsHistory(unref(params), { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getLockStatsHistory>>, TError, TData>
+}
+
+export type GetLockStatsHistoryQueryResult = NonNullable<Awaited<ReturnType<typeof getLockStatsHistory>>>
+export type GetLockStatsHistoryQueryError = NotFoundResponse | FeatureUnavailable
+
+
+/**
+ * @summary Series of pg_stat_lock deltas over a period
+ */
+
+export function useGetLockStatsHistory<TData = Awaited<ReturnType<typeof getLockStatsHistory>>, TError = NotFoundResponse | FeatureUnavailable>(
+ params: MaybeRef<GetLockStatsHistoryParams>, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getLockStatsHistory>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ): UseQueryReturnType<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetLockStatsHistoryQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as UseQueryReturnType<TData, TError> & { queryKey: QueryKey };
+
+  query.queryKey = unref(queryOptions).queryKey as QueryKey;
+
+  return query;
+}
+
+
+
+
+
+
 export type getActivitySampleResponse200 = {
   data: ActivitySample
   status: 200
@@ -10569,7 +10681,7 @@ export const getGetReplicationRecoveryUrl = (params: GetReplicationRecoveryParam
 }
 
 /**
- * Recovery state of a standby (pg_stat_recovery, PostgreSQL 19+). A host that cannot answer is reported through state, not an error status.
+ * Recovery state of a standby (pg_stat_recovery, PostgreSQL 19+). PostgreSQL older than 19, a primary and a role without pg_read_all_stats are reported through state; connection and query failures remain errors.
  */
 export const getReplicationRecovery = async (params: GetReplicationRecoveryParams, options?: Parameters<typeof customFetch>[1]): Promise<getReplicationRecoveryResponse> => {
 

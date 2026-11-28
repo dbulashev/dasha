@@ -1788,6 +1788,55 @@ type LockSnapshot struct {
 	Rows          *[]QueryBlocked `json:"rows,omitempty"`
 }
 
+// LockStatsHistory defines model for LockStatsHistory.
+type LockStatsHistory struct {
+	Meta   LockStatsHistoryMeta `json:"meta"`
+	Series []LockStatsSeries    `json:"series"`
+}
+
+// LockStatsHistoryMeta defines model for LockStatsHistoryMeta.
+type LockStatsHistoryMeta struct {
+	// DeadlockTimeoutChanged The setting changed inside the period, so the counting threshold was not the same throughout.
+	DeadlockTimeoutChanged bool `json:"deadlock_timeout_changed"`
+
+	// DeadlockTimeoutMs Value at the newest capture in the period; only waits longer than this are counted.
+	DeadlockTimeoutMs *int `json:"deadlock_timeout_ms"`
+
+	// EarliestAt Oldest stored capture of this host — from when history exists at all.
+	EarliestAt *time.Time `json:"earliest_at"`
+	Instance   string     `json:"instance"`
+	LatestAt   *time.Time `json:"latest_at"`
+
+	// MaxLocksPerTransaction Value at the newest capture in the period.
+	MaxLocksPerTransaction        *int `json:"max_locks_per_transaction"`
+	MaxLocksPerTransactionChanged bool `json:"max_locks_per_transaction_changed"`
+
+	// VersionChanged The server was upgraded inside the period; the intervals spanning the upgrade are incomplete.
+	VersionChanged bool `json:"version_changed"`
+}
+
+// LockStatsPoint defines model for LockStatsPoint.
+type LockStatsPoint struct {
+	// Complete False when a broken epoch fell into this bucket; draw a gap, not a zero.
+	Complete bool `json:"complete"`
+
+	// DurationSeconds Measured length of the summed intervals. Zero when no interval in the bucket was complete.
+	DurationSeconds  float64   `json:"duration_seconds"`
+	FastpathExceeded int64     `json:"fastpath_exceeded"`
+	From             time.Time `json:"from"`
+	To               time.Time `json:"to"`
+	WaitTimeMs       int64     `json:"wait_time_ms"`
+	Waits            int64     `json:"waits"`
+}
+
+// LockStatsSeries defines model for LockStatsSeries.
+type LockStatsSeries struct {
+	Locktype string `json:"locktype"`
+
+	// Points One point per bucket, aligned by index across all series.
+	Points []LockStatsPoint `json:"points"`
+}
+
 // LogCategory defines model for LogCategory.
 type LogCategory struct {
 	// Code Matched by SQLSTATE where the stream carries it, then by the record itself (an auto_explain plan, a statement duration), then by the English message text. other is whatever matched nothing.
@@ -2164,16 +2213,16 @@ type MaintenanceAutovacuumSummary struct {
 	// RunningVacuums VACUUM processes currently running in the database (pg_stat_progress_vacuum).
 	RunningVacuums int32 `json:"RunningVacuums"`
 
-	// TablesDueAnalyzeOnly Tables past the autoanalyze trigger only.
+	// TablesDueAnalyzeOnly Tables due for autoanalyze only (PG 19+ do_analyze; before 19 the autoanalyze trigger formula).
 	TablesDueAnalyzeOnly int32 `json:"TablesDueAnalyzeOnly"`
 
-	// TablesDueBoth Tables past both triggers.
+	// TablesDueBoth Tables due for both, by the same version-dependent rule.
 	TablesDueBoth int32 `json:"TablesDueBoth"`
 
-	// TablesDueVacuumOnly Tables past the autovacuum trigger (dead-tuple or insert formula) but not the autoanalyze one.
+	// TablesDueVacuumOnly Tables due for autovacuum but not autoanalyze. PG 19+ — autovacuum's own decision (do_vacuum in pg_stat_autovacuum_scores); before 19 — the dead-tuple or insert trigger formula.
 	TablesDueVacuumOnly int32 `json:"TablesDueVacuumOnly"`
 
-	// TablesTotal Total user tables considered.
+	// TablesTotal Tables considered. PG 19+ — every row of pg_stat_autovacuum_scores, system catalogs included; before 19 — pg_stat_user_tables.
 	TablesTotal int32 `json:"TablesTotal"`
 }
 
@@ -3834,6 +3883,19 @@ type GetIOHistoryParams struct {
 // GetIOHistoryParamsGroupBy defines parameters for GetIOHistory.
 type GetIOHistoryParamsGroupBy string
 
+// GetLockStatsHistoryParams defines parameters for GetLockStatsHistory.
+type GetLockStatsHistoryParams struct {
+	ClusterName ClusterName `form:"cluster_name" json:"cluster_name"`
+	Instance    Instance    `form:"instance" json:"instance"`
+
+	// From Start of the period. A window longer than 31 days is trimmed to the 31 days ending at `to`.
+	From time.Time `form:"from" json:"from"`
+	To   time.Time `form:"to" json:"to"`
+
+	// Points Maximum number of points per series; adjacent intervals are summed to fit.
+	Points *int `form:"points,omitempty" json:"points,omitempty"`
+}
+
 // GetLogsParams defines parameters for GetLogs.
 type GetLogsParams struct {
 	ClusterName ClusterName              `form:"cluster_name" json:"cluster_name"`
@@ -4694,6 +4756,9 @@ type ClientInterface interface {
 
 	// GetIOHistory request
 	GetIOHistory(ctx context.Context, params *GetIOHistoryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetLockStatsHistory request
+	GetLockStatsHistory(ctx context.Context, params *GetLockStatsHistoryParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// GetLogs request
 	GetLogs(ctx context.Context, params *GetLogsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -5718,6 +5783,18 @@ func (c *Client) GetIOCurrent(ctx context.Context, params *GetIOCurrentParams, r
 
 func (c *Client) GetIOHistory(ctx context.Context, params *GetIOHistoryParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetIOHistoryRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetLockStatsHistory(ctx context.Context, params *GetLockStatsHistoryParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetLockStatsHistoryRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -11369,6 +11446,103 @@ func NewGetIOHistoryRequest(server string, params *GetIOHistoryParams) (*http.Re
 	return req, nil
 }
 
+// NewGetLockStatsHistoryRequest generates requests for GetLockStatsHistory
+func NewGetLockStatsHistoryRequest(server string, params *GetLockStatsHistoryParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/locks/stats/history")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "cluster_name", runtime.ParamLocationQuery, params.ClusterName); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "instance", runtime.ParamLocationQuery, params.Instance); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "from", runtime.ParamLocationQuery, params.From); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "to", runtime.ParamLocationQuery, params.To); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.Points != nil {
+
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "points", runtime.ParamLocationQuery, *params.Points); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewGetLogsRequest generates requests for GetLogs
 func NewGetLogsRequest(server string, params *GetLogsParams) (*http.Request, error) {
 	var err error
@@ -16591,6 +16765,9 @@ type ClientWithResponsesInterface interface {
 	// GetIOHistoryWithResponse request
 	GetIOHistoryWithResponse(ctx context.Context, params *GetIOHistoryParams, reqEditors ...RequestEditorFn) (*GetIOHistoryResponse, error)
 
+	// GetLockStatsHistoryWithResponse request
+	GetLockStatsHistoryWithResponse(ctx context.Context, params *GetLockStatsHistoryParams, reqEditors ...RequestEditorFn) (*GetLockStatsHistoryResponse, error)
+
 	// GetLogsWithResponse request
 	GetLogsWithResponse(ctx context.Context, params *GetLogsParams, reqEditors ...RequestEditorFn) (*GetLogsResponse, error)
 
@@ -18241,6 +18418,29 @@ func (r GetIOHistoryResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetIOHistoryResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetLockStatsHistoryResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *LockStatsHistory
+	JSON501      *FeatureUnavailable
+}
+
+// Status returns HTTPResponse.Status
+func (r GetLockStatsHistoryResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetLockStatsHistoryResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -20224,6 +20424,15 @@ func (c *ClientWithResponses) GetIOHistoryWithResponse(ctx context.Context, para
 		return nil, err
 	}
 	return ParseGetIOHistoryResponse(rsp)
+}
+
+// GetLockStatsHistoryWithResponse request returning *GetLockStatsHistoryResponse
+func (c *ClientWithResponses) GetLockStatsHistoryWithResponse(ctx context.Context, params *GetLockStatsHistoryParams, reqEditors ...RequestEditorFn) (*GetLockStatsHistoryResponse, error) {
+	rsp, err := c.GetLockStatsHistory(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetLockStatsHistoryResponse(rsp)
 }
 
 // GetLogsWithResponse request returning *GetLogsResponse
@@ -22497,6 +22706,39 @@ func ParseGetIOHistoryResponse(rsp *http.Response) (*GetIOHistoryResponse, error
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetLockStatsHistoryResponse parses an HTTP response from a GetLockStatsHistoryWithResponse call
+func ParseGetLockStatsHistoryResponse(rsp *http.Response) (*GetLockStatsHistoryResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetLockStatsHistoryResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest LockStatsHistory
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 501:
+		var dest FeatureUnavailable
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON501 = &dest
 
 	}
 

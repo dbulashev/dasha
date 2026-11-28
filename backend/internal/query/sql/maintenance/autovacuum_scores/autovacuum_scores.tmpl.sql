@@ -1,5 +1,9 @@
 -- Always one row at least, so the total survives an offset past the end; a NULL
--- table_name marks that the page itself is empty.
+-- table_name marks that the page itself is empty. The view computes scores on
+-- every reference, hence the materialized CTE.
+WITH scores AS MATERIALIZED (
+    SELECT * FROM pg_stat_autovacuum_scores
+)
 SELECT
     t.total,
     p.schema_name,
@@ -13,7 +17,7 @@ SELECT
     p.do_vacuum,
     p.do_analyze,
     p.for_wraparound
-FROM (SELECT count(*)::int AS total FROM pg_stat_autovacuum_scores) t
+FROM (SELECT count(*)::int AS total FROM scores) t
 LEFT JOIN LATERAL (
     SELECT
         n.nspname                     AS schema_name,
@@ -28,7 +32,7 @@ LEFT JOIN LATERAL (
         s.do_analyze,
         s.for_wraparound,
         s.relid
-    FROM pg_stat_autovacuum_scores s
+    FROM scores s
     JOIN pg_class c     ON c.oid = s.relid
     JOIN pg_namespace n ON n.oid = c.relnamespace
     ORDER BY s.score DESC, s.relid

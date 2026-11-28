@@ -61,6 +61,7 @@ package enums
 //	indexes/unused
 //	indexes/unused_report
 //	indexes/usage
+//	locks/stat_snapshot
 //	maintenance/autovacuum_freeze_max_age
 //	maintenance/autovacuum_scores
 //	maintenance/autovacuum_summary

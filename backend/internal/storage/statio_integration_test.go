@@ -14,16 +14,18 @@ import (
 	"github.com/dbulashev/dasha/internal/testinfra"
 )
 
-// newIOTestStorage returns a Storage with io_snapshot and the current day's
-// partition created.
+// newIOTestStorage returns a Storage with the io partition group and the
+// current day's partitions created.
 func newIOTestStorage(t *testing.T) *Storage {
 	t.Helper()
 
 	pool := testinfra.IsolateEmptyPool(t)
 	ctx := t.Context()
 
-	_, err := pool.Exec(ctx, createIOSnapshotSQL)
-	require.NoError(t, err, "io DDL")
+	for _, ddl := range []string{createIOSnapshotSQL, createLockStatSnapshotSQL} {
+		_, err := pool.Exec(ctx, ddl)
+		require.NoError(t, err, "io DDL")
+	}
 
 	s := &Storage{pool: pool, ddlPool: pool, logger: zap.NewNop()}
 
@@ -203,13 +205,15 @@ func TestDropIOPartitionsBefore(t *testing.T) {
 
 	require.NoError(t, s.ensureIOPartitions(ctx, old))
 
-	oldName := "io_snapshot_" + old.Format("20060102")
-	curName := "io_snapshot_" + now.Format("20060102")
-
 	require.NoError(t, s.DropIOPartitionsBefore(ctx, now.AddDate(0, 0, -30)))
 
-	assert.False(t, ioPartitionExists(t, s, oldName), "partition beyond retention must be gone")
-	assert.True(t, ioPartitionExists(t, s, curName), "today's partition must survive")
+	for _, table := range []string{"io_snapshot", "lock_stat_snapshot"} {
+		oldName := table + "_" + old.Format("20060102")
+		curName := table + "_" + now.Format("20060102")
+
+		assert.False(t, ioPartitionExists(t, s, oldName), "partition beyond retention must be gone")
+		assert.True(t, ioPartitionExists(t, s, curName), "today's partition must survive")
+	}
 }
 
 func ioPartitionExists(t *testing.T, s *Storage, name string) bool {

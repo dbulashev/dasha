@@ -97,7 +97,7 @@ func (s *Handlers) GetProgressCluster(
 				Phase:             t.Phase,
 				ClusterIndex:      deref(t.ClusterIndex),
 				HeapTuplesScanned: t.HeapTuplesScanned,
-				HeapTuplesWritten: deref(t.HeapTuplesWritten),
+				HeapTuplesWritten: heapTuplesWritten(t),
 				HeapBlksTotal:     t.HeapBlksTotal,
 				HeapBlksScanned:   t.HeapBlksScanned,
 				IndexRebuildCount: t.IndexRebuildCount,
@@ -105,6 +105,16 @@ func (s *Handlers) GetProgressCluster(
 		})
 
 	return ret, nil
+}
+
+// heapTuplesWritten restores the PG < 19 counter on PG 19, where
+// pg_stat_progress_cluster defined it as inserted + updated.
+func heapTuplesWritten(t dto.ProgressCluster) int64 {
+	if t.HeapTuplesWritten != nil {
+		return *t.HeapTuplesWritten
+	}
+
+	return deref(t.HeapTuplesInserted) + deref(t.HeapTuplesUpdated)
 }
 
 func (s *Handlers) GetProgressCopy(

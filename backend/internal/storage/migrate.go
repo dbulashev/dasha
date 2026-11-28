@@ -301,6 +301,22 @@ CREATE TABLE IF NOT EXISTS io_snapshot (
 ALTER TABLE io_snapshot
     ADD COLUMN IF NOT EXISTS track_wal_io_timing boolean`
 
+	// pg_stat_lock slices share the pg_stat_io schedule, partitions and
+	// retention. The settings are stored per capture: the hints must name the
+	// values that were in force in the window being read.
+	createLockStatSnapshotSQL = `
+CREATE TABLE IF NOT EXISTS lock_stat_snapshot (
+    cluster_name              text        NOT NULL,
+    instance                  text        NOT NULL,
+    captured_at               timestamptz NOT NULL DEFAULT now(),
+    version_num               int         NOT NULL,
+    stats_reset               timestamptz,
+    deadlock_timeout_ms       int         NOT NULL,
+    max_locks_per_transaction int         NOT NULL,
+    rows                      jsonb       NOT NULL,
+    CONSTRAINT lock_stat_snapshot_pkey PRIMARY KEY (cluster_name, instance, captured_at)
+) PARTITION BY RANGE (captured_at)`
+
 	addAutosnapshotIOConfigSQL = `
 ALTER TABLE autosnapshot_config_global
     ADD COLUMN IF NOT EXISTS io_enabled        boolean NOT NULL DEFAULT true,
@@ -390,9 +406,9 @@ var partitionedTables = []string{"snapshots", "query_texts", "trigger_events"}
 var hotPartitionedTables = []string{"hot_snapshot", "hot_top"}
 
 // ioPartitionedTables is a third partition group, for the same reason as the
-// hot one: pg_stat_io history is far denser and ages out much faster
-// (io_retention_days).
-var ioPartitionedTables = []string{"io_snapshot"}
+// hot one: pg_stat_io and pg_stat_lock history is far denser and ages out much
+// faster (io_retention_days).
+var ioPartitionedTables = []string{"io_snapshot", "lock_stat_snapshot"}
 
 // Migrate creates parent tables and partitions for the next partitionDaysAhead days.
 func Migrate(ctx context.Context, cfg string, logger *zap.Logger) error {
@@ -460,6 +476,7 @@ func (s *Storage) migrate(ctx context.Context, logger *zap.Logger) error {
 		addSnapshotDatabasesSQL,
 		createIOSnapshotSQL,
 		addIOSnapshotWALTimingSQL,
+		createLockStatSnapshotSQL,
 		addAutosnapshotIOConfigSQL,
 		createLogInsightsScansSQL,
 		createLogInsightsGroupsSQL,

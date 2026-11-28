@@ -165,7 +165,7 @@ func Delta(prev, cur Snapshot) (Interval, bool) {
 		Duration: cur.CapturedAt.Sub(prev.CapturedAt),
 	}
 
-	if iv.Duration <= 0 || !sameEpoch(prev.Meta(), cur.Meta()) {
+	if iv.Duration <= 0 || !SameEpoch(prev.Meta(), cur.Meta()) {
 		return iv, false
 	}
 
@@ -213,10 +213,10 @@ func Delta(prev, cur Snapshot) (Interval, bool) {
 	return iv, true
 }
 
-// sameEpoch reports whether the two captures describe one continuous run of the
+// SameEpoch reports whether the two captures describe one continuous run of the
 // same server: a major upgrade changes both the columns and the row set, and
-// stats_reset marks a restart or pg_stat_reset_shared('io').
-func sameEpoch(prev, cur Meta) bool {
+// stats_reset marks a restart or a pg_stat_reset_shared of the view.
+func SameEpoch(prev, cur Meta) bool {
 	if prev.VersionNum/10000 != cur.VersionNum/10000 {
 		return false
 	}
@@ -248,7 +248,7 @@ func metaIntervals(metas []Meta) []Interval {
 			To:       cur.CapturedAt,
 			Duration: cur.CapturedAt.Sub(prev.CapturedAt),
 		}
-		iv.Complete = iv.Duration > 0 && sameEpoch(prev, cur)
+		iv.Complete = iv.Duration > 0 && SameEpoch(prev, cur)
 
 		out = append(out, iv)
 	}

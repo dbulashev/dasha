@@ -105,17 +105,16 @@ func (r MaintenanceAutovacuumQueueRow) DominantComponent() *AutovacuumScoreCompo
 		{AutovacuumScoreAnalyze, r.AnalyzeScore},
 	}
 
-	best := -1
+	var best *AutovacuumScoreComponent
 
-	for i, c := range components {
-		if c.value > 0 && (best < 0 || c.value > components[best].value) {
-			best = i
+	bestValue := 0.0
+
+	for i := range components {
+		if components[i].value > bestValue {
+			best = &components[i].name
+			bestValue = components[i].value
 		}
 	}
 
-	if best < 0 {
-		return nil
-	}
-
-	return &components[best].name
+	return best
 }

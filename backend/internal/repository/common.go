@@ -30,6 +30,7 @@ import (
 	"github.com/dbulashev/dasha/internal/schemalint"
 	"github.com/dbulashev/dasha/internal/sqlparse"
 	"github.com/dbulashev/dasha/internal/statio"
+	"github.com/dbulashev/dasha/internal/statlock"
 )
 
 const (
@@ -140,6 +141,9 @@ type Repository interface {
 	GetActivityAccess(ctx context.Context, clusterName, instanceName string) (activity.Access, error)
 	// GetIOSample takes no database: pg_stat_io is instance-wide.
 	GetIOSample(ctx context.Context, clusterName, instanceName string) (*statio.Snapshot, error)
+	// GetLockSample takes no database: pg_stat_lock is instance-wide.
+	GetLockSample(ctx context.Context, clusterName, instanceName string) (*statlock.Snapshot, error)
+	GetServerVersionNum(ctx context.Context, clusterName, instanceName string) (int, error)
 	// GetIndexAdvisorReport takes no instance: pg_stat_statements is per-host and
 	// not replicated, so the candidates are built from the whole cluster's load.
 	GetIndexAdvisorReport(

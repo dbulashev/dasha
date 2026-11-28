@@ -123,6 +123,8 @@ const (
 	QueryIndexesUnusedReport Query = "indexes/unused_report"
 	// QueryIndexesUsage is a Query of type indexes/usage.
 	QueryIndexesUsage Query = "indexes/usage"
+	// QueryLocksStatSnapshot is a Query of type locks/stat_snapshot.
+	QueryLocksStatSnapshot Query = "locks/stat_snapshot"
 	// QueryMaintenanceAutovacuumFreezeMaxAge is a Query of type maintenance/autovacuum_freeze_max_age.
 	QueryMaintenanceAutovacuumFreezeMaxAge Query = "maintenance/autovacuum_freeze_max_age"
 	// QueryMaintenanceAutovacuumScores is a Query of type maintenance/autovacuum_scores.
@@ -296,6 +298,7 @@ var _QueryNames = []string{
 	string(QueryIndexesUnused),
 	string(QueryIndexesUnusedReport),
 	string(QueryIndexesUsage),
+	string(QueryLocksStatSnapshot),
 	string(QueryMaintenanceAutovacuumFreezeMaxAge),
 	string(QueryMaintenanceAutovacuumScores),
 	string(QueryMaintenanceAutovacuumSummary),
@@ -420,6 +423,7 @@ func QueryValues() []Query {
 		QueryIndexesUnused,
 		QueryIndexesUnusedReport,
 		QueryIndexesUsage,
+		QueryLocksStatSnapshot,
 		QueryMaintenanceAutovacuumFreezeMaxAge,
 		QueryMaintenanceAutovacuumScores,
 		QueryMaintenanceAutovacuumSummary,
@@ -548,6 +552,7 @@ var _QueryValue = map[string]Query{
 	"indexes/unused":                                QueryIndexesUnused,
 	"indexes/unused_report":                         QueryIndexesUnusedReport,
 	"indexes/usage":                                 QueryIndexesUsage,
+	"locks/stat_snapshot":                           QueryLocksStatSnapshot,
 	"maintenance/autovacuum_freeze_max_age":         QueryMaintenanceAutovacuumFreezeMaxAge,
 	"maintenance/autovacuum_scores":                 QueryMaintenanceAutovacuumScores,
 	"maintenance/autovacuum_summary":                QueryMaintenanceAutovacuumSummary,

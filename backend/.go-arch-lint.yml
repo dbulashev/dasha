@@ -60,6 +60,7 @@ components:
       - internal/schemalint
       - internal/sqlparse
       - internal/statio
+      - internal/statlock
 
   repository: { in: [internal/repository, internal/query] }
   storage: { in: internal/storage }
